@@ -1,7 +1,7 @@
 CAPSTONE PROJECT TEAM CHARTER
 
 1. TEAM NAME AND MEMBERS
-Team Name: [e.g., "BookBridge" / "ShelfShare" / your choice]
+Team Name: Team 16
 Full Name
 Student Number
 Primary Role
