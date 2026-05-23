@@ -1,141 +1,420 @@
-CAPSTONE PROJECT TEAM CHARTER
 
-1. TEAM NAME AND MEMBERS
-Team Name: Team 16
-Full Name
-Student Number
-Primary Role
-[Mridul Nohria]
-[#74243379]
-Backend Lead/DevOps / QA Lead
-[Bao Tran]
-[97274047]
-Backend developer / Documentation
-Jessica goel
-41224841
-Backend developer/frontend lead/integration lead
-[Yerdana Maulenbay]
-[#24831786]
-Documentation / QA Lead
-Rhythm Trivedi
-41908864
-Frontend developer/DevOps 
+# CAPSTONE PROJECT TEAM CHARTER
 
-Self-Assessed Skills: 
-[Mridul Nohria] — [ Python, REST APIs, database design, agile workflows] 
-Jessica:Python, Java, JavaScript, TypeScript, SQL, HTML/CSS, React, Next.js, Node.js, Django, Expo, Supabase, MySQL, Git/GitHub, Tableau, pandas, scikit-learn, and REST APIs.
-[Bao Tran] — [e.g., React, CSS, accessibility standards, UI/UX design] 
-[Rhythm Trivedi] — [Python, Java, JavaScript, SQL, HTML/CSS, React, UI/UX design, accessibility standards] 
-[Yerdana Maulenbay] — [Python, Pytorch, RAG, LoRA/PEFT, Pydantic]
+## 1. TEAM NAME AND MEMBERS
 
-2. MISSION STATEMENT / PROJECT GOAL
+### Team Name:Team 16
+
+| Full Name | Student Number | Primary Role |
+|---|---|---|
+| Mridul Nohria | 74243379 | Backend Lead / DevOps / QA Lead |
+| Jessica Goel | 41224841 | Backend Developer / Frontend Lead / Integration Lead |
+| Bao Tran | 97274047 | Backend Developer / Documentation |
+| Yerdana Maulenbay | 24831786 | Documentation / QA Lead |
+| Rhythm Trivedi | 41908864 | Frontend Developer / DevOps |
+
+### Self-Assessed Skills
+
+#### Mridul Nohria
+- Python
+- REST APIs
+- Database Design
+- Agile Workflows
+
+#### Jessica Goel
+- Python
+- Java
+- JavaScript
+- TypeScript
+- SQL
+- HTML
+- CSS
+- React
+- Next.js
+- Node.js
+- Django
+- Expo
+- Supabase
+- MySQL
+- Git/GitHub
+- Tableau
+- pandas
+- scikit-learn
+- REST APIs
+
+#### Bao Tran
+- React
+- CSS
+- Accessibility Standards
+- UI/UX Design
+
+#### Rhythm Trivedi
+- Python
+- Java
+- JavaScript
+- SQL
+- HTML/CSS
+- React
+- UI/UX Design
+- Accessibility Standards
+
+#### Yerdana Maulenbay
+- Python
+- PyTorch
+- RAG
+- LoRA/PEFT
+- Pydantic
+
+## 2. MISSION STATEMENT / PROJECT GOAL
+
 We are collaboratively designing, developing, testing, and deploying a secure, AI-powered web application that assists instructors in managing selected Canvas LMS course activities through a natural-language conversational interface.
-This matters because managing a course in Canvas requires navigating multiple menus, settings, and workflows that are time-consuming and often unintuitive for instructors. Our application removes that friction by allowing instructors to interact with Canvas using plain conversational language — asking questions, making updates, and retrieving information the same way they would ask a colleague — reducing administrative overhead and letting instructors focus on teaching.
+
+Managing a course in Canvas requires navigating multiple menus, settings, and workflows that are time-consuming and often unintuitive for instructors. Our application removes that friction by allowing instructors to interact with Canvas using plain conversational language — asking questions, making updates, and retrieving information the same way they would ask a colleague — reducing administrative overhead and allowing instructors to focus more on teaching.
+
+### Why This Project Matters
+
+This system aims to improve:
+
+- Workflow efficiency
+- Instructor productivity
+- Course organization
+- Communication with students
+- Visibility into course activity and submissions
+
+## 3. TEAM GOALS
+
+### Academic Goals
+
+- Achieve a final project grade of **85% or higher** across both terms
+- Successfully integrate a Large Language Model (LLM) with the Canvas LMS API
+- Implement secure authentication and data handling practices appropriate for an academic environment
+- Apply and demonstrate:
+  - Full-stack development
+  - AI/LLM integration
+  - API design
+  - DevOps workflows
+- Ensure consistency of values and argument types being passed to and retrieved from the LLM
+- Publish all work on GitHub with:
+  - Clean commit history
+  - Proper documentation
+  - CI/CD pipelines
+- Sharpen frontend and backend development skills across the team
+- Learn and apply:
+  - Dockerization
+  - Deployment workflows
+  - Refactoring techniques
+  - Testing strategies
+  - Version control best practices
+
+### Collaboration Goals
+
+- Maintain respectful and constructive communication
+- Ensure every member contributes meaningfully throughout the project
+- Stay on or ahead of schedule whenever possible
+- Maintain prompt response times
+- Deliver work consistently and meet deadlines
+- Give and receive constructive feedback professionally
+- Clearly communicate and document major decisions
+- Address blockers early rather than silently absorbing them
+- Be prepared for and actively participate in meetings
+
+### Deliverables and Milestones
+
+- Finalize and merge the Team Charter via Pull Request
+- Submit requirements specification and system design
+- Complete Canvas API integration and LLM conversational interface prototype
+- Finish security review and testing phase
+- Deploy the final application and complete final presentation/demo
+- Avoid last-minute submissions by targeting internally reviewed early delivery
+- Ensure all team members participate in testing before major deliverables
+
+## 4. ROLES AND RESPONSIBILITIES
+
+### Backend Lead
+**Bao Tran / Mridul Nohria / Jessica Goel**
+
+#### Responsibilities
+- Coordinate backend architecture and implementation
+- Track deadlines and project progress
+- Maintain GitHub Projects board
+- Communicate with the instructor when necessary
+- Write weekly project updates
 
 
-3. TEAM GOALS
-Academic Goals:
-Achieve a final project grade of 85% or higher across both terms.
-Successfully integrate a large language model (LLM) with the Canvas LMS API in a final deliverable application.
-Implement secure authentication and data handling practices appropriate for an academic environment, handling real course data.
-Apply and demonstrate full-stack development, AI/LLM integration, API design, and DevOps skills.
-Ensure the consistency of values and types of arguments being passed to and retrieved from the LLM
-Publish all work on GitHub with a clean, documented commit history and maintain CI/CD pipelines throughout the project.
-Collaboration Goals:
-Maintain respectful, constructive communication at all times.
-Ensure every team member has meaningful, visible contributions across both terms.
-Address blockers early — raise issues in the team channel rather than absorbing them silently.
-Deliver every milestone on time by setting internal deadlines 24 hours ahead of official ones.
-Key Milestones (update dates as course schedule is confirmed):
-End of Week 1: Team charter finalized and merged via PR.
-[Date]: Requirements specification and system design submitted.
-[Date]: Canvas API integration and LLM conversational interface prototype complete.
-[Date]: Security review and testing phase complete.
-[Date]: Deployed application and final presentation.
+### Frontend Lead
+**Jessica Goel / Rhythm Trivedi**
 
-4. ROLES AND RESPONSIBILITIES
-Backend Lead (Bao Tran/Mridul Nohria/Jessica Goel) — Coordinates meetings, tracks deadlines, communicates with instructor, maintains GitHub Projects board, writes weekly status updates.
-Frontend Lead (Jessica Goel/Rhythm) — Owns the UI/UX implementation (React), ensures mobile responsiveness and WCAG 2.1 AA accessibility compliance, leads design decisions.
-DevOps / QA Lead (Mridul Nohria/Yerdana Maulenbay) — Sets up and maintains CI/CD pipelines, manages deployment environment, writes and runs tests (unit, integration), enforces code review standards.
-Documentation Lead (Bao Tran/Yerdana Maulenbay) — Maintains the SRS, README, API documentation, and meeting notes. Ensures all deliverables are submitted correctly and on time.
-Integration Lead( Rhythm,jessica goel) — Manages the Git workflow and branch merging, leads integration pairing sessions, and ensures all features connect seamlessly across the full stack. 
-Note on rotation: Roles will be reviewed at the midpoint of each term. Any member may request a role adjustment with team consensus. All members are expected to contribute to both frontend and backend code regardless of primary role.
+#### Responsibilities
+- Own UI/UX implementation using React
+- Ensure responsive and accessible design
+- Lead frontend design decisions
+- Maintain consistency across frontend components
 
-5. WORKING NORMS AND EXPECTATIONS
-Communication Tools:
-Primary: Discord for daily communication.
-Secondary: Email for instructor communications and formal submissions.
-Response time expectation: reply to messages within 24 hours on weekdays; best effort on weekends.
-Meeting Schedule:
-Weekly team meeting: [Saturday, 7pm, Discord link] — mandatory unless prior notice given.
-Quick async check-in posted to the team channel on every Tuesday [github/discord].
-Ad-hoc meetings scheduled with at least 24 hours' notice when possible.
-Git and Code Conventions:
-Repository: GitHub — https://github.com/UBCO-COSC499-S2026/capstone-team-16.
-Branching model: Git Flow — feature branches off development; main is production-only.
-Branch naming: feature/short-description, bug-fix/short-description, docs/short-description.
-Commit messages: imperative present tense, e.g., "Add ISBN lookup API integration."
-No direct commits to main or develop. All changes via pull request.
-Code Review / PRs:
-Every PR requires at least one approval before merging. Two approvals required for major features.
-PR author is responsible for resolving all comments before merging.
-Reviewers must respond to PRs within 48 hours.
-The team charter itself must be merged via PR with all four members reviewing as formal sign-off.
-Task Management:
-GitHub Projects (Kanban board) used for all tasks.
-Every task must have an assignee and a due date before work begins.
-Tasks are moved from "In Progress" to "In Review" only when a PR is open.
-Accommodating Different Working Styles:
-Team members may work async outside meeting times — results matter more than hours.
-Anyone who needs a different communication style or accommodation should raise it in the first week.
-No judgment for asking questions; the team defaults to over-communication.
 
-6. CONFLICT RESOLUTION PLAN
-Step 1 — Direct conversation: the parties involved discuss the issue openly and attempt to resolve it themselves within 48 hours.
-Step 2 — Team mediation: if unresolved, the full team discusses the issue in a dedicated meeting. The project manager facilitates; all perspectives are heard before a resolution is proposed.
-Step 3 — Instructor involvement: if the conflict cannot be resolved internally, the team contacts the course instructor for guidance. This is not a failure — it is the appropriate escalation path.
-Handling underperformance or unresponsiveness:
-If a member misses two consecutive check-ins or deadlines without communication, the project manager reaches out privately first.
-If the issue continues, the team documents the pattern and raises it with the instructor.
-Workload redistribution may be required and will be reflected in peer evaluations.
+### DevOps / QA Lead
+**Mridul Nohria / Yerdana Maulenbay**
 
-7. DECISION-MAKING PROCESS
-Day-to-day technical decisions: the lead for that area decides after informing the team.
-Significant design or scope decisions: discussed as a group; consensus preferred.
-If consensus cannot be reached after reasonable discussion: majority vote (3 of 4).
-Any decision that changes the project scope, tech stack, or timeline must be agreed upon by all four members and documented in the meeting notes.
+#### Responsibilities
+- Maintain CI/CD pipelines
+- Configure deployment environments
+- Create and execute testing workflows
+- Enforce quality assurance standards
 
-8. ACCOUNTABILITY AND COMMITMENT
-All members commit to attending scheduled meetings. Absences must be communicated at least 2 hours in advance.
-Deliverables assigned to an individual are due by the agreed internal deadline — typically 24 hours before the official submission deadline to allow for review.
-If someone cannot meet a deadline, they notify the team as early as possible so workload can be adjusted.
-Repeated missed deadlines (3 or more) without communication will be formally noted and reported to the instructor as part of peer evaluation.
-All members agree to contribute equitably. "Equitably" does not mean identically — it means everyone carries a fair share relative to the overall workload.
+### Documentation Lead
+**Bao Tran / Yerdana Maulenbay**
 
-9. REVIEW AND REVISION
-This charter will be reviewed at the midpoint of Term 1 and again at the start of Term 2.
-The Documentation Lead is responsible for proposing updates.
-Any revision must be agreed upon by all team members and merged via PR, with all members reviewing the changes.
-Version history will be maintained in the repository.
+#### Responsibilities
+- Maintain:
+  - SRS documentation
+  - README files
+  - API documentation
+  - Meeting notes
+- Ensure deliverables are complete and submitted on time
 
-10. OTHER PROCESSES AND PROCEDURES
-Scope of Work:
-The project is scoped to a web-based application only. Native mobile apps are explicitly out of scope for this capstone.
-Features deferred to "Won't Have v1" in our SRS (digital lending, payment processing) are not in scope.
-Work Schedule:
-The team agrees to an estimated contribution of 20 hours per member per week.
-Heavy workload periods (midterms, other course deadlines) will be flagged in advance so the team can plan accordingly.
-Rituals:
-End of each sprint/milestone: brief retrospective — what went well, what didn't, what changes next.
-Celebrate submissions: small acknowledgment when a major deliverable is completed.
-Documentation standards:
-All meeting notes are stored in the /docs folder of the repository.
-Every major decision is recorded with the date, attendees, and outcome.
 
-11. AGREEMENT
-By signing below, each team member confirms they have read, understood, and agree to the terms of this charter. This document serves as our social contract for the duration of the capstone project. Agreement is formalized by each member reviewing and approving the charter PR on GitHub.
-[Bao Tran] — Student #[97274047] — Date: May 21, 2026
-[Mridul Nohria] — Student #[74243379] — Date: May  21, 2026
-Jessica Goel — Student #41224841 — Date: May 21, 2026
-[Rhythm Trivedi] — Student #41908864 — Date: May 21, 2026
-[Yerdana Maulenbay] - Student #[24831786] — Date: May 21st, 2026
+### Integration Lead
+**Rhythm Trivedi / Jessica Goel**
+
+#### Responsibilities
+- Manage branch integration and merge workflows
+- Coordinate integration testing
+- Ensure frontend and backend systems connect properly
+
+
+### Role Flexibility
+
+Roles will be reviewed periodically as the project progresses. Team members are encouraged to learn outside their primary area and contribute across the stack whenever possible. The team values adaptability and collaborative learning.
+
+
+## 5. WORKING NORMS AND EXPECTATIONS
+
+### Communication Tools
+
+| Tool | Purpose |
+|---|---|
+| Discord | Primary Communication |
+| Email | Formal Communication |
+| GitHub | Version Control & Project Management |
+| Google Docs | Shared Documentation |
+
+
+### Response Expectations
+
+- Respond within 24 hours whenever possible
+- Communicate blockers or scheduling conflicts early
+- Maintain professionalism in all communication
+
+
+### Meetings
+
+- Weekly meetings every Saturday or Sunday at 7pm
+- Additional meetings scheduled as required
+
+Members are expected to:
+- Attend on time
+- Come prepared
+- Participate actively
+
+
+### Repository and Development Conventions
+
+#### Git Workflow
+
+- Follow Git Flow practices
+- One issue → one branch
+- No direct commits to `main` or `develop`
+- All changes must go through Pull Requests
+
+
+#### Branch Naming Convention
+
+```text
+feature/short-description
+bugfix/short-description
+docs/short-description
+````
+
+#### Commit Standards
+
+Use clear imperative commit messages.
+
+Example:
+
+```bash
+Add assignment analysis endpoint
+```
+
+
+### Pull Requests / Code Reviews
+
+* Every Pull Request requires at least 1 approval
+* Major features require 2 approvals
+* Include screenshots when applicable
+* Use line-by-line review suggestions when reviewing code
+* PR authors are responsible for resolving comments before merging
+* Reviewers should respond promptly
+
+
+### Integration Rules
+
+* Only Integration Leads may merge major integration branches into production branches
+* Tasks move to “In Review” only when a Pull Request is opened
+
+
+### Task Management
+
+GitHub Projects Board will be used for:
+
+* Sprint planning
+* Task tracking
+* Issue management
+* Progress monitoring
+
+Each task should include:
+
+* An assignee
+* A due date
+* Clear acceptance criteria
+
+
+
+### Accommodating Different Working Styles
+
+* Team members may work asynchronously outside meeting times
+* Results and accountability matter more than fixed hours
+* Team members should feel comfortable asking questions or requesting help
+* The team prioritizes over-communication over assumptions
+
+
+## 6. CONFLICT RESOLUTION PLAN
+
+### Resolving Disagreements
+
+#### Step 1 — Direct Discussion
+
+The involved members discuss the issue respectfully and attempt resolution collaboratively.
+
+#### Step 2 — Team Mediation
+
+If unresolved, the issue is discussed during a dedicated team meeting.
+
+#### Step 3 — Instructor Escalation
+
+If the issue remains unresolved, the instructor may be contacted for mediation.
+
+
+### Handling Underperformance or Unresponsiveness
+
+* Members should communicate early if struggling
+* The team will support members whenever possible
+* Continued lack of participation will first be addressed privately
+* Repeated issues may be escalated to the instructor if necessary
+
+
+## 7. DECISION-MAKING PROCESS
+
+* Consensus is preferred for major architectural and scope decisions
+* Majority vote may be used when consensus cannot be reached
+* Technical leads may make urgent implementation decisions when required
+* Important decisions will be documented for transparency
+
+
+## 8. ACCOUNTABILITY AND COMMITMENT
+
+All members agree to:
+
+* Attend scheduled meetings whenever possible
+* Complete assigned work before internal deadlines
+* Review Pull Requests promptly
+* Communicate delays early
+* Contribute consistently throughout the project lifecycle
+
+
+### Missed Responsibilities
+
+* First occurrence → discussed internally
+* Repeated occurrences → documented and escalated if needed
+
+Equitable contribution does not necessarily mean identical work, but rather fair participation relative to workload and responsibilities.
+
+
+## 9. REVIEW AND REVISION
+
+This charter will be reviewed:
+
+* At major project deliverables
+* Mid-project checkpoints
+* Whenever significant team changes occur
+
+
+### Responsibility for Updates
+
+**Jessica Goel** will coordinate charter revisions and updates.
+
+All revisions must be reviewed and agreed upon by the team.
+
+
+## 10. OTHER PROCESSES AND PROCEDURES
+
+### Scope of Work
+
+* The project is scoped as a web-based application
+* Native mobile applications are out of scope
+* Deferred “Won’t Have v1” features remain outside the current project scope
+
+
+### Work Schedule
+
+* Estimated contribution:
+
+  * ~20 hours per member per week
+* Heavy workload periods should be communicated early
+
+
+### Team Rituals
+
+At the end of each sprint or milestone:
+
+* Discuss:
+
+  * What went well
+  * What could improve
+  * What should change next
+* Celebrate major deliverables and completed milestones
+
+
+### Documentation Standards
+
+* Meeting notes stored in `/docs`
+* Major decisions documented with:
+
+  * Date
+  * Participants
+  * Outcome
+
+
+## 11. AGREEMENT
+
+By approving this charter, each team member confirms they understand and agree to the expectations, responsibilities, and processes outlined above.
+
+This document serves as the team’s collaborative agreement for the duration of the capstone project.
+
+| Team Member       | Student Number | Date         |
+| ----------------- | -------------- | ------------ |
+| Bao Tran          | 97274047       | May 21, 2026 |
+| Mridul Nohria     | 74243379       | May 21, 2026 |
+| Jessica Goel      | 41224841       | May 21, 2026 |
+| Rhythm Trivedi    | 41908864       | May 21, 2026 |
+| Yerdana Maulenbay | 24831786       | May 21, 2026 |
+
+
+## 12. TIPS FOR TEAM SUCCESS
+
+* Communicate openly and respectfully
+* Ask for help early when needed
+* Keep documentation updated
+* Prioritize teamwork over perfection
+* Stay adaptable as project requirements evolve
+* Focus on consistent progress rather than last-minute work
+
+
