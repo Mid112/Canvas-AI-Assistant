@@ -51,9 +51,9 @@
 | 16 | Complete and finalize project proposal/project plan | Entire Team |
 | 17 | Set up GitHub project board and task tracking workflow | Entire Team |
 | 18 | Prepare requirements/design presentation materials | Entire Team |
-| 19 | Begin DFD and UML diagram creation | Bao / Yerdana |
-| 20 | Initialize frontend/backend project structure | Rhythm / Jessica |
-| 21 | Continue Docker and environment setup | Mridul |
+| 19 | Begin DFD and UML diagram creation | Entire Team |
+| 20 | Initialize frontend/backend project structure | Entire Team  |
+| 21 | Continue Docker and environment setup | Entire Team  |
 
 ---
 
