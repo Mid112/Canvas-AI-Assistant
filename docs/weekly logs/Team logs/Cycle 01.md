@@ -23,7 +23,7 @@ Not applicable
 | Team Member | Logged Hours |
 | ----------- | ------------ |
 | Mridul      | 12      |
-| Jessica     | 15    |
+| Jessica     | 12    |
 | Bao     | 10     |
 | Yerdana     | 11    |
 | Rhythm     | 9      |
