@@ -1,3 +1,4 @@
+<img width="2155" height="88" alt="Screenshot 2026-05-29 104344" src="https://github.com/user-attachments/assets/43755721-4978-4d64-9469-642e8ae56169" />
 # Weekly Report: 18/5 – 24/5 (May 18 – May 24)
 
 ## Timesheet
@@ -79,10 +80,12 @@
 
 ### #1: Participated in Team Meeting (Tuesday, 26/5)
 - Met with the team to discuss progress and coordinate upcoming work for the cycle
+<img width="2155" height="88" alt="Screenshot 2026-05-29 104344" src="https://github.com/user-attachments/assets/1b16d5e7-fde0-4754-9065-87b9362f8a43" />
 
 ### #2: DFD Diagrams 
 - Began work on the Level 0 and Level 1 Data Flow Diagrams as part of the system design phase
 - Reviewed architecture concepts to inform diagram structure and notation
+<img width="2159" height="94" alt="Screenshot 2026-05-29 104426" src="https://github.com/user-attachments/assets/322a2c85-2019-4e29-a24d-3df7365df314" />
 
 ### #3: DFD Diagrams update and scripts checking
 - Updating DFD Diagrams for the project, learn the external entities, processes and DataBase needed
