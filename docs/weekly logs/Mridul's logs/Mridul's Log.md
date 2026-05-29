@@ -26,9 +26,9 @@
 
 - Lecture detailing user testing and future deliverables like design documents for project
 
-### #4: Weekly logs and Project Plan 
+### #4: Weekly logs and Project Plan
 
-- Work done asynchronously to create project plan and formalize weekly logs. 
+- Work done asynchronously to create project plan and formalize weekly logs.
 
 ---
 
@@ -68,3 +68,81 @@ priority to help keep everyone aligned and working efficiently.
 - **Goal 1:** Project Plan & Project Planning Video
 - **Goal 2:** Design Document
 - **Goal 3:** Active Development on MVP
+
+---
+
+<br>
+
+# Weekly Report: 26/05 – 28/05 (May 26 – May 28)
+
+## Timesheet
+
+### Clockify Report
+
+- **26/05 (Tuesday):** Not yet using Clockify – Estimated 1 hour
+- **27/05 (Wednesday):** Not yet using Clockify – Estimated 1 hour
+
+---
+
+## Current Tasks
+
+### #1: Project plan
+
+- Completed the project plan deliverable for the cycle.
+
+### #2: Project planning video
+
+- Currently in progress — actively working toward completion for next cycle.
+
+### #3: Design document
+
+- Currently in progress — initial work underway, to be continued next cycle.
+
+### #4: Repository chores & PR work
+
+- Created and finalized the PR template for the repository.
+- Reviewed open pull requests and provided feedback.
+
+---
+
+## Progress Update (since 26/05/2026)
+
+| TASK/ISSUE #           | STATUS      |
+| ---------------------- | ----------- |
+| Project plan           | Completed   |
+| Project planning video | In Progress |
+| Design document        | In Progress |
+| PR template creation   | Completed   |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle presented some personal challenges, as illness limited the ability
+to contribute significantly and prevented consistent use of Clockify for time
+tracking. Despite this, the project plan was successfully completed, marking
+a significant milestone for the team. Some progress was also made on the
+project planning video and design document, both of which remain ongoing into
+the next cycle. Repository improvements including the creation of a PR template,
+severity inclusions, and review restrictions were also completed to strengthen
+the team's development workflow.
+
+### Retrospective:
+
+Due to sickness this cycle, overall contribution and time tracking through
+Clockify were impacted more than anticipated. The team meeting on May 29th
+helped maintain alignment on project progress and upcoming deliverables despite
+the reduced capacity. Going forward, the goal is to return to full contribution
+and resume consistent Clockify usage. The main priorities for the next cycle
+will be closing out the planning video and design document, while ensuring
+time tracking is kept up to date.
+
+---
+
+## Next Cycle Goals
+
+- **Goal 1:** Complete project planning video
+- **Goal 2:** Complete design document
+- **Goal 3:** Begin active development on MVP
