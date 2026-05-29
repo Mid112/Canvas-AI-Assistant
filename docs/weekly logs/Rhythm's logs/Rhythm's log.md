@@ -46,7 +46,6 @@ Keeping up with personal logs, managing formal PR reviews, and delegating work e
 * Initialize the React frontend repository skeleton.
 * Collaborate on setting up the initial Docker environment and outline the GitHub Actions CI/CD pipeline.
 * Begin preparing materials for the upcoming design video presentation.
-<<<<<<< HEAD
 
 # **Cycle 3: Tuesday (26/5) ~ Thursday (28/5)**
 
