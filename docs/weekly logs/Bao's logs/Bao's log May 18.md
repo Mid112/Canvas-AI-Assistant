@@ -59,3 +59,49 @@
 - Begin the first DFD (Level 0 and Level 1) diagram
 - Create the first UML diagram
 - Set up Docker and all necessary development environments
+
+
+# Cycle 3 Report: May 25-May 28
+
+## Timesheet
+
+### Clockify Report
+
+- **26/5 (Tuesday):** Team meeting –  1 hours
+- **27/5 (Wednesday):** DFD Diagrams – 1.5 hour
+- **28/5 (Thursday):** DFD Diagrams, Slides & Script Checking– Estimated 1.5 hours forget to use clockify
+
+**Total Estimated: ~4 hours**
+
+---
+
+## Current Tasks
+
+### #1: Participated in Team Meeting (Tuesday, 26/5)
+- Met with the team to discuss progress and coordinate upcoming work for the cycle
+
+### #2: DFD Diagrams 
+- Began work on the Level 0 and Level 1 Data Flow Diagrams as part of the system design phase
+- Reviewed architecture concepts to inform diagram structure and notation
+
+### #3: DFD Diagrams update and scripts checking
+- Updating DFD Diagrams for the project, learn the external entities, processes and DataBase needed
+- Slides checking and Scripts checking
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle shifted from planning into early design work. The team meeting helped align everyone on next steps, and a solid start was made on the DFD diagrams. The project plan continues to progress alongside the design work.
+
+### Retrospective:
+- The transition from requirements gathering to design work went smoothly. Time spent reviewing architecture concepts before diagramming was useful and helped ground the DFDs in the right principles. The main area to push on next cycle is finishing DFD in detail and getting development environments configured so the team is unblocked when coding begins.
+
+---
+
+## Next Cycle Goals
+- Clockify every time I contribute to the project
+- Finalize the project plan
+- Initialize the Level 0/1 DFD diagram
+
