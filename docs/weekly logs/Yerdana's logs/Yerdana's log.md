@@ -48,9 +48,32 @@
 
 - Keeping up with personal logs, PR reviews, and delegating the work efficiently with the team is relatively novel for me, therefore,
 - I may need more time to form a habit of finishing the tasks.
-## Next Cycle Goals
+## Cycle 3 Goals
 
 - Finish and review the project plan
 - Make the first DFD level 0, and 1 diagram
 - Make the first UML diagram
 - Set up docker, and all the necessary environments
+
+## **Cycle 3 – Goal Review** 
+
+### **Reflection**
+This cycle was primarily focused on design, and deciding the architecture of our system. Our team populated the project board, divided the tasks for system architecture, and made strides towards streamlined workflow. 
+
+### **Retrospective**
+In hindsight, one issue I faced personally was keeping up with the communication around revisions made on an issue, a feature, and addressing the issue in a timely manner. However, project board, and directly linking issues helped to resolve them in an efficient manner. 
+
+## **Next Cycle Goals (Cycle 4: Friday 29/5 ~ Monday 1/6)**
+
+* Continue working on the design document
+* Complete the design document and contribute to design-related discussions
+* Participate in additional PR reviews and team discussions
+* Continue contributing to project planning and documentation
+* Maintain consistent Clockify tracking
+* Refine UI wireframes based on team feedback
+* Support project board management and milestone planning as development begins
+
+
+
+
+
