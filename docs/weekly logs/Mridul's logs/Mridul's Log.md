@@ -101,8 +101,6 @@ priority to help keep everyone aligned and working efficiently.
 ### #4: Repository chores & PR work
 
 - Created and finalized the PR template for the repository.
-- Updated severity inclusions to improve issue classification.
-- Added review restrictions on PRs to enforce team review process.
 - Reviewed open pull requests and provided feedback.
 
 ---
