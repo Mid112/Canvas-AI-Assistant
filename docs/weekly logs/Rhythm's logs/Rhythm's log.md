@@ -1,0 +1,48 @@
+
+**Weekly Report: 18/5 – 24/5 (May 18 – May 24)**
+
+**Timesheet**
+
+Clockify Report
+
+18/5 (Monday): Not yet using Clockify – Estimated 1 hour
+19/5 (Tuesday): Not yet using Clockify – Estimated 2 hours
+20–22/5 (Wed–Fri): Not yet using Clockify – Estimated 3 hours
+23/5 (Saturday): Not yet using Clockify – Estimated 1 hour
+24/5 (Sunday): Not yet using Clockify – Estimated 2 hours
+
+**Current Tasks (Provide sufficient detail)**
+
+**#1: Attended team meeting on Thursday**
+Discussed and finalized the team charter, solidified my role focusing on Frontend UI/UX and DevOps/QA, and established our GitHub branching and communication rules.
+
+**#2: Drafted and submitted Team Charter PR**
+Created the initial pull request for the team charter document on our development branch. Communicated with the team to get reviews, implemented suggested changes, and successfully got it approved.
+
+**#3: Initial project planning and requirements engineering**
+Collaborated on defining the functional and user requirements for the Canvas LMS AI integration. Specifically focused on shaping the user interactions, the "dry-run" visual preview constraints, and outlining the CI/CD pipeline goals for the Project Plan document.
+
+**Progress Update (since 18/5/2026)**
+
+| TASK/ISSUE | STATUS |
+| --- | --- |
+| Drafted and submitted group charter PR | Completed (21/5) |
+| Joined the team on Clockify | Completed (19/5) |
+| Project plan writing | Ongoing (25/5) |
+| Requirements brainstorming | Completed (23/5) |
+
+**Cycle Goal Review**
+
+**Reflection:**
+This week was mainly spent setting up necessary tools, establishing our GitHub workflows, exploring the project boundaries, and communicating with the team. Overall, I am happy with both my abilities and with our team dynamics as we kick off the planning phase.
+
+**Retrospective:**
+Keeping up with personal logs, managing formal PR reviews, and delegating work efficiently with the team is relatively novel for me. Therefore, I may need more time to form a habit of finishing these tracking tasks. I also need to ensure I log my hours directly in Clockify moving forward rather than estimating at the end of the week.
+
+**Next Cycle Goals**
+
+* Finish and review the final Project Plan submission.
+* Begin drafting the initial UI/UX wireframes in Figma (focusing on the conversational interface and the dry-run approval dashboard).
+* Initialize the React frontend repository skeleton.
+* Collaborate on setting up the initial Docker environment and outline the GitHub Actions CI/CD pipeline.
+* Begin preparing materials for the upcoming design video presentation.
