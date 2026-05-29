@@ -31,7 +31,7 @@ services:
     container_name: app_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER:     ${POSTGRES_USER:-appuser}
+      POSTGRES_USER:     ${POSTGRES_USER:-appuser}  # needs to be changed per our usage
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
       POSTGRES_DB:       ${POSTGRES_DB:-appdb}
     volumes:
@@ -103,9 +103,7 @@ services:
       resources:
         reservations:
           devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]   # remove if no GPU available
+              
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 20s
