@@ -4,21 +4,20 @@ version: "3.9"
 #  NETWORKS
 # ─────────────────────────────────────────────
 networks:
-  frontend_net:          # React ↔ FastAPI only
+  frontend_net:
     driver: bridge
-  backend_net:           # FastAPI ↔ MCP ↔ PostgreSQL
+  backend_net:
     driver: bridge
-  ai_net:                # MCP ↔ Ollama only (air-gapped from Canvas/REST)
+  ai_net:
     driver: bridge
-    internal: true       # no external egress from this network
+    internal: true      # no external egress — Ollama is air-gapped
 
 # ─────────────────────────────────────────────
 #  VOLUMES
 # ─────────────────────────────────────────────
 volumes:
   postgres_data:
-  ollama_models:         # persists pulled models between restarts
-  mcp_cache:
+  ollama_models:        # models persist between restarts
 
 # ─────────────────────────────────────────────
 #  SERVICES
@@ -31,12 +30,13 @@ services:
     container_name: app_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER:     ${POSTGRES_USER:-appuser}  # needs to be changed per our usage
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_USER:     ${POSTGRES_USER:-appuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
       POSTGRES_DB:       ${POSTGRES_DB:-appdb}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./db/init:/docker-entrypoint-initdb.d:ro   # seed / migration SQL files
+    ports:
+      - "5432:5432"     # exposed locally so you can inspect with pgAdmin or psql
     networks:
       - backend_net
     healthcheck:
@@ -44,48 +44,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    # Postgres is NOT exposed externally; only backend_net services can reach it.
 
-  # ── 2. MCP Server (sanitisation + AI gateway) ──
-  #    Receives raw Canvas REST data, sanitises it, writes to Postgres,
-  #    then forwards only clean payloads to Ollama.
-  #    Canvas credentials NEVER leave this container.
-  mcp:
-    build:
-      context: ./mcp
-      dockerfile: Dockerfile
-    container_name: app_mcp
-    restart: unless-stopped
-    environment:
-      # Postgres connection
-      DATABASE_URL: postgresql://${POSTGRES_USER:-appuser}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-appdb}
-      # Canvas API (only MCP has these)
-      CANVAS_API_URL:   ${CANVAS_API_URL}
-      CANVAS_API_TOKEN: ${CANVAS_API_TOKEN}
-      # Ollama endpoint (ai_net only)
-      OLLAMA_HOST: http://ollama:11434
-      # Which models MCP is allowed to call
-      ALLOWED_MODELS:   ${ALLOWED_MODELS:-mistral,llama3,phi3}
-      # Sanitisation / PII scrubbing settings
-      SCRUB_PII:        ${SCRUB_PII:-true}
-      MAX_PAYLOAD_BYTES: ${MAX_PAYLOAD_BYTES:-131072}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      ollama:
-        condition: service_started
-    networks:
-      - backend_net      # talks to FastAPI + Postgres
-      - ai_net           # talks to Ollama (isolated)
-    volumes:
-      - mcp_cache:/app/cache
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-
-  # ── 3. Ollama (LLM runtime) ─────────────────
+  # ── 2. Ollama (LLM runtime) ─────────────────
+  # Runs on ai_net only — no external egress.
+  # On Mac Silicon it uses CPU inside Docker.
+  # For GPU acceleration on Mac, run Ollama natively instead
+  # and point MCP at http://host.docker.internal:11434
   ollama:
     image: ollama/ollama:latest
     container_name: app_ollama
@@ -95,116 +59,69 @@ services:
       OLLAMA_NUM_PARALLEL: "2"
     volumes:
       - ollama_models:/root/.ollama
+    ports:
+      - "11434:11434"   # exposed locally so you can test with curl
     networks:
-      - ai_net           # ONLY ai_net — completely isolated from Canvas / REST layer
-    # Ollama is intentionally NOT on frontend_net or backend_net.
-    # Only the MCP server can reach it.
-    deploy:
-      resources:
-        reservations:
-          devices:
-              
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 20s
-      timeout: 10s
-      retries: 5
+      - ai_net
 
-  # ── 4. Model Puller (one-shot init) ─────────
-  #    Pulls requested models on first run, then exits.
+  # ── 3. Model puller (one-shot init) ─────────
+  # Pulls one small model on first run then exits.
+  # Pulling all three on first run takes a long time —
+  # start with mistral only for the smoke test.
   model_puller:
     image: ollama/ollama:latest
     container_name: app_model_puller
     restart: "no"
     entrypoint: >
       /bin/sh -c "
-        sleep 5 &&
+        echo 'Waiting for Ollama...' &&
+        sleep 10 &&
         ollama pull ${MODEL_MISTRAL:-mistral} &&
-        ollama pull ${MODEL_LLAMA:-llama3} &&
-        ollama pull ${MODEL_PHI:-phi3}
+        echo 'Model ready.'
       "
     environment:
       OLLAMA_HOST: http://ollama:11434
     networks:
       - ai_net
     depends_on:
-      ollama:
-        condition: service_healthy
+      - ollama
 
-  # ── 5. FastAPI Backend ───────────────────────
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: production
-    container_name: app_backend
-    restart: unless-stopped
-    environment:
-      # Postgres
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-appuser}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-appdb}
-      # MCP endpoint (backend delegates all AI + Canvas work to MCP)
-      MCP_BASE_URL: http://mcp:8001
-      # App settings
-      SECRET_KEY:         ${SECRET_KEY:-supersecretchangeme}
-      ENVIRONMENT:        ${ENVIRONMENT:-production}
-      ALLOWED_ORIGINS:    ${ALLOWED_ORIGINS:-http://localhost:3000}
-      LOG_LEVEL:          ${LOG_LEVEL:-info}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      mcp:
-        condition: service_healthy
-    networks:
-      - frontend_net     # serves React
-      - backend_net      # reaches Postgres + MCP
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-    # Backend intentionally has NO access to ai_net or Canvas credentials.
-
-  # ── 6. React Frontend ────────────────────────
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: production
-      args:
-        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
-    container_name: app_frontend
-    restart: unless-stopped
-    environment:
-      NODE_ENV: production
-    depends_on:
-      backend:
-        condition: service_healthy
-    networks:
-      - frontend_net
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80"]
-      interval: 20s
-      timeout: 5s
-      retries: 3
-
-  # ── 7. Nginx Reverse Proxy ───────────────────
-  nginx:
-    image: nginx:1.27-alpine
-    container_name: app_nginx
-    restart: unless-stopped
-    ports:
-      - "${HTTP_PORT:-80}:80"
-      - "${HTTPS_PORT:-443}:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/certs:/etc/nginx/certs:ro    # mount TLS certs (Let's Encrypt / self-signed)
-    depends_on:
-      - frontend
-      - backend
-    networks:
-      - frontend_net
-    healthcheck:
-      test: ["CMD", "nginx", "-t"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+  # ── Services below are stubbed out ──────────
+  # Uncomment each one once its Dockerfile exists.
+  #
+  # mcp:
+  #   build:
+  #     context: ./mcp
+  #     dockerfile: Dockerfile
+  #   container_name: app_mcp
+  #   networks:
+  #     - backend_net
+  #     - ai_net
+  #
+  # backend:
+  #   build:
+  #     context: ./backend
+  #     dockerfile: Dockerfile
+  #     target: production
+  #   container_name: app_backend
+  #   networks:
+  #     - frontend_net
+  #     - backend_net
+  #
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #     target: production
+  #   container_name: app_frontend
+  #   networks:
+  #     - frontend_net
+  #
+  # nginx:
+  #   image: nginx:1.27-alpine
+  #   container_name: app_nginx
+  #   ports:
+  #     - "${HTTP_PORT:-80}:80"
+  #     - "${HTTPS_PORT:-443}:443"
+  #   networks:
+  #     - frontend_net
