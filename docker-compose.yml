@@ -53,6 +53,7 @@ services:
   # and point MCP at http://host.docker.internal:11434
   ollama:
     image: ollama/ollama:latest
+    platform: linux/arm64
     container_name: app_ollama
     restart: unless-stopped
     environment:
