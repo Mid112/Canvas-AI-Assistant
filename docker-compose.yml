@@ -1,5 +1,3 @@
-version: "3.9"
-
 # ─────────────────────────────────────────────
 #  NETWORKS
 # ─────────────────────────────────────────────
@@ -10,14 +8,14 @@ networks:
     driver: bridge
   ai_net:
     driver: bridge
-    internal: true      # no external egress — Ollama is air-gapped
+    internal: true      # no external egress in production
+                        # remove internal: true during local dev if needed
 
 # ─────────────────────────────────────────────
 #  VOLUMES
 # ─────────────────────────────────────────────
 volumes:
   postgres_data:
-  ollama_models:        # models persist between restarts
 
 # ─────────────────────────────────────────────
 #  SERVICES
@@ -36,7 +34,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"     # exposed locally so you can inspect with pgAdmin or psql
+      - "5432:5432"     # exposed locally for pgAdmin / psql inspection
     networks:
       - backend_net
     healthcheck:
@@ -45,58 +43,57 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── 2. Ollama (LLM runtime) ─────────────────
-  # Runs on ai_net only — no external egress.
-  # On Mac Silicon it uses CPU inside Docker.
-  # For GPU acceleration on Mac, run Ollama natively instead
-  # and point MCP at http://host.docker.internal:11434
-  ollama:
-    image: ollama/ollama:latest
-    container_name: app_ollama
-    restart: unless-stopped
-    environment:
-      OLLAMA_KEEP_ALIVE: "24h"
-      OLLAMA_NUM_PARALLEL: "2"
-    volumes:
-      - ollama_models:/root/.ollama
-    ports:
-      - "11434:11434"   # exposed locally so you can test with curl
-    networks:
-      - ai_net
+  # ── Ollama ─────────────────────────────────
+  # Ollama runs NATIVELY on Mac (via the menu bar app) for Metal GPU acceleration.
+  # It is reachable from any container via host.docker.internal:11434
+  # When deploying to Linux, uncomment the ollama service below and set
+  # OLLAMA_HOST: http://ollama:11434 in the mcp service.
+  #
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: app_ollama
+  #   restart: unless-stopped
+  #   environment:
+  #     OLLAMA_KEEP_ALIVE: "24h"
+  #     OLLAMA_NUM_PARALLEL: "2"
+  #   volumes:
+  #     - ollama_models:/root/.ollama
+  #   ports:
+  #     - "11434:11434"
+  #   networks:
+  #     - ai_net
 
-  # ── 3. Model puller (one-shot init) ─────────
-  # Pulls one small model on first run then exits.
-  # Pulling all three on first run takes a long time —
-  # start with mistral only for the smoke test.
-  model_puller:
-    image: ollama/ollama:latest
-    container_name: app_model_puller
-    restart: "no"
-    entrypoint: >
-      /bin/sh -c "
-        echo 'Waiting for Ollama...' &&
-        sleep 10 &&
-        ollama pull ${MODEL_MISTRAL:-mistral} &&
-        echo 'Model ready.'
-      "
-    environment:
-      OLLAMA_HOST: http://ollama:11434
-    networks:
-      - ai_net
-    depends_on:
-      - ollama
-
-  # ── Services below are stubbed out ──────────
-  # Uncomment each one once its Dockerfile exists.
+  # ── 2. MCP Server ──────────────────────────
+  # Uncomment once ./mcp/Dockerfile exists.
+  # Canvas credentials live here only — never passed to backend or LLM.
+  # OLLAMA_HOST points to native Mac Ollama via host.docker.internal.
   #
   # mcp:
   #   build:
   #     context: ./mcp
   #     dockerfile: Dockerfile
   #   container_name: app_mcp
+  #   restart: unless-stopped
+  #   environment:
+  #     DATABASE_URL:      postgresql://${POSTGRES_USER:-appuser}:${POSTGRES_PASSWORD:-localdev}@postgres:5432/${POSTGRES_DB:-appdb}
+  #     CANVAS_API_URL:    ${CANVAS_API_URL}
+  #     CANVAS_API_TOKEN:  ${CANVAS_API_TOKEN}
+  #     OLLAMA_HOST:       http://host.docker.internal:11434
+  #     ALLOWED_MODELS:    ${ALLOWED_MODELS:-mistral,llama3,phi3}
+  #     SCRUB_PII:         ${SCRUB_PII:-true}
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
   #   networks:
   #     - backend_net
-  #     - ai_net
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+  #     interval: 15s
+  #     timeout: 5s
+  #     retries: 3
+
+  # ── 3. FastAPI Backend ──────────────────────
+  # Uncomment once ./backend/Dockerfile exists.
   #
   # backend:
   #   build:
@@ -104,24 +101,64 @@ services:
   #     dockerfile: Dockerfile
   #     target: production
   #   container_name: app_backend
+  #   restart: unless-stopped
+  #   environment:
+  #     DATABASE_URL:   postgresql+asyncpg://${POSTGRES_USER:-appuser}:${POSTGRES_PASSWORD:-localdev}@postgres:5432/${POSTGRES_DB:-appdb}
+  #     MCP_BASE_URL:   http://mcp:8001
+  #     SECRET_KEY:     ${SECRET_KEY:-localdevsecret}
+  #     ENVIRONMENT:    ${ENVIRONMENT:-development}
+  #     ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:5173}
+  #     LOG_LEVEL:      ${LOG_LEVEL:-debug}
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
   #   networks:
   #     - frontend_net
   #     - backend_net
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+  #     interval: 15s
+  #     timeout: 5s
+  #     retries: 3
+
+  # ── 4. React Frontend ───────────────────────
+  # Uncomment once ./frontend/Dockerfile exists.
   #
   # frontend:
   #   build:
   #     context: ./frontend
   #     dockerfile: Dockerfile
   #     target: production
+  #     args:
+  #       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
   #   container_name: app_frontend
+  #   restart: unless-stopped
+  #   depends_on:
+  #     backend:
+  #       condition: service_healthy
   #   networks:
   #     - frontend_net
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:80"]
+  #     interval: 20s
+  #     timeout: 5s
+  #     retries: 3
+
+  # ── 5. Nginx Reverse Proxy ──────────────────
+  # Uncomment once frontend and backend are running.
   #
   # nginx:
   #   image: nginx:1.27-alpine
   #   container_name: app_nginx
+  #   restart: unless-stopped
   #   ports:
   #     - "${HTTP_PORT:-80}:80"
   #     - "${HTTPS_PORT:-443}:443"
+  #   volumes:
+  #     - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+  #     - ./nginx/certs:/etc/nginx/certs:ro
+  #   depends_on:
+  #     - frontend
+  #     - backend
   #   networks:
   #     - frontend_net
