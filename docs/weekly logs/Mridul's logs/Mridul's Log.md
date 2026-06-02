@@ -172,25 +172,40 @@ time tracking is kept up to date.
   project setup.
 - Discussed design approach, structure, and setup requirements for the project.
 
-### #2: Next steps and PR approval meeting (May 30)
+<img width="1212" height="177" alt="Screenshot 2026-06-02 at 10 29 20 AM" src="https://github.com/user-attachments/assets/a83a7e98-43d7-4852-b57e-139095b04bdf" />
+
+
+### #2: Project planning video submission (May 29)
+
+- Reviewed and edited the project planning video as part of the 1.5-hour work session.
+- Contributed toward finalizing the video for submission.
+
+<img width="1212" height="177" alt="Screenshot 2026-06-02 at 10 29 20 AM" src="https://github.com/user-attachments/assets/f369a839-23bc-46f5-adcd-8bccdefcf832" />
+
+
+### #3: Next steps and PR approval meeting (May 30)
 
 - Attended a quick 0.5-hour meeting to align on next steps and design approach.
 - Reviewed and approved open pull requests during the session.
 
-### #3: Project planning video review (June 1)
+<img width="1209" height="110" alt="Screenshot 2026-06-02 at 10 29 31 AM" src="https://github.com/user-attachments/assets/dd6c5cf3-4faa-4226-9a58-52a62f3bdd03" />
 
-- Reviewed and edited the project planning video as part of the 1.5-hour work session.
-- Contributed toward finalizing the video for submission.
 
 ### #4: Design document review (June 1)
 
 - Reviewed the current state of the design document and provided feedback.
 - Continued progress toward completing the design document deliverable.
 
+<img width="1212" height="111" alt="Screenshot 2026-06-02 at 10 29 46 AM" src="https://github.com/user-attachments/assets/92ccf7c7-8b14-4c7b-918d-8633d2ff5fb0" />
+
+
 ### #5: Database design (June 1)
 
 - Created the initial database design as part of the overall system design work.
 - This contributes directly to the design document and future MVP development.
+
+<img width="1212" height="111" alt="Screenshot 2026-06-02 at 10 29 46 AM" src="https://github.com/user-attachments/assets/6af686a1-075e-4fa1-9418-ac0919c60234" />
+
 
 ---
 
@@ -221,8 +236,8 @@ this cycle, reflecting an improvement in time tracking habits.
 Team collaboration was strong this cycle with productive meetings on May 29th
 and May 30th helping keep everyone aligned on design decisions and upcoming
 deliverables. Clockify usage was maintained throughout the cycle which is a
-positive step forward compared to the previous cycle. The design document and
-planning video are progressing steadily, though completing both remains the
+positive step forward compared to the previous cycle. The design document is
+progressing steadily, though completing remains the
 top priority going into the next cycle. Continuing to build momentum on the
 design work and moving toward MVP development will be the key focus ahead.
 
