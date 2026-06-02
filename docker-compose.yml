@@ -25,6 +25,7 @@ services:
   # ── 1. PostgreSQL ──────────────────────────
   postgres:
     image: postgres:16-alpine
+    platform: linux/arm64
     container_name: app_postgres
     restart: unless-stopped
     environment:
@@ -63,10 +64,30 @@ services:
   #   networks:
   #     - ai_net
 
-  # ── 2. MCP Server ──────────────────────────
-  # Uncomment once ./mcp/Dockerfile exists.
-  # Canvas credentials live here only — never passed to backend or LLM.
-  # OLLAMA_HOST points to native Mac Ollama via host.docker.internal.
+  # ── 3. Model puller (one-shot init) ─────────
+  # Pulls one small model on first run then exits.
+  # Pulling all three on first run takes a long time —
+  # start with mistral only for the smoke test.
+  model_puller:
+    image: ollama/ollama:latest
+    container_name: app_model_puller
+    restart: "no"
+    entrypoint: >
+      /bin/sh -c "
+        echo 'Waiting for Ollama...' &&
+        sleep 10 &&
+        ollama pull ${MODEL_MISTRAL:-mistral} &&
+        echo 'Model ready.'
+      "
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    networks:
+      - ai_net
+    depends_on:
+      - ollama
+
+  # ── Services below are stubbed out ──────────
+  # Uncomment each one once its Dockerfile exists.
   #
   # mcp:
   #   build:
