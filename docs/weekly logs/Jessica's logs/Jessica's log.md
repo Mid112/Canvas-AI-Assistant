@@ -152,3 +152,68 @@ The project board setup improved team organization and visibility into upcoming 
 * Maintain consistent Clockify tracking
 * Refine UI wireframes based on team feedback
 * Support project board management and milestone planning as development begins
+
+## **Cycle 4: Friday (29/5) ~ Monday (1/6)**
+
+### **Friday (29/5)**
+
+**Timesheet**
+**Clockify Report:** Logged via Clockify – 03:19:05
+
+<img width="1342" height="225" alt="Screenshot 2026-06-02 at 11 55 23 AM" src="https://github.com/user-attachments/assets/d0f21270-f8a6-46db-a085-8bd90488094d" />
+
+**Current Tasks**
+
+* Participated in a team meeting to discuss project progress, design document requirements, and upcoming deliverables
+* Continued creating UI wireframes for the project interfaces
+* Worked on setting up and organizing the GitHub project board, including task creation and milestone planning
+
+### **Saturday (30/5)**
+
+**Timesheet**
+**Clockify Report:** Logged via Clockify – 01:55:32
+<img width="1341" height="96" alt="Screenshot 2026-06-02 at 11 55 31 AM" src="https://github.com/user-attachments/assets/e4c18527-6246-40f0-866f-d112f7d24bc0" />
+**Current Tasks**
+
+* Continued working on UI wireframes and refining interface layouts based on project requirements
+
+### **Sunday (31/5)**
+
+<img width="1343" height="103" alt="Screenshot 2026-06-02 at 11 55 39 AM" src="https://github.com/user-attachments/assets/c18a57f2-674f-4982-a5e5-fbd4b67302c2" />
+
+**Timesheet**
+**Clockify Report:** Logged via Clockify – 00:35:24 
+
+**Current Tasks**
+
+* Continued updating and organizing the project board
+* Reviewed task assignments and milestone planning to ensure project tracking remained up to date
+
+### **Monday (1/6)**
+
+**Timesheet**
+**Clockify Report:** no work done- 0 hrs
+**Current Tasks**
+
+* No project work completed
+
+## **Cycle 4 – Goal Review**
+
+### **Reflection**
+
+This cycle focused on project organization, team coordination, and continued progress on the design phase. Significant effort was dedicated to developing UI wireframes and maintaining the project board, helping establish a stronger foundation for the upcoming design document and future implementation work.
+
+### **Retrospective**
+
+The project board updates improved visibility into team responsibilities and upcoming milestones, while continued wireframe development helped translate project requirements into visual designs. Team meetings provided an opportunity to align on priorities, discuss project progress, and coordinate upcoming deliverables. Overall, this cycle strengthened both project planning and design readiness.
+
+## **Next Cycle Goals (Cycle 5: Tuesday 2/6 ~ Thursday 4/6)**
+
+* Continue working on the design document
+* Complete remaining UI wireframes and incorporate team feedback
+* Participate in design discussions and reviews
+* Continue supporting project board management and milestone planning
+* Review teammates' pull requests and provide feedback
+* Maintain consistent Clockify tracking
+* Prepare for upcoming Proof of Life deliverables
+
