@@ -107,3 +107,61 @@
 - Finalize the project plan
 - Initialize the Level 0/1 DFD diagram
 
+
+# Cycle 4 Report: May 29-June 1
+
+## Timesheet
+
+### Clockify Report
+
+- **29/5 (Friday):** Team meeting –  2.5 hours
+- **29/5 (Friday):** Video presentation –  1.25 hours
+- **30/5 (Saturday):** Team meeting – 0.2 hour
+- **1/6 (Monday):** Review diagrams, update DFD diagrams and system learning – 2 hours
+
+**Total Estimated: ~6 hours**
+
+---
+
+## Completed Tasks
+
+### #1: Participated in Team Meeting (Friday, 29/5 & 30/5)
+- Attended team meetings to discuss project scope, system architecture, and overall design direction.
+- Discussed the interaction between the AI assistant, MCP server, backend services, and Canvas LMS integration.
+<img width="2373" height="82" alt="Screenshot 2026-06-02 102608" src="https://github.com/user-attachments/assets/d04b0225-99b9-418d-8818-0d599a0cdbc6" />
+<img width="2375" height="86" alt="Screenshot 2026-06-02 102602" src="https://github.com/user-attachments/assets/8db3d44f-46ca-4b83-8330-5ab65afc0809" />
+
+
+### #2: Video presentation (Friday, 29/5)
+- Finish script for a 12-minutes video presentation
+- Collaborate with teammate on Zoom for presentating
+<img width="2382" height="188" alt="Screenshot 2026-06-02 102613" src="https://github.com/user-attachments/assets/01960ee4-fd98-4ffc-abe5-8e6daffaf889" />
+
+
+### #3: DFD Diagrams update, system learning, reviews diagrams (Monday, 1/6)
+- Updating DFD Diagrams for the project based on what TA suggested
+- Review use case diagram, wireframe UI
+<img width="2363" height="186" alt="Screenshot 2026-06-02 102621" src="https://github.com/user-attachments/assets/6c78689e-4d6d-43b6-b0e2-f11d055b7f4f" />
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle focused primarily on system analysis and design activities. Significant progress was made in understanding the architecture of the AI-assisted Canvas management system and translating requirements into visual design artifacts.
+- Working on use cases, DFDs, and wireframes helped establish a clearer understanding of system behavior, data movement, and user interactions before implementation begins.
+
+### Retrospective:
+- The team successfully transitioned from project planning into the system design phase.
+- Creating and refining design artifacts improved communication among team members and helped identify system requirements early.
+- Additional time spent researching architecture concepts and AI system workflows contributed to more accurate and detailed diagrams.
+
+---
+
+## Next Cycle Goals
+- Continue tracking all project contributions using Clockify.
+- Finalize Use Case Diagrams and ensure consistency with project requirements.
+- Complete and refine Level 0 and Level 1 Data Flow Diagrams.
+- Finalize wireframes and validate user workflows.
+- Set up development environments and project infrastructure for implementation.
+- Begin backend and frontend development planning.
