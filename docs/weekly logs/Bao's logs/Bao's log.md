@@ -128,16 +128,20 @@
 ### #1: Participated in Team Meeting (Friday, 29/5 & 30/5)
 - Attended team meetings to discuss project scope, system architecture, and overall design direction.
 - Discussed the interaction between the AI assistant, MCP server, backend services, and Canvas LMS integration.
-<img width="2155" height="88" alt="Screenshot 2026-05-29 104344" src="https://github.com/user-attachments/assets/1b16d5e7-fde0-4754-9065-87b9362f8a43" />
+<img width="2373" height="82" alt="Screenshot 2026-06-02 102608" src="https://github.com/user-attachments/assets/d04b0225-99b9-418d-8818-0d599a0cdbc6" />
+<img width="2375" height="86" alt="Screenshot 2026-06-02 102602" src="https://github.com/user-attachments/assets/8db3d44f-46ca-4b83-8330-5ab65afc0809" />
+
 
 ### #2: Video presentation (Friday, 29/5)
 - Finish script for a 12-minutes video presentation
 - Collaborate with teammate on Zoom for presentating
-<img width="2159" height="94" alt="Screenshot 2026-05-29 104426" src="https://github.com/user-attachments/assets/322a2c85-2019-4e29-a24d-3df7365df314" />
+<img width="2382" height="188" alt="Screenshot 2026-06-02 102613" src="https://github.com/user-attachments/assets/01960ee4-fd98-4ffc-abe5-8e6daffaf889" />
+
 
 ### #3: DFD Diagrams update, system learning, reviews diagrams (Monday, 1/6)
 - Updating DFD Diagrams for the project based on what TA suggested
 - Review use case diagram, wireframe UI
+<img width="2363" height="186" alt="Screenshot 2026-06-02 102621" src="https://github.com/user-attachments/assets/6c78689e-4d6d-43b6-b0e2-f11d055b7f4f" />
 
 ---
 
