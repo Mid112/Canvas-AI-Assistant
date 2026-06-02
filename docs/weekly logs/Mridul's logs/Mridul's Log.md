@@ -146,3 +146,90 @@ time tracking is kept up to date.
 - **Goal 1:** Complete project planning video
 - **Goal 2:** Complete design document
 - **Goal 3:** Begin active development on MVP
+
+---
+
+<br>
+
+# Weekly Report: 29/05 – 01/06 (May 29 – June 1)
+
+## Timesheet
+
+### Clockify Report
+
+- **29/05 (Thursday):** Using Clockify – Logged 3 hours
+- **30/05 (Friday):** Using Clockify – Logged 0.5 hours
+- **31/05 (Saturday):** Using Clockify – Logged 0 hours
+- **01/06 (Sunday):** Using Clockify – Logged 1.5 hours
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Design document and project setup meeting (May 29)
+
+- Attended a 3-hour team meeting focused on the design document and initial
+  project setup.
+- Discussed design approach, structure, and setup requirements for the project.
+
+### #2: Next steps and PR approval meeting (May 30)
+
+- Attended a quick 0.5-hour meeting to align on next steps and design approach.
+- Reviewed and approved open pull requests during the session.
+
+### #3: Project planning video review (June 1)
+
+- Reviewed and edited the project planning video as part of the 1.5-hour work session.
+- Contributed toward finalizing the video for submission.
+
+### #4: Design document review (June 1)
+
+- Reviewed the current state of the design document and provided feedback.
+- Continued progress toward completing the design document deliverable.
+
+### #5: Database design (June 1)
+
+- Created the initial database design as part of the overall system design work.
+- This contributes directly to the design document and future MVP development.
+
+---
+
+## Progress Update (since 29/05/2026)
+
+| TASK/ISSUE #             | STATUS      |
+| ------------------------ | ----------- |
+| Design document          | In Progress |
+| Project planning video   | Completed   |
+| Database design          | Completed   |
+| PR reviews and approvals | Completed   |
+| Project setup            | In Progress |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle was centered around advancing the design document and completing project
+planning video. A significant amount of collaborative work was done through team meetings, covering the design approach, project setup, and next steps. The creation of the initial
+database design was a notable concrete deliverable this cycle, laying
+groundwork for future development. Clockify was used consistently throughout
+this cycle, reflecting an improvement in time tracking habits.
+
+### Retrospective:
+
+Team collaboration was strong this cycle with productive meetings on May 29th
+and May 30th helping keep everyone aligned on design decisions and upcoming
+deliverables. Clockify usage was maintained throughout the cycle which is a
+positive step forward compared to the previous cycle. The design document and
+planning video are progressing steadily, though completing both remains the
+top priority going into the next cycle. Continuing to build momentum on the
+design work and moving toward MVP development will be the key focus ahead.
+
+---
+
+## Next Cycle Goals
+
+- **Goal 1:** Complete design document
+- **Goal 2:** Complete project setup
+- **Goal 3:** Begin active development on MVP
