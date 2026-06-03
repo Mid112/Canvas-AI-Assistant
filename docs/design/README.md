@@ -272,12 +272,149 @@ This document describes the overall architecture, use case models, database desi
 * **2a. Email not found.**
   * 2a1. System does not find the email in the database.
   * 2a2. To prevent account enumeration attacks, system displays a generic "If this email exists, a reset process has started" message, taking no database action.
+ 
+  
 ## Database Design 
+
+<img width="2048" height="860" alt="image" src="https://github.com/user-attachments/assets/b768a866-8bef-45b9-958d-a23f559a870c" />
+
+
+### Entity Descriptions and Relationships
+
+---
+
+#### **users**
+- `id`: Primary Key
+- `canvas_user_id`: Unique identifier linked to Canvas LMS
+- `name`, `email`, `role`, `created_at`
+
+Represents all system users (instructors, TAs, and admins). Each user is assigned a single role that determines their access level and permissions within the system.
+
+---
+
+#### **sessions**
+- `id`: Primary Key
+- `user_id`: Foreign Key → `users`
+- `token_hash`, `expires_at`, `created_at`
+
+Tracks active login sessions for authenticated users. When a user logs in, a session record is created with a hashed token and an expiry timestamp. This is how the system validates whether a user is currently authenticated.
+
+---
+
+#### **courses**
+- `id`: Primary Key
+- `canvas_course_id`: Unique identifier linked to Canvas LMS
+- `name`, `term`, `instructor_id`, `created_at`
+
+Stores courses imported from Canvas. Each course is owned by an instructor (via `instructor_id`) and carries a term to support multi-semester use.
+
+---
+
+#### **assignments**
+- `id`: Primary Key
+- `canvas_assignment_id`: Unique identifier linked to Canvas LMS
+- `course_id`: Foreign Key → `courses`
+- `title`, `due_date`, `points_possible`, `created_at`
+
+Stores assignments within a course, synced from Canvas. Each assignment belongs to exactly one course and carries metadata such as due date and point value.
+
+---
+
+#### **submissions**
+- `id`: Primary Key
+- `canvas_submission_id`: Unique identifier linked to Canvas LMS
+- `assignment_id`: Foreign Key → `assignments`
+- `student_canvas_id`, `student_name`, `status`, `score`, `submitted_at`
+
+Tracks individual student submissions per assignment. Students are not stored in the `users` table since the system is built for instructors, not students — they are referenced here only by their Canvas ID. Status can be `missing`, `late`, or `submitted`.
+
+---
+
+#### **conversations**
+- `id`: Primary Key
+- `user_id`: Foreign Key → `users`
+- `course_id`: Foreign Key → `courses` (optional)
+- `created_at`
+
+Represents a chat session between a user and the AI assistant. A conversation can optionally be scoped to a specific course, providing the assistant with relevant context for its responses.
+
+---
+
+#### **messages**
+- `id`: Primary Key
+- `conversation_id`: Foreign Key → `conversations`
+- `role`, `content`, `created_at`
+
+Stores the individual messages within a conversation. Each message is attributed to either the `user` or the `assistant` via the `role` field, forming the full back-and-forth chat history.
+
+---
+
+#### **workflows**
+- `id`: Primary Key
+- `conversation_id`: Foreign Key → `conversations`
+- `user_id`: Foreign Key → `users`
+- `intent`, `generated_query`, `preview_data`, `status`, `created_at`
+
+The core of the system's "human-in-the-loop" safety model. When the AI generates an actionable operation (such as a bulk grade update or a student message), it is stored here as a workflow with a `pending` status. The instructor must explicitly approve or reject it before anything is executed. Status can be `pending`, `approved`, or `rejected`.
+
+---
+
+#### **audit_logs**
+- `id`: Primary Key
+- `user_id`: Foreign Key → `users`
+- `workflow_id`: Foreign Key → `workflows` (optional)
+- `action`, `details`, `timestamp`
+
+A complete record of all actions taken in the system, particularly approved workflows. This is the accountability layer — every operation can be traced back to a specific user and timestamp.
+
+---
+
+#### **message_templates**
+- `id`: Primary Key
+- `user_id`: Foreign Key → `users`
+- `course_id`: Foreign Key → `courses` (optional)
+- `title`, `content`, `created_at`
+
+Stores reusable message templates that instructors can create for common student communications. Templates can be scoped to a specific course or kept general for use across multiple courses.
+
+---
+
+### Cardinality Summary
+
+| Relationship                            | Type     |
+|-----------------------------------------|----------|
+| User → Sessions                         | 1 : 0..* |
+| User → Courses (as instructor)          | 1 : 0..* |
+| Course → Assignments                    | 1 : 0..* |
+| Assignment → Submissions                | 1 : 0..* |
+| User → Conversations                    | 1 : 0..* |
+| Course → Conversations                  | 1 : 0..* |
+| Conversation → Messages                 | 1 : 0..* |
+| Conversation → Workflows                | 1 : 0..* |
+| User → Workflows                        | 1 : 0..* |
+| User → Audit Logs                       | 1 : 0..* |
+| Workflow → Audit Logs                   | 1 : 0..* |
+| User → Message Templates               | 1 : 0..* |
+| Course → Message Templates             | 1 : 0..* |
+
+---
+
+### Why This Model?
+
+This model reflects the core design goal of a safe, auditable AI assistant for Canvas instructors:
+
+- A unified `users` table simplifies account management across all roles
+- Separating `conversations` from `messages` allows sessions to be tracked, resumed, and scoped to a course without duplicating data
+- The `workflows` table enforces the human-in-the-loop requirement — no AI-generated action can execute without explicit instructor approval
+- The `audit_logs` table ensures full traceability of every approved or rejected action, supporting compliance and accountability
+- Students are deliberately excluded from the `users` table and referenced only by Canvas ID in `submissions`, keeping the system focused on instructor-facing workflows
+- Canvas IDs are stored on all synced entities (`users`, `courses`, `assignments`, `submissions`) to support reliable integration with the Canvas LMS API
+- `message_templates` are decoupled from conversations, allowing instructors to build a reusable library of communications independent of any specific AI session
 
 ## Data Flow Diagrams
 
 ### DFD Level 0 - Context Diagram
-
+on n
 The Level 0 DFD provides a high-level overview of the Agentic AI 
 Canvas Course Management System. It illustrates the primary actors 
 interacting with the system, including Instructors, Teaching 
