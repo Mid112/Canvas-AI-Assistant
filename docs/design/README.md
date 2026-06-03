@@ -13,6 +13,120 @@ This document describes the overall architecture, use case models, database desi
 
 ## System Architecture Design
 
+
+## Architecture Pattern
+
+This system uses a **Strict Layered Architecture** combined with a
+**Microservices decomposition** within the backend tier.
+
+The layered pattern enforces that each zone only communicates with the
+zone directly below it which means that the React frontend is isolated from PostgreSQL,
+and FastAPI never influences Ollama. This satisfies the core non-functional
+requirements around LLM isolation and credential security at the
+infrastructure and for the purposes of this project.
+
+The microservices pattern applies within the backend: FastAPI, MCP Server,
+Ollama, and PostgreSQL are independently deployable subsystems, each with
+a single responsibility. This allows the team to develop, test, and replace
+each subsystem without coupling.
+
+Two explicit design decisions drove the architecture:
+
+1. **MCP server as the single credential boundary.** The Canvas API token
+   is stored and used exclusively inside the MCP server. FastAPI never
+   holds it, and the LLM never sees it. A bug or injection in FastAPI
+   cannot retrieve or access the token because it never crosses into that layer.
+
+2. **Pydantic as both the PII sanitiser and output validator.** Rather than
+   a separate processing module, Pydantic field validators handle personal identifiable information field
+   replacement on Canvas input, and schema
+   validation on LLM output. This reduces the component count and makes
+   the transformation and validation a single auditable step.
+
+---
+
+## Component Rationale
+
+### Frontend — React, TypeScript, Tailwind CSS, shadcn/ui
+
+A browser hosted frontend is a **module**, not a
+subsystem because it cannot operate independently and depends entirely on the
+FastAPI layer below it. React handles all user interaction and renders
+three views: the chat panel, the dry-run preview, and the audit log viewer.
+For example, TypeScript enforces type safety across the UI. shadcn/ui provides accessible, consistent components
+without a heavy runtime.
+
+### FastAPI Subsystem — Python 3.12, JWT, bcrypt
+
+FastAPI is the API gateway and orchestration layer. It contains three
+modules:
+
+- **Chat exporter** — receives the raw prompt from the frontend and
+  forwards it to MCP. It does not interpret or transform the prompt.
+- **Authentication module** — verifies JWT tokens and enforces RBAC.
+  Professors, TAs, and admins have different privileges enforced here
+  before any downstream call is made.
+- **Preview builder** — receives the validated diff payload from MCP and
+  formats it for the frontend dry-run view.
+
+FastAPI is designed such that it doesn't hold Canvas credentials and has no access to
+the LLM network. It is in between the browser and the
+trusted server.
+
+### MCP Server Subsystem
+
+MCP is the to connect LLM to external tools or filesystem. It is the only subsystem that holds
+the Canvas API token and the only subsystem that communicates with Ollama.
+It contains four modules in execution order:
+
+- **Pydantic validation + PII hider** — parses the incoming Canvas JSON
+  response, replaces student names and IDs with synthetic tokens, and
+  validates types and structure before anything is sent to the LLM.
+- **Calling Ollama** — sends the sanitised prompt to Ollama via
+  `HTTP POST /api/generate` and waits for the raw text response.
+- **Canvas API call** — attaches the Bearer token and executes the
+  validated action against the Canvas REST API after instructor confirms.
+- **Audit writer** — inserts a timestamped record into the audit log on
+  every MCP action, before and after Canvas execution.
+
+
+
+### Ollama Subsystem — Llama 3.8B, LoRA
+
+Ollama runs locally on the host machine and it serves the LoRA fine-tuned Llama 3.8B model. LoRA is a
+**build-time** fine-tuning technique where the adapted weights are merged into
+the model before deployment and are not a runtime step. During inference,
+the model simply behaves as if it was trained to output structured Canvas
+action JSON. Ollama is isolated from the internet meaning the LLM cannot make outbound calls
+even if there was a network access.
+
+### PostgreSQL Subsystem — SQLAlchemy
+
+PostgreSQL is the persistence layer containing four logical tables:
+
+- **users / sessions** — stores credentials and active session tokens.
+  Passwords are stored as bcrypt hashes, never plaintext.
+- **course cache** — stores timestamped Canvas API responses to avoid
+  redundant API calls against Canvas's rate limits. MCP checks this before
+  hitting Canvas.
+- **Canvas API call log** — records the JSON schema and auth token shape
+  of every outbound Canvas call for audit purposes.
+- **audit log** — immutable append-only record of every instructor action,
+  timestamp, and result. Supports two use cases: transparency (instructors
+  can review past actions) and rollback (revert to a previous safe state if
+  a partial update fails).
+
+SQLAlchemy sits in front of all four tables, enforcing typed models
+and preventing raw SQL construction that could introduce injection risks.
+
+### Canvas LMS REST API — External
+
+Canvas is the only external subsystem. It is accessed exclusively by the
+MCP server using a Bearer token that never leaves that container. The API
+is instructor-scoped which means that each token only has access to the courses belonging
+to that instructor, preventing one instructor from modifying another's
+courses even if credentials were somehow confused.
+
 ## Use Case Models
 ### Use Case Diagram
 <img width="935" height="723" alt="use-case-diagram" src="https://github.com/user-attachments/assets/5905cfa6-e1e2-4bcb-8207-1690b33f53ad" />
