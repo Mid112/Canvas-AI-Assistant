@@ -5,7 +5,264 @@
 ## System Architecture Design
 
 ## Use Case Models
+### Use Case Diagram
+<img width="935" height="723" alt="use-case-diagram" src="https://github.com/user-attachments/assets/5905cfa6-e1e2-4bcb-8207-1690b33f53ad" />
 
+---
+
+### Use Case 1: Authenticate User (Login)
+* **Primary actor:** Instructor, Teaching Assistant, System Administrator 
+* **Description:** User logs into the application securely to receive an active session token. 
+* **Precondition:** User account exists in the PostgreSQL database. 
+* **Postcondition:** User is granted an active JWT and redirected to their respective dashboard. 
+
+**Main scenario:**
+1. User navigates to the login screen at `localhost:3000`.
+2. User inputs their email and password and clicks "Login."
+3. System verifies the password hash against the database.
+4. System generates a JSON Web Token (JWT) for the session.
+5. System redirects the user to the Course Dashboard (or System Dashboard for Admins).
+
+**Extensions:**
+* **3a. Invalid credentials.**
+  * 3a1. System detects a mismatch in the email or password hash.
+  * 3a2. System denies entry and displays an error banner: "Invalid email or password."
+
+---
+
+### Use Case 2: Terminate Session (Logout)
+* **Primary actor:** Instructor, Teaching Assistant, System Administrator 
+* **Description:** User securely exits the application, invalidating their active session. 
+* **Precondition:** User is currently authenticated. 
+* **Postcondition:** Session is terminated and user is returned to the login screen. 
+
+**Main scenario:**
+1. User clicks the "Logout" button in the navigation bar.
+2. System immediately invalidates the active JWT.
+3. System clears cached user data from the local browser storage.
+4. System redirects the user to the Login screen.
+
+---
+
+### Use Case 3: Create User Account
+* **Primary actor:** System Administrator 
+* **Description:** Admin provisions a new user profile and assigns a role. 
+* **Precondition:** Admin is authenticated and viewing the User Management portal. 
+* **Postcondition:** A new user record is created in the PostgreSQL database. 
+
+**Main scenario:**
+1. Admin clicks "Add New User."
+2. Admin enters the new user's email, assigns a temporary password, and selects a role (Instructor or TA).
+3. Admin clicks "Save."
+4. System hashes the temporary password and creates the user record in the database.
+
+**Extensions:**
+* **4a. Email already exists.**
+  * 4a1. System database detects a duplicate email address.
+  * 4a2. System prevents creation and alerts the Admin: "User with this email already exists."
+
+---
+
+### Use Case 4: Connect Canvas Account
+* **Primary actor:** Instructor, Teaching Assistant 
+* **Description:** User inputs their Canvas API token so the application can communicate with the Canvas LMS. 
+* **Precondition:** User is authenticated. 
+* **Postcondition:** The API token is securely encrypted and stored in the database. 
+
+**Main scenario:**
+1. User navigates to the Settings dashboard.
+2. User pastes their Canvas API token into the input field and clicks "Save."
+3. System encrypts the token via AES-256.
+4. System saves the encrypted token to the user's database row.
+5. System makes a test call to the Canvas API to verify access scopes.
+6. System confirms success with a green toast notification.
+
+**Extensions:**
+* **5a. Token is invalid or lacks scopes.**
+  * 5a1. The Canvas API returns an HTTP 401 (Unauthorized) or 403 (Forbidden) error.
+  * 5a2. System deletes the invalid token from the database.
+  * 5a3. System displays an error banner: "Authentication Failed: Ensure token is valid."
+
+---
+
+### Use Case 5: View Course & Submission Dashboard
+* **Primary actor:** Instructor, Teaching Assistant 
+* **Description:** User views a color-coded grid of student submission statuses. 
+* **Precondition:** User has a valid API token stored. 
+* **Postcondition:** The dashboard renders the current submission data. 
+
+**Main scenario:**
+1. User selects a specific course from the sidebar.
+2. System queries the PostgreSQL cache for recent course assignments and submissions.
+3. System renders the submission status grid (submitted, late, missing, excused).
+
+**Extensions:**
+* **2a. Cache is expired (TTL exceeded).**
+  * 2a1. System automatically queries the Canvas API for fresh data.
+  * 2a2. System updates the PostgreSQL cache before rendering the grid.
+* **2b. Canvas API rate limit or timeout.**
+  * 2b1. The Canvas API returns an HTTP 429 error or times out during the fetch.
+  * 2b2. System initiates an exponential backoff retry.
+  * 2b3. If retries fail, system displays a warning and shows the last known cached data.
+
+---
+
+### Use Case 6: Filter & Search Dashboard Data
+* **Primary actor:** Instructor, Teaching Assistant 
+* **Description:** User dynamically filters the dashboard to locate specific students or assignment statuses. 
+* **Precondition:** The Course Dashboard is populated with data. 
+* **Postcondition:** The UI updates to show only requested data without querying the backend. 
+
+**Main scenario:**
+1. User clicks the "Status" filter toggle and selects "Missing."
+2. The frontend system isolates records matching the criteria.
+3. System dynamically updates the grid to display only students with missing assignments.
+
+---
+
+### Use Case 7: Draft & Send AI Reminder Messages
+* **Primary actor:** Instructor, Teaching Assistant 
+* **Description:** User prompts the AI to draft messages, reviews them, and executes the send action. 
+* **Precondition:** User is viewing a specific Course Dashboard. 
+* **Postcondition:** Messages are dispatched via Canvas API and logged in the database. 
+
+**Main scenario:**
+1. User enters a command (e.g., "Draft a reminder to everyone missing Assignment 3").
+2. System parses the command via the local LLM.
+3. System identifies targeted students and generates a visual Dry-Run Preview of the drafted text.
+4. User reviews the draft and clicks "Approve & Execute."
+5. System decrypts the user's Canvas token and dispatches the messages via the Canvas API.
+6. System logs the executed action in the database.
+
+**Extensions:**
+* **2a. LLM fails to parse prompt.**
+  * 2a1. Pydantic validation rejects the LLM output. System prompts user to rephrase.
+* **4a. User alters the draft.**
+  * 4a1. User types in the preview text box to change the message tone before confirming.
+* **4b. User aborts the action.**
+  * 4b1. User clicks "Cancel"; draft is discarded, no API call is made.
+
+---
+
+### Use Case 8: Create Canvas Assignment via AI
+* **Primary actor:** Instructor 
+* **Description:** Instructor prompts the AI to create a new assignment in Canvas. 
+* **Precondition:** Instructor has "Write" permissions on their Canvas token. 
+* **Postcondition:** A new assignment is instantiated in Canvas and logged. 
+
+**Main scenario:**
+1. Instructor types a creation command (e.g., "Create a Week 6 Check-in quiz").
+2. System parses the command and resolves dates via the LLM.
+3. System checks Canvas for duplicate assignment names.
+4. System generates a staging card showing proposed assignment fields.
+5. Instructor reviews and clicks "Approve & Execute."
+6. System creates the assignment via the Canvas API.
+7. System logs the creation event in the database.
+
+**Extensions:**
+* **3a. Duplicate assignment name detected.**
+  * 3a1. System flags the duplicate in the Dry-Run Preview, requiring the instructor to rename it.
+* **5a. Instructor tweaks assignment parameters.**
+  * 5a1. Instructor modifies fields (e.g., Points Possible) before executing.
+
+---
+
+### Use Case 9: View Personal Action History Log
+* **Primary actor:** Instructor, Teaching Assistant 
+* **Description:** User reviews their own past automated actions to ensure accountability. 
+* **Precondition:** User has previously executed an AI action. 
+* **Postcondition:** User successfully views their localized history. 
+
+**Main scenario:**
+1. User clicks on the "History" tab in the dashboard.
+2. System queries the PostgreSQL database for audit logs strictly matching the current user's ID.
+3. System displays a table with timestamps, action types, and affected entities.
+
+---
+
+### Use Case 10: View System Health Dashboard
+* **Primary actor:** System Administrator 
+* **Description:** Admin views high-level application metrics. 
+* **Precondition:** Admin is authenticated. 
+* **Postcondition:** Admin views real-time status of the local deployment. 
+
+**Main scenario:**
+1. Admin navigates to the System Dashboard.
+2. System aggregates data from the database and Docker environment.
+3. System displays active sessions, API error rates, and container health.
+
+**Extensions:**
+* **2a. Container health metrics unreachable.**
+  * 2a1. System fails to read Docker stats.
+  * 2a2. System displays standard database metrics but grays out container statistics with a "Data Unavailable" badge.
+
+---
+
+### Use Case 11: Modify User Roles & Permissions
+* **Primary actor:** System Administrator 
+* **Description:** Admin changes the access level of an existing user. 
+* **Precondition:** Admin is viewing the User Management portal. 
+* **Postcondition:** The target user's role is permanently updated. 
+
+**Main scenario:**
+1. Admin selects a user from the account list.
+2. Admin changes the role drop-down from "TA" to "Instructor" and clicks Save.
+3. System updates the role column in the PostgreSQL database.
+
+**Extensions:**
+* **3a. Admin attempts to demote the final Admin account.**
+  * 3a1. System detects the action would leave the system without an administrator.
+  * 3a2. System blocks the action and displays an error warning.
+
+---
+
+### Use Case 12: Deactivate User Account
+* **Primary actor:** System Administrator 
+* **Description:** Admin revokes application access for a user. 
+* **Precondition:** Target user exists in the database. 
+* **Postcondition:** User can no longer log in or execute actions. 
+
+**Main scenario:**
+1. Admin clicks "Deactivate" next to a user's profile.
+2. System flags the account as `is_active: false` in the database.
+3. System immediately invalidates any active JWTs for that user.
+
+---
+
+### Use Case 13: View System-Wide Master Audit Log
+* **Primary actor:** System Administrator 
+* **Description:** Admin reviews the master ledger of all user actions for compliance. 
+* **Precondition:** Admin is authenticated. 
+* **Postcondition:** Admin views actions taken across all accounts. 
+
+**Main scenario:**
+1. Admin navigates to the Master Audit tab.
+2. System queries PostgreSQL for all logged AI events across all users.
+3. System displays the ledger sequentially.
+
+**Extensions:**
+* **2a. Large dataset retrieval.**
+  * 2a1. System detects more than 100 rows of audit logs.
+  * 2a2. System implements pagination, loading the first 50 results to maintain UI performance.
+
+---
+
+### Use Case 14: Reset User Password
+* **Primary actor:** Instructor, Teaching Assistant, System Administrator 
+* **Description:** User recovers access to their account. 
+* **Precondition:** User is on the login screen. 
+* **Postcondition:** User sets a new password and gains entry. 
+
+**Main scenario:**
+1. User clicks "Forgot Password" and enters their email.
+2. System validates the email against the database.
+3. System prompts the user to enter and confirm a new password.
+4. System generates a new password hash and overwrites the old hash in the database.
+
+**Extensions:**
+* **2a. Email not found.**
+  * 2a1. System does not find the email in the database.
+  * 2a2. To prevent account enumeration attacks, system displays a generic "If this email exists, a reset process has started" message, taking no database action.
 ## Database Design 
 
 ## Data Flow Diagrams
