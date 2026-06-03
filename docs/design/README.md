@@ -263,16 +263,18 @@
 * **2a. Email not found.**
   * 2a1. System does not find the email in the database.
   * 2a2. To prevent account enumeration attacks, system displays a generic "If this email exists, a reset process has started" message, taking no database action.
+ 
+  
 ## Database Design 
 
 <img width="2048" height="860" alt="image" src="https://github.com/user-attachments/assets/b768a866-8bef-45b9-958d-a23f559a870c" />
 
 
-# Entity Descriptions and Relationships
+### Entity Descriptions and Relationships
 
 ---
 
-# **users**
+#### **users**
 - `id`: Primary Key
 - `canvas_user_id`: Unique identifier linked to Canvas LMS
 - `name`, `email`, `role`, `created_at`
@@ -281,7 +283,7 @@ Represents all system users (instructors, TAs, and admins). Each user is assigne
 
 ---
 
-# **sessions**
+#### **sessions**
 - `id`: Primary Key
 - `user_id`: Foreign Key → `users`
 - `token_hash`, `expires_at`, `created_at`
@@ -290,7 +292,7 @@ Tracks active login sessions for authenticated users. When a user logs in, a ses
 
 ---
 
-# **courses**
+#### **courses**
 - `id`: Primary Key
 - `canvas_course_id`: Unique identifier linked to Canvas LMS
 - `name`, `term`, `instructor_id`, `created_at`
@@ -299,7 +301,7 @@ Stores courses imported from Canvas. Each course is owned by an instructor (via 
 
 ---
 
-# **assignments**
+#### **assignments**
 - `id`: Primary Key
 - `canvas_assignment_id`: Unique identifier linked to Canvas LMS
 - `course_id`: Foreign Key → `courses`
@@ -309,7 +311,7 @@ Stores assignments within a course, synced from Canvas. Each assignment belongs 
 
 ---
 
-# **submissions**
+#### **submissions**
 - `id`: Primary Key
 - `canvas_submission_id`: Unique identifier linked to Canvas LMS
 - `assignment_id`: Foreign Key → `assignments`
@@ -318,7 +320,8 @@ Stores assignments within a course, synced from Canvas. Each assignment belongs 
 Tracks individual student submissions per assignment. Students are not stored in the `users` table since the system is built for instructors, not students — they are referenced here only by their Canvas ID. Status can be `missing`, `late`, or `submitted`.
 
 ---
-# **conversations**
+
+#### **conversations**
 - `id`: Primary Key
 - `user_id`: Foreign Key → `users`
 - `course_id`: Foreign Key → `courses` (optional)
@@ -327,7 +330,8 @@ Tracks individual student submissions per assignment. Students are not stored in
 Represents a chat session between a user and the AI assistant. A conversation can optionally be scoped to a specific course, providing the assistant with relevant context for its responses.
 
 ---
-# **messages**
+
+#### **messages**
 - `id`: Primary Key
 - `conversation_id`: Foreign Key → `conversations`
 - `role`, `content`, `created_at`
@@ -336,7 +340,7 @@ Stores the individual messages within a conversation. Each message is attributed
 
 ---
 
-# **workflows**
+#### **workflows**
 - `id`: Primary Key
 - `conversation_id`: Foreign Key → `conversations`
 - `user_id`: Foreign Key → `users`
@@ -346,7 +350,7 @@ The core of the system's "human-in-the-loop" safety model. When the AI generates
 
 ---
 
-# **audit_logs**
+#### **audit_logs**
 - `id`: Primary Key
 - `user_id`: Foreign Key → `users`
 - `workflow_id`: Foreign Key → `workflows` (optional)
@@ -356,7 +360,7 @@ A complete record of all actions taken in the system, particularly approved work
 
 ---
 
-# **message_templates**
+#### **message_templates**
 - `id`: Primary Key
 - `user_id`: Foreign Key → `users`
 - `course_id`: Foreign Key → `courses` (optional)
@@ -366,7 +370,7 @@ Stores reusable message templates that instructors can create for common student
 
 ---
 
-# Cardinality Summary
+### Cardinality Summary
 
 | Relationship                            | Type     |
 |-----------------------------------------|----------|
@@ -386,7 +390,7 @@ Stores reusable message templates that instructors can create for common student
 
 ---
 
-# Why This Model?
+### Why This Model?
 
 This model reflects the core design goal of a safe, auditable AI assistant for Canvas instructors:
 
