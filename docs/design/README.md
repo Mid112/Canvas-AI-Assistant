@@ -99,7 +99,7 @@ Suggested prompts are provided to assist instructors in creating effective assig
 
 <img width="832" height="805" alt="Screenshot 2026-06-02 at 4 44 52 PM" src="https://github.com/user-attachments/assets/f6955521-a2ae-4213-9e07-c8d8eb7cd836" />
 
-Before any AI-generated action is executed, instructors are presented with a Workflow Preview page.
+Before any AI-generated action is executed, instructors are presented with a Workflow Preview and approval page.
 
 This page displays the original request, affected courses, assignments and students. Instructors may approve, modify, or reject the workflow before execution.
 This review process ensures transparency and maintains human oversight over all AI-assisted actions.
@@ -142,7 +142,7 @@ The settings page allows instructors to manage profile information, notification
 
 Selecting **Dashboard** from the navigation menu will take Teaching Assistants to their main dashboard.
 
-The dashboard provides a summary of assigned courses, missing and late submissions, pending message drafts, recent workflow activity, and analytics summaries. Quick action buttons allow TAs to efficiently monitor course progress and assist instructors with course management activities.
+The dashboard provides a summary of assigned courses, missing and late submissions and pending message drafts. Quick action buttons allow TAs to efficiently monitor course progress and assist instructors with course management activities.
 
 The dashboard also clearly displays which actions Teaching Assistants are permitted to perform and which actions require instructor approval.
 
@@ -241,5 +241,5 @@ The Settings page serves as the central location for maintaining and configuring
 
 <img width="820" height="723" alt="Screenshot 2026-06-02 at 5 25 32 PM" src="https://github.com/user-attachments/assets/fd841aa1-256d-4317-9dfb-3e3e75401711" />
 
-### UI Design Disclaimer
+## UI Design Disclaimer
 The wireframes presented in this section represent the current planned user interface for the Canvas Workflow Assistant and are intended to communicate the overall user experience, navigation structure, and core system functionality. As development progresses, certain interface components, layouts, workflows, and visual elements may be refined or modified based on implementation constraints, user feedback, usability testing, and evolving project requirements. Any changes made during development will maintain the core functionality and objectives described throughout this design document.
