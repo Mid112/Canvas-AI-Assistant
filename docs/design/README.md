@@ -48,7 +48,8 @@ The diagram also shows six data stores: D1 User Sessions,
 D2 Canvas Tokens, D3 Course Cache, D4 Audit Logs, 
 D5 Conversations, and D6 Workflows.
 
-<img width="1149" height="831" alt="Screenshot 2026-06-02 210614" src="https://github.com/user-attachments/assets/dd921399-2fb3-4957-8ab2-608e8ecd7cd7" />
+<img width="1752" height="1168" alt="Screenshot 2026-06-02 210907" src="https://github.com/user-attachments/assets/2d01fa06-3774-45b1-a74e-736262b4b58a" />
+
 
 
 ## User Interface (UI) Design
