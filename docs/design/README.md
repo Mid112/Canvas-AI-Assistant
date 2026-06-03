@@ -13,6 +13,8 @@ This document describes the overall architecture, use case models, database desi
 
 ## System Architecture Design
 
+<img width="1124" height="614" alt="Screenshot 2026-06-02 at 11 12 40 PM" src="https://github.com/user-attachments/assets/b736994d-884e-43b4-b04d-3789698d6f5b" />
+
 
 ## Architecture Pattern
 
