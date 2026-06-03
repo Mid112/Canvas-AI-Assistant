@@ -22,7 +22,8 @@ The diagram shows the major data flows entering and leaving the
 system, including user requests, generated responses, Canvas API 
 interactions, and audit reports.
 
-![DFD Level 0](<img width="1170" height="776" alt="Screenshot 2026-06-02 210608" src="https://github.com/user-attachments/assets/1dd6c8ed-ff12-4b08-a27f-0b405064694f" />)
+<img width="1170" height="776" alt="Screenshot 2026-06-02 210608" src="https://github.com/user-attachments/assets/d598a15b-ab38-4cbb-8c16-31b2d11c6e80" />
+
 
 ---
 
@@ -47,7 +48,8 @@ The diagram also shows six data stores: D1 User Sessions,
 D2 Canvas Tokens, D3 Course Cache, D4 Audit Logs, 
 D5 Conversations, and D6 Workflows.
 
-![DFD Level 1](<img width="1149" height="831" alt="Screenshot 2026-06-02 210614" src="https://github.com/user-attachments/assets/9fdef1ca-66f8-4c19-a611-f08c1e769ee9" />)
+<img width="1149" height="831" alt="Screenshot 2026-06-02 210614" src="https://github.com/user-attachments/assets/dd921399-2fb3-4957-8ab2-608e8ecd7cd7" />
+
 
 ## User Interface (UI) Design
 
