@@ -2,6 +2,15 @@
 
 ## Introduction
 
+This document presents the system design for the Canvas Workflow Assistant, a secure AI-powered platform designed to assist instructors in managing selected Canvas Learning Management System (LMS) workflows through natural language interactions and workflow automation.
+
+The primary goal of the system is to reduce the administrative workload associated with course management while maintaining transparency, security, and human oversight. By integrating with Canvas and leveraging locally hosted large language models (LLMs), the platform enables users to perform tasks such as analyzing missing submissions, generating student communications, creating assignments, and reviewing course analytics through a conversational interface.
+
+The system supports three primary user roles: Instructors, Teaching Assistants, and System Administrators. Each role is provided with a dedicated interface and permissions appropriate to their responsibilities. To ensure accountability and user control, all AI-generated actions are presented through a workflow preview and approval process before execution.
+
+This document describes the overall architecture, use case models, database design, data flow diagrams, and user interface design of the system. Together, these components provide a comprehensive overview of how the Canvas Workflow Assistant is structured and how users interact with the platform.
+
+
 ## System Architecture Design
 
 ## Use Case Models
