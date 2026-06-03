@@ -10,6 +10,48 @@
 
 ## Data Flow Diagrams
 
+### DFD Level 0 - Context Diagram
+
+The Level 0 DFD provides a high-level overview of the Agentic AI 
+Canvas Course Management System. It illustrates the primary actors 
+interacting with the system, including Instructors, Teaching 
+Assistants, and the Administrator, as well as external systems 
+such as the Canvas LMS and the local Ollama LLM service.
+
+The diagram shows the major data flows entering and leaving the 
+system, including user requests, generated responses, Canvas API 
+interactions, and audit reports.
+
+<img width="1170" height="776" alt="Screenshot 2026-06-02 210608" src="https://github.com/user-attachments/assets/d598a15b-ab38-4cbb-8c16-31b2d11c6e80" />
+
+
+---
+
+### DFD Level 1 - Process Decomposition
+
+The Level 1 DFD expands the system into six core processes:
+
+- **1.1 User Access** — Handles authentication and session management
+- **1.2 Course Data Retrieval** — Fetches and caches course data 
+  from Canvas LMS using the instructor's stored API token
+- **1.3 Request Interpretation** — Parses natural language input 
+  and consults the Ollama LLM to generate a structured action plan
+- **1.4 Validation & Dry-Run Preview** — Validates the proposed 
+  action and presents a preview to the instructor for approval
+- **1.5 Execute Canvas Actions** — Executes approved actions 
+  against the Canvas LMS REST API
+- **1.6 Audit Logging & History** — Records all actions to the 
+  audit log and surfaces failure notices to instructors and 
+  query results to administrators
+
+The diagram also shows six data stores: D1 User Sessions, 
+D2 Canvas Tokens, D3 Course Cache, D4 Audit Logs, 
+D5 Conversations, and D6 Workflows.
+
+<img width="1752" height="1168" alt="Screenshot 2026-06-02 210907" src="https://github.com/user-attachments/assets/2d01fa06-3774-45b1-a74e-736262b4b58a" />
+
+
+
 ## User Interface (UI) Design
 
 ### Account Setup and Authentication
