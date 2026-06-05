@@ -170,7 +170,7 @@
 
 ---
 
-# Cycle 5 Report: June 2 – June 5
+# Cycle 5 Report: June 2 – June 4
 
 ## Timesheet
 
