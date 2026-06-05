@@ -49,10 +49,9 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run tests
-        run: pytest tests/ -v
-        env:
-          DATABASE_URL: sqlite+aiosqlite:////tmp/test.db
-          ENVIRONMENT: test
+        run: |
+          cd test/backend
+          pytest tests/ -v
 
   # ── 3. Frontend lint + test ───────────────
   frontend-test:
@@ -76,7 +75,9 @@ jobs:
         run: npm run lint
 
       - name: Run tests
-        run: npm run test
+        run: |
+          cd test/frontend
+          npm run test
 
   # ── 4. Docker build check ─────────────────
   docker-build:
