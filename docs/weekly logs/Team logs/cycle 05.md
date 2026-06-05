@@ -58,8 +58,8 @@ We had a two hour meeting on tuesday June 1st to agree on diagram design
 
 ## In Progress Tasks/ To do:
 
-| Task ID | Description        | Estimated Time (hrs) | Assigned To |
-| ------- | ------------------ | -------------------- | ----------- |
+| Task ID | Description        | Assigned To |
+| ------- | ------------------ | ----------- |
 | 328 | Dashboard Prototype | Jessica |
 | 37 | Authentication UI | Rhythm |
 | 320 | Editing and submission | Mridul |
