@@ -14,8 +14,8 @@ We had a two hour meeting on tuesday June 1st to agree on diagram design
     - Project progression
 
 ## Associated Tasks from Project Board:
-| Task ID | Description                                      | Feature | Assigned To | Status      |
-|---------|--------------------------------------------------|---------|-------------|-------------|
+| Task ID | Description                                      | Assigned To | Status      |
+|---------|--------------------------------------------------|-------------|-------------|
 | 318| Presentation slides | Jessica  |Finished|
 | 322 | Presentation script | Yerdana  |Finished|
 | 26, 27, 28, 29, 30| Frontend foundation | Jessica | Finished |
@@ -23,8 +23,8 @@ We had a two hour meeting on tuesday June 1st to agree on diagram design
 | 329 | Folder structure | Mridul | Finished |
 
 ## Tasks for Next Cycle:
-| Task ID | Description                                      | Feature | Assigned To | Status      |
-|---------|--------------------------------------------------|---------|-------------|-------------|
+| Task ID | Description                                      | Assigned To | Status      |
+|---------|--------------------------------------------------|-------------|-------------|
 | 328 | Dashboard Prototype | Jessica |In progress|
 | 37 | Authentication UI | Rhythm |Not started|
 | 320 | Editing and submission | Mridul |Not started|
