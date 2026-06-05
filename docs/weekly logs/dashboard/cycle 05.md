@@ -2,6 +2,7 @@
 ---
 ## Burn-up Chart (Velocity)
 ### June 02 - June 04
+<img width="1392" height="809" alt="Screenshot 2026-06-05 104955" src="https://github.com/user-attachments/assets/d9abc140-79a3-4c36-a37e-a5d620a9abe5" />
 
 
 ## Tasks
