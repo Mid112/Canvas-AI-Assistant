@@ -8,12 +8,12 @@ install:
 # ── Lint ─────────────────────────────────────
 lint:
 	cd backend && ruff check .
-	cd frontend && npm run lint
+	cd test/frontend && npm run lint
 
 # ── Test ─────────────────────────────────────
 test:
-	cd backend && pytest tests/ -v
-	cd frontend && npm run test
+	cd test/backend && pytest tests/ -v
+	cd test/frontend && npm run test
 
 # ── Docker ───────────────────────────────────
 build:
