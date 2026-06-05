@@ -1,4 +1,4 @@
-# Weekly Report: 18/05 – 25/05
+# Cycle Report: 18/05 – 25/05
 
 ## Timesheet
 
@@ -26,9 +26,9 @@
 
 - Lecture detailing user testing and future deliverables like design documents for project
 
-### #4: Weekly logs and Project Plan
+### #4: Cycle logs and Project Plan
 
-- Work done asynchronously to create project plan and formalize weekly logs.
+- Work done asynchronously to create project plan and formalize Cycle logs.
 
 ---
 
@@ -73,7 +73,7 @@ priority to help keep everyone aligned and working efficiently.
 
 <br>
 
-# Weekly Report: 26/05 – 28/05 (May 26 – May 28)
+# Cycle Report: 26/05 – 28/05 (May 26 – May 28)
 
 ## Timesheet
 
@@ -151,7 +151,7 @@ time tracking is kept up to date.
 
 <br>
 
-# Weekly Report: 29/05 – 01/06 (May 29 – June 1)
+# Cycle Report: 29/05 – 01/06 (May 29 – June 1)
 
 ## Timesheet
 
@@ -253,7 +253,7 @@ design work and moving toward MVP development will be the key focus ahead.
 
 <br>
 
-# Weekly Report: 02/06 – 04/06 (June 2 – June 4)
+# Cycle Report: 02/06 – 04/06 (June 2 – June 4)
 
 ## Timesheet
 
