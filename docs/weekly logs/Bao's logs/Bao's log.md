@@ -1,3 +1,4 @@
+<img width="2381" height="101" alt="Screenshot 2026-06-05 095326" src="https://github.com/user-attachments/assets/25c17825-db8d-43a3-94a8-760c436f63c4" />
 # Weekly Report: 18/5 – 24/5 (May 18 – May 24)
 
 ## Timesheet
@@ -187,16 +188,19 @@ Total: ~6.5 hours
 
 ### 1: Participated in Team Meeting (Tuesday, 2/6)
 - Met with the team to discuss the system design presentation, divide recording responsibilities, and coordinate backend and frontend progress after the design video deadline
+<img width="2381" height="101" alt="Screenshot 2026-06-05 095326" src="https://github.com/user-attachments/assets/b78c154a-6500-469c-b31d-cb4753f30e0b" />
 
 
 ### 2: Diagram Finishing (Tuesday, 2/6)
 - Completed the remaining DFD diagrams in preparation for the design presentation
 - Reviewed and finalized notation, external entities, processes, and data stores to ensure consistency across Level 0 and Level 1 diagrams
+<img width="2353" height="94" alt="Screenshot 2026-06-05 095331" src="https://github.com/user-attachments/assets/99e7eb32-4df7-4fe7-a78f-6ed5aed5ea22" />
 
 
 ### 3: Video Recording + Backend Foundation Setup (Thursday, 4/6)
 - Recorded assigned sections of the system design video presentation
 - Initialized the backend project structure under app/backend/ using FastAPI and PostgreSQL
+<img width="2370" height="92" alt="Screenshot 2026-06-05 095335" src="https://github.com/user-attachments/assets/36cd2798-7210-4a33-9b94-84cd89c63dc8" />
 
 
 ---
