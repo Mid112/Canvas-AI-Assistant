@@ -1,18 +1,18 @@
-.PHONY: install lint test build up down logs
+.PHONY: install lint test build up down logs restart clean migrate migrate-new db-shell db-reset
 
 # ── Install ──────────────────────────────────
 install:
-	cd backend && pip install -r requirements.txt
-	cd frontend && npm ci
+	cd test/backend && pip install -r requirements.txt
+	cd test/frontend && npm ci
 
 # ── Lint ─────────────────────────────────────
 lint:
-	cd backend && ruff check .
+	cd test/backend && ruff check .
 	cd test/frontend && npm run lint
 
 # ── Test ─────────────────────────────────────
 test:
-	cd test/backend && pytest tests/ -v
+	cd test/backend && DATABASE_URL=postgresql+asyncpg://appuser:changeme@localhost:5432/appdb pytest tests/ -v
 	cd test/frontend && npm run test
 
 # ── Docker ───────────────────────────────────
@@ -30,6 +30,23 @@ logs:
 
 restart:
 	docker compose restart
+
+# ── Database ─────────────────────────────────
+migrate:
+	cd test/backend && alembic upgrade head
+
+migrate-new:
+	cd test/backend && alembic revision --autogenerate -m "$(msg)"
+	# usage: make migrate-new msg="add canvas_token to users"
+
+db-shell:
+	docker compose exec postgres psql -U appuser -d appdb
+
+db-reset:
+	docker compose down -v
+	docker compose up -d postgres
+	sleep 5
+	make migrate
 
 # ── Full reset ───────────────────────────────
 clean:
