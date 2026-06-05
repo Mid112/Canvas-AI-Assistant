@@ -248,3 +248,88 @@ design work and moving toward MVP development will be the key focus ahead.
 - **Goal 1:** Complete design document
 - **Goal 2:** Complete project setup
 - **Goal 3:** Begin active development on MVP
+
+---
+
+<br>
+
+# Weekly Report: 02/06 – 04/06 (June 2 – June 4)
+
+## Timesheet
+
+### Clockify Report
+
+- **02/06 (Tuesday):** Using Clockify – Logged 3.5 hours
+- **04/06 (Thursday):** Using Clockify – Logged 3 hours
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Cycle 4 team meeting (June 2)
+- Attended a 3.5-hour cycle 4 meeting to review progress and align on
+  upcoming deliverables.
+- Discussed design document completion, dockerization plans, and next steps
+  for the project.
+
+### #2: Design document completion (June 2)
+- Completed the design document deliverable as a team.
+- Finalized all sections and prepared for client delivery.
+
+### #3: CI/CD pipeline basic setup (June 4)
+- Completed the basic setup of the project pipeline.
+- Lays foundational infrastructure for future development and deployment.
+
+### #4: Database dockerization (In Progress)
+- Made initial progress on dockerizing the database.
+- Work is ongoing and will continue into the next cycle as part of broader
+  dockerization efforts.
+
+### #5: Design document video (In Progress)
+- Actively working on recording a video walkthrough of the design document
+  for the client.
+- To be completed in the next cycle.
+
+---
+
+## Progress Update (since 02/06/2026)
+
+| TASK/ISSUE #                  | STATUS      |
+| ----------------------------- | ----------- |
+| Design document               | Completed   |
+| Design document video         | In Progress |
+| Pipeline basic setup          | Completed   |
+| Database dockerization        | In Progress |
+| Cycle 4 meeting               | Completed   |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle marked a key milestone with the completion of the design document,
+which has been an ongoing effort across multiple cycles. The cycle 4 team
+meeting provided strong alignment on the path forward. Concrete technical
+progress was also made this cycle with the basic pipeline setup completed and
+initial work begun on dockerizing the database, both of which lay important
+groundwork for MVP development. The design document video for the client
+remains in progress and will carry into the next cycle.
+
+### Retrospective:
+
+The team delivered well this cycle, with the design document completion being
+a significant achievement. Clockify usage was maintained consistently,
+continuing the positive habit established in the previous cycle. Database
+dockerization is underway but will require more focused effort next cycle to
+reach completion alongside frontend and backend dockerization. Keeping momentum
+on the technical infrastructure work while closing out the client video will
+be the key challenge going into the next cycle.
+
+---
+
+## Next Cycle Goals
+
+- **Goal 1:** Complete design document video for client
+- **Goal 2:** Complete basic dockerization of the frontend
+- **Goal 3:** Complete basic dockerization of the backend
