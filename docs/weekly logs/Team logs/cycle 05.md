@@ -33,7 +33,7 @@ We had a two hour meeting on tuesday June 1st to agree on diagram design
 | 63 | LLM Foundation | Mridul | Not started |
 
 ## Burn-up Chart (Velocity):
-<img width="1066" height="599" alt="Screenshot 2026-06-02 at 11 18 42 AM" src="https://github.com/user-attachments/assets/bde02981-fbc0-4e13-80d6-2dafa5742373" />
+<img width="1392" height="809" alt="Screenshot 2026-06-05 104955" src="https://github.com/user-attachments/assets/d9abc140-79a3-4c36-a37e-a5d620a9abe5" />
 
 
 ## Times for Team/Individual:
