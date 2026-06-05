@@ -107,6 +107,7 @@
 - Finalize the project plan
 - Initialize the Level 0/1 DFD diagram
 
+---
 
 # Cycle 4 Report: May 29-June 1
 
@@ -165,3 +166,54 @@
 - Finalize wireframes and validate user workflows.
 - Set up development environments and project infrastructure for implementation.
 - Begin backend and frontend development planning.
+
+---
+
+# Cycle 5 Report: June 2 – June 5
+
+## Timesheet
+
+### Clockify Report
+
+- 2/6 (Tuesday): Team Meeting – 2.5 hours
+- 2/6 (Tuesday): Diagram Finishing – 1.5 hours
+- 4/6 (Thursday): Backend Initialize + Video Recording – 2.5 hours
+
+Total: ~6.5 hours
+
+---
+
+## Completed Tasks
+
+### 1: Participated in Team Meeting (Tuesday, 2/6)
+- Met with the team to discuss the system design presentation, divide recording responsibilities, and coordinate backend and frontend progress after the design video deadline
+
+
+### 2: Diagram Finishing (Tuesday, 2/6)
+- Completed the remaining DFD diagrams in preparation for the design presentation
+- Reviewed and finalized notation, external entities, processes, and data stores to ensure consistency across Level 0 and Level 1 diagrams
+
+
+### 3: Video Recording + Backend Foundation Setup (Thursday, 4/6)
+- Recorded assigned sections of the system design video presentation
+- Initialized the backend project structure under app/backend/ using FastAPI and PostgreSQL
+
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle covered both the design presentation deliverable and the start of active development. Finishing the diagrams early in the cycle allowed the team to move into recording without blockers. The backend foundation is now in place, giving the rest of the team a stable base to build auth-dependent features on top of.
+
+
+### Retrospective:
+- Combining the video recording and backend setup into one session was efficient but dense. 
+- The backend work aligned closely with what the frontend teammate had already scaffolded, which made the API contract straightforward to define. Going forward, keeping closer communication on shared types and endpoint shapes early will reduce integration friction.
+
+---
+
+## Next Cycle Goals
+- Push backend auth PR for team review
+- Write basic auth tests in test/backend/
+- Begin role-specific API routes (/api/instructor/, /api/ta/, /api/admin/)
