@@ -1,4 +1,4 @@
-# Cycle Report: 18/05 – 25/05
+# Cycle 1, 2 Report: 18/05 – 25/05
 
 ## Timesheet
 
@@ -73,7 +73,7 @@ priority to help keep everyone aligned and working efficiently.
 
 <br>
 
-# Cycle Report: 26/05 – 28/05 (May 26 – May 28)
+# Cycle 3 Report: 26/05 – 28/05 (May 26 – May 28)
 
 ## Timesheet
 
@@ -151,7 +151,7 @@ time tracking is kept up to date.
 
 <br>
 
-# Cycle Report: 29/05 – 01/06 (May 29 – June 1)
+# Cycle 4 Report: 29/05 – 01/06 (May 29 – June 1)
 
 ## Timesheet
 
@@ -253,7 +253,7 @@ design work and moving toward MVP development will be the key focus ahead.
 
 <br>
 
-# Cycle Report: 02/06 – 04/06 (June 2 – June 4)
+# Cycle 5 Report: 02/06 – 04/06 (June 2 – June 4)
 
 ## Timesheet
 
