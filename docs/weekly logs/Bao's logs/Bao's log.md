@@ -1,3 +1,4 @@
+<img width="2381" height="101" alt="Screenshot 2026-06-05 095326" src="https://github.com/user-attachments/assets/25c17825-db8d-43a3-94a8-760c436f63c4" />
 # Weekly Report: 18/5 – 24/5 (May 18 – May 24)
 
 ## Timesheet
@@ -107,6 +108,7 @@
 - Finalize the project plan
 - Initialize the Level 0/1 DFD diagram
 
+---
 
 # Cycle 4 Report: May 29-June 1
 
@@ -165,3 +167,57 @@
 - Finalize wireframes and validate user workflows.
 - Set up development environments and project infrastructure for implementation.
 - Begin backend and frontend development planning.
+
+---
+
+# Cycle 5 Report: June 2 – June 4
+
+## Timesheet
+
+### Clockify Report
+
+- 2/6 (Tuesday): Team Meeting – 2.5 hours
+- 2/6 (Tuesday): Diagram Finishing – 1.5 hours
+- 4/6 (Thursday): Backend Initialize + Video Recording – 2.5 hours
+
+Total: ~6.5 hours
+
+---
+
+## Completed Tasks
+
+### 1: Participated in Team Meeting (Tuesday, 2/6)
+- Met with the team to discuss the system design presentation, divide recording responsibilities, and coordinate backend and frontend progress after the design video deadline
+<img width="2381" height="101" alt="Screenshot 2026-06-05 095326" src="https://github.com/user-attachments/assets/b78c154a-6500-469c-b31d-cb4753f30e0b" />
+
+
+### 2: Diagram Finishing (Tuesday, 2/6)
+- Completed the remaining DFD diagrams in preparation for the design presentation
+- Reviewed and finalized notation, external entities, processes, and data stores to ensure consistency across Level 0 and Level 1 diagrams
+<img width="2353" height="94" alt="Screenshot 2026-06-05 095331" src="https://github.com/user-attachments/assets/99e7eb32-4df7-4fe7-a78f-6ed5aed5ea22" />
+
+
+### 3: Video Recording + Backend Foundation Setup (Thursday, 4/6)
+- Recorded assigned sections of the system design video presentation
+- Initialized the backend project structure under app/backend/ using FastAPI and PostgreSQL
+<img width="2370" height="92" alt="Screenshot 2026-06-05 095335" src="https://github.com/user-attachments/assets/36cd2798-7210-4a33-9b94-84cd89c63dc8" />
+
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle covered both the design presentation deliverable and the start of active development. Finishing the diagrams early in the cycle allowed the team to move into recording without blockers. The backend foundation is now in place, giving the rest of the team a stable base to build auth-dependent features on top of.
+
+
+### Retrospective:
+- Combining the video recording and backend setup into one session was efficient but dense. 
+- The backend work aligned closely with what the frontend teammate had already scaffolded, which made the API contract straightforward to define. Going forward, keeping closer communication on shared types and endpoint shapes early will reduce integration friction.
+
+---
+
+## Next Cycle Goals
+- Push backend auth PR for team review
+- Write basic auth tests in test/backend/
+- Begin role-specific API routes (/api/instructor/, /api/ta/, /api/admin/)
