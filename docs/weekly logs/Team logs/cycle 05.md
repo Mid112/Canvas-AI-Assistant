@@ -1,6 +1,6 @@
 # Weekly Team Log
 
-We had a two hour meeting on tuesday June 1st to agree on diagram design
+We had a two hour meeting on tuesday June 2nd to agree on diagram design
 
 ## Date Range:
 
