@@ -167,7 +167,7 @@ Therefore, team members were able to highlight potential issues before the imple
 
 
 
-# Cycle 5 Report: 02/06 – 05/06 (June 2 – June 5)
+# Cycle 5 Report: 02/06 – 04/06 (June 2 – June 4)
 
 ## Timesheet
 
@@ -175,8 +175,7 @@ Therefore, team members were able to highlight potential issues before the imple
 
 - **02/06 (Tuesday):** Using Clockify – Logged 2 hours
 - **03/06 (Wednesdayday):** Not Using Clockify – Logged 1 hours
-- **34/06 (Thursday):** Not Using Clockify – Logged 0.5 hours
-- **05/06 (Fridayday):** Using Clockify – Logged 1 hours
+- **04/06 (Thursday):** Not Using Clockify – Logged 0.5 hours
 
 <img width="1219" height="174" alt="Screenshot 2026-06-05 at 10 18 42 AM" src="https://github.com/user-attachments/assets/9ddb455d-10c5-4896-ada9-74d05862c278" />
 
