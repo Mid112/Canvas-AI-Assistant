@@ -1,4 +1,4 @@
-# Weekly Report: 18/5 – 24/5 (May 18 – May 24)
+# Weekly Report: 18/5 – 24/5 (May 18 – May 25)
 
 ## Timesheet
 
@@ -76,7 +76,7 @@ In hindsight, one issue I faced personally was keeping up with the communication
 
 
 
-# Weekly Report: 29/05 – 01/06 (May 29 – June 1)
+# Cycle 4 Report: 29/05 – 01/06 (May 29 – June 1)
 
 ## Timesheet
 
@@ -144,7 +144,7 @@ In hindsight, one issue I faced personally was keeping up with the communication
 
 ---
 
-## Cycle Goal Review
+## Cycle 4 Goal Review
 
 ### Reflection:
 
@@ -158,7 +158,7 @@ Therefore, team members were able to highlight potential issues before the imple
 
 ---
 
-## Next Cycle Goals
+## Next Cycle 5 Goals
 
 - **Goal 1:** Complete design document
 - **Goal 2:** Complete project setup
@@ -230,7 +230,7 @@ Therefore, team members were able to highlight potential issues before the imple
 
 ---
 
-## Cycle Goal Review
+## Cycle 5 Goal Review
 
 ### Reflection:
 
@@ -242,7 +242,7 @@ In retrospective, I am very happy that every team member showed an initiative an
 
 ---
 
-## Next Cycle Goals
+## Next Cycle 6 Goals
 
 - **Goal 1:** Complete docker setup for an MCP server, and the backend
 - **Goal 2:** Add qwen 3.5 model and consider vllm
