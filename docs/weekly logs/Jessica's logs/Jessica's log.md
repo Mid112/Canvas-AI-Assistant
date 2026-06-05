@@ -217,3 +217,77 @@ The project board updates improved visibility into team responsibilities and upc
 * Maintain consistent Clockify tracking
 * Prepare for upcoming Proof of Life deliverables
 
+# **Cycle 5: Tuesday (2/6) ~ Thursday (4/6)**
+
+### **Tuesday (2/6)**
+
+**Timesheet**  
+**Clockify Report:** 6:54:09
+<img width="1326" height="344" alt="Screenshot 2026-06-05 at 10 01 43 AM" src="https://github.com/user-attachments/assets/d7e828a8-e6f9-4688-9387-e1b7e14872d1" />
+
+
+**Current Tasks**
+- Participated in team meetings to discuss project progress, design decisions, and upcoming deliverables
+- Worked on finalizing UI wireframes for the system interfaces
+- Added completed wireframes to the design document
+- Refined interface layouts based on team discussions and project requirements
+- Worked on the project introduction section and reviewed teammates' pull requests
+- Contributed feedback during design discussions and documentation reviews
+
+### **Wednesday (3/6)**
+
+**Timesheet**  
+**Clockify Report:** 1:08:59
+<img width="1330" height="349" alt="Screenshot 2026-06-05 at 10 01 54 AM" src="https://github.com/user-attachments/assets/e78b62b4-a19f-488f-97b8-4016f8ebd427" />
+
+
+**Current Tasks**
+- Continued working on presentation slides for the design video
+- Refined slide content to better communicate project goals, system architecture, and proposed workflows
+- Updated presentation materials based on team feedback
+- Assisted with organizing design-related content for project deliverables
+
+### **Thursday (4/6)**
+
+**Timesheet**  
+**Clockify Report:** 1:57:10
+<img width="1335" height="103" alt="Screenshot 2026-06-05 at 10 02 02 AM" src="https://github.com/user-attachments/assets/988eff67-0257-4a83-a89b-0097b3594fef" />
+
+**Current Tasks**
+- Began frontend project setup and environment configuration
+- Worked on establishing the initial frontend structure for future development
+- Set up foundational components and project organization
+- Prepared the development environment for implementation work in upcoming cycles
+
+---
+
+## **Cycle 5 – Goal Review**
+
+### **Reflection**
+
+This cycle focused on advancing the project's design phase and preparing materials for upcoming milestone deliverables. Significant progress was made through the completion of UI wireframes, improvements to the design document, and preparation of presentation materials. Work also began on the frontend development environment, marking the transition from planning and design toward implementation.
+
+### **Retrospective**
+
+The completion of the UI wireframes provided a clear visual representation of the system and helped solidify the proposed user workflows. Integrating these wireframes into the design document improved the overall quality and completeness of the project's design artifacts.
+
+Team meetings and design discussions helped align project priorities and ensure all team members shared a common understanding of the system architecture and functionality. Additional effort was dedicated to improving the design presentation slides, allowing the team to better communicate project objectives and technical decisions.
+
+Frontend setup work established the foundation required for future development activities. Consistent participation in pull request reviews and team discussions also contributed to maintaining project quality and collaboration throughout the cycle.
+
+---
+
+## **Next Cycle Goals (Cycle 6: Friday 5/6 ~ Monday 8/6)**
+
+* Complete frontend project setup and project structure configuration
+* Begin implementation of core frontend pages and navigation
+* Start backend setup using FastAPI and Pydantic
+* Define frontend-backend integration workflows
+* Continue preparing Proof of Life milestone deliverables
+* Participate in pull request reviews and team discussions
+* Support project board management and milestone planning
+* Continue contributing to project documentation where needed
+* Maintain consistent Clockify tracking
+* Begin implementation of high-priority MVP functionality
+
+
