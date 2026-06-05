@@ -167,4 +167,90 @@ Therefore, team members were able to highlight potential issues before the imple
 
 
 
+# Cycle 5 Report: 02/06 – 05/06 (June 2 – June 5)
+
+## Timesheet
+
+### Clockify Report
+
+- **02/06 (Tuesday):** Using Clockify – Logged 2 hours
+- **03/06 (Wednesdayday):** Not Using Clockify – Logged 1 hours
+- **34/06 (Thursday):** Not Using Clockify – Logged 0.5 hours
+- **05/06 (Fridayday):** Using Clockify – Logged 1 hours
+
+<img width="1219" height="174" alt="Screenshot 2026-06-05 at 10 18 42 AM" src="https://github.com/user-attachments/assets/9ddb455d-10c5-4896-ada9-74d05862c278" />
+
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Design document and project setup meeting (June 2)
+
+- Wrote docker files for ollama, and PostgreSQL
+- Attended a team meeting to discuss the System Architecture, and especially the database component
+
+<img width="1229" height="177" alt="Screenshot 2026-06-02 at 10 43 31 AM" src="https://github.com/user-attachments/assets/5cc6c421-0ac1-4039-8db5-e2ac6ac11568" />
+
+
+### #2: Project planning video submission (June 3)
+
+- Wrote a script for the project design presentation video
+- Refined the system architecture diagram by dividing subsystems into components
+
+
+### #3: PR review (June 4)
+
+- Reviewed individual PRs on docker setup and pipeline integration
+
+
+### #4: Dockerized environment (June 5)
+
+- Attended a 2 hour team meeting to discuss Github actions, issues
+- Ran, and tested the docker container on my local device
+
+
+
+<img width="1223" height="139" alt="Screenshot 2026-06-05 at 10 38 56 AM" src="https://github.com/user-attachments/assets/db34e219-3299-41f4-9e74-0a7bc3036bde" />
+
+
+
+
+---
+
+## Progress Update (since 29/05/2026)
+
+| TASK/ISSUE #             | STATUS      |
+| ------------------------ | ----------- |
+| Design document          | Completed |
+| Project design video     | Completed   |
+| Database design          | Completed   |
+| PR reviews and approvals | Completed   |
+| Project setup            | In Progress |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle was mainly involved with the project design video, as well as initial steps to set up a running dockerized environment. The main difficulty was the initial ambiguity in requirements, the tech stack we should use, and how the MVP should look like. Therefore, we continuously iterated the project design document especially concerning the design of our database and its integration. 
+
+### Retrospective:
+
+In retrospective, I am very happy that every team member showed an initiative and for the fact that we started working on a presentation 2 days prior to the deadline which allowed for plenty of time to iterate.
+
+---
+
+## Next Cycle Goals
+
+- **Goal 1:** Complete docker setup for an MCP server, and the backend
+- **Goal 2:** Add qwen 3.5 model and consider vllm
+- **Goal 3:** Begin designing tests for each component of our system
+
+
+
+
+
+
 
