@@ -54,12 +54,12 @@ Keeping up with personal logs, managing formal PR reviews, and delegating work e
 Clockify Report
 
 26/5 (Tuesday): 00:59:05
+
 <img width="1344" height="109" alt="Clockify-05:26" src="https://github.com/user-attachments/assets/77b000db-94d0-423a-9e42-94b5371b35d0" />
 
 28/5 (Thursday): 01:34:39
 
 <img width="1343" height="168" alt="Clockify-05:28" src="https://github.com/user-attachments/assets/fb6f511b-1ccc-4c00-a4d8-5bd23d000891" />
-
 
 
 **Current Tasks (Provide sufficient detail)**
@@ -72,6 +72,7 @@ Discussed task breakdown and milestone planning, and set up project board to tra
 Paerticipated in discussions regarding Requirements Video Presentation. Reviewed presentation slides and script, provided additional feedback, and edited script to better align with requirements and goals.
 
 **#3: Drafted Use Case models for Design Documentation**
+
 Began drafting a Use Case diagram and Use Case scenarios based on requrirements, including user journey lines.
 
 **Cycle Goal Review**
@@ -88,9 +89,12 @@ The project board helped improve structure and the breakdown of upcoming tasks a
 * Continue working on the design document and complete the Use Case Models
 * Complete upcoming PR reviews and participate in team discussions
 * Maintain consistent Clockify tracking
+
 * Participate in weekly team meeting and discuss current progress and upcoming milestones
 
-  ### Cycle 4: Friday (05/29) ~ Monday (06/01)
+* Participate in weekly team meeting and discuss current progress and upcoming milestones
+
+# **Cycle 4: Friday (05/29) ~ Monday (06/01)**
 
 **Timesheet**
 
@@ -118,3 +122,40 @@ The project board helped improve structure and the breakdown of upcoming tasks a
 * Complete and submit the design documentation and begin working on the design presentation.
 * Begin active development on MVP and front-end.
 * Continue discussions and weekly team meeting to discuss current progress, upcoming milestones, and finalize project setup.
+
+# **Cycle 5: Tuesday (06/02) ~ Thursday (06/04)**
+
+**Timesheet**
+
+**Clockify Report**
+
+**06/02 (Tuesday):** 07:41:14
+<img width="1337" height="228" alt="Untitled 3" src="https://github.com/user-attachments/assets/877bbddf-c539-4e01-b3e1-70a7c59f19bc" />
+**06/04 (Thursday):** 00:42:53
+<img width="1338" height="104" alt="Untitled 4" src="https://github.com/user-attachments/assets/d1263b01-7ed1-4370-b867-3b4df817599a" />
+**Current Tasks (Provide sufficient detail)**
+
+* **#1: Team Meeting & Milestone Coordination:** 
+Attended an extended team meeting on Tuesday morning to coordinate our final push for the design documentation. We discussed current progress across all sections, delegated the remaining writing tasks, and aligned on the final project architecture and setup.
+
+* **#2: Finalized Use Case Models & PR Reviews:** 
+Spent the afternoon and evening on Tuesday finalizing the Use Case Models, including the specific scenarios and journey lines. Reviewed multiple pull requests from the team to safely integrate our work into the main design document repository, ensuring our system architecture and UI mockups were perfectly aligned without merge conflicts.
+
+* **#3: Design Presentation:** 
+On Thursday evening, I reviewed and edited the system design presentation slides and script. I refined the content to ensure it effectively covered our Use Cases, L1 DFD, and UI mockups while fitting within the strict 8-10 minute time limit, and successfully recorded the presentation.
+
+**Cycle Goal Review**
+
+* **Reflection:** 
+This cycle was entirely dedicated to wrapping up the design documentation and presentation milestones. Collaborating closely with the team during our long Tuesday meeting ensured everyone was on the same page regarding our architecture and requirements before the final submission. 
+
+* **Retrospective:** 
+Managing team pull requests proved to be an essential exercise in maintaining version control and keeping our design document cohesive. Recording the presentation went smoothly now that our design rationale is fully solidified. While the heavy focus on documentation meant I couldn't fully pivot to active frontend development yet, wrapping this milestone clears the runway for coding.
+
+**Next Cycle Goals**
+
+* Begin active development on the React, TypeScript, and Tailwind front-end for the MVP.
+* Implement the initial Instructor Dashboard UI and routing based on our approved wireframes.
+* Continue weekly team meetings to coordinate frontend and backend (FastAPI/PostgreSQL) integration.
+* Maintain consistent Clockify tracking as active coding tasks ramp up.
+
