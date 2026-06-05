@@ -260,7 +260,12 @@ design work and moving toward MVP development will be the key focus ahead.
 ### Clockify Report
 
 - **02/06 (Tuesday):** Using Clockify – Logged 3.5 hours
+<img width="2464" height="254" alt="image" src="https://github.com/user-attachments/assets/9078a5e9-3292-4a8b-8004-e3a83a2f3928" />
+
 - **04/06 (Thursday):** Using Clockify – Logged 3 hours
+
+<img width="2480" height="280" alt="image" src="https://github.com/user-attachments/assets/80b97962-4786-4cca-8e6a-9e587de5f1c5" />
+
 
 ---
 
