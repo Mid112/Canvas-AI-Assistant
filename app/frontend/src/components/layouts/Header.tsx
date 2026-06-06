@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Menu, User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -20,16 +21,20 @@ import {
 } from "@/components/ui/sheet";
 import { Sidebar } from "@/components/layouts/Sidebar";
 import type { NavItem } from "@/types/navigation";
+import type { UserRole } from "@/types/user";
+import { getProfilePath } from "@/utils/navigation";
 import { paths } from "@/routes/paths";
 
 interface HeaderProps {
   title: string;
+  role: UserRole;
   roleLabel: string;
   navItems: NavItem[];
 }
 
-export function Header({ title, roleLabel, navItems }: HeaderProps) {
+export function Header({ title, role, roleLabel, navItems }: HeaderProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-6">
@@ -72,14 +77,22 @@ export function Header({ title, roleLabel, navItems }: HeaderProps) {
           <User className="size-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuLabel>{roleLabel}</DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem render={<Link to={paths.home} />}>
-            Home
-          </DropdownMenuItem>
-          <DropdownMenuItem render={<Link to={paths.login} />}>
-            Sign out
-          </DropdownMenuItem>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>{roleLabel}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate(getProfilePath(role))}>
+              Profile
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate(paths.home)}>
+              Home
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => navigate(paths.login)}
+            >
+              Log out
+            </DropdownMenuItem>
+          </DropdownMenuGroup>
         </DropdownMenuContent>
       </DropdownMenu>
     </header>

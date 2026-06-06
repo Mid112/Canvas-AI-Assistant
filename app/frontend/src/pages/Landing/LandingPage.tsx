@@ -36,7 +36,6 @@ export function LandingPage() {
   return (
     <section className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-12 px-4 py-12 md:px-6 md:py-20">
       <div className="mx-auto max-w-3xl space-y-6 text-center">
-        <p className="text-sm font-medium text-primary">Capstone Project</p>
         <h1 className="text-4xl font-bold tracking-tight md:text-5xl">
           Canvas Workflow Assistant
         </h1>

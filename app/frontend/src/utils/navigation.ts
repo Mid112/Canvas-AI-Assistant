@@ -57,3 +57,14 @@ export function getRoleLabel(role: UserRole): string {
       return "Administrator";
   }
 }
+
+export function getProfilePath(role: UserRole): string {
+  switch (role) {
+    case "instructor":
+      return paths.instructor.profile;
+    case "ta":
+      return paths.ta.profile;
+    case "admin":
+      return paths.admin.profile;
+  }
+}

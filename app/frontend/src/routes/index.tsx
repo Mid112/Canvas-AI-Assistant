@@ -20,6 +20,7 @@ import { AdminDashboardPage } from "@/pages/Admin/AdminDashboardPage";
 import { AdminUsersPage } from "@/pages/Admin/AdminUsersPage";
 import { AdminAuditPage } from "@/pages/Admin/AdminAuditPage";
 import { AdminSettingsPage } from "@/pages/Admin/AdminSettingsPage";
+import { ProfilePage } from "@/pages/Profile/ProfilePage";
 import { paths } from "@/routes/paths";
 
 export const router = createBrowserRouter([
@@ -44,6 +45,7 @@ export const router = createBrowserRouter([
       { path: paths.instructor.assistant, element: <InstructorAssistantPage /> },
       { path: paths.instructor.history, element: <InstructorHistoryPage /> },
       { path: paths.instructor.settings, element: <InstructorSettingsPage /> },
+      { path: paths.instructor.profile, element: <ProfilePage /> },
     ],
   },
   {
@@ -54,6 +56,7 @@ export const router = createBrowserRouter([
       { path: paths.ta.messages, element: <TAMessagesPage /> },
       { path: paths.ta.students, element: <TAStudentsPage /> },
       { path: paths.ta.settings, element: <TASettingsPage /> },
+      { path: paths.ta.profile, element: <ProfilePage /> },
     ],
   },
   {
@@ -63,6 +66,7 @@ export const router = createBrowserRouter([
       { path: paths.admin.users, element: <AdminUsersPage /> },
       { path: paths.admin.audit, element: <AdminAuditPage /> },
       { path: paths.admin.settings, element: <AdminSettingsPage /> },
+      { path: paths.admin.profile, element: <ProfilePage /> },
     ],
   },
   { path: "*", element: <Navigate to={paths.home} replace /> },

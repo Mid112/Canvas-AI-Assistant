@@ -1,8 +1,9 @@
-import { NavLink } from "react-router-dom";
-import { GraduationCap } from "lucide-react";
+import { Link, NavLink } from "react-router-dom";
+import { GraduationCap, Home, LogOut } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { NavItem } from "@/types/navigation";
+import { paths } from "@/routes/paths";
 
 interface SidebarProps {
   navItems: NavItem[];
@@ -10,6 +11,9 @@ interface SidebarProps {
   onNavigate?: () => void;
   className?: string;
 }
+
+const footerLinkClass =
+  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground";
 
 export function Sidebar({
   navItems,
@@ -24,7 +28,11 @@ export function Sidebar({
         className,
       )}
     >
-      <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-4">
+      <Link
+        to={paths.home}
+        onClick={onNavigate}
+        className="flex h-16 items-center gap-2 border-b border-sidebar-border px-4 transition-colors hover:bg-sidebar-accent/40"
+      >
         <div className="flex size-9 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
           <GraduationCap className="size-5" />
         </div>
@@ -32,7 +40,7 @@ export function Sidebar({
           <p className="truncate text-sm font-semibold">Canvas Workflow</p>
           <p className="truncate text-xs text-muted-foreground">{roleLabel}</p>
         </div>
-      </div>
+      </Link>
       <nav className="flex flex-1 flex-col gap-1 p-3">
         {navItems.map((item) => (
           <NavLink
@@ -52,7 +60,17 @@ export function Sidebar({
             <span>{item.title}</span>
           </NavLink>
         ))}
+        <Link to={paths.login} onClick={onNavigate} className={footerLinkClass}>
+          <LogOut className="size-4 shrink-0" />
+          <span>Log out</span>
+        </Link>
       </nav>
+      <div className="border-t border-sidebar-border p-3">
+        <Link to={paths.home} onClick={onNavigate} className={footerLinkClass}>
+          <Home className="size-4 shrink-0" />
+          <span>Home</span>
+        </Link>
+      </div>
     </aside>
   );
 }

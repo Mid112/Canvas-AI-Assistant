@@ -4,6 +4,7 @@ import { Header } from "@/components/layouts/Header";
 import { Sidebar } from "@/components/layouts/Sidebar";
 import {
   getNavItemsForRole,
+  getProfilePath,
   getRoleLabel,
 } from "@/utils/navigation";
 import type { UserRole } from "@/types/user";
@@ -13,6 +14,9 @@ interface DashboardLayoutProps {
 }
 
 function getPageTitle(pathname: string, role: UserRole): string {
+  if (pathname === getProfilePath(role)) {
+    return "Profile";
+  }
   const navItems = getNavItemsForRole(role);
   const match = navItems.find((item) => pathname.startsWith(item.href));
   return match?.title ?? getRoleLabel(role);
@@ -30,7 +34,12 @@ export function DashboardLayout({ role }: DashboardLayoutProps) {
         <Sidebar navItems={navItems} roleLabel={roleLabel} />
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
-        <Header title={title} roleLabel={roleLabel} navItems={navItems} />
+        <Header
+          title={title}
+          role={role}
+          roleLabel={roleLabel}
+          navItems={navItems}
+        />
         <main className="flex flex-1 flex-col overflow-auto">
           <Outlet />
         </main>
