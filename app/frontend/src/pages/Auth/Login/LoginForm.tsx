@@ -1,6 +1,8 @@
 import type { FormEvent } from "react";
+import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { paths } from "@/routes/paths";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
@@ -53,12 +55,12 @@ export function LoginForm({ onSubmit }: LoginFormProps) {
           />
           <span className="text-sm text-[#475569]">Remember me</span>
         </label>
-        <button
-          type="button"
+        <Link
+          to={paths.resetPassword}
           className="text-sm font-medium text-[#2563eb] hover:underline"
         >
           Forgot password?
-        </button>
+        </Link>
       </div>
 
       <Button

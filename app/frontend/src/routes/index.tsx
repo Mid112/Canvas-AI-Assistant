@@ -6,6 +6,7 @@ import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { LandingPage } from "@/pages/Landing/LandingPage";
 import { LoginPage } from "@/pages/Auth/LoginPage";
 import { RegisterPage } from "@/pages/Auth/RegisterPage";
+import { ResetPasswordPage } from "@/pages/Auth/ResetPasswordPage";
 import { InstructorDashboardPage } from "@/pages/Instructor/InstructorDashboardPage";
 import { InstructorCoursesPage } from "@/pages/Instructor/InstructorCoursesPage";
 import { InstructorAssistantPage } from "@/pages/Instructor/InstructorAssistantPage";
@@ -35,6 +36,7 @@ export const router = createBrowserRouter([
     children: [
       { path: paths.login, element: <LoginPage /> },
       { path: paths.register, element: <RegisterPage /> },
+      { path: paths.resetPassword, element: <ResetPasswordPage /> },
     ],
   },
   {
