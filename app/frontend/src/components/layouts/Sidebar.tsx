@@ -60,7 +60,7 @@ export function Sidebar({
             <span>{item.title}</span>
           </NavLink>
         ))}
-        <Link to={paths.login} onClick={onNavigate} className={footerLinkClass}>
+        <Link to={paths.home} onClick={onNavigate} className={footerLinkClass}>
           <LogOut className="size-4 shrink-0" />
           <span>Log out</span>
         </Link>
