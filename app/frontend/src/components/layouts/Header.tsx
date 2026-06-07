@@ -88,7 +88,7 @@ export function Header({ title, role, roleLabel, navItems }: HeaderProps) {
             </DropdownMenuItem>
             <DropdownMenuItem
               variant="destructive"
-              onClick={() => navigate(paths.login)}
+              onClick={() => navigate(paths.home)}
             >
               Log out
             </DropdownMenuItem>
