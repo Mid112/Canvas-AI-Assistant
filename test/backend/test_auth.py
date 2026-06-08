@@ -1,7 +1,7 @@
 import uuid
 import pytest
 from fastapi.testclient import TestClient
-from app.main import app
+from app.backend.app.main import app
 
 
 @pytest.fixture(scope="module")
@@ -51,5 +51,5 @@ def test_get_current_user(client):
 
 
 def test_get_current_user_invalid_token(client):
-    response = client.get("/api/v1/auth/me", headers={"Authorization": "invalidtoken"})
+    response = client.get("/api/v1/auth/me", headers={"Authorization": "Bearer invalidtoken"})
     assert response.status_code == 401
