@@ -29,7 +29,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routers (placeholders for now)
+# Routers
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(canvas.router, prefix=settings.API_V1_PREFIX)
 
