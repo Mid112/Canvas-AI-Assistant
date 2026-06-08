@@ -27,10 +27,17 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in v.split(",") if origin.strip()]
         return v
 
+    # Database
+    DATABASE_URL: str = "postgresql+asyncpg://appuser:localdev@localhost:5432/appdb"
+
+    # Auth
+    SECRET_KEY: str = "localdevsecret"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-
 
 settings = get_settings()
