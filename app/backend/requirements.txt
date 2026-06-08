@@ -1,0 +1,11 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.13.4
+pydantic-settings==2.14.1
+python-dotenv==1.2.2
+# --- added in later milestones, kept here so the stack is reproducible ---
+# sqlalchemy[asyncio]==2.0.36   # milestone: DB models
+# asyncpg==0.30.0               # milestone: DB models
+# alembic==1.14.0               # milestone: migrations
+# python-jose[cryptography]==3.3.0  # milestone: auth (#49)
+# passlib[bcrypt]==1.7.4            # milestone: auth (#49)
