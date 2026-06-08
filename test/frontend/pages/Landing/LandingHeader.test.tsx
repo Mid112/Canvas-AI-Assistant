@@ -2,8 +2,8 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { LandingHeader } from "@/pages/Landing/LandingHeader";
-import { renderWithRouter } from "../../utils/renderWithRouter";
-import { paths } from "../../../../app/frontend/src/routes/paths";
+import { paths } from "@/routes/paths";
+import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 describe("LandingHeader", () => {
   it("renders the application name", () => {

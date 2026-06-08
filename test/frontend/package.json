@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "pretest": "test -e node_modules || ln -sf ../../app/node_modules node_modules",
+    "pretest": "node ./scripts/ensure-node-modules.mjs",
     "test": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.config.ts"
   }

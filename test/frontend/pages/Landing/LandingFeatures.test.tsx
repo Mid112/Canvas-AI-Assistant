@@ -6,9 +6,9 @@ describe('LandingFeatures', () => {
   it('renders all feature cards correctly', () => {
     render(<LandingFeatures />);
     
-    expect(screen.getByText(/Conversational AI/i)).toBeDefined();
-    expect(screen.getByText(/Workflow Previews/i)).toBeDefined();
-    expect(screen.getByText(/Local AI Privacy/i)).toBeDefined();
-    expect(screen.getByText(/Audit Logging/i)).toBeDefined();
+    expect(screen.getByText(/Conversational AI/i)).toBeInTheDocument();
+    expect(screen.getByText(/Workflow Previews/i)).toBeInTheDocument();
+    expect(screen.getByText(/Local AI Privacy/i)).toBeInTheDocument();
+    expect(screen.getByText(/Audit Logging/i)).toBeInTheDocument();
   });
 });

@@ -1,8 +1,8 @@
 import { screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { LandingHero } from '@/pages/Landing/LandingHero';
-import { renderWithRouter } from '../../utils/renderWithRouter';
-import { paths } from '../../../../app/frontend/src/routes/paths';
+import { paths } from '@/routes/paths';
+import { renderWithRouter } from '@test/utils/renderWithRouter';
 
 describe('LandingHero', () => {
   it('renders the main heading and description', () => {
@@ -12,10 +12,10 @@ describe('LandingHero', () => {
       screen.getByRole('heading', {
         name: /Manage Canvas Workflows Using Natural Language/i,
       }),
-    ).toBeDefined();
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/Streamline your course management with AI-powered assistance/i),
-    ).toBeDefined();
+    ).toBeInTheDocument();
   });
 
   it('renders call-to-action buttons with correct routing links', () => {
