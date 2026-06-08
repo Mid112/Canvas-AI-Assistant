@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # Canvas API
+    CANVAS_API_URL: str = "https://canvas.ubc.ca/api/v1"
+    CANVAS_API_TOKEN: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

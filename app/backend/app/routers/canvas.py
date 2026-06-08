@@ -6,5 +6,5 @@ router = APIRouter(prefix="/canvas", tags=["canvas"])
 
 @router.get("/ping")
 async def ping() -> dict[str, str]:
-    """Temporary endpoint to confirm the canvas router is mounted."""
+    """Temporary endpoint to confirm the canvas router is mounted and working"""
     return {"router": "canvas", "status": "placeholder"}
