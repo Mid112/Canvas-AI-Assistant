@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     )
 
     # App
-    PROJECT_NAME: str = "Canvas Helper API"
+    PROJECT_NAME: str = "Canvas Helper AI Assistant"
     API_V1_PREFIX: str = "/api/v1"
     DEBUG: bool = False
 
@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "localdevsecret"
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+
+    # Canvas API
+    CANVAS_API_URL: str = "https://canvas.ubc.ca/api/v1"
+    CANVAS_API_TOKEN: str = ""
 
 
 @lru_cache
