@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     )
 
     # App
-    PROJECT_NAME: str = "Canvas Helper API"
+    PROJECT_NAME: str = "Canvas Helper AI Assistant"
     API_V1_PREFIX: str = "/api/v1"
     DEBUG: bool = False
 
