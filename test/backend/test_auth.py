@@ -83,10 +83,14 @@ def test_get_current_user(client):
 
 
 def test_get_current_user_invalid_token(client):
+<<<<<<< HEAD
     response = client.get(
         "/api/v1/auth/me",
         headers={"Authorization": "Bearer invalidtoken"}
     )
+=======
+    response = client.get("/api/v1/auth/me", headers={"Authorization": "Bearer invalidtoken"})
+>>>>>>> d836f89 (Update config.py)
     assert response.status_code == 401
 
 
