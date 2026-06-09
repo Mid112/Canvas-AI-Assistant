@@ -5,10 +5,10 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  publicDir: path.resolve(__dirname, "./frontend/public"),
+  publicDir: path.resolve(__dirname, "./public"),
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./frontend/src"),
+      "@": path.resolve(__dirname, "./src"),
     },
   },
 });

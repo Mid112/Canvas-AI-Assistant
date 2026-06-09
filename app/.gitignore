@@ -1,10 +1,34 @@
+# ─────────────────────────────────────────────
+# Environment
+# ─────────────────────────────────────────────
 .env
 .env.local
 .env.*.local
+
+# ─────────────────────────────────────────────
+# Python / Backend
+# ─────────────────────────────────────────────
 venv/
 __pycache__/
+*.py[cod]
 .pytest_cache/
-logs
+*.egg-info/
+
+# ─────────────────────────────────────────────
+# Node / Frontend
+# ─────────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+frontend/.vite/
+frontend/dist/
+frontend/dist-ssr/
+dist/
+dist-ssr/
+
+# ─────────────────────────────────────────────
+# Logs
+# ─────────────────────────────────────────────
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -12,17 +36,20 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-
+# ─────────────────────────────────────────────
+# Editor
+# ─────────────────────────────────────────────
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
+.idea/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
+
+# ─────────────────────────────────────────────
+# OS
+# ─────────────────────────────────────────────
+.DS_Store
+Thumbs.db
