@@ -1,6 +1,5 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 
-import { MainLayout } from "@/components/layouts/MainLayout";
 import { AuthLayout } from "@/components/layouts/AuthLayout";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { LandingPage } from "@/pages/Landing/LandingPage";
@@ -25,12 +24,7 @@ import { ProfilePage } from "@/pages/Profile/ProfilePage";
 import { paths } from "@/routes/paths";
 
 export const router = createBrowserRouter([
-  {
-    element: <MainLayout />,
-    children: [
-      { path: paths.home, element: <LandingPage /> },
-    ],
-  },
+  { path: paths.home, element: <LandingPage /> },
   {
     element: <AuthLayout />,
     children: [
