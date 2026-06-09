@@ -18,19 +18,16 @@ COPY . .
 RUN npm run build
 
 # ─────────────────────────────────────────────
-# Stage 2: Serve with Nginx
+# Stage 2: Serve with Nginx (unprivileged - no high/critical CVEs)
 # ─────────────────────────────────────────────
-FROM nginx:alpine AS production
-
-# Remove default nginx static assets
-RUN rm -rf /usr/share/nginx/html/*
+FROM nginxinc/nginx-unprivileged:alpine-slim AS production
 
 # Copy built assets from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy nginx config (we'll create this next)
+# Copy nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-EXPOSE 80
+EXPOSE 8080
 
 CMD ["nginx", "-g", "daemon off;"]
