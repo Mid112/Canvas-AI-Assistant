@@ -180,6 +180,8 @@ Managing team pull requests proved to be an essential exercise in maintaining ve
 
 * **#3: Pull Request Reviews:** Spent time reviewing PRs from team members. Carefully checked code quality, ensured styling consistencies across different branches, and helped manage safe merges into our main repository to prevent integration conflicts as our codebase grows.
 
+* **#4: Team Meeting:** Participated in team meeting to discuss implementation plans and upcoming Proof of Life deliverables
+
 **Cycle Goal Review**
 
 * **Reflection:** This cycle required a strong balance between wrapping up final design deliverables (the presentation video) and kicking off heavy frontend development. Successfully laying the UI and testing groundwork for our entry pages sets a clear, modular pattern for the rest of our React application.
@@ -190,6 +192,6 @@ Managing team pull requests proved to be an essential exercise in maintaining ve
 
 * Finish developing the UI for the remaining frontend pages: Canvas Connector, Review Permissions, and the Authentication Error page.
 * Continue reviewing team PRs to maintain code quality and smooth integrations.
-* Connect the React front-end application with our backend API.
+* Integrate the front-end application with our backend API.
 * Get Docker properly set up and running on my local laptop for containerized development and testing.
-* Prepare for the final project presentation scheduled for June 12.
+* Prepare for the proof of life demo scheduled for June 12.
