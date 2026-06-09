@@ -1,4 +1,4 @@
-# Cycle 5 (6/02-6/04)
+# Cycle 6 (6/02-6/04)
 ---
 ## Burn-up Chart (Velocity)
 ### June 05 - June 08
