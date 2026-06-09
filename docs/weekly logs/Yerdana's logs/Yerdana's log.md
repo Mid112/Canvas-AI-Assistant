@@ -249,6 +249,96 @@ In retrospective, I am very happy that every team member showed an initiative an
 
 
 
+# Cycle 6 Report: 05/06 – 08/06 (June 5 – June 8)
+
+## Timesheet
+
+### Clockify Report
+
+- **05/06 (Friday):** Using Clockify – Logged 2 hours
+- **06/06 (Saturday):** Not Using Clockify – Logged 0 hours
+- **07/06 (Sunday):** Using Clockify – Logged 2.5 hours
+- **08/06 (Monday)** Using Clockify - Logged 2 hours
+
+<img width="1224" height="56" alt="Screenshot 2026-06-09 at 10 32 54 AM" src="https://github.com/user-attachments/assets/010f9d3f-5ca6-4525-8a82-758abd46ccd4" />
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Installing vLLM and Qwen3 on a local computer (June 5)
+
+- Installed vLLM and XCode Command Line Tools to run Qwen3-4B model inference on a local machine using Mac Silicon Metal accelleration
+- Prompted the model continuonsly on various questions to test the sanity, and response type
+- Checked role-based prompting via OpenAI API, where I checked for the 'choices' list in the return type
+
+<img width="1202" height="144" alt="Screenshot 2026-06-09 at 10 08 45 AM" src="https://github.com/user-attachments/assets/37d3df5b-fcdc-4fba-950f-bfd1683ab961" />
+
+
+
+### #2: Setting up MCP/vLLM backend (June 7)
+
+- After installing vLLM locally, I added an option to run vLLM in a docker container but on a CPU
+- Generated few JSON files to test the response and to verify the model choice. Model had to be chosen such that context length was good enough but also could utilize the limited RAM
+- Set up a mock MCP Server that contains resources, and tools available to Canvas MCP server
+- Ran 3 tests using pytest to test the available tools, system health, and response type
+- Ran 3 tests for the vLLM to test the model response, role type, and system health
+- Constructed a docker-compose.yml and separate dockerfiles for the test, and for MCP/vLLM to run
+
+<img width="1205" height="128" alt="Screenshot 2026-06-09 at 10 19 47 AM" src="https://github.com/user-attachments/assets/7a68db0b-aa88-4edc-9273-23e8bbd9e8fb" />
+
+
+
+### #3: Dockerized environment for MCP/vLLM (June 8)
+
+- Reviewed individual PRs from Bao on FastAPI backend, and Canvas API
+- Discussed with the team next steps with regards to context embeddings for role-based prompting
+
+
+<img width="1213" height="140" alt="Screenshot 2026-06-09 at 10 20 40 AM" src="https://github.com/user-attachments/assets/8b561d61-9745-402b-afe3-3a88944b1904" />
+
+
+
+
+---
+
+## Progress Update (since 05/06/2026)
+
+| TASK/ISSUE #             | STATUS      |
+| ------------------------ | ----------- |
+| Design document          | Completed |
+| Project design video     | Completed   |
+| Database design          | Completed   |
+| PR reviews and approvals | Completed   |
+| Project setup            | In Progress |
+| Dockerized environment for MCP/vLLM | Completed |
+| Locally running vLLM     | Completed   |
+| Setup for PostgreSQL     | Completed   |
+| MCP Server, and Client design | In Progress |
+
+---
+
+## Cycle 6 Goal Review
+
+### Reflection:
+
+This cycle was successful in terms of backend development, where Bao worked on FastAPI, and Canvas API response. I worked on MCP/vLLM setup, and initial tests to prove the working concept. 
+One win for this cycle was the availability of resources online for learning, as well as, other comparable structures that served as an inspiration for our project. 
+
+### Retrospective:
+
+In retrospective, I am quite pleased with the integration, however, I would be more careful of complex designs that would have a hard time being developed, and tested in real life, especially given resource 
+and time constraints
+
+---
+
+## Next Cycle 7 Goals
+
+- **Goal 1:** Design a Canvas MCP server with initial set of core tools
+- **Goal 2:** Prompt and study the JSON response from Qwen3-4B
+- **Goal 3:** Design a context embedding, and retrieval for the model to use
+
+
+
 
 
 
