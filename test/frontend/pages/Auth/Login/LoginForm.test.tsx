@@ -1,20 +1,21 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { FormEvent } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { LoginForm } from "@/pages/Auth/Login/LoginForm";
+import { renderWithRouter } from "../../../utils/renderWithRouter";
 
 describe("LoginForm", () => {
   it("renders email and password fields", () => {
-    render(<LoginForm onSubmit={vi.fn()} />);
+    renderWithRouter(<LoginForm onSubmit={vi.fn()} />);
 
     expect(screen.getByLabelText("Email Address")).toBeInTheDocument();
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
   });
 
   it("renders field placeholders", () => {
-    render(<LoginForm onSubmit={vi.fn()} />);
+    renderWithRouter(<LoginForm onSubmit={vi.fn()} />);
 
     expect(
       screen.getByPlaceholderText("professor@university.edu"),
@@ -24,18 +25,18 @@ describe("LoginForm", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders remember me checkbox and forgot password button", () => {
-    render(<LoginForm onSubmit={vi.fn()} />);
+  it("renders remember me checkbox and forgot password link", () => {
+    renderWithRouter(<LoginForm onSubmit={vi.fn()} />);
 
     expect(screen.getByLabelText("Remember me")).toBeInTheDocument();
     expect(screen.getByText("Remember me")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Forgot password?" }),
-    ).toBeInTheDocument();
+      screen.getByRole("link", { name: "Forgot password?" }),
+    ).toHaveAttribute("href", "/reset-password");
   });
 
   it("renders the sign in submit button", () => {
-    render(<LoginForm onSubmit={vi.fn()} />);
+    renderWithRouter(<LoginForm onSubmit={vi.fn()} />);
 
     expect(
       screen.getByRole("button", { name: "Sign In" }),
@@ -46,7 +47,7 @@ describe("LoginForm", () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn((e: FormEvent<HTMLFormElement>) => e.preventDefault());
 
-    render(<LoginForm onSubmit={onSubmit} />);
+    renderWithRouter(<LoginForm onSubmit={onSubmit} />);
 
     await user.click(screen.getByRole("button", { name: "Sign In" }));
 
@@ -56,7 +57,7 @@ describe("LoginForm", () => {
   it("allows typing into email and password fields", async () => {
     const user = userEvent.setup();
 
-    render(<LoginForm onSubmit={vi.fn()} />);
+    renderWithRouter(<LoginForm onSubmit={vi.fn()} />);
 
     const emailInput = screen.getByLabelText("Email Address");
     const passwordInput = screen.getByLabelText("Password");

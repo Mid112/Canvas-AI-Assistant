@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { LoginPage } from "@/pages/Auth/LoginPage";
 import { paths } from "@/routes/paths";
-import { renderWithRouter } from "../../utils/renderWithRouter";
+import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 const mockNavigate = vi.fn();
 

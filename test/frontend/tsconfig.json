@@ -10,7 +10,8 @@
     "noEmit": true,
     "types": ["vitest/globals", "@testing-library/jest-dom"],
     "paths": {
-      "@/*": ["../../app/frontend/src/*"]
+      "@/*": ["../../app/frontend/src/*"],
+      "@test/*": ["./*"]
     }
   },
   "include": ["./**/*"]
