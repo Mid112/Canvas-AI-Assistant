@@ -2,6 +2,7 @@ export const paths = {
   home: "/",
   login: "/login",
   register: "/register",
+  resetPassword: "/reset-password",
   instructor: {
     dashboard: "/instructor/dashboard",
     courses: "/instructor/courses",
