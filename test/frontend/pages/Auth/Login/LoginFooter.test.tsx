@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { LoginFooter } from "@/pages/Auth/Login/LoginFooter";
 import { paths } from "@/routes/paths";
-import { renderWithRouter } from "../../../utils/renderWithRouter";
+import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 describe("LoginFooter", () => {
   it("renders the account prompt text", () => {

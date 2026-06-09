@@ -1,11 +1,11 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 
-import { MainLayout } from "@/components/layouts/MainLayout";
 import { AuthLayout } from "@/components/layouts/AuthLayout";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { LandingPage } from "@/pages/Landing/LandingPage";
 import { LoginPage } from "@/pages/Auth/LoginPage";
 import { RegisterPage } from "@/pages/Auth/RegisterPage";
+import { ResetPasswordPage } from "@/pages/Auth/ResetPasswordPage";
 import { InstructorDashboardPage } from "@/pages/Instructor/InstructorDashboardPage";
 import { InstructorCoursesPage } from "@/pages/Instructor/InstructorCoursesPage";
 import { InstructorAssistantPage } from "@/pages/Instructor/InstructorAssistantPage";
@@ -24,17 +24,13 @@ import { ProfilePage } from "@/pages/Profile/ProfilePage";
 import { paths } from "@/routes/paths";
 
 export const router = createBrowserRouter([
-  {
-    element: <MainLayout />,
-    children: [
-      { path: paths.home, element: <LandingPage /> },
-    ],
-  },
+  { path: paths.home, element: <LandingPage /> },
   {
     element: <AuthLayout />,
     children: [
       { path: paths.login, element: <LoginPage /> },
       { path: paths.register, element: <RegisterPage /> },
+      { path: paths.resetPassword, element: <ResetPasswordPage /> },
     ],
   },
   {
