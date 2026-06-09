@@ -159,3 +159,39 @@ Managing team pull requests proved to be an essential exercise in maintaining ve
 * Continue weekly team meetings to coordinate frontend and backend (FastAPI/PostgreSQL) integration.
 * Maintain consistent Clockify tracking as active coding tasks ramp up.
 
+# **Cycle 6: Friday (06/05) ~ Monday (06/08)**
+
+**Timesheet**
+
+**Clockify Report**
+
+**06/05 (Friday):** 03:02:17
+<img width="1336" height="171" alt="06:05" src="https://github.com/user-attachments/assets/3a28bbff-dfe2-495a-8716-33e0b7ef3a65" />
+**06/07 (Sunday):** 03:56:42
+<img width="1340" height="228" alt="06:07" src="https://github.com/user-attachments/assets/909c15da-8570-4124-b3ea-a914c2fee70c" />
+**06/08 (Monday):** 01:50:44
+<img width="1339" height="109" alt="06:08" src="https://github.com/user-attachments/assets/f6f3e22c-274a-4330-95ad-d972db4af76d" />
+
+**Current Tasks (Provide sufficient detail)**
+
+* **#1: Design Video Presentation:** Collaborated with the team to film and finalize the system design video presentation. Ensured that our Use Cases, L1 DFD, and UI mockups were clearly articulated and perfectly aligned with our system architecture before submitting the final recording.
+
+* **#2: Frontend UI & Testing (Landing & Register Pages):** Contributed to the frontend development by creating the Landing Page and Create Account (Register) page UIs. Translated wireframes into responsive React components. Additionally, wrote and updated the corresponding Vitest unit tests to ensure all new UI components render correctly and reliably.
+
+* **#3: Pull Request Reviews:** Spent time reviewing PRs from team members. Carefully checked code quality, ensured styling consistencies across different branches, and helped manage safe merges into our main repository to prevent integration conflicts as our codebase grows.
+
+* **#4: Team Meeting:** Participated in team meeting to discuss implementation plans and upcoming Proof of Life deliverables
+
+**Cycle Goal Review**
+
+* **Reflection:** This cycle required a strong balance between wrapping up final design deliverables (the presentation video) and kicking off heavy frontend development. Successfully laying the UI and testing groundwork for our entry pages sets a clear, modular pattern for the rest of our React application.
+
+* **Retrospective:** Reviewing team PRs has been a crucial exercise in maintaining our repository's health and keeping everyone on the same page visually and architecturally. Now that the design video is out of the way, the focus needs to shift heavily toward connecting our frontend work to the backend infrastructure. 
+
+**Next Cycle Goals**
+
+* Finish developing the UI for the remaining frontend pages: Canvas Connector, Review Permissions, and the Authentication Error page.
+* Continue reviewing team PRs to maintain code quality and smooth integrations.
+* Integrate the front-end application with our backend API.
+* Get Docker properly set up and running on my local laptop for containerized development and testing.
+* Prepare for the proof of life demo scheduled for June 12.
