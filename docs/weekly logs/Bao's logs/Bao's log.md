@@ -221,3 +221,58 @@ Total: ~6.5 hours
 - Push backend auth PR for team review
 - Write basic auth tests in test/backend/
 - Begin role-specific API routes (/api/instructor/, /api/ta/, /api/admin/)
+
+---
+
+# Cycle 6 Report: June 5 – June 8
+
+## Timesheet
+
+### Clockify Report
+
+- 5/6 (Friday): Team Meeting – 3 hours
+- 7/6 (Saturday): fastAPI set up + authAPI  – 3.9 hours
+- 8/6 (Sunday): Backend Initialize + Video Recording – 4.9 hours
+
+Total: ~11.8 hours
+
+---
+
+## Completed Tasks
+
+### 1: Participated in Team Meeting (Friday, 5/6)
+- Met with the team to discuss the work for demo of proof of life, my part is for backend mostly
+<img width="2211" height="262" alt="Screenshot 2026-06-09 100812" src="https://github.com/user-attachments/assets/a0f0a129-36d8-4242-8b83-6fa8e5cb8b9e" />
+
+
+
+### 2: fastAPI set up + authAPI (Sunday, 7/6)
+- fastAPI basic set up, folder structure for backend made
+- authAPI endpoint set up, JWT token used
+<img width="2202" height="279" alt="Screenshot 2026-06-09 100816" src="https://github.com/user-attachments/assets/be26bb73-e9f0-4e11-88ba-d06dc4e568fa" />
+
+
+
+### 3: PR review and canvasAPI basic set up (S, 4/6)
+- review frontend PRs of others, work on canvasAPI by reading documents
+- implement basic canvasAPI endpoints getsubmission, getcourse,..
+<img width="2200" height="562" alt="Screenshot 2026-06-09 100820" src="https://github.com/user-attachments/assets/c9e28d8c-35fc-45e6-bd49-d4a71cf6f6eb" />
+
+
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle completed the fastAPI foundation, make basic Canvas API and login. The three-layer architecture (integration → service → router) keeps the code organized and will make it straightforward to add more Canvas endpoints when the LLM integration begins. All 13 backend tests pass and the server is confirmed running locally with Docker.
+
+
+### Retrospective:
+- Running frontend and backend PRs in parallel with teammates caused some integration gaps — the signup form doesn't call the backend yet and the name field has no backend counterpart. A quick alignment session with the frontend team before integration week will help avoid rework. The Windows Vitest is still an issue for me to solve
+
+---
+
+## Next Cycle Goals
+- Discuss frontend–backend integration with team: wire up register/login forms to `/api/v1/auth/` endpoints
+- Create refactor/backend-cleanup branch: move `client` fixture to `conftest.py` and do some refactor before integration phase
