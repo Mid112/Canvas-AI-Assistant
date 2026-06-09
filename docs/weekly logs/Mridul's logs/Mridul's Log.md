@@ -352,8 +352,14 @@ be the key challenge going into the next cycle.
 
 - **05/06 :** Using Clockify – Logged 3.5 hours
 - **05/06 :** Using Clockify – Logged 2.33 hours
+
+<img width="1222" height="177" alt="Screenshot 2026-06-09 at 10 13 52 AM" src="https://github.com/user-attachments/assets/64ee32a8-1fcd-402b-876d-ba6be46dc4ca" />
+
 - **07/06 :** Using Clockify – Logged 0 hours
 - **08/06 :** Using Clockify – Logged 3.5 hours
+
+<img width="1220" height="118" alt="Screenshot 2026-06-09 at 10 13 47 AM" src="https://github.com/user-attachments/assets/41bb1611-295b-4e80-8508-ef17984c7289" />
+
 
 ---
 
