@@ -290,4 +290,88 @@ Frontend setup work established the foundation required for future development a
 * Maintain consistent Clockify tracking
 * Begin implementation of high-priority MVP functionality
 
+# **Cycle 6: Friday (5/6) ~ Monday (8/6)**
+
+### **Friday (5/6)**
+
+**Timesheet**  
+**Clockify Report:** 3:46:00
+<img width="1327" height="163" alt="Screenshot 2026-06-09 at 9 51 38 AM" src="https://github.com/user-attachments/assets/67822e61-037e-441e-b1b0-702c348449aa" />
+
+**Current Tasks**
+- Participated in a team meeting to discuss implementation plans and upcoming Proof of Life deliverables
+- Discussed frontend development progress and project priorities with team members
+- Addressed pull request feedback received from teammates
+- Made required revisions and fixes to submitted pull requests
+- Reviewed project progress and coordinated next development steps
+
+### **Saturday (6/6)**
+
+**Timesheet**  
+**Clockify Report:** 1:16:50
+<img width="1333" height="97" alt="Screenshot 2026-06-09 at 9 51 47 AM" src="https://github.com/user-attachments/assets/949d74ec-96aa-4b09-b78f-e3f7c679525c" />
+
+**Current Tasks**
+- Continued frontend development work
+- Implemented and refined the Login page interface
+- Worked on component structure and page layout
+- Ensured the page aligned with the project's design requirements and mockups
+- Performed testing and UI adjustments during implementation
+
+### **Sunday (7/6)**
+
+**Timesheet**  
+**Clockify Report:** 1:37:49
+<img width="1334" height="165" alt="Screenshot 2026-06-09 at 9 51 55 AM" src="https://github.com/user-attachments/assets/c7e1ae86-e79c-40c0-9c25-7d97830ef49b" />
+
+**Current Tasks**
+- Continued development of the Login page functionality and interface
+- Designed and implemented the Reset Password page
+- Added navigation between Login and Reset Password pages
+- Worked on frontend component organization and page consistency
+- Performed testing and validation of user interface functionality
+
+### **Monday (8/6)**
+
+**Timesheet**  
+**Clockify Report:** 0:54:19
+<img width="1335" height="104" alt="Screenshot 2026-06-09 at 9 57 49 AM" src="https://github.com/user-attachments/assets/3588e327-9244-4733-b535-9437866557d3" />
+
+**Current Tasks**
+- Reviewed teammates' pull requests
+- Provided feedback on code quality and implementation details
+- Verified project changes and reviewed frontend contributions
+- Participated in team collaboration and code review activities
+
+---
+
+## **Cycle 6 – Goal Review**
+
+### **Reflection**
+
+This cycle marked the beginning of active frontend implementation for the project. Work focused on translating the completed design artifacts into functional user interfaces, including the Login and Reset Password pages. Significant progress was made toward establishing the application's authentication-related user experience while maintaining collaboration through team meetings and pull request reviews.
+
+### **Retrospective**
+
+The team meeting helped align development priorities and ensure all members were prepared for upcoming milestones. Time was spent addressing pull request feedback and improving submitted work based on review comments, contributing to overall project quality.
+
+Frontend development progressed with the implementation of the Login page and the addition of a Reset Password page. These interfaces were developed according to the approved design mockups and helped establish reusable UI patterns for future pages. Navigation between authentication-related pages was also incorporated, improving the overall user experience.
+
+Code review activities continued throughout the cycle, allowing for knowledge sharing and maintaining development standards across the project. Overall, the cycle successfully transitioned the project from design-focused work toward active implementation.
+
+---
+
+## **Next Cycle Goals (Cycle 7: Tuesday 9/6 ~ Thursday 11/6)**
+
+* Continue frontend development and implement additional authentication-related pages
+* Refine Login and Reset Password functionality based on team feedback
+* Begin development of registration and dashboard interfaces
+* Continue writing and expanding frontend unit tests
+* Participate in pull request reviews and team discussions
+* Support Proof of Life milestone preparation and demonstrations
+* Continue frontend component refactoring and code cleanup
+* Assist with backend integration planning and API discussions
+* Update project documentation as implementation progresses
+* Maintain consistent Clockify tracking
+
 
