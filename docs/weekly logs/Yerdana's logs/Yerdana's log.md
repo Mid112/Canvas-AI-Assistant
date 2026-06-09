@@ -260,9 +260,7 @@ In retrospective, I am very happy that every team member showed an initiative an
 - **07/06 (Sunday):** Using Clockify – Logged 2.5 hours
 - **08/06 (Monday)** Using Clockify - Logged 2 hours
 
-<img width="1219" height="174" alt="Screenshot 2026-06-05 at 10 18 42 AM" src="https://github.com/user-attachments/assets/9ddb455d-10c5-4896-ada9-74d05862c278" />
-
-
+<img width="1224" height="56" alt="Screenshot 2026-06-09 at 10 32 54 AM" src="https://github.com/user-attachments/assets/010f9d3f-5ca6-4525-8a82-758abd46ccd4" />
 ---
 
 ## Current Tasks (Provide sufficient detail)
