@@ -338,3 +338,84 @@ be the key challenge going into the next cycle.
 - **Goal 1:** Complete design document video for client
 - **Goal 2:** Complete basic dockerization of the frontend
 - **Goal 3:** Complete basic dockerization of the backend
+
+---
+
+<br>
+
+
+# Cycle 6 Report: 05/06 – 08/06 (June 5 – June 8)
+
+## Timesheet
+
+### Clockify Report
+
+- **05/06 :** Using Clockify – Logged 3.5 hours
+- **05/06 :** Using Clockify – Logged 2.33 hours
+- **07/06 :** Using Clockify – Logged 0 hours
+- **08/06 :** Using Clockify – Logged 3.5 hours
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Cycle 5 review and dockerization planning meeting (June 5)
+- Attended a 3.5-hour cycle 5 meeting to review progress and align on
+  dockerization strategy going forward.
+- Discussed integration plans for frontend, backend, and MCP docker containers.
+
+### #3: Design document video edit and submission (June 5)
+- Edited and submitted the design document video walkthrough for the client
+  over a 2 hour 20 minute session.
+- Completes a carried-over deliverable from the previous cycle.
+
+### #2: Frontend dockerization (June 8)
+- Completed the dockerization of the frontend over a 3.5-hour work session.
+- Sets up the foundation for integrating all containers together in the
+  next cycle.
+
+
+
+---
+
+## Progress Update (since 05/06/2026)
+
+| TASK/ISSUE #                         | STATUS      |
+| ------------------------------------ | ----------- |
+| Frontend dockerization               | Completed   |
+| Design document video                | Completed   |
+| Cycle 5 meeting                      | Completed   |
+| Docker integration (FE, BE, MCP)     | In Progress |
+| Proof of life presentation           | Not Started |
+| MVP                                  | In Progress |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle saw strong technical progress with the completion of frontend
+dockerization, which is a key step toward full container integration. The
+design document video was also edited and submitted this cycle, closing out
+a deliverable that had been carried over from the previous cycle. The cycle 5
+meeting helped the team align on the dockerization strategy and set a clear
+direction for integrating the frontend, backend, and MCP containers together.
+
+### Retrospective:
+
+The team maintained good momentum this cycle, delivering on both the frontend
+dockerization and the client video submission. Clockify was used consistently
+throughout the cycle. The primary challenge going into the next cycle will be
+the integration of all docker containers, which is a more complex task that
+will require close collaboration. Alongside this, beginning the proof of life
+presentation and pushing forward on the MVP will keep the team on track toward
+final deliverables.
+
+---
+
+## Next Cycle Goals
+
+- **Goal 1:** Integrate frontend, backend, and MCP docker containers together
+- **Goal 2:** Create proof of life presentation
+- **Goal 3:** Continue active development toward MVP completion
