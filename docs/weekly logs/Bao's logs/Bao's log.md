@@ -242,19 +242,22 @@ Total: ~11.8 hours
 
 ### 1: Participated in Team Meeting (Friday, 5/6)
 - Met with the team to discuss the work for demo of proof of life, my part is for backend mostly
-<img width="2381" height="101" alt="Screenshot 2026-06-05 095326" src="https://github.com/user-attachments/assets/b78c154a-6500-469c-b31d-cb4753f30e0b" />
+<img width="2211" height="262" alt="Screenshot 2026-06-09 100812" src="https://github.com/user-attachments/assets/a0f0a129-36d8-4242-8b83-6fa8e5cb8b9e" />
+
 
 
 ### 2: fastAPI set up + authAPI (Sunday, 7/6)
 - fastAPI basic set up, folder structure for backend made
 - authAPI endpoint set up, JWT token used
-<img width="2353" height="94" alt="Screenshot 2026-06-05 095331" src="https://github.com/user-attachments/assets/99e7eb32-4df7-4fe7-a78f-6ed5aed5ea22" />
+<img width="2202" height="279" alt="Screenshot 2026-06-09 100816" src="https://github.com/user-attachments/assets/be26bb73-e9f0-4e11-88ba-d06dc4e568fa" />
+
 
 
 ### 3: PR review and canvasAPI basic set up (S, 4/6)
 - review frontend PRs of others, work on canvasAPI by reading documents
 - implement basic canvasAPI endpoints getsubmission, getcourse,..
-<img width="2370" height="92" alt="Screenshot 2026-06-05 095335" src="https://github.com/user-attachments/assets/36cd2798-7210-4a33-9b94-84cd89c63dc8" />
+<img width="2200" height="562" alt="Screenshot 2026-06-09 100820" src="https://github.com/user-attachments/assets/c9e28d8c-35fc-45e6-bd49-d4a71cf6f6eb" />
+
 
 
 ---
