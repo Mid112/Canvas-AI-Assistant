@@ -90,6 +90,46 @@ describe("RegisterForm", () => {
     expect(submitButton).toBeEnabled();
   });
 
+  it("shows a password mismatch error when passwords do not match", async () => {
+    const user = userEvent.setup();
+
+    renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
+
+    await user.type(screen.getByLabelText("Password"), "secret123");
+    await user.type(screen.getByLabelText("Confirm Password"), "different");
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Passwords must match");
+    expect(
+      screen.getByRole("button", { name: "Create Account" }),
+    ).toBeDisabled();
+  });
+
+  it("does not show password mismatch error before confirm password is entered", async () => {
+    const user = userEvent.setup();
+
+    renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
+
+    await user.type(screen.getByLabelText("Password"), "secret123");
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("clears password mismatch error when passwords match", async () => {
+    const user = userEvent.setup();
+
+    renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
+
+    const confirmPasswordInput = screen.getByLabelText("Confirm Password");
+
+    await user.type(screen.getByLabelText("Password"), "secret123");
+    await user.type(confirmPasswordInput, "different");
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+
+    await user.clear(confirmPasswordInput);
+    await user.type(confirmPasswordInput, "secret123");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
   it("calls onSubmit when the form is submitted", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn((e: FormEvent<HTMLFormElement>) => e.preventDefault());

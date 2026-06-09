@@ -21,11 +21,16 @@ export function RegisterForm({ onSubmit }: RegisterFormProps) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
+  const passwordsMatch = password === confirmPassword;
+  const showPasswordMismatchError =
+    confirmPassword !== "" && !passwordsMatch;
+
   const isFormComplete =
     name.trim() !== "" &&
     email.trim() !== "" &&
     password !== "" &&
     confirmPassword !== "" &&
+    passwordsMatch &&
     acceptedTerms;
 
   return (
@@ -114,6 +119,12 @@ export function RegisterForm({ onSubmit }: RegisterFormProps) {
           </Link>
         </span>
       </label>
+
+      {showPasswordMismatchError && (
+        <p className="text-sm text-[#dc2626]" role="alert">
+          Passwords must match
+        </p>
+      )}
 
       <Button
         type="submit"
