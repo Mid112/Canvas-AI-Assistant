@@ -20,7 +20,7 @@ async def fetch_courses() -> list[dict]:
             response = await client.get(
                 f"{settings.CANVAS_API_URL}/courses",
                 headers=_HEADERS(),
-                params={"enrollment_type": "teacher", "state[]": "available"},
+                params={"state[]": ["available", "unpublished", "completed"]},
             )
     except httpx.RequestError as e:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Could not reach Canvas: {e}")
