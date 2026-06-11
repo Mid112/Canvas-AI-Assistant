@@ -20,6 +20,7 @@ networks:
 
 volumes:
   postgres_data:
+  canvas_data:
 
 services:
   # ─────────────────────────────────────────────
@@ -87,3 +88,11 @@ services:
     # --reload watches for file changes and restarts uvicorn
     # automatically — no manual restarts needed during development
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+  canvas-docker:
+    image: lbjay/canvas-docker
+    container_name: canvas_lms
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - canvas_data:/opt/canvas-lms/tmp
