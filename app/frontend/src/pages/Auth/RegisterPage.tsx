@@ -17,7 +17,7 @@ export function RegisterPage() {
         <RegisterForm
           onSubmit={(e) => {
             e.preventDefault();
-            navigate(paths.login);
+            navigate(paths.canvasInfo);
           }}
         />
         <RegisterFooter />

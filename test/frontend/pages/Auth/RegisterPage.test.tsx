@@ -36,7 +36,7 @@ describe("RegisterPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("navigates to login on create account", async () => {
+  it("navigates to canvas info on create account", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
 
@@ -56,6 +56,6 @@ describe("RegisterPage", () => {
     );
     await user.click(screen.getByRole("button", { name: "Create Account" }));
 
-    expect(mockNavigate).toHaveBeenCalledWith(paths.login);
+    expect(mockNavigate).toHaveBeenCalledWith(paths.canvasInfo);
   });
 });
