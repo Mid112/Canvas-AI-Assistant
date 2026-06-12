@@ -1,4 +1,3 @@
-<img width="2381" height="101" alt="Screenshot 2026-06-05 095326" src="https://github.com/user-attachments/assets/25c17825-db8d-43a3-94a8-760c436f63c4" />
 # Weekly Report: 18/5 – 24/5 (May 18 – May 24)
 
 ## Timesheet
