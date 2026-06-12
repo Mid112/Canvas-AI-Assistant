@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     # Canvas API
     CANVAS_API_URL: str = "https://canvas.ubc.ca/api/v1"
     CANVAS_API_TOKEN: str = ""
-    CANVAS_TOKEN_ENCRYPTION_KEY: str = "PCPDxlDY56M2KDT6jvGAAFx8_oHImQQNmtRuzwrcnh4="
+    CANVAS_TOKEN_ENCRYPTION_KEY: str = ""
 
 
 @lru_cache
