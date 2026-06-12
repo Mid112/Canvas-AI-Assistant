@@ -4,6 +4,8 @@ export const paths = {
   register: "/register",
   canvasInfo: "/canvas-info",
   resetPassword: "/reset-password",
+  reviewPermissions: "/review-permissions",
+  canvasAuthError: "/canvas-auth-error",
   instructor: {
     dashboard: "/instructor/dashboard",
     courses: "/instructor/courses",

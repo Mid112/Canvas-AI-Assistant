@@ -7,6 +7,7 @@ import { paths } from "@/routes/paths";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 const mockNavigate = vi.fn();
+const mockLogin = vi.fn();
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom");
@@ -15,6 +16,25 @@ vi.mock("react-router-dom", async () => {
     useNavigate: () => mockNavigate,
   };
 });
+
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => ({
+    login: mockLogin,
+    logout: vi.fn(),
+    register: vi.fn(),
+    user: null,
+    isAuthenticated: false,
+    isLoading: false,
+  }),
+  AuthApiError: class AuthApiError extends Error {
+    status: number;
+
+    constructor(message: string, status: number) {
+      super(message);
+      this.status = status;
+    }
+  },
+}));
 
 describe("LoginPage", () => {
   it("renders all login sections", () => {
@@ -34,14 +54,24 @@ describe("LoginPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("navigates to instructor dashboard on sign in", async () => {
+  it("navigates to canvas info after successful sign in", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
+    mockLogin.mockResolvedValue(undefined);
 
     renderWithRouter(<LoginPage />);
 
+    await user.type(
+      screen.getByLabelText("Email Address"),
+      "professor@university.edu",
+    );
+    await user.type(screen.getByLabelText("Password"), "secret123");
     await user.click(screen.getByRole("button", { name: "Sign In" }));
 
-    expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.dashboard);
+    expect(mockLogin).toHaveBeenCalledWith({
+      email: "professor@university.edu",
+      password: "secret123",
+    });
+    expect(mockNavigate).toHaveBeenCalledWith(paths.canvasInfo);
   });
 });

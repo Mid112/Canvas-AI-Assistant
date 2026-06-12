@@ -28,7 +28,7 @@ describe("ResetPasswordPage", () => {
     expect(screen.getByText("Canvas LMS")).toBeInTheDocument();
   });
 
-  it("submits the form without navigating away", async () => {
+  it("shows a success message after submitting a valid email", async () => {
     const user = userEvent.setup();
 
     renderWithRouter(<ResetPasswordPage />, {
@@ -41,8 +41,8 @@ describe("ResetPasswordPage", () => {
     );
     await user.click(screen.getByRole("button", { name: "Send Reset Link" }));
 
-    expect(screen.getByLabelText("Email Address")).toHaveValue(
-      "you@university.edu",
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "If an account exists for you@university.edu",
     );
   });
 });

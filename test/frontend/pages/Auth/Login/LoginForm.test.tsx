@@ -1,6 +1,5 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { FormEvent } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { LoginForm } from "@/pages/Auth/Login/LoginForm";
@@ -35,23 +34,46 @@ describe("LoginForm", () => {
     ).toHaveAttribute("href", "/reset-password");
   });
 
-  it("renders the sign in submit button", () => {
+  it("renders the sign in submit button disabled by default", () => {
     renderWithRouter(<LoginForm onSubmit={vi.fn()} />);
 
-    expect(
-      screen.getByRole("button", { name: "Sign In" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sign In" })).toBeDisabled();
   });
 
-  it("calls onSubmit when the form is submitted", async () => {
+  it("enables submit when email and password are filled", async () => {
     const user = userEvent.setup();
-    const onSubmit = vi.fn((e: FormEvent<HTMLFormElement>) => e.preventDefault());
+
+    renderWithRouter(<LoginForm onSubmit={vi.fn()} />);
+
+    const submitButton = screen.getByRole("button", { name: "Sign In" });
+
+    await user.type(
+      screen.getByLabelText("Email Address"),
+      "professor@university.edu",
+    );
+    expect(submitButton).toBeDisabled();
+
+    await user.type(screen.getByLabelText("Password"), "secret123");
+    expect(submitButton).toBeEnabled();
+  });
+
+  it("calls onSubmit with credentials when the form is submitted", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
 
     renderWithRouter(<LoginForm onSubmit={onSubmit} />);
 
+    await user.type(
+      screen.getByLabelText("Email Address"),
+      "professor@university.edu",
+    );
+    await user.type(screen.getByLabelText("Password"), "secret123");
     await user.click(screen.getByRole("button", { name: "Sign In" }));
 
-    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit).toHaveBeenCalledWith({
+      email: "professor@university.edu",
+      password: "secret123",
+    });
   });
 
   it("allows typing into email and password fields", async () => {
@@ -67,5 +89,15 @@ describe("LoginForm", () => {
 
     expect(emailInput).toHaveValue("professor@university.edu");
     expect(passwordInput).toHaveValue("secret123");
+  });
+
+  it("shows an error message when provided", () => {
+    renderWithRouter(
+      <LoginForm onSubmit={vi.fn()} error="Invalid email or password." />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Invalid email or password.",
+    );
   });
 });

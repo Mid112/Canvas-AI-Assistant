@@ -6,7 +6,11 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 interface RegisterFormProps {
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onSubmit: (credentials: {
+    email: string;
+    password: string;
+  }) => void | Promise<void>;
+  isSubmitting?: boolean;
 }
 
 const inputClassName =
@@ -14,7 +18,10 @@ const inputClassName =
 
 const labelClassName = "text-sm font-semibold text-[#1e293b]";
 
-export function RegisterForm({ onSubmit }: RegisterFormProps) {
+export function RegisterForm({
+  onSubmit,
+  isSubmitting = false,
+}: RegisterFormProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -33,8 +40,17 @@ export function RegisterForm({ onSubmit }: RegisterFormProps) {
     passwordsMatch &&
     acceptedTerms;
 
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!isFormComplete || isSubmitting) {
+      return;
+    }
+
+    await onSubmit({ email: email.trim(), password });
+  };
+
   return (
-    <form className="space-y-5" onSubmit={onSubmit}>
+    <form className="space-y-5" onSubmit={handleSubmit}>
       <div className="space-y-2">
         <label htmlFor="name" className={labelClassName}>
           Full Name
@@ -128,10 +144,10 @@ export function RegisterForm({ onSubmit }: RegisterFormProps) {
 
       <Button
         type="submit"
-        disabled={!isFormComplete}
+        disabled={!isFormComplete || isSubmitting}
         className="h-11 w-full rounded-lg bg-[#2563eb] text-base font-semibold text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] hover:bg-[#1d4ed8] disabled:bg-[#cbd5e1] disabled:text-[#94a3b8] disabled:shadow-none disabled:hover:bg-[#cbd5e1]"
       >
-        Create Account
+        {isSubmitting ? "Creating Account..." : "Create Account"}
       </Button>
     </form>
   );
