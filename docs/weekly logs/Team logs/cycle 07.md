@@ -32,7 +32,8 @@ We had a 2 hour meeting on Tuesday June 9nd to divide tasks for demo proof of li
 | 154 | Missing Submission Analysis | Mridul | Not started
 
 ## Burn-up Chart (Velocity):
-<img width="2200" height="562" alt="Screenshot 2026-06-09 100820" src="https://github.com/user-attachments/assets/de81414c-e2b3-4490-a453-9f07a1704152" />
+<img width="705" height="443" alt="Screenshot 2026-06-12 100320" src="https://github.com/user-attachments/assets/00bab60a-05a4-4850-ada9-fa06efc4c96b" />
+
 
 
 ## Times for Team/Individual:
