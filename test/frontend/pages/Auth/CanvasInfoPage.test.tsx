@@ -26,12 +26,13 @@ describe("CanvasInfoPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows connect canvas as the current onboarding step", () => {
+  it("shows canvas info as the current onboarding step", () => {
     renderWithRouter(<CanvasInfoPage />);
 
-    expect(screen.getByText("Sign In")).toBeInTheDocument();
-    expect(screen.getByText("Connect Canvas")).toBeInTheDocument();
-    expect(screen.getByText("Setup Complete")).toBeInTheDocument();
+    expect(screen.getByText("Canvas Info")).toBeInTheDocument();
+    expect(screen.getByText("Connect Canvas Account")).toBeInTheDocument();
+    expect(screen.getByText("Review Permissions")).toBeInTheDocument();
+    expect(screen.getByText("Dashboard")).toBeInTheDocument();
   });
 
   it("renders permission and security details", () => {

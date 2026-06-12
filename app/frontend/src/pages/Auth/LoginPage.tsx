@@ -6,7 +6,7 @@ import { LoginFooter } from "@/pages/Auth/Login/LoginFooter";
 import { LoginForm } from "@/pages/Auth/Login/LoginForm";
 import { LoginHeader } from "@/pages/Auth/Login/LoginHeader";
 import { LoginWelcome } from "@/pages/Auth/Login/LoginWelcome";
-import { paths } from "@/routes/paths";
+import { getPostAuthPath } from "@/utils/onboarding";
 
 export function LoginPage() {
   const navigate = useNavigate();
@@ -27,8 +27,8 @@ export function LoginPage() {
             setIsSubmitting(true);
 
             try {
-              await login(credentials);
-              navigate(paths.canvasInfo);
+              const user = await login(credentials);
+              navigate(getPostAuthPath(user.id, user.role));
             } catch (err) {
               if (err instanceof AuthApiError && err.status === 401) {
                 setError("Invalid email or password.");

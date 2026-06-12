@@ -59,7 +59,14 @@ describe("RegisterPage", () => {
   it("navigates to canvas info on create account", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
-    mockRegister.mockResolvedValue(undefined);
+    mockRegister.mockResolvedValue({
+      id: 1,
+      email: "professor@university.edu",
+      name: "professor",
+      role: "instructor",
+      is_active: true,
+      has_canvas_token: false,
+    });
 
     renderWithRouter(<RegisterPage />);
 
@@ -78,6 +85,7 @@ describe("RegisterPage", () => {
     await user.click(screen.getByRole("button", { name: "Create Account" }));
 
     expect(mockRegister).toHaveBeenCalledWith({
+      name: "Dr. Jane Smith",
       email: "professor@university.edu",
       password: "secret123",
     });
