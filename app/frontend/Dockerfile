@@ -14,6 +14,10 @@ RUN npm ci
 # Copy the rest of the frontend source
 COPY . .
 
+# Production nginx proxies /api/ to the backend — use a same-origin relative URL.
+ARG VITE_API_BASE_URL=/api/v1
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 # Build the production bundle
 RUN npm run build
 
