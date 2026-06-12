@@ -4,6 +4,7 @@ import { AuthLayout } from "@/components/layouts/AuthLayout";
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
 import { LandingPage } from "@/pages/Landing/LandingPage";
 import { CanvasInfoPage } from "@/pages/Auth/CanvasInfoPage";
+import { ConnectCanvasPage } from "@/pages/Auth/ConnectCanvasPage";
 import { LoginPage } from "@/pages/Auth/LoginPage";
 import { RegisterPage } from "@/pages/Auth/RegisterPage";
 import { ResetPasswordPage } from "@/pages/Auth/ResetPasswordPage";
@@ -51,6 +52,7 @@ export const router = createBrowserRouter([
         element: <AuthLayout />,
         children: [
           { path: paths.canvasInfo, element: <CanvasInfoPage /> },
+          { path: paths.connectCanvas, element: <ConnectCanvasPage /> },
           { path: paths.reviewPermissions, element: <ReviewPermissionsPage /> },
           { path: paths.canvasAuthError, element: <CanvasAuthErrorPage /> },
         ],

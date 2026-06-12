@@ -139,6 +139,7 @@ describe("RegisterForm", () => {
     await user.click(screen.getByRole("button", { name: "Create Account" }));
 
     expect(onSubmit).toHaveBeenCalledWith({
+      name: "Dr. Jane Smith",
       email: "professor@university.edu",
       password: "secret123",
     });

@@ -2,7 +2,11 @@ import { Check } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-export type OnboardingStep = "signIn" | "connectCanvas" | "setupComplete";
+export type OnboardingStep =
+  | "canvasInfo"
+  | "connectCanvas"
+  | "reviewPermissions"
+  | "dashboard";
 
 interface StepConfig {
   id: OnboardingStep;
@@ -10,9 +14,10 @@ interface StepConfig {
 }
 
 const STEPS: StepConfig[] = [
-  { id: "signIn", label: "Sign In" },
-  { id: "connectCanvas", label: "Connect Canvas" },
-  { id: "setupComplete", label: "Setup Complete" },
+  { id: "canvasInfo", label: "Canvas Info" },
+  { id: "connectCanvas", label: "Connect Canvas Account" },
+  { id: "reviewPermissions", label: "Review Permissions" },
+  { id: "dashboard", label: "Dashboard" },
 ];
 
 interface OnboardingProgressProps {
@@ -29,7 +34,7 @@ export function OnboardingProgress({ currentStep }: OnboardingProgressProps) {
   return (
     <nav
       aria-label="Onboarding progress"
-      className="mb-8 w-full max-w-xl"
+      className="mb-8 w-full max-w-3xl"
     >
       <ol className="flex items-center">
         {STEPS.map((step, index) => {
@@ -67,7 +72,7 @@ export function OnboardingProgress({ currentStep }: OnboardingProgressProps) {
                 </div>
                 <span
                   className={cn(
-                    "text-xs font-medium whitespace-nowrap",
+                    "max-w-24 text-center text-xs font-medium leading-tight sm:max-w-none sm:whitespace-nowrap",
                     isCurrent && "text-[#2563eb]",
                     isCompleted && "text-[#16a34a]",
                     !isCompleted && !isCurrent && "text-[#94a3b8]",
@@ -79,7 +84,7 @@ export function OnboardingProgress({ currentStep }: OnboardingProgressProps) {
               {!isLast && (
                 <div
                   className={cn(
-                    "mx-3 mb-6 h-0.5 flex-1",
+                    "mx-2 mb-6 h-0.5 flex-1 sm:mx-3",
                     index < currentIndex ? "bg-[#16a34a]" : "bg-[#e2e8f0]",
                   )}
                   aria-hidden="true"

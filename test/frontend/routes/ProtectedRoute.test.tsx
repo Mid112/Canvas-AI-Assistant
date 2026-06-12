@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,15 +10,36 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: vi.fn(),
 }));
 
+vi.mock("@/lib/onboarding-storage", () => ({
+  hasCompletedOnboarding: vi.fn(),
+}));
+
+import { hasCompletedOnboarding } from "@/lib/onboarding-storage";
+
 const mockedUseAuth = vi.mocked(useAuth);
+const mockedHasCompletedOnboarding = vi.mocked(hasCompletedOnboarding);
+
+const instructorUser = {
+  id: 1,
+  email: "professor@university.edu",
+  name: "professor",
+  role: "instructor" as const,
+  is_active: true,
+  has_canvas_token: false,
+};
 
 describe("ProtectedRoute", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   function renderProtectedRoute(initialEntry = "/protected") {
     render(
       <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
           <Route element={<ProtectedRoute />}>
             <Route path="/protected" element={<div>Protected content</div>} />
+            <Route path={paths.canvasInfo} element={<div>Canvas info</div>} />
           </Route>
           <Route path={paths.login} element={<div>Login page</div>} />
         </Routes>
@@ -57,14 +78,10 @@ describe("ProtectedRoute", () => {
     expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
   });
 
-  it("renders child routes for authenticated users", () => {
+  it("renders child routes for authenticated users who completed onboarding", () => {
+    mockedHasCompletedOnboarding.mockReturnValue(true);
     mockedUseAuth.mockReturnValue({
-      user: {
-        id: "1",
-        email: "professor@university.edu",
-        name: "professor",
-        role: "instructor",
-      },
+      user: instructorUser,
       isAuthenticated: true,
       isLoading: false,
       login: vi.fn(),
@@ -76,5 +93,46 @@ describe("ProtectedRoute", () => {
 
     expect(screen.getByText("Protected content")).toBeInTheDocument();
     expect(screen.queryByText("Login page")).not.toBeInTheDocument();
+  });
+
+  it("redirects authenticated users without completed onboarding to canvas info", () => {
+    mockedHasCompletedOnboarding.mockReturnValue(false);
+    mockedUseAuth.mockReturnValue({
+      user: instructorUser,
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    renderProtectedRoute();
+
+    expect(screen.getByText("Canvas info")).toBeInTheDocument();
+    expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
+  });
+
+  it("allows onboarding routes before onboarding is complete", () => {
+    mockedHasCompletedOnboarding.mockReturnValue(false);
+    mockedUseAuth.mockReturnValue({
+      user: instructorUser,
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter initialEntries={[paths.canvasInfo]}>
+        <Routes>
+          <Route element={<ProtectedRoute />}>
+            <Route path={paths.canvasInfo} element={<div>Canvas info</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Canvas info")).toBeInTheDocument();
   });
 });

@@ -75,6 +75,8 @@ describe("AuthContext", () => {
     mockedFetchCurrentUser.mockResolvedValue({
       id: 1,
       email: "professor@university.edu",
+      name: "Dr. Jane Smith",
+      has_canvas_token: false,
       is_active: true,
     });
 
@@ -87,10 +89,12 @@ describe("AuthContext", () => {
     expect(mockedFetchCurrentUser).toHaveBeenCalledWith("stored-token");
     expect(result.current.isAuthenticated).toBe(true);
     expect(result.current.user).toEqual({
-      id: "1",
+      id: 1,
       email: "professor@university.edu",
-      name: "professor",
+      name: "Dr. Jane Smith",
       role: "instructor",
+      is_active: true,
+      has_canvas_token: false,
     });
   });
 
@@ -117,6 +121,8 @@ describe("AuthContext", () => {
     mockedFetchCurrentUser.mockResolvedValue({
       id: 2,
       email: "user@university.edu",
+      name: "Test User",
+      has_canvas_token: false,
       is_active: true,
     });
 
@@ -150,6 +156,8 @@ describe("AuthContext", () => {
     mockedFetchCurrentUser.mockResolvedValue({
       id: 3,
       email: "new@university.edu",
+      name: "New User",
+      has_canvas_token: false,
       is_active: true,
     });
 
@@ -161,12 +169,14 @@ describe("AuthContext", () => {
 
     await act(async () => {
       await result.current.register({
+        name: "New User",
         email: "new@university.edu",
         password: "secret123",
       });
     });
 
     expect(mockedRegisterUser).toHaveBeenCalledWith({
+      name: "New User",
       email: "new@university.edu",
       password: "secret123",
     });
@@ -179,6 +189,8 @@ describe("AuthContext", () => {
     mockedFetchCurrentUser.mockResolvedValue({
       id: 1,
       email: "professor@university.edu",
+      name: "Dr. Jane Smith",
+      has_canvas_token: false,
       is_active: true,
     });
 

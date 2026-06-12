@@ -57,7 +57,14 @@ describe("LoginPage", () => {
   it("navigates to canvas info after successful sign in", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
-    mockLogin.mockResolvedValue(undefined);
+    mockLogin.mockResolvedValue({
+      id: 1,
+      email: "professor@university.edu",
+      name: "professor",
+      role: "instructor",
+      is_active: true,
+      has_canvas_token: false,
+    });
 
     renderWithRouter(<LoginPage />);
 

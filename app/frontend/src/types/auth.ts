@@ -6,6 +6,8 @@ export interface TokenResponse {
 export interface UserResponse {
   id: number;
   email: string;
+  name: string | null;
+  has_canvas_token: boolean;
   is_active: boolean;
 }
 
@@ -15,6 +17,7 @@ export interface LoginCredentials {
 }
 
 export interface RegisterCredentials {
+  name: string;
   email: string;
   password: string;
 }

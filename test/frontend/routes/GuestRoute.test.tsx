@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,9 +10,29 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: vi.fn(),
 }));
 
+vi.mock("@/lib/onboarding-storage", () => ({
+  hasCompletedOnboarding: vi.fn(),
+}));
+
+import { hasCompletedOnboarding } from "@/lib/onboarding-storage";
+
 const mockedUseAuth = vi.mocked(useAuth);
+const mockedHasCompletedOnboarding = vi.mocked(hasCompletedOnboarding);
+
+const instructorUser = {
+  id: 1,
+  email: "professor@university.edu",
+  name: "professor",
+  role: "instructor" as const,
+  is_active: true,
+  has_canvas_token: false,
+};
 
 describe("GuestRoute", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
   function renderGuestRoute(initialEntry = "/login") {
     render(
       <MemoryRouter initialEntries={[initialEntry]}>
@@ -23,6 +43,10 @@ describe("GuestRoute", () => {
           <Route
             path={paths.canvasInfo}
             element={<div>Canvas info</div>}
+          />
+          <Route
+            path={paths.instructor.dashboard}
+            element={<div>Instructor dashboard</div>}
           />
         </Routes>
       </MemoryRouter>,
@@ -59,14 +83,10 @@ describe("GuestRoute", () => {
     expect(screen.getByText("Login page")).toBeInTheDocument();
   });
 
-  it("redirects authenticated users to canvas info onboarding", () => {
+  it("redirects authenticated users without completed onboarding to canvas info", () => {
+    mockedHasCompletedOnboarding.mockReturnValue(false);
     mockedUseAuth.mockReturnValue({
-      user: {
-        id: "1",
-        email: "professor@university.edu",
-        name: "professor",
-        role: "instructor",
-      },
+      user: instructorUser,
       isAuthenticated: true,
       isLoading: false,
       login: vi.fn(),
@@ -78,5 +98,22 @@ describe("GuestRoute", () => {
 
     expect(screen.getByText("Canvas info")).toBeInTheDocument();
     expect(screen.queryByText("Login page")).not.toBeInTheDocument();
+  });
+
+  it("redirects authenticated users with completed onboarding to their dashboard", () => {
+    mockedHasCompletedOnboarding.mockReturnValue(true);
+    mockedUseAuth.mockReturnValue({
+      user: instructorUser,
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    renderGuestRoute();
+
+    expect(screen.getByText("Instructor dashboard")).toBeInTheDocument();
+    expect(screen.queryByText("Canvas info")).not.toBeInTheDocument();
   });
 });

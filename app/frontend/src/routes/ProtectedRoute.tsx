@@ -2,9 +2,11 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { paths } from "@/routes/paths";
+import { hasCompletedOnboarding } from "@/lib/onboarding-storage";
+import { isOnboardingPath } from "@/utils/onboarding";
 
 export function ProtectedRoute() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -17,6 +19,14 @@ export function ProtectedRoute() {
 
   if (!isAuthenticated) {
     return <Navigate to={paths.login} state={{ from: location }} replace />;
+  }
+
+  if (
+    user &&
+    !hasCompletedOnboarding(user.id) &&
+    !isOnboardingPath(location.pathname)
+  ) {
+    return <Navigate to={paths.canvasInfo} replace />;
   }
 
   return <Outlet />;
