@@ -12,7 +12,7 @@ CREATE TABLE users (
     canvas_user_id   VARCHAR UNIQUE,                          -- nullable for admin (no Canvas account)
     name             VARCHAR NOT NULL,
     email            VARCHAR UNIQUE NOT NULL,
-    password_hash    TEXT NOT NULL,                           -- bcrypt hashed
+    hashed_password  TEXT NOT NULL,                          -- bcrypt hashed
     role             VARCHAR NOT NULL CHECK (role IN ('instructor', 'ta', 'admin')),
     canvas_token     TEXT,                                    -- encrypted, per user
     canvas_url       TEXT,                                    -- e.g. https://canvas.ubc.ca

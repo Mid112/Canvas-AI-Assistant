@@ -5,25 +5,17 @@ from app.config import settings
 from app.core.database import Base, engine
 from app.routers import auth, canvas
 
-# Import all models so SQLAlchemy registers them with Base.metadata
-# before create_all runs on startup. Without these imports the tables
-# won't be created even though the model files exist.
-import app.models.user             # noqa: F401
-import app.models.course           # noqa: F401
-import app.models.assignment       # noqa: F401
-import app.models.submission       # noqa: F401
-import app.models.conversation     # noqa: F401
-import app.models.message          # noqa: F401
-import app.models.workflow         # noqa: F401
-import app.models.audit_log        # noqa: F401
-import app.models.message_template # noqa: F401
+# Single import — models/__init__.py registers all models with Base
+import app.models  # noqa: F401
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Create all tables on startup if they don't exist
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
+    # Clean up DB connections on shutdown
     await engine.dispose()
 
 
