@@ -7,19 +7,20 @@ describe("OnboardingProgress", () => {
   it("renders all onboarding step labels", () => {
     render(<OnboardingProgress currentStep="connectCanvas" />);
 
-    expect(screen.getByText("Sign In")).toBeInTheDocument();
-    expect(screen.getByText("Connect Canvas")).toBeInTheDocument();
-    expect(screen.getByText("Setup Complete")).toBeInTheDocument();
+    expect(screen.getByText("Canvas Info")).toBeInTheDocument();
+    expect(screen.getByText("Connect Canvas Account")).toBeInTheDocument();
+    expect(screen.getByText("Review Permissions")).toBeInTheDocument();
+    expect(screen.getByText("Dashboard")).toBeInTheDocument();
   });
 
-  it("marks connect canvas as the current step", () => {
+  it("marks connect canvas account as the current step", () => {
     render(<OnboardingProgress currentStep="connectCanvas" />);
 
     const nav = screen.getByLabelText("Onboarding progress");
     expect(nav.querySelector('[aria-current="step"]')).toBeInTheDocument();
   });
 
-  it("marks sign in as completed when on connect canvas step", () => {
+  it("marks canvas info as completed when on connect canvas step", () => {
     const { container } = render(
       <OnboardingProgress currentStep="connectCanvas" />,
     );
@@ -30,10 +31,10 @@ describe("OnboardingProgress", () => {
     expect(completedSteps.length).toBeGreaterThanOrEqual(1);
   });
 
-  it("marks setup complete as upcoming when on connect canvas step", () => {
-    render(<OnboardingProgress currentStep="connectCanvas" />);
+  it("marks dashboard as upcoming when on review permissions step", () => {
+    render(<OnboardingProgress currentStep="reviewPermissions" />);
 
-    const setupCompleteLabel = screen.getByText("Setup Complete");
-    expect(setupCompleteLabel).toHaveClass("text-[#94a3b8]");
+    const dashboardLabel = screen.getByText("Dashboard");
+    expect(dashboardLabel).toHaveClass("text-[#94a3b8]");
   });
 });

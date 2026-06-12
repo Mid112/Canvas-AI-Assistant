@@ -3,7 +3,10 @@ export const paths = {
   login: "/login",
   register: "/register",
   canvasInfo: "/canvas-info",
+  connectCanvas: "/connect-canvas",
   resetPassword: "/reset-password",
+  reviewPermissions: "/review-permissions",
+  canvasAuthError: "/canvas-auth-error",
   instructor: {
     dashboard: "/instructor/dashboard",
     courses: "/instructor/courses",

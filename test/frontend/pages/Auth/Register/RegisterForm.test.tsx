@@ -1,6 +1,5 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { FormEvent } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { RegisterForm } from "@/pages/Auth/Register/RegisterForm";
@@ -130,16 +129,20 @@ describe("RegisterForm", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("calls onSubmit when the form is submitted", async () => {
+  it("calls onSubmit with credentials when the form is submitted", async () => {
     const user = userEvent.setup();
-    const onSubmit = vi.fn((e: FormEvent<HTMLFormElement>) => e.preventDefault());
+    const onSubmit = vi.fn();
 
     renderWithRouter(<RegisterForm onSubmit={onSubmit} />);
 
     await fillValidForm(user);
     await user.click(screen.getByRole("button", { name: "Create Account" }));
 
-    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit).toHaveBeenCalledWith({
+      name: "Dr. Jane Smith",
+      email: "professor@university.edu",
+      password: "secret123",
+    });
   });
 
   it("allows typing into form fields", async () => {

@@ -1,13 +1,18 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { AuthApiError, useAuth } from "@/contexts/AuthContext";
 import { LoginFooter } from "@/pages/Auth/Login/LoginFooter";
 import { LoginForm } from "@/pages/Auth/Login/LoginForm";
 import { LoginHeader } from "@/pages/Auth/Login/LoginHeader";
 import { LoginWelcome } from "@/pages/Auth/Login/LoginWelcome";
-import { paths } from "@/routes/paths";
+import { getPostAuthPath } from "@/utils/onboarding";
 
 export function LoginPage() {
   const navigate = useNavigate();
+  const { login } = useAuth();
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   return (
     <div className="fixed inset-0 z-50 flex min-h-svh items-center justify-center bg-[#e8eef4] p-4 md:p-8">
@@ -15,9 +20,24 @@ export function LoginPage() {
         <LoginHeader />
         <LoginWelcome />
         <LoginForm
-          onSubmit={(e) => {
-            e.preventDefault();
-            navigate(paths.instructor.dashboard);
+          error={error}
+          isSubmitting={isSubmitting}
+          onSubmit={async (credentials) => {
+            setError(null);
+            setIsSubmitting(true);
+
+            try {
+              const user = await login(credentials);
+              navigate(getPostAuthPath(user.id, user.role));
+            } catch (err) {
+              if (err instanceof AuthApiError && err.status === 401) {
+                setError("Invalid email or password.");
+              } else {
+                setError("Unable to sign in. Please try again.");
+              }
+            } finally {
+              setIsSubmitting(false);
+            }
           }}
         />
         <LoginFooter />
