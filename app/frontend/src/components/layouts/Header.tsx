@@ -20,6 +20,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Sidebar } from "@/components/layouts/Sidebar";
+import { useAuth } from "@/contexts/AuthContext";
 import type { NavItem } from "@/types/navigation";
 import type { UserRole } from "@/types/user";
 import { getProfilePath } from "@/utils/navigation";
@@ -35,6 +36,12 @@ interface HeaderProps {
 export function Header({ title, role, roleLabel, navItems }: HeaderProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate(paths.login);
+  };
 
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-6">
@@ -86,10 +93,7 @@ export function Header({ title, role, roleLabel, navItems }: HeaderProps) {
             <DropdownMenuItem onClick={() => navigate(paths.home)}>
               Home
             </DropdownMenuItem>
-            <DropdownMenuItem
-              variant="destructive"
-              onClick={() => navigate(paths.home)}
-            >
+            <DropdownMenuItem variant="destructive" onClick={handleLogout}>
               Log out
             </DropdownMenuItem>
           </DropdownMenuGroup>

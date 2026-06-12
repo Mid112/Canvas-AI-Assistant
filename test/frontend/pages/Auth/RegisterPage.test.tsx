@@ -7,6 +7,7 @@ import { paths } from "@/routes/paths";
 import { renderWithRouter } from "../../utils/renderWithRouter";
 
 const mockNavigate = vi.fn();
+const mockRegister = vi.fn();
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom");
@@ -15,6 +16,25 @@ vi.mock("react-router-dom", async () => {
     useNavigate: () => mockNavigate,
   };
 });
+
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => ({
+    login: vi.fn(),
+    logout: vi.fn(),
+    register: mockRegister,
+    user: null,
+    isAuthenticated: false,
+    isLoading: false,
+  }),
+  AuthApiError: class AuthApiError extends Error {
+    status: number;
+
+    constructor(message: string, status: number) {
+      super(message);
+      this.status = status;
+    }
+  },
+}));
 
 describe("RegisterPage", () => {
   it("renders all register sections", () => {
@@ -39,6 +59,7 @@ describe("RegisterPage", () => {
   it("navigates to canvas info on create account", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
+    mockRegister.mockResolvedValue(undefined);
 
     renderWithRouter(<RegisterPage />);
 
@@ -56,6 +77,10 @@ describe("RegisterPage", () => {
     );
     await user.click(screen.getByRole("button", { name: "Create Account" }));
 
+    expect(mockRegister).toHaveBeenCalledWith({
+      email: "professor@university.edu",
+      password: "secret123",
+    });
     expect(mockNavigate).toHaveBeenCalledWith(paths.canvasInfo);
   });
 });
