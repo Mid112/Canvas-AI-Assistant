@@ -9,6 +9,8 @@ def fetch_courses(instructor_id: str) -> dict:
     """Fetch courses for an instructor — stub for now."""
     return {"courses": [], "instructor_id": instructor_id}
 
+
+
 @mcp.custom_route("/health", methods=["GET"])
 async def health(request):
     return JSONResponse({"status": "ok"})
