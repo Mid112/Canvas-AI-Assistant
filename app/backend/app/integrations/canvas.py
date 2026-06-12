@@ -2,7 +2,9 @@ import httpx
 from fastapi import HTTPException, status
 from app.config import settings
 
-_HEADERS = lambda: {"Authorization": f"Bearer {settings.CANVAS_API_TOKEN}"}
+
+def _headers(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"}
 
 
 def _raise_for_canvas_error(response: httpx.Response) -> None:
@@ -14,12 +16,24 @@ def _raise_for_canvas_error(response: httpx.Response) -> None:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Canvas API error: {response.status_code}")
 
 
-async def fetch_courses() -> list[dict]:
+async def validate_token(token: str) -> None:
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{settings.CANVAS_API_URL}/users/self",
+                headers=_headers(token),
+            )
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Could not reach Canvas: {e}")
+    _raise_for_canvas_error(response)
+
+
+async def fetch_courses(token: str) -> list[dict]:
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{settings.CANVAS_API_URL}/courses",
-                headers=_HEADERS(),
+                headers=_headers(token),
                 params={"state[]": ["available", "unpublished", "completed"]},
             )
     except httpx.RequestError as e:
@@ -28,12 +42,12 @@ async def fetch_courses() -> list[dict]:
     return response.json()
 
 
-async def fetch_assignments(course_id: int) -> list[dict]:
+async def fetch_assignments(course_id: int, token: str) -> list[dict]:
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{settings.CANVAS_API_URL}/courses/{course_id}/assignments",
-                headers=_HEADERS(),
+                headers=_headers(token),
             )
     except httpx.RequestError as e:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Could not reach Canvas: {e}")
@@ -41,12 +55,12 @@ async def fetch_assignments(course_id: int) -> list[dict]:
     return response.json()
 
 
-async def fetch_submissions(course_id: int, assignment_id: int) -> list[dict]:
+async def fetch_submissions(course_id: int, assignment_id: int, token: str) -> list[dict]:
     try:
         async with httpx.AsyncClient() as client:
             response = await client.get(
                 f"{settings.CANVAS_API_URL}/courses/{course_id}/assignments/{assignment_id}/submissions",
-                headers=_HEADERS(),
+                headers=_headers(token),
             )
     except httpx.RequestError as e:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Could not reach Canvas: {e}")
