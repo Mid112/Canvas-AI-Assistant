@@ -120,6 +120,8 @@ services:
     build:
       context: ./app/frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api/v1
 
     restart: unless-stopped
 
