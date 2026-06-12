@@ -1,6 +1,5 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { FormEvent } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { ResetPasswordForm } from "@/pages/Auth/ResetPassword/ResetPasswordForm";
@@ -21,23 +20,42 @@ describe("ResetPasswordForm", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders the send reset link submit button", () => {
+  it("renders the send reset link submit button disabled by default", () => {
     renderWithRouter(<ResetPasswordForm onSubmit={vi.fn()} />);
 
     expect(
       screen.getByRole("button", { name: "Send Reset Link" }),
-    ).toBeInTheDocument();
+    ).toBeDisabled();
   });
 
-  it("calls onSubmit when the form is submitted", async () => {
+  it("shows an email validation error for invalid addresses", async () => {
     const user = userEvent.setup();
-    const onSubmit = vi.fn((e: FormEvent<HTMLFormElement>) => e.preventDefault());
+
+    renderWithRouter(<ResetPasswordForm onSubmit={vi.fn()} />);
+
+    await user.type(screen.getByLabelText("Email Address"), "invalid-email");
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Enter a valid email address",
+    );
+  });
+
+  it("calls onSubmit and shows success message for valid email", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
 
     renderWithRouter(<ResetPasswordForm onSubmit={onSubmit} />);
 
+    await user.type(
+      screen.getByLabelText("Email Address"),
+      "you@university.edu",
+    );
     await user.click(screen.getByRole("button", { name: "Send Reset Link" }));
 
-    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit).toHaveBeenCalledWith("you@university.edu");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "If an account exists for you@university.edu",
+    );
   });
 
   it("allows typing into the email field", async () => {

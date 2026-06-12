@@ -1,6 +1,7 @@
-import { Link, NavLink } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router-dom";
 import { GraduationCap, Home, LogOut } from "lucide-react";
 
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import type { NavItem } from "@/types/navigation";
 import { paths } from "@/routes/paths";
@@ -21,6 +22,15 @@ export function Sidebar({
   onNavigate,
   className,
 }: SidebarProps) {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    onNavigate?.();
+    navigate(paths.login);
+  };
+
   return (
     <aside
       className={cn(
@@ -60,10 +70,10 @@ export function Sidebar({
             <span>{item.title}</span>
           </NavLink>
         ))}
-        <Link to={paths.home} onClick={onNavigate} className={footerLinkClass}>
+        <button type="button" onClick={handleLogout} className={footerLinkClass}>
           <LogOut className="size-4 shrink-0" />
           <span>Log out</span>
-        </Link>
+        </button>
       </nav>
       <div className="border-t border-sidebar-border p-3">
         <Link to={paths.home} onClick={onNavigate} className={footerLinkClass}>
