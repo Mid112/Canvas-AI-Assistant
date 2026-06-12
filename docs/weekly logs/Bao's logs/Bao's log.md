@@ -295,8 +295,9 @@ Total: ~11.5 hours
 ## Completed Tasks
 
 ### 1: Participated in Team Meeting (Tuesday, 9/6)
-- Met with the team to discuss the work for demo of proof of life, using canvas docker
-<img width="2211" height="262" alt="Screenshot 2026-06-09 100812" src="https://github.com/user-attachments/assets/a0f0a129-36d8-4242-8b83-6fa8e5cb8b9e" />
+- Met with the team to discuss the work for demo of proof of life, using canvas docker<img 
+
+<img width="1085" height="49" alt="Screenshot 2026-06-12 091002" src="https://github.com/user-attachments/assets/ca001464-f290-41b3-8987-50c8438ff580" />
 
 
 
@@ -306,7 +307,10 @@ Total: ~11.5 hours
 - set new endpoint for getting token when sign up
 - review teammates' PRs to be ready for demo proof of life
 
-<img width="2202" height="279" alt="Screenshot 2026-06-09 100816" src="https://github.com/user-attachments/assets/be26bb73-e9f0-4e11-88ba-d06dc4e568fa" />
+<img width="1079" height="221" alt="Screenshot 2026-06-12 091006" src="https://github.com/user-attachments/assets/77166369-c46b-42a2-9e4c-ab675e7aeeed" />
+
+
+
 
 
 ---
