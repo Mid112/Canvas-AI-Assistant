@@ -4,15 +4,20 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.core.database import Base, engine
 from app.routers import auth, canvas
-import app.models.user  # noqa: F401 — ensure model is registered with Base
+
+# Single import — models/__init__.py registers all models with Base
+import app.models  # noqa: F401
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Create all tables on startup if they don't exist
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
+    # Clean up DB connections on shutdown
     await engine.dispose()
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -20,7 +25,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS - allow the frontend dev server(s) defined in .env to call the API.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.BACKEND_CORS_ORIGINS,
@@ -29,13 +33,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routers
 app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(canvas.router, prefix=settings.API_V1_PREFIX)
+
 
 @app.get("/", tags=["root"])
 async def root() -> dict[str, str]:
     return {"message": f"{settings.PROJECT_NAME} is running."}
+
 
 @app.get("/health", tags=["health"])
 async def health_check() -> dict[str, str]:
