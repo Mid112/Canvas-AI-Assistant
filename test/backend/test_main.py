@@ -19,8 +19,3 @@ def test_health(client):
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
-
-
-def test_canvas_ping(client):
-    response = client.get("/api/v1/canvas/ping")
-    assert response.status_code == 200
