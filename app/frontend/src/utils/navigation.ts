@@ -68,3 +68,14 @@ export function getProfilePath(role: UserRole): string {
       return paths.admin.profile;
   }
 }
+
+export function getDashboardPath(role: UserRole): string {
+  switch (role) {
+    case "instructor":
+      return paths.instructor.dashboard;
+    case "ta":
+      return paths.ta.dashboard;
+    case "admin":
+      return paths.admin.dashboard;
+  }
+}

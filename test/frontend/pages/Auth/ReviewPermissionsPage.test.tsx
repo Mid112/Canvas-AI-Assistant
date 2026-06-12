@@ -7,6 +7,33 @@ import { paths } from "@/routes/paths";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 const mockNavigate = vi.fn();
+const mockUser = {
+  id: 1,
+  email: "professor@university.edu",
+  name: "professor",
+  role: "ta" as const,
+  is_active: true,
+  has_canvas_token: false,
+};
+
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => ({
+    user: mockUser,
+    isAuthenticated: true,
+    isLoading: false,
+    login: vi.fn(),
+    register: vi.fn(),
+    logout: vi.fn(),
+  }),
+}));
+
+vi.mock("@/lib/onboarding-storage", () => ({
+  markOnboardingComplete: vi.fn(),
+}));
+
+import { markOnboardingComplete } from "@/lib/onboarding-storage";
+
+const mockedMarkOnboardingComplete = vi.mocked(markOnboardingComplete);
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom");
@@ -20,6 +47,7 @@ describe("ReviewPermissionsPage", () => {
   it("renders the review permissions overview", () => {
     renderWithRouter(<ReviewPermissionsPage />);
 
+    expect(screen.getByLabelText("Onboarding progress")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Review Permissions" }),
     ).toBeInTheDocument();
@@ -56,9 +84,10 @@ describe("ReviewPermissionsPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("navigates to dashboard when approved", async () => {
+  it("marks onboarding complete and navigates to role dashboard when approved", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
+    mockedMarkOnboardingComplete.mockClear();
 
     renderWithRouter(<ReviewPermissionsPage />);
 
@@ -66,10 +95,11 @@ describe("ReviewPermissionsPage", () => {
       screen.getByRole("button", { name: "Approve & Continue" }),
     );
 
-    expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.dashboard);
+    expect(mockedMarkOnboardingComplete).toHaveBeenCalledWith(mockUser.id);
+    expect(mockNavigate).toHaveBeenCalledWith(paths.ta.dashboard);
   });
 
-  it("navigates back to canvas info on cancel", async () => {
+  it("navigates back to connect canvas on cancel", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
 
@@ -77,6 +107,6 @@ describe("ReviewPermissionsPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(mockNavigate).toHaveBeenCalledWith(paths.canvasInfo);
+    expect(mockNavigate).toHaveBeenCalledWith(paths.connectCanvas);
   });
 });

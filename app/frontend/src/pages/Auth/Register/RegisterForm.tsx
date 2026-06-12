@@ -4,12 +4,10 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import type { RegisterCredentials } from "@/types/auth";
 
 interface RegisterFormProps {
-  onSubmit: (credentials: {
-    email: string;
-    password: string;
-  }) => void | Promise<void>;
+  onSubmit: (credentials: RegisterCredentials) => void | Promise<void>;
   isSubmitting?: boolean;
 }
 
@@ -46,7 +44,11 @@ export function RegisterForm({
       return;
     }
 
-    await onSubmit({ email: email.trim(), password });
+    await onSubmit({
+      name: name.trim(),
+      email: email.trim(),
+      password,
+    });
   };
 
   return (

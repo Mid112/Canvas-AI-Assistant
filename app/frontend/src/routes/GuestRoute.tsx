@@ -1,10 +1,10 @@
 import { Navigate, Outlet } from "react-router-dom";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { paths } from "@/routes/paths";
+import { getPostAuthPath } from "@/utils/onboarding";
 
 export function GuestRoute() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   if (isLoading) {
     return (
@@ -14,8 +14,8 @@ export function GuestRoute() {
     );
   }
 
-  if (isAuthenticated) {
-    return <Navigate to={paths.canvasInfo} replace />;
+  if (isAuthenticated && user) {
+    return <Navigate to={getPostAuthPath(user.id, user.role)} replace />;
   }
 
   return <Outlet />;
