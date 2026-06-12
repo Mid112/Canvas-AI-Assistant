@@ -7,7 +7,6 @@
     "types": ["vite/client"],
     "skipLibCheck": true,
 
-
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
@@ -16,7 +15,7 @@
     "jsx": "react-jsx",
 
     "paths": {
-      "@/*": ["./frontend/src/*"]
+      "@/*": ["./src/*"]
     },
 
     "noUnusedLocals": true,
@@ -24,5 +23,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["frontend/src"]
+  "include": ["src"]
 }

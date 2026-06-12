@@ -8,8 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "npm --prefix ../test/frontend run test",
-    "test:watch": "npm --prefix ../test/frontend run test:watch"
+    "test": "npm --prefix ../../test/frontend run test",
+    "test:watch": "npm --prefix ../../test/frontend run test:watch"
   },
   "dependencies": {
     "@base-ui/react": "^1.5.0",

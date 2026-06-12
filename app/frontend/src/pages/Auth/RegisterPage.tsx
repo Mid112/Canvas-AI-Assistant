@@ -1,44 +1,27 @@
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { RegisterFooter } from "@/pages/Auth/Register/RegisterFooter";
+import { RegisterForm } from "@/pages/Auth/Register/RegisterForm";
+import { RegisterHeader } from "@/pages/Auth/Register/RegisterHeader";
+import { RegisterWelcome } from "@/pages/Auth/Register/RegisterWelcome";
 import { paths } from "@/routes/paths";
 
 export function RegisterPage() {
+  const navigate = useNavigate();
+
   return (
-    <form
-      className="space-y-4"
-      onSubmit={(e) => {
-        e.preventDefault();
-      }}
-    >
-      <div className="space-y-2">
-        <label htmlFor="name" className="text-sm font-medium">
-          Full name
-        </label>
-        <Input id="name" type="text" placeholder="Jane Instructor" />
+    <div className="fixed inset-0 z-50 flex min-h-svh items-center justify-center bg-[#e8eef4] p-4 md:p-8">
+      <div className="w-full max-w-md rounded-2xl bg-white px-8 py-10 shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
+        <RegisterHeader />
+        <RegisterWelcome />
+        <RegisterForm
+          onSubmit={(e) => {
+            e.preventDefault();
+            navigate(paths.login);
+          }}
+        />
+        <RegisterFooter />
       </div>
-      <div className="space-y-2">
-        <label htmlFor="email" className="text-sm font-medium">
-          Email
-        </label>
-        <Input id="email" type="email" placeholder="you@university.edu" />
-      </div>
-      <div className="space-y-2">
-        <label htmlFor="password" className="text-sm font-medium">
-          Password
-        </label>
-        <Input id="password" type="password" placeholder="••••••••" />
-      </div>
-      <Button className="w-full" render={<Link to={paths.login} />}>
-        Create account
-      </Button>
-      <p className="text-center text-sm text-muted-foreground">
-        Already have an account?{" "}
-        <Link to={paths.login} className="font-medium text-primary hover:underline">
-          Log in
-        </Link>
-      </p>
-    </form>
+    </div>
   );
 }
