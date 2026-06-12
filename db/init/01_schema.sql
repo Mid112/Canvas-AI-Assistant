@@ -1,0 +1,153 @@
+-- ─────────────────────────────────────────────
+-- Safe AI-Powered Canvas Workflow Assistant
+-- Team 16 - Database Schema
+-- File: db/init/01_schema.sql
+-- ─────────────────────────────────────────────
+
+-- ─────────────────────────────────────────────
+-- Users
+-- ─────────────────────────────────────────────
+CREATE TABLE users (
+    id               SERIAL PRIMARY KEY,
+    canvas_user_id   VARCHAR UNIQUE,                          -- nullable for admin (no Canvas account)
+    name             VARCHAR NOT NULL,
+    email            VARCHAR UNIQUE NOT NULL,
+    password_hash    TEXT NOT NULL,                           -- bcrypt hashed
+    role             VARCHAR NOT NULL CHECK (role IN ('instructor', 'ta', 'admin')),
+    canvas_token     TEXT,                                    -- encrypted, per user
+    canvas_url       TEXT,                                    -- e.g. https://canvas.ubc.ca
+    is_active        BOOLEAN DEFAULT true,
+    created_at       TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- ─────────────────────────────────────────────
+-- Sessions
+-- ─────────────────────────────────────────────
+CREATE TABLE sessions (
+    id           SERIAL PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash   VARCHAR NOT NULL,
+    expires_at   TIMESTAMPTZ NOT NULL,
+    created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_sessions_user_id ON sessions(user_id);
+CREATE INDEX idx_sessions_token_hash ON sessions(token_hash);
+
+-- ─────────────────────────────────────────────
+-- Courses
+-- ─────────────────────────────────────────────
+CREATE TABLE courses (
+    id               SERIAL PRIMARY KEY,
+    canvas_course_id VARCHAR UNIQUE NOT NULL,
+    name             VARCHAR NOT NULL,
+    term             VARCHAR,
+    instructor_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    created_at       TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_courses_instructor_id ON courses(instructor_id);
+
+-- ─────────────────────────────────────────────
+-- Assignments
+-- ─────────────────────────────────────────────
+CREATE TABLE assignments (
+    id                   SERIAL PRIMARY KEY,
+    canvas_assignment_id VARCHAR UNIQUE NOT NULL,
+    course_id            INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    title                VARCHAR NOT NULL,
+    due_date             TIMESTAMPTZ,
+    points_possible      FLOAT,
+    created_at           TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_assignments_course_id ON assignments(course_id);
+
+-- ─────────────────────────────────────────────
+-- Submissions
+-- ─────────────────────────────────────────────
+CREATE TABLE submissions (
+    id                    SERIAL PRIMARY KEY,
+    canvas_submission_id  VARCHAR UNIQUE NOT NULL,
+    assignment_id         INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
+    student_canvas_id     VARCHAR NOT NULL,
+    student_name          VARCHAR,
+    status                VARCHAR NOT NULL CHECK (status IN ('missing', 'late', 'submitted')),
+    score                 FLOAT,
+    submitted_at          TIMESTAMPTZ
+);
+
+CREATE INDEX idx_submissions_assignment_id ON submissions(assignment_id);
+CREATE INDEX idx_submissions_student_canvas_id ON submissions(student_canvas_id);
+
+-- ─────────────────────────────────────────────
+-- Conversations
+-- ─────────────────────────────────────────────
+CREATE TABLE conversations (
+    id         SERIAL PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    course_id  INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_conversations_user_id ON conversations(user_id);
+
+-- ─────────────────────────────────────────────
+-- Messages
+-- ─────────────────────────────────────────────
+CREATE TABLE messages (
+    id               SERIAL PRIMARY KEY,
+    conversation_id  INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    role             VARCHAR NOT NULL CHECK (role IN ('user', 'assistant')),
+    content          TEXT NOT NULL,
+    created_at       TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_messages_conversation_id ON messages(conversation_id);
+
+-- ─────────────────────────────────────────────
+-- Workflows
+-- ─────────────────────────────────────────────
+CREATE TABLE workflows (
+    id               SERIAL PRIMARY KEY,
+    conversation_id  INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    intent           VARCHAR NOT NULL,
+    generated_query  JSONB,
+    preview_data     JSONB,
+    status           VARCHAR NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
+    created_at       TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_workflows_user_id ON workflows(user_id);
+CREATE INDEX idx_workflows_conversation_id ON workflows(conversation_id);
+CREATE INDEX idx_workflows_status ON workflows(status);
+
+-- ─────────────────────────────────────────────
+-- Audit Logs
+-- ─────────────────────────────────────────────
+CREATE TABLE audit_logs (
+    id           SERIAL PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    workflow_id  INTEGER REFERENCES workflows(id) ON DELETE SET NULL,
+    action       VARCHAR NOT NULL,
+    details      JSONB,
+    timestamp    TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
+CREATE INDEX idx_audit_logs_timestamp ON audit_logs(timestamp);
+
+-- ─────────────────────────────────────────────
+-- Message Templates
+-- ─────────────────────────────────────────────
+CREATE TABLE message_templates (
+    id         SERIAL PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    course_id  INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    title      VARCHAR NOT NULL,
+    content    TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_message_templates_user_id ON message_templates(user_id);
