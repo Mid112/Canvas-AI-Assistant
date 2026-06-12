@@ -195,3 +195,40 @@ Managing team pull requests proved to be an essential exercise in maintaining ve
 * Integrate the front-end application with our backend API.
 * Get Docker properly set up and running on my local laptop for containerized development and testing.
 * Prepare for the proof of life demo scheduled for June 12.
+
+  # **Cycle 7: Tuesday (06/09) ~ Thursday (06/11)**
+
+**Timesheet**
+
+**Clockify Report**
+
+**06/09 (Tuesday):** 02:10:43
+<img width="1337" height="106" alt="Untitled" src="https://github.com/user-attachments/assets/2af61f57-179b-49b4-8cf9-83c9e7233251" />
+
+**06/10 (Wednesday):** 00:24:42
+<img width="1336" height="109" alt="Untitled 2" src="https://github.com/user-attachments/assets/e2526a2e-ef1d-4480-b476-aeed61ccfb9f" />
+
+**06/11 (Thursday):** 04:41:32
+<img width="1339" height="232" alt="Untitled 3" src="https://github.com/user-attachments/assets/932ce880-9f1a-4060-9160-c3238620bf83" />
+
+* **#1: Team Meeting & Proof of Life Demo Prep:** Attended a team meeting to strategize and prepare for our upcoming Proof of Life demo on June 12. We aligned on the specific user flow we will showcase, coordinated our speaking parts, and identified the core features that need to be fully functional for the presentation.
+
+* **#2: Finalizing Frontend UI Components:** Finished developing the UI for the remaining essential frontend pages. Built the Canvas Connector interface, the Review Permissions page (to handle role-based security visibility), and a dedicated Authentication Error page. Ensured all new components match our established Tailwind and `shadcn/ui` styling patterns.
+
+* **#3: API Integration & Docker Configuration:** Successfully integrated the React front-end application with our backend API. To ensure a consistent development environment, I also got Docker properly set up and running on my local laptop. This allows for seamless containerized development and testing, ensuring the frontend and backend communicate reliably.
+
+* **#4: Pull Request Reviews:** Continued reviewing team PRs to maintain high code quality and ensure smooth integrations. Focused heavily on catching styling inconsistencies and preventing merge conflicts as the team merges backend logic with the frontend interfaces.
+
+**Cycle Goal Review**
+
+* **Reflection:** This cycle was a major turning point for the project, as we finally bridged the gap between our static frontend UI and the active backend API. Finalizing the remaining UI pages and establishing a working, containerized Docker environment means our application is finally operating as a cohesive system rather than isolated parts.
+
+* **Retrospective:** Getting Docker set up locally and connecting the API always introduces a bit of a learning curve regarding routing and network ports, but overcoming those hurdles was crucial for team consistency. With the application connected and PRs cleanly merged, we are in a strong position for the Proof of Life demo. 
+
+**Next Cycle Goals**
+
+* Successfully deliver the Proof of Life presentation and demo on June 12.
+* Address any bugs, UI glitches, or feedback identified during the live demo.
+* Enhance frontend error handling and loading states for API calls to improve user experience.
+* Continue expanding unit and integration tests for the newly connected components.
+* Prepare for Quiz 1
