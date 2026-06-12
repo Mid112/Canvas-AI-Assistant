@@ -3,42 +3,45 @@
 ---
 
 ## Burn-up Chart (Velocity)
-<img width="1055" height="595" alt="Screenshot 2026-06-09 at 10 47 07 AM" src="https://github.com/user-attachments/assets/bb29a088-d99d-4efc-a4c2-babf100f7b3e" />
+<img width="705" height="443" alt="Screenshot 2026-06-12 100320" src="https://github.com/user-attachments/assets/6d2eafc9-c58d-48e8-a665-d33ac15432f7" />
+
 
 
 ## Tasks
-<img width="2556" height="1222" alt="Screenshot 2026-06-09 102823" src="https://github.com/user-attachments/assets/72550bd5-588e-454c-8de5-69415ab0a8a8" />
+<img width="1271" height="670" alt="Screenshot 2026-06-12 100246" src="https://github.com/user-attachments/assets/d88c3324-58a8-4979-8d43-194b17e39ca7" />
+
 
 
 
 ## Clockify Summary
 ### team Summary
-<img width="1166" height="647" alt="Screenshot 2026-06-09 102830" src="https://github.com/user-attachments/assets/77bc24aa-087e-4799-b4b3-0ef7148d3daa" />
 
+<img width="836" height="373" alt="Screenshot 2026-06-12 101405" src="https://github.com/user-attachments/assets/56eac13a-002d-4b26-b72e-d71c66b5860d" />
 
-<img width="1152" height="432" alt="Screenshot 2026-06-09 102834" src="https://github.com/user-attachments/assets/6527876a-9825-47a5-a9d1-d239aef92567" />
+<img width="848" height="602" alt="Screenshot 2026-06-12 101415" src="https://github.com/user-attachments/assets/cc7afcca-5d3b-4368-b73b-f487c7cf2f34" />
 
 
 
 
 ### Jessica:
-<img width="2164" height="1080" alt="Screenshot 2026-06-09 103123" src="https://github.com/user-attachments/assets/94495dc7-e121-41ca-ac7c-9f1498758d76" />
+<img width="1088" height="265" alt="Screenshot 2026-06-12 101457" src="https://github.com/user-attachments/assets/3537dbf2-dbfb-4f99-b1bf-6baeadcc2394" />
 
 
 ### Rhythm:
-<img width="2175" height="689" alt="Screenshot 2026-06-09 103113" src="https://github.com/user-attachments/assets/c538eb68-10c5-4ac4-b9ff-fc5829c2ff68" />
+<img width="1082" height="268" alt="Screenshot 2026-06-12 101655" src="https://github.com/user-attachments/assets/9ab83d00-0a5b-4c29-b559-ccf83a3f4b5f" />
 
 
 ### Mridul:
-<img width="2176" height="463" alt="Screenshot 2026-06-09 103053" src="https://github.com/user-attachments/assets/a6c67465-894c-4bc9-8c69-522422596e81" />
+<img width="1088" height="167" alt="Screenshot 2026-06-12 101509" src="https://github.com/user-attachments/assets/ce52b465-d597-4722-a00f-60d3bc76d61a" />
+
 
 
 ### Bao:
-<img width="2160" height="927" alt="Screenshot 2026-06-09 103035" src="https://github.com/user-attachments/assets/02f0ebe1-7940-4c2f-a15f-0846d082bad4" />
+<img width="1082" height="307" alt="Screenshot 2026-06-12 101643" src="https://github.com/user-attachments/assets/8cf30503-3021-424c-8a62-9524766b76dc" />
 
 
 ### Yerdana:
-<img width="2198" height="601" alt="Screenshot 2026-06-09 103015" src="https://github.com/user-attachments/assets/3b9760cd-74bc-47b6-957d-d64458f23515" />
+
 
 
 
