@@ -2,13 +2,18 @@
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyd
 .Python
 *.egg-info/
+dist/
+build/
+.eggs/
 
 # Virtual environments
 venv/
 .venv/
 env/
+.env/
 
 # Environment variables - NEVER commit these
 .env
@@ -17,8 +22,11 @@ env/
 
 # Node
 node_modules/
+dist/
+.next/
+.nuxt/
 
-# Vite build output
+# Vite
 app/frontend/dist/
 
 # IDE

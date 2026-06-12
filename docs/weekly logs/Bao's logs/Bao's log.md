@@ -1,4 +1,3 @@
-<img width="2381" height="101" alt="Screenshot 2026-06-05 095326" src="https://github.com/user-attachments/assets/25c17825-db8d-43a3-94a8-760c436f63c4" />
 # Weekly Report: 18/5 – 24/5 (May 18 – May 24)
 
 ## Timesheet
@@ -276,3 +275,64 @@ Total: ~11.8 hours
 ## Next Cycle Goals
 - Discuss frontend–backend integration with team: wire up register/login forms to `/api/v1/auth/` endpoints
 - Create refactor/backend-cleanup branch: move `client` fixture to `conftest.py` and do some refactor before integration phase
+
+---
+
+# Cycle 7 Report: June 9 – June 11
+
+## Timesheet
+
+### Clockify Report
+
+- 9/6 (Tuesday): Team Meeting – 2 hours
+- 11/6 (Thursday): Canvas docker + set token endpoint + PR reviews – 9.5 hours
+
+Total: ~11.5 hours
+
+---
+
+## Completed Tasks
+
+### 1: Participated in Team Meeting (Tuesday, 9/6)
+- Met with the team to discuss the work for demo of proof of life, using canvas docker<img 
+
+<img width="1085" height="49" alt="Screenshot 2026-06-12 091002" src="https://github.com/user-attachments/assets/ca001464-f290-41b3-8987-50c8438ff580" />
+
+
+
+### 2: canvas docker + set token endpoint + PR reviews (Thursday, 11/6)
+- set up canvas-docker for testing purpose
+- learning system integration
+- set new endpoint for getting token when sign up
+- review teammates' PRs to be ready for demo proof of life
+
+<img width="1079" height="221" alt="Screenshot 2026-06-12 091006" src="https://github.com/user-attachments/assets/77166369-c46b-42a2-9e4c-ab675e7aeeed" />
+
+
+
+
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle focused on three backend tracks: user identity, per-user Canvas token security, and integration testing setup.
+
+- Auth — name field: Added name to RegisterRequest, User model, and UserResponse so the signup form can capture and store a real display name end-to-end.
+
+- Canvas token endpoint: Implemented the full per-user Canvas token flow — PATCH /api/v1/auth/me/canvas-token validates the token against Canvas (GET /users/self), encrypts it with Fernet symmetric encryption, and stores it per user. All downstream Canvas API calls (/courses, /assignments, /submissions) now decrypt and use the stored token instead of a global config value. Users without a token get a clear 403 before any Canvas call is made.
+
+- Security: Encryption key lives only in .env (gitignored) — never committed. Added root .gitignore after catching .env about to be staged with 26,000 other files.
+
+- Docker: Confirmed full stack running locally — Postgres via Docker, backend on port 8000, frontend on 5173.
+
+
+### Retrospective:
+- The biggest problem we encoutered was the postgres password auth failure that turned out to be a missing .env file after switching branches — gitignored files don't travel with branches, so the port 5433 setting was lost and the backend silently fell back to the default port 5432. Worth documenting for the team: always re-create .env from .env.example when switching to a new branch.
+
+---
+
+## Next Cycle Goals
+- Wire PATCH /me/canvas-token to the frontend CanvasInfoPage — the backend is ready, the page just needs a form and an API call
+- Fix frontend type gaps with teammate: RegisterCredentials missing name, UserResponse missing name and has_canvas_token
