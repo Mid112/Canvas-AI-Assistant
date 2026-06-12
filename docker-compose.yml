@@ -88,7 +88,7 @@ services:
 
       # Comma-separated list of origins allowed to call the API.
       # The frontend dev server (port 3000) is allowed by default.
-      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:3000}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:80,http://localhost}
 
       # Canvas API credentials — injected from .env at runtime.
       # Never hardcoded here so they don't end up in the Git repo.
