@@ -374,4 +374,78 @@ Code review activities continued throughout the cycle, allowing for knowledge sh
 * Update project documentation as implementation progresses
 * Maintain consistent Clockify tracking
 
+# **Cycle 7: Tuesday (9/6) ~ Thursday (11/6)**
+
+### **Tuesday (9/6)**
+
+<img width="1202" height="163" alt="Screenshot 2026-06-12 at 10 27 20 PM" src="https://github.com/user-attachments/assets/6daec36b-b249-4437-b63b-9e21d7032b19" />
+
+**Timesheet**  
+**Clockify Report:** 2:14:46
+
+**Current Tasks**
+- Participated in the weekly team meeting to discuss project progress and upcoming milestone requirements
+- Discussed frontend implementation progress and team deliverables
+- Reviewed teammates' pull requests and project contributions
+- Provided feedback on implementation details and code quality
+- Collaborated with team members on development planning and task allocation
+
+### **Wednesday (10/6)**
+<img width="1025" height="105" alt="Screenshot 2026-06-12 at 10 29 31 PM" src="https://github.com/user-attachments/assets/7cd1ae94-d586-4c95-8ef7-cda19c618aee" />
+
+**Timesheet**  
+**Clockify Report:** 2:13:55
+
+**Current Tasks**
+- Worked on setting up and organizing the project board
+- Updated project tasks and workflow tracking
+- Organized issues and development priorities for upcoming milestones
+- Improved project planning visibility for the team
+- Assisted with milestone preparation and task management
+
+### **Thursday (11/6)**
+<img width="1023" height="151" alt="Screenshot 2026-06-12 at 10 30 00 PM" src="https://github.com/user-attachments/assets/f9ee78ac-afb9-4d78-9a15-87ef8a510ceb" />
+
+
+**Timesheet**  
+**Clockify Report:** 4:40:38
+
+**Current Tasks**
+- Continued project board setup and refinement
+- Updated task assignments and project tracking information
+- Worked on frontend development and implementation tasks
+- Continued building and refining frontend components
+- Assisted with project organization and milestone preparation
+- Performed testing and validation of frontend functionality
+
+---
+
+## **Cycle 7 – Goal Review**
+
+### **Reflection**
+
+This cycle focused on project organization, milestone preparation, and continued frontend development. Significant effort was dedicated to improving project management processes through project board setup and refinement, ensuring that development tasks and priorities were clearly organized. Development work also continued on the frontend portion of the system as the team moved closer to the Proof of Life milestone.
+
+### **Retrospective**
+
+Team collaboration remained active through meetings and pull request reviews, helping maintain alignment on project goals and implementation priorities. Reviewing teammates' contributions provided opportunities to improve code quality and share feedback across the team.
+
+A substantial portion of the cycle was dedicated to organizing and refining the project board. This work improved task visibility, milestone tracking, and overall project coordination. Establishing a structured workflow will help the team manage development activities more effectively throughout the remainder of the project.
+
+Frontend development also continued during this cycle, contributing toward the implementation of user-facing functionality and supporting progress toward upcoming deliverables. Overall, the cycle strengthened both the project's organizational structure and implementation progress.
+
+---
+
+## **Next Cycle Goals (Cycle 8: Friday 12/6 ~ Monday 15/6)**
+
+* Prepare for the software architecture and project workflow knowledge quiz
+* Review the system architecture, design document, and project proposal
+* Continue frontend implementation and refinement
+* Begin integrating frontend pages with backend services where applicable
+* Participate in pull request reviews and team discussions
+* Continue updating and maintaining the project board
+* Support Proof of Life milestone feedback and follow-up improvements
+* Expand frontend testing coverage and validation
+* Continue contributing to project documentation
+* Maintain consistent Clockify tracking
 
