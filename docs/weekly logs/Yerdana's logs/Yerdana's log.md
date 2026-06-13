@@ -339,7 +339,73 @@ and time constraints
 
 
 
+# Cycle 7 Report: 06/09 – 06/11 (June 9 – June 11)
+
+## Timesheet
+
+### Clockify Report
+- **09/06 (Monday):** Using Clockify – Logged 3.5 hours
+- **10/06 (Tuesday):** Using Clockify – Logged 2 hours
+- **11/06 (Wednesday):** Using Clockify – Logged 3 hours
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Designing and implementing Canvas MCP server with core tools (June 9)
+- Inspected merged PRs from teammates covering FastAPI backend, Canvas API integration layer, and PostgreSQL schema to understand the existing data models and endpoints
+- Implemented the MCP server using FastMCP with streamable HTTP transport, exposing tools
+<img width="1218" height="134" alt="Screenshot 2026-06-12 at 11 10 37 AM" src="https://github.com/user-attachments/assets/428e1270-22a6-4bd3-8b0d-e6f3056c8e81" />
 
 
+### #2: Writing and passing MCP server tests (June 10)
+- Wrote 19 pytest tests covering infrastructure, tool schema validation, response structure, and Canvas integration
+- Tests are split into four categories: infrastructure (health, tool listing), schema (parameter declarations), response structure, and Canvas integration
+<img width="1217" height="125" alt="Screenshot 2026-06-12 at 11 11 28 AM" src="https://github.com/user-attachments/assets/7327de6e-428f-439b-99f4-045f85997192" />
 
 
+### #3: Setting up Canvas LMS sandbox and running full integration tests (June 11)
+- Cloned and configured a local Canvas LMS sandbox running in Docker on port 8090
+- Created a professor account, enrolled them as teacher in a test course, published the course, and generated a Canvas API token scoped to that professor
+- Ran all 19 MCP tests against the real Canvas sandbox — all tests pass including the 4 Canvas integration tests that were previously skipped
+<img width="1212" height="131" alt="Screenshot 2026-06-12 at 11 12 02 AM" src="https://github.com/user-attachments/assets/6d21bd12-1728-4737-b2b6-7ce6827bbdc3" />
+
+---
+
+## Progress Update (since 09/06/2026)
+
+| TASK/ISSUE #                          | STATUS      |
+| ------------------------------------- | ----------- |
+| Design document                       | Completed   |
+| Project design video                  | Completed   |
+| Database design                       | Completed   |
+| PR reviews and approvals              | Completed   |
+| Project setup                         | Completed   |
+| Dockerized environment for MCP/vLLM   | Completed   |
+| Locally running vLLM                  | Completed   |
+| Setup for PostgreSQL                  | Completed   |
+| Canvas MCP server core tools          | Completed   |
+| MCP server tests (19 passing)         | Completed   |
+| Canvas LMS sandbox setup              | Completed   |
+| Full integration tests with Canvas    | Completed   |
+| MCP client design                     | In Progress |
+| Context embedding and retrieval       | In Progress |
+
+---
+
+## Cycle 7 Goal Review
+
+### Reflection:
+This cycle was productive in terms of MCP server development and testing. The Canvas MCP server was designed and implemented with 7 core tools, all passing 19 automated tests. Setting up the real Canvas LMS sandbox took significant time due to Docker networking and configuration challenges, but ultimately resulted in a fully working integration test suite running against real Canvas data rather than mocks.
+
+One win this cycle was enforcing the architectural boundary through tests — the `test_no_workflow_tools_registered` test ensures the MCP server stays within its responsibility of Canvas tool execution and read-only audit access, and will catch any accidental additions in the future.
+
+### Retrospective:
+In retrospective, setting up a local Canvas LMS sandbox proved more complex than anticipated due to the gap between Instructure's internal Docker tooling and external developer use cases. In future cycles, environment setup time should be budgeted separately from feature development time to avoid underestimating cycle scope.
+
+---
+
+## Next Cycle 8 Goals
+- **Goal 1:** Design and implement the MCP client inside FastAPI that calls MCP server tools
+- **Goal 2:** Wire the LLM (Qwen via vLLM) to interpret instructor prompts and invoke the correct MCP tools
+- **Goal 3:** Implement context embedding and retrieval so the model has course-scoped context when generating responses
