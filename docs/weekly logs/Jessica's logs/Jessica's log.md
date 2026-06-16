@@ -449,3 +449,91 @@ Frontend development also continued during this cycle, contributing toward the i
 * Continue contributing to project documentation
 * Maintain consistent Clockify tracking
 
+# **Cycle 8: Friday (12/6) ~ Monday (15/6)**
+
+### **Friday (12/6)**
+<img width="1200" height="163" alt="Screenshot 2026-06-16 at 10 56 58 AM" src="https://github.com/user-attachments/assets/295fa4e0-cbff-465f-a9a9-04eaa819e3c1" />
+
+**Timesheet**  
+**Clockify Report:** 4:21:11
+
+**Current Tasks**
+- Continued frontend development and refinement
+- Worked on improving frontend functionality and user interface components
+- Participated in team meetings related to the Proof of Life milestone
+- Discussed project progress, implementation status, and upcoming deliverables
+- Reviewed milestone requirements and coordinated development priorities with team members
+- Contributed to milestone preparation activities
+
+### **Saturday (13/6)**
+
+**Timesheet**  
+**Clockify Report:** 0:00:00
+
+**Current Tasks**
+- No Clockify entries recorded
+
+### **Sunday (14/6)**
+
+**Timesheet**  
+**Clockify Report:** 0:00:00
+
+**Current Tasks**
+- No Clockify entries recorded
+
+### **Monday (15/6)**
+<img width="1200" height="152" alt="Screenshot 2026-06-16 at 10 57 05 AM" src="https://github.com/user-attachments/assets/95efd070-420b-4420-b497-3fb21bfc370f" />
+
+**Timesheet**  
+**Clockify Report:** 3:12:32
+
+**Current Tasks**
+- Participated in a team meeting to discuss post–Proof of Life feedback and next development steps
+- Worked on project board updates and task organization
+- Updated milestone progress and development priorities
+- Organized project workflow and issue tracking
+- Assisted with planning upcoming MVP development activities
+- Coordinated team tasks and project management updates
+- Reviewed project architecture, workflows, and design documentation
+- Studied for the Knowledge Assessment Quiz, including:
+  - Architecture diagrams vs Data Flow Diagrams (DFDs)
+  - UML diagrams and their purpose
+  - System architecture and component interactions
+  - Docker deployment strategy
+  - Project workflows and use cases
+  - Pull request review expectations and software engineering practices
+
+---
+
+## **Cycle 8 – Goal Review**
+
+### **Reflection**
+
+This cycle focused on milestone preparation, project coordination, frontend development, and preparation for the Knowledge Assessment Quiz. Time was spent refining frontend functionality, participating in team discussions, reviewing project architecture, and studying key design concepts such as system architecture, workflows, deployment strategy, and data flow models. Additional effort was dedicated to project organization through project board maintenance and task management activities, helping prepare the team for the transition into MVP development.
+
+### **Retrospective**
+
+The team meeting provided an opportunity to review project progress, discuss milestone outcomes, and identify priorities for upcoming development work. These discussions helped ensure all team members remained aligned on project goals and implementation timelines.
+
+Frontend development continued during this cycle, contributing to the ongoing implementation of user-facing features. Work focused on refining existing functionality and supporting the project's transition from initial prototypes toward MVP-ready components.
+
+Project management activities also remained a key focus. Updates to the project board improved visibility into current tasks, milestone progress, and upcoming development priorities. Maintaining an organized workflow helped the team prepare for the next phase of implementation and ensured that project requirements remained clearly tracked.
+
+Preparation for the Knowledge Assessment Quiz was also completed during this cycle. This involved reviewing the project architecture, workflows, deployment strategy, design documentation, and key software engineering concepts discussed throughout the project. This review helped strengthen understanding of the system and improve readiness for technical discussions and assessment questions.
+
+Overall, this cycle balanced technical development, project coordination, and academic preparation while supporting continued progress toward the MVP milestone.
+
+
+## **Next Cycle Goals (Cycle 9: Tuesday 16/6 ~ Thursday 18/6)**
+
+* Begin active development of MVP features
+* Continue frontend implementation and refinement
+* Support backend integration and API discussions
+* Review and break down remaining MVP requirements into actionable tasks
+* Continue project board maintenance and sprint planning
+* Participate in pull request reviews and team meetings
+* Expand frontend testing coverage where appropriate
+* Support documentation updates and project tracking
+* Prepare for upcoming MVP milestone deliverables
+* Maintain consistent Clockify tracking
+
