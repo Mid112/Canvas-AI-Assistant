@@ -409,3 +409,69 @@ In retrospective, setting up a local Canvas LMS sandbox proved more complex than
 - **Goal 1:** Design and implement the MCP client inside FastAPI that calls MCP server tools
 - **Goal 2:** Wire the LLM (Qwen via vLLM) to interpret instructor prompts and invoke the correct MCP tools
 - **Goal 3:** Implement context embedding and retrieval so the model has course-scoped context when generating responses
+
+
+
+# Cycle 8 Report: 06/12 – 06/15 (June 12 – June 15)
+
+## Timesheet
+
+### Clockify Report
+- **12/06 (Friday):** Using Clockify – Logged 3 hours
+- **13/06 (Saturday):** Using Clockify – Logged 0 hours
+- **14/06 (Sunday):** Using Clockify – Logged 0 hours
+- **15/06 (Monday):** Using Clockify - Logged 2 hours
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Preparing for the knowledge quiz (June 12)
+- Revised system architecture, DFD diagrams, UML diagrams, use cases, and Git workflow of our team
+<img width="1217" height="123" alt="Screenshot 2026-06-16 at 10 27 27 AM" src="https://github.com/user-attachments/assets/d02c6bb1-13ff-402e-8c4c-8a5a3146ec8e" />
+
+
+### #2: Team meeting, and explaining the system architecture for the knowledge quiz (June 15)
+- Went over the system architecture diagram, and its corresponding code in details with team members
+- Asked questions, and proposed changes to the database relations
+- Discussed development plans, and tasks for the next 2 weeks according to the project board
+<img width="1212" height="141" alt="Screenshot 2026-06-16 at 10 27 50 AM" src="https://github.com/user-attachments/assets/a72e1d69-747f-47dc-8869-31c6d92c18ab" />
+
+---
+
+## Progress Update (since 12/06/2026)
+
+| TASK/ISSUE #                          | STATUS      |
+| ------------------------------------- | ----------- |
+| Design document                       | Completed   |
+| Project design video                  | Completed   |
+| Database design                       | Completed   |
+| PR reviews and approvals              | Completed   |
+| Project setup                         | Completed   |
+| Dockerized environment for MCP/vLLM   | Completed   |
+| Locally running vLLM                  | Completed   |
+| Setup for PostgreSQL                  | Completed   |
+| Canvas MCP server core tools          | Completed   |
+| MCP server tests (19 passing)         | Completed   |
+| Canvas LMS sandbox setup              | Completed   |
+| Full integration tests with Canvas    | Completed   |
+| MCP client design                     | In Progress |
+| Context embedding and retrieval       | In Progress |
+
+---
+
+## Cycle 8 Goal Review
+
+### Reflection:
+This cycle was more involved with preparation for knowledge quiz, as well as a revision of our strategy for the project with fewer direct implementaitons made to the project. However, I am still satisfied with the decision making process, and also for the fact that our team was able to eliminate some confusion around user roles, and our primary target for the usability now is supporting multiple canvas tokens per user. 
+
+Also, one positive note was how agile we were, and how fast we were able to implement changes to the small details compared to the project design specifications earlier this term. 
+
+### Retrospective:
+In retrospective, integrating multiple components and troubleshooting was more difficult than I imagined, partly because the development pace was different for multiple parts.
+
+## Next Cycle 9 Goals
+- **Goal 1:** Design an adapter component that will make it possible for 3rd party LLM apps such as Claude Code to integrate with our software
+- **Goal 2:** Align the functionality of MCP server to functional requirements mentioned in project requirement list
+- **Goal 3:** Implement context embedding, and storage of the embedding, retrieval and augmentation using either a persistent storage alone, or with the help of Redis. 
+
