@@ -232,3 +232,34 @@ Managing team pull requests proved to be an essential exercise in maintaining ve
 * Enhance frontend error handling and loading states for API calls to improve user experience.
 * Continue expanding unit and integration tests for the newly connected components.
 * Prepare for Quiz 1
+
+  # **Cycle 8: Friday (06/12) ~ Monday (06/15)**
+
+**Timesheet**
+
+**Clockify Report**
+
+**06/12 (Friday):** 02:19:06
+<img width="1337" height="109" alt="Untitled 2" src="https://github.com/user-attachments/assets/d0a23431-aa65-4ece-9307-b17b9fb5268c" />
+**06/15 (Monday):** 02:11:33
+<img width="1336" height="108" alt="Untitled" src="https://github.com/user-attachments/assets/f16dd35e-226a-411f-8b56-796b48824f20" />
+
+**Current Tasks (Provide sufficient detail)**
+
+* **#1: Architectural & DB Model Review Meetings:** Participated in two comprehensive team meetings to discuss necessary adjustments to our core architecture and database models. A major focal point was reviewing the existing dashboards and debating the removal of the TA role and TA Dashboard to streamline the application scope and focus entirely on the Instructor/Admin experience.
+
+* **#2: CI Pipeline Planning:** Engaged in technical discussions regarding the integration of our Continuous Integration (CI) pipeline. Coordinated on how this pipeline will automate our testing and deployment processes to maintain code health as we push heavier frontend and backend updates.
+
+* **#3: Knowledge Assessment Preparation:** Dedicated significant time to studying and preparing for Knowledge Quiz #1. This involved collaboratively reviewing our team's system architecture, L1 DFD, use case models, Git/PR workflows, and component ownership to ensure we were fully aligned on our software engineering practices.
+
+**Cycle Goal Review**
+
+* **Reflection:** While this cycle did not yield much direct coding progress, taking a step back to re-evaluate our architecture and database models was a necessary strategic pause. The discussions around trimming down features like potentially removing the TA dashboard will ultimately save us development time and reduce unnecessary complexity moving forward.
+
+* **Retrospective:** Studying collectively for the knowledge assessment acted as an excellent forced review of our entire system design. Ensuring everyone understands the exact data flow between the React frontend and FastAPI backend ensures we are completely synchronized before we resume heavy implementation.
+
+**Next Cycle Goals**
+
+* Implement the architectural decisions discussed this cycle, including refactoring the UI/routing to account for the removal of the TA role.
+* Address feedback identified during the live demo.
+* Implement admin role
