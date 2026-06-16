@@ -345,12 +345,12 @@ Total: ~11.5 hours
 
 ### Clockify Report
 
-- 12/6 (Friday): Meeting and presentation – 1h 12m
+- 12/6 (Friday): Meeting and presentation – 3h 12m
 - 13/6 (Saturday): Feature for role and manage canvas token work – 1h 48m
 - 14/6 (Sunday): Adding test for role – 1h 3m
 - 15/6 (Monday): Team Meeting – 2h 5m
 
-Total: ~6h 9m
+Total: ~8h 9m
 
 ---
 
@@ -359,19 +359,27 @@ Total: ~6h 9m
 ### 1: Demo Presentation and Team Meeting (Friday, 12/6)
 - Participated in the proof-of-life demo presentation
 - Walked through the working full stack: Postgres via Docker, backend auth endpoints, and frontend register/login flow
-- Discussed with the team the next feature set to tackle for the backend (Project 3)
+- Discussed with the team the next feature set to tackle for the backend
+  <img width="1087" height="85" alt="Screenshot 2026-06-15 203129" src="https://github.com/user-attachments/assets/7896e5b5-c864-4ab2-8428-3ae486ba1dde" />
+
 
 ### 2: Feature for Role and Canvas Token Management (Saturday, 13/6)
 - Started implementing role-based access control on the backend — laying the groundwork for admin and instructor roles
 - Worked on separating role concerns so that an admin can control which users have instructor privileges
 - Continued refining the Canvas token management layer to align with the expanded user model
+<img width="1088" height="79" alt="Screenshot 2026-06-15 203137" src="https://github.com/user-attachments/assets/3575dffc-e7b5-420f-8adc-0c8dd078bac9" />
+
 
 ### 3: Adding Tests for Role Feature (Sunday, 14/6)
 - Wrote backend tests covering the new role logic
 - Verified that role-restricted endpoints correctly reject unauthorized users
+<img width="1085" height="83" alt="Screenshot 2026-06-15 203142" src="https://github.com/user-attachments/assets/562c7fc6-aba2-47ad-9d0f-c1044e4c6207" />
+
 
 ### 4: Team Meeting (Monday, 15/6)
-- Met with the team to align on feature priorities for the next cycle and plan the backend work for Project 3
+- Met with the team to align on feature priorities for the next cycle and plan the backend work 
+<img width="1084" height="83" alt="Screenshot 2026-06-15 203147" src="https://github.com/user-attachments/assets/0a8eeb9e-f1be-4b91-a142-e280940ecc1f" />
+
 
 ---
 
@@ -387,7 +395,7 @@ Total: ~6h 9m
 - Tests: Added test coverage for the role feature early, following the pattern established in previous cycles — write tests alongside the feature rather than after.
 
 ### Retrospective:
-- The cycle was shorter in hours than Cycle 7 due to the demo day and weekend work, but stayed focused on moving the backend forward into Project 3 scope. Role-based access is the most important new constraint to get right early, since it affects every downstream endpoint.
+- The cycle stayed focused on moving the backend forward into MVP scope. Role-based access is the most important new constraint to get right early, since it affects every downstream endpoint.
 
 ---
 
