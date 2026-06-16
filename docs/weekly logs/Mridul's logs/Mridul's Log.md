@@ -520,3 +520,86 @@ radar for upcoming cycles.
 - **Goal 1:** Complete proof of life presentation
 - **Goal 2:** Connect MCP docker container to the stack
 - **Goal 3:** Continue active development toward MVP completion
+
+---
+
+<br>
+
+# Cycle 8 Report: 12/06 – 15/06 (June 12 – June 15)
+
+## Timesheet
+
+### Clockify Report
+
+- **12/06 (Friday):** Using Clockify – Logged 3.85 hours
+<img width="2428" height="238" alt="image" src="https://github.com/user-attachments/assets/48334c8a-94aa-49b1-b9cf-d75e10faa1a9" />
+
+
+- **13/06 (Saturday):** Using Clockify – Logged 0 hours
+- **14/06 (Sunday):** Using Clockify – Logged 0 hours
+- **15/06 (Monday):** Using Clockify – Logged 2.18 hours
+<img width="2410" height="210" alt="image" src="https://github.com/user-attachments/assets/35c469d7-299b-415d-8b25-c5bbef6c170e" />
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Cycle 7 meeting, proof of life completion and demo (June 12)
+- Attended cycle 7 meeting to review progress and finalize the proof of
+  life deliverable.
+- Completed the proof of life presentation and participated in the demo,
+  marking a significant project milestone.
+
+### #2: Knowledge test (June 15)
+- Discussed the knowledge test as part of the 2 hour 11 minute work session.
+
+### #3: CI/CD pipeline discussion (June 15)
+- Participated in discussions around the CI/CD pipeline setup and next
+  steps for automation and deployment workflows.
+
+### #4: Design document discussion (June 15)
+- Reviewed and discussed the design document to ensure alignment with the
+  current state of the project and upcoming development work.
+
+---
+
+## Progress Update (since 12/06/2026)
+
+| TASK/ISSUE #               | STATUS      |
+| -------------------------- | ----------- |
+| Proof of life presentation | Completed   |
+| Knowledge test             | Completed   |
+| CI/CD pipeline             | In Progress |
+| MCP docker connection      | In Progress |
+| MVP                        | In Progress |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle's standout achievement was the completion and successful demo of
+the proof of life presentation, a major milestone for the project. The cycle
+7 meeting helped wrap up outstanding items and set a clear direction going
+forward. Additional work on the knowledge test, CI/CD pipeline discussion,
+and design document alignment on June 15 kept the team productive across
+the cycle.
+
+### Retrospective:
+
+The team came together well this cycle to deliver the proof of life demo,
+reflecting solid collaboration and sustained effort across the project.
+Clockify hours were logged on active work days, maintaining the consistent
+tracking habit established in recent cycles. CI/CD pipeline work and MCP
+docker connection remain ongoing priorities that will need dedicated focus
+in the next cycle. With the proof of life complete, the team is well
+positioned to shift full attention toward MVP development.
+
+---
+
+## Next Cycle Goals
+
+- **Goal 1:** Connect MCP docker container to the stack
+- **Goal 2:** Complete CI/CD pipeline setup
+- **Goal 3:** Continue active development toward MVP completion
