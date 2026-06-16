@@ -336,3 +336,62 @@ Total: ~11.5 hours
 ## Next Cycle Goals
 - Wire PATCH /me/canvas-token to the frontend CanvasInfoPage — the backend is ready, the page just needs a form and an API call
 - Fix frontend type gaps with teammate: RegisterCredentials missing name, UserResponse missing name and has_canvas_token
+
+---
+
+# Cycle 8 Report: June 12 – June 15
+
+## Timesheet
+
+### Clockify Report
+
+- 12/6 (Friday): Meeting and presentation – 1h 12m
+- 13/6 (Saturday): Feature for role and manage canvas token work – 1h 48m
+- 14/6 (Sunday): Adding test for role – 1h 3m
+- 15/6 (Monday): Team Meeting – 2h 5m
+
+Total: ~6h 9m
+
+---
+
+## Completed Tasks
+
+### 1: Demo Presentation and Team Meeting (Friday, 12/6)
+- Participated in the proof-of-life demo presentation
+- Walked through the working full stack: Postgres via Docker, backend auth endpoints, and frontend register/login flow
+- Discussed with the team the next feature set to tackle for the backend (Project 3)
+
+### 2: Feature for Role and Canvas Token Management (Saturday, 13/6)
+- Started implementing role-based access control on the backend — laying the groundwork for admin and instructor roles
+- Worked on separating role concerns so that an admin can control which users have instructor privileges
+- Continued refining the Canvas token management layer to align with the expanded user model
+
+### 3: Adding Tests for Role Feature (Sunday, 14/6)
+- Wrote backend tests covering the new role logic
+- Verified that role-restricted endpoints correctly reject unauthorized users
+
+### 4: Team Meeting (Monday, 15/6)
+- Met with the team to align on feature priorities for the next cycle and plan the backend work for Project 3
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle shifted focus from the auth/token foundation built in Cycle 7 toward the next layer: role-based access and a richer user model.
+
+- Demo: The proof-of-life demo on June 12 validated that the full stack is functional end-to-end — register, login, Canvas token storage, and protected API calls all working together.
+
+- Role feature: Started building admin/instructor role separation. The goal is for an admin account to manage which users hold instructor roles, rather than all users sharing the same permissions. This is foundational for the multi-role feature set in Project 3.
+
+- Tests: Added test coverage for the role feature early, following the pattern established in previous cycles — write tests alongside the feature rather than after.
+
+### Retrospective:
+- The cycle was shorter in hours than Cycle 7 due to the demo day and weekend work, but stayed focused on moving the backend forward into Project 3 scope. Role-based access is the most important new constraint to get right early, since it affects every downstream endpoint.
+
+---
+
+## Next Cycle Goals
+- Add more constraints to account registration: enforce password strength, validate email format more strictly, prevent duplicate registrations with clearer error messages
+- Implement admin role: admin users can promote/demote instructor role for other accounts; protect instructor-only endpoints with role checks
+- Expand Canvas API response fields to match the database schema — courses, assignments, and submissions should capture all fields defined in the DB design (e.g., canvas_course_id, canvas_user_id, enrollment state)
