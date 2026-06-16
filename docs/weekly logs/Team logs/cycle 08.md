@@ -33,7 +33,8 @@ We had a 2-hour team meeting on Friday June 12th to kick off Cycle 8, reviewing 
 | | | | |
 
 ## Burn-up Chart (Velocity):
-<!-- Add burn-up chart screenshot here -->
+<img width="701" height="405" alt="Screenshot 2026-06-15 205334" src="https://github.com/user-attachments/assets/58d40d59-4010-4013-9678-7a0d01d90d35" />
+
 
 ## Times for Team/Individual:
 
