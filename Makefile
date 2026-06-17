@@ -1,4 +1,4 @@
-.PHONY: install lint test build up down logs restart clean migrate migrate-new db-shell db-reset
+.PHONY: install lint lint-fix test test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset
 
 # ── Install ──────────────────────────────────
 # Creates a venv (if one doesn't exist) and installs backend deps
@@ -33,9 +33,27 @@ lint-fix:
 # frontend tests (vitest, proxied via package.json).
 # PYTHONPATH points at app/backend so `from app.main import app`
 # resolves correctly even though tests live in test/backend/.
+# Assumes dev postgres (docker-compose.dev.yml) is already running.
 test:
 	PYTHONPATH=./app/backend DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb app/backend/.venv/bin/pytest test/backend/ -v
 	cd app/frontend && npm run test
+
+# ── Test from scratch ─────────────────────────
+# Full reset: tears down any running stack (dev or prod), starts
+# a fresh dev postgres, reinstalls backend deps into a clean venv,
+# then runs the full test suite. Use this when something's in a
+# broken/inconsistent state, or before a milestone demo to confirm
+# everything genuinely works from zero.
+test-fresh:
+	docker compose down -v
+	docker compose -f docker-compose.dev.yml down -v
+	docker compose -f docker-compose.dev.yml up postgres -d
+	sleep 5
+	rm -rf app/backend/.venv
+	cd app/backend && python3 -m venv .venv
+	cd app/backend && .venv/bin/pip install --upgrade pip
+	cd app/backend && .venv/bin/pip install -r requirements.txt
+	make test
 
 # ── Docker ───────────────────────────────────
 build:
