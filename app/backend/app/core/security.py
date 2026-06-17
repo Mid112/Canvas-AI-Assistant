@@ -1,5 +1,5 @@
-from datetime import UTC, datetime, timedelta
-
+from datetime import UTC, timedelta, timezone
+from cryptography.fernet import Fernet
 from jose import jwt
 from passlib.context import CryptContext
 
@@ -25,3 +25,15 @@ def create_access_token(subject: str | int) -> str:
 def decode_access_token(token: str) -> str:
     payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
     return payload["sub"]
+
+
+def _fernet() -> Fernet:
+    return Fernet(settings.CANVAS_TOKEN_ENCRYPTION_KEY.encode())
+
+
+def encrypt_canvas_token(plain_token: str) -> str:
+    return _fernet().encrypt(plain_token.encode()).decode()
+
+
+def decrypt_canvas_token(encrypted_token: str) -> str:
+    return _fernet().decrypt(encrypted_token.encode()).decode()
