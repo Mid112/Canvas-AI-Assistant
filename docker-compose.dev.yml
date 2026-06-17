@@ -71,6 +71,7 @@ services:
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:5173}
       CANVAS_API_URL: ${CANVAS_API_URL:-https://canvas.ubc.ca/api/v1}
       CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-}
+      CANVAS_TOKEN_ENCRYPTION_KEY: ${CANVAS_TOKEN_ENCRYPTION_KEY:-}
     volumes:
       # Mount your local code into the container so changes
       # are reflected immediately without rebuilding the image.

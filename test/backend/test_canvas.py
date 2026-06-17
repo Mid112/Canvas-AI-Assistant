@@ -33,7 +33,10 @@ def auth_headers(client):
         json={"name": "Test User", "email": email, "password": "secret123"}
     )
     token = response.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token}"}
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "test-canvas-token"}, headers=headers)
+    return headers
 
 
 def test_list_courses_unauthenticated(client):
@@ -73,3 +76,11 @@ def test_list_courses_invalid_canvas_token(client, auth_headers):
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Canvas API token")
         response = client.get("/api/v1/canvas/courses", headers=auth_headers)
     assert response.status_code == 401
+
+
+def test_list_courses_no_canvas_token(client):
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "No Token User"})
+    token = reg.json()["access_token"]
+    response = client.get("/api/v1/canvas/courses", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 403
