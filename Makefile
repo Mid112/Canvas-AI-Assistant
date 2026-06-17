@@ -34,7 +34,7 @@ lint-fix:
 # PYTHONPATH points at app/backend so `from app.main import app`
 # resolves correctly even though tests live in test/backend/.
 test:
-	PYTHONPATH=./app/backend DATABASE_URL=postgresql+asyncpg://appuser:changeme@localhost:5432/appdb app/backend/.venv/bin/pytest test/backend/ -v
+	PYTHONPATH=./app/backend DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb app/backend/.venv/bin/pytest test/backend/ -v
 	cd app/frontend && npm run test
 
 # ── Docker ───────────────────────────────────
@@ -65,11 +65,11 @@ migrate-new:
 	# usage: make migrate-new msg="add canvas_token to users"
 
 db-shell:
-	docker compose exec postgres psql -U appuser -d appdb
+	docker compose -f docker-compose.dev.yml exec postgres psql -U appuser -d appdb
 
 db-reset:
-	docker compose down -v
-	docker compose up -d postgres
+	docker compose -f docker-compose.dev.yml down -v
+	docker compose -f docker-compose.dev.yml up -d postgres
 	sleep 5
 	make migrate
 
