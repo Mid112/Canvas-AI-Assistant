@@ -1,3 +1,4 @@
+from cryptography.fernet import InvalidToken
 from fastapi import HTTPException, status
 from app.core.security import decrypt_canvas_token
 from app.integrations.canvas import fetch_assignments, fetch_courses, fetch_submissions
@@ -11,7 +12,13 @@ def _require_canvas_token(user: User) -> str:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Canvas token not set. PATCH to /api/v1/auth/me/canvas-token first.",
         )
-    return decrypt_canvas_token(user.canvas_token)
+    try:
+        return decrypt_canvas_token(user.canvas_token)
+    except InvalidToken:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Canvas token is corrupted — please reconnect Canvas.",
+        )
 
 
 async def get_courses(user: User) -> list[CourseResponse]:
