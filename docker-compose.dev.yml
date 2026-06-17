@@ -20,7 +20,6 @@ networks:
 
 volumes:
   postgres_data:
-  canvas_data:
 
 services:
   # ─────────────────────────────────────────────
@@ -72,6 +71,7 @@ services:
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:5173}
       CANVAS_API_URL: ${CANVAS_API_URL:-https://canvas.ubc.ca/api/v1}
       CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-}
+      CANVAS_TOKEN_ENCRYPTION_KEY: ${CANVAS_TOKEN_ENCRYPTION_KEY:-}
     volumes:
       # Mount your local code into the container so changes
       # are reflected immediately without rebuilding the image.
@@ -88,11 +88,3 @@ services:
     # --reload watches for file changes and restarts uvicorn
     # automatically — no manual restarts needed during development
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-  canvas-docker:
-    image: lbjay/canvas-docker
-    container_name: canvas_lms
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    volumes:
-      - canvas_data:/opt/canvas-lms/tmp
