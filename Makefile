@@ -15,6 +15,19 @@ lint:
 	cd app/backend && .venv/bin/ruff check .
 	cd app/frontend && npm run lint
 
+# ── Lint Fix ─────────────────────────────────
+# Auto-fixes safe, non-breaking issues: import sorting, unused
+# imports, trailing whitespace, missing trailing newlines, and
+# similar syntax modernizations (e.g. datetime.UTC alias).
+# Ruff only applies fixes it's confident are behavior-preserving —
+# it will NOT touch things like the E731 lambda-assignment warning
+# or line-length (E501) issues, since fixing those requires a
+# human decision about how to restructure the code.
+lint-fix:
+	cd app/backend && .venv/bin/ruff check . --fix
+	cd app/backend && .venv/bin/ruff format .
+	cd app/frontend && npm run lint -- --fix
+
 # ── Test ─────────────────────────────────────
 # Runs backend tests (pytest, against test/backend/) and
 # frontend tests (vitest, proxied via package.json).

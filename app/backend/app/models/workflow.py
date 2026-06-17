@@ -1,15 +1,18 @@
 from __future__ import annotations
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+
 from sqlalchemy import DateTime, ForeignKey, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.audit_log import AuditLog
     from app.models.conversation import Conversation
     from app.models.user import User
-    from app.models.audit_log import AuditLog
 
 
 class Workflow(Base):
@@ -32,13 +35,13 @@ class Workflow(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
 
-    conversation: Mapped["Conversation"] = relationship(
+    conversation: Mapped[Conversation] = relationship(
         "Conversation", back_populates="workflows"
     )
-    user: Mapped["User"] = relationship("User", back_populates="workflows")
-    audit_logs: Mapped[list["AuditLog"]] = relationship(
+    user: Mapped[User] = relationship("User", back_populates="workflows")
+    audit_logs: Mapped[list[AuditLog]] = relationship(
         "AuditLog", back_populates="workflow"
     )

@@ -53,7 +53,7 @@ jobs:
           cache: "pip"
           cache-dependency-path: app/backend/requirements.txt
       - name: Install dependencies
-        run: pip install -r requirements.txt ruff mypy
+        run: pip install -r requirements.txt
       - name: Lint
         run: ruff check .
       - name: Type check

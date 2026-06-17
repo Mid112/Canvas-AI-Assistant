@@ -1,8 +1,11 @@
 from __future__ import annotations
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.core.database import Base
 
 if TYPE_CHECKING:
@@ -27,11 +30,11 @@ class Assignment(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
 
-    course: Mapped["Course"] = relationship(
+    course: Mapped[Course] = relationship(
         "Course", back_populates="assignments")
-    submissions: Mapped[list["Submission"]] = relationship(
+    submissions: Mapped[list[Submission]] = relationship(
         "Submission", back_populates="assignment", cascade="all, delete-orphan"
     )

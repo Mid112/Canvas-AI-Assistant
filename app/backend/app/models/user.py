@@ -1,16 +1,18 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+
 from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.core.database import Base
 
 if TYPE_CHECKING:
-    from app.models.course import Course
-    from app.models.conversation import Conversation
-    from app.models.workflow import Workflow
     from app.models.audit_log import AuditLog
+    from app.models.conversation import Conversation
+    from app.models.course import Course
     from app.models.message_template import MessageTemplate
     from app.models.session import Session
+    from app.models.workflow import Workflow
 
 
 class User(Base):
@@ -35,7 +37,7 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
 
     # Relationships

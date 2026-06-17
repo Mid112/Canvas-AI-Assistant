@@ -1,5 +1,6 @@
 import httpx
 from fastapi import HTTPException, status
+
 from app.config import settings
 
 _HEADERS = lambda: {"Authorization": f"Bearer {settings.CANVAS_API_TOKEN}"}

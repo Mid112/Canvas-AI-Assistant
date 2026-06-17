@@ -1,9 +1,12 @@
 from __future__ import annotations
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
+
 from sqlalchemy import DateTime, ForeignKey, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.core.database import Base
 
 if TYPE_CHECKING:
@@ -29,11 +32,11 @@ class AuditLog(Base):
 
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
         index=True,
     )
 
-    user: Mapped["User"] = relationship("User", back_populates="audit_logs")
-    workflow: Mapped["Workflow | None"] = relationship(
+    user: Mapped[User] = relationship("User", back_populates="audit_logs")
+    workflow: Mapped[Workflow | None] = relationship(
         "Workflow", back_populates="audit_logs"
     )
