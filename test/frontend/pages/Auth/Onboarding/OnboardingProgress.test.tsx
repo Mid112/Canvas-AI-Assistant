@@ -1,0 +1,40 @@
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+
+import { OnboardingProgress } from "@/pages/Auth/Onboarding/OnboardingProgress";
+
+describe("OnboardingProgress", () => {
+  it("renders all onboarding step labels", () => {
+    render(<OnboardingProgress currentStep="connectCanvas" />);
+
+    expect(screen.getByText("Canvas Info")).toBeInTheDocument();
+    expect(screen.getByText("Connect Canvas Account")).toBeInTheDocument();
+    expect(screen.getByText("Review Permissions")).toBeInTheDocument();
+    expect(screen.getByText("Dashboard")).toBeInTheDocument();
+  });
+
+  it("marks connect canvas account as the current step", () => {
+    render(<OnboardingProgress currentStep="connectCanvas" />);
+
+    const nav = screen.getByLabelText("Onboarding progress");
+    expect(nav.querySelector('[aria-current="step"]')).toBeInTheDocument();
+  });
+
+  it("marks canvas info as completed when on connect canvas step", () => {
+    const { container } = render(
+      <OnboardingProgress currentStep="connectCanvas" />,
+    );
+
+    const completedSteps = container.querySelectorAll(
+      ".border-\\[\\#16a34a\\].bg-\\[\\#16a34a\\]",
+    );
+    expect(completedSteps.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("marks dashboard as upcoming when on review permissions step", () => {
+    render(<OnboardingProgress currentStep="reviewPermissions" />);
+
+    const dashboardLabel = screen.getByText("Dashboard");
+    expect(dashboardLabel).toHaveClass("text-[#94a3b8]");
+  });
+});
