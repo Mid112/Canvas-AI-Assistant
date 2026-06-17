@@ -103,3 +103,33 @@ def test_set_canvas_token(client):
     assert resp.json()["has_canvas_token"] is True
 
     assert client.get("/api/v1/auth/me", headers=headers).json()["has_canvas_token"] is True
+
+
+def test_set_canvas_token_invalid_returns_422(client):
+    from fastapi import HTTPException
+
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with patch(
+        "app.services.auth.validate_token",
+        new=AsyncMock(side_effect=HTTPException(
+            status_code=422,
+            detail="Invalid Canvas API token",
+        )),
+    ):
+        resp = client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "bad-token"}, headers=headers)
+    assert resp.status_code == 422
+    assert "Invalid Canvas API token" in resp.json()["detail"]
+
+
+def test_set_canvas_token_empty_string_rejected(client):
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": ""}, headers=headers)
+    assert resp.status_code == 422
