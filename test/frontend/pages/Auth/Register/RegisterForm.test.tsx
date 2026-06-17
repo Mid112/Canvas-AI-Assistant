@@ -165,4 +165,47 @@ describe("RegisterForm", () => {
     expect(passwordInput).toHaveValue("secret123");
     expect(confirmPasswordInput).toHaveValue("secret123");
   });
+
+  it("shows an email validation error for invalid addresses", async () => {
+    const user = userEvent.setup();
+
+    renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
+
+    await user.type(screen.getByLabelText("Email Address"), "invalid-email");
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Enter a valid email address",
+    );
+    expect(
+      screen.getByRole("button", { name: "Create Account" }),
+    ).toBeDisabled();
+  });
+
+  it("shows a password length error for short passwords", async () => {
+    const user = userEvent.setup();
+
+    renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
+
+    await user.type(screen.getByLabelText("Password"), "short");
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Password must be at least 8 characters",
+    );
+    expect(
+      screen.getByRole("button", { name: "Create Account" }),
+    ).toBeDisabled();
+  });
+
+  it("shows an API error message when provided", () => {
+    renderWithRouter(
+      <RegisterForm
+        onSubmit={vi.fn()}
+        error="An account with this email already exists."
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "An account with this email already exists.",
+    );
+  });
 });

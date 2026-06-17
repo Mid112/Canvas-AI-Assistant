@@ -16,11 +16,38 @@ class AuthApiError extends Error {
   }
 }
 
+type ValidationErrorItem = {
+  loc?: (string | number)[];
+  msg?: string;
+};
+
+function formatValidationErrors(errors: ValidationErrorItem[]): string {
+  for (const error of errors) {
+    const field = error.loc?.find((part) => part !== "body");
+    if (field === "email") {
+      return "Enter a valid email address.";
+    }
+    if (field === "password") {
+      return "Please enter a valid password.";
+    }
+    if (error.msg) {
+      return error.msg;
+    }
+  }
+
+  return "Please check your information and try again.";
+}
+
 async function parseError(response: Response): Promise<string> {
   try {
-    const data = (await response.json()) as { detail?: string };
+    const data = (await response.json()) as {
+      detail?: string | ValidationErrorItem[];
+    };
     if (typeof data.detail === "string") {
       return data.detail;
+    }
+    if (Array.isArray(data.detail) && data.detail.length > 0) {
+      return formatValidationErrors(data.detail);
     }
   } catch {
     // Fall through to default message.

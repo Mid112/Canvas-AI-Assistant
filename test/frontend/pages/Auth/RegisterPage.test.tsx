@@ -1,9 +1,10 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import { RegisterPage } from "@/pages/Auth/RegisterPage";
 import { paths } from "@/routes/paths";
+import { AuthApiError } from "@/services/auth";
 import { renderWithRouter } from "../../utils/renderWithRouter";
 
 const mockNavigate = vi.fn();
@@ -37,6 +38,11 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 describe("RegisterPage", () => {
+  beforeEach(() => {
+    mockNavigate.mockReset();
+    mockRegister.mockReset();
+  });
+
   it("renders all register sections", () => {
     renderWithRouter(<RegisterPage />);
 
@@ -90,5 +96,33 @@ describe("RegisterPage", () => {
       password: "secret123",
     });
     expect(mockNavigate).toHaveBeenCalledWith(paths.canvasInfo);
+  });
+
+  it("shows an error when registration fails with a duplicate email", async () => {
+    const user = userEvent.setup();
+    mockRegister.mockRejectedValue(
+      new AuthApiError("Email already registered", 400),
+    );
+
+    renderWithRouter(<RegisterPage />);
+
+    await user.type(screen.getByLabelText("Full Name"), "Dr. Jane Smith");
+    await user.type(
+      screen.getByLabelText("Email Address"),
+      "professor@university.edu",
+    );
+    await user.type(screen.getByLabelText("Password"), "secret123");
+    await user.type(screen.getByLabelText("Confirm Password"), "secret123");
+    await user.click(
+      screen.getByLabelText(
+        "I agree to the Terms of Service and Privacy Policy",
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "Create Account" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "An account with this email already exists.",
+    );
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });

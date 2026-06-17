@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { paths } from "@/routes/paths";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { isValidEmail } from "@/lib/validation";
 
 interface LoginFormProps {
   onSubmit: (credentials: { email: string; password: string }) => void | Promise<void>;
@@ -20,7 +21,9 @@ export function LoginForm({
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const isFormComplete = email.trim() !== "" && password !== "";
+  const trimmedEmail = email.trim();
+  const showEmailError = trimmedEmail !== "" && !isValidEmail(trimmedEmail);
+  const isFormComplete = isValidEmail(trimmedEmail) && password !== "";
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -28,7 +31,7 @@ export function LoginForm({
       return;
     }
 
-    await onSubmit({ email: email.trim(), password });
+    await onSubmit({ email: trimmedEmail, password });
   };
 
   return (
@@ -46,9 +49,16 @@ export function LoginForm({
           placeholder="professor@university.edu"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          aria-invalid={showEmailError}
           className="h-11 rounded-lg border-[#e2e8f0] bg-white px-3.5 text-[#1e293b] shadow-none placeholder:text-[#94a3b8]"
         />
       </div>
+
+      {showEmailError && (
+        <p className="text-sm text-[#dc2626]" role="alert">
+          Enter a valid email address
+        </p>
+      )}
 
       <div className="space-y-2">
         <label

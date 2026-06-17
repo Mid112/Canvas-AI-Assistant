@@ -1,9 +1,10 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import { LoginPage } from "@/pages/Auth/LoginPage";
 import { paths } from "@/routes/paths";
+import { AuthApiError } from "@/services/auth";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 const mockNavigate = vi.fn();
@@ -37,6 +38,11 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 describe("LoginPage", () => {
+  beforeEach(() => {
+    mockNavigate.mockReset();
+    mockLogin.mockReset();
+  });
+
   it("renders all login sections", () => {
     renderWithRouter(<LoginPage />);
 
@@ -80,5 +86,47 @@ describe("LoginPage", () => {
       password: "secret123",
     });
     expect(mockNavigate).toHaveBeenCalledWith(paths.canvasInfo);
+  });
+
+  it("shows an error when sign in fails with invalid credentials", async () => {
+    const user = userEvent.setup();
+    mockLogin.mockRejectedValue(
+      new AuthApiError("Invalid credentials", 401),
+    );
+
+    renderWithRouter(<LoginPage />);
+
+    await user.type(
+      screen.getByLabelText("Email Address"),
+      "professor@university.edu",
+    );
+    await user.type(screen.getByLabelText("Password"), "wrongpassword");
+    await user.click(screen.getByRole("button", { name: "Sign In" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Invalid email or password.",
+    );
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it("shows an error when the account is disabled", async () => {
+    const user = userEvent.setup();
+    mockLogin.mockRejectedValue(
+      new AuthApiError("Account is disabled", 403),
+    );
+
+    renderWithRouter(<LoginPage />);
+
+    await user.type(
+      screen.getByLabelText("Email Address"),
+      "professor@university.edu",
+    );
+    await user.type(screen.getByLabelText("Password"), "secret123");
+    await user.click(screen.getByRole("button", { name: "Sign In" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Account is disabled. Please contact support.",
+    );
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });
