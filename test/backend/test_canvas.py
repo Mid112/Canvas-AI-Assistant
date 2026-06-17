@@ -73,9 +73,9 @@ def test_list_submissions(client, auth_headers):
 def test_list_courses_invalid_canvas_token(client, auth_headers):
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
         mock.side_effect = HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Canvas API token")
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Invalid Canvas API token")
         response = client.get("/api/v1/canvas/courses", headers=auth_headers)
-    assert response.status_code == 401
+    assert response.status_code == 422
 
 
 def test_list_courses_no_canvas_token(client):
