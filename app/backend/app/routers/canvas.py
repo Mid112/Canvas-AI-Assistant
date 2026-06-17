@@ -9,14 +9,14 @@ router = APIRouter(prefix="/canvas", tags=["canvas"])
 
 @router.get("/courses", response_model=list[CourseResponse])
 async def list_courses(current_user: User = Depends(get_current_user)):
-    return await get_courses()
+    return await get_courses(current_user)
 
 
 @router.get("/courses/{course_id}/assignments", response_model=list[AssignmentResponse])
 async def list_assignments(course_id: int, current_user: User = Depends(get_current_user)):
-    return await get_assignments(course_id)
+    return await get_assignments(course_id, current_user)
 
 
 @router.get("/courses/{course_id}/assignments/{assignment_id}/submissions", response_model=list[SubmissionResponse])
 async def list_submissions(course_id: int, assignment_id: int, current_user: User = Depends(get_current_user)):
-    return await get_submissions(course_id, assignment_id)
+    return await get_submissions(course_id, assignment_id, current_user)

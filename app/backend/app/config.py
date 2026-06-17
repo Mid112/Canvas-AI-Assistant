@@ -38,6 +38,17 @@ class Settings(BaseSettings):
     # Canvas API
     CANVAS_API_URL: str = "https://canvas.ubc.ca/api/v1"
     CANVAS_API_TOKEN: str = ""
+    CANVAS_TOKEN_ENCRYPTION_KEY: str = ""
+
+    @field_validator("CANVAS_TOKEN_ENCRYPTION_KEY", mode="before")
+    @classmethod
+    def _validate_encryption_key(cls, v: str) -> str:
+        if not v:
+            raise ValueError(
+                "CANVAS_TOKEN_ENCRYPTION_KEY must be set. "
+                "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            )
+        return v
 
 
 @lru_cache

@@ -1,7 +1,8 @@
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.core.security import create_access_token, hash_password, verify_password
+from app.core.security import create_access_token, encrypt_canvas_token, hash_password, verify_password
+from app.integrations.canvas import validate_token
 from app.models.user import User
 from app.schemas.auth import RegisterRequest, TokenResponse
 
@@ -51,3 +52,11 @@ async def login_user(
         )
 
     return TokenResponse(access_token=create_access_token(user.id))
+
+
+async def update_canvas_token(db: AsyncSession, user: User, canvas_token: str) -> User:
+    await validate_token(canvas_token)
+    user.canvas_token = encrypt_canvas_token(canvas_token)
+    await db.commit()
+    await db.refresh(user)
+    return user
