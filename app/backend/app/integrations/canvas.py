@@ -9,7 +9,7 @@ def _headers(token: str) -> dict:
 
 def _raise_for_canvas_error(response: httpx.Response) -> None:
     if response.status_code == 401:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Canvas API token")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid Canvas API token")
     if response.status_code == 404:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Canvas resource not found")
     if response.is_error:

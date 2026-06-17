@@ -1,5 +1,5 @@
 from typing import Any
-from pydantic import BaseModel, EmailStr, model_validator
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 
 class RegisterRequest(BaseModel):
@@ -19,7 +19,7 @@ class TokenResponse(BaseModel):
 
 
 class CanvasTokenRequest(BaseModel):
-    canvas_token: str
+    canvas_token: str = Field(min_length=1)
 
 
 class UserResponse(BaseModel):

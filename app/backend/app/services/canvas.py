@@ -9,7 +9,7 @@ def _require_canvas_token(user: User) -> str:
     if not user.canvas_token:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Canvas token not set. POST to /api/v1/auth/me/canvas-token first.",
+            detail="Canvas token not set. PATCH to /api/v1/auth/me/canvas-token first.",
         )
     return decrypt_canvas_token(user.canvas_token)
 
