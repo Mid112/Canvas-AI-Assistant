@@ -35,7 +35,11 @@ def auth_headers(client):
     token = response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
-        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "test-canvas-token"}, headers=headers)
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-canvas-token", "canvas_url": "https://canvas.ubc.ca/api/v1"},
+            headers=headers,
+        )
     return headers
 
 
@@ -76,6 +80,25 @@ def test_list_courses_invalid_canvas_token(client, auth_headers):
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Invalid Canvas API token")
         response = client.get("/api/v1/canvas/courses", headers=auth_headers)
     assert response.status_code == 422
+
+
+def test_list_courses_selects_correct_school(client):
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Multi User"})
+    token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "ubc-token", "canvas_url": "https://canvas.ubc.ca/api/v1"}, headers=headers)
+        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "sfu-token", "canvas_url": "https://canvas.sfu.ca/api/v1"}, headers=headers)
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = MOCK_COURSES
+        response = client.get("/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca/api/v1", headers=headers)
+    assert response.status_code == 200
+
+    response = client.get("/api/v1/canvas/courses?canvas_url=https://canvas.other.ca/api/v1", headers=headers)
+    assert response.status_code == 403
 
 
 def test_list_courses_no_canvas_token(client):
