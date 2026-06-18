@@ -1,18 +1,30 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { useAuth } from "@/contexts/AuthContext";
 import { getStoredToken } from "@/lib/auth-storage";
+import { markOnboardingComplete } from "@/lib/onboarding-storage";
 import { ConnectCanvasForm } from "@/pages/Auth/ConnectCanvas/ConnectCanvasForm";
 import { ConnectCanvasHeader } from "@/pages/Auth/ConnectCanvas/ConnectCanvasHeader";
 import { ConnectCanvasHelp } from "@/pages/Auth/ConnectCanvas/ConnectCanvasHelp";
 import { OnboardingProgress } from "@/pages/Auth/Onboarding/OnboardingProgress";
 import { paths } from "@/routes/paths";
-import { CanvasApiError, updateCanvasToken } from "@/services/canvas";
+import { CanvasApiError, updateCanvasTokens } from "@/services/canvas";
+import { getAssistantPath } from "@/utils/navigation";
 
 export function ConnectCanvasPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const finishWithoutCanvas = () => {
+    if (user) {
+      markOnboardingComplete(user.id);
+    }
+
+    navigate(getAssistantPath(user?.role ?? "instructor"));
+  };
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-[#e8eef4]">
@@ -26,7 +38,8 @@ export function ConnectCanvasPage() {
           <ConnectCanvasForm
             error={error}
             isSubmitting={isSubmitting}
-            onSubmit={async ({ canvasToken }) => {
+            onSkip={finishWithoutCanvas}
+            onSubmit={async ({ canvasTokens }) => {
               setError(null);
               setIsSubmitting(true);
 
@@ -38,7 +51,7 @@ export function ConnectCanvasPage() {
               }
 
               try {
-                await updateCanvasToken(canvasToken, accessToken);
+                await updateCanvasTokens(canvasTokens, accessToken);
                 navigate(paths.reviewPermissions);
               } catch (err) {
                 if (err instanceof CanvasApiError && err.status === 401) {
@@ -46,8 +59,17 @@ export function ConnectCanvasPage() {
                   return;
                 }
 
+                if (err instanceof CanvasApiError && err.status === 404) {
+                  setError(
+                    "Canvas connection is not available yet. The backend endpoint has not been implemented.",
+                  );
+                  return;
+                }
+
                 setError(
-                  "Unable to connect Canvas. Please check your token and try again.",
+                  err instanceof CanvasApiError && err.message
+                    ? err.message
+                    : "Unable to connect Canvas. Please check your token and try again.",
                 );
               } finally {
                 setIsSubmitting(false);

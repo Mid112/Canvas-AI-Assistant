@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { AuthApiError, useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { getRegisterErrorMessage } from "@/lib/auth-errors";
 import { RegisterFooter } from "@/pages/Auth/Register/RegisterFooter";
 import { RegisterForm } from "@/pages/Auth/Register/RegisterForm";
 import { RegisterHeader } from "@/pages/Auth/Register/RegisterHeader";
@@ -34,11 +35,7 @@ export function RegisterPage() {
               await register(credentials);
               navigate(paths.canvasInfo);
             } catch (err) {
-              if (err instanceof AuthApiError && err.status === 400) {
-                setError("An account with this email already exists.");
-              } else {
-                setError("Unable to create account. Please try again.");
-              }
+              setError(getRegisterErrorMessage(err));
             } finally {
               setIsSubmitting(false);
             }

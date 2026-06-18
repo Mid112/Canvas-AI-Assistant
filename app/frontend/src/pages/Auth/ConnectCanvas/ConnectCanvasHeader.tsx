@@ -7,10 +7,11 @@ export function ConnectCanvasHeader() {
         <KeyRound className="size-7" aria-hidden="true" />
       </div>
       <h1 className="text-2xl font-bold tracking-tight text-[#1e293b]">
-        Enter Your Canvas API Token
+        Connect Your Canvas Account
       </h1>
       <p className="mt-3 text-sm leading-relaxed text-[#64748b]">
-        Paste the access token from your Canvas account to connect your courses
+        Add one or more Canvas tokens to connect institution workflows, or skip
+        to use the query assistant only.
       </p>
     </div>
   );

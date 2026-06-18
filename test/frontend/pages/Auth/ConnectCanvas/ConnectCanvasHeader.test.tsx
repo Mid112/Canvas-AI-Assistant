@@ -9,11 +9,11 @@ describe("ConnectCanvasHeader", () => {
     renderWithRouter(<ConnectCanvasHeader />);
 
     expect(
-      screen.getByRole("heading", { name: "Enter Your Canvas API Token" }),
+      screen.getByRole("heading", { name: "Connect Your Canvas Account" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Paste the access token from your Canvas account to connect your courses",
+        "Add one or more Canvas tokens to connect institution workflows, or skip to use the query assistant only.",
       ),
     ).toBeInTheDocument();
   });
