@@ -25,7 +25,7 @@ async def validate_token(token: str, canvas_url: str = settings.CANVAS_API_URL) 
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.get(
-                f"{canvas_url}/users/self",
+                f"{canvas_url}/api/v1/users/self",
                 headers=_headers(token),
             )
     except httpx.TimeoutException:
@@ -39,7 +39,7 @@ async def fetch_courses(token: str, canvas_url: str = settings.CANVAS_API_URL) -
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.get(
-                f"{canvas_url}/courses",
+                f"{canvas_url}/api/v1/courses",
                 headers=_headers(token),
                 params={"state[]": ["available", "unpublished", "completed"]},
             )
@@ -55,7 +55,7 @@ async def fetch_assignments(course_id: int, token: str, canvas_url: str = settin
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.get(
-                f"{canvas_url}/courses/{course_id}/assignments",
+                f"{canvas_url}/api/v1/courses/{course_id}/assignments",
                 headers=_headers(token),
             )
     except httpx.TimeoutException:
@@ -70,7 +70,7 @@ async def fetch_submissions(course_id: int, assignment_id: int, token: str, canv
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.get(
-                f"{canvas_url}/courses/{course_id}/assignments/{assignment_id}/submissions",
+                f"{canvas_url}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions",
                 headers=_headers(token),
             )
     except httpx.TimeoutException:

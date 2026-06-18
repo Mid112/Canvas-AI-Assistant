@@ -114,14 +114,14 @@ def test_set_canvas_token_second_school(client):
     headers = {"Authorization": f"Bearer {token}"}
 
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
-        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "token-ubc", "canvas_url": "https://canvas.ubc.ca/api/v1"}, headers=headers)
-        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "token-sfu", "canvas_url": "https://canvas.sfu.ca/api/v1"}, headers=headers)
+        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "token-ubc", "canvas_url": "https://canvas.ubc.ca"}, headers=headers)
+        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "token-sfu", "canvas_url": "https://canvas.sfu.ca"}, headers=headers)
 
     me = client.get("/api/v1/auth/me", headers=headers).json()
     assert me["has_canvas_token"] is True
     assert len(me["canvas_connections"]) == 2
     urls = {c["canvas_url"] for c in me["canvas_connections"]}
-    assert urls == {"https://canvas.ubc.ca/api/v1", "https://canvas.sfu.ca/api/v1"}
+    assert urls == {"https://canvas.ubc.ca", "https://canvas.sfu.ca"}
 
 
 def test_set_canvas_token_upsert_same_school(client):

@@ -36,7 +36,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # Canvas API
-    CANVAS_API_URL: str = "https://canvas.ubc.ca/api/v1"
+    # base domain only — /api/v1 is appended by the integration layer
+    CANVAS_API_URL: str = "https://canvas.ubc.ca"
     CANVAS_API_TOKEN: str = ""
     CANVAS_TOKEN_ENCRYPTION_KEY: str = ""
 

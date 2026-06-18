@@ -37,7 +37,7 @@ def auth_headers(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-canvas-token", "canvas_url": "https://canvas.ubc.ca/api/v1"},
+            json={"canvas_token": "test-canvas-token", "canvas_url": "https://canvas.ubc.ca"},
             headers=headers,
         )
     return headers
@@ -89,15 +89,15 @@ def test_list_courses_selects_correct_school(client):
     headers = {"Authorization": f"Bearer {token}"}
 
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
-        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "ubc-token", "canvas_url": "https://canvas.ubc.ca/api/v1"}, headers=headers)
-        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "sfu-token", "canvas_url": "https://canvas.sfu.ca/api/v1"}, headers=headers)
+        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "ubc-token", "canvas_url": "https://canvas.ubc.ca"}, headers=headers)
+        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "sfu-token", "canvas_url": "https://canvas.sfu.ca"}, headers=headers)
 
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
         mock.return_value = MOCK_COURSES
-        response = client.get("/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca/api/v1", headers=headers)
+        response = client.get("/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca", headers=headers)
     assert response.status_code == 200
 
-    response = client.get("/api/v1/canvas/courses?canvas_url=https://canvas.other.ca/api/v1", headers=headers)
+    response = client.get("/api/v1/canvas/courses?canvas_url=https://canvas.other.ca", headers=headers)
     assert response.status_code == 403
 
 
