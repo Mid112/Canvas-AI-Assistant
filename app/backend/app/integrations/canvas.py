@@ -8,6 +8,8 @@ def _headers(token: str) -> dict:
 
 
 def _raise_for_canvas_error(response: httpx.Response) -> None:
+    # Canvas returns 401 when the token is wrong — we re-map to 422 so our client
+    # doesn't confuse it with our own auth (which uses 401 for expired JWT)
     if response.status_code == 401:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Invalid Canvas API token")
     if response.status_code == 404:
@@ -19,11 +21,11 @@ def _raise_for_canvas_error(response: httpx.Response) -> None:
 _TIMEOUT = httpx.Timeout(10.0)
 
 
-async def validate_token(token: str) -> None:
+async def validate_token(token: str, canvas_url: str = settings.CANVAS_API_URL) -> None:
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.get(
-                f"{settings.CANVAS_API_URL}/users/self",
+                f"{canvas_url}/users/self",
                 headers=_headers(token),
             )
     except httpx.TimeoutException:
@@ -33,11 +35,11 @@ async def validate_token(token: str) -> None:
     _raise_for_canvas_error(response)
 
 
-async def fetch_courses(token: str) -> list[dict]:
+async def fetch_courses(token: str, canvas_url: str = settings.CANVAS_API_URL) -> list[dict]:
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.get(
-                f"{settings.CANVAS_API_URL}/courses",
+                f"{canvas_url}/courses",
                 headers=_headers(token),
                 params={"state[]": ["available", "unpublished", "completed"]},
             )
@@ -49,11 +51,11 @@ async def fetch_courses(token: str) -> list[dict]:
     return response.json()
 
 
-async def fetch_assignments(course_id: int, token: str) -> list[dict]:
+async def fetch_assignments(course_id: int, token: str, canvas_url: str = settings.CANVAS_API_URL) -> list[dict]:
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.get(
-                f"{settings.CANVAS_API_URL}/courses/{course_id}/assignments",
+                f"{canvas_url}/courses/{course_id}/assignments",
                 headers=_headers(token),
             )
     except httpx.TimeoutException:
@@ -64,11 +66,11 @@ async def fetch_assignments(course_id: int, token: str) -> list[dict]:
     return response.json()
 
 
-async def fetch_submissions(course_id: int, assignment_id: int, token: str) -> list[dict]:
+async def fetch_submissions(course_id: int, assignment_id: int, token: str, canvas_url: str = settings.CANVAS_API_URL) -> list[dict]:
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.get(
-                f"{settings.CANVAS_API_URL}/courses/{course_id}/assignments/{assignment_id}/submissions",
+                f"{canvas_url}/courses/{course_id}/assignments/{assignment_id}/submissions",
                 headers=_headers(token),
             )
     except httpx.TimeoutException:

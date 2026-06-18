@@ -1,5 +1,6 @@
-from typing import Any
-from pydantic import BaseModel, EmailStr, Field, model_validator
+from datetime import datetime
+from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator
+from app.config import settings
 
 
 class RegisterRequest(BaseModel):
@@ -20,6 +21,27 @@ class TokenResponse(BaseModel):
 
 class CanvasTokenRequest(BaseModel):
     canvas_token: str = Field(min_length=1)
+    # lambda so it reads from settings at request time, not at import time
+    canvas_url: str = Field(default_factory=lambda: settings.CANVAS_API_URL)
+
+    @field_validator("canvas_url", mode="before")
+    @classmethod
+    def _normalize_url(cls, v: str) -> str:
+        # strip trailing slash so "https://canvas.ubc.ca/api/v1/" and ".../api/v1" are the same key
+        v = str(v).rstrip("/")
+        # block non-https to prevent SSRF — backend would otherwise call arbitrary internal hosts
+        if not v.startswith("https://"):
+            raise ValueError("canvas_url must be an https:// URL")
+        return v
+
+
+# encrypted_token is intentionally excluded — never expose it in API responses
+class CanvasConnectionResponse(BaseModel):
+    id: int
+    canvas_url: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class UserResponse(BaseModel):
@@ -28,20 +50,12 @@ class UserResponse(BaseModel):
     email: str
     role: str
     is_active: bool
-    has_canvas_token: bool
+    canvas_connections: list[CanvasConnectionResponse] = []
 
     model_config = {"from_attributes": True}
 
-    @model_validator(mode="before")
-    @classmethod
-    def _compute_has_canvas_token(cls, data: Any) -> Any:
-        if hasattr(data, "canvas_token"):
-            return {
-                "id": data.id,
-                "email": data.email,
-                "name": data.name,
-                "role": data.role,
-                "is_active": data.is_active,
-                "has_canvas_token": data.canvas_token is not None,
-            }
-        return data
+    # computed_field is needed so Pydantic includes this property in the serialized response
+    @computed_field
+    @property
+    def has_canvas_token(self) -> bool:
+        return len(self.canvas_connections) > 0
