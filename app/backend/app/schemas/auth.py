@@ -27,7 +27,7 @@ class CanvasTokenRequest(BaseModel):
     @field_validator("canvas_url", mode="before")
     @classmethod
     def _normalize_url(cls, v: str) -> str:
-        # strip trailing slash so "https://canvas.ubc.ca/api/v1/" and ".../api/v1" are the same key
+        # strip trailing slash so "https://canvas.ubc.ca/" and "https://canvas.ubc.ca" are the same key
         v = str(v).rstrip("/")
         # block non-https to prevent SSRF — backend would otherwise call arbitrary internal hosts
         if not v.startswith("https://"):
