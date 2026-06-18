@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.canvas_connection import CanvasConnection
     from app.models.course import Course
     from app.models.conversation import Conversation
     from app.models.workflow import Workflow
@@ -28,10 +29,6 @@ class User(Base):
     # instructor / ta / admin — enforced by CHECK in SQL schema
     role: Mapped[str] = mapped_column(String, nullable=False, default="instructor")
 
-    # Encrypted Canvas API token stored per user
-    canvas_token: Mapped[str | None] = mapped_column(Text, nullable=True)
-    canvas_url: Mapped[str | None] = mapped_column(String, nullable=True)
-
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -39,6 +36,9 @@ class User(Base):
     )
 
     # Relationships
+    canvas_connections: Mapped[list["CanvasConnection"]] = relationship(
+        "CanvasConnection", back_populates="user", cascade="all, delete-orphan"
+    )
     sessions: Mapped[list["Session"]] = relationship(
         "Session", back_populates="user", cascade="all, delete-orphan"
     )
