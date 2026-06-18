@@ -27,10 +27,60 @@ We had a 2-hour team meeting on Friday June 12th to kick off Cycle 8, reviewing 
 | 140 | Intent Detection | Yerdana | In Progress |
 | 154 | Missing Submission Analysis | Mridul | In Progress |
 
-## Tasks for Next Cycle:
+## Tasks for Next 2 weeks:
+### Backend:
 | Task ID | Description                                      | Assigned To | Status      |
 |---------|--------------------------------------------------|-------------|-------------|
-| | | | |
+| 63 | LLM Foundation | Yerdana | In progress |
+| 516 | Authentication API | Yerdana | In progress |
+| 517 | Admin API | Yerdana | In progress |
+| 518 | Role-based access control | Yerdana | Not started |
+| 519 | Instructor Account Management Service | Yerdana | Not started |
+| 520 | Canvas Token Management Service | Yerdana | Not started |
+| 532 | Action history service | Yerdana | Not started |
+| 533 | Safe error handling | Yerdana | Not started |
+| 521 | Course Retrieval Service | Bao | Not started |
+| 522 | Student Retrieval Service | Bao | Not started |
+| 523 | Assignment Retrieval Service | Bao | Not started |
+| 524 | Submission Retrieval Service | Bao | Not started |
+| 525 | Missing submission analysis | Bao | Not started |
+| 526 | Late submission analysis | Bao | Not started |
+| 527 | Natural language assistant service | Bao | Not started |
+| 528 | Assignment creation service | Bao | Not started |
+| 529 | Assignment update service | Bao | Not started |
+| 530 | Student messaging service | Bao | Not started |
+| 531 | Preview & confirmation service | Bao | Not started |
+### Integration:
+| Task ID | Description                                      | Assigned To | Status      |
+|---------|--------------------------------------------------|-------------|-------------|
+| 628 | Frontend & backend authentication | Mridul | Not started |
+| 629 | Admin authentication integration | Mridul | Not started |
+| 630 | Instructor account management integration | Mridul | Not started |
+| 631 | Canvas integration | Mridul | Not started |
+| 632 | Dashboard integration | Mridul | Not started |
+| 633 | Assistant workflow integration | Mridul | Not started |
+| 634 | Assignment workflow integration | Mridul | Not started |
+| 635 | Messaging workflow integration | Mridul | Not started |
+| 636 | Action history integration | Mridul | Not started |
+| 636 | Action history integration | Mridul | Not started |
+### Frontend:
+| Task ID | Description                                      | Assigned To | Status      |
+|---------|--------------------------------------------------|-------------|-------------|
+| 87 | Authentication UI | Jessica & Rhythm | Not started |
+| 399 | Course dashboard | Rhythm | Not started |
+| 406 | Student & Assignment views | Rhythm | Not started |
+| 407 | Natural langugage assistant UI | Jessica | Not started |
+| 408 | Missing submission dashboard | Rhythm | Not started |
+| 409 | Late submission dashboard | Rhythm | Not started |
+| 410 | Assignment creation UI | Jessica | Not started |
+| 411 | Assignment update UI | Jessica | Not started |
+| 412 | Student message draft UI | Jessica | Not started |
+| 413 | Action history UI | Rhythm | Not started |
+| 414 | Dry run preview UI | Jessica | Not started |
+| 419 | Course access UI | Rhythm | Not started |
+| 420 | Canvas token setup UI | Jessica | Not started |
+| 498 | Administrator login UI | Jessica | Not started |
+| 499 | Instructor account management UI | Jessica | Not started |
 
 ## Burn-up Chart (Velocity):
 <img width="701" height="405" alt="Screenshot 2026-06-15 205334" src="https://github.com/user-attachments/assets/58d40d59-4010-4013-9678-7a0d01d90d35" />
