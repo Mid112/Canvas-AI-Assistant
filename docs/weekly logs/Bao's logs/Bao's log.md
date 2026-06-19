@@ -403,3 +403,53 @@ Total: ~8h 9m
 - Add more constraints to account registration: enforce password strength, validate email format more strictly, prevent duplicate registrations with clearer error messages
 - Implement admin role: admin users can promote/demote instructor role for other accounts; protect instructor-only endpoints with role checks
 - Expand Canvas API response fields to match the database schema — courses, assignments, and submissions should capture all fields defined in the DB design (e.g., canvas_course_id, canvas_user_id, enrollment state)
+
+---
+
+# Cycle 9 Report: June 16 – June 18
+
+## Timesheet
+
+### Clockify Report
+
+- 16/6 (Tuesday): Meeting with the team – 0h 53m
+- 17/6 (Wednesday): Meeting for coding – 3h 6m
+- 17/6 (Wednesday): Canvas token management endpoints fix – 1h 35m
+- 18/6 (Thursday): Backend token and PR reviews – 1h 35m
+
+Total: 7h 10m
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting (Tuesday, 16/6)
+- Met with the team to discuss progress and align on priorities for the cycle
+
+### 2: Meeting for Coding (Wednesday, 17/6)
+- Collaborated with the team on coding direction and implementation decisions for the current sprint
+
+### 3: Canvas Token Management Endpoints Fix (Wednesday, 17/6)
+- Debugged and fixed issues with the Canvas token management endpoints
+- Ensured token storage, validation, and retrieval work correctly end-to-end
+
+### 4: Backend Token and PR Reviews (Thursday, 18/6)
+- Continued backend token work and refinements
+- Reviewed teammates' PRs and provided feedback
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle focused on stabilizing the Canvas token management layer and keeping the backend aligned with the frontend integration work happening in parallel. The team meetings helped coordinate cross-team dependencies ahead of the MVP demo phase.
+
+### Retrospective:
+- The Canvas token endpoint fixes took longer than expected due to edge cases in validation and encryption. Closer alignment with the frontend team early in the cycle would have reduced back-and-forth. PR reviews were productive and helped catch integration gaps before they reached main.
+
+---
+
+## Next Cycle Goals
+- Add more constraints to account registration: enforce password strength, validate email format more strictly, prevent duplicate registrations with clearer error messages
+- Implement admin role: admin users can promote/demote instructor role for other accounts; protect instructor-only endpoints with role checks
+- Expand Canvas API response fields to match the database schema — courses, assignments, and submissions should capture all fields defined in the DB design (e.g., canvas_course_id, canvas_user_id, enrollment state)
