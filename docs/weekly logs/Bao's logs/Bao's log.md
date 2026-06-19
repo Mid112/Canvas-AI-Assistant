@@ -425,17 +425,19 @@ Total: 7h 10m
 
 ### 1: Team Meeting (Tuesday, 16/6)
 - Met with the team to discuss progress and align on priorities for the cycle
+<img width="1118" height="38" alt="Screenshot 2026-06-19 113711" src="https://github.com/user-attachments/assets/857c9781-dea7-4be1-bc26-b05c0dc4201d" />
 
-### 2: Meeting for Coding (Wednesday, 17/6)
+### 2: Meeting for Coding (Wednesday, 17/6) + Canvas Token Management Endpoints Fix (Wednesday, 17/6)
 - Collaborated with the team on coding direction and implementation decisions for the current sprint
-
-### 3: Canvas Token Management Endpoints Fix (Wednesday, 17/6)
 - Debugged and fixed issues with the Canvas token management endpoints
 - Ensured token storage, validation, and retrieval work correctly end-to-end
+<img width="1121" height="74" alt="Screenshot 2026-06-19 113715" src="https://github.com/user-attachments/assets/e89d8ba4-3e4a-4fab-b775-b20c8965e53c" />
 
 ### 4: Backend Token and PR Reviews (Thursday, 18/6)
 - Continued backend token work and refinements
 - Reviewed teammates' PRs and provided feedback
+<img width="1120" height="41" alt="Screenshot 2026-06-19 113719" src="https://github.com/user-attachments/assets/1c7fee70-6428-45f6-84fb-028a22655087" />
+
 
 ---
 
