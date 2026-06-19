@@ -263,3 +263,37 @@ Managing team pull requests proved to be an essential exercise in maintaining ve
 * Implement the architectural decisions discussed this cycle, including refactoring the UI/routing to account for the removal of the TA role.
 * Address feedback identified during the live demo.
 * Implement admin role
+
+# **Cycle 9: Tuesday (06/16) ~ Thursday (06/18)**
+
+**Timesheet**
+
+**Clockify Report**
+
+**06/16 (Tuesday):** 01:30:00
+<img width="1339" height="110" alt="Untitled" src="https://github.com/user-attachments/assets/cbbad35a-cbe0-4060-a877-bdbb6d50a317" />
+
+**06/17 (Wednesday):** 03:07:35
+<img width="1338" height="109" alt="Untitled 2" src="https://github.com/user-attachments/assets/7ddb6725-e8f1-47de-a14c-bf350c0fca54" />
+
+
+**Current Tasks (Provide sufficient detail)**
+
+* **#1: MVP Milestone Planning & Team Meetings:** Participated in strategic team meetings to map out the technical requirements and deliverables for the upcoming Minimum Viable Product (MVP) milestone. We discussed feature scoping, timeline prioritization, and exactly which core workflows need to be fully functional to demonstrate the application's primary value.
+
+* **#2: Canvas Connect Page Development & Refactoring:** Continued developing and refactoring the Canvas Connector page. Streamlined the UI to cleanly guide the Instructor through the integration process for linking their Canvas account, ensuring the component structure strictly adheres to requirements.
+
+* **#3: Course Management UI Development:** Began active development on the new Course Management frontend page for the Instructor Dashboard. Drafted the initial layout and modular components required to display and access courses and course analytics overview.
+
+**Cycle Goal Review**
+
+* **Reflection:** This cycle required a strong balance between high-level project management for the MVP and focused frontend coding. Wrapping up the Canvas Connect page is a significant technical step, as it represents the critical gateway between our application's AI workflows and the user's actual Canvas environment. 
+
+* **Retrospective:** Translating the immediate outcomes of our MVP planning meetings directly into the Course Management page development helped maintain a very clear, prioritized focus. Ensuring our UI components remain highly modular during this rapid development phase and continue to keep our Pull Requests clean and manageable for the team.
+
+**Next Cycle Goals**
+
+* Complete the frontend implementation of the Course Management page and Canvas Connect Page.
+* Continue developing Instructor Dashboard pages.
+* Continue meeting with the team on Tuesday, Wednesday, and Friday.
+* Continue reviewing team PRs to maintain code quality and prevent merge conflicts leading up to the MVP deadline.
