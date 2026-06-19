@@ -102,6 +102,7 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://testuser:testpass@localhost:5432/testdb
           ENVIRONMENT: test
           SECRET_KEY: ci-test-secret
+          CANVAS_TOKEN_ENCRYPTION_KEY: cS_xtOdvX6UctctAErcx3JJC1e3YBBM-Kwh9WLY3ocI=
 
   # ── 3. Frontend lint + test ───────────────
   frontend-test:
