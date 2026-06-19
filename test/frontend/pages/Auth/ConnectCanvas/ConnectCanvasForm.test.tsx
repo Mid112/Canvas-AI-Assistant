@@ -1,28 +1,27 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 import { ConnectCanvasForm } from "@/pages/Auth/ConnectCanvas/ConnectCanvasForm";
-import { getStoredToken } from "@/lib/auth-storage";
 import { validateCanvasToken } from "@/services/canvas";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
-
-vi.mock("@/lib/auth-storage", () => ({
-  getStoredToken: vi.fn(),
-}));
 
 vi.mock("@/services/canvas", () => ({
   validateCanvasToken: vi.fn(),
 }));
 
-const mockedGetStoredToken = vi.mocked(getStoredToken);
 const mockedValidateCanvasToken = vi.mocked(validateCanvasToken);
+
+const defaultProps = {
+  accessToken: "access-token",
+  onSubmit: vi.fn(),
+  onSkip: vi.fn(),
+};
 
 describe("ConnectCanvasForm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    mockedGetStoredToken.mockReturnValue("access-token");
     mockedValidateCanvasToken.mockResolvedValue("valid");
   });
 
@@ -31,9 +30,7 @@ describe("ConnectCanvasForm", () => {
   });
 
   it("renders the token field, add button, and actions", () => {
-    renderWithRouter(
-      <ConnectCanvasForm onSubmit={vi.fn()} onSkip={vi.fn()} />,
-    );
+    renderWithRouter(<ConnectCanvasForm {...defaultProps} />);
 
     expect(screen.getByLabelText(/Canvas API Token/i)).toBeInTheDocument();
     expect(
@@ -49,9 +46,7 @@ describe("ConnectCanvasForm", () => {
 
   it("disables connect until a token is validated", async () => {
     const user = userEvent.setup();
-    renderWithRouter(
-      <ConnectCanvasForm onSubmit={vi.fn()} onSkip={vi.fn()} />,
-    );
+    renderWithRouter(<ConnectCanvasForm {...defaultProps} />);
 
     expect(
       screen.getByRole("button", { name: "Connect Canvas" }),
@@ -70,9 +65,7 @@ describe("ConnectCanvasForm", () => {
     const user = userEvent.setup();
     mockedValidateCanvasToken.mockResolvedValue("expired");
 
-    renderWithRouter(
-      <ConnectCanvasForm onSubmit={vi.fn()} onSkip={vi.fn()} />,
-    );
+    renderWithRouter(<ConnectCanvasForm {...defaultProps} />);
 
     await user.type(screen.getByLabelText(/Canvas API Token/i), "expired-token");
     await vi.advanceTimersByTimeAsync(500);
@@ -88,7 +81,7 @@ describe("ConnectCanvasForm", () => {
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
     renderWithRouter(
-      <ConnectCanvasForm onSubmit={onSubmit} onSkip={vi.fn()} />,
+      <ConnectCanvasForm {...defaultProps} onSubmit={onSubmit} />,
     );
 
     await user.type(screen.getByLabelText(/Canvas API Token/i), "  token-one  ");
@@ -114,9 +107,7 @@ describe("ConnectCanvasForm", () => {
 
   it("does not re-validate unchanged tokens when another field is edited", async () => {
     const user = userEvent.setup();
-    renderWithRouter(
-      <ConnectCanvasForm onSubmit={vi.fn()} onSkip={vi.fn()} />,
-    );
+    renderWithRouter(<ConnectCanvasForm {...defaultProps} />);
 
     await user.type(screen.getByLabelText(/Canvas API Token/i), "token-one");
     await vi.advanceTimersByTimeAsync(500);
@@ -140,11 +131,30 @@ describe("ConnectCanvasForm", () => {
     );
   });
 
+  it("calls onSessionExpired when accessToken is missing during validation", async () => {
+    const user = userEvent.setup();
+    const onSessionExpired = vi.fn();
+
+    renderWithRouter(
+      <ConnectCanvasForm
+        {...defaultProps}
+        accessToken={null}
+        onSessionExpired={onSessionExpired}
+      />,
+    );
+
+    await user.type(screen.getByLabelText(/Canvas API Token/i), "token-one");
+    await vi.advanceTimersByTimeAsync(500);
+
+    await waitFor(() => {
+      expect(onSessionExpired).toHaveBeenCalledTimes(1);
+    });
+    expect(mockedValidateCanvasToken).not.toHaveBeenCalled();
+  });
+
   it("adds and removes institution token fields", async () => {
     const user = userEvent.setup();
-    renderWithRouter(
-      <ConnectCanvasForm onSubmit={vi.fn()} onSkip={vi.fn()} />,
-    );
+    renderWithRouter(<ConnectCanvasForm {...defaultProps} />);
 
     await user.click(
       screen.getByRole("button", { name: "Add another institution" }),
@@ -168,7 +178,7 @@ describe("ConnectCanvasForm", () => {
     const onSkip = vi.fn().mockResolvedValue(undefined);
 
     renderWithRouter(
-      <ConnectCanvasForm onSubmit={vi.fn()} onSkip={onSkip} />,
+      <ConnectCanvasForm {...defaultProps} onSkip={onSkip} />,
     );
 
     await user.click(
@@ -181,9 +191,8 @@ describe("ConnectCanvasForm", () => {
   it("shows an error message when provided", () => {
     renderWithRouter(
       <ConnectCanvasForm
+        {...defaultProps}
         error="Unable to connect Canvas. Please check your token and try again."
-        onSubmit={vi.fn()}
-        onSkip={vi.fn()}
       />,
     );
 

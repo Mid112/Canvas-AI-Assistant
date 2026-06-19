@@ -3,7 +3,6 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getStoredToken } from "@/lib/auth-storage";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import {
   ConnectCanvasTokenStatus,
@@ -12,8 +11,10 @@ import {
 import { validateCanvasToken } from "@/services/canvas";
 
 interface ConnectCanvasFormProps {
+  accessToken: string | null;
   error?: string | null;
   isSubmitting?: boolean;
+  onSessionExpired?: () => void;
   onSubmit: (values: { canvasTokens: string[] }) => void | Promise<void>;
   onSkip: () => void | Promise<void>;
 }
@@ -51,8 +52,10 @@ function isTokenValidationComplete(
 }
 
 export function ConnectCanvasForm({
+  accessToken,
   error = null,
   isSubmitting = false,
+  onSessionExpired,
   onSubmit,
   onSkip,
 }: ConnectCanvasFormProps) {
@@ -63,6 +66,8 @@ export function ConnectCanvasForm({
   const debouncedTokens = useDebouncedValue(canvasTokens, VALIDATION_DEBOUNCE_MS);
   const validationRequestIds = useRef<number[]>([0]);
   const prevDebouncedTokens = useRef<string[]>([]);
+  const onSessionExpiredRef = useRef(onSessionExpired);
+  onSessionExpiredRef.current = onSessionExpired;
 
   const nonEmptyTokens = canvasTokens
     .map((token) => token.trim())
@@ -125,22 +130,13 @@ export function ConnectCanvasForm({
         ),
       );
 
+      if (!accessToken) {
+        onSessionExpiredRef.current?.();
+        return;
+      }
+
       void (async () => {
         try {
-          const accessToken = getStoredToken();
-          if (!accessToken) {
-            if (validationRequestIds.current[index] !== requestId) {
-              return;
-            }
-
-            setValidationStates((current) =>
-              current.map((state, stateIndex) =>
-                stateIndex === index ? { status: "invalid" } : state,
-              ),
-            );
-            return;
-          }
-
           const status = await validateCanvasToken(trimmedToken, accessToken);
 
           if (validationRequestIds.current[index] !== requestId) {
@@ -167,7 +163,7 @@ export function ConnectCanvasForm({
     });
 
     prevDebouncedTokens.current = debouncedTokens;
-  }, [debouncedTokens]);
+  }, [accessToken, debouncedTokens]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();

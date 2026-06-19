@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { getStoredToken } from "@/lib/auth-storage";
 import { markOnboardingComplete } from "@/lib/onboarding-storage";
 import { ConnectCanvasForm } from "@/pages/Auth/ConnectCanvas/ConnectCanvasForm";
 import { ConnectCanvasHeader } from "@/pages/Auth/ConnectCanvas/ConnectCanvasHeader";
@@ -14,7 +13,7 @@ import { getAssistantPath } from "@/utils/navigation";
 
 export function ConnectCanvasPage() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, accessToken } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -36,14 +35,15 @@ export function ConnectCanvasPage() {
             <ConnectCanvasHelp />
           </div>
           <ConnectCanvasForm
+            accessToken={accessToken}
             error={error}
             isSubmitting={isSubmitting}
+            onSessionExpired={logout}
             onSkip={finishWithoutCanvas}
             onSubmit={async ({ canvasTokens }) => {
               setError(null);
               setIsSubmitting(true);
 
-              const accessToken = getStoredToken();
               if (!accessToken) {
                 logout();
                 return;

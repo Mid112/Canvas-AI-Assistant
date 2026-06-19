@@ -4,7 +4,6 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 import { ConnectCanvasPage } from "@/pages/Auth/ConnectCanvasPage";
 import { paths } from "@/routes/paths";
-import { getStoredToken } from "@/lib/auth-storage";
 import { markOnboardingComplete } from "@/lib/onboarding-storage";
 import { updateCanvasTokens, validateCanvasToken } from "@/services/canvas";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
@@ -31,12 +30,9 @@ vi.mock("@/contexts/AuthContext", () => ({
       is_active: true,
       has_canvas_token: false,
     },
+    accessToken: "access-token",
     logout: mockLogout,
   }),
-}));
-
-vi.mock("@/lib/auth-storage", () => ({
-  getStoredToken: vi.fn(),
 }));
 
 vi.mock("@/lib/onboarding-storage", () => ({
@@ -56,7 +52,6 @@ vi.mock("@/services/canvas", () => ({
   },
 }));
 
-const mockedGetStoredToken = vi.mocked(getStoredToken);
 const mockedUpdateCanvasTokens = vi.mocked(updateCanvasTokens);
 const mockedValidateCanvasToken = vi.mocked(validateCanvasToken);
 const mockedMarkOnboardingComplete = vi.mocked(markOnboardingComplete);
@@ -65,7 +60,6 @@ describe("ConnectCanvasPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    mockedGetStoredToken.mockReturnValue("access-token");
     mockedValidateCanvasToken.mockResolvedValue("valid");
   });
 
