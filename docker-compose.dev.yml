@@ -20,6 +20,7 @@ networks:
 
 volumes:
   postgres_data:
+  canvas_data:
 
 services:
   # ─────────────────────────────────────────────
@@ -54,6 +55,14 @@ services:
       timeout: 5s
       retries: 5
 
+  canvas-docker:
+    image: lbjay/canvas-docker
+    container_name: canvas_lms
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - canvas_data:/opt/canvas-lms/tmp
   # ─────────────────────────────────────────────
   # Backend (FastAPI) — dev mode
   # ─────────────────────────────────────────────
