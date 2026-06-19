@@ -84,13 +84,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (credentials: LoginCredentials) => {
     const tokenResponse = await loginUser(credentials);
     setStoredToken(tokenResponse.access_token);
-    return loadUser(tokenResponse.access_token);
+
+    try {
+      return await loadUser(tokenResponse.access_token);
+    } catch (error) {
+      clearStoredToken();
+      setUser(null);
+      throw error;
+    }
   }, [loadUser]);
 
   const register = useCallback(async (credentials: RegisterCredentials) => {
     const tokenResponse = await registerUser(credentials);
     setStoredToken(tokenResponse.access_token);
-    return loadUser(tokenResponse.access_token);
+
+    try {
+      return await loadUser(tokenResponse.access_token);
+    } catch (error) {
+      clearStoredToken();
+      setUser(null);
+      throw error;
+    }
   }, [loadUser]);
 
   const logout = useCallback(() => {
