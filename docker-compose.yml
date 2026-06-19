@@ -1,66 +1,39 @@
 # ─────────────────────────────────────────────
-# docker-compose.yml — Production Compose File
+# docker-compose.yml
 #
-# Defines all 4 services that make up the app:
-#   1. postgres  — the database
-#   2. backend   — FastAPI Python API
-#   3. frontend  — React app served by Nginx
-#   4. nginx     — reverse proxy (routes traffic to frontend/backend)
+# Services:
+#   1. postgres    — database
+#   2. backend     — FastAPI Python API
+#   3. mcp_server  — Canvas MCP server
+#   4. frontend    — React app served by Nginx
+#   5. nginx       — reverse proxy
 #
-# Two internal networks keep services isolated:
+# Networks:
 #   frontend_net — nginx ↔ frontend ↔ backend
-#   backend_net  — backend ↔ postgres
-#
-# Postgres never touches frontend_net, so the database is
-# unreachable from the browser side entirely.
+#   backend_net  — backend ↔ postgres ↔ mcp_server
+#   ai_net       — mcp_server ↔ vLLM (internal, no external egress)
 # ─────────────────────────────────────────────
 
 services:
+
   # ─────────────────────────────────────────────
   # 1. PostgreSQL Database
   # ─────────────────────────────────────────────
   postgres:
-    # Use the official lightweight Alpine-based Postgres 16 image.
-    # Alpine images are smaller and have fewer vulnerabilities.
     image: postgres:16-alpine
-
-    # Always restart if the container crashes (but not if manually stopped).
     restart: unless-stopped
-
-    # These become environment variables inside the container.
-    # ${VAR:-default} means: use the .env value if set, otherwise
-    # fall back to the default shown after :-
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-appuser}
+      POSTGRES_USER:     ${POSTGRES_USER:-appuser}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
-      POSTGRES_DB: ${POSTGRES_DB:-appdb}
-
+      POSTGRES_DB:       ${POSTGRES_DB:-appdb}
     volumes:
-      # Named volume: persists database data between container restarts.
-      # Without this, all data is lost every time postgres restarts.
       - postgres_data:/var/lib/postgresql/data
-
-      # Mount our SQL schema file into the init directory.
-      # Postgres automatically runs any .sql files found here
-      # on first startup (only when the data volume is empty).
       - ./db/init:/docker-entrypoint-initdb.d
-
-    # Health check: docker waits for postgres to be ready before
-    # starting services that depend on it (like backend).
-    # pg_isready pings the database and returns success when it
-    # can accept connections.
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${POSTGRES_USER:-appuser} -d ${POSTGRES_DB:-appdb}",
-        ]
-      interval: 10s # check every 10 seconds
-      timeout: 5s # fail the check if no response in 5 seconds
-      retries: 5 # mark unhealthy after 5 failed checks in a row
-
-    # Only reachable by services on backend_net.
-    # The frontend and nginx cannot talk to postgres directly.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-appuser} -d ${POSTGRES_DB:-appdb}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - backend_net
 
@@ -68,16 +41,22 @@ services:
   # 2. Backend (FastAPI)
   # ─────────────────────────────────────────────
   backend:
-    # Build the image from the Dockerfile in app/backend/.
-    # Docker uses that folder as the build context, meaning only
-    # files inside app/backend/ are visible during the build.
     build:
       context: ./app/backend
       dockerfile: Dockerfile
-
     restart: unless-stopped
-
     environment:
+<<<<<<< feature/mcp-vllm-setup
+      DATABASE_URL:          postgresql+asyncpg://${POSTGRES_USER:-appuser}:${POSTGRES_PASSWORD:-localdev}@postgres:5432/${POSTGRES_DB:-appdb}
+      SECRET_KEY:            ${SECRET_KEY:-localdevsecret}
+      BACKEND_CORS_ORIGINS:  ${BACKEND_CORS_ORIGINS:-http://localhost:8888,http://localhost}
+      CANVAS_API_URL:        ${CANVAS_API_URL:-https://canvas.ubc.ca/api/v1}
+      CANVAS_API_TOKEN:      ${CANVAS_API_TOKEN:-}
+      MCP_SERVER_URL:        http://mcp_server:8001
+      # VLLM_MODE=native → vLLM running on host Mac via Metal
+      # VLLM_MODE=docker → vLLM running in container (slow, CPU only on Mac)
+      VLLM_BASE_URL:         ${VLLM_BASE_URL:-http://host.docker.internal:8000}
+=======
       # asyncpg connection string — uses "postgres" as the hostname
       # because that is the service name defined above.
       # Docker's internal DNS resolves service names to container IPs.
@@ -99,96 +78,104 @@ services:
     # Don't start backend until postgres passes its health check.
     # condition: service_healthy means it waits for pg_isready to
     # succeed, not just for the container to start.
+>>>>>>> develop
     depends_on:
       postgres:
         condition: service_healthy
-
-    # On both networks so it can:
-    # - receive requests from nginx (frontend_net)
-    # - query postgres (backend_net)
     networks:
       - frontend_net
       - backend_net
 
   # ─────────────────────────────────────────────
-  # 3. Frontend (React + Nginx)
+  # 3. MCP Server (Canvas integration + AI gateway)
+  # ─────────────────────────────────────────────
+  mcp_server:
+    build:
+      context: ./app/mcp
+      dockerfile: Dockerfile
+    container_name: app_mcp
+    restart: unless-stopped
+    environment:
+      CANVAS_API_URL:   ${CANVAS_API_URL:-http://placeholder.local}
+      CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-placeholder}
+      BACKEND_URL:      http://backend:8000
+    ports:
+      - "8001:8001"
+    depends_on:
+      - backend
+    networks:
+      - backend_net
+
+  # ─────────────────────────────────────────────
+  # 4. Frontend (React + Nginx)
   # ─────────────────────────────────────────────
   frontend:
-    # Build from app/frontend/Dockerfile.
-    # That Dockerfile has two stages:
-    #   Stage 1: Node 22 builds the React app (npm run build → dist/)
-    #   Stage 2: nginx-unprivileged serves the dist/ files
     build:
       context: ./app/frontend
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: /api/v1
-
     restart: unless-stopped
-
-    # Frontend needs backend to be up so API calls don't fail
-    # immediately on first page load.
     depends_on:
       - backend
-
-    # Only on frontend_net — it serves files and proxies API calls,
-    # but never talks to postgres directly.
     networks:
       - frontend_net
 
   # ─────────────────────────────────────────────
-  # 4. Nginx Reverse Proxy
+  # 5. Nginx Reverse Proxy
   # ─────────────────────────────────────────────
   nginx:
-    # Use the security-hardened unprivileged nginx image.
-    # This image runs as a non-root user, reducing attack surface.
-    # It has zero high/critical CVEs unlike nginx:alpine.
     image: nginxinc/nginx-unprivileged:alpine-slim
-
     restart: unless-stopped
-
     ports:
-      # Map host port 80 to container port 8080.
-      # 0.0.0.0 means listen on all network interfaces, so other
-      # machines on the same WiFi can reach the app by IP address.
-      # This is what allows instructors to access the app at
-      # http://192.168.1.xx from their own devices.
-      - "0.0.0.0:80:8080"
-
+      # Using 8888 to avoid conflict with Canvas sandbox on port 80
+      - "0.0.0.0:8888:8080"
     volumes:
-      # Mount our nginx config as read-only (:ro).
-      # Read-only prevents the container from accidentally
-      # modifying the config file on the host machine.
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-
-    # Nginx needs both services running before it starts routing.
     depends_on:
       - frontend
       - backend
-
-    # Only on frontend_net — nginx routes to frontend and backend,
-    # but never needs to reach postgres.
     networks:
       - frontend_net
+
+  # ── vLLM container ──────────────────────────
+  # Only used when VLLM_MODE=docker.
+  # On Mac Silicon this runs CPU only and is very slow.
+  # For native Metal mode leave this commented and run vLLM manually.
+  # When uncommenting also set VLLM_BASE_URL=http://vllm:8000 in .env
+  #
+  # vllm:
+  #   image: vllm/vllm-openai:latest
+  #   container_name: app_vllm
+  #   restart: unless-stopped
+  #   environment:
+  #     VLLM_MODEL: ${VLLM_MODEL:-Qwen/Qwen3-4B}
+  #   command: >
+  #     --model ${VLLM_MODEL:-Qwen/Qwen3-4B}
+  #     --host 0.0.0.0
+  #     --port 8000
+  #     --max-model-len 4096
+  #   volumes:
+  #     - ~/.cache/huggingface:/root/.cache/huggingface
+  #   ports:
+  #     - "8000:8000"
+  #   networks:
+  #     - ai_net
 
 # ─────────────────────────────────────────────
 # Networks
 # ─────────────────────────────────────────────
 networks:
-  # Connects: nginx ↔ frontend ↔ backend
-  # This is the "public-facing" side of the app.
   frontend_net:
     driver: bridge
-
-  # Connects: backend ↔ postgres only
-  # Postgres is completely hidden from nginx and frontend.
   backend_net:
     driver: bridge
+  ai_net:
+    driver: bridge
+    internal: true    # no external egress — for containerized vLLM
 
 # ─────────────────────────────────────────────
 # Volumes
 # ─────────────────────────────────────────────
 volumes:
-  # Postgres data persists here between restarts.
-  # Stored on the host machine by Docker — survives container rebuilds.
   postgres_data:
