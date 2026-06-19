@@ -1,6 +1,10 @@
+import logging
+
 import httpx
 from fastapi import HTTPException, status
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _headers(token: str) -> dict:
@@ -31,7 +35,8 @@ async def validate_token(token: str, canvas_url: str = settings.CANVAS_API_URL) 
     except httpx.TimeoutException:
         raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
     except httpx.RequestError as e:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Could not reach Canvas: {e}")
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
     _raise_for_canvas_error(response)
 
 
@@ -46,7 +51,8 @@ async def fetch_courses(token: str, canvas_url: str = settings.CANVAS_API_URL) -
     except httpx.TimeoutException:
         raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
     except httpx.RequestError as e:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Could not reach Canvas: {e}")
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
     _raise_for_canvas_error(response)
     return response.json()
 
@@ -61,7 +67,8 @@ async def fetch_assignments(course_id: int, token: str, canvas_url: str = settin
     except httpx.TimeoutException:
         raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
     except httpx.RequestError as e:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Could not reach Canvas: {e}")
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
     _raise_for_canvas_error(response)
     return response.json()
 
@@ -76,6 +83,7 @@ async def fetch_submissions(course_id: int, assignment_id: int, token: str, canv
     except httpx.TimeoutException:
         raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
     except httpx.RequestError as e:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Could not reach Canvas: {e}")
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
     _raise_for_canvas_error(response)
     return response.json()
