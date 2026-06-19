@@ -14,7 +14,7 @@ import { getAssistantPath } from "@/utils/navigation";
 
 export function ConnectCanvasPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -45,8 +45,7 @@ export function ConnectCanvasPage() {
 
               const accessToken = getStoredToken();
               if (!accessToken) {
-                setError("You must be signed in to connect Canvas.");
-                setIsSubmitting(false);
+                logout();
                 return;
               }
 
@@ -55,7 +54,7 @@ export function ConnectCanvasPage() {
                 navigate(paths.reviewPermissions);
               } catch (err) {
                 if (err instanceof CanvasApiError && err.status === 401) {
-                  setError("Your session expired. Please sign in again.");
+                  logout();
                   return;
                 }
 

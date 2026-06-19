@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getStoredToken } from "@/lib/auth-storage";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import {
   ConnectCanvasTokenStatus,
@@ -61,6 +62,7 @@ export function ConnectCanvasForm({
   >(() => createIdleValidationStates(1));
   const debouncedTokens = useDebouncedValue(canvasTokens, VALIDATION_DEBOUNCE_MS);
   const validationRequestIds = useRef<number[]>([0]);
+  const prevDebouncedTokens = useRef<string[]>([]);
 
   const nonEmptyTokens = canvasTokens
     .map((token) => token.trim())
@@ -99,6 +101,10 @@ export function ConnectCanvasForm({
 
   useEffect(() => {
     debouncedTokens.forEach((token, index) => {
+      if (prevDebouncedTokens.current[index] === token) {
+        return;
+      }
+
       const trimmedToken = token.trim();
 
       if (trimmedToken === "") {
@@ -121,7 +127,21 @@ export function ConnectCanvasForm({
 
       void (async () => {
         try {
-          const status = await validateCanvasToken(trimmedToken);
+          const accessToken = getStoredToken();
+          if (!accessToken) {
+            if (validationRequestIds.current[index] !== requestId) {
+              return;
+            }
+
+            setValidationStates((current) =>
+              current.map((state, stateIndex) =>
+                stateIndex === index ? { status: "invalid" } : state,
+              ),
+            );
+            return;
+          }
+
+          const status = await validateCanvasToken(trimmedToken, accessToken);
 
           if (validationRequestIds.current[index] !== requestId) {
             return;
@@ -145,6 +165,8 @@ export function ConnectCanvasForm({
         }
       })();
     });
+
+    prevDebouncedTokens.current = debouncedTokens;
   }, [debouncedTokens]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {

@@ -1,10 +1,16 @@
 /** Matches PATCH /api/v1/auth/me/canvas-token request body. */
 export interface CanvasTokenUpdateRequest {
-  canvas_tokens: string[];
+  canvas_token: string;
+  canvas_url?: string;
 }
 
-/** Matches POST validation result for a Canvas access token. */
+/** Result of validating a Canvas access token. */
 export type CanvasTokenValidationStatus = "valid" | "expired" | "invalid";
+
+/** Matches POST /api/v1/auth/me/canvas-token/validate response body. */
+export interface CanvasTokenValidationResponse {
+  status: CanvasTokenValidationStatus;
+}
 
 /** Matches auth user response after canvas token is saved. */
 export interface CanvasTokenUpdateResponse {

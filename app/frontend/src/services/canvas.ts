@@ -1,8 +1,8 @@
 import { API_BASE_URL } from "@/config/api";
-import { CANVAS_API_URL } from "@/config/canvas";
 import type {
   CanvasTokenUpdateRequest,
   CanvasTokenUpdateResponse,
+  CanvasTokenValidationResponse,
   CanvasTokenValidationStatus,
 } from "@/types/canvas";
 
@@ -46,11 +46,15 @@ async function parseError(response: Response): Promise<string> {
   return "Something went wrong. Please try again.";
 }
 
-export async function updateCanvasTokens(
-  canvasTokens: string[],
+export async function updateCanvasToken(
+  canvasToken: string,
   accessToken: string,
+  canvasUrl?: string,
 ): Promise<CanvasTokenUpdateResponse> {
-  const body: CanvasTokenUpdateRequest = { canvas_tokens: canvasTokens };
+  const body: CanvasTokenUpdateRequest = { canvas_token: canvasToken };
+  if (canvasUrl) {
+    body.canvas_url = canvasUrl;
+  }
 
   const response = await fetch(`${API_BASE_URL}/auth/me/canvas-token`, {
     method: "PATCH",
@@ -68,25 +72,49 @@ export async function updateCanvasTokens(
   return response.json() as Promise<CanvasTokenUpdateResponse>;
 }
 
+/** Saves one or more tokens via separate PATCH requests (one per institution). */
+export async function updateCanvasTokens(
+  canvasTokens: string[],
+  accessToken: string,
+): Promise<CanvasTokenUpdateResponse> {
+  if (canvasTokens.length === 0) {
+    throw new CanvasApiError("Canvas token is required", 400);
+  }
+
+  let lastResponse: CanvasTokenUpdateResponse | undefined;
+  for (const token of canvasTokens) {
+    lastResponse = await updateCanvasToken(token, accessToken);
+  }
+
+  return lastResponse!;
+}
+
 export async function validateCanvasToken(
   canvasToken: string,
+  accessToken: string,
+  canvasUrl?: string,
 ): Promise<CanvasTokenValidationStatus> {
+  const body: CanvasTokenUpdateRequest = { canvas_token: canvasToken };
+  if (canvasUrl) {
+    body.canvas_url = canvasUrl;
+  }
+
   try {
-    const response = await fetch(`${CANVAS_API_URL}/users/self`, {
+    const response = await fetch(`${API_BASE_URL}/auth/me/canvas-token/validate`, {
+      method: "POST",
       headers: {
-        Authorization: `Bearer ${canvasToken}`,
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
       },
+      body: JSON.stringify(body),
     });
 
-    if (response.status === 401) {
-      return "expired";
+    if (!response.ok) {
+      return "invalid";
     }
 
-    if (response.ok) {
-      return "valid";
-    }
-
-    return "invalid";
+    const data = (await response.json()) as CanvasTokenValidationResponse;
+    return data.status;
   } catch {
     return "invalid";
   }

@@ -3,19 +3,26 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 import { ConnectCanvasForm } from "@/pages/Auth/ConnectCanvas/ConnectCanvasForm";
+import { getStoredToken } from "@/lib/auth-storage";
 import { validateCanvasToken } from "@/services/canvas";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
+
+vi.mock("@/lib/auth-storage", () => ({
+  getStoredToken: vi.fn(),
+}));
 
 vi.mock("@/services/canvas", () => ({
   validateCanvasToken: vi.fn(),
 }));
 
+const mockedGetStoredToken = vi.mocked(getStoredToken);
 const mockedValidateCanvasToken = vi.mocked(validateCanvasToken);
 
 describe("ConnectCanvasForm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockedGetStoredToken.mockReturnValue("access-token");
     mockedValidateCanvasToken.mockResolvedValue("valid");
   });
 
@@ -103,6 +110,34 @@ describe("ConnectCanvasForm", () => {
     expect(onSubmit).toHaveBeenCalledWith({
       canvasTokens: ["token-one", "token-two"],
     });
+  });
+
+  it("does not re-validate unchanged tokens when another field is edited", async () => {
+    const user = userEvent.setup();
+    renderWithRouter(
+      <ConnectCanvasForm onSubmit={vi.fn()} onSkip={vi.fn()} />,
+    );
+
+    await user.type(screen.getByLabelText(/Canvas API Token/i), "token-one");
+    await vi.advanceTimersByTimeAsync(500);
+    await screen.findByText("Token is valid");
+    expect(mockedValidateCanvasToken).toHaveBeenCalledTimes(1);
+
+    await user.click(
+      screen.getByRole("button", { name: "Add another institution" }),
+    );
+    await user.type(
+      screen.getByLabelText("Canvas API Token (Institution 2)"),
+      "token-two",
+    );
+    await vi.advanceTimersByTimeAsync(500);
+    await screen.findAllByText("Token is valid");
+
+    expect(mockedValidateCanvasToken).toHaveBeenCalledTimes(2);
+    expect(mockedValidateCanvasToken).toHaveBeenLastCalledWith(
+      "token-two",
+      "access-token",
+    );
   });
 
   it("adds and removes institution token fields", async () => {

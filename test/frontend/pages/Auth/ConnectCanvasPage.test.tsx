@@ -19,6 +19,8 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
+const mockLogout = vi.fn();
+
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
     user: {
@@ -29,6 +31,7 @@ vi.mock("@/contexts/AuthContext", () => ({
       is_active: true,
       has_canvas_token: false,
     },
+    logout: mockLogout,
   }),
 }));
 
@@ -132,6 +135,24 @@ describe("ConnectCanvasPage", () => {
       ["token-one", "token-two"],
       "access-token",
     );
+  });
+
+  it("logs out when the session expires during connect", async () => {
+    const user = userEvent.setup();
+    const { CanvasApiError } = await import("@/services/canvas");
+    mockedUpdateCanvasTokens.mockRejectedValue(
+      new CanvasApiError("Invalid token", 401),
+    );
+
+    renderWithRouter(<ConnectCanvasPage />);
+
+    await user.type(screen.getByLabelText(/Canvas API Token/i), "valid-token");
+    await vi.advanceTimersByTimeAsync(500);
+    await screen.findByText("Token is valid");
+    await user.click(screen.getByRole("button", { name: "Connect Canvas" }));
+
+    expect(mockLogout).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   it("skips canvas connection and opens the query assistant", async () => {
