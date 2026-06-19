@@ -1,5 +1,6 @@
 from cryptography.fernet import InvalidToken
 from fastapi import HTTPException, status
+
 from app.core.security import decrypt_canvas_token
 from app.integrations.canvas import fetch_assignments, fetch_courses, fetch_submissions
 from app.models.user import User
