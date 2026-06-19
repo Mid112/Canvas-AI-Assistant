@@ -14,11 +14,23 @@ CREATE TABLE users (
     email            VARCHAR UNIQUE NOT NULL,
     hashed_password  TEXT NOT NULL,                          -- bcrypt hashed
     role             VARCHAR NOT NULL CHECK (role IN ('instructor', 'ta', 'admin')),
-    canvas_token     TEXT,                                    -- encrypted, per user
-    canvas_url       TEXT,                                    -- e.g. https://canvas.ubc.ca
     is_active        BOOLEAN DEFAULT true,
     created_at       TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ─────────────────────────────────────────────
+-- Canvas Connections (one row per user per Canvas instance)
+-- ─────────────────────────────────────────────
+CREATE TABLE canvas_connections (
+    id               SERIAL PRIMARY KEY,
+    user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    canvas_url       VARCHAR NOT NULL,
+    encrypted_token  TEXT NOT NULL,
+    created_at       TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_user_canvas_url UNIQUE (user_id, canvas_url)
+);
+
+CREATE INDEX idx_canvas_connections_user_id ON canvas_connections(user_id);
 
 -- ─────────────────────────────────────────────
 -- Sessions
