@@ -537,3 +537,89 @@ Overall, this cycle balanced technical development, project coordination, and ac
 * Prepare for upcoming MVP milestone deliverables
 * Maintain consistent Clockify tracking
 
+# **Cycle 9: Tuesday (16/6) ~ Thursday (18/6)**
+
+### **Tuesday (16/6)**
+<img width="1194" height="164" alt="Screenshot 2026-06-19 at 11 21 53 AM" src="https://github.com/user-attachments/assets/4ba84c6e-92d0-4b73-b7b0-645b8374a31c" />
+
+**Timesheet**  
+**Clockify Report:** 4:53:13
+
+**Current Tasks**
+- Worked on project board management and organization
+- Updated issues, milestones, and development priorities
+- Refined task breakdowns for upcoming MVP work
+- Organized sprint tasks and tracked project progress
+- Participated in project planning discussions with team members
+- Reviewed project requirements and coordinated development activities
+- Assisted with workflow planning and milestone preparation
+
+---
+
+### **Wednesday (17/6)**
+<img width="1206" height="103" alt="Screenshot 2026-06-19 at 11 21 59 AM" src="https://github.com/user-attachments/assets/c41c5b68-9eb0-419f-9a40-750263d110a9" />
+
+**Timesheet**  
+**Clockify Report:** 2:50:06
+
+**Current Tasks**
+- Participated in team meeting discussions
+- Reviewed project progress and current development status
+- Discussed MVP feature implementation plans
+- Coordinated team responsibilities and upcoming deliverables
+- Addressed project management and workflow concerns
+- Reviewed development priorities and sprint goals
+
+---
+
+### **Thursday (18/6)**
+<img width="1201" height="102" alt="Screenshot 2026-06-19 at 11 22 06 AM" src="https://github.com/user-attachments/assets/d8045c80-5cc1-4d5e-b5b2-f6cf8fd310aa" />
+
+**Timesheet**  
+**Clockify Report:** 1:04:29
+
+**Current Tasks**
+- Worked on the Canvas Connector page
+- Implemented frontend UI components related to Canvas integration
+- Refined page layout and user interaction flow
+- Reviewed connector requirements and project specifications
+- Tested frontend functionality and UI behavior
+- Prepared the feature for future backend integration
+
+---
+
+## **Cycle 9 – Goal Review**
+
+### **Reflection**
+
+This cycle focused on project management, team coordination, and continued MVP development. Significant time was spent organizing the project board, updating milestones, and ensuring development tasks were properly tracked and prioritized. Team meetings helped align project goals and clarify responsibilities as implementation work progressed.
+
+Development efforts during this cycle included work on the Canvas Connector feature, which represents an important component of the project's integration workflow. Progress was made on the frontend implementation while ensuring that the design remained consistent with the overall application structure.
+
+### **Retrospective**
+
+Project board management remained a major focus throughout the cycle. Updating tasks, organizing issues, and refining milestone plans improved visibility into team progress and helped maintain a structured workflow. These activities supported better coordination and ensured that development efforts remained aligned with project requirements.
+
+The team meeting provided an opportunity to review ongoing work, discuss implementation challenges, and establish priorities for upcoming MVP development. Team collaboration helped clarify responsibilities and improve communication regarding project progress.
+
+Frontend development progressed through work on the Canvas Connector page. This involved implementing interface components, refining user interactions, and preparing the feature for future backend connectivity. The work completed during this cycle contributes directly toward the project's MVP goals and future Canvas integration functionality.
+
+Overall, this cycle balanced project management responsibilities with frontend implementation work, helping move the project closer to a functional MVP while maintaining organized development processes.
+
+---
+
+## **Next Cycle Goals (Cycle 10: Friday 19/6 ~ Monday 22/6)**
+
+* Continue development of Canvas integration features
+* Connect frontend components with backend APIs where applicable
+* Refine Canvas Connector functionality and user experience
+* Review and test MVP features currently under development
+* Continue project board maintenance and sprint planning
+* Participate in team meetings and development discussions
+* Review teammate pull requests and provide feedback
+* Expand frontend testing coverage for newly implemented features
+* Support documentation updates for completed features
+* Maintain consistent Clockify tracking
+
+
+
