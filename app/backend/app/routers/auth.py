@@ -4,7 +4,7 @@ from app.core.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.auth import CanvasTokenRequest, LoginRequest, RegisterRequest, TokenResponse, UserResponse
-from app.services.auth import login_user, register_user, update_canvas_token
+from app.services.auth import login_user, register_user, remove_canvas_connection, update_canvas_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -41,4 +41,13 @@ async def set_canvas_token(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await update_canvas_token(db, current_user, body.canvas_token)
+    return await update_canvas_token(db, current_user, body.canvas_token, body.canvas_url)
+
+
+@router.delete("/me/canvas-connections/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_canvas_connection(
+    connection_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await remove_canvas_connection(db, current_user, connection_id)
