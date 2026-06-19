@@ -10,7 +10,7 @@
 [tool.ruff]
 # Target Python 3.12 syntax (matches your Docker base image)
 target-version = "py312"
-line-length = 100
+line-length = 130
 
 # Directories ruff should ignore entirely
 exclude = [
