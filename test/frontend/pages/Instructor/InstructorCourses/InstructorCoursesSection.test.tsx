@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { institutionCourseData } from "@/pages/Instructor/InstructorCourses/institutionCourseData";
+import { institutionCourseData } from "@/data/institutionCourseData";
 import {
   InstructorCoursesCard,
   InstructorCoursesEmptyState,

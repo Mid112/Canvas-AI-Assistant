@@ -16,7 +16,7 @@ import {
 import {
   getInstitutionData,
   institutions,
-} from "@/pages/Instructor/InstructorCourses/institutionCourseData";
+} from "@/data/institutionCourseData";
 import type {
   CourseAnalyticsOverview,
   InstructorCourse,

@@ -1,8 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { institutionCourseData } from "@/pages/Instructor/InstructorCourses/institutionCourseData";
+import { institutionCourseData } from "@/data/institutionCourseData";
 import { InstructorCoursesOverview } from "@/pages/Instructor/InstructorCourses/InstructorCoursesOverview";
+import type { CourseAnalyticsOverview } from "@/types/course";
 
 describe("InstructorCoursesOverview", () => {
   it("renders analytics overview cards", () => {
@@ -22,5 +23,35 @@ describe("InstructorCoursesOverview", () => {
     expect(screen.getByText("Completed Assignments")).toBeInTheDocument();
     expect(screen.getByText("At-Risk Students")).toBeInTheDocument();
     expect(screen.getByText("View Full Report")).toBeInTheDocument();
+  });
+
+  it("colors trend details based on metric direction", () => {
+    const analytics: CourseAnalyticsOverview = {
+      averagePerformance: 70,
+      averagePerformanceTrend: -4,
+      activeStudents: 50,
+      totalStudents: 100,
+      completedAssignments: 80,
+      completedAssignmentsTrend: 2,
+      atRiskStudents: 12,
+      atRiskStudentsTrend: 3,
+    };
+
+    render(<InstructorCoursesOverview analytics={analytics} />);
+
+    expect(screen.getByText("-4%")).toHaveClass("text-destructive");
+    expect(screen.getByText("+2%")).toHaveClass("text-emerald-600");
+    expect(screen.getByText("+3%")).toHaveClass("text-destructive");
+    expect(screen.getByText("50%")).toHaveClass("text-muted-foreground");
+  });
+
+  it("shows green for a decreasing at-risk trend", () => {
+    render(
+      <InstructorCoursesOverview
+        analytics={institutionCourseData[0]!.analytics}
+      />,
+    );
+
+    expect(screen.getByText("-2%")).toHaveClass("text-emerald-600");
   });
 });

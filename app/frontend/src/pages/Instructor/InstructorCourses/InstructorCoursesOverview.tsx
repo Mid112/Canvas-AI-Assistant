@@ -7,19 +7,16 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  formatAnalyticsTrend,
+  getTrendColorClass,
+  getTrendDirection,
+} from "@/lib/analytics-trends";
 import { cn } from "@/lib/utils";
 import type { CourseAnalyticsOverview } from "@/types/course";
 
 interface InstructorCoursesOverviewProps {
   analytics: CourseAnalyticsOverview;
-}
-
-function formatTrend(value: number): string {
-  if (value > 0) {
-    return `+${value}%`;
-  }
-
-  return `${value}%`;
 }
 
 function OverviewCard({
@@ -42,10 +39,7 @@ function OverviewCard({
           {title}
         </CardTitle>
         <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10">
-        <Icon
-          className="size-4 text-primary"
-          aria-hidden="true"
-        />
+          <Icon className="size-4 text-primary" aria-hidden="true" />
         </div>
       </CardHeader>
       <CardContent>
@@ -80,30 +74,36 @@ export function InstructorCoursesOverview({
         <OverviewCard
           title="Average Performance"
           value={`${analytics.averagePerformance}%`}
-          detail={formatTrend(analytics.averagePerformanceTrend)}
+          detail={formatAnalyticsTrend(analytics.averagePerformanceTrend)}
           icon={LineChart}
-          detailClassName="text-emerald-600"
+          detailClassName={getTrendColorClass(
+            getTrendDirection(analytics.averagePerformanceTrend),
+          )}
         />
         <OverviewCard
           title="Active Students"
           value={`${analytics.activeStudents}/${analytics.totalStudents}`}
           detail={`${activePercent}%`}
           icon={Users}
-          detailClassName="text-emerald-600"
+          detailClassName="text-muted-foreground"
         />
         <OverviewCard
           title="Completed Assignments"
           value={`${analytics.completedAssignments}%`}
-          detail={formatTrend(analytics.completedAssignmentsTrend)}
+          detail={formatAnalyticsTrend(analytics.completedAssignmentsTrend)}
           icon={ClipboardList}
-          detailClassName="text-emerald-600"
+          detailClassName={getTrendColorClass(
+            getTrendDirection(analytics.completedAssignmentsTrend),
+          )}
         />
         <OverviewCard
           title="At-Risk Students"
           value={String(analytics.atRiskStudents)}
-          detail={formatTrend(analytics.atRiskStudentsTrend)}
+          detail={formatAnalyticsTrend(analytics.atRiskStudentsTrend)}
           icon={AlertCircle}
-          detailClassName="text-emerald-600"
+          detailClassName={getTrendColorClass(
+            getTrendDirection(analytics.atRiskStudentsTrend, true),
+          )}
         />
       </div>
     </section>

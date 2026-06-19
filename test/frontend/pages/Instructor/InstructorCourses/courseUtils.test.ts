@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { institutionCourseData } from "@/pages/Instructor/InstructorCourses/institutionCourseData";
+import { institutionCourseData } from "@/data/institutionCourseData";
 import {
   filterInstructorCourses,
   sortInstructorCourses,
