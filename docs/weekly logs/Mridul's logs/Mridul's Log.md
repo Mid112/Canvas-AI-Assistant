@@ -615,7 +615,11 @@ positioned to shift full attention toward MVP development.
 ### Clockify Report
 
 - **16/06 (Tuesday):** Using Clockify – Logged 1.15 hours
+<img width="2450" height="236" alt="image" src="https://github.com/user-attachments/assets/9c43541d-e673-4f28-b511-10cbcfbed3be" />
+
 - **17/06 (Wednesday):** Using Clockify – Logged 2.75 hours
+<img width="2418" height="226" alt="image" src="https://github.com/user-attachments/assets/d9b0a5b4-5f7c-4567-9747-88f4e1373be3" />
+
 - **18/06 (Thursday):** Using Clockify – Logged 0 hours
 
 ---
