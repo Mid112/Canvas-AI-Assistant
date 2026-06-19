@@ -94,6 +94,7 @@ services:
       # Never hardcoded here so they don't end up in the Git repo.
       CANVAS_API_URL: ${CANVAS_API_URL:-https://canvas.ubc.ca/api/v1}
       CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-}
+      CANVAS_TOKEN_ENCRYPTION_KEY: ${CANVAS_TOKEN_ENCRYPTION_KEY}
 
     # Don't start backend until postgres passes its health check.
     # condition: service_healthy means it waits for pg_isready to
