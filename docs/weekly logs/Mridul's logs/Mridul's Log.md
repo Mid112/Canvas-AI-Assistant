@@ -603,3 +603,79 @@ positioned to shift full attention toward MVP development.
 - **Goal 1:** Connect MCP docker container to the stack
 - **Goal 2:** Complete CI/CD pipeline setup
 - **Goal 3:** Continue active development toward MVP completion
+
+---
+
+<br>
+
+# Cycle 9 Report: 16/06 – 18/06 (June 16 – June 18)
+
+## Timesheet
+
+### Clockify Report
+
+- **16/06 (Tuesday):** Using Clockify – Logged 1.15 hours
+<img width="2450" height="236" alt="image" src="https://github.com/user-attachments/assets/9c43541d-e673-4f28-b511-10cbcfbed3be" />
+
+- **17/06 (Wednesday):** Using Clockify – Logged 2.75 hours
+<img width="2418" height="226" alt="image" src="https://github.com/user-attachments/assets/d9b0a5b4-5f7c-4567-9747-88f4e1373be3" />
+
+- **18/06 (Thursday):** Using Clockify – Logged 0 hours
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Team meeting for term-end task assignment (June 16)
+- Attended a 1 hour 9 minute team meeting to discuss and assign tasks for
+  the remainder of the term.
+- Aligned on responsibilities and priorities heading into the final stretch
+  of the project.
+
+### #2: Coding session — CI, linting, and Makefile implementation (June 17)
+- Participated in a 2 hour 45 minute coding session focused on implementing
+  CI, linting, and a Makefile for the project.
+- Contributed to setting up automation and code quality tooling to support
+  ongoing development.
+
+---
+
+## Progress Update (since 16/06/2026)
+
+| TASK/ISSUE #               | STATUS      |
+| --------------------------- | ----------- |
+| Term-end task assignment   | Completed   |
+| CI implementation          | Completed   |
+| Linting setup              | Completed   |
+| Makefile                   | Completed   |
+| MCP docker connection      | In Progress |
+| MVP                        | In Progress |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle focused on setting the team up for a strong finish to the term.
+The meeting on June 16 ensured everyone is aligned on term-end task
+assignments and priorities. Technical progress was made on June 17 with the
+implementation of CI, linting, and a Makefile, which strengthens the
+project's development workflow and code quality standards going forward.
+
+### Retrospective:
+
+The team used this cycle efficiently to plan ahead and improve the project's
+tooling. Clockify was logged consistently on both active work days. With
+term-end tasks now assigned, the team has clear direction for the remaining
+cycles. The CI, linting, and Makefile work lays a solid foundation for
+continued development. MCP docker connection and MVP development remain the
+key priorities to carry forward into the next cycle.
+
+---
+
+## Next Cycle Goals
+
+- **Goal 1:** Connect MCP docker container to the stack
+- **Goal 2:** Continue active development toward MVP completion
+- **Goal 3:** Progress on term-end assigned tasks
