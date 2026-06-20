@@ -92,9 +92,9 @@ We had a team meeting this cycle to review proof of life follow-up items and ali
 
 | Team Member | Logged Hours |
 | ----------- | ------------ |
-| Mridul      | 9:14:06      |
-| Jessica     | 11:01:15     |
-| Bao         | 10:10:01     |
+| Mridul      | 3:54:06      |
+| Jessica     | 8:47:48      |
+| Bao         | 7:10:01      |
 | Yerdana     | 7:29:31      |
 | Rhythm      | 4:37:35      |
 
