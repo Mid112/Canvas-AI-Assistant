@@ -475,3 +475,81 @@ In retrospective, integrating multiple components and troubleshooting was more d
 - **Goal 2:** Align the functionality of MCP server to functional requirements mentioned in project requirement list
 - **Goal 3:** Implement context embedding, and storage of the embedding, retrieval and augmentation using either a persistent storage alone, or with the help of Redis. 
 
+
+
+# Cycle 9 Report: 06/16 – 06/18 (June 16 – June 18)
+
+## Timesheet
+
+### Clockify Report
+- **16/06 (Tuesday):** Using Clockify – Logged 1 hours
+- **17/06 (Wednesday):** Using Clockify – Logged 2.5 hours
+- **18/06 (Thursday):** Using Clockify – Logged 3.5 hours
+
+
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+
+
+### #1: Reviewing and testing multiple Canvas-connection PRs against a local sandbox (June 17–18)
+- Tested `feature/auth-validation-and-errors` end to end against develop — all manual scenarios (email/password validation, login/register error messages, protected route redirects, logout) passed; approved
+- Tested `feature/canvas-connect-page` against a self-hosted Canvas sandbox and found a request-shape mismatch between the frontend's `canvas_tokens` array and the backend's singular `canvas_token` field; requested changes
+- Reviewed and merged-tested `feature/backend-token-route`, which replaced the single `canvas_token` column with a `canvas_connections` table supporting multiple Canvas schools per user; verified all listed tests
+- Reviewed `feature/CI-tests`; confirmed `make install` and `make lint` work correctly
+- Tested `feature/backend-CanvasAPI`'s `lbjay/canvas-docker` integration;
+
+<img width="1211" height="235" alt="Screenshot 2026-06-19 at 9 56 39 PM" src="https://github.com/user-attachments/assets/5bf78b50-059f-4cd8-89d5-f8f1ed060450" />
+
+
+
+### #2: Checking the Canvas token validation failure across the full stack (June 18)
+- Traced a "Token is invalid" UI error through five layers to confirm the actual cause: the validate endpoint's SSRF guard requires `https://` URLs, which no current local Canvas sandbox satisfies since both run over plain HTTP
+- Confirmed via direct `curl` testing that the CORS issue from an earlier review had already been fixed where token validation now calls our own backend rather than Canvas directly, resolving the "Consider backend proxy" follow-up from that PR's own description
+- Opened a issue documenting that this https requirement blocks manual testing of any Canvas-connection feature against every sandbox the team currently has, and proposed a resolution option: HTTPS reverse proxy in front of the sandbox
+
+<img width="1221" height="130" alt="Screenshot 2026-06-19 at 10 01 02 PM" src="https://github.com/user-attachments/assets/963d4a58-4165-4567-8f90-ecbebf32ea45" />
+
+
+---
+
+## Progress Update (since 16/06/2026)
+
+| TASK/ISSUE #                                | STATUS      |
+| -------------------------------------------- | ----------- |
+| Design document                              | Completed   |
+| Project design video                         | Completed   |
+| Database design                               | Completed   |
+| PR reviews and approvals                     | Completed   |
+| Project setup                                 | Completed   |
+| Dockerized environment for MCP/vLLM           | Completed   |
+| Locally running vLLM                          | Completed   |
+| Setup for PostgreSQL                          | Completed   |
+| Canvas MCP server core tools                  | Completed   |
+| MCP server tests (19 passing)                 | Completed   |
+| Canvas LMS sandbox setup                      | Completed   |
+| Full integration tests with Canvas            | In Progress   |
+| Multi-institution Canvas token support (backend) | Completed |
+| MCP client design                             | In Progress |
+| Third-party LLM adapter design (Claude Code, Codex) | In Progress |
+| Context embedding and retrieval               | Not Started |
+
+---
+
+## Cycle 9 Goal Review
+
+### Reflection:
+This cycle shifted from building new features to integration testing and architectural planning. Reviewing four separate PRs against a real Canvas sandbox surfaced two issues: a request shape mismatch and a testability gap caused by the SSRF guard and that none of the individual PRs' own test suites could have caught. This made me believe into the value of testing PRs together against a shared environment rather than purely in isolation.
+
+I also started designing the third-party LLM adapter layer, which clarified that most of the work is not writing a new adapter per LLM, but making sure our MCP server stays a clean, client-agnostic implementation of the protocol where any MCP-compliant tool (Claude Code, Codex) already knows how to talk to it. The translation-loop pattern we already built for vLLM doubles as the adapter for any future non-MCP-native LLM API.
+
+### Retrospective:
+In retrospective, the time spent debugging the token-validation failure was longer than ideal, but debugging it early on was the right call. Going forward, I will try to comminicate the exact specs of design with frontend or integration people. 
+
+---
+
+## Next Cycle 10 Goals
+- **Goal 1:** Implement the MCP client inside FastAPI and wire it to the LLM (Qwen via vLLM) for prompt-to-tool-call translation
+- **Goal 2:** Document the MCP server connection contract (`mcp.json` config, auth requirements) so Claude Code/Codex compatibility can be verified directly
