@@ -2,6 +2,8 @@ from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator
 from app.config import settings
 
+_LOCAL_HTTP_PREFIXES = ("http://localhost", "http://127.0.0.1", "http://canvas_lms")
+
 
 class RegisterRequest(BaseModel):
     name: str
@@ -30,8 +32,10 @@ class CanvasTokenRequest(BaseModel):
         # strip trailing slash so "https://canvas.ubc.ca/" and "https://canvas.ubc.ca" are the same key
         v = str(v).rstrip("/")
         # block non-https to prevent SSRF — backend would otherwise call arbitrary internal hosts
+        # allow plain http:// for local Canvas instances when DEBUG is on
         if not v.startswith("https://"):
-            raise ValueError("canvas_url must be an https:// URL")
+            if not (settings.DEBUG and any(v.startswith(p) for p in _LOCAL_HTTP_PREFIXES)):
+                raise ValueError("canvas_url must be an https:// URL")
         return v
 
 
