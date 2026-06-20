@@ -3,31 +3,46 @@
 ---
 
 ## Burn-up Chart (Velocity)
-[ADD BURN-UP CHART SCREENSHOT HERE]
+
+<img width="940" height="605" alt="Screenshot 2026-06-19 at 11 30 44 PM" src="https://github.com/user-attachments/assets/31960c91-d5ea-4371-9b28-1c7b65c5f88b" />
+
 
 ## Tasks
-[ADD TASKS SCREENSHOT HERE]
+
+<img width="1435" height="729" alt="Screenshot 2026-06-19 at 11 31 55 PM" src="https://github.com/user-attachments/assets/630197fa-7db5-4a6f-a6e2-0d174c66bdb4" />
+
 
 ## Clockify Summary
 ### team Summary
-[ADD TEAM SUMMARY SCREENSHOT HERE]
+<img width="1208" height="718" alt="Screenshot 2026-06-19 at 11 33 37 PM" src="https://github.com/user-attachments/assets/4d3cb55b-3742-4001-9faf-a9970549cf26" />
 
-[ADD TEAM SUMMARY SCREENSHOT 2 HERE]
+
+<img width="1217" height="439" alt="Screenshot 2026-06-19 at 11 34 03 PM" src="https://github.com/user-attachments/assets/67f082df-b26a-444a-94e6-e4a8a634ec24" />
+
+
 
 ### Jessica:
-[ADD SCREENSHOT HERE]
+
+<img width="1221" height="680" alt="Screenshot 2026-06-19 at 11 37 06 PM" src="https://github.com/user-attachments/assets/52b5ed63-65cd-4a40-8045-4e1a75aff692" />
+
 
 ### Rhythm:
-[ADD SCREENSHOT HERE]
+
+<img width="1220" height="235" alt="Screenshot 2026-06-19 at 11 37 37 PM" src="https://github.com/user-attachments/assets/555ec530-3555-448c-bcd4-e0993cf26996" />
 
 ### Mridul:
-[ADD SCREENSHOT HERE]
+
+<img width="1220" height="238" alt="Screenshot 2026-06-19 at 11 39 51 PM" src="https://github.com/user-attachments/assets/22db7642-acb0-475a-86ed-26efc46335a0" />
+
 
 ### Bao:
-[ADD SCREENSHOT HERE]
+
+<img width="1219" height="367" alt="Screenshot 2026-06-19 at 11 40 17 PM" src="https://github.com/user-attachments/assets/332816e2-8323-4e97-ac6f-f93b22857084" />
 
 ### Yerdana:
-[ADD SCREENSHOT HERE]
+
+<img width="1227" height="246" alt="Screenshot 2026-06-19 at 11 40 43 PM" src="https://github.com/user-attachments/assets/5265ef84-4b1c-4007-adc9-317106313772" />
+
 
 ---
 
