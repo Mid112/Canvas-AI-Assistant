@@ -84,6 +84,9 @@ We had a team meeting this cycle to review proof of life follow-up items and ali
 
 ## Burn-up Chart (Velocity):
 
+<img width="977" height="560" alt="Screenshot 2026-06-19 at 11 24 53 PM" src="https://github.com/user-attachments/assets/725e4479-2b19-46c2-a980-4c48ad36f64e" />
+
+
 
 ## Times for Team/Individual:
 
