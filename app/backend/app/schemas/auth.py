@@ -1,8 +1,11 @@
+from typing import Any
 from datetime import datetime
+from typing import Literal
 from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator
 from app.config import settings
 
 _LOCAL_HTTP_PREFIXES = ("http://localhost", "http://127.0.0.1", "http://canvas_lms")
+
 
 
 class RegisterRequest(BaseModel):
@@ -37,6 +40,10 @@ class CanvasTokenRequest(BaseModel):
             if not (settings.DEBUG and any(v.startswith(p) for p in _LOCAL_HTTP_PREFIXES)):
                 raise ValueError("canvas_url must be an https:// URL")
         return v
+
+
+class CanvasTokenValidationResponse(BaseModel):
+    status: Literal["valid", "expired", "invalid"]
 
 
 # encrypted_token is intentionally excluded — never expose it in API responses

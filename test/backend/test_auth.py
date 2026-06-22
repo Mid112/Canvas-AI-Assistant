@@ -107,6 +107,34 @@ def test_set_canvas_token(client):
     assert client.get("/api/v1/auth/me", headers=headers).json()["has_canvas_token"] is True
 
 
+def test_validate_canvas_token(client):
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with patch(
+        "app.routers.auth.check_token_status",
+        new=AsyncMock(return_value="valid"),
+    ):
+        resp = client.post(
+            "/api/v1/auth/me/canvas-token/validate",
+            json={"canvas_token": "test-token"},
+            headers=headers,
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "valid"
+
+
+def test_validate_canvas_token_requires_auth(client):
+    resp = client.post(
+        "/api/v1/auth/me/canvas-token/validate",
+        json={"canvas_token": "test-token"},
+    )
+    assert resp.status_code == 403
+
+
 def test_set_canvas_token_second_school(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})

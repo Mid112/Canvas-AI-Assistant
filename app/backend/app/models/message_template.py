@@ -1,8 +1,15 @@
-from datetime import datetime, timezone
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.core.database import Base
 
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class MessageTemplate(Base):
@@ -10,26 +17,21 @@ class MessageTemplate(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    # FK to the instructor who created this template
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id"), nullable=False, index=True
     )
 
-    # Optional — template may be scoped to a specific course
     course_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("courses.id"), nullable=True
     )
 
-    # Short name for the template e.g. "Missing submission reminder"
     title: Mapped[str] = mapped_column(String, nullable=False)
-
-    # Full template body — Text for unlimited length
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
 
-    # Relationships
-    user: Mapped["User"] = relationship("User", back_populates="message_templates")
+    user: Mapped[User] = relationship(
+        "User", back_populates="message_templates")
