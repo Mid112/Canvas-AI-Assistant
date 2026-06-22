@@ -1,4 +1,5 @@
 import logging
+from typing import Literal
 
 import httpx
 from fastapi import HTTPException, status
@@ -39,6 +40,30 @@ async def validate_token(token: str, canvas_url: str = settings.CANVAS_API_URL) 
         logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
     _raise_for_canvas_error(response)
+
+
+CanvasTokenStatus = Literal["valid", "expired", "invalid"]
+
+
+async def check_token_status(
+    token: str, canvas_url: str = settings.CANVAS_API_URL
+) -> CanvasTokenStatus:
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.get(
+                f"{canvas_url}/api/v1/users/self",
+                headers=_headers(token),
+            )
+    except (httpx.TimeoutException, httpx.RequestError) as e:
+        if isinstance(e, httpx.RequestError):
+            logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        return "invalid"
+
+    if response.status_code == 401:
+        return "expired"
+    if response.is_success:
+        return "valid"
+    return "invalid"
 
 
 async def fetch_courses(token: str, canvas_url: str = settings.CANVAS_API_URL) -> list[dict]:

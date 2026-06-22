@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { RegisterPage } from "@/pages/Auth/RegisterPage";
 import { paths } from "@/routes/paths";
+import { getPostAuthPath } from "@/utils/onboarding";
 import { renderWithRouter } from "../../utils/renderWithRouter";
 
 const mockNavigate = vi.fn();
@@ -89,6 +90,9 @@ describe("RegisterPage", () => {
       email: "professor@university.edu",
       password: "secret123",
     });
-    expect(mockNavigate).toHaveBeenCalledWith(paths.canvasInfo);
+    expect(mockNavigate).toHaveBeenCalledWith(
+      getPostAuthPath(1, "instructor"),
+    );
+    expect(getPostAuthPath(1, "instructor")).toBe(paths.canvasInfo);
   });
 });

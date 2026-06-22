@@ -1,5 +1,6 @@
 from typing import Any
 from datetime import datetime
+from typing import Literal
 from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator
 from app.config import settings
 
@@ -35,6 +36,10 @@ class CanvasTokenRequest(BaseModel):
         if not v.startswith("https://"):
             raise ValueError("canvas_url must be an https:// URL")
         return v
+
+
+class CanvasTokenValidationResponse(BaseModel):
+    status: Literal["valid", "expired", "invalid"]
 
 
 # encrypted_token is intentionally excluded — never expose it in API responses

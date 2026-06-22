@@ -17,10 +17,27 @@ class AuthApiError extends Error {
 }
 
 async function parseError(response: Response): Promise<string> {
+  if (response.status === 404) {
+    return "The requested API endpoint was not found. Make sure the backend is running.";
+  }
+
   try {
-    const data = (await response.json()) as { detail?: string };
+    const data = (await response.json()) as {
+      detail?: string | Array<{ msg?: string }>;
+    };
+
     if (typeof data.detail === "string") {
       return data.detail;
+    }
+
+    if (Array.isArray(data.detail) && data.detail.length > 0) {
+      const firstMessage = data.detail.find(
+        (item) => typeof item.msg === "string",
+      )?.msg;
+
+      if (firstMessage) {
+        return firstMessage;
+      }
     }
   } catch {
     // Fall through to default message.

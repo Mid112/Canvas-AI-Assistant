@@ -43,6 +43,16 @@ const mockedLoginUser = vi.mocked(loginUser);
 const mockedRegisterUser = vi.mocked(registerUser);
 const mockedFetchCurrentUser = vi.mocked(fetchCurrentUser);
 
+const mockUserResponse = {
+  id: 1,
+  email: "professor@university.edu",
+  name: "Dr. Jane Smith",
+  role: "instructor",
+  is_active: true,
+  canvas_connections: [],
+  has_canvas_token: false,
+};
+
 function wrapper({ children }: { children: React.ReactNode }) {
   return <AuthProvider>{children}</AuthProvider>;
 }
@@ -68,17 +78,12 @@ describe("AuthContext", () => {
 
     expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.user).toBeNull();
+    expect(result.current.accessToken).toBeNull();
   });
 
   it("loads the current user when a stored token exists", async () => {
     mockedGetStoredToken.mockReturnValue("stored-token");
-    mockedFetchCurrentUser.mockResolvedValue({
-      id: 1,
-      email: "professor@university.edu",
-      name: "Dr. Jane Smith",
-      has_canvas_token: false,
-      is_active: true,
-    });
+    mockedFetchCurrentUser.mockResolvedValue(mockUserResponse);
 
     const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -88,6 +93,7 @@ describe("AuthContext", () => {
 
     expect(mockedFetchCurrentUser).toHaveBeenCalledWith("stored-token");
     expect(result.current.isAuthenticated).toBe(true);
+    expect(result.current.accessToken).toBe("stored-token");
     expect(result.current.user).toEqual({
       id: 1,
       email: "professor@university.edu",
@@ -111,6 +117,7 @@ describe("AuthContext", () => {
     expect(mockedClearStoredToken).toHaveBeenCalledTimes(1);
     expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.user).toBeNull();
+    expect(result.current.accessToken).toBeNull();
   });
 
   it("logs in and stores the token", async () => {
@@ -119,11 +126,10 @@ describe("AuthContext", () => {
       token_type: "bearer",
     });
     mockedFetchCurrentUser.mockResolvedValue({
+      ...mockUserResponse,
       id: 2,
       email: "user@university.edu",
       name: "Test User",
-      has_canvas_token: false,
-      is_active: true,
     });
 
     const { result } = renderHook(() => useAuth(), { wrapper });
@@ -144,6 +150,7 @@ describe("AuthContext", () => {
       password: "secret123",
     });
     expect(mockedSetStoredToken).toHaveBeenCalledWith("new-token");
+    expect(result.current.accessToken).toBe("new-token");
     expect(result.current.isAuthenticated).toBe(true);
     expect(result.current.user?.email).toBe("user@university.edu");
   });
@@ -154,11 +161,10 @@ describe("AuthContext", () => {
       token_type: "bearer",
     });
     mockedFetchCurrentUser.mockResolvedValue({
+      ...mockUserResponse,
       id: 3,
       email: "new@university.edu",
       name: "New User",
-      has_canvas_token: false,
-      is_active: true,
     });
 
     const { result } = renderHook(() => useAuth(), { wrapper });
@@ -181,18 +187,13 @@ describe("AuthContext", () => {
       password: "secret123",
     });
     expect(mockedSetStoredToken).toHaveBeenCalledWith("register-token");
+    expect(result.current.accessToken).toBe("register-token");
     expect(result.current.user?.email).toBe("new@university.edu");
   });
 
   it("logs out and clears auth state", async () => {
     mockedGetStoredToken.mockReturnValue("stored-token");
-    mockedFetchCurrentUser.mockResolvedValue({
-      id: 1,
-      email: "professor@university.edu",
-      name: "Dr. Jane Smith",
-      has_canvas_token: false,
-      is_active: true,
-    });
+    mockedFetchCurrentUser.mockResolvedValue(mockUserResponse);
 
     const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -207,5 +208,6 @@ describe("AuthContext", () => {
     expect(mockedClearStoredToken).toHaveBeenCalledTimes(1);
     expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.user).toBeNull();
+    expect(result.current.accessToken).toBeNull();
   });
 });

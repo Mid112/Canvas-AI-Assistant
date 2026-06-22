@@ -28,6 +28,7 @@ import type { User, UserRole } from "@/types/user";
 
 interface AuthContextValue {
   user: User | null;
+  accessToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (credentials: LoginCredentials) => Promise<User>;
@@ -39,14 +40,16 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const DEFAULT_ROLE: UserRole = "instructor";
 
-function mapUserResponse(response: UserResponse & { role?: string }): User {
-  const role = (response.role as UserRole | undefined) ?? DEFAULT_ROLE;
+function isUserRole(role: string): role is UserRole {
+  return role === "instructor" || role === "ta" || role === "admin";
+}
 
+function mapUserResponse(response: UserResponse): User {
   return {
     id: response.id,
     email: response.email,
     name: response.name ?? response.email.split("@")[0] ?? response.email,
-    role,
+    role: isUserRole(response.role) ? response.role : DEFAULT_ROLE,
     is_active: response.is_active,
     has_canvas_token: response.has_canvas_token,
   };
@@ -54,6 +57,7 @@ function mapUserResponse(response: UserResponse & { role?: string }): User {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadUser = useCallback(async (token: string) => {
@@ -71,9 +75,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    setAccessToken(token);
+
     loadUser(token)
       .catch(() => {
         clearStoredToken();
+        setAccessToken(null);
         setUser(null);
       })
       .finally(() => {
@@ -84,30 +91,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (credentials: LoginCredentials) => {
     const tokenResponse = await loginUser(credentials);
     setStoredToken(tokenResponse.access_token);
-    return loadUser(tokenResponse.access_token);
+    setAccessToken(tokenResponse.access_token);
+
+    try {
+      return await loadUser(tokenResponse.access_token);
+    } catch (error) {
+      clearStoredToken();
+      setAccessToken(null);
+      setUser(null);
+      throw error;
+    }
   }, [loadUser]);
 
   const register = useCallback(async (credentials: RegisterCredentials) => {
     const tokenResponse = await registerUser(credentials);
     setStoredToken(tokenResponse.access_token);
-    return loadUser(tokenResponse.access_token);
+    setAccessToken(tokenResponse.access_token);
+
+    try {
+      return await loadUser(tokenResponse.access_token);
+    } catch (error) {
+      clearStoredToken();
+      setAccessToken(null);
+      setUser(null);
+      throw error;
+    }
   }, [loadUser]);
 
   const logout = useCallback(() => {
     clearStoredToken();
+    setAccessToken(null);
     setUser(null);
   }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
+      accessToken,
       isAuthenticated: user !== null,
       isLoading,
       login,
       register,
       logout,
     }),
-    [user, isLoading, login, register, logout],
+    [user, accessToken, isLoading, login, register, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
