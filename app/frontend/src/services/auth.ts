@@ -21,6 +21,8 @@ type ValidationErrorItem = {
   msg?: string;
 };
 
+const DEFAULT_VALIDATION_MESSAGE = "Please check your information and try again.";
+
 function formatValidationErrors(errors: ValidationErrorItem[]): string {
   for (const error of errors) {
     const field = error.loc?.find((part) => part !== "body");
@@ -30,12 +32,9 @@ function formatValidationErrors(errors: ValidationErrorItem[]): string {
     if (field === "password") {
       return "Please enter a valid password.";
     }
-    if (error.msg) {
-      return error.msg;
-    }
   }
 
-  return "Please check your information and try again.";
+  return DEFAULT_VALIDATION_MESSAGE;
 }
 
 async function parseError(response: Response): Promise<string> {
