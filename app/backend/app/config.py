@@ -1,5 +1,6 @@
 from functools import lru_cache
 from typing import Annotated
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
@@ -36,8 +37,20 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # Canvas API
-    CANVAS_API_URL: str = "https://canvas.ubc.ca/api/v1"
+    # base domain only — /api/v1 is appended by the integration layer
+    CANVAS_API_URL: str = "https://canvas.ubc.ca"
     CANVAS_API_TOKEN: str = ""
+    CANVAS_TOKEN_ENCRYPTION_KEY: str = ""
+
+    @field_validator("CANVAS_TOKEN_ENCRYPTION_KEY", mode="before")
+    @classmethod
+    def _validate_encryption_key(cls, v: str) -> str:
+        if not v:
+            raise ValueError(
+                "CANVAS_TOKEN_ENCRYPTION_KEY must be set. "
+                "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+            )
+        return v
 
 
 @lru_cache

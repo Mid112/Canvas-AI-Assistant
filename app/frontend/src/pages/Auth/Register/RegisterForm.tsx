@@ -36,13 +36,15 @@ export function RegisterForm({
   const showPasswordMismatchError =
     confirmPassword !== "" && !passwordsMatch;
 
-  const isFormComplete =
+  const hasRequiredFields =
     name.trim() !== "" &&
     isValidEmail(trimmedEmail) &&
     isValidPassword(password) &&
     confirmPassword !== "" &&
-    passwordsMatch &&
-    acceptedTerms;
+    passwordsMatch;
+
+  const isFormComplete = hasRequiredFields && acceptedTerms;
+  const showTermsReminder = hasRequiredFields && !acceptedTerms;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -161,6 +163,12 @@ export function RegisterForm({
       {showPasswordMismatchError && (
         <p className="text-sm text-[#dc2626]" role="alert">
           Passwords must match
+        </p>
+      )}
+
+      {showTermsReminder && (
+        <p className="text-sm text-[#64748b]" role="status">
+          Accept the Terms of Service and Privacy Policy to continue.
         </p>
       )}
 

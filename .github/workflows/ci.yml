@@ -1,0 +1,160 @@
+name: CI
+
+on:
+  # Only run on PRs targeting main/develop — not on every direct push.
+  # This means CI runs once per PR (and again on each new commit pushed
+  # to that PR), rather than on every single push to a branch.
+  pull_request:
+    branches: [main, develop]
+  # Still run on direct pushes to main/develop themselves, since those
+  # represent code actually landing in a protected branch.
+  push:
+    branches: [main, develop]
+
+# Cancels older in-progress runs for the same branch/PR when a new
+# commit is pushed. Prevents CI minutes being wasted on stale runs
+# and means only the latest push actually finishes running.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── 0. Detect which parts of the repo changed ──────────
+  # This lets backend-only changes skip frontend jobs and vice versa.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'app/backend/**'
+              - 'test/backend/**'
+            frontend:
+              - 'app/frontend/**'
+              - 'test/frontend/**'
+
+  # ── 1. Backend lint + type check ──────────
+  backend-lint:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    defaults:
+      run:
+        working-directory: ./app/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: app/backend/requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt ruff mypy
+      - name: Lint
+        run: ruff check .
+      - name: Type check
+        # continue-on-error: true means mypy issues are visible in the
+        # CI log and job summary, but won't block merges yet. Remove
+        # this once the codebase has been typed-checked end to end
+        # and you're ready to enforce it strictly.
+        continue-on-error: true
+        run: mypy . --ignore-missing-imports
+
+  # ── 2. Backend tests ──────────────────────
+  backend-test:
+    runs-on: ubuntu-latest
+    needs: backend-lint
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: app/backend/requirements.txt
+      - name: Install dependencies
+        working-directory: ./app/backend
+        run: pip install -r requirements.txt
+      - name: Run tests
+        # Tests live in test/backend/ but import from app.backend.app,
+        # so we run pytest from the repo root with PYTHONPATH set.
+        run: PYTHONPATH=./app/backend pytest test/backend/ -v
+        env:
+          DATABASE_URL: postgresql+asyncpg://testuser:testpass@localhost:5432/testdb
+          ENVIRONMENT: test
+          SECRET_KEY: ci-test-secret
+          CANVAS_TOKEN_ENCRYPTION_KEY: cS_xtOdvX6UctctAErcx3JJC1e3YBBM-Kwh9WLY3ocI=
+
+  # ── 3. Frontend lint + test ───────────────
+  frontend-test:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    defaults:
+      run:
+        working-directory: ./app/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: app/frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Run tests
+        # package.json test script proxies to test/frontend internally
+        run: npm run test
+
+  # ── 4. Docker build check ─────────────────
+  # Only runs after both lint/test jobs succeed (or are skipped
+  # because that part of the repo didn't change).
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-test]
+    if: always() && !failure() && !cancelled()
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./app/backend
+          push: false
+          tags: app-backend:test
+      - name: Build frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./app/frontend
+          push: false
+          tags: app-frontend:test
+      # MCP commented out until app/mcp/ has a Dockerfile.
+      # Uncomment once MCP service is implemented.
+      # - name: Build MCP image
+      #   uses: docker/build-push-action@v5
+      #   with:
+      #     context: ./app/mcp
+      #     push: false
+      #     tags: app-mcp:test

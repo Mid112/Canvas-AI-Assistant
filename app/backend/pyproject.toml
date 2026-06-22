@@ -1,0 +1,60 @@
+# ─────────────────────────────────────────────
+# app/backend/pyproject.toml
+# Ruff (linter) and Mypy (type checker) configuration.
+# Without this file, ruff/mypy use generic defaults that may
+# not match your project structure — e.g. mypy won't know
+# where your source root is, ruff won't know which Python
+# version's syntax to target.
+# ─────────────────────────────────────────────
+
+[tool.ruff]
+# Target Python 3.12 syntax (matches your Docker base image)
+target-version = "py312"
+line-length = 130
+
+# Directories ruff should ignore entirely
+exclude = [
+    ".venv",
+    "__pycache__",
+    "*.egg-info",
+]
+
+[tool.ruff.lint]
+# Rule sets enabled:
+# E/W = pycodestyle errors/warnings
+# F   = pyflakes (unused imports, undefined names)
+# I   = isort (import sorting)
+# UP  = pyupgrade (modern Python syntax suggestions)
+select = ["E", "W", "F", "I", "UP"]
+
+# Allow unused imports in __init__.py files — these are often
+# intentional re-exports (e.g. models/__init__.py)
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.12"
+
+# Don't fail on missing type stubs for third-party packages
+# that don't ship their own (e.g. some FastAPI dependencies)
+ignore_missing_imports = true
+
+# Don't require type hints on every single function yet —
+# can be tightened later once the codebase is more mature
+disallow_untyped_defs = false
+
+# Exclude virtual environment and cache directories
+exclude = [
+    ".venv",
+    "__pycache__",
+]
+
+# main.py has a module/variable naming collision: the package is
+# called "app" and the FastAPI instance is also called "app" (the
+# standard FastAPI convention, required by `uvicorn app.main:app`).
+# mypy sometimes misresolves this as a module-vs-variable conflict.
+# Disable that specific check just for this file rather than
+# renaming the FastAPI instance.
+[[tool.mypy.overrides]]
+module = "app.main"
+disable_error_code = ["assignment", "attr-defined"]

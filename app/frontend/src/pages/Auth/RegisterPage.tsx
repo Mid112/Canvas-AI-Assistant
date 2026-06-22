@@ -7,7 +7,7 @@ import { RegisterFooter } from "@/pages/Auth/Register/RegisterFooter";
 import { RegisterForm } from "@/pages/Auth/Register/RegisterForm";
 import { RegisterHeader } from "@/pages/Auth/Register/RegisterHeader";
 import { RegisterWelcome } from "@/pages/Auth/Register/RegisterWelcome";
-import { paths } from "@/routes/paths";
+import { getPostAuthPath } from "@/utils/onboarding";
 
 export function RegisterPage() {
   const navigate = useNavigate();
@@ -28,8 +28,8 @@ export function RegisterPage() {
             setIsSubmitting(true);
 
             try {
-              await register(credentials);
-              navigate(paths.canvasInfo);
+              const user = await register(credentials);
+              navigate(getPostAuthPath(user.id, user.role));
             } catch (err) {
               setError(getRegisterErrorMessage(err));
             } finally {

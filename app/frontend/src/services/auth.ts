@@ -38,6 +38,10 @@ function formatValidationErrors(errors: ValidationErrorItem[]): string {
 }
 
 async function parseError(response: Response): Promise<string> {
+  if (response.status === 404) {
+    return "The requested API endpoint was not found. Make sure the backend is running.";
+  }
+
   try {
     const data = (await response.json()) as {
       detail?: string | ValidationErrorItem[];

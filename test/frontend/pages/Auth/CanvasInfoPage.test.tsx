@@ -1,8 +1,20 @@
 import { screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 
 import { CanvasInfoPage } from "@/pages/Auth/CanvasInfoPage";
+import { paths } from "@/routes/paths";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
+
+const mockNavigate = vi.fn();
+
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual("react-router-dom");
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 describe("CanvasInfoPage", () => {
   it("renders the canvas info overview", () => {
@@ -42,5 +54,14 @@ describe("CanvasInfoPage", () => {
     expect(screen.getByText("Manage Assignments")).toBeInTheDocument();
     expect(screen.getByText("Enterprise-Grade Encryption")).toBeInTheDocument();
     expect(screen.getByText("Revocable Access")).toBeInTheDocument();
+  });
+
+  it("navigates to connect canvas when proceed is clicked", async () => {
+    const user = userEvent.setup();
+    renderWithRouter(<CanvasInfoPage />);
+
+    await user.click(screen.getByRole("button", { name: "Proceed to Connect" }));
+
+    expect(mockNavigate).toHaveBeenCalledWith(paths.connectCanvas);
   });
 });
