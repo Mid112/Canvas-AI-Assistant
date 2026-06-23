@@ -2,7 +2,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -51,10 +50,12 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
   const [selectedInstitutionId, setSelectedInstitutionId] = useState(() =>
     resolveInstitutionId(user?.id),
   );
+  const [prevUserId, setPrevUserId] = useState(user?.id);
 
-  useEffect(() => {
+  if (user?.id !== prevUserId) {
+    setPrevUserId(user?.id);
     setSelectedInstitutionId(resolveInstitutionId(user?.id));
-  }, [user?.id]);
+  }
 
   const setSelectedInstitution = useCallback(
     (institutionId: string) => {

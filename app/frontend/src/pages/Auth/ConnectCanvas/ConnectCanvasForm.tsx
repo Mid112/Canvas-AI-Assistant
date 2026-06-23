@@ -67,7 +67,10 @@ export function ConnectCanvasForm({
   const validationRequestIds = useRef<number[]>([0]);
   const prevDebouncedTokens = useRef<string[]>([]);
   const onSessionExpiredRef = useRef(onSessionExpired);
-  onSessionExpiredRef.current = onSessionExpired;
+
+  useEffect(() => {
+    onSessionExpiredRef.current = onSessionExpired;
+  }, [onSessionExpired]);
 
   const nonEmptyTokens = canvasTokens
     .map((token) => token.trim())
@@ -87,22 +90,6 @@ export function ConnectCanvasForm({
     allEnteredTokensValid &&
     !isValidatingTokens &&
     !isSubmitting;
-
-  useEffect(() => {
-    setValidationStates((current) => {
-      if (current.length === canvasTokens.length) {
-        return current;
-      }
-
-      return canvasTokens.map(
-        (_, index) => current[index] ?? { status: "idle" },
-      );
-    });
-
-    validationRequestIds.current = canvasTokens.map(
-      (_, index) => validationRequestIds.current[index] ?? 0,
-    );
-  }, [canvasTokens.length]);
 
   useEffect(() => {
     debouncedTokens.forEach((token, index) => {
