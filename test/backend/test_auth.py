@@ -132,7 +132,7 @@ def test_validate_canvas_token_requires_auth(client):
         "/api/v1/auth/me/canvas-token/validate",
         json={"canvas_token": "test-token"},
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 401
 
 
 def test_set_canvas_token_second_school(client):

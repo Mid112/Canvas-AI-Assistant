@@ -1,4 +1,8 @@
-import { AuthApiError } from "@/services/auth";
+import {
+  AuthApiError,
+  DEFAULT_VALIDATION_MESSAGE,
+  GENERIC_AUTH_ERROR_MESSAGE,
+} from "@/services/auth";
 
 function isNetworkError(error: unknown): boolean {
   return (
@@ -8,32 +12,60 @@ function isNetworkError(error: unknown): boolean {
   );
 }
 
-export function getRegisterErrorMessage(error: unknown): string {
-  if (error instanceof AuthApiError) {
-    if (error.status === 400) {
-      return "An account with this email already exists.";
-    }
+function getValidationErrorMessage(message: string): string {
+  return message === GENERIC_AUTH_ERROR_MESSAGE
+    ? DEFAULT_VALIDATION_MESSAGE
+    : message;
+}
 
-    if (error.status === 422) {
-      return "Please check your name, email, and password and try again.";
-    }
+export function getLoginErrorMessage(err: unknown): string {
+  return getAuthErrorMessage(err, "Unable to sign in. Please try again.", {
+    401: "Invalid email or password.",
+    403: "Account is disabled. Please contact support.",
+  });
+}
 
-    if (error.status === 404) {
-      return "The server endpoint was not found. Make sure the backend is running.";
-    }
-
-    if (error.status >= 500) {
-      return "The server encountered an error. Make sure the database is running.";
-    }
-
-    if (error.message) {
-      return error.message;
-    }
-  }
-
-  if (isNetworkError(error)) {
+export function getRegisterErrorMessage(err: unknown): string {
+  if (isNetworkError(err)) {
     return "Cannot reach the server. Start the backend with: docker compose -f docker-compose.dev.yml up";
   }
 
-  return "Unable to create account. Please try again.";
+  if (err instanceof AuthApiError && err.status >= 500) {
+    return "The server encountered an error. Make sure the database is running.";
+  }
+
+  return getAuthErrorMessage(
+    err,
+    "Unable to create account. Please try again.",
+    {
+      400: "An account with this email already exists.",
+      404: "The server endpoint was not found. Make sure the backend is running.",
+    },
+    { useMessageForUnmapped: true },
+  );
+}
+
+function getAuthErrorMessage(
+  err: unknown,
+  fallback: string,
+  statusMessages: Record<number, string>,
+  options?: { useMessageForUnmapped?: boolean },
+): string {
+  if (!(err instanceof AuthApiError)) {
+    return fallback;
+  }
+
+  if (statusMessages[err.status]) {
+    return statusMessages[err.status];
+  }
+
+  if (err.status === 422) {
+    return getValidationErrorMessage(err.message);
+  }
+
+  if (options?.useMessageForUnmapped && err.message) {
+    return err.message;
+  }
+
+  return fallback;
 }

@@ -11,6 +11,8 @@ export const paths = {
     dashboard: "/instructor/dashboard",
     courses: "/instructor/courses",
     assistant: "/instructor/assistant",
+    analytics: "/instructor/analytics",
+    messages: "/instructor/messages",
     history: "/instructor/history",
     settings: "/instructor/settings",
     profile: "/instructor/profile",

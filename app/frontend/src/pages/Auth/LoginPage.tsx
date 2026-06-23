@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import { AuthApiError, useAuth } from "@/contexts/AuthContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { getLoginErrorMessage } from "@/lib/auth-errors";
 import { LoginFooter } from "@/pages/Auth/Login/LoginFooter";
 import { LoginForm } from "@/pages/Auth/Login/LoginForm";
 import { LoginHeader } from "@/pages/Auth/Login/LoginHeader";
@@ -30,11 +31,7 @@ export function LoginPage() {
               const user = await login(credentials);
               navigate(getPostAuthPath(user.id, user.role));
             } catch (err) {
-              if (err instanceof AuthApiError && err.status === 401) {
-                setError("Invalid email or password.");
-              } else {
-                setError("Unable to sign in. Please try again.");
-              }
+              setError(getLoginErrorMessage(err));
             } finally {
               setIsSubmitting(false);
             }

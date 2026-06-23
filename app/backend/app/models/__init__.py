@@ -11,18 +11,20 @@ from app.models.message_template import MessageTemplate
 from app.models.session import Session
 from app.models.submission import Submission
 from app.models.user import User
+from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
 
 __all__ = [
-    "User",
-    "CanvasConnection",
-    "Session",
-    "Course",
     "Assignment",
-    "Submission",
-    "Conversation",
-    "Message",
-    "Workflow",
     "AuditLog",
+    "CanvasConnection",
+    "Conversation",
+    "Course",
+    "Message",
     "MessageTemplate",
+    "Session",
+    "Submission",
+    "User",
+    "UserPreference",
+    "Workflow",
 ]

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.course import Course
     from app.models.message import Message
     from app.models.user import User
     from app.models.workflow import Workflow
@@ -23,8 +24,10 @@ class Conversation(Base):
         Integer, ForeignKey("users.id"), nullable=False, index=True
     )
 
+    # The course this conversation session is scoped to.
+    # Distinct from user_preferences.active_course_id (which is the UI selection state).
     course_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("courses.id"), nullable=True
+        Integer, ForeignKey("courses.id", ondelete="SET NULL"), nullable=True
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -33,6 +36,7 @@ class Conversation(Base):
     )
 
     user: Mapped[User] = relationship("User", back_populates="conversations")
+    course: Mapped[Course | None] = relationship("Course")
     messages: Mapped[list[Message]] = relationship(
         "Message", back_populates="conversation", cascade="all, delete-orphan"
     )

@@ -65,6 +65,7 @@ export function Header({ title, role, roleLabel, navItems }: HeaderProps) {
             </SheetHeader>
             <Sidebar
               navItems={navItems}
+              role={role}
               roleLabel={roleLabel}
               onNavigate={() => setMobileOpen(false)}
               className="w-full border-0"

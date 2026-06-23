@@ -1,7 +1,38 @@
 import { describe, expect, it } from "vitest";
 
-import { getRegisterErrorMessage } from "@/lib/auth-errors";
-import { AuthApiError } from "@/services/auth";
+import {
+  getLoginErrorMessage,
+  getRegisterErrorMessage,
+} from "@/lib/auth-errors";
+import { AuthApiError, GENERIC_AUTH_ERROR_MESSAGE } from "@/services/auth";
+
+describe("getLoginErrorMessage", () => {
+  it("maps 401 errors to invalid credentials message", () => {
+    expect(
+      getLoginErrorMessage(new AuthApiError("Invalid credentials", 401)),
+    ).toBe("Invalid email or password.");
+  });
+
+  it("maps 403 errors to disabled account message", () => {
+    expect(
+      getLoginErrorMessage(new AuthApiError("Account is disabled", 403)),
+    ).toBe("Account is disabled. Please contact support.");
+  });
+
+  it("maps 422 errors to validation message", () => {
+    expect(
+      getLoginErrorMessage(
+        new AuthApiError("Enter a valid email address.", 422),
+      ),
+    ).toBe("Enter a valid email address.");
+  });
+
+  it("returns fallback for unknown errors", () => {
+    expect(getLoginErrorMessage(new Error("network"))).toBe(
+      "Unable to sign in. Please try again.",
+    );
+  });
+});
 
 describe("getRegisterErrorMessage", () => {
   it("returns a duplicate email message for 400 errors", () => {
@@ -12,10 +43,20 @@ describe("getRegisterErrorMessage", () => {
     ).toBe("An account with this email already exists.");
   });
 
-  it("returns a validation message for 422 errors", () => {
-    expect(getRegisterErrorMessage(new AuthApiError("Unprocessable", 422))).toBe(
-      "Please check your name, email, and password and try again.",
-    );
+  it("maps 422 errors to field-specific validation message", () => {
+    expect(
+      getRegisterErrorMessage(
+        new AuthApiError("Enter a valid email address.", 422),
+      ),
+    ).toBe("Enter a valid email address.");
+  });
+
+  it("returns a validation message for generic 422 errors", () => {
+    expect(
+      getRegisterErrorMessage(
+        new AuthApiError(GENERIC_AUTH_ERROR_MESSAGE, 422),
+      ),
+    ).toBe("Please check your information and try again.");
   });
 
   it("returns a not found message for 404 errors", () => {

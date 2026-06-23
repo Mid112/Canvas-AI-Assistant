@@ -60,6 +60,7 @@ export function ResetPasswordForm({ onSubmit }: ResetPasswordFormProps) {
             placeholder="you@university.edu"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            aria-invalid={showEmailError}
             className="h-11 rounded-lg border-[#e2e8f0] bg-white pr-3.5 pl-10 text-[#1e293b] shadow-none placeholder:text-[#94a3b8]"
           />
         </div>

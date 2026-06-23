@@ -4,10 +4,12 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { isValidEmail, isValidPassword, MIN_PASSWORD_LENGTH } from "@/lib/validation";
 import type { RegisterCredentials } from "@/types/auth";
 
 interface RegisterFormProps {
   onSubmit: (credentials: RegisterCredentials) => void | Promise<void>;
+  error?: string | null;
   isSubmitting?: boolean;
 }
 
@@ -18,6 +20,7 @@ const labelClassName = "text-sm font-semibold text-[#1e293b]";
 
 export function RegisterForm({
   onSubmit,
+  error = null,
   isSubmitting = false,
 }: RegisterFormProps) {
   const [name, setName] = useState("");
@@ -26,14 +29,17 @@ export function RegisterForm({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
+  const trimmedEmail = email.trim();
+  const showEmailError = trimmedEmail !== "" && !isValidEmail(trimmedEmail);
+  const showPasswordError = password !== "" && !isValidPassword(password);
   const passwordsMatch = password === confirmPassword;
   const showPasswordMismatchError =
     confirmPassword !== "" && !passwordsMatch;
 
   const hasRequiredFields =
     name.trim() !== "" &&
-    email.trim() !== "" &&
-    password !== "" &&
+    isValidEmail(trimmedEmail) &&
+    isValidPassword(password) &&
     confirmPassword !== "" &&
     passwordsMatch;
 
@@ -48,7 +54,7 @@ export function RegisterForm({
 
     await onSubmit({
       name: name.trim(),
-      email: email.trim(),
+      email: trimmedEmail,
       password,
     });
   };
@@ -79,9 +85,16 @@ export function RegisterForm({
           placeholder="professor@university.edu"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
+          aria-invalid={showEmailError}
           className={inputClassName}
         />
       </div>
+
+      {showEmailError && (
+        <p className="text-sm text-[#dc2626]" role="alert">
+          Enter a valid email address
+        </p>
+      )}
 
       <div className="space-y-2">
         <label htmlFor="password" className={labelClassName}>
@@ -93,9 +106,16 @@ export function RegisterForm({
           placeholder="Create a strong password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          aria-invalid={showPasswordError}
           className={inputClassName}
         />
       </div>
+
+      {showPasswordError && (
+        <p className="text-sm text-[#dc2626]" role="alert">
+          Password must be at least {MIN_PASSWORD_LENGTH} characters
+        </p>
+      )}
 
       <div className="space-y-2">
         <label htmlFor="confirm-password" className={labelClassName}>
@@ -149,6 +169,12 @@ export function RegisterForm({
       {showTermsReminder && (
         <p className="text-sm text-[#64748b]" role="status">
           Accept the Terms of Service and Privacy Policy to continue.
+        </p>
+      )}
+
+      {error && (
+        <p className="text-sm text-[#dc2626]" role="alert">
+          {error}
         </p>
       )}
 
