@@ -18,6 +18,12 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Self-hosted runners must use a writable tool cache path. Without this,
+  # setup-python/setup-node default to /Users/runner and fail with EACCES.
+  RUNNER_TOOL_CACHE: ${{ github.workspace }}/../../_tool
+  AGENT_TOOLSDIRECTORY: ${{ github.workspace }}/../../_tool
+
 jobs:
   # ── 0. Detect which parts of the repo changed ──────────
   # This lets backend-only changes skip frontend jobs and vice versa.
