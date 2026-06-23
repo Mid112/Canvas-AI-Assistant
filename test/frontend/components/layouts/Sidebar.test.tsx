@@ -1,11 +1,13 @@
-import { screen } from "@testing-library/react";
+import type { ComponentProps } from "react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { Sidebar } from "@/components/layouts/Sidebar";
+import { InstitutionProvider } from "@/contexts/InstitutionContext";
 import { paths } from "@/routes/paths";
 import { instructorNavItems } from "@/utils/navigation";
-import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 const mockNavigate = vi.fn();
 const mockLogout = vi.fn();
@@ -23,39 +25,58 @@ vi.mock("@/contexts/AuthContext", () => ({
     logout: mockLogout,
     login: vi.fn(),
     register: vi.fn(),
-    user: null,
+    user: {
+      id: 1,
+      email: "jane.doe@ubc.ca",
+      name: "Dr. Jane Doe",
+      role: "instructor" as const,
+      is_active: true,
+      has_canvas_token: true,
+    },
     isAuthenticated: true,
     isLoading: false,
   }),
 }));
 
-describe("Sidebar", () => {
-  it("renders navigation items and role label", () => {
-    renderWithRouter(
-      <Sidebar navItems={instructorNavItems} roleLabel="Instructor" />,
-    );
+function renderSidebar(props: ComponentProps<typeof Sidebar>) {
+  return render(
+    <InstitutionProvider>
+      <MemoryRouter>
+        <Sidebar {...props} />
+      </MemoryRouter>
+    </InstitutionProvider>,
+  );
+}
 
-    expect(screen.getByText("Canvas Workflow")).toBeInTheDocument();
-    expect(screen.getByText("Instructor")).toBeInTheDocument();
+describe("Sidebar", () => {
+  it("renders navigation items and portal branding", () => {
+    renderSidebar({
+      navItems: instructorNavItems,
+      role: "instructor",
+      roleLabel: "Instructor",
+    });
+
+    expect(screen.getByText("Canvas AI")).toBeInTheDocument();
+    expect(screen.getByText("Instructor Portal")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Log out" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open profile menu" })).toBeInTheDocument();
   });
 
-  it("logs out and navigates to login when log out is clicked", async () => {
-    const user = userEvent.setup();
+  it("logs out from the profile menu", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onNavigate = vi.fn();
     mockNavigate.mockClear();
     mockLogout.mockClear();
 
-    renderWithRouter(
-      <Sidebar
-        navItems={instructorNavItems}
-        roleLabel="Instructor"
-        onNavigate={onNavigate}
-      />,
-    );
+    renderSidebar({
+      navItems: instructorNavItems,
+      role: "instructor",
+      roleLabel: "Instructor",
+      onNavigate,
+    });
 
-    await user.click(screen.getByRole("button", { name: "Log out" }));
+    await user.click(screen.getByRole("button", { name: "Open profile menu" }));
+    await user.click(await screen.findByText("Log out"));
 
     expect(mockLogout).toHaveBeenCalledTimes(1);
     expect(onNavigate).toHaveBeenCalledTimes(1);
