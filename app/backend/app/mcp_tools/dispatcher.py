@@ -17,6 +17,25 @@ from app.services.canvas import (
     set_active_course,
 )
 
+import re
+
+def _extract_json(raw_llm_output: str) -> str:
+    """Qwen3 and similar 'thinking' models wrap reasoning in <think>...</think>
+    before the actual answer. Strip that block, then pull out the first
+    {...} object found in what remains — handles both thinking-model output
+    and any incidental prose/markdown fences around the JSON."""
+
+    without_thinking = re.sub(r"<think>.*?</think>", "", raw_llm_output, flags=re.DOTALL)
+
+    match = re.search(r"\{.*\}", without_thinking, re.DOTALL)
+    if match:
+        return match.group(0)
+
+    return without_thinking.strip()
+
+
+
+
 
 class ToolExecutionError(Exception):
     """Callers catch this and turn it into a user-facing message —
@@ -35,8 +54,9 @@ def parse_action(raw_llm_output: str) -> Any:
     Any failure raises ToolExecutionError with a message safe to show
     the user, plus a more detailed message for the audit log."""
 
+    cleaned = _extract_json(raw_llm_output)
     try:
-        data = json.loads(raw_llm_output)
+        data = json.loads(cleaned)
     except json.JSONDecodeError as e:
         raise ToolExecutionError(
             "The assistant's response could not be understood. Please try rephrasing.",

@@ -1,4 +1,4 @@
-.PHONY: install lint lint-fix test test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset
+.PHONY: install install-vllm lint lint-fix test test-llm test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset run-vllm
 
 # ── Install ──────────────────────────────────
 # Creates a venv (if one doesn't exist) and installs backend deps
@@ -8,6 +8,16 @@ install:
 	cd app/backend && .venv/bin/pip install --upgrade pip
 	cd app/backend && .venv/bin/pip install -r requirements.txt
 	cd app/frontend && npm ci
+
+# ── Install vLLM ─────────────────────────────
+# Creates a dedicated venv for vLLM at ~/vllm-env (kept separate from
+# the backend's venv since vLLM has heavy, sometimes conflicting deps)
+# and downloads the Qwen3-4B model. Run once per machine.
+install-vllm:
+	python3.12 -m venv ~/vllm-env
+	~/vllm-env/bin/pip install --upgrade pip
+	~/vllm-env/bin/pip install vllm
+	~/vllm-env/bin/hf download Qwen/Qwen3-4B
 
 # ── Lint ─────────────────────────────────────
 # Checks code style/quality without running tests.
@@ -38,6 +48,14 @@ test:
 	PYTHONPATH=./app/backend DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb app/backend/.venv/bin/pytest test/backend/ -v
 	cd app/frontend && npm run test
 
+# ── Test LLM adapter ─────────────────────────
+# Runs just the LLM adapter test (test/backend/llm_test.py) against a
+# live vLLM instance. Requires `make run-vllm` running in another
+# terminal first — this does NOT start vLLM for you, since vLLM is a
+# long-running process meant to stay up across multiple test runs.
+test-llm:
+	PYTHONPATH=./app/backend app/backend/.venv/bin/pytest test/backend/llm_test.py -v
+
 # ── Test from scratch ─────────────────────────
 # Full reset: tears down any running stack (dev or prod), starts
 # a fresh dev postgres, reinstalls backend deps into a clean venv,
@@ -54,6 +72,20 @@ test-fresh:
 	cd app/backend && .venv/bin/pip install --upgrade pip
 	cd app/backend && .venv/bin/pip install -r requirements.txt
 	make test
+
+# ── Run vLLM ─────────────────────────────────
+# Starts vLLM's OpenAI-compatible server on port 8001 (8000 is
+# reserved for the FastAPI backend — do not change this port without
+# also updating VLLM_BASE_URL in app/backend/.env.example and .env).
+# Leave this running in its own terminal — it's long-lived, not a
+# one-shot command. First run also downloads the model if you skipped
+# `make install-vllm`, which can take several minutes.
+run-vllm:
+	~/vllm-env/bin/python -m vllm.entrypoints.openai.api_server \
+		--model Qwen/Qwen3-4B \
+		--host 0.0.0.0 \
+		--port 8001 \
+		--max-model-len 4096
 
 # ── Docker ───────────────────────────────────
 build:

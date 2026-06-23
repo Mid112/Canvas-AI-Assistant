@@ -12,7 +12,7 @@ from app.models.message import Message
 from app.models.user import User
 from app.services.llm.llm_setting import get_llm_adapter
 
-LLM_TIMEOUT_SECONDS = 30.0
+LLM_TIMEOUT_SECONDS = 90.0
 
 
 async def get_or_create_conversation(
@@ -78,7 +78,7 @@ async def handle_chat_message(
     except (asyncio.TimeoutError, Exception) as e:
         is_timeout = isinstance(e, asyncio.TimeoutError)
         log_detail = "LLM request timed out" if is_timeout else f"LLM request failed: {e}"
-        await log_message(db, conversation, role="system", content=log_detail)
+        await log_message(db, conversation, role="assistant", content=log_detail)
         await db.commit()
         return (
             conversation,
@@ -90,7 +90,7 @@ async def handle_chat_message(
         action = parse_action(raw_output)
         result = await execute_tool(db, user, action)
     except ToolExecutionError as e:
-        await log_message(db, conversation, role="system", content=e.log_detail)
+        await log_message(db, conversation, role="assistant", content=e.log_detail)
         await db.commit()
         return conversation, {"error": e.user_message}, True
 
