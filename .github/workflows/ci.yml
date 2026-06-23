@@ -91,22 +91,31 @@ jobs:
     - macOS
     - X64
     needs: backend-lint
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: testuser
-          POSTGRES_PASSWORD: testpass
-          POSTGRES_DB: testdb
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v4
+      - name: Start PostgreSQL
+        # Service containers only work on Linux runners. On macOS self-hosted
+        # runners, start Postgres via Docker instead.
+        run: |
+          CONTAINER="ci-postgres-${{ github.run_id }}"
+          docker rm -f "$CONTAINER" 2>/dev/null || true
+          docker run -d \
+            --name "$CONTAINER" \
+            -e POSTGRES_USER=testuser \
+            -e POSTGRES_PASSWORD=testpass \
+            -e POSTGRES_DB=testdb \
+            -p 5434:5432 \
+            postgres:16-alpine
+          for i in $(seq 1 30); do
+            if docker exec "$CONTAINER" pg_isready -U testuser -d testdb >/dev/null 2>&1; then
+              echo "PostgreSQL is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "PostgreSQL failed to start"
+          docker logs "$CONTAINER"
+          exit 1
       - name: Set up Python 3.12
         run: |
           python3.12 --version
@@ -125,10 +134,13 @@ jobs:
         # so we run pytest from the repo root with PYTHONPATH set.
         run: PYTHONPATH=./app/backend python3.12 -m pytest test/backend/ -v
         env:
-          DATABASE_URL: postgresql+asyncpg://testuser:testpass@localhost:5432/testdb
+          DATABASE_URL: postgresql+asyncpg://testuser:testpass@localhost:5434/testdb
           ENVIRONMENT: test
           SECRET_KEY: ci-test-secret
           CANVAS_TOKEN_ENCRYPTION_KEY: cS_xtOdvX6UctctAErcx3JJC1e3YBBM-Kwh9WLY3ocI=
+      - name: Stop PostgreSQL
+        if: always()
+        run: docker rm -f "ci-postgres-${{ github.run_id }}" 2>/dev/null || true
 
   # ── 3. Frontend lint + test ───────────────
   frontend-test:
