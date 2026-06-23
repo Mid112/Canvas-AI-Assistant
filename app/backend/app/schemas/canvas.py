@@ -1,16 +1,35 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CourseResponse(BaseModel):
-    id: int
+    # extra="ignore" — Canvas returns many fields we don't need; populate_by_name lets
+    # us also construct this with canvas_id= directly (not just via the alias "id")
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    # validation_alias="id" parses Canvas JSON {"id": N} into canvas_id during input;
+    # serialization uses the field name canvas_id so the frontend never sees a bare "id"
+    canvas_id: int = Field(validation_alias="id")
+    local_id: int | None = None
+
     name: str
     course_code: str
-    enrollment_term_id: int | None = None
     workflow_state: str
 
+    enrollment_term_id: int | None = None
+    term_name: str | None = None
+
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+
+    # Only present when Canvas request includes include[]=total_students
+    total_students: int | None = None
+
+
 class AssignmentResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     id: int
     name: str
     description: str | None = None
@@ -20,6 +39,8 @@ class AssignmentResponse(BaseModel):
 
 
 class SubmissionResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     id: int
     assignment_id: int
     user_id: int
@@ -27,3 +48,18 @@ class SubmissionResponse(BaseModel):
     grade: str | None = None
     submitted_at: datetime | None = None
     workflow_state: str
+
+
+class ActiveCourseSet(BaseModel):
+    local_course_id: int
+
+
+class ActiveCourseResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    local_id: int
+    canvas_course_id: str
+    # canvas_url tells the AI layer which Canvas instance to call for assignments/submissions
+    canvas_url: str
+    name: str
+    term: str | None = None
