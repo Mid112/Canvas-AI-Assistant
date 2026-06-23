@@ -8,11 +8,12 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.canvas_connection import CanvasConnection
-    from app.models.course import Course
     from app.models.conversation import Conversation
+    from app.models.course import Course
     from app.models.audit_log import AuditLog
     from app.models.message_template import MessageTemplate
     from app.models.session import Session
+    from app.models.user_preference import UserPreference
     from app.models.workflow import Workflow
 
 
@@ -58,4 +59,8 @@ class User(Base):
     )
     message_templates: Mapped[list["MessageTemplate"]] = relationship(
         "MessageTemplate", back_populates="user", cascade="all, delete-orphan"
+    )
+    # uselist=False — one-to-one with user_preferences; cascade removes the row when the user is deleted
+    preferences: Mapped["UserPreference | None"] = relationship(
+        "UserPreference", back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
