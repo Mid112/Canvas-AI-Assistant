@@ -5,7 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { Sidebar } from "@/components/layouts/Sidebar";
-import { InstitutionProvider } from "@/contexts/InstitutionContext";
+import { InstitutionProvider } from "@/contexts/InstitutionProvider";
 import { paths } from "@/routes/paths";
 import { instructorNavItems } from "@/utils/navigation";
 

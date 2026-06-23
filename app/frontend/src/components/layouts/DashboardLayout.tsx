@@ -3,7 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 
 import { Header } from "@/components/layouts/Header";
 import { Sidebar } from "@/components/layouts/Sidebar";
-import { InstitutionProvider } from "@/contexts/InstitutionContext";
+import { InstitutionProvider } from "@/contexts/InstitutionProvider";
 import {
   getStoredSidebarOpen,
   setStoredSidebarOpen,

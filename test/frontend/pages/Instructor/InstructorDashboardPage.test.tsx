@@ -2,7 +2,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { useInstitution } from "@/contexts/InstitutionContext";
+import { useInstitution } from "@/contexts/useInstitution";
 import { InstructorDashboardPage } from "@/pages/Instructor/InstructorDashboardPage";
 import { paths } from "@/routes/paths";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";

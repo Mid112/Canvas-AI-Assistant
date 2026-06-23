@@ -1,5 +1,5 @@
 import { useAuth } from "@/contexts/AuthContext";
-import { useInstitution } from "@/contexts/InstitutionContext";
+import { useInstitution } from "@/contexts/useInstitution";
 import { InstructorDashboardActiveCourses } from "@/pages/Instructor/InstructorDashboard/InstructorDashboardActiveCourses";
 import { InstructorDashboardHeader } from "@/pages/Instructor/InstructorDashboard/InstructorDashboardHeader";
 import { InstructorDashboardNotifications } from "@/pages/Instructor/InstructorDashboard/InstructorDashboardNotifications";

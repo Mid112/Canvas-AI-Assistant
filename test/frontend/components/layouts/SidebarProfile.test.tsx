@@ -4,7 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { SidebarProfile } from "@/components/layouts/SidebarProfile";
-import { InstitutionProvider } from "@/contexts/InstitutionContext";
+import { InstitutionProvider } from "@/contexts/InstitutionProvider";
 import { paths } from "@/routes/paths";
 
 const mockNavigate = vi.fn();

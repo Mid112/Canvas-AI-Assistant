@@ -2,10 +2,8 @@ import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { AuthProvider } from "@/contexts/AuthContext";
-import {
-  InstitutionProvider,
-  useInstitution,
-} from "@/contexts/InstitutionContext";
+import { InstitutionProvider } from "@/contexts/InstitutionProvider";
+import { useInstitution } from "@/contexts/useInstitution";
 
 function wrapper({ children }: { children: React.ReactNode }) {
   return (

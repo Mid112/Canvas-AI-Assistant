@@ -1,14 +1,15 @@
 import {
-  createContext,
   useCallback,
-  useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  InstitutionContext,
+  type InstitutionContextValue,
+} from "@/contexts/institution-context";
 import {
   getInstitutionData,
   institutions,
@@ -17,24 +18,9 @@ import {
   getStoredInstitutionId,
   setStoredInstitutionId,
 } from "@/lib/institution-storage";
-import type {
-  CourseAnalyticsOverview,
-  InstructorCourse,
-} from "@/types/course";
+import type { CourseAnalyticsOverview } from "@/types/course";
 import type { InstructorDashboardData } from "@/types/dashboard";
 import { sharedDashboardQuickActions } from "@/types/dashboard";
-import type { Institution } from "@/types/institution";
-
-interface InstitutionContextValue {
-  institutions: Institution[];
-  selectedInstitution: Institution;
-  setSelectedInstitution: (institutionId: string) => void;
-  courses: InstructorCourse[];
-  analytics: CourseAnalyticsOverview;
-  dashboard: InstructorDashboardData;
-}
-
-const InstitutionContext = createContext<InstitutionContextValue | null>(null);
 
 const DEFAULT_INSTITUTION_ID = institutions[0]?.id ?? "ubc";
 
@@ -90,13 +76,16 @@ function withSharedQuickActions(
 
 export function InstitutionProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const userId = user?.id;
   const [selectedInstitutionId, setSelectedInstitutionId] = useState(() =>
-    resolveInstitutionId(user?.id),
+    resolveInstitutionId(userId),
   );
+  const [previousUserId, setPreviousUserId] = useState(userId);
 
-  useEffect(() => {
-    setSelectedInstitutionId(resolveInstitutionId(user?.id));
-  }, [user?.id]);
+  if (userId !== previousUserId) {
+    setPreviousUserId(userId);
+    setSelectedInstitutionId(resolveInstitutionId(userId));
+  }
 
   const setSelectedInstitution = useCallback(
     (institutionId: string) => {
@@ -144,14 +133,4 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
       {children}
     </InstitutionContext.Provider>
   );
-}
-
-export function useInstitution(): InstitutionContextValue {
-  const context = useContext(InstitutionContext);
-
-  if (!context) {
-    throw new Error("useInstitution must be used within an InstitutionProvider");
-  }
-
-  return context;
 }
