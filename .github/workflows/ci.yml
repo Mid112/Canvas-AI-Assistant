@@ -85,6 +85,7 @@ jobs:
         run: python3.12 -m mypy . --ignore-missing-imports
 
   # ── 2. Backend tests ──────────────────────
+  # Postgres is started via docker run — not services: (Linux runners only).
   backend-test:
     runs-on:
     - self-hosted
