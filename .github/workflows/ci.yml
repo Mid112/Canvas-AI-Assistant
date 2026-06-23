@@ -63,26 +63,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python 3.12
+        working-directory: ${{ github.workspace }}
         run: |
           python3.12 --version
-          python3.12 -m pip install --upgrade pip
+          python3.12 -m venv .ci-venv
+          echo "$GITHUB_WORKSPACE/.ci-venv/bin" >> $GITHUB_PATH
       - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-py3.12-${{ hashFiles('app/backend/requirements.txt') }}
+          key: pip-${{ runner.os }}-${{ runner.arch }}-py3.12-${{ hashFiles('app/backend/requirements.txt') }}
           restore-keys: |
-            pip-${{ runner.os }}-py3.12-
+            pip-${{ runner.os }}-${{ runner.arch }}-py3.12-
       - name: Install dependencies
-        run: python3.12 -m pip install -r requirements.txt ruff mypy
+        env:
+          PYTHONNOUSERSITE: 1
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt ruff mypy
       - name: Lint
-        run: python3.12 -m ruff check .
+        env:
+          PYTHONNOUSERSITE: 1
+        run: python -m ruff check .
       - name: Type check
         # continue-on-error: true means mypy issues are visible in the
         # CI log and job summary, but won't block merges yet. Remove
         # this once the codebase has been typed-checked end to end
         # and you're ready to enforce it strictly.
         continue-on-error: true
-        run: python3.12 -m mypy . --ignore-missing-imports
+        env:
+          PYTHONNOUSERSITE: 1
+        run: python -m mypy . --ignore-missing-imports
 
   # ── 2. Backend tests ──────────────────────
   # Postgres is started via docker run — not services: (Linux runners only).
@@ -120,25 +130,31 @@ jobs:
       - name: Set up Python 3.12
         run: |
           python3.12 --version
-          python3.12 -m pip install --upgrade pip
+          python3.12 -m venv .ci-venv
+          echo "$GITHUB_WORKSPACE/.ci-venv/bin" >> $GITHUB_PATH
       - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-py3.12-${{ hashFiles('app/backend/requirements.txt') }}
+          key: pip-${{ runner.os }}-${{ runner.arch }}-py3.12-${{ hashFiles('app/backend/requirements.txt') }}
           restore-keys: |
-            pip-${{ runner.os }}-py3.12-
+            pip-${{ runner.os }}-${{ runner.arch }}-py3.12-
       - name: Install dependencies
         working-directory: ./app/backend
-        run: python3.12 -m pip install -r requirements.txt
+        env:
+          PYTHONNOUSERSITE: 1
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
       - name: Run tests
         # Tests live in test/backend/ but import from app.backend.app,
         # so we run pytest from the repo root with PYTHONPATH set.
-        run: PYTHONPATH=./app/backend python3.12 -m pytest test/backend/ -v
         env:
+          PYTHONNOUSERSITE: 1
           DATABASE_URL: postgresql+asyncpg://testuser:testpass@localhost:5434/testdb
           ENVIRONMENT: test
           SECRET_KEY: ci-test-secret
           CANVAS_TOKEN_ENCRYPTION_KEY: cS_xtOdvX6UctctAErcx3JJC1e3YBBM-Kwh9WLY3ocI=
+        run: PYTHONPATH=./app/backend python -m pytest test/backend/ -v
       - name: Stop PostgreSQL
         if: always()
         run: docker rm -f "ci-postgres-${{ github.run_id }}" 2>/dev/null || true
