@@ -1,6 +1,8 @@
-import { AuthApiError } from "@/services/auth";
-
-const DEFAULT_VALIDATION_MESSAGE = "Please check your information and try again.";
+import {
+  AuthApiError,
+  DEFAULT_VALIDATION_MESSAGE,
+  GENERIC_AUTH_ERROR_MESSAGE,
+} from "@/services/auth";
 
 function isNetworkError(error: unknown): boolean {
   return (
@@ -8,6 +10,12 @@ function isNetworkError(error: unknown): boolean {
     (error.message === "Failed to fetch" ||
       error.message.includes("NetworkError"))
   );
+}
+
+function getValidationErrorMessage(message: string): string {
+  return message === GENERIC_AUTH_ERROR_MESSAGE
+    ? DEFAULT_VALIDATION_MESSAGE
+    : message;
 }
 
 export function getLoginErrorMessage(err: unknown): string {
@@ -22,37 +30,26 @@ export function getRegisterErrorMessage(err: unknown): string {
     return "Cannot reach the server. Start the backend with: docker compose -f docker-compose.dev.yml up";
   }
 
-  if (err instanceof AuthApiError) {
-    if (err.status === 400) {
-      return "An account with this email already exists.";
-    }
-
-    if (err.status === 404) {
-      return "The server endpoint was not found. Make sure the backend is running.";
-    }
-
-    if (err.status >= 500) {
-      return "The server encountered an error. Make sure the database is running.";
-    }
-
-    if (err.status === 422) {
-      return err.message === "Something went wrong. Please try again."
-        ? DEFAULT_VALIDATION_MESSAGE
-        : err.message;
-    }
-
-    if (err.message) {
-      return err.message;
-    }
+  if (err instanceof AuthApiError && err.status >= 500) {
+    return "The server encountered an error. Make sure the database is running.";
   }
 
-  return "Unable to create account. Please try again.";
+  return getAuthErrorMessage(
+    err,
+    "Unable to create account. Please try again.",
+    {
+      400: "An account with this email already exists.",
+      404: "The server endpoint was not found. Make sure the backend is running.",
+    },
+    { useMessageForUnmapped: true },
+  );
 }
 
 function getAuthErrorMessage(
   err: unknown,
   fallback: string,
   statusMessages: Record<number, string>,
+  options?: { useMessageForUnmapped?: boolean },
 ): string {
   if (!(err instanceof AuthApiError)) {
     return fallback;
@@ -63,9 +60,11 @@ function getAuthErrorMessage(
   }
 
   if (err.status === 422) {
-    return err.message === "Something went wrong. Please try again."
-      ? DEFAULT_VALIDATION_MESSAGE
-      : err.message;
+    return getValidationErrorMessage(err.message);
+  }
+
+  if (options?.useMessageForUnmapped && err.message) {
+    return err.message;
   }
 
   return fallback;

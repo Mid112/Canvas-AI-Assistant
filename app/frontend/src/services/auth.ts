@@ -21,7 +21,10 @@ type ValidationErrorItem = {
   msg?: string;
 };
 
-const DEFAULT_VALIDATION_MESSAGE = "Please check your information and try again.";
+export const DEFAULT_VALIDATION_MESSAGE =
+  "Please check your information and try again.";
+export const GENERIC_AUTH_ERROR_MESSAGE =
+  "Something went wrong. Please try again.";
 
 function formatValidationErrors(errors: ValidationErrorItem[]): string {
   for (const error of errors) {
@@ -56,7 +59,7 @@ async function parseError(response: Response): Promise<string> {
     // Fall through to default message.
   }
 
-  return "Something went wrong. Please try again.";
+  return GENERIC_AUTH_ERROR_MESSAGE;
 }
 
 async function request<T>(

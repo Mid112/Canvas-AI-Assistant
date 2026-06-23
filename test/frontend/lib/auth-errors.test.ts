@@ -4,7 +4,7 @@ import {
   getLoginErrorMessage,
   getRegisterErrorMessage,
 } from "@/lib/auth-errors";
-import { AuthApiError } from "@/services/auth";
+import { AuthApiError, GENERIC_AUTH_ERROR_MESSAGE } from "@/services/auth";
 
 describe("getLoginErrorMessage", () => {
   it("maps 401 errors to invalid credentials message", () => {
@@ -54,7 +54,7 @@ describe("getRegisterErrorMessage", () => {
   it("returns a validation message for generic 422 errors", () => {
     expect(
       getRegisterErrorMessage(
-        new AuthApiError("Something went wrong. Please try again.", 422),
+        new AuthApiError(GENERIC_AUTH_ERROR_MESSAGE, 422),
       ),
     ).toBe("Please check your information and try again.");
   });
