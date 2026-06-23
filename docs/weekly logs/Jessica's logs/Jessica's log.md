@@ -621,5 +621,92 @@ Overall, this cycle balanced project management responsibilities with frontend i
 * Support documentation updates for completed features
 * Maintain consistent Clockify tracking
 
+# **Cycle 10: Friday (19/6) ~ Monday (22/6)**
+
+### **Friday (19/6)**
+<img width="1036" height="167" alt="Screenshot 2026-06-23 at 10 52 43 AM" src="https://github.com/user-attachments/assets/7433f4a7-9f07-4463-9033-0cea59d86fd2" />
+
+**Timesheet**  
+**Clockify Report:** 2:13:27
+
+**Current Tasks**
+- Participated in team meeting discussions
+- Reviewed MVP progress and current implementation status
+- Discussed upcoming development priorities and sprint goals
+- Coordinated tasks and responsibilities with team members
+- Conducted pull request reviews and provided feedback
+- Reviewed code quality and implementation approaches
+- Supported ongoing project planning activities
+
+---
+
+### **Saturday (20/6)**
+
+**Timesheet**  
+**Clockify Report:** 0:00:00
+
+**Current Tasks**
+- No Clockify entries recorded
+
+
+### **Sunday (21/6)**
+
+<img width="1203" height="162" alt="Screenshot 2026-06-23 at 10 56 08 AM" src="https://github.com/user-attachments/assets/b74df8f4-e78b-4923-8bb4-1cd9e2c866eb" />
+
+**Timesheet**  
+**Clockify Report:** 1:18:01
+
+**Current Tasks**
+- Reviewed teammate pull requests and provided feedback
+- Checked implementation details and code quality
+- Worked on authentication validation functionality
+- Continued frontend development related to user authentication
+- Reviewed validation requirements and application flow
+- Tested authentication-related user interactions
+
+---
+
+### **Monday (22/6)**
+
+**Timesheet**  
+**Clockify Report:** 0:00:00
+
+**Current Tasks**
+- No completed Clockify entries recorded
+
+---
+
+## **Cycle 10 – Goal Review**
+
+### **Reflection**
+
+This cycle focused on team coordination, code review activities, and continued development of authentication-related functionality. Time was spent participating in team discussions, reviewing pull requests, and contributing to the implementation of validation features that support the application's authentication workflow. These activities helped maintain project quality while supporting ongoing MVP development.
+
+### **Retrospective**
+
+Team meetings during this cycle provided an opportunity to review project progress, discuss implementation challenges, and coordinate upcoming development work. These discussions helped ensure that team members remained aligned on project priorities and milestone objectives.
+
+Pull request reviews formed an important part of the cycle. Reviewing teammates' code helped identify potential issues, maintain consistency across the codebase, and improve overall software quality. Providing constructive feedback also supported collaboration and knowledge sharing within the team.
+
+Development work focused on authentication validation functionality. This included reviewing requirements, implementing frontend validation behavior, and testing user interactions related to authentication workflows. Progress made during this cycle contributes to improving the reliability and usability of the application's authentication system.
+
+Overall, this cycle balanced development work with collaboration and code review responsibilities, supporting continued progress toward MVP completion while maintaining code quality standards.
+
+---
+
+## **Next Cycle Goals (Cycle 11: Tuesday 23/6 ~ Thursday 25/6)**
+
+* Continue development of authentication and Canvas integration features
+* Complete remaining frontend tasks for MVP functionality
+* Support backend integration efforts where required
+* Review and test recently implemented features
+* Continue participating in pull request reviews and team discussions
+* Improve validation and error-handling workflows
+* Update project board tasks and milestone tracking
+* Assist with documentation and testing activities
+* Prepare for upcoming MVP deliverables and demonstrations
+* Maintain consistent Clockify tracking
+
+
 
 
