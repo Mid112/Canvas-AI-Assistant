@@ -455,3 +455,63 @@ Total: 7h 10m
 - Add more constraints to account registration: enforce password strength, validate email format more strictly, prevent duplicate registrations with clearer error messages
 - Implement admin role: admin users can promote/demote instructor role for other accounts; protect instructor-only endpoints with role checks
 - Expand Canvas API response fields to match the database schema — courses, assignments, and submissions should capture all fields defined in the DB design (e.g., canvas_course_id, canvas_user_id, enrollment state)
+
+---
+
+# Cycle 10 Report: June 19 – June 22
+
+## Timesheet
+
+### Clockify Report
+
+- 19/6 (Friday): meeting with the team to review PRs, merge canvas-docker into dev branch - 3 hours
+- 20/6 (Saturday): fix db _init_, remove duplicate import, add userpreference model into db - 1.2 hours
+- 21/6 (Sunday): ORM models and work on canvas integration + schemas - 3.65 hours
+- 22/6 (Monday): Finish canvas retrieve system with unit tests, edge cases handle - 3.5 hours
+Total: 10.7 hours
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting + PR Reviews (Friday, 19/6)
+- Met with the team to review open PRs and coordinate merge order before the MVP demo phase
+- Reviewed and merged the canvas-docker branch into dev to unblock local Canvas API testing
+
+### 2: Database Init Fix + UserPreference Model (Saturday, 20/6)
+- Fixed duplicate imports in `models/__init__.py` that were causing SQLAlchemy registration issues
+- Created the `UserPreference` ORM model and added `user_preferences` table to the SQL schema
+- Designed the table with `user_id` as primary key (one row per user) and a nullable FK to `courses` for the active course selection
+
+### 3: ORM Models + Canvas Integration Layer (Sunday, 21/6)
+- Updated `Conversation` model to restore `course_id` (historical record of which course a chat session belongs to, distinct from active course selection)
+- Added `preferences` one-to-one relationship to `User` with cascade delete
+- Rewrote `integrations/canvas.py` to support RFC 5988 Link header pagination (`_fetch_all_pages`, up to 50 pages) and single retry on Canvas 5xx errors
+- Enriched `CourseResponse` schema with `canvas_id`, `local_id`, `canvas_url`, `term_name`, `start_at`, `end_at`, and `total_students`
+- Added `canvas_url` column to the `courses` table and changed `canvas_course_id UNIQUE` to `UNIQUE(canvas_course_id, instructor_id)` to allow co-instructors on the same Canvas course
+
+### 4: Canvas Retrieval Service + Tests (Monday, 22/6)
+- Implemented `get_courses` with batch upsert pattern (one IN query + single flush) — no N+1 queries
+- Implemented `get_active_course` and `set_active_course` backed by `user_preferences` with a `joinedload` to avoid a second query for the course name
+- Wired `GET /canvas/active-course` and `PATCH /canvas/active-course` endpoints with DB session injection
+- Wrote 23 integration tests covering response shape, upsert idempotency, term name extraction, error propagation (403/422/502), multi-school token routing, active course round-trip, upsert-overwrites-previous, and cross-user ownership enforcement
+- Fixed a pre-existing auth test that had the wrong expected status code (401 vs 403)
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle delivered the full canvas retrieval service — courses are now persisted to a local DB on every sync, and instructors can select and retrieve an active working course. The work also resolved two schema-level design issues (co-instructor uniqueness and missing canvas_url on courses) that would have blocked the AI conversation layer.
+
+### Retrospective:
+- The pagination and retry implementation was straightforward once the Canvas API contract (Link headers, RFC 5988) was understood. The trickier part was the active course storage design — iterating through ALTER TABLE approaches and landing on a separate `user_preferences` table took more back-and-forth than expected. Writing tests before finalising the schema would have caught the canvas_url gap earlier.
+
+---
+
+## Next Cycle Goals
+- Implement the conversation layer: accept a user message, resolve the active course from `user_preferences`, fetch relevant assignments/submissions, and pass context to the LLM
+- Add caching to `GET /canvas/courses` with a `last_synced_at` timestamp so repeated page loads don't hit Canvas on every request
+- Wire up course context to the chat UI so the active course is displayed and selectable from the frontend
+
+---
