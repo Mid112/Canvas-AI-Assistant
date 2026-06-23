@@ -163,3 +163,12 @@ CREATE TABLE message_templates (
 );
 
 CREATE INDEX idx_message_templates_user_id ON message_templates(user_id);
+
+-- ─────────────────────────────────────────────
+-- User Preferences (one row per user)
+-- ─────────────────────────────────────────────
+CREATE TABLE user_preferences (
+    user_id          INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    active_course_id INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    updated_at       TIMESTAMPTZ DEFAULT NOW()
+);
