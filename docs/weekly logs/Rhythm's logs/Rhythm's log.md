@@ -297,3 +297,35 @@ Managing team pull requests proved to be an essential exercise in maintaining ve
 * Continue developing Instructor Dashboard pages.
 * Continue meeting with the team on Tuesday, Wednesday, and Friday.
 * Continue reviewing team PRs to maintain code quality and prevent merge conflicts leading up to the MVP deadline.
+
+# **Cycle 10: Friday (06/19) ~ Monday (06/22)**
+
+**Timesheet**
+
+**Clockify Report**
+
+**06/19 (Friday):** 02:25:26
+<img width="1208" height="112" alt="Untitled" src="https://github.com/user-attachments/assets/f8825691-611d-4858-b358-a353d5bb8b75" />
+
+**06/22 (Monday):** 02:16:06
+<img width="1207" height="229" alt="Untitled 2" src="https://github.com/user-attachments/assets/49237091-bc54-4ba4-8bc0-c08157aca296" />
+
+**Current Tasks (Provide sufficient detail)**
+
+* **#1: Team Meeting & Course Access Page:** Participated in our team meeting on Friday. During this session, I finalized the frontend development for the Course Access page, ensuring the UI cleanly manages how instructors view their linked Canvas courses.
+
+* **#2: PR Reviews & Technical Discussions:** Utilized the Friday working session to engage in real-time technical discussions with the team. Reviewed multiple Pull Requests, leveraging the synchronous time to immediately clear blockers, enforce styling consistencies, and safely merge code into the main branch.
+
+* **#3: Course Dashboard Development:** On Monday, I transitioned to and completed the majority of the frontend work for the main Course Dashboard page. Drafted the core UI layout and component architecture required to display course-specific analytics.
+
+**Cycle Goal Review**
+
+* **Reflection:** I am making very strong, consistent progress on the remaining frontend pages. Implementing a cadence of three team meetings a week has been incredibly beneficial. It provides us with dedicated, real-time blocks to focus on our individual tasks while allowing for immediate PR reviews and rapid technical discussions without waiting asynchronously.
+
+* **Retrospective:** The synchronized working strategy has dramatically reduced the turnaround time for our PR approvals and keeps the whole team perfectly aligned on architecture. Moving directly from the Course Access page into the Course Dashboard kept my development momentum high, effectively setting up the UI scaffolding we need before connecting the final backend data.
+
+**Next Cycle Goals**
+
+* Fully finish the Course Dashboard page UI and finalize its integration with the backend data endpoints.
+* Continue utilizing the 3x weekly team meetings to facilitate real-time PR reviews and unblock any frontend/backend integration hurdles.
+* Continue making progress on all remaining frontend preparations to lock in our features for the upcoming MVP milestone.
