@@ -62,6 +62,23 @@ describe("Sidebar", () => {
     expect(screen.getByRole("button", { name: "Open profile menu" })).toBeInTheDocument();
   });
 
+  it("calls onToggle when the close sidebar button is clicked", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const onToggle = vi.fn();
+
+    renderSidebar({
+      navItems: instructorNavItems,
+      role: "instructor",
+      roleLabel: "Instructor",
+      showToggle: true,
+      onToggle,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Close sidebar" }));
+
+    expect(onToggle).toHaveBeenCalledTimes(1);
+  });
+
   it("logs out from the profile menu", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onNavigate = vi.fn();

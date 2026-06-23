@@ -1,12 +1,14 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { getInstitutionData } from "@/data/institutionCourseData";
 import { InstructorDashboardNotifications } from "@/pages/Instructor/InstructorDashboard/InstructorDashboardNotifications";
+import { paths } from "@/routes/paths";
+import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 describe("InstructorDashboardNotifications", () => {
-  it("renders notifications with badge count", () => {
-    render(
+  it("renders notifications with badge count and view-all link", () => {
+    renderWithRouter(
       <InstructorDashboardNotifications
         notifications={getInstitutionData("ubc")!.dashboard.notifications}
       />,
@@ -23,8 +25,9 @@ describe("InstructorDashboardNotifications", () => {
     expect(
       screen.getByText("New student enrolled in CS 101"),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "View All Notifications" }),
-    ).toBeInTheDocument();
+    const viewAllLink = screen.getByRole("link", {
+      name: "View All Notifications",
+    });
+    expect(viewAllLink).toHaveAttribute("href", paths.instructor.notifications);
   });
 });

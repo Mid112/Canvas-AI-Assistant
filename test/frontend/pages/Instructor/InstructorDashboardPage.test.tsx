@@ -66,7 +66,14 @@ describe("InstructorDashboardPage", () => {
     expect(
       screen.getByText("Welcome back, Dr. Jane Doe. Overview for UBC."),
     ).toBeInTheDocument();
+    expect(screen.getAllByText("Active Courses").length).toBeGreaterThan(0);
+    expect(screen.getByText("Total Students")).toBeInTheDocument();
+    expect(screen.getByText("Missing Submissions")).toBeInTheDocument();
+    expect(screen.getByText("Pending Approvals")).toBeInTheDocument();
     expect(screen.getByText("156")).toBeInTheDocument();
+    expect(screen.getByText("Recent Activity")).toBeInTheDocument();
+    expect(screen.getByText("Quick AI Actions")).toBeInTheDocument();
+    expect(screen.getByText("Notifications")).toBeInTheDocument();
     expect(
       screen.getAllByText(/CS 101: Intro to Programming/).length,
     ).toBeGreaterThan(0);
