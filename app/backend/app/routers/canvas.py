@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+
 from app.config import settings
 from app.dependencies import get_current_user
 from app.models.user import User

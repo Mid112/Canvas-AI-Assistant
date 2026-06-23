@@ -99,7 +99,12 @@ async def fetch_assignments(course_id: int, token: str, canvas_url: str = settin
     return response.json()
 
 
-async def fetch_submissions(course_id: int, assignment_id: int, token: str, canvas_url: str = settings.CANVAS_API_URL) -> list[dict]:
+async def fetch_submissions(
+    course_id: int,
+    assignment_id: int,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> list[dict]:
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.get(

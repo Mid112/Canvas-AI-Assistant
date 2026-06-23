@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.dependencies import get_current_user
+from app.integrations.canvas import check_token_status
 from app.models.user import User
 from app.schemas.auth import (
     CanvasTokenRequest,
@@ -12,7 +13,6 @@ from app.schemas.auth import (
     TokenResponse,
     UserResponse,
 )
-from app.integrations.canvas import check_token_status
 from app.services.auth import login_user, register_user, remove_canvas_connection, update_canvas_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
