@@ -51,11 +51,16 @@ CREATE INDEX idx_sessions_token_hash ON sessions(token_hash);
 -- ─────────────────────────────────────────────
 CREATE TABLE courses (
     id               SERIAL PRIMARY KEY,
-    canvas_course_id VARCHAR UNIQUE NOT NULL,
+    canvas_course_id VARCHAR NOT NULL,
+    -- canvas_url tracks which Canvas instance this course came from (e.g. UBC vs SFU)
+    -- so the AI layer always knows which endpoint to call for assignments/submissions
+    canvas_url       VARCHAR NOT NULL,
     name             VARCHAR NOT NULL,
     term             VARCHAR,
     instructor_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    created_at       TIMESTAMPTZ DEFAULT NOW()
+    created_at       TIMESTAMPTZ DEFAULT NOW(),
+    -- composite unique: the same Canvas course can exist once per instructor (co-instructors allowed)
+    CONSTRAINT uq_course_per_instructor UNIQUE (canvas_course_id, instructor_id)
 );
 
 CREATE INDEX idx_courses_instructor_id ON courses(instructor_id);

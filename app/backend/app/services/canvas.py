@@ -61,6 +61,7 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
         else:
             course = Course(
                 canvas_course_id=cid,
+                canvas_url=canvas_url,
                 name=item["name"],
                 term=term_name,
                 instructor_id=user.id,
@@ -105,7 +106,7 @@ async def get_active_course(user: User, db: AsyncSession) -> ActiveCourseRespons
     if not pref or not pref.active_course:
         return None
     c = pref.active_course
-    return ActiveCourseResponse(local_id=c.id, canvas_course_id=c.canvas_course_id, name=c.name, term=c.term)
+    return ActiveCourseResponse(local_id=c.id, canvas_course_id=c.canvas_course_id, canvas_url=c.canvas_url, name=c.name, term=c.term)
 
 
 async def set_active_course(user: User, local_course_id: int, db: AsyncSession) -> ActiveCourseResponse:
@@ -127,4 +128,4 @@ async def set_active_course(user: User, local_course_id: int, db: AsyncSession) 
         db.add(UserPreference(user_id=user.id, active_course_id=course.id))
 
     await db.commit()
-    return ActiveCourseResponse(local_id=course.id, canvas_course_id=course.canvas_course_id, name=course.name, term=course.term)
+    return ActiveCourseResponse(local_id=course.id, canvas_course_id=course.canvas_course_id, canvas_url=course.canvas_url, name=course.name, term=course.term)

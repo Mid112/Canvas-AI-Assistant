@@ -59,5 +59,7 @@ class ActiveCourseResponse(BaseModel):
 
     local_id: int
     canvas_course_id: str
+    # canvas_url tells the AI layer which Canvas instance to call for assignments/submissions
+    canvas_url: str
     name: str
     term: str | None = None

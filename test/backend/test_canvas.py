@@ -328,10 +328,12 @@ def test_set_and_get_active_course(client):
     assert set_resp.json()["local_id"] == local_id
     assert set_resp.json()["canvas_course_id"] == str(canvas_id)
     assert "name" in set_resp.json()
+    assert "canvas_url" in set_resp.json()
 
     get_resp = client.get("/api/v1/canvas/active-course", headers=headers)
     assert get_resp.status_code == 200
     assert get_resp.json()["local_id"] == local_id
+    assert get_resp.json()["canvas_url"] == set_resp.json()["canvas_url"]
 
 
 def test_set_active_course_updates_preference(client):
