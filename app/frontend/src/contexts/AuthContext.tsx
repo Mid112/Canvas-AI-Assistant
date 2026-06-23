@@ -57,8 +57,10 @@ function mapUserResponse(response: UserResponse): User {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [accessToken, setAccessToken] = useState<string | null>(() =>
+    getStoredToken(),
+  );
+  const [isLoading, setIsLoading] = useState(() => getStoredToken() !== null);
 
   const loadUser = useCallback(async (token: string) => {
     const currentUser = await fetchCurrentUser(token);
@@ -71,11 +73,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const token = getStoredToken();
 
     if (!token) {
-      setIsLoading(false);
       return;
     }
-
-    setAccessToken(token);
 
     loadUser(token)
       .catch(() => {
