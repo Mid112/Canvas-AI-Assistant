@@ -1,36 +1,27 @@
-import { Link, NavLink, useNavigate } from "react-router-dom";
-import { GraduationCap, Home, LogOut } from "lucide-react";
+import { Link, NavLink } from "react-router-dom";
+import { GraduationCap } from "lucide-react";
 
-import { useAuth } from "@/contexts/AuthContext";
+import { SidebarProfile } from "@/components/layouts/SidebarProfile";
 import { cn } from "@/lib/utils";
 import type { NavItem } from "@/types/navigation";
 import { paths } from "@/routes/paths";
+import type { UserRole } from "@/types/user";
 
 interface SidebarProps {
   navItems: NavItem[];
+  role: UserRole;
   roleLabel: string;
   onNavigate?: () => void;
   className?: string;
 }
 
-const footerLinkClass =
-  "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground";
-
 export function Sidebar({
   navItems,
+  role,
   roleLabel,
   onNavigate,
   className,
 }: SidebarProps) {
-  const navigate = useNavigate();
-  const { logout } = useAuth();
-
-  const handleLogout = () => {
-    logout();
-    onNavigate?.();
-    navigate(paths.login);
-  };
-
   return (
     <aside
       className={cn(
@@ -47,8 +38,8 @@ export function Sidebar({
           <GraduationCap className="size-5" />
         </div>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">Canvas Workflow</p>
-          <p className="truncate text-xs text-muted-foreground">{roleLabel}</p>
+          <p className="truncate text-sm font-semibold">Canvas AI</p>
+          <p className="truncate text-xs text-muted-foreground">{roleLabel} Portal</p>
         </div>
       </Link>
       <nav className="flex flex-1 flex-col gap-1 p-3">
@@ -61,8 +52,8 @@ export function Sidebar({
               cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
               )
             }
           >
@@ -70,17 +61,8 @@ export function Sidebar({
             <span>{item.title}</span>
           </NavLink>
         ))}
-        <button type="button" onClick={handleLogout} className={footerLinkClass}>
-          <LogOut className="size-4 shrink-0" />
-          <span>Log out</span>
-        </button>
       </nav>
-      <div className="border-t border-sidebar-border p-3">
-        <Link to={paths.home} onClick={onNavigate} className={footerLinkClass}>
-          <Home className="size-4 shrink-0" />
-          <span>Home</span>
-        </Link>
-      </div>
+      <SidebarProfile role={role} onNavigate={onNavigate} />
     </aside>
   );
 }

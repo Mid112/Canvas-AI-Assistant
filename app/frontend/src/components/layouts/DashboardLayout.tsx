@@ -2,6 +2,7 @@ import { Outlet, useLocation } from "react-router-dom";
 
 import { Header } from "@/components/layouts/Header";
 import { Sidebar } from "@/components/layouts/Sidebar";
+import { InstitutionProvider } from "@/contexts/InstitutionContext";
 import {
   getNavItemsForRole,
   getProfilePath,
@@ -22,16 +23,16 @@ function getPageTitle(pathname: string, role: UserRole): string {
   return match?.title ?? getRoleLabel(role);
 }
 
-export function DashboardLayout({ role }: DashboardLayoutProps) {
+function DashboardShell({ role }: DashboardLayoutProps) {
   const { pathname } = useLocation();
   const navItems = getNavItemsForRole(role);
   const roleLabel = getRoleLabel(role);
   const title = getPageTitle(pathname, role);
 
   return (
-    <div className="flex min-h-svh w-full bg-muted/20">
+    <div className="flex min-h-svh w-full bg-[#f4f7fb]">
       <div className="hidden lg:flex">
-        <Sidebar navItems={navItems} roleLabel={roleLabel} />
+        <Sidebar navItems={navItems} role={role} roleLabel={roleLabel} />
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         <Header
@@ -45,5 +46,13 @@ export function DashboardLayout({ role }: DashboardLayoutProps) {
         </main>
       </div>
     </div>
+  );
+}
+
+export function DashboardLayout({ role }: DashboardLayoutProps) {
+  return (
+    <InstitutionProvider>
+      <DashboardShell role={role} />
+    </InstitutionProvider>
   );
 }

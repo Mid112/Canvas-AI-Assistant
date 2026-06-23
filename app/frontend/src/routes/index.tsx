@@ -14,6 +14,8 @@ import { ReviewPermissionsPage } from "@/pages/Auth/ReviewPermissionsPage";
 import { InstructorDashboardPage } from "@/pages/Instructor/InstructorDashboardPage";
 import { InstructorCoursesPage } from "@/pages/Instructor/InstructorCoursesPage";
 import { InstructorAssistantPage } from "@/pages/Instructor/InstructorAssistantPage";
+import { InstructorAnalyticsPage } from "@/pages/Instructor/InstructorAnalyticsPage";
+import { InstructorMessagesPage } from "@/pages/Instructor/InstructorMessagesPage";
 import { InstructorHistoryPage } from "@/pages/Instructor/InstructorHistoryPage";
 import { InstructorSettingsPage } from "@/pages/Instructor/InstructorSettingsPage";
 import { TADashboardPage } from "@/pages/TA/TADashboardPage";
@@ -78,6 +80,14 @@ export const router = createBrowserRouter([
               {
                 path: paths.instructor.assistant,
                 element: <InstructorAssistantPage />,
+              },
+              {
+                path: paths.instructor.analytics,
+                element: <InstructorAnalyticsPage />,
+              },
+              {
+                path: paths.instructor.messages,
+                element: <InstructorMessagesPage />,
               },
               {
                 path: paths.instructor.history,
