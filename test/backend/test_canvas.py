@@ -5,19 +5,36 @@ from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 from app.main import app
 
-MOCK_COURSES = [
-    {"id": 1, "name": "CPSC 310", "course_code": "CPSC310",
-        "enrollment_term_id": 1, "workflow_state": "available"}
-]
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _unique_course(canvas_id: int | None = None) -> dict:
+    """Return a minimal Canvas-shaped course dict with a unique id."""
+    cid = canvas_id if canvas_id is not None else uuid.uuid4().int % 10_000_000
+    return {
+        "id": cid,
+        "name": "CPSC 310",
+        "course_code": "CPSC310",
+        "enrollment_term_id": 1,
+        "workflow_state": "available",
+    }
+
+
 MOCK_ASSIGNMENTS = [
     {"id": 10, "name": "Assignment 1", "description": None,
-        "due_at": None, "points_possible": 100.0, "course_id": 1}
+     "due_at": None, "points_possible": 100.0, "course_id": 1}
 ]
 MOCK_SUBMISSIONS = [
     {"id": 100, "assignment_id": 10, "user_id": 5, "score": 85.0,
-        "grade": "B", "submitted_at": None, "workflow_state": "submitted"}
+     "grade": "B", "submitted_at": None, "workflow_state": "submitted"}
 ]
 
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
 def client():
@@ -27,6 +44,7 @@ def client():
 
 @pytest.fixture(scope="module")
 def auth_headers(client):
+    """A single registered user with a Canvas token connected."""
     email = f"test_{uuid.uuid4()}@example.com"
     response = client.post(
         "/api/v1/auth/register",
@@ -43,67 +61,325 @@ def auth_headers(client):
     return headers
 
 
+def _register_with_canvas(client) -> dict:
+    """Register a fresh user + connect a Canvas token. Returns auth headers."""
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Test User", "email": email, "password": "secret123"}
+    )
+    token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            headers=headers,
+        )
+    return headers
+
+
+# ---------------------------------------------------------------------------
+# GET /canvas/courses
+# ---------------------------------------------------------------------------
+
 def test_list_courses_unauthenticated(client):
     response = client.get("/api/v1/canvas/courses")
     assert response.status_code == 401
 
 
 def test_list_courses(client, auth_headers):
+    courses = [_unique_course()]
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
-        mock.return_value = MOCK_COURSES
+        mock.return_value = courses
         response = client.get("/api/v1/canvas/courses", headers=auth_headers)
     assert response.status_code == 200
     assert response.json()[0]["name"] == "CPSC 310"
 
 
-def test_list_assignments(client, auth_headers):
-    with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock:
-        mock.return_value = MOCK_ASSIGNMENTS
-        response = client.get(
-            "/api/v1/canvas/courses/1/assignments", headers=auth_headers)
-    assert response.status_code == 200
-    assert response.json()[0]["name"] == "Assignment 1"
+def test_list_courses_response_shape(client, auth_headers):
+    """Response must use canvas_id (not id) and include local_id after DB upsert."""
+    courses = [_unique_course()]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        response = client.get("/api/v1/canvas/courses", headers=auth_headers)
+    data = response.json()[0]
+    assert "canvas_id" in data
+    assert "local_id" in data
+    assert data["local_id"] is not None
+    assert "id" not in data  # old field name must not leak through
 
 
-def test_list_submissions(client, auth_headers):
-    with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
-        mock.return_value = MOCK_SUBMISSIONS
-        response = client.get(
-            "/api/v1/canvas/courses/1/assignments/10/submissions", headers=auth_headers)
+def test_list_courses_upsert_is_idempotent(client, auth_headers):
+    """Fetching the same Canvas course twice must not create duplicate DB rows."""
+    courses = [_unique_course()]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        r1 = client.get("/api/v1/canvas/courses", headers=auth_headers)
+        r2 = client.get("/api/v1/canvas/courses", headers=auth_headers)
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert r1.json()[0]["local_id"] == r2.json()[0]["local_id"]
+
+
+def test_list_courses_term_name_populated(client, auth_headers):
+    """term_name is extracted from the nested Canvas term object."""
+    courses = [_unique_course() | {"term": {"id": 5, "name": "Summer 2025"}}]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        response = client.get("/api/v1/canvas/courses", headers=auth_headers)
+    assert response.json()[0]["term_name"] == "Summer 2025"
+
+
+def test_list_courses_empty_canvas_returns_empty_list(client, auth_headers):
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = []
+        response = client.get("/api/v1/canvas/courses", headers=auth_headers)
     assert response.status_code == 200
-    assert response.json()[0]["workflow_state"] == "submitted"
+    assert response.json() == []
 
 
 def test_list_courses_invalid_canvas_token(client, auth_headers):
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
         mock.side_effect = HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Invalid Canvas API token")
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid Canvas API token",
+        )
         response = client.get("/api/v1/canvas/courses", headers=auth_headers)
     assert response.status_code == 422
 
 
-def test_list_courses_selects_correct_school(client):
-    email = f"test_{uuid.uuid4()}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Multi User"})
-    token = reg.json()["access_token"]
-    headers = {"Authorization": f"Bearer {token}"}
-
-    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
-        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "ubc-token", "canvas_url": "https://canvas.ubc.ca"}, headers=headers)
-        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "sfu-token", "canvas_url": "https://canvas.sfu.ca"}, headers=headers)
-
+def test_list_courses_canvas_permission_denied(client, auth_headers):
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
-        mock.return_value = MOCK_COURSES
-        response = client.get("/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca", headers=headers)
-    assert response.status_code == 200
-
-    response = client.get("/api/v1/canvas/courses?canvas_url=https://canvas.other.ca", headers=headers)
+        mock.side_effect = HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Canvas token lacks permission for this resource",
+        )
+        response = client.get("/api/v1/canvas/courses", headers=auth_headers)
     assert response.status_code == 403
+
+
+def test_list_courses_canvas_unavailable(client, auth_headers):
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.side_effect = HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach Canvas",
+        )
+        response = client.get("/api/v1/canvas/courses", headers=auth_headers)
+    assert response.status_code == 502
 
 
 def test_list_courses_no_canvas_token(client):
     email = f"test_{uuid.uuid4()}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "No Token User"})
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "No Token User", "email": email, "password": "secret123"}
+    )
     token = reg.json()["access_token"]
-    response = client.get("/api/v1/canvas/courses", headers={"Authorization": f"Bearer {token}"})
+    response = client.get(
+        "/api/v1/canvas/courses",
+        headers={"Authorization": f"Bearer {token}"}
+    )
     assert response.status_code == 403
+
+
+def test_list_courses_selects_correct_school(client):
+    headers = _register_with_canvas(client)
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "sfu-token", "canvas_url": "https://canvas.sfu.ca"},
+            headers=headers,
+        )
+
+    courses = [_unique_course()]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        response = client.get(
+            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            headers=headers,
+        )
+    assert response.status_code == 200
+
+    # A Canvas URL with no stored token must be rejected
+    response = client.get(
+        "/api/v1/canvas/courses?canvas_url=https://canvas.other.ca",
+        headers=headers,
+    )
+    assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# GET /canvas/courses/{id}/assignments
+# ---------------------------------------------------------------------------
+
+def test_list_assignments(client, auth_headers):
+    with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock:
+        mock.return_value = MOCK_ASSIGNMENTS
+        response = client.get(
+            "/api/v1/canvas/courses/1/assignments", headers=auth_headers
+        )
+    assert response.status_code == 200
+    assert response.json()[0]["name"] == "Assignment 1"
+
+
+def test_list_assignments_unauthenticated(client):
+    response = client.get("/api/v1/canvas/courses/1/assignments")
+    assert response.status_code == 401
+
+
+def test_list_assignments_no_canvas_token(client):
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "No Token", "email": email, "password": "secret123"}
+    )
+    token = reg.json()["access_token"]
+    response = client.get(
+        "/api/v1/canvas/courses/1/assignments",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# GET /canvas/courses/{id}/assignments/{id}/submissions
+# ---------------------------------------------------------------------------
+
+def test_list_submissions(client, auth_headers):
+    with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
+        mock.return_value = MOCK_SUBMISSIONS
+        response = client.get(
+            "/api/v1/canvas/courses/1/assignments/10/submissions",
+            headers=auth_headers,
+        )
+    assert response.status_code == 200
+    assert response.json()[0]["workflow_state"] == "submitted"
+
+
+def test_list_submissions_unauthenticated(client):
+    response = client.get("/api/v1/canvas/courses/1/assignments/10/submissions")
+    assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# GET /canvas/active-course
+# ---------------------------------------------------------------------------
+
+def test_get_active_course_unauthenticated(client):
+    response = client.get("/api/v1/canvas/active-course")
+    assert response.status_code == 401
+
+
+def test_get_active_course_no_preference(client):
+    """A freshly registered user with no preference set returns null."""
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Fresh User", "email": email, "password": "secret123"}
+    )
+    token = reg.json()["access_token"]
+    response = client.get(
+        "/api/v1/canvas/active-course",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 200
+    assert response.json() is None
+
+
+# ---------------------------------------------------------------------------
+# PATCH /canvas/active-course
+# ---------------------------------------------------------------------------
+
+def test_set_active_course_unauthenticated(client):
+    response = client.patch("/api/v1/canvas/active-course", json={"local_course_id": 1})
+    assert response.status_code == 401
+
+
+def test_set_active_course_nonexistent_course(client, auth_headers):
+    """Setting a course ID that does not exist returns 404."""
+    response = client.patch(
+        "/api/v1/canvas/active-course",
+        json={"local_course_id": 999_999},
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
+
+
+def test_set_and_get_active_course(client):
+    """Full round-trip: fetch courses → set active → get active returns same course."""
+    headers = _register_with_canvas(client)
+
+    courses = [_unique_course()]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        fetch_resp = client.get("/api/v1/canvas/courses", headers=headers)
+    assert fetch_resp.status_code == 200
+
+    local_id = fetch_resp.json()[0]["local_id"]
+    canvas_id = fetch_resp.json()[0]["canvas_id"]
+
+    set_resp = client.patch(
+        "/api/v1/canvas/active-course",
+        json={"local_course_id": local_id},
+        headers=headers,
+    )
+    assert set_resp.status_code == 200
+    assert set_resp.json()["local_id"] == local_id
+    assert set_resp.json()["canvas_course_id"] == str(canvas_id)
+    assert "name" in set_resp.json()
+
+    get_resp = client.get("/api/v1/canvas/active-course", headers=headers)
+    assert get_resp.status_code == 200
+    assert get_resp.json()["local_id"] == local_id
+
+
+def test_set_active_course_updates_preference(client):
+    """Setting a second course overwrites the first (upsert, not append)."""
+    headers = _register_with_canvas(client)
+
+    course_a = [_unique_course()]
+    course_b = [_unique_course()]
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = course_a + course_b
+        fetch_resp = client.get("/api/v1/canvas/courses", headers=headers)
+    assert fetch_resp.status_code == 200
+
+    local_id_a = fetch_resp.json()[0]["local_id"]
+    local_id_b = fetch_resp.json()[1]["local_id"]
+
+    client.patch(
+        "/api/v1/canvas/active-course",
+        json={"local_course_id": local_id_a},
+        headers=headers,
+    )
+    client.patch(
+        "/api/v1/canvas/active-course",
+        json={"local_course_id": local_id_b},
+        headers=headers,
+    )
+
+    get_resp = client.get("/api/v1/canvas/active-course", headers=headers)
+    assert get_resp.status_code == 200
+    assert get_resp.json()["local_id"] == local_id_b
+
+
+def test_set_active_course_wrong_user(client):
+    """A course owned by another instructor cannot be set as active — returns 404."""
+    # User A fetches and owns a course
+    headers_a = _register_with_canvas(client)
+    courses = [_unique_course()]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        fetch_resp = client.get("/api/v1/canvas/courses", headers=headers_a)
+    local_id = fetch_resp.json()[0]["local_id"]
+
+    # User B tries to set user A's course as their active course
+    headers_b = _register_with_canvas(client)
+    response = client.patch(
+        "/api/v1/canvas/active-course",
+        json={"local_course_id": local_id},
+        headers=headers_b,
+    )
+    assert response.status_code == 404
