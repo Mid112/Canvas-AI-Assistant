@@ -41,7 +41,7 @@ jobs:
 
   # ── 1. Backend lint + type check ──────────
   backend-lint:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     defaults:
@@ -68,7 +68,7 @@ jobs:
 
   # ── 2. Backend tests ──────────────────────
   backend-test:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: backend-lint
     services:
       postgres:
@@ -106,7 +106,7 @@ jobs:
 
   # ── 3. Frontend lint + test ───────────────
   frontend-test:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     defaults:
@@ -131,7 +131,7 @@ jobs:
   # Only runs after both lint/test jobs succeed (or are skipped
   # because that part of the repo didn't change).
   docker-build:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [backend-test, frontend-test]
     if: always() && !failure() && !cancelled()
     steps:
