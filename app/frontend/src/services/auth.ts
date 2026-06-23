@@ -16,6 +16,30 @@ class AuthApiError extends Error {
   }
 }
 
+type ValidationErrorItem = {
+  loc?: (string | number)[];
+  msg?: string;
+};
+
+export const DEFAULT_VALIDATION_MESSAGE =
+  "Please check your information and try again.";
+export const GENERIC_AUTH_ERROR_MESSAGE =
+  "Something went wrong. Please try again.";
+
+function formatValidationErrors(errors: ValidationErrorItem[]): string {
+  for (const error of errors) {
+    const field = error.loc?.find((part) => part !== "body");
+    if (field === "email") {
+      return "Enter a valid email address.";
+    }
+    if (field === "password") {
+      return "Please enter a valid password.";
+    }
+  }
+
+  return DEFAULT_VALIDATION_MESSAGE;
+}
+
 async function parseError(response: Response): Promise<string> {
   if (response.status === 404) {
     return "The requested API endpoint was not found. Make sure the backend is running.";
@@ -23,27 +47,19 @@ async function parseError(response: Response): Promise<string> {
 
   try {
     const data = (await response.json()) as {
-      detail?: string | Array<{ msg?: string }>;
+      detail?: string | ValidationErrorItem[];
     };
-
     if (typeof data.detail === "string") {
       return data.detail;
     }
-
     if (Array.isArray(data.detail) && data.detail.length > 0) {
-      const firstMessage = data.detail.find(
-        (item) => typeof item.msg === "string",
-      )?.msg;
-
-      if (firstMessage) {
-        return firstMessage;
-      }
+      return formatValidationErrors(data.detail);
     }
   } catch {
     // Fall through to default message.
   }
 
-  return "Something went wrong. Please try again.";
+  return GENERIC_AUTH_ERROR_MESSAGE;
 }
 
 async function request<T>(
