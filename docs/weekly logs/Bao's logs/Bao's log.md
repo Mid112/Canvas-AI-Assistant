@@ -477,11 +477,13 @@ Total: 10.7 hours
 ### 1: Team Meeting + PR Reviews (Friday, 19/6)
 - Met with the team to review open PRs and coordinate merge order before the MVP demo phase
 - Reviewed and merged the canvas-docker branch into dev to unblock local Canvas API testing
+<img width="652" height="68" alt="Screenshot 2026-06-23 103238" src="https://github.com/user-attachments/assets/1ca16504-d117-45f6-9fca-f6c7e94a52d7" />
 
 ### 2: Database Init Fix + UserPreference Model (Saturday, 20/6)
 - Fixed duplicate imports in `models/__init__.py` that were causing SQLAlchemy registration issues
 - Created the `UserPreference` ORM model and added `user_preferences` table to the SQL schema
 - Designed the table with `user_id` as primary key (one row per user) and a nullable FK to `courses` for the active course selection
+<img width="653" height="65" alt="Screenshot 2026-06-23 103242" src="https://github.com/user-attachments/assets/1cec86ee-a42d-44f3-8736-caff75ca3c12" />
 
 ### 3: ORM Models + Canvas Integration Layer (Sunday, 21/6)
 - Updated `Conversation` model to restore `course_id` (historical record of which course a chat session belongs to, distinct from active course selection)
@@ -489,6 +491,7 @@ Total: 10.7 hours
 - Rewrote `integrations/canvas.py` to support RFC 5988 Link header pagination (`_fetch_all_pages`, up to 50 pages) and single retry on Canvas 5xx errors
 - Enriched `CourseResponse` schema with `canvas_id`, `local_id`, `canvas_url`, `term_name`, `start_at`, `end_at`, and `total_students`
 - Added `canvas_url` column to the `courses` table and changed `canvas_course_id UNIQUE` to `UNIQUE(canvas_course_id, instructor_id)` to allow co-instructors on the same Canvas course
+<img width="647" height="100" alt="Screenshot 2026-06-23 103246" src="https://github.com/user-attachments/assets/31f97afd-38fb-4b3c-9752-e22485e8c73b" />
 
 ### 4: Canvas Retrieval Service + Tests (Monday, 22/6)
 - Implemented `get_courses` with batch upsert pattern (one IN query + single flush) — no N+1 queries
@@ -496,6 +499,7 @@ Total: 10.7 hours
 - Wired `GET /canvas/active-course` and `PATCH /canvas/active-course` endpoints with DB session injection
 - Wrote 23 integration tests covering response shape, upsert idempotency, term name extraction, error propagation (403/422/502), multi-school token routing, active course round-trip, upsert-overwrites-previous, and cross-user ownership enforcement
 - Fixed a pre-existing auth test that had the wrong expected status code (401 vs 403)
+<img width="656" height="67" alt="Screenshot 2026-06-23 103248" src="https://github.com/user-attachments/assets/f3fbe800-ce70-47c5-b353-64ce156fe27c" />
 
 ---
 
