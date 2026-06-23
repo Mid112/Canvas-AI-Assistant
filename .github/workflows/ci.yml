@@ -19,8 +19,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Self-hosted runners must use a writable tool cache path. Without this,
-  # setup-python/setup-node default to /Users/runner and fail with EACCES.
+  # Helps setup-node use the runner's writable _work/_tool cache.
+  # Note: setup-python on macOS always installs to /Users/runner/hostedtoolcache,
+  # so backend jobs use the system Python instead (see setup steps below).
   RUNNER_TOOL_CACHE: ${{ github.workspace }}/../../_tool
   AGENT_TOOLSDIRECTORY: ${{ github.workspace }}/../../_tool
 
@@ -61,22 +62,27 @@ jobs:
         working-directory: ./app/backend
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Set up Python 3.12
+        run: |
+          python3.12 --version
+          python3.12 -m pip install --upgrade pip
+      - uses: actions/cache@v4
         with:
-          python-version: "3.12"
-          cache: "pip"
-          cache-dependency-path: app/backend/requirements.txt
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py3.12-${{ hashFiles('app/backend/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-py3.12-
       - name: Install dependencies
-        run: pip install -r requirements.txt ruff mypy
+        run: python3.12 -m pip install -r requirements.txt ruff mypy
       - name: Lint
-        run: ruff check .
+        run: python3.12 -m ruff check .
       - name: Type check
         # continue-on-error: true means mypy issues are visible in the
         # CI log and job summary, but won't block merges yet. Remove
         # this once the codebase has been typed-checked end to end
         # and you're ready to enforce it strictly.
         continue-on-error: true
-        run: mypy . --ignore-missing-imports
+        run: python3.12 -m mypy . --ignore-missing-imports
 
   # ── 2. Backend tests ──────────────────────
   backend-test:
@@ -101,18 +107,23 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Set up Python 3.12
+        run: |
+          python3.12 --version
+          python3.12 -m pip install --upgrade pip
+      - uses: actions/cache@v4
         with:
-          python-version: "3.12"
-          cache: "pip"
-          cache-dependency-path: app/backend/requirements.txt
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py3.12-${{ hashFiles('app/backend/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-py3.12-
       - name: Install dependencies
         working-directory: ./app/backend
-        run: pip install -r requirements.txt
+        run: python3.12 -m pip install -r requirements.txt
       - name: Run tests
         # Tests live in test/backend/ but import from app.backend.app,
         # so we run pytest from the repo root with PYTHONPATH set.
-        run: PYTHONPATH=./app/backend pytest test/backend/ -v
+        run: PYTHONPATH=./app/backend python3.12 -m pytest test/backend/ -v
         env:
           DATABASE_URL: postgresql+asyncpg://testuser:testpass@localhost:5432/testdb
           ENVIRONMENT: test
