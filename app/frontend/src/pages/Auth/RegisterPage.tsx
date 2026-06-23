@@ -20,12 +20,8 @@ export function RegisterPage() {
       <div className="w-full max-w-md rounded-2xl bg-white px-8 py-10 shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
         <RegisterHeader />
         <RegisterWelcome />
-        {error && (
-          <p className="mb-4 text-sm text-[#dc2626]" role="alert">
-            {error}
-          </p>
-        )}
         <RegisterForm
+          error={error}
           isSubmitting={isSubmitting}
           onSubmit={async (credentials) => {
             setError(null);

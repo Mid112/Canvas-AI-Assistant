@@ -100,4 +100,17 @@ describe("LoginForm", () => {
       "Invalid email or password.",
     );
   });
+
+  it("shows an email validation error for invalid addresses", async () => {
+    const user = userEvent.setup();
+
+    renderWithRouter(<LoginForm onSubmit={vi.fn()} />);
+
+    await user.type(screen.getByLabelText("Email Address"), "invalid-email");
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Enter a valid email address",
+    );
+    expect(screen.getByRole("button", { name: "Sign In" })).toBeDisabled();
+  });
 });

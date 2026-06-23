@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isValidEmail } from "@/lib/validation";
+import { isValidEmail, isValidPassword, MIN_PASSWORD_LENGTH } from "@/lib/validation";
 
 describe("isValidEmail", () => {
   it("returns true for valid email addresses", () => {
@@ -21,5 +21,18 @@ describe("isValidEmail", () => {
   it("returns false for empty strings", () => {
     expect(isValidEmail("")).toBe(false);
     expect(isValidEmail("   ")).toBe(false);
+  });
+});
+
+describe("isValidPassword", () => {
+  it(`returns true for passwords with at least ${MIN_PASSWORD_LENGTH} characters`, () => {
+    expect(isValidPassword("secret123")).toBe(true);
+    expect(isValidPassword("a".repeat(MIN_PASSWORD_LENGTH))).toBe(true);
+  });
+
+  it(`returns false for passwords shorter than ${MIN_PASSWORD_LENGTH} characters`, () => {
+    expect(isValidPassword("short")).toBe(false);
+    expect(isValidPassword("")).toBe(false);
+    expect(isValidPassword("a".repeat(MIN_PASSWORD_LENGTH - 1))).toBe(false);
   });
 });

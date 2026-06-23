@@ -4,7 +4,7 @@ export function InstructorAnalyticsPage() {
   return (
     <PlaceholderPage
       title="Analytics"
-      description="Track course performance and student engagement."
+      description="View performance analytics across your courses."
       message="Analytics coming soon"
     />
   );

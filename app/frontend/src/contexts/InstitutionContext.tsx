@@ -68,10 +68,7 @@ const EMPTY_DASHBOARD: InstructorDashboardData = {
 function resolveInstitutionId(userId: number | undefined): string {
   if (userId) {
     const storedId = getStoredInstitutionId(userId);
-    if (
-      storedId &&
-      institutions.some((institution) => institution.id === storedId)
-    ) {
+    if (storedId && institutions.some((institution) => institution.id === storedId)) {
       return storedId;
     }
   }
@@ -103,9 +100,7 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
 
   const setSelectedInstitution = useCallback(
     (institutionId: string) => {
-      if (
-        !institutions.some((institution) => institution.id === institutionId)
-      ) {
+      if (!institutions.some((institution) => institution.id === institutionId)) {
         return;
       }
 
@@ -120,9 +115,8 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
 
   const selectedInstitution = useMemo(
     () =>
-      institutions.find(
-        (institution) => institution.id === selectedInstitutionId,
-      ) ?? institutions[0]!,
+      institutions.find((institution) => institution.id === selectedInstitutionId) ??
+      institutions[0]!,
     [selectedInstitutionId],
   );
 

@@ -4,7 +4,7 @@ export function InstructorMessagesPage() {
   return (
     <PlaceholderPage
       title="Messages"
-      description="View and respond to student messages."
+      description="Review and send messages to students."
       message="Messages coming soon"
     />
   );
