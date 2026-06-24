@@ -18,7 +18,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/contexts/AuthContext";
-import { useInstitution } from "@/contexts/InstitutionContext";
+import { useInstitution } from "@/contexts/useInstitution";
 import { getInitials } from "@/lib/user-display";
 import { cn } from "@/lib/utils";
 import { getProfilePath, getRoleLabel } from "@/utils/navigation";

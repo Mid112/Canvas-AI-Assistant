@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Menu, User } from "lucide-react";
+import { Menu, PanelLeft, User } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/sheet";
 import { Sidebar } from "@/components/layouts/Sidebar";
 import { useAuth } from "@/contexts/AuthContext";
+import { cn } from "@/lib/utils";
 import type { NavItem } from "@/types/navigation";
 import type { UserRole } from "@/types/user";
 import { getProfilePath } from "@/utils/navigation";
@@ -31,9 +32,18 @@ interface HeaderProps {
   role: UserRole;
   roleLabel: string;
   navItems: NavItem[];
+  sidebarOpen?: boolean;
+  onToggleSidebar?: () => void;
 }
 
-export function Header({ title, role, roleLabel, navItems }: HeaderProps) {
+export function Header({
+  title,
+  role,
+  roleLabel,
+  navItems,
+  sidebarOpen = true,
+  onToggleSidebar,
+}: HeaderProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -46,6 +56,18 @@ export function Header({ title, role, roleLabel, navItems }: HeaderProps) {
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-6">
       <div className="flex items-center gap-3">
+        {onToggleSidebar ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className={cn("hidden lg:inline-flex", sidebarOpen && "lg:hidden")}
+            aria-label="Open sidebar"
+            onClick={onToggleSidebar}
+          >
+            <PanelLeft className="size-4" />
+          </Button>
+        ) : null}
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
           <SheetTrigger
             render={

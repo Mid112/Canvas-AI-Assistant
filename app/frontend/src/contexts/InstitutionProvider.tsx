@@ -1,7 +1,5 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useMemo,
   useState,
   type ReactNode,
@@ -9,30 +7,49 @@ import {
 
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  getStoredInstitutionId,
-  setStoredInstitutionId,
-} from "@/lib/institution-storage";
+  InstitutionContext,
+  type InstitutionContextValue,
+} from "@/contexts/institution-context";
 import {
   getInstitutionData,
   institutions,
 } from "@/data/institutionCourseData";
-import type {
-  CourseAnalyticsOverview,
-  InstructorCourse,
-} from "@/types/course";
-import type { Institution } from "@/types/institution";
-
-interface InstitutionContextValue {
-  institutions: Institution[];
-  selectedInstitution: Institution;
-  setSelectedInstitution: (institutionId: string) => void;
-  courses: InstructorCourse[];
-  analytics: CourseAnalyticsOverview;
-}
-
-const InstitutionContext = createContext<InstitutionContextValue | null>(null);
+import {
+  getStoredInstitutionId,
+  setStoredInstitutionId,
+} from "@/lib/institution-storage";
+import type { CourseAnalyticsOverview } from "@/types/course";
+import type { InstructorDashboardData } from "@/types/dashboard";
+import { sharedDashboardQuickActions } from "@/types/dashboard";
 
 const DEFAULT_INSTITUTION_ID = institutions[0]?.id ?? "ubc";
+
+const EMPTY_ANALYTICS: CourseAnalyticsOverview = {
+  averagePerformance: 0,
+  averagePerformanceTrend: 0,
+  activeStudents: 0,
+  totalStudents: 0,
+  completedAssignments: 0,
+  completedAssignmentsTrend: 0,
+  atRiskStudents: 0,
+  atRiskStudentsTrend: 0,
+};
+
+const EMPTY_DASHBOARD: InstructorDashboardData = {
+  metrics: {
+    activeCourses: 0,
+    activeCoursesTrend: 0,
+    totalStudents: 0,
+    totalStudentsTrend: 0,
+    missingSubmissions: 0,
+    missingSubmissionsTrend: 0,
+    pendingApprovals: 0,
+  },
+  recentActivity: [],
+  quickActions: sharedDashboardQuickActions,
+  activeCourses: [],
+  notifications: [],
+};
 
 function resolveInstitutionId(userId: number | undefined): string {
   if (userId) {
@@ -45,16 +62,29 @@ function resolveInstitutionId(userId: number | undefined): string {
   return DEFAULT_INSTITUTION_ID;
 }
 
+function withSharedQuickActions(
+  dashboard: InstructorDashboardData,
+): InstructorDashboardData {
+  return {
+    ...dashboard,
+    quickActions:
+      dashboard.quickActions.length > 0
+        ? dashboard.quickActions
+        : sharedDashboardQuickActions,
+  };
+}
+
 export function InstitutionProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
+  const userId = user?.id;
   const [selectedInstitutionId, setSelectedInstitutionId] = useState(() =>
-    resolveInstitutionId(user?.id),
+    resolveInstitutionId(userId),
   );
-  const [prevUserId, setPrevUserId] = useState(user?.id);
+  const [previousUserId, setPreviousUserId] = useState(userId);
 
-  if (user?.id !== prevUserId) {
-    setPrevUserId(user?.id);
-    setSelectedInstitutionId(resolveInstitutionId(user?.id));
+  if (userId !== previousUserId) {
+    setPreviousUserId(userId);
+    setSelectedInstitutionId(resolveInstitutionId(userId));
   }
 
   const setSelectedInstitution = useCallback(
@@ -90,16 +120,10 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
       selectedInstitution,
       setSelectedInstitution,
       courses: institutionData?.courses ?? [],
-      analytics: institutionData?.analytics ?? {
-        averagePerformance: 0,
-        averagePerformanceTrend: 0,
-        activeStudents: 0,
-        totalStudents: 0,
-        completedAssignments: 0,
-        completedAssignmentsTrend: 0,
-        atRiskStudents: 0,
-        atRiskStudentsTrend: 0,
-      },
+      analytics: institutionData?.analytics ?? EMPTY_ANALYTICS,
+      dashboard: withSharedQuickActions(
+        institutionData?.dashboard ?? EMPTY_DASHBOARD,
+      ),
     }),
     [institutionData, selectedInstitution, setSelectedInstitution],
   );
@@ -109,14 +133,4 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
       {children}
     </InstitutionContext.Provider>
   );
-}
-
-export function useInstitution(): InstitutionContextValue {
-  const context = useContext(InstitutionContext);
-
-  if (!context) {
-    throw new Error("useInstitution must be used within an InstitutionProvider");
-  }
-
-  return context;
 }

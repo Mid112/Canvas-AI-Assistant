@@ -3,7 +3,7 @@ import type { ReactElement } from "react";
 import { MemoryRouter, type MemoryRouterProps } from "react-router-dom";
 
 import { AuthProvider } from "@/contexts/AuthContext";
-import { InstitutionProvider } from "@/contexts/InstitutionContext";
+import { InstitutionProvider } from "@/contexts/InstitutionProvider";
 
 interface RenderWithInstitutionOptions extends RenderOptions {
   routerProps?: MemoryRouterProps;

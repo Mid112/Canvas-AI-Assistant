@@ -1,3 +1,5 @@
+import type { InstructorDashboardData } from "@/types/dashboard";
+
 export interface InstructorCourse {
   id: number;
   code: string;
@@ -23,6 +25,7 @@ export interface InstitutionCourseData {
   institutionId: string;
   analytics: CourseAnalyticsOverview;
   courses: InstructorCourse[];
+  dashboard: InstructorDashboardData;
 }
 
 export type CourseViewMode = "grid" | "list";

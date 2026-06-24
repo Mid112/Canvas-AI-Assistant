@@ -11,11 +11,12 @@ import { ResetPasswordPage } from "@/pages/Auth/ResetPasswordPage";
 import { CanvasAuthErrorPage } from "@/pages/Error/CanvasAuthErrorPage";
 import { NotFoundPage } from "@/pages/Error/NotFoundPage";
 import { ReviewPermissionsPage } from "@/pages/Auth/ReviewPermissionsPage";
-import { InstructorAnalyticsPage } from "@/pages/Instructor/InstructorAnalyticsPage";
-import { InstructorMessagesPage } from "@/pages/Instructor/InstructorMessagesPage";
 import { InstructorDashboardPage } from "@/pages/Instructor/InstructorDashboardPage";
 import { InstructorCoursesPage } from "@/pages/Instructor/InstructorCoursesPage";
 import { InstructorAssistantPage } from "@/pages/Instructor/InstructorAssistantPage";
+import { InstructorAnalyticsPage } from "@/pages/Instructor/InstructorAnalyticsPage";
+import { InstructorMessagesPage } from "@/pages/Instructor/InstructorMessagesPage";
+import { InstructorNotificationsPage } from "@/pages/Instructor/InstructorNotificationsPage";
 import { InstructorHistoryPage } from "@/pages/Instructor/InstructorHistoryPage";
 import { InstructorSettingsPage } from "@/pages/Instructor/InstructorSettingsPage";
 import { TADashboardPage } from "@/pages/TA/TADashboardPage";
@@ -92,6 +93,10 @@ export const router = createBrowserRouter([
                   {
                     path: paths.instructor.messages,
                     element: <InstructorMessagesPage />,
+                  },
+                  {
+                    path: paths.instructor.notifications,
+                    element: <InstructorNotificationsPage />,
                   },
                   {
                     path: paths.instructor.history,

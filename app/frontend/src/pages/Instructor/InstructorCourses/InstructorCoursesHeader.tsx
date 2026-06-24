@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { useInstitution } from "@/contexts/InstitutionContext";
+import { useInstitution } from "@/contexts/useInstitution";
 
 export function InstructorCoursesHeader() {
   const { selectedInstitution } = useInstitution();
