@@ -28,6 +28,15 @@ const instructorUser = {
   has_canvas_token: false,
 };
 
+const adminUser = {
+  id: 2,
+  email: "admin@university.edu",
+  name: "admin",
+  role: "admin" as const,
+  is_active: true,
+  has_canvas_token: false,
+};
+
 describe("ProtectedRoute", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -134,5 +143,22 @@ describe("ProtectedRoute", () => {
     );
 
     expect(screen.getByText("Canvas info")).toBeInTheDocument();
+  });
+
+  it("allows admins to access protected routes without completed onboarding", () => {
+    mockedHasCompletedOnboarding.mockReturnValue(false);
+    mockedUseAuth.mockReturnValue({
+      user: adminUser,
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    renderProtectedRoute();
+
+    expect(screen.getByText("Protected content")).toBeInTheDocument();
+    expect(screen.queryByText("Canvas info")).not.toBeInTheDocument();
   });
 });

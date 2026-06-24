@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 
-import { useInstitution } from "@/contexts/InstitutionContext";
+import { useInstitution } from "@/contexts/useInstitution";
 import {
   filterInstructorCourses,
   sortInstructorCourses,

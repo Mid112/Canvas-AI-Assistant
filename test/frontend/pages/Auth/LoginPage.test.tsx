@@ -88,6 +88,30 @@ describe("LoginPage", () => {
     expect(mockNavigate).toHaveBeenCalledWith(paths.canvasInfo);
   });
 
+  it("navigates to the admin dashboard after successful admin sign in", async () => {
+    const user = userEvent.setup();
+    mockNavigate.mockClear();
+    mockLogin.mockResolvedValue({
+      id: 2,
+      email: "admin@university.edu",
+      name: "admin",
+      role: "admin",
+      is_active: true,
+      has_canvas_token: false,
+    });
+
+    renderWithRouter(<LoginPage />);
+
+    await user.type(
+      screen.getByLabelText("Email Address"),
+      "admin@university.edu",
+    );
+    await user.type(screen.getByLabelText("Password"), "secret123");
+    await user.click(screen.getByRole("button", { name: "Sign In" }));
+
+    expect(mockNavigate).toHaveBeenCalledWith(paths.admin.dashboard);
+  });
+
   it("shows an error when sign in fails with invalid credentials", async () => {
     const user = userEvent.setup();
     mockLogin.mockRejectedValue(
