@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     CANVAS_TOKEN_ENCRYPTION_KEY: str = ""
 
     # LLM
-    VLLM_BASE_URL: str = "http://host.docker.internal:8000/v1"
+    VLLM_BASE_URL: str = "http://host.docker.internal:8001/v1"
     VLLM_MODEL: str = "Qwen/Qwen3-4B"
 
     @field_validator("CANVAS_TOKEN_ENCRYPTION_KEY", mode="before")
