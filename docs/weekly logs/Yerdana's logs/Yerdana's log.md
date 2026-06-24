@@ -553,3 +553,71 @@ In retrospective, the time spent debugging the token-validation failure was long
 ## Next Cycle 10 Goals
 - **Goal 1:** Implement the MCP client inside FastAPI and wire it to the LLM (Qwen via vLLM) for prompt-to-tool-call translation
 - **Goal 2:** Document the MCP server connection contract (`mcp.json` config, auth requirements) so Claude Code/Codex compatibility can be verified directly
+
+
+
+# Cycle 10 Report: 06/19 – 06/22 (June 19 – June 22)
+
+## Timesheet
+
+### Clockify Report
+- **19/06 (Friday):** Using Clockify – Logged 3.6 hours
+- **20/06 (Saturday):** Not Using Clockify – Logged 0 hours
+- **21/06 (Sunday):** Not Using Clockify – Logged 0 hours
+- **22/06 (Monday):** Not Using Clockify – Logged 0 hours
+
+
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Live coding session with the team — troubleshooting Canvas connect and Canvas Docker (June 19)
+- Joined a live coding session with the team to work through outstanding issues from the previous cycle's PR reviews
+- Troubleshot the `feature/canvas-connect-page` PR's Canvas token connection flow, tracing the request through the frontend form, the Vite dev proxy, and the backend's token validation endpoint to confirm where the connection was failing
+- Troubleshot the Canvas Docker sandbox setup (`lbjay/canvas-docker`), including container networking, the missing compose service definition, and a URL-construction bug in the Canvas integration layer that was duplicating the `/api/v1` path prefix
+
+<img width="1218" height="114" alt="Screenshot 2026-06-23 at 9 01 55 PM" src="https://github.com/user-attachments/assets/7b64f47f-e47c-41fa-b7d1-c26bee6cb71b" />
+
+---
+
+
+## Progress Update (since 19/06/2026)
+
+| TASK/ISSUE #                                | STATUS      |
+| -------------------------------------------- | ----------- |
+| Design document                              | Completed   |
+| Project design video                         | Completed   |
+| Database design                               | Completed   |
+| PR reviews and approvals                     | Completed   |
+| Project setup                                 | Completed   |
+| Dockerized environment for MCP/vLLM           | Completed   |
+| Locally running vLLM                          | Completed   |
+| Setup for PostgreSQL                          | Completed   |
+| Canvas MCP server core tools                  | Completed   |
+| MCP server tests (19 passing)                 | Completed   |
+| Canvas LMS sandbox setup                      | Completed   |
+| Full integration tests with Canvas            | In Progress |
+| Multi-institution Canvas token support (backend) | Completed |
+| Canvas Docker sandbox troubleshooting          | Completed   |
+| Canvas connect page troubleshooting            | In Progress |
+| MCP client design                             | In Progress |
+| Third-party LLM adapter design (Claude Code, Codex) | In Progress |
+| Context embedding and retrieval               | Not Started |
+
+---
+
+## Cycle 10 Goal Review
+
+### Reflection:
+This cycle was lighter than previous ones in terms of hours logged, limited to a single live coding session with the team on Friday. That session was still productive where working through the Canvas connect and Canvas Docker issues together with teammates resolved problems faster than the solo debugging from the previous cycle, since teammates with direct context on each PR could confirm assumptions immediately rather than needing to be traced independently.
+
+### Retrospective:
+In retrospective, the live session reinforced a takeaway from last cycle: pairing on cross PR integration issues is more efficient than reviewing PRs in isolation and writing up findings separately. Going forward, I'd like to schedule more of these joint troubleshooting sessions earlier, rather than discovering the overlap between backend and frontend after the fact.
+
+---
+
+## Next Cycle 11 Goals
+- **Goal 1:** Implement the MCP client inside FastAPI and wire it to the LLM (Qwen via vLLM) for prompt-to-tool-call translation
+- **Goal 2:** Resolve the Canvas Docker compose service and `/api/v1` URL duplication issues found during the live session, either via follow-up PR or confirming the in-flight fix
+- **Goal 3:** Document the MCP server connection contract (`mcp.json` config, auth requirements) so Claude Code/Codex compatibility can be verified directly
