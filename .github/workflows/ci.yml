@@ -67,7 +67,7 @@ jobs:
       run:
         working-directory: ./app/backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python 3.12
         working-directory: ${{ github.workspace }}
         run: |
@@ -109,7 +109,7 @@ jobs:
     - X64
     needs: backend-lint
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Start PostgreSQL
         # Service containers only work on Linux runners. On macOS self-hosted
         # runners, start Postgres via Docker instead.
