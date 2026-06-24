@@ -44,27 +44,14 @@ def _parse_next_link(link_header: str) -> str | None:
     return None
 
 
-async def _request_with_retry(
-    client: httpx.AsyncClient,
-    method: str,
-    url: str,
-    **kwargs,
-) -> httpx.Response:
+async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
     # Single retry on transient Canvas 5xx — network blips shouldn't fail the whole request.
-    response = await client.request(method, url, **kwargs)
+    response = await client.get(url, **kwargs)
     if response.is_server_error:
         logger.warning("Canvas returned %d for %s — retrying once", response.status_code, url)
         await asyncio.sleep(_RETRY_DELAY)
-        response = await client.request(method, url, **kwargs)
+        response = await client.get(url, **kwargs)
     return response
-
-
-async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
-    return await _request_with_retry(client, "GET", url, **kwargs)
-
-
-async def _put_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
-    return await _request_with_retry(client, "PUT", url, **kwargs)
 
 
 async def _fetch_all_pages(
@@ -157,54 +144,6 @@ async def fetch_courses(token: str, canvas_url: str = settings.CANVAS_API_URL) -
     except httpx.RequestError as e:
         logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
-
-
-async def fetch_assignment(
-    course_id: int,
-    assignment_id: int,
-    token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
-) -> dict:
-    try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            response = await _get_with_retry(
-                client,
-                f"{canvas_url}/api/v1/courses/{course_id}/assignments/{assignment_id}",
-                headers=_headers(token),
-            )
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
-    except httpx.RequestError as e:
-        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
-
-    _raise_for_canvas_error(response)
-    return response.json()
-
-
-async def update_assignment(
-    course_id: int,
-    assignment_id: int,
-    token: str,
-    canvas_url: str,
-    payload: dict,
-) -> dict:
-    try:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            response = await _put_with_retry(
-                client,
-                f"{canvas_url}/api/v1/courses/{course_id}/assignments/{assignment_id}",
-                headers=_headers(token),
-                json={"assignment": payload},
-            )
-    except httpx.TimeoutException:
-        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
-    except httpx.RequestError as e:
-        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
-
-    _raise_for_canvas_error(response)
-    return response.json()
 
 
 async def fetch_assignments(course_id: int, token: str, canvas_url: str = settings.CANVAS_API_URL) -> list[dict]:

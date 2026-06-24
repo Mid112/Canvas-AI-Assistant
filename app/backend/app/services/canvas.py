@@ -7,23 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.security import decrypt_canvas_token
-from app.integrations.canvas import (
-    fetch_assignment,
-    fetch_assignments,
-    fetch_courses,
-    fetch_submissions,
-    update_assignment as canvas_update_assignment,
-)
+from app.integrations.canvas import fetch_assignments, fetch_courses, fetch_submissions
 from app.models.course import Course
 from app.models.user import User
 from app.models.user_preference import UserPreference
-from app.schemas.canvas import (
-    ActiveCourseResponse,
-    AssignmentResponse,
-    AssignmentUpdate,
-    CourseResponse,
-    SubmissionResponse,
-)
+from app.schemas.canvas import ActiveCourseResponse, AssignmentResponse, CourseResponse, SubmissionResponse
 
 
 def _require_canvas_token(user: User, canvas_url: str) -> str:
@@ -96,75 +84,15 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
     ]
 
 
-async def _get_owned_course(db: AsyncSession, user: User, local_course_id: int) -> Course:
-    course = await db.scalar(
-        select(Course).where(
-            Course.id == local_course_id,
-            Course.instructor_id == user.id,
-        )
-    )
-    if not course:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Course not found or does not belong to you.",
-        )
-    return course
-
-
-async def get_assignments(
-    local_course_id: int, user: User, db: AsyncSession
-) -> list[AssignmentResponse]:
-    course = await _get_owned_course(db, user, local_course_id)
-    token = _require_canvas_token(user, course.canvas_url)
-    data = await fetch_assignments(int(course.canvas_course_id), token, course.canvas_url)
+async def get_assignments(course_id: int, user: User, canvas_url: str) -> list[AssignmentResponse]:
+    token = _require_canvas_token(user, canvas_url)
+    data = await fetch_assignments(course_id, token, canvas_url)
     return [AssignmentResponse(**item) for item in data]
 
 
-async def get_assignment(
-    local_course_id: int,
-    assignment_id: int,
-    user: User,
-    db: AsyncSession,
-) -> AssignmentResponse:
-    course = await _get_owned_course(db, user, local_course_id)
-    token = _require_canvas_token(user, course.canvas_url)
-    data = await fetch_assignment(
-        int(course.canvas_course_id), assignment_id, token, course.canvas_url
-    )
-    return AssignmentResponse(**data)
-
-
-async def update_assignment(
-    local_course_id: int,
-    assignment_id: int,
-    user: User,
-    db: AsyncSession,
-    body: AssignmentUpdate,
-) -> AssignmentResponse:
-    course = await _get_owned_course(db, user, local_course_id)
-    token = _require_canvas_token(user, course.canvas_url)
-    payload = body.model_dump(mode="json", exclude_none=True)
-    data = await canvas_update_assignment(
-        int(course.canvas_course_id),
-        assignment_id,
-        token,
-        course.canvas_url,
-        payload,
-    )
-    return AssignmentResponse(**data)
-
-
-async def get_submissions(
-    local_course_id: int,
-    assignment_id: int,
-    user: User,
-    db: AsyncSession,
-) -> list[SubmissionResponse]:
-    course = await _get_owned_course(db, user, local_course_id)
-    token = _require_canvas_token(user, course.canvas_url)
-    data = await fetch_submissions(
-        int(course.canvas_course_id), assignment_id, token, course.canvas_url
-    )
+async def get_submissions(course_id: int, assignment_id: int, user: User, canvas_url: str) -> list[SubmissionResponse]:
+    token = _require_canvas_token(user, canvas_url)
+    data = await fetch_submissions(course_id, assignment_id, token, canvas_url)
     return [SubmissionResponse(**item) for item in data]
 
 
