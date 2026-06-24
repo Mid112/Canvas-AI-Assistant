@@ -108,7 +108,7 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
 
     match action.action:
         case "fetch_courses":
-            courses = await get_courses(user, course.canvas_url if (course := None) else _default_canvas_url(user), db)
+            courses = await get_courses(user, _default_canvas_url(user), db)
             return {"courses": [c.model_dump() for c in courses]}
 
         case "fetch_assignments":
