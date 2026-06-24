@@ -679,3 +679,103 @@ key priorities to carry forward into the next cycle.
 - **Goal 1:** Connect MCP docker container to the stack
 - **Goal 2:** Continue active development toward MVP completion
 - **Goal 3:** Progress on term-end assigned tasks
+
+---
+
+<br>
+
+# Cycle 10 Report: 19/06 – 22/06 (June 19 – June 22)
+
+## Timesheet
+
+### Clockify Report
+
+* **19/06 (Friday):** Using Clockify – Logged 5.33 hours
+<img width="1213" height="185" alt="Screenshot 2026-06-23 at 8 16 11 PM" src="https://github.com/user-attachments/assets/0df26d14-4374-402c-8314-8713c02753e1" />
+
+
+* **20/06 (Saturday):** Using Clockify – Logged 0 hours
+
+* **21/06 (Sunday):** Using Clockify – Logged 0 hours
+
+* **22/06 (Monday):** Using Clockify – Logged 0.17 hours
+
+  <img width="1205" height="112" alt="Screenshot 2026-06-23 at 8 16 22 PM" src="https://github.com/user-attachments/assets/f29c45f9-c4ab-4257-ae50-112527311532" />
+
+
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Add Canvas Docker setup (June 19)
+
+* Worked for 2 hours and 15 minutes on adding Canvas Docker support to the project.
+* Focused on setting up the Docker-related configuration needed to support the Canvas environment.
+* Continued progress on improving the project’s containerization and development setup.
+
+### #2: Coding session — Docker integration and project development (June 19)
+
+* Participated in a 3 hour and 5 minute coding session focused on active project development.
+* Continued working on Docker-related implementation and integration tasks.
+* Contributed to the project’s technical progress toward MVP completion.
+
+### #3: PR review — requested changes for Docker work (June 22)
+
+* Spent 10 minutes reviewing PR requested changes related to the Docker implementation.
+* Checked the requested updates and identified what needed to be addressed before the PR could move forward.
+
+---
+
+## Progress Update (since 19/06/2026)
+
+| TASK/ISSUE #                | STATUS      |
+| --------------------------- | ----------- |
+| Canvas Docker setup         | In Progress |
+| Docker integration          | In Progress |
+| Coding session work         | Completed   |
+| PR requested changes review | Completed   |
+| MCP docker connection       | In Progress |
+| MVP                         | In Progress |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle focused mainly on Docker-related development and continued progress
+toward improving the project’s technical setup. On June 19, time was spent
+adding Canvas Docker support and participating in a coding session to continue
+project implementation. This helped move the Docker integration forward and
+supported the broader goal of preparing the project for MVP completion.
+
+On June 22, I reviewed the requested PR changes related to the Docker work.
+Although this was a shorter task, it was important for understanding the
+feedback and identifying what needs to be updated before the Docker-related
+changes can be finalized.
+
+The total hours worked this cycle were lower than expected because I had a
+final exam for another course that required significant attention and
+preparation. Since that course is now completed, I will be able to focus more
+time and energy on the project in the next cycle.
+
+### Retrospective:
+
+The cycle was productive, with most of the active work completed on June 19.
+A significant amount of time was dedicated to Docker setup and coding, which
+directly supports the team’s technical goals. The PR review on June 22 helped
+clarify the remaining changes needed for the Docker implementation.
+
+Going forward, the main focus should be on addressing the PR feedback,
+continuing the Docker integration, and making further progress toward MVP
+completion.
+
+---
+
+## Next Cycle Goals
+
+* **Goal 1:** Address PR requested changes for the Docker implementation
+* **Goal 2:** Continue connecting the Docker setup to the project stack
+* **Goal 3:** Continue active development toward MVP completion
+
