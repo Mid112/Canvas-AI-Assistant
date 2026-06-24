@@ -22,7 +22,10 @@ jobs:
   # ── 0. Detect which parts of the repo changed ──────────
   # This lets backend-only changes skip frontend jobs and vice versa.
   changes:
-    runs-on: ubuntu-latest
+    runs-on:
+    - self-hosted
+    - macOS
+    - X64
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -41,7 +44,10 @@ jobs:
 
   # ── 1. Backend lint + type check ──────────
   backend-lint:
-    runs-on: ubuntu-latest
+    runs-on:
+    - self-hosted
+    - macOS
+    - X64
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     defaults:
@@ -68,7 +74,10 @@ jobs:
 
   # ── 2. Backend tests ──────────────────────
   backend-test:
-    runs-on: ubuntu-latest
+    runs-on:
+    - self-hosted
+    - macOS
+    - X64
     needs: backend-lint
     services:
       postgres:
@@ -106,7 +115,10 @@ jobs:
 
   # ── 3. Frontend lint + test ───────────────
   frontend-test:
-    runs-on: ubuntu-latest
+    runs-on:
+    - self-hosted
+    - macOS
+    - X64
     needs: changes
     if: needs.changes.outputs.frontend == 'true'
     defaults:
@@ -131,7 +143,10 @@ jobs:
   # Only runs after both lint/test jobs succeed (or are skipped
   # because that part of the repo didn't change).
   docker-build:
-    runs-on: ubuntu-latest
+    runs-on:
+    - self-hosted
+    - macOS
+    - X64
     needs: [backend-test, frontend-test]
     if: always() && !failure() && !cancelled()
     steps:
