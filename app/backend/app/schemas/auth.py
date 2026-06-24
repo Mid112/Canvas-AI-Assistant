@@ -1,9 +1,9 @@
-from typing import Any
 from datetime import datetime
 from typing import Literal
-from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator
-from app.config import settings
 
+from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator
+
+from app.config import settings
 
 
 class RegisterRequest(BaseModel):

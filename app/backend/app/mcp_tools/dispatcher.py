@@ -1,14 +1,15 @@
 # app/backend/app/mcp_tools/dispatcher.py
 import json
+import re
 from typing import Any
 
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.mcp_tools.schemas import ACTION_SCHEMAS
 from app.models.course import Course
 from app.models.user import User
-from app.mcp_tools.schemas import ACTION_SCHEMAS
 from app.services.canvas import (
     get_active_course,
     get_assignments,
@@ -17,7 +18,6 @@ from app.services.canvas import (
     set_active_course,
 )
 
-import re
 
 def _extract_json(raw_llm_output: str) -> str:
     """Qwen3 and similar 'thinking' models wrap reasoning in <think>...</think>

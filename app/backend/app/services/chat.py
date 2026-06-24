@@ -75,7 +75,7 @@ async def handle_chat_message(
             adapter.generate(system_prompt, message, timeout=LLM_TIMEOUT_SECONDS),
             timeout=LLM_TIMEOUT_SECONDS,
         )
-    except (asyncio.TimeoutError, Exception) as e:
+    except (TimeoutError, Exception) as e:
         is_timeout = isinstance(e, asyncio.TimeoutError)
         log_detail = "LLM request timed out" if is_timeout else f"LLM request failed: {e}"
         await log_message(db, conversation, role="assistant", content=log_detail)

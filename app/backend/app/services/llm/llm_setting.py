@@ -1,8 +1,8 @@
 # app/backend/app/services/llm/llm_setting.py
 from app.config import settings
+from app.services.llm.anthropic_adapter import AnthropicAdapter
 from app.services.llm.base import LLMAdapter
 from app.services.llm.openai_compatible import OpenAICompatibleAdapter
-from app.services.llm.anthropic_adapter import AnthropicAdapter
 
 
 def get_llm_adapter(llm_settings: dict) -> LLMAdapter:
