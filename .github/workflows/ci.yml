@@ -108,14 +108,17 @@ jobs:
         # Service containers only work on Linux runners. On macOS self-hosted
         # runners, start Postgres via Docker instead.
         run: |
+          NETWORK="ci-net-${{ github.run_id }}"
           CONTAINER="ci-postgres-${{ github.run_id }}"
           docker rm -f "$CONTAINER" 2>/dev/null || true
+          docker network rm "$NETWORK" 2>/dev/null || true
+          docker network create "$NETWORK"
           docker run -d \
             --name "$CONTAINER" \
+            --network "$NETWORK" \
             -e POSTGRES_USER=testuser \
             -e POSTGRES_PASSWORD=testpass \
             -e POSTGRES_DB=testdb \
-            -p 5434:5432 \
             postgres:16-alpine
           for i in $(seq 1 30); do
             if docker exec "$CONTAINER" pg_isready -U testuser -d testdb >/dev/null 2>&1; then
@@ -127,37 +130,26 @@ jobs:
           echo "PostgreSQL failed to start"
           docker logs "$CONTAINER"
           exit 1
-      - name: Set up Python 3.12
-        run: |
-          python3.12 --version
-          python3.12 -m venv .ci-venv
-          echo "$GITHUB_WORKSPACE/.ci-venv/bin" >> $GITHUB_PATH
-      - uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ runner.arch }}-py3.12-${{ hashFiles('app/backend/requirements.txt') }}
-          restore-keys: |
-            pip-${{ runner.os }}-${{ runner.arch }}-py3.12-
-      - name: Install dependencies
-        working-directory: ./app/backend
-        env:
-          PYTHONNOUSERSITE: 1
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
       - name: Run tests
-        # Tests live in test/backend/ but import from app.backend.app,
-        # so we run pytest from the repo root with PYTHONPATH set.
-        env:
-          PYTHONNOUSERSITE: 1
-          DATABASE_URL: postgresql+asyncpg://testuser:testpass@localhost:5434/testdb
-          ENVIRONMENT: test
-          SECRET_KEY: ci-test-secret
-          CANVAS_TOKEN_ENCRYPTION_KEY: cS_xtOdvX6UctctAErcx3JJC1e3YBBM-Kwh9WLY3ocI=
-        run: PYTHONPATH=./app/backend python -m pytest test/backend/ -v
+        # x64 Rosetta on Apple Silicon breaks native wheels like cryptography.
+        # Run pytest inside Linux Docker with Postgres on the same network.
+        run: |
+          docker run --rm \
+            --network "ci-net-${{ github.run_id }}" \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            -e DATABASE_URL=postgresql+asyncpg://testuser:testpass@ci-postgres-${{ github.run_id }}:5432/testdb \
+            -e ENVIRONMENT=test \
+            -e SECRET_KEY=ci-test-secret \
+            -e CANVAS_TOKEN_ENCRYPTION_KEY=cS_xtOdvX6UctctAErcx3JJC1e3YBBM-Kwh9WLY3ocI= \
+            -e PYTHONPATH=./app/backend \
+            python:3.12-slim-bookworm \
+            bash -c "pip install --quiet -r app/backend/requirements.txt && pytest test/backend/ -v"
       - name: Stop PostgreSQL
         if: always()
-        run: docker rm -f "ci-postgres-${{ github.run_id }}" 2>/dev/null || true
+        run: |
+          docker rm -f "ci-postgres-${{ github.run_id }}" 2>/dev/null || true
+          docker network rm "ci-net-${{ github.run_id }}" 2>/dev/null || true
 
   # ── 3. Frontend lint + test ───────────────
   frontend-test:
