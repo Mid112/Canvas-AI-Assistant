@@ -1,12 +1,13 @@
 # Weekly Team Log
 
-We had three team meetings this cycle, on Friday, Saturday, and Monday, to keep moving toward the MVP milestone. Mridul added Canvas Docker support and worked through PR feedback on the Docker setup. Bao merged the Canvas Docker branch into dev and built out the full course retrieval service with pagination, upsert, and active course selection. Jessica worked on the Administrator Login UI and admin route protection, and got her auth validation PR merged. Rhythm finished the Course Access page and moved on to the Course Dashboard. Yerdana joined a live coding session to troubleshoot the Canvas connect page and the Canvas Docker sandbox, and opened a PR for the LLM adapter layer.
+We had 1 team meeting during this cycle, on Friday to keep moving toward the MVP milestone. Mridul added Canvas Docker support and worked through PR feedback on the Docker setup. Bao merged the Canvas Docker branch into develop and built out the full course retrieval service with pagination, upsert, and active course selection. Jessica worked on the Administrator Login UI and admin route protection, and got her auth validation PR merged. Rhythm finished the Course Access page and moved on to the Course Dashboard. Yerdana joined a live coding session to troubleshoot the Canvas connect page and the Canvas Docker sandbox, and opened a PR for the LLM adapter layer.
 
 ## Date Range:
 
 - [19-06] - [22-06]
 
 ## Features in the Project Plan Cycle:
+
 
 - Canvas Docker setup and testing
 - Course retrieval service (fetch, pagination, upsert, active course)
@@ -87,17 +88,21 @@ We had three team meetings this cycle, on Friday, Saturday, and Monday, to keep 
 | 499 | Instructor account management UI | Jessica | Not started |
 
 ## Burn-up Chart (Velocity):
-[ADD BURN-UP CHART SCREENSHOT HERE]
+
+<img width="943" height="545" alt="Screenshot 2026-06-23 at 9 41 31 PM" src="https://github.com/user-attachments/assets/5b20f786-09e0-4727-b9fb-a40d4e3c9996" />
+
+<img width="907" height="508" alt="Screenshot 2026-06-23 at 9 43 20 PM" src="https://github.com/user-attachments/assets/3b8c9fe9-d6cf-4419-b50e-c26f55e503a6" />
+
 
 ## Times for Team/Individual:
 
 | Team Member | Logged Hours |
 | ----------- | ------------ |
-| Mridul      | [ADD HOURS] |
-| Jessica     | [ADD HOURS] |
-| Bao         | [ADD HOURS] |
-| Yerdana     | [ADD HOURS] |
-| Rhythm      | [ADD HOURS] |
+| Mridul      | 5:40:00 |
+| Jessica     | 3:31:28 |
+| Bao         | 7:52:32 |
+| Yerdana     | 3:41:00 |
+| Rhythm      | 4:41:32 |
 
 ## Completed Tasks:
 
