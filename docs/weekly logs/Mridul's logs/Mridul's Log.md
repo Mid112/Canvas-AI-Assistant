@@ -691,14 +691,18 @@ key priorities to carry forward into the next cycle.
 ### Clockify Report
 
 * **19/06 (Friday):** Using Clockify – Logged 5.33 hours
-  *(2 hours 15 minutes for adding Canvas Docker + 3 hours 5 minutes coding session)*
+<img width="1213" height="185" alt="Screenshot 2026-06-23 at 8 16 11 PM" src="https://github.com/user-attachments/assets/0df26d14-4374-402c-8314-8713c02753e1" />
+
 
 * **20/06 (Saturday):** Using Clockify – Logged 0 hours
 
 * **21/06 (Sunday):** Using Clockify – Logged 0 hours
 
 * **22/06 (Monday):** Using Clockify – Logged 0.17 hours
-  *(10 minutes reviewing PR requested changes for adding Docker)*
+
+  <img width="1205" height="112" alt="Screenshot 2026-06-23 at 8 16 22 PM" src="https://github.com/user-attachments/assets/f29c45f9-c4ab-4257-ae50-112527311532" />
+
+
 
 ---
 
