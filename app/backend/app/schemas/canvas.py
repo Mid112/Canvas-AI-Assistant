@@ -38,6 +38,12 @@ class AssignmentResponse(BaseModel):
     course_id: int
 
 
+class AssignmentUpdate(BaseModel):
+    name: str = Field(min_length=1)
+    description: str | None = None
+    due_at: datetime | None = None
+
+
 class SubmissionResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

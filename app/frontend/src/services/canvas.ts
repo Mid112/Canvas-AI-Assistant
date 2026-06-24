@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "@/config/api";
 import type {
+  CanvasCourse,
   CanvasTokenUpdateRequest,
   CanvasTokenUpdateResponse,
   CanvasTokenValidationResponse,
@@ -118,4 +119,30 @@ export async function validateCanvasToken(
   } catch {
     return "invalid";
   }
+}
+
+export async function fetchCourses(
+  accessToken: string,
+  canvasUrl?: string,
+): Promise<CanvasCourse[]> {
+  const params = new URLSearchParams();
+  if (canvasUrl) {
+    params.set("canvas_url", canvasUrl);
+  }
+
+  const query = params.toString();
+  const response = await fetch(
+    `${API_BASE_URL}/canvas/courses${query ? `?${query}` : ""}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new CanvasApiError(await parseError(response), response.status);
+  }
+
+  return response.json() as Promise<CanvasCourse[]>;
 }

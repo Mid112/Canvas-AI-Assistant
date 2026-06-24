@@ -9,15 +9,18 @@ from app.schemas.canvas import (
     ActiveCourseResponse,
     ActiveCourseSet,
     AssignmentResponse,
+    AssignmentUpdate,
     CourseResponse,
     SubmissionResponse,
 )
 from app.services.canvas import (
     get_active_course,
+    get_assignment,
     get_assignments,
     get_courses,
     get_submissions,
     set_active_course,
+    update_assignment,
 )
 
 router = APIRouter(prefix="/canvas", tags=["canvas"])
@@ -32,26 +35,55 @@ async def list_courses(
     return await get_courses(current_user, canvas_url, db)
 
 
-@router.get("/courses/{course_id}/assignments", response_model=list[AssignmentResponse])
+@router.get("/courses/{local_course_id}/assignments", response_model=list[AssignmentResponse])
 async def list_assignments(
-    course_id: int,
+    local_course_id: int,
     current_user: User = Depends(get_current_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
 ):
-    return await get_assignments(course_id, current_user, canvas_url)
+    return await get_assignments(local_course_id, current_user, db)
 
 
 @router.get(
-    "/courses/{course_id}/assignments/{assignment_id}/submissions",
+    "/courses/{local_course_id}/assignments/{assignment_id}",
+    response_model=AssignmentResponse,
+)
+async def get_assignment_endpoint(
+    local_course_id: int,
+    assignment_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_assignment(local_course_id, assignment_id, current_user, db)
+
+
+@router.patch(
+    "/courses/{local_course_id}/assignments/{assignment_id}",
+    response_model=AssignmentResponse,
+)
+async def update_assignment_endpoint(
+    local_course_id: int,
+    assignment_id: int,
+    body: AssignmentUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await update_assignment(
+        local_course_id, assignment_id, current_user, db, body
+    )
+
+
+@router.get(
+    "/courses/{local_course_id}/assignments/{assignment_id}/submissions",
     response_model=list[SubmissionResponse],
 )
 async def list_submissions(
-    course_id: int,
+    local_course_id: int,
     assignment_id: int,
     current_user: User = Depends(get_current_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
 ):
-    return await get_submissions(course_id, assignment_id, current_user, canvas_url)
+    return await get_submissions(local_course_id, assignment_id, current_user, db)
 
 
 # Active course — stores which course the instructor is currently working in (UI selection state).

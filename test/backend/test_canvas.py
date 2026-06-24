@@ -10,6 +10,19 @@ from app.main import app
 # Helpers
 # ---------------------------------------------------------------------------
 
+def _seed_owned_course(client, auth_headers) -> int:
+    """Fetch mocked Canvas courses so a local course row exists for the user."""
+    courses = [_unique_course()]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        response = client.get(
+            f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}",
+            headers=auth_headers,
+        )
+    assert response.status_code == 200
+    return response.json()[0]["local_id"]
+
+
 # Explicit Canvas URL used by all tests — avoids depending on whatever CANVAS_API_URL
 # is set to in .env (which may point to the mock Docker server for manual testing)
 CANVAS_URL = "https://canvas.ubc.ca"
@@ -220,13 +233,23 @@ def test_list_courses_selects_correct_school(client):
 # ---------------------------------------------------------------------------
 
 def test_list_assignments(client, auth_headers):
+    local_id = _seed_owned_course(client, auth_headers)
     with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock:
         mock.return_value = MOCK_ASSIGNMENTS
         response = client.get(
-            f"/api/v1/canvas/courses/1/assignments?canvas_url={CANVAS_URL}", headers=auth_headers
+            f"/api/v1/canvas/courses/{local_id}/assignments",
+            headers=auth_headers,
         )
     assert response.status_code == 200
     assert response.json()[0]["name"] == "Assignment 1"
+
+
+def test_list_assignments_unknown_course(client, auth_headers):
+    response = client.get(
+        "/api/v1/canvas/courses/999_999/assignments",
+        headers=auth_headers,
+    )
+    assert response.status_code == 404
 
 
 def test_list_assignments_unauthenticated(client):
@@ -248,15 +271,46 @@ def test_list_assignments_no_canvas_token(client):
     assert response.status_code == 403
 
 
+# GET /canvas/courses/{id}/assignments/{assignment_id}
+# ---------------------------------------------------------------------------
+
+def test_get_assignment(client, auth_headers):
+    local_id = _seed_owned_course(client, auth_headers)
+    with patch("app.services.canvas.fetch_assignment", new_callable=AsyncMock) as mock:
+        mock.return_value = MOCK_ASSIGNMENTS[0]
+        response = client.get(
+            f"/api/v1/canvas/courses/{local_id}/assignments/10",
+            headers=auth_headers,
+        )
+    assert response.status_code == 200
+    assert response.json()["name"] == "Assignment 1"
+
+
+def test_update_assignment(client, auth_headers):
+    local_id = _seed_owned_course(client, auth_headers)
+    updated = MOCK_ASSIGNMENTS[0] | {"name": "Assignment 1 Updated"}
+    with patch("app.services.canvas.canvas_update_assignment", new_callable=AsyncMock) as mock:
+        mock.return_value = updated
+        response = client.patch(
+            f"/api/v1/canvas/courses/{local_id}/assignments/10",
+            headers=auth_headers,
+            json={"name": "Assignment 1 Updated", "description": "Updated prompt"},
+        )
+    assert response.status_code == 200
+    assert response.json()["name"] == "Assignment 1 Updated"
+    mock.assert_awaited_once()
+
+
 # ---------------------------------------------------------------------------
 # GET /canvas/courses/{id}/assignments/{id}/submissions
 # ---------------------------------------------------------------------------
 
 def test_list_submissions(client, auth_headers):
+    local_id = _seed_owned_course(client, auth_headers)
     with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
         mock.return_value = MOCK_SUBMISSIONS
         response = client.get(
-            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{local_id}/assignments/10/submissions",
             headers=auth_headers,
         )
     assert response.status_code == 200

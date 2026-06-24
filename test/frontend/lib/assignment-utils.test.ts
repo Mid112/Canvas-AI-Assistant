@@ -1,0 +1,48 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  assignmentToFormValues,
+  buildAssignmentChanges,
+  formatDueDateForDisplay,
+  hasAssignmentChanges,
+} from "@/lib/assignment-utils";
+import type { Assignment } from "@/types/assignment";
+
+const assignment: Assignment = {
+  id: 42,
+  name: "Midterm Essay",
+  description: "Write about algorithms.",
+  due_at: "2026-12-01T23:59:00.000Z",
+  points_possible: 100,
+  course_id: 7,
+};
+
+describe("assignment-utils", () => {
+  it("maps assignment data to form values", () => {
+    const values = assignmentToFormValues(assignment);
+
+    expect(values.name).toBe("Midterm Essay");
+    expect(values.description).toBe("Write about algorithms.");
+    expect(values.dueDate).toMatch(/^2026-/);
+  });
+
+  it("detects changed fields for preview", () => {
+    const updated = {
+      ...assignmentToFormValues(assignment),
+      name: "Updated Essay",
+      description: "Revised prompt",
+    };
+
+    const changes = buildAssignmentChanges(assignment, updated);
+
+    expect(changes).toHaveLength(2);
+    expect(changes[0]?.label).toBe("Title");
+    expect(changes[1]?.label).toBe("Description");
+    expect(hasAssignmentChanges(assignment, updated)).toBe(true);
+  });
+
+  it("formats due dates for display", () => {
+    expect(formatDueDateForDisplay(null)).toBe("No due date");
+    expect(formatDueDateForDisplay("invalid-date")).toBe("invalid-date");
+  });
+});
