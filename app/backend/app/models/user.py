@@ -7,10 +7,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.audit_log import AuditLog
     from app.models.canvas_connection import CanvasConnection
     from app.models.conversation import Conversation
     from app.models.course import Course
-    from app.models.audit_log import AuditLog
     from app.models.message_template import MessageTemplate
     from app.models.session import Session
     from app.models.user_preference import UserPreference

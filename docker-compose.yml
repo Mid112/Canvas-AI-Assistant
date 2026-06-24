@@ -15,7 +15,6 @@
 # ─────────────────────────────────────────────
 
 services:
-
   # ─────────────────────────────────────────────
   # 1. PostgreSQL Database
   # ─────────────────────────────────────────────
@@ -23,14 +22,18 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER:     ${POSTGRES_USER:-appuser}
+      POSTGRES_USER: ${POSTGRES_USER:-appuser}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
-      POSTGRES_DB:       ${POSTGRES_DB:-appdb}
+      POSTGRES_DB: ${POSTGRES_DB:-appdb}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-appuser} -d ${POSTGRES_DB:-appdb}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-appuser} -d ${POSTGRES_DB:-appdb}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -52,7 +55,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:-localdevsecret}
       # nginx serves the frontend on port 8888 (see nginx service below)
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:8888,http://localhost}
-      CANVAS_API_URL: ${CANVAS_API_URL:-https://canvas.ubc.ca/api/v1}
+      CANVAS_API_URL: ${CANVAS_API_URL:-https://canvas.ubc.ca}
       CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-}
       CANVAS_TOKEN_ENCRYPTION_KEY: ${CANVAS_TOKEN_ENCRYPTION_KEY}
       MCP_SERVER_URL: http://mcp_server:8001
@@ -76,9 +79,9 @@ services:
     container_name: app_mcp
     restart: unless-stopped
     environment:
-      CANVAS_API_URL:   ${CANVAS_API_URL:-http://placeholder.local}
+      CANVAS_API_URL: ${CANVAS_API_URL:-http://placeholder.local}
       CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-placeholder}
-      BACKEND_URL:      http://backend:8000
+      BACKEND_URL: http://backend:8000
     ports:
       - "8001:8001"
     depends_on:
@@ -152,7 +155,7 @@ networks:
     driver: bridge
   ai_net:
     driver: bridge
-    internal: true    # no external egress — for containerized vLLM
+    internal: true # no external egress — for containerized vLLM
 
 # ─────────────────────────────────────────────
 # Volumes

@@ -162,7 +162,12 @@ async def fetch_assignments(course_id: int, token: str, canvas_url: str = settin
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
 
 
-async def fetch_submissions(course_id: int, assignment_id: int, token: str, canvas_url: str = settings.CANVAS_API_URL) -> list[dict]:
+async def fetch_submissions(
+    course_id: int,
+    assignment_id: int,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> list[dict]:
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             return await _fetch_all_pages(
