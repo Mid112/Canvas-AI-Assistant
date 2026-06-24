@@ -58,7 +58,7 @@
 
 ### Current State
 
-The team merged the Canvas Docker setup and the full course retrieval service this cycle. Courses are now synced from Canvas into the local database on every fetch, and instructors can select and store an active course. Yerdana joined a live troubleshooting session with the team to debug the Canvas connect page and the Canvas Docker sandbox, and found a missing compose service definition and a URL duplication bug in the Canvas integration layer. Yerdana also opened a PR for the LLM adapter layer, which connects the chatbox to Canvas through a locally run LLM. The Canvas Connect page is still in review.
+The team merged the Canvas Docker setup and the full course retrieval service this cycle. Courses are now synced from Canvas into the local database on every fetch, and instructors can select and store an active course. Yerdana joined a live troubleshooting session with the team to debug the Canvas connect page and the Canvas Docker sandbox, and found a missing compose service definition and a URL duplication bug in the Canvas integration layer. Yerdana also opened a PR for the LLM adapter layer, which connects the chatbox to Canvas through a locally run LLM. 
 
 **Completed and merged to `develop`:**
 
