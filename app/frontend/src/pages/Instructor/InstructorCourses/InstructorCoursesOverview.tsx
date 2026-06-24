@@ -63,12 +63,6 @@ export function InstructorCoursesOverview({
         <h2 id="course-analytics-heading" className="text-lg font-semibold">
           Course Analytics Overview
         </h2>
-        <button
-          type="button"
-          className="text-sm font-medium text-primary hover:underline"
-        >
-          View Full Report
-        </button>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <OverviewCard

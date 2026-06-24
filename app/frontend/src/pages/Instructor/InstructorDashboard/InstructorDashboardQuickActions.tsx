@@ -30,10 +30,6 @@ export function InstructorDashboardQuickActions({
 }: InstructorDashboardQuickActionsProps) {
   const navigate = useNavigate();
 
-  const openAssistant = () => {
-    navigate(paths.instructor.assistant);
-  };
-
   return (
     <Card className="shadow-sm ring-1 ring-border/60">
       <CardHeader>
@@ -54,7 +50,7 @@ export function InstructorDashboardQuickActions({
             <button
               key={action.id}
               type="button"
-              onClick={openAssistant}
+              onClick={() => navigate(paths.instructor.assistant)}
               className={dashboardInteractive.actionCard}
             >
               <div
@@ -82,7 +78,7 @@ export function InstructorDashboardQuickActions({
         <Button
           className={cn("w-full", dashboardColors.blue.button)}
           size="lg"
-          onClick={openAssistant}
+          onClick={() => navigate(paths.instructor.assistant)}
         >
           Open AI Assistant
         </Button>
