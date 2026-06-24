@@ -11,12 +11,11 @@ on:
   push:
     branches: [main, develop]
 
-# Cancels older in-progress runs for the same branch/PR when a new
-# commit is pushed. Prevents CI minutes being wasted on stale runs
-# and means only the latest push actually finishes running.
+# On a single self-hosted runner, cancel-in-progress often kills checkout mid-run
+# when commits are pushed in quick succession. Let each run finish.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   # Helps setup-node use the runner's writable _work/_tool cache.
@@ -37,7 +36,7 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -61,7 +60,7 @@ jobs:
       run:
         working-directory: ./app/backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Python 3.12
         working-directory: ${{ github.workspace }}
         run: |
@@ -103,7 +102,7 @@ jobs:
     - X64
     needs: backend-lint
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Start PostgreSQL
         # Service containers only work on Linux runners. On macOS self-hosted
         # runners, start Postgres via Docker instead.
@@ -163,8 +162,8 @@ jobs:
       run:
         working-directory: ./app/frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: "npm"
@@ -188,7 +187,7 @@ jobs:
     needs: [backend-test, frontend-test]
     if: always() && !failure() && !cancelled()
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Build backend image
