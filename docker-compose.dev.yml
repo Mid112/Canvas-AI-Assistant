@@ -20,6 +20,7 @@ networks:
 
 volumes:
   postgres_data:
+  canvas_data:
 
 services:
   # ─────────────────────────────────────────────
@@ -54,6 +55,16 @@ services:
       timeout: 5s
       retries: 5
 
+  canvas-docker:
+    image: lbjay/canvas-docker
+    container_name: canvas_lms
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - canvas_data:/opt/canvas-lms/tmp
+    networks:
+      - backend_net
   # ─────────────────────────────────────────────
   # Backend (FastAPI) — dev mode
   # ─────────────────────────────────────────────
@@ -69,7 +80,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:-localdevsecret}
       DEBUG: "true"
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:5173}
-      CANVAS_API_URL: ${CANVAS_API_URL:-https://canvas.ubc.ca/api/v1}
+      CANVAS_API_URL: ${CANVAS_API_URL:-http://canvas_lms:3000}
       CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-}
       CANVAS_TOKEN_ENCRYPTION_KEY: ${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=}
     volumes:

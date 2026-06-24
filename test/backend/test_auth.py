@@ -2,6 +2,7 @@ import uuid
 import pytest
 from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
+from app.config import settings
 from app.main import app
 
 
@@ -203,6 +204,49 @@ def test_canvas_url_must_be_https(client):
     headers = {"Authorization": f"Bearer {token}"}
 
     resp = client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "tok", "canvas_url": "http://evil.com/api/v1"}, headers=headers)
+    assert resp.status_code == 422
+
+
+def test_debug_allows_canvas_lms_http_url(client, monkeypatch):
+    monkeypatch.setattr(settings, "DEBUG", True)
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        resp = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "tok", "canvas_url": "http://canvas_lms:3000"},
+            headers=headers,
+        )
+
+    assert resp.status_code == 200
+
+
+def test_debug_rejects_untrusted_http_url(client, monkeypatch):
+    monkeypatch.setattr(settings, "DEBUG", True)
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "tok", "canvas_url": "http://evil.com"}, headers=headers)
+    assert resp.status_code == 422
+
+
+def test_non_debug_rejects_localhost_http_url(client, monkeypatch):
+    monkeypatch.setattr(settings, "DEBUG", False)
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = client.patch(
+        "/api/v1/auth/me/canvas-token",
+        json={"canvas_token": "tok", "canvas_url": "http://localhost:3000"},
+        headers=headers,
+    )
     assert resp.status_code == 422
 
 
