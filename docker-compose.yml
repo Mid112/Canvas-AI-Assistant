@@ -55,7 +55,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:-localdevsecret}
       # nginx serves the frontend on port 8888 (see nginx service below)
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:8888,http://localhost}
-      CANVAS_API_URL: ${CANVAS_API_URL:-https://canvas.ubc.ca/api/v1}
+      CANVAS_API_URL: ${CANVAS_API_URL:-https://canvas.ubc.ca}
       CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-}
       CANVAS_TOKEN_ENCRYPTION_KEY: ${CANVAS_TOKEN_ENCRYPTION_KEY}
       MCP_SERVER_URL: http://mcp_server:8001

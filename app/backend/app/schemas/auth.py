@@ -1,12 +1,12 @@
 from datetime import datetime
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator
 
 from app.config import settings
 
-_LOCAL_HTTP_PREFIXES = ("http://localhost", "http://127.0.0.1", "http://canvas_lms")
-
+_LOCAL_HTTP_HOSTS = {"localhost", "127.0.0.1", "canvas_lms"}
 
 
 class RegisterRequest(BaseModel):
@@ -38,7 +38,12 @@ class CanvasTokenRequest(BaseModel):
         # block non-https to prevent SSRF — backend would otherwise call arbitrary internal hosts
         # allow plain http:// for local Canvas instances when DEBUG is on
         if not v.startswith("https://"):
-            if not (settings.DEBUG and any(v.startswith(p) for p in _LOCAL_HTTP_PREFIXES)):
+            parsed_url = urlparse(v)
+            if not (
+                settings.DEBUG
+                and parsed_url.scheme == "http"
+                and parsed_url.hostname in _LOCAL_HTTP_HOSTS
+            ):
                 raise ValueError("canvas_url must be an https:// URL")
         return v
 
