@@ -76,15 +76,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    loadUser(token)
-      .catch(() => {
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        await loadUser(token);
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
         clearStoredToken();
         setAccessToken(null);
         setUser(null);
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [loadUser]);
 
   const login = useCallback(async (credentials: LoginCredentials) => {

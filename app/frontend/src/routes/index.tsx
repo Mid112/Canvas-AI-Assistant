@@ -31,6 +31,7 @@ import { AdminSettingsPage } from "@/pages/Admin/AdminSettingsPage";
 import { ProfilePage } from "@/pages/Profile/ProfilePage";
 import { GuestRoute } from "@/routes/GuestRoute";
 import { ProtectedRoute } from "@/routes/ProtectedRoute";
+import { RoleRoute } from "@/routes/RoleRoute";
 import { RootLayout } from "@/routes/RootLayout";
 import { paths } from "@/routes/paths";
 
@@ -68,62 +69,77 @@ export const router = createBrowserRouter([
             ],
           },
           {
-            element: <DashboardLayout role="instructor" />,
+            element: <RoleRoute role="instructor" />,
             children: [
               {
-                path: paths.instructor.dashboard,
-                element: <InstructorDashboardPage />,
+                element: <DashboardLayout role="instructor" />,
+                children: [
+                  {
+                    path: paths.instructor.dashboard,
+                    element: <InstructorDashboardPage />,
+                  },
+                  {
+                    path: paths.instructor.courses,
+                    element: <InstructorCoursesPage />,
+                  },
+                  {
+                    path: paths.instructor.assistant,
+                    element: <InstructorAssistantPage />,
+                  },
+                  {
+                    path: paths.instructor.analytics,
+                    element: <InstructorAnalyticsPage />,
+                  },
+                  {
+                    path: paths.instructor.messages,
+                    element: <InstructorMessagesPage />,
+                  },
+                  {
+                    path: paths.instructor.notifications,
+                    element: <InstructorNotificationsPage />,
+                  },
+                  {
+                    path: paths.instructor.history,
+                    element: <InstructorHistoryPage />,
+                  },
+                  {
+                    path: paths.instructor.settings,
+                    element: <InstructorSettingsPage />,
+                  },
+                  { path: paths.instructor.profile, element: <ProfilePage /> },
+                ],
               },
-              {
-                path: paths.instructor.courses,
-                element: <InstructorCoursesPage />,
-              },
-              {
-                path: paths.instructor.assistant,
-                element: <InstructorAssistantPage />,
-              },
-              {
-                path: paths.instructor.analytics,
-                element: <InstructorAnalyticsPage />,
-              },
-              {
-                path: paths.instructor.messages,
-                element: <InstructorMessagesPage />,
-              },
-              {
-                path: paths.instructor.notifications,
-                element: <InstructorNotificationsPage />,
-              },
-              {
-                path: paths.instructor.history,
-                element: <InstructorHistoryPage />,
-              },
-              {
-                path: paths.instructor.settings,
-                element: <InstructorSettingsPage />,
-              },
-              { path: paths.instructor.profile, element: <ProfilePage /> },
             ],
           },
           {
-            element: <DashboardLayout role="ta" />,
+            element: <RoleRoute role="ta" />,
             children: [
-              { path: paths.ta.dashboard, element: <TADashboardPage /> },
-              { path: paths.ta.courses, element: <TACoursesPage /> },
-              { path: paths.ta.messages, element: <TAMessagesPage /> },
-              { path: paths.ta.students, element: <TAStudentsPage /> },
-              { path: paths.ta.settings, element: <TASettingsPage /> },
-              { path: paths.ta.profile, element: <ProfilePage /> },
+              {
+                element: <DashboardLayout role="ta" />,
+                children: [
+                  { path: paths.ta.dashboard, element: <TADashboardPage /> },
+                  { path: paths.ta.courses, element: <TACoursesPage /> },
+                  { path: paths.ta.messages, element: <TAMessagesPage /> },
+                  { path: paths.ta.students, element: <TAStudentsPage /> },
+                  { path: paths.ta.settings, element: <TASettingsPage /> },
+                  { path: paths.ta.profile, element: <ProfilePage /> },
+                ],
+              },
             ],
           },
           {
-            element: <DashboardLayout role="admin" />,
+            element: <RoleRoute role="admin" />,
             children: [
-              { path: paths.admin.dashboard, element: <AdminDashboardPage /> },
-              { path: paths.admin.users, element: <AdminUsersPage /> },
-              { path: paths.admin.audit, element: <AdminAuditPage /> },
-              { path: paths.admin.settings, element: <AdminSettingsPage /> },
-              { path: paths.admin.profile, element: <ProfilePage /> },
+              {
+                element: <DashboardLayout role="admin" />,
+                children: [
+                  { path: paths.admin.dashboard, element: <AdminDashboardPage /> },
+                  { path: paths.admin.users, element: <AdminUsersPage /> },
+                  { path: paths.admin.audit, element: <AdminAuditPage /> },
+                  { path: paths.admin.settings, element: <AdminSettingsPage /> },
+                  { path: paths.admin.profile, element: <ProfilePage /> },
+                ],
+              },
             ],
           },
         ],

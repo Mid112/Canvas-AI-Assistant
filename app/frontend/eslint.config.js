@@ -18,6 +18,21 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      'react-refresh/only-export-components': [
+        'error',
+        {
+          allowExportNames: [
+            'badgeVariants',
+            'buttonVariants',
+            'tabsListVariants',
+            'useAuth',
+            'useInstitution',
+            'AuthApiError',
+          ],
+        },
+      ],
+    },
   },
   {
     files: ['src/components/ui/**/*.{ts,tsx}'],
