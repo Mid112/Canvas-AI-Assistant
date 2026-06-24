@@ -5,12 +5,15 @@ import {
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatAnalyticsTrend } from "@/lib/analytics-trends";
 import { cn } from "@/lib/utils";
+import { paths } from "@/routes/paths";
 import type { DashboardMetrics } from "@/types/dashboard";
 
+import { getSubmissionsAnalysisPath } from "../InstructorSubmissionsAnalysis/submissionNavigation";
 import {
   dashboardColors,
   formatMissingSubmissionsTrend,
@@ -28,6 +31,7 @@ function MetricCard({
   icon: Icon,
   iconClassName,
   detailClassName,
+  href,
 }: {
   title: string;
   value: string;
@@ -35,9 +39,15 @@ function MetricCard({
   icon: LucideIcon;
   iconClassName: string;
   detailClassName?: string;
+  href?: string;
 }) {
-  return (
-    <Card className="shadow-sm ring-1 ring-border/60">
+  const card = (
+    <Card
+      className={cn(
+        "shadow-sm ring-1 ring-border/60",
+        href && "transition-colors hover:bg-muted/40",
+      )}
+    >
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {title}
@@ -59,6 +69,16 @@ function MetricCard({
       </CardContent>
     </Card>
   );
+
+  if (!href) {
+    return card;
+  }
+
+  return (
+    <Link to={href} className="block rounded-xl focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+      {card}
+    </Link>
+  );
 }
 
 export function InstructorDashboardOverview({
@@ -77,6 +97,7 @@ export function InstructorDashboardOverview({
           icon={BookOpen}
           iconClassName={dashboardColors.blue.iconSquare}
           detailClassName={dashboardColors.green.trend}
+          href={paths.instructor.courses}
         />
         <MetricCard
           title="Total Students"
@@ -95,6 +116,7 @@ export function InstructorDashboardOverview({
           detailClassName={getMissingSubmissionsTrendClass(
             metrics.missingSubmissionsTrend,
           )}
+          href={getSubmissionsAnalysisPath({ status: "missing" })}
         />
         <MetricCard
           title="Pending Approvals"

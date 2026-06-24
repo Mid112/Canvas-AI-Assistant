@@ -24,7 +24,7 @@ describe("InstructorDashboardActiveCourses", () => {
     ).toBeInTheDocument();
 
     const viewLinks = screen.getAllByRole("link", { name: "View" });
-    expect(viewLinks).toHaveLength(4);
+    expect(viewLinks).toHaveLength(6);
     viewLinks.forEach((link) => {
       expect(link).toHaveAttribute("href", paths.instructor.courses);
     });
