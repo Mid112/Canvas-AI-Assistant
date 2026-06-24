@@ -3,7 +3,9 @@ import httpx
 
 from app.services.llm.base import LLMAdapter
 
-# Anthropic as opposed to OpenAI compatible providers has difference naming conventions for the request/response shape, so we need a separate adapter for it.
+
+# Anthropic uses different request/response naming than OpenAI-compatible
+# providers, so it needs a separate adapter.
 class AnthropicAdapter(LLMAdapter):
     def __init__(self, api_key: str, model: str):
         self.api_key = api_key
