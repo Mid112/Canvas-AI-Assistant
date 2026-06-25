@@ -32,6 +32,12 @@ function getPageTitle(pathname: string, role: UserRole): string {
 
   const navItems = getNavItemsForRole(role);
   const match = navItems.find((item) => pathname.startsWith(item.href));
+  if (pathname.includes("/assignments/") && pathname.endsWith("/edit")) {
+    return "Update Assignment";
+  }
+  if (pathname.includes("/assignments")) {
+    return "Course Assignments";
+  }
   return match?.title ?? getRoleLabel(role);
 }
 
