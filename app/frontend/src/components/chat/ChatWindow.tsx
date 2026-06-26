@@ -127,10 +127,23 @@ export function ChatWindow({
   return (
     <Card className="flex min-h-[32rem] flex-1 flex-col overflow-hidden shadow-sm ring-1 ring-border/60">
       <CardContent className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:p-6">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+          {messages.map((message) =>
+            message.role === "assistant" ? (
+              <AssistantMessage key={message.id} message={message} />
+            ) : (
+              <UserMessage key={message.id} message={message} />
+            ),
+          )}
+
+          {isLoading ? <LoadingIndicator /> : null}
+          <div ref={scrollAnchorRef} />
+        </div>
+
         {error ? (
           <div
             role="alert"
-            className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3"
+            className="shrink-0 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3"
           >
             <div className="flex items-start gap-2 text-sm text-destructive">
               <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
@@ -147,19 +160,6 @@ export function ChatWindow({
             </Button>
           </div>
         ) : null}
-
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-          {messages.map((message) =>
-            message.role === "assistant" ? (
-              <AssistantMessage key={message.id} message={message} />
-            ) : (
-              <UserMessage key={message.id} message={message} />
-            ),
-          )}
-
-          {isLoading ? <LoadingIndicator /> : null}
-          <div ref={scrollAnchorRef} />
-        </div>
 
         <ChatInput
           onSend={handleSend}

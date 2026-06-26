@@ -17,6 +17,8 @@ function randomDelayMs(): number {
   return 1000 + Math.floor(Math.random() * 1000);
 }
 
+// Placeholder mock response routing — delete and replace with real backend/LLM
+// integration once the frontend sends messages to the API.
 function buildMockResponse(message: string): AssistantResponse {
   const normalized = message.toLowerCase();
 
@@ -73,7 +75,7 @@ export async function sendAssistantMessage(
 ): Promise<AssistantResponse> {
   await delay(randomDelayMs());
 
-  if (message.toLowerCase().includes("fail")) {
+  if (message.toLowerCase().includes("fail please")) {
     throw new AssistantApiError(
       "The assistant is temporarily unavailable. Please try again.",
     );
