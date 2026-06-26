@@ -1,5 +1,5 @@
 import { API_BASE_URL } from "@/config/api";
-import type { Assignment, AssignmentUpdatePayload } from "@/types/assignment";
+import type { Assignment, AssignmentCreatePayload, AssignmentUpdatePayload } from "@/types/assignment";
 
 export class AssignmentApiError extends Error {
   status: number;
@@ -87,6 +87,21 @@ export async function fetchAssignment(
   return request<Assignment>(
     buildAssignmentUrl(localCourseId, assignmentId),
     accessToken,
+  );
+}
+
+export async function createAssignment(
+  localCourseId: number,
+  payload: AssignmentCreatePayload,
+  accessToken: string,
+): Promise<Assignment> {
+  return request<Assignment>(
+    buildCourseAssignmentsUrl(localCourseId),
+    accessToken,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
   );
 }
 

@@ -16,3 +16,10 @@ export interface GeneratedAssignmentDraft {
 }
 
 export type AssignmentCreateStep = "describe" | "review";
+
+export interface AssignmentApprovePayload {
+  courseId: string;
+  name: string;
+  description: string;
+  dueDate: string;
+}

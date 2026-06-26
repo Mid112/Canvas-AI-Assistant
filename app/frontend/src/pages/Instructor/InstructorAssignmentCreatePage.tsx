@@ -71,7 +71,12 @@ export function InstructorAssignmentCreatePage() {
     setIsApproving(true);
 
     try {
-      await approveAssignmentDraft();
+      await approveAssignmentDraft({
+        courseId: describeValues.courseId,
+        name: values.name,
+        description: values.description,
+        dueDate: values.dueDate,
+      });
       setApprovedValues(values);
     } catch (error) {
       setApproveError(

@@ -76,10 +76,42 @@ describe("InstructorAssignmentCreatePage", () => {
     await user.click(screen.getByRole("button", { name: "Approve Assignment" }));
 
     await waitFor(() => {
-      expect(mockedApprove).toHaveBeenCalled();
+      expect(mockedApprove).toHaveBeenCalledWith({
+        courseId: "1",
+        name: "Python Functions Quiz",
+        description: "Complete a short quiz covering functions.",
+        dueDate: "2026-12-15T23:59",
+      });
     });
 
     expect(await screen.findByText("Assignment Approved")).toBeInTheDocument();
+  });
+
+  it("passes instructor edits to approveAssignmentDraft", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.selectOptions(screen.getByLabelText("Select Course"), "1");
+    await user.type(
+      screen.getByLabelText("Assignment Prompt"),
+      "Create a quiz on Python functions and parameters for beginners.",
+    );
+    await user.click(screen.getByRole("button", { name: "Generate Assignment" }));
+
+    const titleInput = await screen.findByLabelText("Assignment title");
+    await user.clear(titleInput);
+    await user.type(titleInput, "Edited Quiz Title");
+
+    await user.click(screen.getByRole("button", { name: "Approve Assignment" }));
+
+    await waitFor(() => {
+      expect(mockedApprove).toHaveBeenCalledWith({
+        courseId: "1",
+        name: "Edited Quiz Title",
+        description: "Complete a short quiz covering functions.",
+        dueDate: "2026-12-15T23:59",
+      });
+    });
   });
 
   it("returns to describe step from review", async () => {
@@ -96,6 +128,27 @@ describe("InstructorAssignmentCreatePage", () => {
     await screen.findByLabelText("Assignment title");
     await user.click(screen.getByRole("button", { name: "Back to Describe" }));
 
+    expect(screen.getByText("Describe Your Assignment")).toBeInTheDocument();
+  });
+
+  it("shows an error when assignment generation fails", async () => {
+    const user = userEvent.setup();
+    mockedGenerate.mockRejectedValueOnce(
+      new Error("The assignment generator is temporarily unavailable. Please try again."),
+    );
+
+    renderPage();
+
+    await user.selectOptions(screen.getByLabelText("Select Course"), "1");
+    await user.type(
+      screen.getByLabelText("Assignment Prompt"),
+      "Create a quiz on Python functions and parameters for beginners.",
+    );
+    await user.click(screen.getByRole("button", { name: "Generate Assignment" }));
+
+    expect(
+      await screen.findByText(/assignment generator is temporarily unavailable/i),
+    ).toBeInTheDocument();
     expect(screen.getByText("Describe Your Assignment")).toBeInTheDocument();
   });
 });

@@ -1,5 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,8 @@ export function AssignmentReviewApproveStep({
     register,
     handleSubmit,
     watch,
-    formState: { errors },
+    trigger,
+    formState: { errors, isValid },
   } = useForm<AssignmentReviewFormSchema>({
     resolver: zodResolver(assignmentReviewSchema),
     defaultValues: {
@@ -46,10 +48,14 @@ export function AssignmentReviewApproveStep({
       description: draft.description,
       dueDate: draft.dueDate,
     },
-    mode: "onBlur",
+    mode: "onChange",
   });
 
   const dueDateValue = watch("dueDate");
+
+  useEffect(() => {
+    void trigger();
+  }, [trigger]);
 
   return (
     <Card className="shadow-sm ring-1 ring-border/60">
@@ -149,7 +155,7 @@ export function AssignmentReviewApproveStep({
           <Button
             type="submit"
             className={cn(dashboardColors.blue.button)}
-            disabled={isApproving}
+            disabled={isApproving || !isValid}
           >
             {isApproving ? (
               <>

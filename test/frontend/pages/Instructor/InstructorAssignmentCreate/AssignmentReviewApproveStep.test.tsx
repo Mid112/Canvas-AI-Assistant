@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -51,5 +51,31 @@ describe("AssignmentReviewApproveStep", () => {
 
     expect(await screen.findByText("Title cannot be empty")).toBeInTheDocument();
     expect(onApprove).not.toHaveBeenCalled();
+  });
+
+  it("disables approve when the form is invalid", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AssignmentReviewApproveStep
+        courseLabel="CS 101"
+        draft={draft}
+        isApproving={false}
+        onApprove={vi.fn()}
+        onBack={vi.fn()}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("button", { name: "Approve Assignment" }),
+    ).toBeEnabled();
+
+    await user.clear(screen.getByLabelText("Assignment title"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Approve Assignment" }),
+      ).toBeDisabled();
+    });
   });
 });

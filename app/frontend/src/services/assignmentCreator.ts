@@ -1,4 +1,9 @@
-import type { GeneratedAssignmentDraft } from "@/types/assignmentCreate";
+import { formatDueDateForApi } from "@/lib/assignment-utils";
+import type { AssignmentCreatePayload } from "@/types/assignment";
+import type {
+  AssignmentApprovePayload,
+  GeneratedAssignmentDraft,
+} from "@/types/assignmentCreate";
 
 export class AssignmentCreatorApiError extends Error {
   constructor(message: string) {
@@ -91,7 +96,29 @@ export async function generateAssignmentDraft(
   return buildMockDraft(prompt);
 }
 
+export function toAssignmentCreateRequest(
+  payload: AssignmentApprovePayload,
+): { courseId: number; assignment: AssignmentCreatePayload } {
+  const courseId = Number(payload.courseId);
+  if (!Number.isInteger(courseId) || courseId <= 0) {
+    throw new AssignmentCreatorApiError("A valid course is required.");
+  }
+
+  return {
+    courseId,
+    assignment: {
+      name: payload.name.trim(),
+      description: payload.description.trim() || null,
+      due_at: payload.dueDate ? formatDueDateForApi(payload.dueDate) : null,
+    },
+  };
+}
+
 /** Mock approve/create — simulates saving to Canvas. */
-export async function approveAssignmentDraft(): Promise<void> {
+export async function approveAssignmentDraft(
+  payload: AssignmentApprovePayload,
+): Promise<void> {
+  const request = toAssignmentCreateRequest(payload);
   await delay(800);
+  void request;
 }
