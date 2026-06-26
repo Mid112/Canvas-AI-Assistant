@@ -13,7 +13,7 @@ import { getAssistantPath } from "@/utils/navigation";
 
 export function ConnectCanvasPage() {
   const navigate = useNavigate();
-  const { user, logout, accessToken } = useAuth();
+  const { user, logout, accessToken, refreshUser } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -51,6 +51,9 @@ export function ConnectCanvasPage() {
 
               try {
                 await updateCanvasTokens(canvasTokens, accessToken);
+                // The save response updates the backend; refresh AuthContext before
+                // leaving onboarding so Canvas-backed pages can fetch immediately.
+                await refreshUser();
                 navigate(paths.reviewPermissions);
               } catch (err) {
                 if (err instanceof CanvasApiError && err.status === 401) {

@@ -184,14 +184,16 @@ export function InstructorCoursesSection({
   );
 }
 
-export function InstructorCoursesEmptyState() {
+export function InstructorCoursesEmptyState({
+  description = "Try adjusting your search or switch institutions.",
+}: {
+  description?: string;
+}) {
   return (
     <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed p-12 text-center">
       <div className="space-y-1">
         <p className="font-medium">No courses found</p>
-        <p className="text-sm text-muted-foreground">
-          Try adjusting your search or switch institutions.
-        </p>
+        <p className="text-sm text-muted-foreground">{description}</p>
       </div>
     </div>
   );

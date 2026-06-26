@@ -33,6 +33,7 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (credentials: LoginCredentials) => Promise<User>;
   register: (credentials: RegisterCredentials) => Promise<User>;
+  refreshUser: () => Promise<User | null>;
   logout: () => void;
 }
 
@@ -52,6 +53,7 @@ function mapUserResponse(response: UserResponse): User {
     role: isUserRole(response.role) ? response.role : DEFAULT_ROLE,
     is_active: response.is_active,
     has_canvas_token: response.has_canvas_token,
+    canvas_connections: response.canvas_connections,
   };
 }
 
@@ -131,6 +133,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [loadUser]);
 
+  const refreshUser = useCallback(async () => {
+    if (!accessToken) {
+      return null;
+    }
+
+    // Re-read /auth/me after profile-level mutations, such as connecting Canvas,
+    // so derived flags like has_canvas_token stay in sync without a new login.
+    return await loadUser(accessToken);
+  }, [accessToken, loadUser]);
+
   const logout = useCallback(() => {
     clearStoredToken();
     setAccessToken(null);
@@ -145,9 +157,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       login,
       register,
+      refreshUser,
       logout,
     }),
-    [user, accessToken, isLoading, login, register, logout],
+    [user, accessToken, isLoading, login, register, refreshUser, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
