@@ -13,6 +13,7 @@ export const paths = {
     courseAssignments: "/instructor/courses/:localCourseId/assignments",
     assignmentUpdate:
       "/instructor/courses/:localCourseId/assignments/:assignmentId/edit",
+    assignmentCreate: "/instructor/assignments/create",
     assistant: "/instructor/assistant",
     analytics: "/instructor/analytics",
     messages: "/instructor/messages",
