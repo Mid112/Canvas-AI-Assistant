@@ -36,6 +36,7 @@ export function ChatWindow({
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const initialPromptHandledRef = useRef<string | null>(null);
+  const isDeliveringRef = useRef(false);
 
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView?.({ behavior: "smooth" });
@@ -46,6 +47,11 @@ export function ChatWindow({
   }, [isLoading, onLoadingChange]);
 
   const deliverAssistantResponse = useCallback(async (userText: string) => {
+    if (isDeliveringRef.current) {
+      return;
+    }
+
+    isDeliveringRef.current = true;
     setIsLoading(true);
     setError(null);
     setRetryMessage(userText);
@@ -71,6 +77,7 @@ export function ChatWindow({
           : "Something went wrong. Please try again.";
       setError(message);
     } finally {
+      isDeliveringRef.current = false;
       setIsLoading(false);
     }
   }, []);
@@ -106,10 +113,11 @@ export function ChatWindow({
     initialPromptHandledRef.current = initialPrompt;
     handleSend(initialPrompt);
     onInitialPromptConsumed?.();
+    initialPromptHandledRef.current = null;
   }, [handleSend, initialPrompt, onInitialPromptConsumed]);
 
   const handleRetry = () => {
-    if (!retryMessage || isLoading) {
+    if (!retryMessage || isDeliveringRef.current) {
       return;
     }
 

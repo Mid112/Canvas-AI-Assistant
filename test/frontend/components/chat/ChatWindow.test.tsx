@@ -3,9 +3,27 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChatWindow } from "@/components/chat/ChatWindow";
+import {
+  AssistantApiError,
+  sendAssistantMessage,
+} from "@/services/assistant";
+
+vi.mock("@/services/assistant", async () => {
+  const actual = await vi.importActual<typeof import("@/services/assistant")>(
+    "@/services/assistant",
+  );
+
+  return {
+    ...actual,
+    sendAssistantMessage: vi.fn(actual.sendAssistantMessage),
+  };
+});
+
+const mockedSendAssistantMessage = vi.mocked(sendAssistantMessage);
 
 describe("ChatWindow", () => {
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
@@ -59,11 +77,22 @@ describe("ChatWindow", () => {
   it("shows an error banner and retry button when the mock request fails", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
+    mockedSendAssistantMessage
+      .mockRejectedValueOnce(
+        new AssistantApiError(
+          "The assistant is temporarily unavailable. Please try again.",
+        ),
+      )
+      .mockResolvedValueOnce({
+        content: "Retry succeeded.",
+        explanation: "The assistant responded after a retry.",
+      });
+
     render(<ChatWindow />);
 
     await user.type(
       screen.getByRole("textbox", { name: "Chat message" }),
-      "fail please",
+      "Show missing submissions",
     );
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
@@ -73,5 +102,15 @@ describe("ChatWindow", () => {
       await screen.findByText(/assistant is temporarily unavailable/i),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await vi.advanceTimersByTimeAsync(2000);
+
+    await waitFor(() => {
+      expect(screen.getByText("Retry succeeded.")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Explanation")).toBeInTheDocument();
+    expect(mockedSendAssistantMessage).toHaveBeenCalledTimes(2);
   });
 });
