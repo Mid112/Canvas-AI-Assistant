@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from app.services.llm.factory import get_llm_adapter
+from app.services.llm.llm_setting import get_llm_adapter
 
 
 @pytest.mark.asyncio

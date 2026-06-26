@@ -49,10 +49,9 @@ test:
 	cd app/frontend && npm run test
 
 # ── Test LLM adapter ─────────────────────────
-# Runs just the LLM adapter test (test/backend/llm_test.py) against a
-# live vLLM instance. Requires `make run-vllm` running in another
-# terminal first — this does NOT start vLLM for you, since vLLM is a
-# long-running process meant to stay up across multiple test runs.
+# Runs the LLM adapter test (test/backend/llm_test.py). This test mocks
+# the httpx call to the LLM, so it does NOT require vLLM running — it
+# verifies the adapter's request/response handling logic in isolation.
 test-llm:
 	PYTHONPATH=./app/backend app/backend/.venv/bin/pytest test/backend/llm_test.py -v
 
