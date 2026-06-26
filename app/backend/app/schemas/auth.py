@@ -1,12 +1,10 @@
 from datetime import datetime
 from typing import Literal
 from urllib.parse import urlparse
+
 from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator
 
 from app.config import settings
-
-
-
 
 _LOCAL_HTTP_HOSTS = {"localhost", "127.0.0.1", "canvas_lms"}
 
