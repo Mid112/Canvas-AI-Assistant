@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -38,16 +39,32 @@ class AssignmentResponse(BaseModel):
     course_id: int
 
 
+class SubmissionStatus(str, Enum):
+    graded = "graded"
+    submitted = "submitted"
+    late = "late"
+    missing = "missing"
+    unsubmitted = "unsubmitted"
+    excused = "excused"
+
+
 class SubmissionResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     id: int
     assignment_id: int
     user_id: int
-    score: float | None = None
-    grade: str | None = None
+    student_name: str | None = None
     submitted_at: datetime | None = None
     workflow_state: str
+
+    # Parsed status (#547) — one of: graded, submitted, late, missing, unsubmitted, excused
+    status: SubmissionStatus
+
+    # Grading info (#548)
+    score: float | None = None
+    grade: str | None = None
+    graded_at: datetime | None = None
 
 
 class ActiveCourseSet(BaseModel):
