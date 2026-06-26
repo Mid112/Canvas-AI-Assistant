@@ -6,7 +6,7 @@ from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator
 from app.config import settings
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator
+
 
 from app.config import settings
 
