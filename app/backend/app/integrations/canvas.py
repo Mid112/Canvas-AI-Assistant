@@ -174,7 +174,8 @@ async def fetch_submissions(
                 client,
                 f"{canvas_url}/api/v1/courses/{course_id}/assignments/{assignment_id}/submissions",
                 headers=_headers(token),
-                params={"per_page": 100},
+                # include[]=user populates submission["user"]["name"] so we can store student_name
+                params={"per_page": 100, "include[]": "user"},
             )
     except httpx.TimeoutException:
         raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
