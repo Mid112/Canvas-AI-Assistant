@@ -26,7 +26,9 @@ from app.schemas.canvas import (
     AssignmentUpdate,
     CourseResponse,
     SubmissionResponse,
+    SubmissionStatus,
 )
+
 
 
 def require_canvas_token(user: User, canvas_url: str) -> str:
@@ -186,6 +188,37 @@ def _parse_dt(value: str | None) -> datetime | None:
     return datetime.fromisoformat(value) if value else None
 
 
+def _parse_submission_status(raw: dict) -> SubmissionStatus:
+    # Priority: excused > missing > graded > late > submitted > unsubmitted
+    if raw.get("excused"):
+        return SubmissionStatus.excused
+    if raw.get("missing"):
+        return SubmissionStatus.missing
+    state = raw.get("workflow_state", "unsubmitted")
+    if state == "graded":
+        return SubmissionStatus.graded
+    if state in ("submitted", "pending_review"):
+        return SubmissionStatus.late if raw.get("late") else SubmissionStatus.submitted
+    return SubmissionStatus.unsubmitted
+
+
+def _parse_submission(raw: dict) -> SubmissionResponse:
+    # Canvas returns user data when include[]=user is set; fall back to None if absent
+    user = raw.get("user") or {}
+    return SubmissionResponse(
+        id=raw["id"],
+        assignment_id=raw["assignment_id"],
+        user_id=raw["user_id"],
+        student_name=user.get("name"),
+        submitted_at=raw.get("submitted_at"),
+        workflow_state=raw.get("workflow_state", "unsubmitted"),
+        status=_parse_submission_status(raw),
+        score=raw.get("score"),
+        grade=raw.get("grade"),
+        graded_at=raw.get("graded_at"),
+    )
+
+
 async def get_assignment(
     local_course_id: int,
     assignment_id: int,
@@ -257,7 +290,8 @@ async def get_submissions(
         token,
         canvas_url,
     )
-    return [SubmissionResponse(**item) for item in data]
+    return [_parse_submission(raw) for raw in data]
+
 
 
 async def get_active_course(user: User, db: AsyncSession) -> ActiveCourseResponse | None:
