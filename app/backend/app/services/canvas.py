@@ -8,6 +8,7 @@ from sqlalchemy.orm import joinedload
 
 from app.core.security import decrypt_canvas_token
 from app.integrations.canvas import fetch_assignments, fetch_courses, fetch_submissions
+from app.models.assignment import Assignment
 from app.models.course import Course
 from app.models.user import User
 from app.models.user_preference import UserPreference
@@ -84,10 +85,68 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
     ]
 
 
-async def get_assignments(course_id: int, user: User, canvas_url: str) -> list[AssignmentResponse]:
-    token = _require_canvas_token(user, canvas_url)
-    data = await fetch_assignments(course_id, token, canvas_url)
-    return [AssignmentResponse(**item) for item in data]
+async def get_assignments(local_course_id: int, user: User, db: AsyncSession) -> list[AssignmentResponse]:
+    # Ownership check — also gives us canvas_course_id and canvas_url without a client param
+    course = await db.scalar(
+        select(Course).where(Course.id == local_course_id, Course.instructor_id == user.id)
+    )
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found or does not belong to you.",
+        )
+
+    token = _require_canvas_token(user, course.canvas_url)
+    data = await fetch_assignments(int(course.canvas_course_id), token, course.canvas_url)
+
+    if not data:
+        return []
+
+    # Batch-fetch existing assignment rows for this course to avoid N+1 on upsert
+    canvas_ids = [str(item["id"]) for item in data]
+    rows = await db.scalars(
+        select(Assignment).where(Assignment.canvas_assignment_id.in_(canvas_ids))
+    )
+    assignment_map: dict[str, Assignment] = {a.canvas_assignment_id: a for a in rows}
+
+    for item in data:
+        aid = str(item["id"])
+        title = item.get("name") or "Untitled"
+        description = item.get("description")
+        due_date = _parse_dt(item.get("due_at"))
+        points_possible = item.get("points_possible")
+
+        if aid in assignment_map:
+            assignment_map[aid].title = title
+            assignment_map[aid].description = description
+            assignment_map[aid].due_date = due_date
+            assignment_map[aid].points_possible = points_possible
+        else:
+            assignment = Assignment(
+                canvas_assignment_id=aid,
+                course_id=course.id,
+                title=title,
+                description=description,
+                due_date=due_date,
+                points_possible=points_possible,
+            )
+            db.add(assignment)
+            assignment_map[aid] = assignment
+
+    await db.flush()
+    await db.commit()
+
+    return [
+        AssignmentResponse.model_validate({
+            **item,
+            "local_id": assignment_map[str(item["id"])].id,
+        })
+        for item in data
+    ]
+
+
+def _parse_dt(value: str | None) -> datetime | None:
+    return datetime.fromisoformat(value) if value else None
 
 
 async def get_submissions(course_id: int, assignment_id: int, user: User, canvas_url: str) -> list[SubmissionResponse]:

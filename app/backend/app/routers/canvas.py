@@ -36,9 +36,9 @@ async def list_courses(
 async def list_assignments(
     course_id: int,
     current_user: User = Depends(get_current_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
 ):
-    return await get_assignments(course_id, current_user, canvas_url)
+    return await get_assignments(course_id, current_user, db)
 
 
 @router.get(
