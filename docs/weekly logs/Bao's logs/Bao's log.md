@@ -538,16 +538,19 @@ Total: 9 hours
 ### 1: Team Meeting + PR Reviews (Tuesday, 23/6)
 - Met with the team to review open PRs and walk through each member's implementation to build shared understanding of the codebase
 - Discussed integration points between the Canvas retrieval layer and the upcoming conversation/context-fetch work
+<img width="478" height="44" alt="Screenshot 2026-06-26 102611" src="https://github.com/user-attachments/assets/b3652a2c-c9a5-4579-b2b6-8cf91d592f06" />
 
 ### 2: Student Retrieval Service + Tests (Wednesday, 24/6)
 - Implemented `get_students` service to fetch and upsert enrolled students from Canvas into the local DB
 - Wrote integration tests covering student retrieval, upsert idempotency, and error propagation
+<img width="481" height="64" alt="Screenshot 2026-06-26 102615" src="https://github.com/user-attachments/assets/b2b73492-e130-463e-a516-12917d3228a0" />
 
 ### 3: PR Reviews + Assignment & Submission Retrieval (Thursday, 25/6)
 - Reviewed team PRs to validate implementation quality and alignment with the shared data model
 - Implemented assignment retrieval service to fetch course assignments from Canvas and persist them locally
 - Implemented submission retrieval service to fetch per-student submission data for each assignment
 - Updated ORM models and SQL schema to support `assignments` and `submissions` tables
+<img width="479" height="135" alt="Screenshot 2026-06-26 102619" src="https://github.com/user-attachments/assets/2137f8b0-8571-440d-9987-f738ff81862e" />
 
 ---
 
