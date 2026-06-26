@@ -562,7 +562,7 @@ Total: 9 hours
 ---
 
 ## Next Cycle Goals
-- Implement the conversation layer: accept a user message, resolve the active course from `user_preferences`, fetch relevant assignments/submissions, and pass context to the LLM
+- Work on completing authAPI, canvasAPI and role-based access control.
 - Add caching to `GET /canvas/courses` with a `last_synced_at` timestamp so repeated page loads don't hit Canvas on every request
 - Wire up course context to the chat UI so the active course is displayed and selectable from the frontend
 
