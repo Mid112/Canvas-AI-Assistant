@@ -519,3 +519,54 @@ Total: 10.7 hours
 - Wire up course context to the chat UI so the active course is displayed and selectable from the frontend
 
 ---
+
+# Cycle 11 Report: June 23 – June 25
+
+## Timesheet
+
+### Clockify Report
+
+- 23/6 (Tuesday): meeting with the team to review PRs, look over each other parts and understanding - 2.5 hours
+- 24/6 (Wednesday): work on student retrieval service, add test to cover - 2.5 hours
+- 25/6 (Thursday): review PRs, implement assignment retrieval and submission retrieval, update model and database accordingly - 4 hours
+Total: 9 hours
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting + PR Reviews (Tuesday, 23/6)
+- Met with the team to review open PRs and walk through each member's implementation to build shared understanding of the codebase
+- Discussed integration points between the Canvas retrieval layer and the upcoming conversation/context-fetch work
+<img width="478" height="44" alt="Screenshot 2026-06-26 102611" src="https://github.com/user-attachments/assets/b3652a2c-c9a5-4579-b2b6-8cf91d592f06" />
+
+### 2: Student Retrieval Service + Tests (Wednesday, 24/6)
+- Implemented `get_students` service to fetch and upsert enrolled students from Canvas into the local DB
+- Wrote integration tests covering student retrieval, upsert idempotency, and error propagation
+<img width="481" height="64" alt="Screenshot 2026-06-26 102615" src="https://github.com/user-attachments/assets/b2b73492-e130-463e-a516-12917d3228a0" />
+
+### 3: PR Reviews + Assignment & Submission Retrieval (Thursday, 25/6)
+- Reviewed team PRs to validate implementation quality and alignment with the shared data model
+- Implemented assignment retrieval service to fetch course assignments from Canvas and persist them locally
+- Implemented submission retrieval service to fetch per-student submission data for each assignment
+- Updated ORM models and SQL schema to support `assignments` and `submissions` tables
+<img width="479" height="135" alt="Screenshot 2026-06-26 102619" src="https://github.com/user-attachments/assets/2137f8b0-8571-440d-9987-f738ff81862e" />
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle delivered the student, assignment, and submission retrieval services — the core data layer needed to provide assignment context to the LLM. Combined with the active course selection from the previous cycle, the backend can now resolve a full context snapshot (course → students → assignments → submissions) for any instructor query.
+
+### Retrospective:
+- The scope expanded mid-cycle to include both assignment and submission retrieval, which made Thursday dense but kept the data model cohesive in a single PR. Starting the cycle with a team PR review session was valuable — it surfaced integration points earlier and reduced back-and-forth in later reviews.
+
+---
+
+## Next Cycle Goals
+- Work on completing authAPI, canvasAPI and role-based access control.
+- Add caching to `GET /canvas/courses` with a `last_synced_at` timestamp so repeated page loads don't hit Canvas on every request
+- Wire up course context to the chat UI so the active course is displayed and selectable from the frontend
+
+---
