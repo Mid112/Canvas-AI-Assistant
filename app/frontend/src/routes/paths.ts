@@ -13,6 +13,7 @@ export const paths = {
     assistant: "/instructor/assistant",
     analytics: "/instructor/analytics",
     messages: "/instructor/messages",
+    notifications: "/instructor/notifications",
     history: "/instructor/history",
     settings: "/instructor/settings",
     profile: "/instructor/profile",

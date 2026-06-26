@@ -8,8 +8,8 @@ WORKDIR /app
 # Copy dependency files first (layer caching)
 COPY package.json package-lock.json ./
 
-# Install dependencies
-RUN npm ci
+# Install dependencies without audit/funding network calls
+RUN npm ci --no-audit --no-fund
 
 # Copy the rest of the frontend source
 COPY . .

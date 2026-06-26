@@ -46,6 +46,23 @@ describe("Header", () => {
     expect(screen.getByRole("button", { name: "Account menu" })).toBeInTheDocument();
   });
 
+  it("shows the open sidebar button when the sidebar is closed", () => {
+    renderWithRouter(
+      <Header
+        title="Dashboard"
+        role="instructor"
+        roleLabel="Instructor"
+        navItems={instructorNavItems}
+        sidebarOpen={false}
+        onToggleSidebar={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Open sidebar" }),
+    ).toBeInTheDocument();
+  });
+
   it("logs out and navigates to login from the account menu", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     mockNavigate.mockClear();

@@ -1,10 +1,14 @@
 .env
 .env.local
 .env.*.local
+actions-runner/
 venv/
+.venv/
+.venv.bak/
 __pycache__/
 .pytest_cache/
 app/node_modules
 test/vllm/venv/
 test/mcp/venv/
 test/backend/venv/
+.vscode/*

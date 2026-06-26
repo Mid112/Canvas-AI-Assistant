@@ -14,8 +14,14 @@ export function isOnboardingPath(pathname: string): boolean {
   return ONBOARDING_PATHS.some((path) => pathname === path);
 }
 
+export function requiresOnboarding(role: UserRole): boolean {
+  return role !== "admin";
+}
+
 export function getPostAuthPath(userId: number, role: UserRole): string {
-  return hasCompletedOnboarding(userId)
-    ? getDashboardPath(role)
-    : paths.canvasInfo;
+  if (!requiresOnboarding(role) || hasCompletedOnboarding(userId)) {
+    return getDashboardPath(role);
+  }
+
+  return paths.canvasInfo;
 }

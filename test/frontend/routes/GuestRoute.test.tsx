@@ -28,6 +28,15 @@ const instructorUser = {
   has_canvas_token: false,
 };
 
+const adminUser = {
+  id: 2,
+  email: "admin@university.edu",
+  name: "admin",
+  role: "admin" as const,
+  is_active: true,
+  has_canvas_token: false,
+};
+
 describe("GuestRoute", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -47,6 +56,10 @@ describe("GuestRoute", () => {
           <Route
             path={paths.instructor.dashboard}
             element={<div>Instructor dashboard</div>}
+          />
+          <Route
+            path={paths.admin.dashboard}
+            element={<div>Admin dashboard</div>}
           />
         </Routes>
       </MemoryRouter>,
@@ -114,6 +127,23 @@ describe("GuestRoute", () => {
     renderGuestRoute();
 
     expect(screen.getByText("Instructor dashboard")).toBeInTheDocument();
+    expect(screen.queryByText("Canvas info")).not.toBeInTheDocument();
+  });
+
+  it("redirects admins to the admin dashboard without completed onboarding", () => {
+    mockedHasCompletedOnboarding.mockReturnValue(false);
+    mockedUseAuth.mockReturnValue({
+      user: adminUser,
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    renderGuestRoute();
+
+    expect(screen.getByText("Admin dashboard")).toBeInTheDocument();
     expect(screen.queryByText("Canvas info")).not.toBeInTheDocument();
   });
 });

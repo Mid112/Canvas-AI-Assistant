@@ -4,6 +4,13 @@ from typing import Literal
 from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator
 
 from app.config import settings
+from urllib.parse import urlparse
+
+from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator
+
+from app.config import settings
+
+_LOCAL_HTTP_HOSTS = {"localhost", "127.0.0.1", "canvas_lms"}
 
 
 class RegisterRequest(BaseModel):
@@ -33,8 +40,15 @@ class CanvasTokenRequest(BaseModel):
         # strip trailing slash so "https://canvas.ubc.ca/" and "https://canvas.ubc.ca" are the same key
         v = str(v).rstrip("/")
         # block non-https to prevent SSRF — backend would otherwise call arbitrary internal hosts
+        # allow plain http:// for local Canvas instances when DEBUG is on
         if not v.startswith("https://"):
-            raise ValueError("canvas_url must be an https:// URL")
+            parsed_url = urlparse(v)
+            if not (
+                settings.DEBUG
+                and parsed_url.scheme == "http"
+                and parsed_url.hostname in _LOCAL_HTTP_HOSTS
+            ):
+                raise ValueError("canvas_url must be an https:// URL")
         return v
 
 
