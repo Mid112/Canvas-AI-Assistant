@@ -268,6 +268,172 @@ def test_list_submissions_unauthenticated(client):
     assert response.status_code == 401
 
 
+def test_list_submissions_no_canvas_token(client):
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "No Token", "email": email, "password": "secret123"}
+    )
+    token = reg.json()["access_token"]
+    response = client.get(
+        f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+        headers={"Authorization": f"Bearer {token}"}
+    )
+    assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# #547 — Submission status parsing
+# ---------------------------------------------------------------------------
+
+def _submission(**overrides) -> dict:
+    """Return a minimal Canvas submission dict with optional field overrides."""
+    base = {
+        "id": 100,
+        "assignment_id": 10,
+        "user_id": 5,
+        "score": None,
+        "grade": None,
+        "graded_at": None,
+        "submitted_at": None,
+        "workflow_state": "unsubmitted",
+        "missing": False,
+        "late": False,
+        "excused": False,
+    }
+    return {**base, **overrides}
+
+
+@pytest.mark.parametrize("raw,expected_status", [
+    (
+        _submission(workflow_state="graded", score=85.0, grade="B"),
+        "graded",
+    ),
+    (
+        _submission(workflow_state="submitted", submitted_at="2026-01-01T12:00:00Z"),
+        "submitted",
+    ),
+    (
+        _submission(workflow_state="submitted", late=True, submitted_at="2026-01-01T12:00:00Z"),
+        "late",
+    ),
+    (
+        _submission(workflow_state="unsubmitted", missing=True),
+        "missing",
+    ),
+    (
+        _submission(workflow_state="unsubmitted"),
+        "unsubmitted",
+    ),
+    (
+        _submission(workflow_state="graded", excused=True),
+        "excused",
+    ),
+])
+def test_submission_status_parsing(client, auth_headers, raw, expected_status):
+    with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
+        mock.return_value = [raw]
+        response = client.get(
+            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            headers=auth_headers,
+        )
+    assert response.status_code == 200
+    assert response.json()[0]["status"] == expected_status
+
+
+# ---------------------------------------------------------------------------
+# #548 — Grading information parsing
+# ---------------------------------------------------------------------------
+
+def test_submission_grading_fields_populated(client, auth_headers):
+    raw = _submission(
+        workflow_state="graded",
+        score=92.5,
+        grade="A",
+        graded_at="2026-06-01T08:00:00Z",
+    )
+    with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
+        mock.return_value = [raw]
+        response = client.get(
+            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            headers=auth_headers,
+        )
+    data = response.json()[0]
+    assert data["score"] == 92.5
+    assert data["grade"] == "A"
+    assert data["graded_at"] is not None
+
+
+def test_submission_grading_fields_null_when_ungraded(client, auth_headers):
+    raw = _submission(workflow_state="submitted", submitted_at="2026-06-01T08:00:00Z")
+    with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
+        mock.return_value = [raw]
+        response = client.get(
+            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            headers=auth_headers,
+        )
+    data = response.json()[0]
+    assert data["score"] is None
+    assert data["grade"] is None
+    assert data["graded_at"] is None
+
+
+# ---------------------------------------------------------------------------
+# #549 — API failure handling
+# ---------------------------------------------------------------------------
+
+def test_list_submissions_invalid_canvas_token(client, auth_headers):
+    with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
+        mock.side_effect = HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid Canvas API token",
+        )
+        response = client.get(
+            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            headers=auth_headers,
+        )
+    assert response.status_code == 422
+
+
+def test_list_submissions_canvas_permission_denied(client, auth_headers):
+    with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
+        mock.side_effect = HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Canvas token lacks permission for this resource",
+        )
+        response = client.get(
+            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            headers=auth_headers,
+        )
+    assert response.status_code == 403
+
+
+def test_list_submissions_canvas_unavailable(client, auth_headers):
+    with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
+        mock.side_effect = HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach Canvas",
+        )
+        response = client.get(
+            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            headers=auth_headers,
+        )
+    assert response.status_code == 502
+
+
+def test_list_submissions_canvas_timeout(client, auth_headers):
+    with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
+        mock.side_effect = HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Canvas API timed out",
+        )
+        response = client.get(
+            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            headers=auth_headers,
+        )
+    assert response.status_code == 504
+
+
 # ---------------------------------------------------------------------------
 # GET /canvas/active-course
 # ---------------------------------------------------------------------------
