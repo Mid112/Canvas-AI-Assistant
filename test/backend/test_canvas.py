@@ -219,12 +219,18 @@ def test_list_courses_selects_correct_school(client):
 # GET /canvas/courses/{id}/assignments
 # ---------------------------------------------------------------------------
 
-def test_list_assignments(client, auth_headers):
+def test_list_assignments(client):
+    """Assignments endpoint uses local course ID — seed a course first to get one."""
+    headers = _register_with_canvas(client)
+    courses = [_unique_course()]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        fetch_resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+    local_id = fetch_resp.json()[0]["local_id"]
+
     with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock:
         mock.return_value = MOCK_ASSIGNMENTS
-        response = client.get(
-            f"/api/v1/canvas/courses/1/assignments?canvas_url={CANVAS_URL}", headers=auth_headers
-        )
+        response = client.get(f"/api/v1/canvas/courses/{local_id}/assignments", headers=headers)
     assert response.status_code == 200
     assert response.json()[0]["name"] == "Assignment 1"
 
@@ -235,6 +241,7 @@ def test_list_assignments_unauthenticated(client):
 
 
 def test_list_assignments_no_canvas_token(client):
+    """A user with no Canvas token has no courses in DB — course lookup returns 404."""
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
@@ -242,10 +249,10 @@ def test_list_assignments_no_canvas_token(client):
     )
     token = reg.json()["access_token"]
     response = client.get(
-        f"/api/v1/canvas/courses/1/assignments?canvas_url={CANVAS_URL}",
+        "/api/v1/canvas/courses/1/assignments",
         headers={"Authorization": f"Bearer {token}"}
     )
-    assert response.status_code == 403
+    assert response.status_code == 404
 
 
 # ---------------------------------------------------------------------------
