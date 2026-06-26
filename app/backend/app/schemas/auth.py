@@ -8,8 +8,6 @@ from urllib.parse import urlparse
 
 
 
-from app.config import settings
-
 _LOCAL_HTTP_HOSTS = {"localhost", "127.0.0.1", "canvas_lms"}
 
 
