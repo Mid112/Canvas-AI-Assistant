@@ -707,6 +707,88 @@ Overall, this cycle balanced development work with collaboration and code review
 * Prepare for upcoming MVP deliverables and demonstrations
 * Maintain consistent Clockify tracking
 
+# **Cycle 11: Tuesday (23/6) ~ Thursday (25/6)**
+
+### **Tuesday (23/6)**
+
+**Timesheet**  
+**Clockify Report:** 3:01:55
+<img width="1199" height="218" alt="Screenshot 2026-06-26 at 11 36 59 AM" src="https://github.com/user-attachments/assets/268b7601-d981-4a3e-918f-4284ffe4fcd2" />
+
+**Current Tasks**
+- Participated in the weekly team meeting
+- Discussed sprint progress, MVP development, and upcoming deliverables
+- Worked on the GitHub Actions CI workflow
+- Investigated and resolved issues in the continuous integration pipeline
+- Reviewed teammate pull requests and provided feedback
+- Verified code quality and ensured changes aligned with project standards
+
+---
+
+### **Wednesday (24/6)**
+
+**Timesheet**  
+**Clockify Report:** 2:14:33
+<img width="1201" height="225" alt="Screenshot 2026-06-26 at 11 37 52 AM" src="https://github.com/user-attachments/assets/c219575d-4ce9-4bb3-bbbe-86580fac9fde" />
+
+**Current Tasks**
+- Participated in the weekly team meeting
+- Discussed frontend implementation progress and project priorities
+- Reviewed teammate pull requests and provided implementation feedback
+- Continued frontend development and refinement
+- Implemented and tested frontend functionality
+- Verified UI behavior and prepared changes for integration
+
+---
+
+### **Thursday (25/6)**
+
+**Timesheet**  
+**Clockify Report:** 1:14:00
+<img width="1210" height="109" alt="Screenshot 2026-06-26 at 11 38 32 AM" src="https://github.com/user-attachments/assets/801ce530-43f1-44d6-a5af-fe5b9a67d8e4" />
+**Current Tasks**
+- Continued frontend development
+- Reviewed and merged pull request feedback into ongoing work
+- Fixed issues in the GitHub Actions CI workflow
+- Verified CI pipeline execution after workflow updates
+- Tested frontend changes to ensure compatibility with the updated workflow
+- Prepared completed work for submission and code review
+
+---
+
+## **Cycle 11 – Goal Review**
+
+### **Reflection**
+
+This cycle focused on frontend development, improving the project's continuous integration workflow, and maintaining code quality through pull request reviews. Time was spent implementing frontend features, resolving CI workflow issues, and collaborating with teammates during regular project meetings. These efforts helped improve development efficiency while supporting ongoing MVP implementation.
+
+### **Retrospective**
+
+Team meetings continued to provide opportunities to review project progress, discuss implementation challenges, and coordinate development priorities. These discussions ensured that everyone remained aligned on current tasks and upcoming milestone objectives.
+
+A significant portion of the cycle was dedicated to improving the GitHub Actions CI workflow. Troubleshooting and resolving workflow issues helped increase the reliability of automated testing and build processes, reducing potential integration problems for future pull requests.
+
+Frontend development also continued throughout the cycle, with work focused on refining application functionality and preparing features for integration. Pull request reviews remained an important responsibility, helping maintain code quality and ensuring that contributions met the project's development standards.
+
+Overall, this cycle balanced feature development, DevOps improvements, and collaborative code review activities, contributing to a more stable development workflow and continued progress toward completing the MVP.
+
+---
+
+## **Next Cycle Goals (Cycle 12: Friday 26/6 ~ Monday 29/6)**
+
+* Continue frontend feature implementation
+* Complete remaining authentication and Canvas integration tasks
+* Improve and stabilize the CI/CD workflow
+* Review and merge outstanding pull requests
+* Perform additional frontend testing and bug fixing
+* Continue project board maintenance and sprint planning
+* Participate in team meetings and implementation discussions
+* Update documentation for completed features
+* Prepare remaining MVP features for integration and testing
+* Maintain consistent Clockify tracking
+
+
+
 
 
 
