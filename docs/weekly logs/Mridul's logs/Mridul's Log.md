@@ -779,3 +779,94 @@ completion.
 * **Goal 2:** Continue connecting the Docker setup to the project stack
 * **Goal 3:** Continue active development toward MVP completion
 
+---
+<br>
+
+# Cycle 11 Report: 23/06 – 25/06 (June 23 – June 25)
+
+## Timesheet
+
+### Clockify Report
+
+* **23/06 (Tuesday):** Using Clockify – Logged 0.50 hours
+  *(30 minutes for Canvas Docker changes)*
+<img width="2416" height="240" alt="image" src="https://github.com/user-attachments/assets/cf601366-d343-49a7-a4c7-d0d9214d9f5e" />
+
+* **24/06 (Wednesday):** Using Clockify – Logged 2.55 hours
+  *(2 hours and 33 minutes for frontend and backend authentication work)*
+<img width="2436" height="236" alt="image" src="https://github.com/user-attachments/assets/270bc5c4-9cc5-45f0-add0-c010e42f8f7b" />
+
+
+* **25/06 (Thursday):** Using Clockify – Logged 0 hours
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Canvas Docker changes (June 23)
+
+* Worked for 30 minutes on additional Canvas Docker-related changes.
+* Reviewed and updated the Docker setup to better support the local Canvas LMS development environment.
+* Continued refining the Docker integration so the backend can connect properly to Canvas during local development.
+
+### #2: Frontend and backend authentication work (June 24)
+
+* Worked for 2 hours and 33 minutes on frontend and backend authentication-related development.
+* Continued improving how authentication connects between the frontend and backend.
+* Worked on supporting the user flow needed for logging in, connecting services, and accessing protected backend functionality.
+* This work contributed to improving the project’s overall MVP functionality.
+
+---
+
+## Progress Update (since 23/06/2026)
+
+| TASK/ISSUE #            | STATUS      |
+| ----------------------- | ----------- |
+| Canvas Docker changes   | Complete |
+| Docker integration      | Complete |
+| Frontend authentication | In Progress |
+| Backend authentication  | In Progress |
+| Authentication flow     | In Progress |
+| MVP                     | In Progress |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle focused on continuing Docker-related improvements and making progress
+on the project’s authentication flow. On June 23, I worked on Canvas Docker
+changes to continue improving the local development setup and make the Canvas
+integration easier to run and test.
+
+On June 24, I worked on frontend and backend authentication for 2 hours and
+33 minutes. This helped move the project closer to a working MVP by improving
+the connection between the user-facing frontend and the backend authentication
+logic.
+
+Compared to the previous cycle, I was able to shift more attention back to the
+project now that my final exam for another course is completed. The work this
+cycle helped continue progress on both the Docker setup and the authentication
+features that are important for the project’s core functionality.
+
+### Retrospective:
+
+This cycle was productive because it built directly on the previous Docker
+work while also moving into authentication-related development. The Canvas
+Docker changes helped strengthen the local setup, while the frontend and
+backend authentication work supported the user flow needed for the MVP.
+
+The main area to continue improving is completing and testing the authentication
+flow across the frontend and backend. Continued work is also needed on the
+Docker integration to make sure the local Canvas setup is reliable for future
+development and testing.
+
+---
+
+## Next Cycle Goals
+
+* **Goal 1:** Continue frontend and backend authentication development
+* **Goal 2:** Test the authentication flow across the full stack
+* **Goal 3:** Continue improving Canvas Docker integration and local setup
+* **Goal 4:** Continue active development toward MVP completion
