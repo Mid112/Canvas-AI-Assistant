@@ -19,6 +19,9 @@ vi.mock("react-router-dom", async () => {
 });
 
 const mockLogout = vi.fn();
+// Connecting Canvas mutates the backend user record; the page refreshes auth
+// state so courses can fetch immediately after onboarding.
+const mockRefreshUser = vi.fn();
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
@@ -29,9 +32,11 @@ vi.mock("@/contexts/AuthContext", () => ({
       role: "instructor",
       is_active: true,
       has_canvas_token: false,
+      canvas_connections: [],
     },
     accessToken: "access-token",
     logout: mockLogout,
+    refreshUser: mockRefreshUser,
   }),
 }));
 
@@ -61,6 +66,7 @@ describe("ConnectCanvasPage", () => {
     vi.clearAllMocks();
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mockedValidateCanvasToken.mockResolvedValue("valid");
+    mockRefreshUser.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -97,6 +103,9 @@ describe("ConnectCanvasPage", () => {
       ["valid-token"],
       "access-token",
     );
+    // Navigation should wait until AuthContext has reloaded has_canvas_token
+    // and canvas_connections from /auth/me.
+    expect(mockRefreshUser).toHaveBeenCalledTimes(1);
     expect(mockNavigate).toHaveBeenCalledWith(paths.reviewPermissions);
   });
 

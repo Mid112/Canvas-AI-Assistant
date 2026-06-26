@@ -101,6 +101,9 @@ describe("AuthContext", () => {
       role: "instructor",
       is_active: true,
       has_canvas_token: false,
+      // AuthContext preserves Canvas connection metadata so downstream pages
+      // can call the correct Canvas host without another /auth/me request.
+      canvas_connections: [],
     });
   });
 
