@@ -7,8 +7,11 @@ import {
   Users,
 } from "lucide-react";
 
+import { Link } from "react-router-dom";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { instructorCourseAssignmentsPath } from "@/routes/paths";
 import type { InstructorCourse } from "@/types/course";
 
 interface InstructorCoursesCardProps {
@@ -68,7 +71,14 @@ export function InstructorCoursesCard({ course }: InstructorCoursesCardProps) {
       </CardContent>
 
       <CardFooter className="grid grid-cols-2 gap-2 border-t bg-transparent pt-4">
-        <Button className="w-full">View Course</Button>
+        <Button
+          className="w-full"
+          render={
+            <Link to={instructorCourseAssignmentsPath(course.id)} />
+          }
+        >
+          View Course
+        </Button>
         <Button variant="outline" className="w-full">
           <BarChart3 data-icon="inline-start" />
           Analytics
@@ -104,7 +114,14 @@ export function InstructorCoursesList({ courses }: InstructorCoursesListProps) {
               <span className="text-sm font-medium tabular-nums">
                 {course.progress}%
               </span>
-              <Button size="sm">View Course</Button>
+              <Button
+                size="sm"
+                render={
+                  <Link to={instructorCourseAssignmentsPath(course.id)} />
+                }
+              >
+                View Course
+              </Button>
             </div>
           </li>
         ))}

@@ -10,6 +10,9 @@ export const paths = {
   instructor: {
     dashboard: "/instructor/dashboard",
     courses: "/instructor/courses",
+    courseAssignments: "/instructor/courses/:localCourseId/assignments",
+    assignmentUpdate:
+      "/instructor/courses/:localCourseId/assignments/:assignmentId/edit",
     assistant: "/instructor/assistant",
     analytics: "/instructor/analytics",
     messages: "/instructor/messages",
@@ -34,3 +37,14 @@ export const paths = {
     profile: "/admin/profile",
   },
 } as const;
+
+export function instructorCourseAssignmentsPath(localCourseId: number | string) {
+  return `/instructor/courses/${localCourseId}/assignments`;
+}
+
+export function instructorAssignmentUpdatePath(
+  localCourseId: number | string,
+  assignmentId: number | string,
+) {
+  return `/instructor/courses/${localCourseId}/assignments/${assignmentId}/edit`;
+}
