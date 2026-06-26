@@ -329,3 +329,41 @@ Managing team pull requests proved to be an essential exercise in maintaining ve
 * Fully finish the Course Dashboard page UI and finalize its integration with the backend data endpoints.
 * Continue utilizing the 3x weekly team meetings to facilitate real-time PR reviews and unblock any frontend/backend integration hurdles.
 * Continue making progress on all remaining frontend preparations to lock in our features for the upcoming MVP milestone.
+
+# **Cycle 11: Tuesday (06/23) ~ Thursday (06/25)**
+
+**Timesheet**
+
+**Clockify Report**
+
+**06/23 (Tuesday):** 04:04:37
+<img width="1337" height="169" alt="Untitled" src="https://github.com/user-attachments/assets/d64d473e-2a13-4be3-b240-c7bdc0a3cf23" />
+
+
+**06/24 (Wednesday):** 02:20:04
+<img width="1343" height="107" alt="Untitled 2" src="https://github.com/user-attachments/assets/13693295-84be-4078-9815-4330e848795c" />
+
+
+**06/25 (Thursday):** 00:31:42
+<img width="1340" height="107" alt="Untitled 3" src="https://github.com/user-attachments/assets/d9b76c17-1129-4644-a11a-3d643d1643e1" />
+
+
+**Current Tasks (Provide sufficient detail)**
+
+* **#1: Course Dashboard Completion:** On Tuesday I participated in a team meeting where I finalized the frontend implementation for the main Course Dashboard page. Ensured all components were fully responsive and aligned with the established design system before moving on to the next feature set.
+
+* **#2: Team Meeting & Analytics Dashboard:** Participated in a team meeting on Wednesday to align on current progress. During the meeting, I began active development on the missing and late submissions analytic dashboard, drafting the initial UI to visualize student submission data for instructors.
+
+* **#3: Pull Request Review:** Dedicated time on Thursday to thoroughly review a team member's pull request. Checked for code quality, verified UI consistency, and ensured that the newly introduced code integrated smoothly without causing conflicts.
+
+**Cycle Goal Review**
+
+* **Reflection:** We are making steady progress as we transition from high-level navigation pages to granular data visualization features. Successfully finishing the Course Dashboard and immediately pivoting into the analytics views for missing/late submissions keeps our momentum strong as we approach the MVP.
+
+* **Retrospective:** Maintaining a consistent rhythm of building new features and doing PR reviews is proving highly effective. It ensures that my frontend work doesn't block others and that the codebase remains clean and cohesive as we scale up the application's functionality.
+
+**Next Cycle Goals**
+
+* Complete the UI implementation for the missing and late submissions analytic dashboard.
+* Integrate the new analytics dashboard with the backend API to render live submission data.
+* Continue conducting timely PR reviews to support smooth team integrations.
