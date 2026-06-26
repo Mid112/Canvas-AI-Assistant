@@ -10,6 +10,7 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.assignment import Assignment
+    from app.models.student import Student
     from app.models.user import User
 
 
@@ -37,4 +38,7 @@ class Course(Base):
     instructor: Mapped[User] = relationship("User", back_populates="courses")
     assignments: Mapped[list[Assignment]] = relationship(
         "Assignment", back_populates="course", cascade="all, delete-orphan"
+    )
+    students: Mapped[list[Student]] = relationship(
+        "Student", back_populates="course", cascade="all, delete-orphan"
     )
