@@ -1,3 +1,4 @@
+import { MemoryRouter } from "react-router-dom";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -14,15 +15,19 @@ const courses = institutionCourseData[0]!.courses.slice(0, 2);
 
 describe("InstructorCoursesCard", () => {
   it("renders course progress and action buttons", () => {
-    render(<InstructorCoursesCard course={courses[0]!} />);
+    render(
+      <MemoryRouter>
+        <InstructorCoursesCard course={courses[0]!} />
+      </MemoryRouter>,
+    );
 
     expect(
       screen.getByText("CS 101: Introduction to Programming"),
     ).toBeInTheDocument();
     expect(screen.getByText("82%")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "View Course" }),
-    ).toBeInTheDocument();
+      screen.getByRole("link", { name: "View Course" }),
+    ).toHaveAttribute("href", "/instructor/courses/1/assignments");
     expect(
       screen.getByRole("button", { name: "Analytics" }),
     ).toBeInTheDocument();
@@ -31,7 +36,11 @@ describe("InstructorCoursesCard", () => {
 
 describe("InstructorCoursesList", () => {
   it("renders courses in list format", () => {
-    render(<InstructorCoursesList courses={courses} />);
+    render(
+      <MemoryRouter>
+        <InstructorCoursesList courses={courses} />
+      </MemoryRouter>,
+    );
 
     expect(
       screen.getByText("CS 101: Introduction to Programming"),
@@ -45,15 +54,17 @@ describe("InstructorCoursesList", () => {
 describe("InstructorCoursesSection", () => {
   it("renders grid view by default", () => {
     render(
-      <InstructorCoursesSection
-        courses={courses}
-        viewMode="grid"
-        onViewModeChange={vi.fn()}
-      />,
+      <MemoryRouter>
+        <InstructorCoursesSection
+          courses={courses}
+          viewMode="grid"
+          onViewModeChange={vi.fn()}
+        />
+      </MemoryRouter>,
     );
 
     expect(screen.getByText("Your Courses (2)")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "View Course" })).toHaveLength(
+    expect(screen.getAllByRole("link", { name: "View Course" })).toHaveLength(
       2,
     );
   });
@@ -63,11 +74,13 @@ describe("InstructorCoursesSection", () => {
     const onViewModeChange = vi.fn();
 
     render(
-      <InstructorCoursesSection
-        courses={courses}
-        viewMode="grid"
-        onViewModeChange={onViewModeChange}
-      />,
+      <MemoryRouter>
+        <InstructorCoursesSection
+          courses={courses}
+          viewMode="grid"
+          onViewModeChange={onViewModeChange}
+        />
+      </MemoryRouter>,
     );
 
     await user.click(screen.getByRole("button", { name: "List View" }));

@@ -18,6 +18,13 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Helps setup-node use the runner's writable _work/_tool cache.
+  # Note: setup-python on macOS always installs to /Users/runner/hostedtoolcache,
+  # so backend jobs use the system Python instead (see setup steps below).
+  RUNNER_TOOL_CACHE: ${{ github.workspace }}/../../_tool
+  AGENT_TOOLSDIRECTORY: ${{ github.workspace }}/../../_tool
+
 jobs:
   # ── 0. Detect which parts of the repo changed ──────────
   # This lets backend-only changes skip frontend jobs and vice versa.
@@ -55,63 +62,94 @@ jobs:
         working-directory: ./app/backend
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Set up Python 3.12
+        working-directory: ${{ github.workspace }}
+        run: |
+          python3.12 --version
+          python3.12 -m venv .ci-venv
+          echo "$GITHUB_WORKSPACE/.ci-venv/bin" >> $GITHUB_PATH
+      - uses: actions/cache@v4
         with:
-          python-version: "3.12"
-          cache: "pip"
-          cache-dependency-path: app/backend/requirements.txt
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ runner.arch }}-py3.12-${{ hashFiles('app/backend/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-${{ runner.arch }}-py3.12-
       - name: Install dependencies
-        run: pip install -r requirements.txt ruff mypy
+        env:
+          PYTHONNOUSERSITE: 1
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt ruff mypy
       - name: Lint
-        run: ruff check .
+        env:
+          PYTHONNOUSERSITE: 1
+        run: python -m ruff check .
       - name: Type check
         # continue-on-error: true means mypy issues are visible in the
         # CI log and job summary, but won't block merges yet. Remove
         # this once the codebase has been typed-checked end to end
         # and you're ready to enforce it strictly.
         continue-on-error: true
-        run: mypy . --ignore-missing-imports
+        env:
+          PYTHONNOUSERSITE: 1
+        run: python -m mypy . --ignore-missing-imports
 
   # ── 2. Backend tests ──────────────────────
+  # Postgres is started via docker run — not services: (Linux runners only).
   backend-test:
     runs-on:
     - self-hosted
     - macOS
     - X64
     needs: backend-lint
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: testuser
-          POSTGRES_PASSWORD: testpass
-          POSTGRES_DB: testdb
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: "pip"
-          cache-dependency-path: app/backend/requirements.txt
-      - name: Install dependencies
-        working-directory: ./app/backend
-        run: pip install -r requirements.txt
+      - name: Start PostgreSQL
+        # Service containers only work on Linux runners. On macOS self-hosted
+        # runners, start Postgres via Docker instead.
+        run: |
+          NETWORK="ci-net-${{ github.run_id }}"
+          CONTAINER="ci-postgres-${{ github.run_id }}"
+          docker rm -f "$CONTAINER" 2>/dev/null || true
+          docker network rm "$NETWORK" 2>/dev/null || true
+          docker network create "$NETWORK"
+          docker run -d \
+            --name "$CONTAINER" \
+            --network "$NETWORK" \
+            -e POSTGRES_USER=testuser \
+            -e POSTGRES_PASSWORD=testpass \
+            -e POSTGRES_DB=testdb \
+            postgres:16-alpine
+          for i in $(seq 1 30); do
+            if docker exec "$CONTAINER" pg_isready -U testuser -d testdb >/dev/null 2>&1; then
+              echo "PostgreSQL is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "PostgreSQL failed to start"
+          docker logs "$CONTAINER"
+          exit 1
       - name: Run tests
-        # Tests live in test/backend/ but import from app.backend.app,
-        # so we run pytest from the repo root with PYTHONPATH set.
-        run: PYTHONPATH=./app/backend pytest test/backend/ -v
-        env:
-          DATABASE_URL: postgresql+asyncpg://testuser:testpass@localhost:5432/testdb
-          ENVIRONMENT: test
-          SECRET_KEY: ci-test-secret
-          CANVAS_TOKEN_ENCRYPTION_KEY: cS_xtOdvX6UctctAErcx3JJC1e3YBBM-Kwh9WLY3ocI=
+        # x64 Rosetta on Apple Silicon breaks native wheels like cryptography.
+        # Run pytest inside Linux Docker with Postgres on the same network.
+        run: |
+          docker run --rm \
+            --network "ci-net-${{ github.run_id }}" \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            -e DATABASE_URL=postgresql+asyncpg://testuser:testpass@ci-postgres-${{ github.run_id }}:5432/testdb \
+            -e ENVIRONMENT=test \
+            -e SECRET_KEY=ci-test-secret \
+            -e CANVAS_TOKEN_ENCRYPTION_KEY=cS_xtOdvX6UctctAErcx3JJC1e3YBBM-Kwh9WLY3ocI= \
+            -e PYTHONPATH=./app/backend \
+            python:3.12-slim-bookworm \
+            bash -c "pip install --quiet -r app/backend/requirements.txt && pytest test/backend/ -v"
+      - name: Stop PostgreSQL
+        if: always()
+        run: |
+          docker rm -f "ci-postgres-${{ github.run_id }}" 2>/dev/null || true
+          docker network rm "ci-net-${{ github.run_id }}" 2>/dev/null || true
 
   # ── 3. Frontend lint + test ───────────────
   frontend-test:
