@@ -11,6 +11,7 @@ import {
   formValuesToUpdatePayload,
   hasAssignmentChanges,
 } from "@/lib/assignment-utils";
+import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
 import { AssignmentUpdateForm } from "@/pages/Instructor/InstructorAssignmentUpdate/AssignmentUpdateForm";
 import { AssignmentUpdatePreview } from "@/pages/Instructor/InstructorAssignmentUpdate/AssignmentUpdatePreview";
 import { paths } from "@/routes/paths";
@@ -34,6 +35,7 @@ export function InstructorAssignmentUpdatePage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const canvasUrl = getPrimaryCanvasConnectionUrl(user);
 
   const parsedLocalCourseId = Number(localCourseId);
   const parsedAssignmentId = Number(assignmentId);
@@ -49,6 +51,9 @@ export function InstructorAssignmentUpdatePage() {
     }
 
     const token = accessToken;
+    // Snapshot the URL used for this request so an auth/user refresh during the
+    // async load cannot switch Canvas hosts mid-flight.
+    const selectedCanvasUrl = canvasUrl;
     let cancelled = false;
 
     async function loadAssignment() {
@@ -57,6 +62,7 @@ export function InstructorAssignmentUpdatePage() {
           parsedLocalCourseId,
           parsedAssignmentId,
           token,
+          selectedCanvasUrl,
         );
 
         if (cancelled) {
@@ -95,7 +101,7 @@ export function InstructorAssignmentUpdatePage() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, idsAreValid, parsedAssignmentId, parsedLocalCourseId, user?.has_canvas_token]);
+  }, [accessToken, canvasUrl, idsAreValid, parsedAssignmentId, parsedLocalCourseId, user?.has_canvas_token]);
 
   const retryLoad = async () => {
     if (!accessToken || !idsAreValid || !user?.has_canvas_token) {
@@ -111,6 +117,7 @@ export function InstructorAssignmentUpdatePage() {
         parsedLocalCourseId,
         parsedAssignmentId,
         accessToken,
+        canvasUrl,
       );
       setAssignment(data);
       setFormValues(assignmentToFormValues(data));
@@ -165,6 +172,7 @@ export function InstructorAssignmentUpdatePage() {
         parsedAssignmentId,
         formValuesToUpdatePayload(formValues),
         accessToken,
+        canvasUrl,
       );
       setAssignment(updated);
       setFormValues(assignmentToFormValues(updated));

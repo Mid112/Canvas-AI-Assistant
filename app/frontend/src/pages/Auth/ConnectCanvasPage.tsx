@@ -51,10 +51,10 @@ export function ConnectCanvasPage() {
 
               try {
                 await updateCanvasTokens(canvasTokens, accessToken);
-                // The save response updates the backend; refresh AuthContext before
-                // leaving onboarding so Canvas-backed pages can fetch immediately.
-                await refreshUser();
+                // Move forward as soon as the token save succeeds; if the follow-up
+                // auth refresh has a transient failure, Canvas is still connected.
                 navigate(paths.reviewPermissions);
+                await refreshUser();
               } catch (err) {
                 if (err instanceof CanvasApiError && err.status === 401) {
                   logout();

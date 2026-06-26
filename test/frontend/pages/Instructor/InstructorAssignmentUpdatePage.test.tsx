@@ -29,6 +29,13 @@ const authWithCanvas = {
     role: "instructor",
     is_active: true,
     has_canvas_token: true,
+    canvas_connections: [
+      {
+        id: 1,
+        canvas_url: "http://localhost:3000",
+        created_at: "2026-06-26T00:00:00.000Z",
+      },
+    ],
   },
   accessToken: "token",
   isAuthenticated: true,
@@ -96,7 +103,12 @@ describe("InstructorAssignmentUpdatePage", () => {
       expect(screen.getByLabelText("Assignment title")).toHaveValue("Lab 1");
     });
 
-    expect(mockedFetchAssignment).toHaveBeenCalledWith(3, 10, "token");
+    expect(mockedFetchAssignment).toHaveBeenCalledWith(
+      3,
+      10,
+      "token",
+      "http://localhost:3000",
+    );
   });
 
   it("shows preview before confirming updates", async () => {

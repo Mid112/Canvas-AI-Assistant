@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/AuthContext";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
+import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
 import {
   instructorAssignmentUpdatePath,
   paths,
@@ -31,6 +32,7 @@ export function InstructorCourseAssignmentsPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const canvasUrl = getPrimaryCanvasConnectionUrl(user);
 
   const parsedLocalCourseId = Number(localCourseId);
   const idIsValid =
@@ -42,11 +44,18 @@ export function InstructorCourseAssignmentsPage() {
     }
 
     const token = accessToken;
+    // Snapshot the URL used for this request so an auth/user refresh during the
+    // async load cannot switch Canvas hosts mid-flight.
+    const selectedCanvasUrl = canvasUrl;
     let cancelled = false;
 
     async function loadAssignments() {
       try {
-        const data = await fetchCourseAssignments(parsedLocalCourseId, token);
+        const data = await fetchCourseAssignments(
+          parsedLocalCourseId,
+          token,
+          selectedCanvasUrl,
+        );
         if (!cancelled) {
           setAssignments(data);
           setLoadError(null);
@@ -74,7 +83,7 @@ export function InstructorCourseAssignmentsPage() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, idIsValid, parsedLocalCourseId, user?.has_canvas_token]);
+  }, [accessToken, canvasUrl, idIsValid, parsedLocalCourseId, user?.has_canvas_token]);
 
   if (!idIsValid) {
     return (

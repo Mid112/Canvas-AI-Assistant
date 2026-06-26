@@ -5,6 +5,7 @@ import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRe
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInstitution } from "@/contexts/useInstitution";
+import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
 import { CanvasApiError, fetchCourses } from "@/services/canvas";
 import {
   filterInstructorCourses,
@@ -46,7 +47,7 @@ export function InstructorCoursesPage() {
   const [isLoadingCanvasCourses, setIsLoadingCanvasCourses] = useState(false);
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<CourseViewMode>("grid");
-  const canvasUrl = user?.canvas_connections[0]?.canvas_url;
+  const canvasUrl = getPrimaryCanvasConnectionUrl(user);
 
   useEffect(() => {
     if (!accessToken || !user?.has_canvas_token) {

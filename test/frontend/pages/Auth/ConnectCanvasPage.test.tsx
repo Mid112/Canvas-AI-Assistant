@@ -103,10 +103,10 @@ describe("ConnectCanvasPage", () => {
       ["valid-token"],
       "access-token",
     );
-    // Navigation should wait until AuthContext has reloaded has_canvas_token
-    // and canvas_connections from /auth/me.
-    expect(mockRefreshUser).toHaveBeenCalledTimes(1);
+    // Users move to the next step once the save succeeds; AuthContext still
+    // refreshes afterward so later Canvas-backed pages get fresh connection data.
     expect(mockNavigate).toHaveBeenCalledWith(paths.reviewPermissions);
+    expect(mockRefreshUser).toHaveBeenCalledTimes(1);
   });
 
   it("submits multiple tokens when provided", async () => {
