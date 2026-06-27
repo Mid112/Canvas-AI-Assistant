@@ -11,23 +11,35 @@ import {
   type InstructorFormValues,
 } from "@/schemas/instructorSchema";
 
-interface InstructorFormProps {
-  mode: "create" | "edit";
-  defaultValues?: Partial<InstructorFormValues | EditInstructorFormValues>;
+type InstructorFormBaseProps = {
   serverError?: string | null;
   isSubmitting?: boolean;
   onCancel: () => void;
-  onSubmit: (values: InstructorFormValues | EditInstructorFormValues) => void;
-}
+};
 
-export function InstructorForm({
-  mode,
-  defaultValues,
-  serverError = null,
-  isSubmitting = false,
-  onCancel,
-  onSubmit,
-}: InstructorFormProps) {
+type CreateInstructorFormProps = InstructorFormBaseProps & {
+  mode: "create";
+  defaultValues?: Partial<InstructorFormValues>;
+  onSubmit: (values: InstructorFormValues) => void;
+};
+
+type EditInstructorFormProps = InstructorFormBaseProps & {
+  mode: "edit";
+  defaultValues?: Partial<EditInstructorFormValues>;
+  onSubmit: (values: EditInstructorFormValues) => void;
+};
+
+type InstructorFormProps = CreateInstructorFormProps | EditInstructorFormProps;
+
+export function InstructorForm(props: InstructorFormProps) {
+  const {
+    mode,
+    defaultValues,
+    serverError = null,
+    isSubmitting = false,
+    onCancel,
+    onSubmit,
+  } = props;
   const isCreate = mode === "create";
 
   const {
@@ -45,11 +57,20 @@ export function InstructorForm({
     mode: "onBlur",
   });
 
+  const handleFormSubmit = (values: InstructorFormValues | EditInstructorFormValues) => {
+    if (isCreate) {
+      (onSubmit as CreateInstructorFormProps["onSubmit"])(values as InstructorFormValues);
+      return;
+    }
+
+    (onSubmit as EditInstructorFormProps["onSubmit"])(values as EditInstructorFormValues);
+  };
+
   return (
     <form
       className="space-y-4"
       noValidate
-      onSubmit={handleSubmit(onSubmit)}
+      onSubmit={handleSubmit(handleFormSubmit)}
     >
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
