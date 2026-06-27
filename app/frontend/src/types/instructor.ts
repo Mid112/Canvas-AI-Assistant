@@ -1,0 +1,30 @@
+export type InstructorStatus = "active" | "disabled";
+
+export interface Instructor {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  status: InstructorStatus;
+  createdAt: string;
+  lastLoginAt: string;
+}
+
+export interface CreateInstructorPayload {
+  firstName: string;
+  lastName: string;
+  email: string;
+  temporaryPassword: string;
+}
+
+export interface UpdateInstructorPayload {
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
+export type InstructorConfirmAction = "enable" | "disable" | "revoke";
+
+export function getInstructorFullName(instructor: Pick<Instructor, "firstName" | "lastName">): string {
+  return [instructor.firstName, instructor.lastName].filter(Boolean).join(" ");
+}
