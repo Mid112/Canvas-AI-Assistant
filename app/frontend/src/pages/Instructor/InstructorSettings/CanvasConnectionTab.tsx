@@ -80,10 +80,10 @@ export function CanvasConnectionTab() {
     canvasUrl: "",
     canvasToken: "",
   });
-  const [urlError, setUrlError] = useState<string | null>(null);
-  const [tokenValidation, setTokenValidation] = useState<TokenValidationState>({
-    status: "idle",
-  });
+  const [tokenStatus, setTokenStatus] = useState<
+    Exclude<TokenValidationState["status"], "idle" | "validating">
+  >("invalid");
+  const [validatedKey, setValidatedKey] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<{
     type: "success" | "error";
     text: string;
@@ -94,49 +94,61 @@ export function CanvasConnectionTab() {
   const validationRequestId = useRef(0);
 
   const connections = user?.canvas_connections ?? [];
+  const urlError = validateCanvasUrl(formState.canvasUrl);
+
+  const debouncedUrlError = validateCanvasUrl(debouncedForm.canvasUrl);
+  const debouncedToken = debouncedForm.canvasToken.trim();
+  const debouncedUrl = normalizeCanvasUrl(debouncedForm.canvasUrl);
+  const validationKey = `${debouncedUrl}:${debouncedToken}`;
+  const shouldValidateToken =
+    debouncedToken !== "" &&
+    debouncedUrlError === null &&
+    Boolean(accessToken);
+
+  const tokenValidation: TokenValidationState = !shouldValidateToken
+    ? { status: "idle" }
+    : validatedKey !== validationKey
+      ? { status: "validating" }
+      : { status: tokenStatus };
 
   useEffect(() => {
-    const urlValidationError = validateCanvasUrl(debouncedForm.canvasUrl);
-    setUrlError(urlValidationError);
-
-    const trimmedToken = debouncedForm.canvasToken.trim();
-    const trimmedUrl = normalizeCanvasUrl(debouncedForm.canvasUrl);
-
-    if (trimmedToken === "" || urlValidationError) {
-      setTokenValidation({ status: "idle" });
-      return;
-    }
-
-    if (!accessToken) {
+    if (!shouldValidateToken) {
       return;
     }
 
     const requestId = validationRequestId.current + 1;
     validationRequestId.current = requestId;
-    setTokenValidation({ status: "validating" });
 
     void (async () => {
       try {
         const status = await validateCanvasToken(
-          trimmedToken,
-          accessToken,
-          trimmedUrl,
+          debouncedToken,
+          accessToken!,
+          debouncedUrl,
         );
 
         if (validationRequestId.current !== requestId) {
           return;
         }
 
-        setTokenValidation({ status });
+        setValidatedKey(validationKey);
+        setTokenStatus(status);
       } catch {
         if (validationRequestId.current !== requestId) {
           return;
         }
 
-        setTokenValidation({ status: "invalid" });
+        setValidatedKey(validationKey);
+        setTokenStatus("invalid");
       }
     })();
-  }, [accessToken, debouncedForm]);
+  }, [
+    accessToken,
+    debouncedToken,
+    debouncedUrl,
+    shouldValidateToken,
+    validationKey,
+  ]);
 
   const canSave =
     formState.canvasToken.trim() !== "" &&
@@ -160,7 +172,7 @@ export function CanvasConnectionTab() {
       );
       await refreshUser();
       setFormState({ canvasUrl: "", canvasToken: "" });
-      setTokenValidation({ status: "idle" });
+      setValidatedKey(null);
       setStatusMessage({
         type: "success",
         text: "Canvas connection saved successfully.",
@@ -184,7 +196,7 @@ export function CanvasConnectionTab() {
       canvasToken: "",
     });
     setStatusMessage(null);
-    setTokenValidation({ status: "idle" });
+    setValidatedKey(null);
   };
 
   const handleDisconnect = async (connectionId: number) => {
