@@ -621,3 +621,76 @@ In retrospective, the live session reinforced a takeaway from last cycle: pairin
 - **Goal 1:** Implement the MCP client inside FastAPI and wire it to the LLM (Qwen via vLLM) for prompt-to-tool-call translation
 - **Goal 2:** Resolve the Canvas Docker compose service and `/api/v1` URL duplication issues found during the live session, either via follow-up PR or confirming the in-flight fix
 - **Goal 3:** Document the MCP server connection contract (`mcp.json` config, auth requirements) so Claude Code/Codex compatibility can be verified directly
+
+
+
+
+# Cycle 11 Report: 06/23 – 06/25 (June 23 – June 25)
+
+## Timesheet
+
+### Clockify Report
+- **23/06 (Tuesday):** Using Clockify – Logged [4:11:00]
+- **24/06 (Wednesday):** Using Clockify – Logged [2:33:00]
+- **25/06 (Thursday):** Not Using Clockify – Logged 0 hours
+
+
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: LLM adapter chat pipeline (June 23–25)
+- Built the LLM adapter layer connecting the chatbox to Canvas through a locally run model. Built a shared adapter interface so the rest of the app talks to one method, no matter which LLM backend is behind it.
+- Built an in-process tool dispatcher. The LLM's raw text response gets cleaned, parsed as JSON, checked against a schema, then routed to the right Canvas function. Added handling for the `<think>` blocks the model wraps its reasoning in, since they broke parsing if left in.
+- Added a timeout on the LLM call and clean error handling for bad or malformed output, so a failure returns a normal response instead of crashing.
+- Wrote unit tests for the parser, the dispatcher, and the chat endpoint. All mock the LLM call, so they run in CI with no live model needed.
+- Tested the full pipeline end to end against a real Canvas sandbox. Enrolled five students, created two assignments, and confirmed fetch_courses, fetch_assignments, and fetch_submissions all return correct real data through the chat endpoint.
+- Got Makefile feedback from Mridul during review and used it to clean up the install and run targets.
+
+
+<img width="1217" height="269" alt="Screenshot 2026-06-26 at 11 43 25 PM" src="https://github.com/user-attachments/assets/dc209c33-dcf7-4cd9-951f-eda76f932bb9" />
+
+
+---
+
+## Progress Update (since 23/06/2026)
+
+| TASK/ISSUE #                                | STATUS      |
+| -------------------------------------------- | ----------- |
+| Design document                              | Completed   |
+| Project design video                         | Completed   |
+| Database design                               | Completed   |
+| PR reviews and approvals                     | Completed   |
+| Project setup                                 | Completed   |
+| Dockerized environment for MCP/vLLM           | Completed   |
+| Locally running vLLM                          | Completed   |
+| Setup for PostgreSQL                          | Completed   |
+| Canvas MCP server core tools                  | Completed   |
+| MCP server tests (19 passing)                 | Completed   |
+| Canvas LMS sandbox setup                      | Completed   |
+| Full integration tests with Canvas            | Completed   |
+| Multi-institution Canvas token support (backend) | Completed |
+| Canvas Docker sandbox troubleshooting          | Completed   |
+| LLM adapter chat pipeline                      | Completed   |
+| Timeout and error handling                     | Completed   |
+| Chat pipeline tested against real Canvas data  | Completed   |
+| Request clarification for ambiguous requests   | Not Started |
+| Action history service                         | Not Started |
+
+---
+
+## Cycle 11 Goal Review
+
+### Reflection:
+This cycle was about finishing the LLM adapter and proving it works. I built the adapter so the chatbox can call a local model, parsed and cleaned its output, validated it, and routed it to the right Canvas function. I tested it against a real Canvas sandbox with five students and two assignments, and every fetch action returned correct real data. Timeout and error handling are in place, so a bad response or a slow model does not crash anything.
+
+### Retrospective:
+The biggest time sink was debugging environment issues rather than the actual logic: port conflicts, missing dependencies in the test venv, and a database schema that needed a full restart everytime. Tt just took longer than expected to sort out. The actual adapter and dispatcher code came together quickly once the environment was stable. Mridul's Makefile feedback was a good reminder to keep documentation in sync with what the code actually does.
+
+---
+
+## Next Cycle 12 Goals
+- **Goal 1:** Add the "request clarification for ambiguous requests" action, so the assistant can ask a follow-up question instead of guessing when the user's message is unclear
+- **Goal 2:** Build the action history service so every chat-triggered Canvas action is logged in a way users can review later
+- **Goal 3:** Add safe error handling for the remaining edge cases identified during testing
