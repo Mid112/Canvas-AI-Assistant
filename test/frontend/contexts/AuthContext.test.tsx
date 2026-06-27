@@ -101,6 +101,7 @@ describe("AuthContext", () => {
       role: "instructor",
       is_active: true,
       has_canvas_token: false,
+      canvas_connections: [],
     });
   });
 
