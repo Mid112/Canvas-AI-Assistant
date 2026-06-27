@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,6 +9,7 @@ import {
   getStoredProfileDraft,
   saveProfileDraft,
 } from "@/lib/profile-storage";
+import type { User } from "@/types/user";
 import { getRoleLabel } from "@/utils/navigation";
 
 function splitName(fullName: string): { firstName: string; lastName: string } {
@@ -28,16 +29,9 @@ function splitName(fullName: string): { firstName: string; lastName: string } {
   };
 }
 
-export function ProfileInformationSection() {
-  const { user } = useAuth();
-  const storedDraft = useMemo(
-    () => (user ? getStoredProfileDraft(user.id) : null),
-    [user],
-  );
-  const initialName = useMemo(
-    () => splitName(storedDraft?.name ?? user?.name ?? ""),
-    [storedDraft?.name, user?.name],
-  );
+function ProfileInformationForm({ user }: { user: User }) {
+  const storedDraft = getStoredProfileDraft(user.id);
+  const initialName = splitName(storedDraft?.name ?? user.name);
   const [firstName, setFirstName] = useState(initialName.firstName);
   const [lastName, setLastName] = useState(initialName.lastName);
   const [department, setDepartment] = useState(storedDraft?.department ?? "");
@@ -45,17 +39,6 @@ export function ProfileInformationSection() {
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    setFirstName(initialName.firstName);
-    setLastName(initialName.lastName);
-    setDepartment(storedDraft?.department ?? "");
-    setTitle(storedDraft?.title ?? "");
-  }, [initialName.firstName, initialName.lastName, storedDraft]);
-
-  if (!user) {
-    return null;
-  }
 
   const handleSave = async () => {
     const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
@@ -161,4 +144,14 @@ export function ProfileInformationSection() {
       </CardFooter>
     </Card>
   );
+}
+
+export function ProfileInformationSection() {
+  const { user } = useAuth();
+
+  if (!user) {
+    return null;
+  }
+
+  return <ProfileInformationForm key={user.id} user={user} />;
 }
