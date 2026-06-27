@@ -109,6 +109,33 @@ describe("ConnectCanvasPage", () => {
     expect(mockRefreshUser).toHaveBeenCalledTimes(1);
   });
 
+  it("still navigates when the post-connect auth refresh fails", async () => {
+    const user = userEvent.setup();
+    mockedUpdateCanvasTokens.mockResolvedValue({
+      id: 1,
+      email: "professor@university.edu",
+      is_active: true,
+      has_canvas_token: true,
+    });
+    // Token save is the critical path; a later /auth/me refresh failure should
+    // not surface as a failed Canvas connection after navigation has started.
+    mockRefreshUser.mockRejectedValue(new Error("Refresh failed"));
+
+    renderWithRouter(<ConnectCanvasPage />);
+
+    await user.type(screen.getByLabelText(/Canvas API Token/i), "valid-token");
+    await vi.advanceTimersByTimeAsync(500);
+    await screen.findByText("Token is valid");
+    await user.click(screen.getByRole("button", { name: "Connect Canvas" }));
+
+    expect(mockNavigate).toHaveBeenCalledWith(paths.reviewPermissions);
+    expect(
+      screen.queryByText(
+        "Unable to connect Canvas. Please check your token and try again.",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
   it("submits multiple tokens when provided", async () => {
     const user = userEvent.setup();
     mockedUpdateCanvasTokens.mockResolvedValue({
