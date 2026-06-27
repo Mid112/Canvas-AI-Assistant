@@ -82,17 +82,18 @@ We had 1 team meeting during this cycle, on Tuesday, to review PRs and walk thro
 | 499 | Instructor account management UI | Jessica | Not started |
 
 ## Burn-up Chart (Velocity):
-[ADD BURN-UP CHART SCREENSHOT HERE]
+<img width="933" height="557" alt="Screenshot 2026-06-26 at 11 46 29 PM" src="https://github.com/user-attachments/assets/06f73aa9-907a-4234-8a16-f18ffaa37924" />
+
 
 ## Times for Team/Individual:
 
 | Team Member | Logged Hours |
 | ----------- | ------------ |
-| Mridul      | [ADD HOURS] |
-| Jessica     | [ADD HOURS] |
-| Bao         | [ADD HOURS] |
-| Yerdana     | [ADD HOURS] |
-| Rhythm      | [ADD HOURS] |
+| Mridul      | 3:13:00|
+| Jessica     | 6:30:28 |
+| Bao         | 12:20:12 |
+| Yerdana     | 6:44:44 |
+| Rhythm      | 9:12:29 |
 
 ## Completed Tasks:
 
