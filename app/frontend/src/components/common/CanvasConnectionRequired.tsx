@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { paths } from "@/routes/paths";
+import { instructorSettingsPath } from "@/routes/paths";
 
 interface CanvasConnectionRequiredProps {
   title?: string;
@@ -21,11 +21,11 @@ export function CanvasConnectionRequired({
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <Button render={<Link to={paths.connectCanvas} />}>
+          <Button render={<Link to={instructorSettingsPath("canvas")} />}>
             Connect Canvas
           </Button>
-          <Button variant="outline" render={<Link to={paths.instructor.courses} />}>
-            Back to courses
+          <Button variant="outline" render={<Link to={instructorSettingsPath("canvas")} />}>
+            Open Settings
           </Button>
         </div>
       </CardContent>

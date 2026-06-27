@@ -47,6 +47,11 @@ async function parseError(response: Response): Promise<string> {
   return "Something went wrong. Please try again.";
 }
 
+export interface CanvasConnectionInput {
+  canvasUrl: string;
+  canvasToken: string;
+}
+
 export async function updateCanvasToken(
   canvasToken: string,
   accessToken: string,
@@ -73,7 +78,24 @@ export async function updateCanvasToken(
   return response.json() as Promise<CanvasTokenUpdateResponse>;
 }
 
-/** Saves one or more tokens via separate PATCH requests (one per institution). */
+/** Saves one or more connections via separate PATCH requests (one per institution). */
+export async function updateCanvasConnections(
+  connections: CanvasConnectionInput[],
+  accessToken: string,
+): Promise<CanvasTokenUpdateResponse> {
+  if (connections.length === 0) {
+    throw new CanvasApiError("Canvas token is required", 400);
+  }
+
+  let lastResponse: CanvasTokenUpdateResponse | undefined;
+  for (const { canvasUrl, canvasToken } of connections) {
+    lastResponse = await updateCanvasToken(canvasToken, accessToken, canvasUrl);
+  }
+
+  return lastResponse!;
+}
+
+/** @deprecated Use updateCanvasConnections with canvas URLs instead. */
 export async function updateCanvasTokens(
   canvasTokens: string[],
   accessToken: string,
@@ -88,6 +110,25 @@ export async function updateCanvasTokens(
   }
 
   return lastResponse!;
+}
+
+export async function removeCanvasConnection(
+  connectionId: number,
+  accessToken: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_BASE_URL}/auth/me/canvas-connections/${connectionId}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new CanvasApiError(await parseError(response), response.status);
+  }
 }
 
 export async function validateCanvasToken(

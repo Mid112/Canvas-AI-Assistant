@@ -39,6 +39,14 @@ export const paths = {
   },
 } as const;
 
+export function instructorSettingsPath(tab?: "canvas" | "notifications" | "security") {
+  if (!tab) {
+    return paths.instructor.settings;
+  }
+
+  return `${paths.instructor.settings}?tab=${tab}`;
+}
+
 export function instructorCourseAssignmentsPath(localCourseId: number | string) {
   return `/instructor/courses/${localCourseId}/assignments`;
 }

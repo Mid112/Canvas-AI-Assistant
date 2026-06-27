@@ -34,6 +34,7 @@ interface AuthContextValue {
   login: (credentials: LoginCredentials) => Promise<User>;
   register: (credentials: RegisterCredentials) => Promise<User>;
   logout: () => void;
+  refreshUser: () => Promise<User>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -52,6 +53,7 @@ function mapUserResponse(response: UserResponse): User {
     role: isUserRole(response.role) ? response.role : DEFAULT_ROLE,
     is_active: response.is_active,
     has_canvas_token: response.has_canvas_token,
+    canvas_connections: response.canvas_connections ?? [],
   };
 }
 
@@ -137,6 +139,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const token = accessToken ?? getStoredToken();
+    if (!token) {
+      throw new Error("Not authenticated");
+    }
+
+    return loadUser(token);
+  }, [accessToken, loadUser]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -146,8 +157,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
+      refreshUser,
     }),
-    [user, accessToken, isLoading, login, register, logout],
+    [user, accessToken, isLoading, login, register, logout, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
