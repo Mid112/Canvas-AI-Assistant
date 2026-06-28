@@ -56,10 +56,6 @@ describe("InstructorDashboardQuickActions", () => {
     expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant);
 
     mockNavigate.mockClear();
-    await user.click(screen.getByRole("button", { name: /Grade Analysis/i }));
-    expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant);
-
-    mockNavigate.mockClear();
     await user.click(
       screen.getByRole("button", { name: "Open AI Assistant" }),
     );

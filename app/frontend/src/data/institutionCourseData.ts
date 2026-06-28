@@ -85,7 +85,7 @@ export const institutionCourseData: InstitutionCourseData[] = [
     ],
     dashboard: {
       metrics: {
-        activeCourses: 6,
+        activeCourses: 4,
         activeCoursesTrend: 8,
         totalStudents: 156,
         totalStudentsTrend: 12,
@@ -152,20 +152,6 @@ export const institutionCourseData: InstitutionCourseData[] = [
           name: "Advanced Topics",
           studentCount: 31,
           assignmentCount: 4,
-        },
-        {
-          id: 5,
-          code: "CS 150",
-          name: "Web Development",
-          studentCount: 52,
-          assignmentCount: 10,
-        },
-        {
-          id: 6,
-          code: "CS 250",
-          name: "Database Systems",
-          studentCount: 40,
-          assignmentCount: 7,
         },
       ],
       notifications: [
