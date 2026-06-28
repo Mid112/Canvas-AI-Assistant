@@ -41,7 +41,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 const DEFAULT_ROLE: UserRole = "instructor";
 
 function isUserRole(role: string): role is UserRole {
-  return role === "instructor" || role === "ta" || role === "admin";
+  return role === "instructor" || role === "admin";
 }
 
 function mapUserResponse(response: UserResponse): User {
