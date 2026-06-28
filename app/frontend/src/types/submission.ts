@@ -15,6 +15,7 @@ export interface SubmissionAiSummary {
 
 export interface AssignmentSubmissionAnalysis {
   id: string;
+  courseId: number;
   label: string;
   courseCode: string;
   submissionRate: number;

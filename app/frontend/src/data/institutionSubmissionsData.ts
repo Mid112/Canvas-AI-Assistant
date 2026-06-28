@@ -6,6 +6,7 @@ export const institutionSubmissionsData: InstitutionSubmissionsData[] = [
     assignments: [
       {
         id: "pa3",
+        courseId: 1,
         label: "Programming Assignment 3",
         courseCode: "CS 101",
         submissionRate: 88,
@@ -80,6 +81,7 @@ export const institutionSubmissionsData: InstitutionSubmissionsData[] = [
       },
       {
         id: "hw4",
+        courseId: 2,
         label: "Homework 4: Recursion",
         courseCode: "CS 201",
         submissionRate: 92,
@@ -119,6 +121,7 @@ export const institutionSubmissionsData: InstitutionSubmissionsData[] = [
       },
       {
         id: "midterm",
+        courseId: 3,
         label: "Midterm Project",
         courseCode: "CS 301",
         submissionRate: 76,
@@ -170,6 +173,103 @@ export const institutionSubmissionsData: InstitutionSubmissionsData[] = [
             "Late project submissions are scoring 12% lower on average than on-time work.",
         },
       },
+      {
+        id: "research-paper",
+        courseId: 4,
+        label: "Research Paper Draft",
+        courseCode: "CS 401",
+        submissionRate: 81,
+        missingSubmissions: [
+          {
+            id: "ubc-m11",
+            name: "Olivia Martinez",
+            email: "olivia.martinez@student.ubc.ca",
+            avatarColor: "bg-indigo-500",
+            lastActive: "2 days ago",
+          },
+        ],
+        lateSubmissions: [
+          {
+            id: "ubc-l7",
+            name: "Henry Clark",
+            email: "henry.clark@student.ubc.ca",
+            avatarColor: "bg-teal-500",
+            lateBy: "2 days late",
+          },
+        ],
+        aiSummary: {
+          keyInsights:
+            "Research Paper Draft has a submission rate of 81%. One student has not submitted.",
+          recommendation:
+            "Check in with Olivia Martinez before the peer review session.",
+          lateSubmissionsNote:
+            "One late draft was submitted with a valid extension.",
+        },
+      },
+      {
+        id: "portfolio",
+        courseId: 5,
+        label: "Portfolio Milestone 2",
+        courseCode: "CS 150",
+        submissionRate: 90,
+        missingSubmissions: [
+          {
+            id: "ubc-m12",
+            name: "Grace Turner",
+            email: "grace.turner@student.ubc.ca",
+            avatarColor: "bg-fuchsia-500",
+            lastActive: "1 day ago",
+          },
+          {
+            id: "ubc-m13",
+            name: "Ryan Cooper",
+            email: "ryan.cooper@student.ubc.ca",
+            avatarColor: "bg-slate-500",
+            lastActive: "4 days ago",
+          },
+        ],
+        lateSubmissions: [],
+        aiSummary: {
+          keyInsights:
+            "Portfolio Milestone 2 has a submission rate of 90%. Two students have not submitted.",
+          recommendation:
+            "Send a reminder before the demo day. Ryan Cooper has been inactive recently.",
+          lateSubmissionsNote: "No late submissions for this milestone.",
+        },
+      },
+      {
+        id: "sql-project",
+        courseId: 6,
+        label: "SQL Schema Project",
+        courseCode: "CS 250",
+        submissionRate: 86,
+        missingSubmissions: [
+          {
+            id: "ubc-m14",
+            name: "Nina Shah",
+            email: "nina.shah@student.ubc.ca",
+            avatarColor: "bg-amber-500",
+            lastActive: "3 days ago",
+          },
+        ],
+        lateSubmissions: [
+          {
+            id: "ubc-l8",
+            name: "Tyler Brooks",
+            email: "tyler.brooks@student.ubc.ca",
+            avatarColor: "bg-green-600",
+            lateBy: "1 day late",
+          },
+        ],
+        aiSummary: {
+          keyInsights:
+            "SQL Schema Project has a submission rate of 86%. One student has not submitted.",
+          recommendation:
+            "Offer a schema review session for students still working on normalization.",
+          lateSubmissionsNote:
+            "Late submissions are trending close to the class average.",
+        },
+      },
     ],
   },
   {
@@ -177,6 +277,7 @@ export const institutionSubmissionsData: InstitutionSubmissionsData[] = [
     assignments: [
       {
         id: "lab2",
+        courseId: 101,
         label: "Lab 2: Control Flow",
         courseCode: "COSC 111",
         submissionRate: 84,
@@ -216,8 +317,9 @@ export const institutionSubmissionsData: InstitutionSubmissionsData[] = [
       },
       {
         id: "quiz1",
-        label: "Quiz 1: Variables",
-        courseCode: "COSC 121",
+        courseId: 102,
+        label: "Quiz 1: Machine Architecture",
+        courseCode: "COSC 211",
         submissionRate: 91,
         missingSubmissions: [
           {
@@ -231,10 +333,43 @@ export const institutionSubmissionsData: InstitutionSubmissionsData[] = [
         lateSubmissions: [],
         aiSummary: {
           keyInsights:
-            "Quiz 1: Variables has a submission rate of 91%. One student has not submitted.",
+            "Quiz 1: Machine Architecture has a submission rate of 91%. One student has not submitted.",
           recommendation:
             "Follow up with Riley Adams before the next in-class session.",
           lateSubmissionsNote: "No late submissions for this assignment.",
+        },
+      },
+      {
+        id: "db-lab1",
+        courseId: 103,
+        label: "Lab 1: ER Diagrams",
+        courseCode: "COSC 304",
+        submissionRate: 88,
+        missingSubmissions: [
+          {
+            id: "ubco-m4",
+            name: "Sam Rivera",
+            email: "sam.rivera@student.ubco.ca",
+            avatarColor: "bg-cyan-500",
+            lastActive: "2 days ago",
+          },
+        ],
+        lateSubmissions: [
+          {
+            id: "ubco-l2",
+            name: "Jamie Lee",
+            email: "jamie.lee@student.ubco.ca",
+            avatarColor: "bg-orange-500",
+            lateBy: "3 days late",
+          },
+        ],
+        aiSummary: {
+          keyInsights:
+            "Lab 1: ER Diagrams has a submission rate of 88%. One student has not submitted.",
+          recommendation:
+            "Share the ER diagram rubric again before the next lab.",
+          lateSubmissionsNote:
+            "One late lab submission is pending manual review.",
         },
       },
     ],

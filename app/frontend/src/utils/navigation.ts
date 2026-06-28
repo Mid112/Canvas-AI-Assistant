@@ -1,5 +1,4 @@
 import {
-  BarChart3,
   BookOpen,
   Bot,
   FileText,
@@ -18,7 +17,6 @@ export const instructorNavItems: NavItem[] = [
   { title: "Dashboard", href: paths.instructor.dashboard, icon: LayoutDashboard },
   { title: "Courses", href: paths.instructor.courses, icon: BookOpen },
   { title: "AI Assistant", href: paths.instructor.assistant, icon: Bot },
-  { title: "Analytics", href: paths.instructor.analytics, icon: BarChart3 },
   { title: "Messages", href: paths.instructor.messages, icon: MessageSquare },
   {
     title: "Workflow History",

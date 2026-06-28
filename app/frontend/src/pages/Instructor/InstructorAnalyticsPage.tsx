@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Navigate, useParams, useSearchParams } from "react-router-dom";
 
 import { useInstitution } from "@/contexts/useInstitution";
 import { getInstitutionSubmissionsData } from "@/data/institutionSubmissionsData";
 import type { SubmissionStatusFilter } from "@/types/submission";
+import { paths } from "@/routes/paths";
 
 import { InstructorSubmissionsAnalysisFilters } from "./InstructorSubmissionsAnalysis/InstructorSubmissionsAnalysisFilters";
 import { InstructorSubmissionsAnalysisHeader } from "./InstructorSubmissionsAnalysis/InstructorSubmissionsAnalysisHeader";
@@ -12,7 +13,9 @@ import { MissingSubmissionsSection } from "./InstructorSubmissionsAnalysis/Missi
 import { SubmissionsAiSummary } from "./InstructorSubmissionsAnalysis/SubmissionsAiSummary";
 import { downloadSubmissionsReport } from "./InstructorSubmissionsAnalysis/submissionExport";
 import {
+  getCourseAssignments,
   parseSubmissionStatusFilter,
+  usesSampleSubmissionData,
 } from "./InstructorSubmissionsAnalysis/submissionNavigation";
 import {
   filterSubmissionStudents,
@@ -21,17 +24,29 @@ import {
 } from "./InstructorSubmissionsAnalysis/submissionUtils";
 
 export function InstructorAnalyticsPage() {
-  const { selectedInstitution } = useInstitution();
+  const { courseId: courseIdParam } = useParams();
+  const courseId = Number(courseIdParam);
+  const { courses, selectedInstitution } = useInstitution();
   const [searchParams] = useSearchParams();
   const assignmentIdParam = searchParams.get("assignmentId");
   const statusParam = parseSubmissionStatusFilter(searchParams.get("status"));
-  const submissionsData = useMemo(
-    () => getInstitutionSubmissionsData(selectedInstitution.id),
-    [selectedInstitution.id],
+  const course = useMemo(
+    () => courses.find((entry) => entry.id === courseId),
+    [courseId, courses],
   );
-  const assignments = useMemo(
-    () => submissionsData?.assignments ?? [],
-    [submissionsData],
+  const allAssignments = useMemo(() => {
+    if (!course) {
+      return [];
+    }
+
+    const submissionsData = getInstitutionSubmissionsData(
+      selectedInstitution.id,
+    );
+    return getCourseAssignments(submissionsData?.assignments ?? [], course);
+  }, [course, selectedInstitution.id]);
+  const showingSampleSubmissionData = usesSampleSubmissionData(
+    allAssignments,
+    courseId,
   );
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
   const [search, setSearch] = useState("");
@@ -39,17 +54,19 @@ export function InstructorAnalyticsPage() {
     useState<SubmissionStatusFilter>(statusParam);
 
   const effectiveAssignmentId =
-    assignments.find(
+    allAssignments.find(
       (assignment) =>
         assignment.id === selectedAssignmentId ||
         assignment.id === assignmentIdParam,
     )?.id ??
-    assignments[0]?.id ??
+    allAssignments[0]?.id ??
     "";
 
   const selectedAssignment = useMemo(() => {
-    return assignments.find((assignment) => assignment.id === effectiveAssignmentId);
-  }, [assignments, effectiveAssignmentId]);
+    return allAssignments.find(
+      (assignment) => assignment.id === effectiveAssignmentId,
+    );
+  }, [allAssignments, effectiveAssignmentId]);
 
   const missingStudents = useMemo(
     () =>
@@ -81,12 +98,19 @@ export function InstructorAnalyticsPage() {
     );
   }, [lateStudents, missingStudents, selectedAssignment]);
 
-  if (!selectedAssignment) {
+  if (!course) {
+    return <Navigate to={paths.instructor.courses} replace />;
+  }
+
+  if (allAssignments.length === 0) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-        <InstructorSubmissionsAnalysisHeader onExportReport={handleExportReport} />
+        <InstructorSubmissionsAnalysisHeader
+          course={course}
+          onExportReport={handleExportReport}
+        />
         <p className="text-muted-foreground">
-          No submission data available for {selectedInstitution.shortName}.
+          No submission data available for {course.code}: {course.name}.
         </p>
       </div>
     );
@@ -94,10 +118,22 @@ export function InstructorAnalyticsPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-      <InstructorSubmissionsAnalysisHeader onExportReport={handleExportReport} />
+      <InstructorSubmissionsAnalysisHeader
+        course={course}
+        onExportReport={handleExportReport}
+      />
+
+      {showingSampleSubmissionData ? (
+        <p
+          role="status"
+          className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100"
+        >
+          Showing sample submission data for local development.
+        </p>
+      ) : null}
 
       <InstructorSubmissionsAnalysisFilters
-        assignments={assignments}
+        assignments={allAssignments}
         selectedAssignmentId={effectiveAssignmentId}
         onAssignmentChange={setSelectedAssignmentId}
         search={search}
@@ -116,7 +152,9 @@ export function InstructorAnalyticsPage() {
           ) : null}
         </div>
 
-        <SubmissionsAiSummary summary={selectedAssignment.aiSummary} />
+        {selectedAssignment ? (
+          <SubmissionsAiSummary summary={selectedAssignment.aiSummary} />
+        ) : null}
       </div>
     </div>
   );

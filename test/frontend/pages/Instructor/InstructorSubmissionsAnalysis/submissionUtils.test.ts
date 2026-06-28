@@ -2,12 +2,23 @@ import { describe, expect, it } from "vitest";
 
 import { institutionSubmissionsData } from "@/data/institutionSubmissionsData";
 import {
+  filterSubmissionAssignments,
   filterSubmissionStudents,
   shouldShowLateSection,
   shouldShowMissingSection,
 } from "@/pages/Instructor/InstructorSubmissionsAnalysis/submissionUtils";
 
 const students = institutionSubmissionsData[0]!.assignments[0]!.missingSubmissions;
+
+describe("filterSubmissionAssignments", () => {
+  it("filters assignments by label", () => {
+    const assignments = institutionSubmissionsData[0]!.assignments;
+    const results = filterSubmissionAssignments(assignments, "recursion");
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.id).toBe("hw4");
+  });
+});
 
 describe("filterSubmissionStudents", () => {
   it("returns all students when search is empty", () => {
