@@ -34,7 +34,7 @@ describe("InstructorDashboardQuickActions", () => {
     ).toBeInTheDocument();
   });
 
-  it("navigates to the assistant page from quick actions", async () => {
+  it("navigates to assignment creator or assistant from quick actions", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
 
@@ -46,6 +46,12 @@ describe("InstructorDashboardQuickActions", () => {
 
     await user.click(
       screen.getByRole("button", { name: /Create Assignment/i }),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assignmentCreate);
+
+    mockNavigate.mockClear();
+    await user.click(
+      screen.getByRole("button", { name: /Draft Announcement/i }),
     );
     expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant);
 
