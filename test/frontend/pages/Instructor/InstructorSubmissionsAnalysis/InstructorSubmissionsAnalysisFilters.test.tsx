@@ -4,11 +4,15 @@ import { describe, expect, it, vi } from "vitest";
 
 import { institutionSubmissionsData } from "@/data/institutionSubmissionsData";
 import { InstructorSubmissionsAnalysisFilters } from "@/pages/Instructor/InstructorSubmissionsAnalysis/InstructorSubmissionsAnalysisFilters";
+import { getCourseAssignments } from "@/pages/Instructor/InstructorSubmissionsAnalysis/submissionNavigation";
 
-const assignments = institutionSubmissionsData[0]!.assignments;
+const assignments = getCourseAssignments(
+  institutionSubmissionsData[0]!.assignments,
+  { id: 1, code: "CS 101" },
+);
 
 describe("InstructorSubmissionsAnalysisFilters", () => {
-  it("renders assignment, search, and status controls", () => {
+  it("renders assignment, student search, and status controls", () => {
     render(
       <InstructorSubmissionsAnalysisFilters
         assignments={assignments}
@@ -21,17 +25,15 @@ describe("InstructorSubmissionsAnalysisFilters", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Select Assignment")).toBeInTheDocument();
+    expect(
+      screen.getByLabelText("Search or select assignment"),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Search students")).toBeInTheDocument();
     expect(screen.getByLabelText("Filter by Status")).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: "CS 101: Programming Assignment 3" }),
-    ).toBeInTheDocument();
   });
 
   it("calls change handlers when filters are updated", async () => {
     const user = userEvent.setup();
-    const onAssignmentChange = vi.fn();
     const onSearchChange = vi.fn();
     const onStatusFilterChange = vi.fn();
 
@@ -39,7 +41,7 @@ describe("InstructorSubmissionsAnalysisFilters", () => {
       <InstructorSubmissionsAnalysisFilters
         assignments={assignments}
         selectedAssignmentId="pa3"
-        onAssignmentChange={onAssignmentChange}
+        onAssignmentChange={vi.fn()}
         search=""
         onSearchChange={onSearchChange}
         statusFilter="all"
@@ -47,14 +49,12 @@ describe("InstructorSubmissionsAnalysisFilters", () => {
       />,
     );
 
-    await user.selectOptions(screen.getByLabelText("Select Assignment"), "hw4");
     await user.type(screen.getByLabelText("Search students"), "maria");
     await user.selectOptions(
       screen.getByLabelText("Filter by Status"),
       "missing",
     );
 
-    expect(onAssignmentChange).toHaveBeenCalledWith("hw4");
     expect(onSearchChange).toHaveBeenCalled();
     expect(onStatusFilterChange).toHaveBeenCalledWith("missing");
   });

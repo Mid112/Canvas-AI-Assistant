@@ -1,4 +1,5 @@
 import type {
+  AssignmentSubmissionAnalysis,
   SubmissionStatusFilter,
   SubmissionStudent,
 } from "@/types/submission";
@@ -16,6 +17,20 @@ export function filterSubmissionStudents(
     (student) =>
       student.name.toLowerCase().includes(query) ||
       student.email.toLowerCase().includes(query),
+  );
+}
+
+export function filterSubmissionAssignments(
+  assignments: AssignmentSubmissionAnalysis[],
+  search: string,
+): AssignmentSubmissionAnalysis[] {
+  const query = search.trim().toLowerCase();
+  if (!query) {
+    return assignments;
+  }
+
+  return assignments.filter((assignment) =>
+    assignment.label.toLowerCase().includes(query),
   );
 }
 

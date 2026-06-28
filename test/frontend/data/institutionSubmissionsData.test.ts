@@ -8,8 +8,8 @@ import {
 describe("institutionSubmissionsData", () => {
   it("provides submission analysis data for each institution", () => {
     expect(institutionSubmissionsData).toHaveLength(2);
-    expect(getInstitutionSubmissionsData("ubc")?.assignments).toHaveLength(3);
-    expect(getInstitutionSubmissionsData("ubco")?.assignments).toHaveLength(2);
+    expect(getInstitutionSubmissionsData("ubc")?.assignments).toHaveLength(6);
+    expect(getInstitutionSubmissionsData("ubco")?.assignments).toHaveLength(3);
   });
 
   it("includes missing and late students for each assignment", () => {

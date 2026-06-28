@@ -7,6 +7,8 @@ import type {
   SubmissionStatusFilter,
 } from "@/types/submission";
 
+import { AssignmentSearchSelect } from "./AssignmentSearchSelect";
+
 interface InstructorSubmissionsAnalysisFiltersProps {
   assignments: AssignmentSubmissionAnalysis[];
   selectedAssignmentId: string;
@@ -32,27 +34,12 @@ export function InstructorSubmissionsAnalysisFilters({
   onStatusFilterChange,
 }: InstructorSubmissionsAnalysisFiltersProps) {
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      <div className="space-y-1.5">
-        <label
-          htmlFor="assignment-select"
-          className="text-sm font-medium text-foreground"
-        >
-          Select Assignment
-        </label>
-        <select
-          id="assignment-select"
-          value={selectedAssignmentId}
-          onChange={(event) => onAssignmentChange(event.target.value)}
-          className={selectClassName}
-        >
-          {assignments.map((assignment) => (
-            <option key={assignment.id} value={assignment.id}>
-              {assignment.courseCode}: {assignment.label}
-            </option>
-          ))}
-        </select>
-      </div>
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <AssignmentSearchSelect
+        assignments={assignments}
+        selectedAssignmentId={selectedAssignmentId}
+        onAssignmentChange={onAssignmentChange}
+      />
 
       <div className="space-y-1.5">
         <label

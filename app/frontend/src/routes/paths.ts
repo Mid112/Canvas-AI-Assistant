@@ -14,8 +14,9 @@ export const paths = {
     assignmentUpdate:
       "/instructor/courses/:localCourseId/assignments/:assignmentId/edit",
     assignmentCreate: "/instructor/assignments/create",
+    courseAnalytics: (courseId: number | string) =>
+      `/instructor/courses/${courseId}/analytics`,
     assistant: "/instructor/assistant",
-    analytics: "/instructor/analytics",
     messages: "/instructor/messages",
     notifications: "/instructor/notifications",
     history: "/instructor/history",
