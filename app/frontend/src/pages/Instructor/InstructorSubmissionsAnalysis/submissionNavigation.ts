@@ -2,6 +2,7 @@ import type {
   AssignmentSubmissionAnalysis,
   SubmissionStatusFilter,
 } from "@/types/submission";
+import { instructorCourseAnalyticsPath } from "@/routes/paths";
 
 export function getCourseAnalyticsPath(
   courseId: number,
@@ -21,7 +22,7 @@ export function getCourseAnalyticsPath(
   }
 
   const query = params.toString();
-  const base = `/instructor/courses/${courseId}/analytics`;
+  const base = instructorCourseAnalyticsPath(courseId);
 
   return query ? `${base}?${query}` : base;
 }
