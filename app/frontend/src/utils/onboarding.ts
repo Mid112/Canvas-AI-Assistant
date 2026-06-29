@@ -1,6 +1,6 @@
 import { hasCompletedOnboarding } from "@/lib/onboarding-storage";
 import { paths } from "@/routes/paths";
-import type { UserRole } from "@/types/user";
+import type { User, UserRole } from "@/types/user";
 import { getDashboardPath } from "@/utils/navigation";
 
 export const ONBOARDING_PATHS = [
@@ -18,9 +18,15 @@ export function requiresOnboarding(role: UserRole): boolean {
   return role !== "admin";
 }
 
-export function getPostAuthPath(userId: number, role: UserRole): string {
-  if (!requiresOnboarding(role) || hasCompletedOnboarding(userId)) {
-    return getDashboardPath(role);
+export function isOnboardingComplete(user: Pick<User, "id" | "canvas_connections">): boolean {
+  return (
+    hasCompletedOnboarding(user.id) || user.canvas_connections.length > 0
+  );
+}
+
+export function getPostAuthPath(user: Pick<User, "id" | "role" | "canvas_connections">): string {
+  if (!requiresOnboarding(user.role) || isOnboardingComplete(user)) {
+    return getDashboardPath(user.role);
   }
 
   return paths.canvasInfo;

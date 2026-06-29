@@ -54,7 +54,7 @@ function ProfileInformationForm({ user }: { user: User }) {
     setSavedMessage(null);
 
     try {
-      await saveProfileDraft(user.id, {
+      saveProfileDraft(user.id, {
         name: fullName,
         department: department.trim(),
         title: title.trim(),

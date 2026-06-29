@@ -7,28 +7,24 @@ import {
   Mail,
   Upload,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
-import { normalizeCanvasUrl, validateCanvasUrl } from "@/lib/canvas-url";
-import { useDebouncedValue } from "@/lib/useDebouncedValue";
+import { normalizeCanvasUrl } from "@/lib/canvas-url";
+import { useCanvasTokenValidation } from "@/lib/useCanvasTokenValidation";
 import {
   ConnectCanvasTokenStatus,
-  type TokenValidationState,
 } from "@/pages/Auth/ConnectCanvas/ConnectCanvasTokenStatus";
 import {
   CanvasApiError,
   removeCanvasConnection,
   updateCanvasToken,
-  validateCanvasToken,
 } from "@/services/canvas";
 import type { CanvasConnection } from "@/types/user";
-
-const VALIDATION_DEBOUNCE_MS = 500;
 
 const PERMISSIONS = [
   {
@@ -80,79 +76,23 @@ export function CanvasConnectionTab() {
     canvasUrl: "",
     canvasToken: "",
   });
-  const [tokenStatus, setTokenStatus] = useState<
-    Exclude<TokenValidationState["status"], "idle" | "validating">
-  >("invalid");
-  const [validatedKey, setValidatedKey] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<{
     type: "success" | "error";
     text: string;
   } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [disconnectingId, setDisconnectingId] = useState<number | null>(null);
-  const debouncedForm = useDebouncedValue(formState, VALIDATION_DEBOUNCE_MS);
-  const validationRequestId = useRef(0);
+  const { urlError, validation: tokenValidation } = useCanvasTokenValidation(
+    formState.canvasToken,
+    formState.canvasUrl,
+    accessToken,
+  );
 
   const connections = user?.canvas_connections ?? [];
-  const urlError = validateCanvasUrl(formState.canvasUrl);
-
-  const debouncedUrlError = validateCanvasUrl(debouncedForm.canvasUrl);
-  const debouncedToken = debouncedForm.canvasToken.trim();
-  const debouncedUrl = normalizeCanvasUrl(debouncedForm.canvasUrl);
-  const validationKey = `${debouncedUrl}:${debouncedToken}`;
-  const shouldValidateToken =
-    debouncedToken !== "" &&
-    debouncedUrlError === null &&
-    Boolean(accessToken);
-
-  const tokenValidation: TokenValidationState = !shouldValidateToken
-    ? { status: "idle" }
-    : validatedKey !== validationKey
-      ? { status: "validating" }
-      : { status: tokenStatus };
-
-  useEffect(() => {
-    if (!shouldValidateToken) {
-      return;
-    }
-
-    const requestId = validationRequestId.current + 1;
-    validationRequestId.current = requestId;
-
-    void (async () => {
-      try {
-        const status = await validateCanvasToken(
-          debouncedToken,
-          accessToken!,
-          debouncedUrl,
-        );
-
-        if (validationRequestId.current !== requestId) {
-          return;
-        }
-
-        setValidatedKey(validationKey);
-        setTokenStatus(status);
-      } catch {
-        if (validationRequestId.current !== requestId) {
-          return;
-        }
-
-        setValidatedKey(validationKey);
-        setTokenStatus("invalid");
-      }
-    })();
-  }, [
-    accessToken,
-    debouncedToken,
-    debouncedUrl,
-    shouldValidateToken,
-    validationKey,
-  ]);
 
   const canSave =
     formState.canvasToken.trim() !== "" &&
-    validateCanvasUrl(formState.canvasUrl) === null &&
+    urlError === null &&
     tokenValidation.status === "valid" &&
     !isSaving;
 
@@ -172,7 +112,6 @@ export function CanvasConnectionTab() {
       );
       await refreshUser();
       setFormState({ canvasUrl: "", canvasToken: "" });
-      setValidatedKey(null);
       setStatusMessage({
         type: "success",
         text: "Canvas connection saved successfully.",
@@ -196,7 +135,6 @@ export function CanvasConnectionTab() {
       canvasToken: "",
     });
     setStatusMessage(null);
-    setValidatedKey(null);
   };
 
   const handleDisconnect = async (connectionId: number) => {

@@ -22,7 +22,7 @@ export function ProfileDeleteSection() {
     setErrorMessage(null);
 
     try {
-      await deleteProfileLocally(user.id);
+      deleteProfileLocally(user.id);
       logout();
       navigate(paths.home, {
         replace: true,
