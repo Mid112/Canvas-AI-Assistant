@@ -28,9 +28,9 @@ export function InstructorAnalyticsPage() {
   const { courseId: courseIdParam } = useParams();
   const courseId = Number(courseIdParam);
   const { courses, selectedInstitution } = useInstitution();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const assignmentIdParam = searchParams.get("assignmentId");
-  const statusParam = parseSubmissionStatusFilter(searchParams.get("status"));
+  const statusFilter = parseSubmissionStatusFilter(searchParams.get("status"));
   const course = useMemo(
     () => courses.find((entry) => entry.id === courseId),
     [courseId, courses],
@@ -51,8 +51,26 @@ export function InstructorAnalyticsPage() {
   );
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] =
-    useState<SubmissionStatusFilter>(statusParam);
+
+  const handleStatusFilterChange = useCallback(
+    (status: SubmissionStatusFilter) => {
+      setSearchParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+
+          if (status === "all") {
+            next.delete("status");
+          } else {
+            next.set("status", status);
+          }
+
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const effectiveAssignmentId = resolveEffectiveAssignmentId(
     allAssignments,
@@ -137,7 +155,7 @@ export function InstructorAnalyticsPage() {
         search={search}
         onSearchChange={setSearch}
         statusFilter={statusFilter}
-        onStatusFilterChange={setStatusFilter}
+        onStatusFilterChange={handleStatusFilterChange}
       />
 
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
