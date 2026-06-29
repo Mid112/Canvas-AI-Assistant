@@ -3,6 +3,8 @@ import { Outlet, useLocation } from "react-router-dom";
 
 import { Header } from "@/components/layouts/Header";
 import { Sidebar } from "@/components/layouts/Sidebar";
+import { ActiveCourseContextBar } from "@/components/courses/ActiveCourseContextBar";
+import { ActiveCourseProvider } from "@/contexts/ActiveCourseProvider";
 import { InstitutionProvider } from "@/contexts/InstitutionProvider";
 import {
   getStoredSidebarOpen,
@@ -84,6 +86,7 @@ function DashboardShell({ role }: DashboardLayoutProps) {
           sidebarOpen={sidebarOpen}
           onToggleSidebar={toggleSidebar}
         />
+        {role === "instructor" ? <ActiveCourseContextBar /> : null}
         <main className="flex flex-1 flex-col overflow-auto">
           <Outlet />
         </main>
@@ -95,7 +98,9 @@ function DashboardShell({ role }: DashboardLayoutProps) {
 export function DashboardLayout({ role }: DashboardLayoutProps) {
   return (
     <InstitutionProvider>
-      <DashboardShell role={role} />
+      <ActiveCourseProvider>
+        <DashboardShell role={role} />
+      </ActiveCourseProvider>
     </InstitutionProvider>
   );
 }

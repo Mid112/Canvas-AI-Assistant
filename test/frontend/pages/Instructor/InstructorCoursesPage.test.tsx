@@ -1,10 +1,32 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useInstitution } from "@/contexts/useInstitution";
 import { InstructorCoursesPage } from "@/pages/Instructor/InstructorCoursesPage";
+import {
+  fetchActiveCourse,
+  fetchCourses,
+  setActiveCourse,
+} from "@/services/canvas";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
+
+vi.mock("@/services/canvas", async () => {
+  const actual = await vi.importActual<typeof import("@/services/canvas")>(
+    "@/services/canvas",
+  );
+
+  return {
+    ...actual,
+    fetchCourses: vi.fn(),
+    fetchActiveCourse: vi.fn(),
+    setActiveCourse: vi.fn(),
+  };
+});
+
+const mockedFetchCourses = vi.mocked(fetchCourses);
+const mockedFetchActiveCourse = vi.mocked(fetchActiveCourse);
+const mockedSetActiveCourse = vi.mocked(setActiveCourse);
 
 function InstitutionSwitchHarness() {
   const { setSelectedInstitution } = useInstitution();
@@ -20,7 +42,21 @@ function InstitutionSwitchHarness() {
 }
 
 describe("InstructorCoursesPage", () => {
-  it("renders the course management page instead of the placeholder", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.clearAllMocks();
+    mockedFetchCourses.mockResolvedValue([]);
+    mockedFetchActiveCourse.mockResolvedValue(null);
+    mockedSetActiveCourse.mockResolvedValue({
+      local_id: 1,
+      canvas_course_id: "101",
+      canvas_url: "https://canvas.example.edu",
+      name: "CS 101: Introduction to Programming",
+      term: null,
+    });
+  });
+
+  it("renders the course management page instead of the placeholder", async () => {
     renderWithInstitution(<InstructorCoursesPage />);
 
     expect(
@@ -31,6 +67,7 @@ describe("InstructorCoursesPage", () => {
     expect(
       screen.queryByText("Courses coming soon"),
     ).not.toBeInTheDocument();
+    expect(await screen.findByText("Your Courses (6)")).toBeInTheDocument();
   });
 
   it("filters courses by search query", async () => {
@@ -92,5 +129,20 @@ describe("InstructorCoursesPage", () => {
     expect(
       screen.getByText("COSC 111: Computer Programming I"),
     ).toBeInTheDocument();
+  });
+
+  it("persists the selected active course locally", async () => {
+    const user = userEvent.setup();
+
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    await screen.findByText("Your Courses (6)");
+    await user.click(screen.getAllByRole("button", { name: "Set Active" })[0]!);
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain(
+        "Active course: CS 101: Introduction to Programming",
+      );
+    });
   });
 });

@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useInstitution } from "@/contexts/useInstitution";
-import { CanvasApiError, fetchCourses } from "@/services/canvas";
 import {
   filterInstructorCourses,
   sortInstructorCourses,
@@ -15,78 +15,23 @@ import {
   InstructorCoursesEmptyState,
   InstructorCoursesSection,
 } from "@/pages/Instructor/InstructorCourses/InstructorCoursesSection";
-import type { CourseViewMode, InstructorCourse } from "@/types/course";
-import type { CanvasCourse } from "@/types/canvas";
-
-function mapCanvasCourseToInstructorCourse(course: CanvasCourse): InstructorCourse | null {
-  if (course.local_id == null) {
-    return null;
-  }
-
-  return {
-    id: course.local_id,
-    code: course.course_code,
-    name: course.name,
-    progress: 0,
-    studentCount: course.total_students ?? 0,
-    assignmentCount: 0,
-    lastActivity: "Synced from Canvas",
-  };
-}
+import type { CourseViewMode } from "@/types/course";
 
 export function InstructorCoursesPage() {
-  const { courses: mockCourses, analytics } = useInstitution();
-  const { accessToken, user } = useAuth();
-  const [canvasCourses, setCanvasCourses] = useState<InstructorCourse[]>([]);
-  const [canvasError, setCanvasError] = useState<string | null>(null);
+  const { analytics } = useInstitution();
+  const { user } = useAuth();
+  const {
+    activeCourse,
+    availableCourses,
+    error: activeCourseError,
+    isLoading,
+    isSaving,
+    selectActiveCourse,
+  } = useActiveCourse();
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<CourseViewMode>("grid");
 
-  useEffect(() => {
-    if (!accessToken || !user?.has_canvas_token) {
-      return;
-    }
-
-    const token = accessToken;
-    let cancelled = false;
-
-    async function loadCanvasCourses() {
-      try {
-        const data = await fetchCourses(token);
-        if (cancelled) {
-          return;
-        }
-
-        setCanvasCourses(
-          data
-            .map(mapCanvasCourseToInstructorCourse)
-            .filter((course): course is InstructorCourse => course !== null),
-        );
-        setCanvasError(null);
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
-        const message =
-          error instanceof CanvasApiError
-            ? error.message
-            : "Unable to load courses from Canvas.";
-        setCanvasError(message);
-        setCanvasCourses([]);
-      }
-    }
-
-    void loadCanvasCourses();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [accessToken, user?.has_canvas_token]);
-
-  const courses = user?.has_canvas_token && canvasCourses.length > 0
-    ? canvasCourses
-    : mockCourses;
+  const courses = availableCourses;
 
   const filteredCourses = useMemo(() => {
     const filtered = filterInstructorCourses(courses, search);
@@ -100,15 +45,25 @@ export function InstructorCoursesPage() {
       <InstructorCoursesSearch search={search} onSearchChange={setSearch} />
 
       {!user?.has_canvas_token ? (
-        <CanvasConnectionRequired description="Connect Canvas to open course assignments and update them from this dashboard. You can still browse the sample course layout below." />
+        <CanvasConnectionRequired description="Connect Canvas to sync your courses and persist an active course selection across sessions. You can still browse the sample course layout below." />
       ) : null}
 
-      {user?.has_canvas_token && canvasError ? (
+      {user?.has_canvas_token && activeCourseError ? (
         <p
           role="alert"
           className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
         >
-          {canvasError} Showing sample course data instead.
+          {activeCourseError} Showing sample course data instead.
+        </p>
+      ) : null}
+
+      {user?.has_canvas_token && isLoading ? (
+        <p className="text-sm text-muted-foreground">Syncing courses from Canvas...</p>
+      ) : null}
+
+      {activeCourse ? (
+        <p className="text-sm text-muted-foreground">
+          Active course: <span className="font-medium text-foreground">{activeCourse.name}</span>
         </p>
       ) : null}
 
@@ -121,6 +76,9 @@ export function InstructorCoursesPage() {
           courses={filteredCourses}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
+          activeCourseId={activeCourse?.local_id ?? null}
+          onSetActiveCourse={(courseId) => void selectActiveCourse(courseId)}
+          isSettingActiveCourse={isSaving}
         />
       )}
     </div>

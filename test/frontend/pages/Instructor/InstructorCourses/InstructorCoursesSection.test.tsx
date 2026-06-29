@@ -13,11 +13,22 @@ import {
 
 const courses = institutionCourseData[0]!.courses.slice(0, 2);
 
+const activeCourseProps = {
+  activeCourseId: null as number | null,
+  onSetActiveCourse: vi.fn(),
+  isSettingActiveCourse: false,
+};
+
 describe("InstructorCoursesCard", () => {
   it("renders course progress and action buttons", () => {
     render(
       <MemoryRouter>
-        <InstructorCoursesCard course={courses[0]!} />
+        <InstructorCoursesCard
+          course={courses[0]!}
+          isActive={false}
+          onSetActive={vi.fn()}
+          isSettingActive={false}
+        />
       </MemoryRouter>,
     );
 
@@ -29,7 +40,7 @@ describe("InstructorCoursesCard", () => {
       screen.getByRole("link", { name: "View Course" }),
     ).toHaveAttribute("href", "/instructor/courses/1/assignments");
     expect(
-      screen.getByRole("button", { name: "Analytics" }),
+      screen.getByRole("button", { name: "Set Active" }),
     ).toBeInTheDocument();
   });
 });
@@ -38,7 +49,10 @@ describe("InstructorCoursesList", () => {
   it("renders courses in list format", () => {
     render(
       <MemoryRouter>
-        <InstructorCoursesList courses={courses} />
+        <InstructorCoursesList
+          courses={courses}
+          {...activeCourseProps}
+        />
       </MemoryRouter>,
     );
 
@@ -59,6 +73,7 @@ describe("InstructorCoursesSection", () => {
           courses={courses}
           viewMode="grid"
           onViewModeChange={vi.fn()}
+          {...activeCourseProps}
         />
       </MemoryRouter>,
     );
