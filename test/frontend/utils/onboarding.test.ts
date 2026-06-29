@@ -7,9 +7,10 @@ import {
 } from "@/utils/onboarding";
 
 describe("onboarding utils", () => {
-  it("requires onboarding for instructors only", () => {
+  it("does not require onboarding for admins", () => {
     expect(requiresOnboarding("admin")).toBe(false);
     expect(requiresOnboarding("instructor")).toBe(true);
+    expect(requiresOnboarding("ta")).toBe(true);
   });
 
   it("sends admins directly to the admin dashboard", () => {

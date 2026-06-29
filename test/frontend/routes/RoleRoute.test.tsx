@@ -36,7 +36,7 @@ describe("RoleRoute", () => {
   });
 
   function renderRoleRoute(
-    role: "instructor" | "admin",
+    role: "instructor" | "ta" | "admin",
     initialEntry: string,
   ) {
     render(

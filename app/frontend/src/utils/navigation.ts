@@ -28,6 +28,14 @@ export const instructorNavItems: NavItem[] = [
   { title: "Settings", href: paths.instructor.settings, icon: Settings },
 ];
 
+export const taNavItems: NavItem[] = [
+  { title: "Dashboard", href: paths.ta.dashboard, icon: LayoutDashboard },
+  { title: "Courses", href: paths.ta.courses, icon: BookOpen },
+  { title: "Messages", href: paths.ta.messages, icon: MessageSquare },
+  { title: "Students", href: paths.ta.students, icon: Users },
+  { title: "Settings", href: paths.ta.settings, icon: Settings },
+];
+
 export const adminNavItems: NavItem[] = [
   { title: "Dashboard", href: paths.admin.dashboard, icon: LayoutDashboard },
   { title: "Users", href: paths.admin.users, icon: Users },
@@ -39,6 +47,8 @@ export function getNavItemsForRole(role: UserRole): NavItem[] {
   switch (role) {
     case "instructor":
       return instructorNavItems;
+    case "ta":
+      return taNavItems;
     case "admin":
       return adminNavItems;
   }
@@ -48,6 +58,8 @@ export function getRoleLabel(role: UserRole): string {
   switch (role) {
     case "instructor":
       return "Instructor";
+    case "ta":
+      return "Teaching Assistant";
     case "admin":
       return "Administrator";
   }
@@ -57,6 +69,8 @@ export function getProfilePath(role: UserRole): string {
   switch (role) {
     case "instructor":
       return paths.instructor.profile;
+    case "ta":
+      return paths.ta.profile;
     case "admin":
       return paths.admin.profile;
   }
@@ -66,6 +80,8 @@ export function getDashboardPath(role: UserRole): string {
   switch (role) {
     case "instructor":
       return paths.instructor.dashboard;
+    case "ta":
+      return paths.ta.dashboard;
     case "admin":
       return paths.admin.dashboard;
   }
@@ -75,6 +91,8 @@ export function getAssistantPath(role: UserRole): string {
   switch (role) {
     case "instructor":
       return paths.instructor.assistant;
+    case "ta":
+      return paths.ta.dashboard;
     case "admin":
       return paths.admin.dashboard;
   }

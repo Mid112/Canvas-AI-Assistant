@@ -38,27 +38,18 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function isUserRole(role: string): role is UserRole {
-  return role === "instructor" || role === "admin";
-}
+const DEFAULT_ROLE: UserRole = "instructor";
 
-export class UnsupportedUserRoleError extends Error {
-  constructor(role: string) {
-    super(`Unsupported user role: ${role}`);
-    this.name = "UnsupportedUserRoleError";
-  }
+function isUserRole(role: string): role is UserRole {
+  return role === "instructor" || role === "ta" || role === "admin";
 }
 
 function mapUserResponse(response: UserResponse): User {
-  if (!isUserRole(response.role)) {
-    throw new UnsupportedUserRoleError(response.role);
-  }
-
   return {
     id: response.id,
     email: response.email,
     name: response.name ?? response.email.split("@")[0] ?? response.email,
-    role: response.role,
+    role: isUserRole(response.role) ? response.role : DEFAULT_ROLE,
     is_active: response.is_active,
     has_canvas_token: response.has_canvas_token,
   };
