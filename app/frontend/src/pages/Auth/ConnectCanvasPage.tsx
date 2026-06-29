@@ -44,14 +44,19 @@ export function ConnectCanvasPage() {
               setError(null);
               setIsSubmitting(true);
 
-              if (!accessToken) {
-                logout();
-                return;
-              }
-
               try {
+                if (!accessToken) {
+                  logout();
+                  return;
+                }
+
                 await updateCanvasConnections(connections, accessToken);
                 await refreshUser();
+
+                if (user) {
+                  markOnboardingComplete(user.id);
+                }
+
                 navigate(paths.reviewPermissions);
               } catch (err) {
                 if (err instanceof CanvasApiError && err.status === 401) {

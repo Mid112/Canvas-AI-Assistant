@@ -70,6 +70,7 @@ describe("LoginPage", () => {
       role: "instructor",
       is_active: true,
       has_canvas_token: false,
+      canvas_connections: [],
     });
 
     renderWithRouter(<LoginPage />);
@@ -98,6 +99,7 @@ describe("LoginPage", () => {
       role: "admin",
       is_active: true,
       has_canvas_token: false,
+      canvas_connections: [],
     });
 
     renderWithRouter(<LoginPage />);

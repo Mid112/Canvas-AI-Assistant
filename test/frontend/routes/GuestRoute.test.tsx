@@ -26,6 +26,7 @@ const instructorUser = {
   role: "instructor" as const,
   is_active: true,
   has_canvas_token: false,
+  canvas_connections: [],
 };
 
 const adminUser = {
@@ -35,6 +36,7 @@ const adminUser = {
   role: "admin" as const,
   is_active: true,
   has_canvas_token: false,
+  canvas_connections: [],
 };
 
 describe("GuestRoute", () => {

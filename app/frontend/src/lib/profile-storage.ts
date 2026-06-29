@@ -28,16 +28,11 @@ export function clearStoredProfileDraft(userId: number): void {
 }
 
 /** Frontend-only profile save until backend profile endpoints exist. */
-export async function saveProfileDraft(
-  userId: number,
-  draft: ProfileDraft,
-): Promise<void> {
-  await Promise.resolve();
+export function saveProfileDraft(userId: number, draft: ProfileDraft): void {
   setStoredProfileDraft(userId, draft);
 }
 
 /** Frontend-only profile delete simulation — clears local profile data. */
-export async function deleteProfileLocally(userId: number): Promise<void> {
-  await Promise.resolve();
+export function deleteProfileLocally(userId: number): void {
   clearStoredProfileDraft(userId);
 }

@@ -106,6 +106,7 @@ describe("ConnectCanvasPage", () => {
       "access-token",
     );
     expect(mockRefreshUser).toHaveBeenCalled();
+    expect(mockedMarkOnboardingComplete).toHaveBeenCalledWith(1);
     expect(mockNavigate).toHaveBeenCalledWith(paths.reviewPermissions);
   });
 
