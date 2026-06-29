@@ -22,6 +22,11 @@ import { InstructorMessagesPage } from "@/pages/Instructor/InstructorMessagesPag
 import { InstructorNotificationsPage } from "@/pages/Instructor/InstructorNotificationsPage";
 import { InstructorHistoryPage } from "@/pages/Instructor/InstructorHistoryPage";
 import { InstructorSettingsPage } from "@/pages/Instructor/InstructorSettingsPage";
+import { TADashboardPage } from "@/pages/TA/TADashboardPage";
+import { TACoursesPage } from "@/pages/TA/TACoursesPage";
+import { TAMessagesPage } from "@/pages/TA/TAMessagesPage";
+import { TAStudentsPage } from "@/pages/TA/TAStudentsPage";
+import { TASettingsPage } from "@/pages/TA/TASettingsPage";
 import { AdminDashboardPage } from "@/pages/Admin/AdminDashboardPage";
 import { AdminUsersPage } from "@/pages/Admin/AdminUsersPage";
 import { AdminAuditPage } from "@/pages/Admin/AdminAuditPage";
@@ -117,6 +122,22 @@ export const router = createBrowserRouter([
                     element: <InstructorSettingsPage />,
                   },
                   { path: paths.instructor.profile, element: <ProfilePage /> },
+                ],
+              },
+            ],
+          },
+          {
+            element: <RoleRoute role="ta" />,
+            children: [
+              {
+                element: <DashboardLayout role="ta" />,
+                children: [
+                  { path: paths.ta.dashboard, element: <TADashboardPage /> },
+                  { path: paths.ta.courses, element: <TACoursesPage /> },
+                  { path: paths.ta.messages, element: <TAMessagesPage /> },
+                  { path: paths.ta.students, element: <TAStudentsPage /> },
+                  { path: paths.ta.settings, element: <TASettingsPage /> },
+                  { path: paths.ta.profile, element: <ProfilePage /> },
                 ],
               },
             ],

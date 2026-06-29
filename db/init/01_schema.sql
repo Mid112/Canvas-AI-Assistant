@@ -13,7 +13,7 @@ CREATE TABLE users (
     name             VARCHAR NOT NULL,
     email            VARCHAR UNIQUE NOT NULL,
     hashed_password  TEXT NOT NULL,                          -- bcrypt hashed
-    role             VARCHAR NOT NULL CHECK (role IN ('instructor', 'admin')), -- was ('instructor', 'ta', 'admin'); see db/migrations/002_remove_ta_role.sql
+    role             VARCHAR NOT NULL CHECK (role IN ('instructor', 'ta', 'admin')),
     is_active        BOOLEAN DEFAULT true,
     created_at       TIMESTAMPTZ DEFAULT NOW()
 );

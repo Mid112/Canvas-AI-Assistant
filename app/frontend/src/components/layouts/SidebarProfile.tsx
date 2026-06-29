@@ -88,7 +88,9 @@ export function SidebarProfile({
                 navigate(
                   role === "instructor"
                     ? paths.instructor.settings
-                    : paths.admin.settings,
+                    : role === "ta"
+                      ? paths.ta.settings
+                      : paths.admin.settings,
                 );
               }}
             >
