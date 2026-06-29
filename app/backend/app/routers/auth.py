@@ -27,7 +27,7 @@ async def register(
     body: RegisterRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    # Pass full body so service can access name and role
+    # Pass full body so service can access name; role is assigned server-side.
     return await register_user(db, body)
 
 
