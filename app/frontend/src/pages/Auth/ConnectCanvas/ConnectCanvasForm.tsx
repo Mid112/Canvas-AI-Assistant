@@ -1,5 +1,5 @@
 import { Plus, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -97,13 +97,13 @@ function ConnectCanvasConnectionEntry({
   );
   const onValidationChangeRef = useRef(onValidationChange);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     onValidationChangeRef.current = onValidationChange;
   }, [onValidationChange]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     onValidationChangeRef.current(entry.id, validation);
-  }, [entry.id, validation]);
+  }, [entry.id, validation.status]);
 
   return (
     <div className="space-y-4 rounded-xl border border-[#e2e8f0] bg-[#f8fafc]/60 p-4">
