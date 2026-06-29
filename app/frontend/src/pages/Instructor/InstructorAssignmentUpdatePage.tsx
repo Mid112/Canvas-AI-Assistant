@@ -6,6 +6,7 @@ import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRe
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanvasCourseByLocalId } from "@/hooks/useCanvasCourseByLocalId";
 import {
   assignmentToFormValues,
   formValuesToUpdatePayload,
@@ -43,20 +44,31 @@ export function InstructorAssignmentUpdatePage() {
     Number.isInteger(parsedAssignmentId) &&
     parsedAssignmentId > 0;
 
+  // Route param is local_id; assignment API needs canvas_id + canvas_url.
+  const {
+    course: canvasCourse,
+    error: resolveError,
+    isLoading: isResolvingCourse,
+  } = useCanvasCourseByLocalId(idsAreValid ? parsedLocalCourseId : null);
+
   useEffect(() => {
-    if (!accessToken || !idsAreValid || !user?.has_canvas_token) {
+    if (!accessToken || !canvasCourse || !idsAreValid || !user?.has_canvas_token) {
       return;
     }
 
     const token = accessToken;
+    const { canvasCourseId, canvasUrl } = canvasCourse;
     let cancelled = false;
 
     async function loadAssignment() {
+      setIsLoading(true);
+
       try {
         const data = await fetchAssignment(
-          parsedLocalCourseId,
+          canvasCourseId,
           parsedAssignmentId,
           token,
+          canvasUrl,
         );
 
         if (cancelled) {
@@ -95,22 +107,30 @@ export function InstructorAssignmentUpdatePage() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, idsAreValid, parsedAssignmentId, parsedLocalCourseId, user?.has_canvas_token]);
+  }, [
+    accessToken,
+    canvasCourse,
+    idsAreValid,
+    parsedAssignmentId,
+    user?.has_canvas_token,
+  ]);
 
   const retryLoad = async () => {
-    if (!accessToken || !idsAreValid || !user?.has_canvas_token) {
+    if (!accessToken || !canvasCourse || !idsAreValid || !user?.has_canvas_token) {
       return;
     }
 
+    const { canvasCourseId, canvasUrl } = canvasCourse;
     setIsLoading(true);
     setLoadError(null);
     setSuccessMessage(null);
 
     try {
       const data = await fetchAssignment(
-        parsedLocalCourseId,
+        canvasCourseId,
         parsedAssignmentId,
         accessToken,
+        canvasUrl,
       );
       setAssignment(data);
       setFormValues(assignmentToFormValues(data));
@@ -151,20 +171,22 @@ export function InstructorAssignmentUpdatePage() {
   };
 
   const handleConfirm = async () => {
-    if (!assignment || !formValues || !accessToken) {
+    if (!assignment || !formValues || !accessToken || !canvasCourse) {
       return;
     }
 
+    const { canvasCourseId, canvasUrl } = canvasCourse;
     setIsSubmitting(true);
     setSubmitError(null);
     setSuccessMessage(null);
 
     try {
       const updated = await updateAssignment(
-        parsedLocalCourseId,
+        canvasCourseId,
         parsedAssignmentId,
         formValuesToUpdatePayload(formValues),
         accessToken,
+        canvasUrl,
       );
       setAssignment(updated);
       setFormValues(assignmentToFormValues(updated));
@@ -211,12 +233,30 @@ export function InstructorAssignmentUpdatePage() {
     );
   }
 
-  if (isLoading) {
+  if (isResolvingCourse || isLoading) {
     return (
       <PageState
         title="Loading assignment"
         message="Fetching the latest assignment details from Canvas..."
         icon={<Loader2 className="size-5 animate-spin text-primary" aria-hidden="true" />}
+      />
+    );
+  }
+
+  if (resolveError) {
+    return (
+      <PageState
+        title="Unable to load course"
+        message={resolveError}
+        icon={<AlertCircle className="size-5 text-destructive" aria-hidden="true" />}
+        action={
+          <Link
+            to={paths.instructor.courses}
+            className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium hover:bg-muted"
+          >
+            Back to courses
+          </Link>
+        }
       />
     );
   }

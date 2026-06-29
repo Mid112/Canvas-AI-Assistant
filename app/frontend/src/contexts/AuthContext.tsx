@@ -34,6 +34,8 @@ interface AuthContextValue {
   login: (credentials: LoginCredentials) => Promise<User>;
   register: (credentials: RegisterCredentials) => Promise<User>;
   logout: () => void;
+  /** Re-load the current user from /auth/me without a full re-login. */
+  refreshUser: () => Promise<User | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -137,6 +139,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    // Re-fetch /auth/me — e.g. after saving a Canvas token so has_canvas_token updates.
+    const token = accessToken ?? getStoredToken();
+    if (!token) {
+      return null;
+    }
+
+    try {
+      return await loadUser(token);
+    } catch (error) {
+      clearStoredToken();
+      setAccessToken(null);
+      setUser(null);
+      throw error;
+    }
+  }, [accessToken, loadUser]);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -146,8 +165,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
+      refreshUser,
     }),
-    [user, accessToken, isLoading, login, register, logout],
+    [user, accessToken, isLoading, login, register, logout, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

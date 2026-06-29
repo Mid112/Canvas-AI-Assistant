@@ -4,7 +4,15 @@ import { Route, Routes } from "react-router-dom";
 
 import { InstructorCourseAssignmentsPage } from "@/pages/Instructor/InstructorCourseAssignmentsPage";
 import { fetchCourseAssignments } from "@/services/assignments";
-import { renderWithRouter } from "@test/utils/renderWithRouter";
+import { fetchCourses } from "@/services/canvas";
+import { renderWithInstitution } from "@test/utils/renderWithInstitution";
+
+vi.mock("@/services/canvas", () => ({
+  CanvasApiError: class CanvasApiError extends Error {
+    status = 500;
+  },
+  fetchCourses: vi.fn(),
+}));
 
 vi.mock("@/services/assignments", () => ({
   AssignmentApiError: class AssignmentApiError extends Error {
@@ -14,6 +22,8 @@ vi.mock("@/services/assignments", () => ({
 }));
 
 const mockUseAuth = vi.fn();
+const mockedFetchCourses = vi.mocked(fetchCourses);
+const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
 
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
@@ -25,8 +35,6 @@ vi.mock("@/contexts/AuthContext", async () => {
     useAuth: () => mockUseAuth(),
   };
 });
-
-const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
 
 const authWithCanvas = {
   user: {
@@ -43,10 +51,13 @@ const authWithCanvas = {
   login: vi.fn(),
   register: vi.fn(),
   logout: vi.fn(),
+  refreshUser: vi.fn(),
 };
 
+const CANVAS_URL = "https://canvas.ubc.ca";
+
 function renderPage(localCourseId = "3") {
-  return renderWithRouter(
+  return renderWithInstitution(
     <Routes>
       <Route
         path="/instructor/courses/:localCourseId/assignments"
@@ -65,6 +76,16 @@ describe("InstructorCourseAssignmentsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseAuth.mockReturnValue(authWithCanvas);
+    mockedFetchCourses.mockResolvedValue([
+      {
+        canvas_id: 99,
+        local_id: 3,
+        name: "Database Systems",
+        course_code: "CS 250",
+        workflow_state: "available",
+        total_students: 52,
+      },
+    ]);
     mockedFetchCourseAssignments.mockResolvedValue([
       {
         id: 10,
@@ -86,7 +107,11 @@ describe("InstructorCourseAssignmentsPage", () => {
       expect(screen.getByText("Lab 1")).toBeInTheDocument();
     });
 
-    expect(mockedFetchCourseAssignments).toHaveBeenCalledWith(3, "token");
+    expect(mockedFetchCourseAssignments).toHaveBeenCalledWith(
+      99,
+      "token",
+      CANVAS_URL,
+    );
 
     const editLink = screen.getByRole("link", { name: "Edit" });
     expect(editLink).toHaveAttribute(

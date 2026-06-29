@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanvasCourseByLocalId } from "@/hooks/useCanvasCourseByLocalId";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
 import {
   instructorAssignmentUpdatePath,
@@ -29,24 +30,38 @@ export function InstructorCourseAssignmentsPage() {
   const { localCourseId } = useParams();
   const { accessToken, user } = useAuth();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingAssignments, setIsLoadingAssignments] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const parsedLocalCourseId = Number(localCourseId);
   const idIsValid =
     Number.isInteger(parsedLocalCourseId) && parsedLocalCourseId > 0;
 
+  const {
+    course: canvasCourse,
+    error: resolveError,
+    isLoading: isResolvingCourse,
+  } = useCanvasCourseByLocalId(idIsValid ? parsedLocalCourseId : null);
+
+  // Wait for local_id → canvas_id resolution before calling assignment endpoints.
   useEffect(() => {
-    if (!accessToken || !idIsValid || !user?.has_canvas_token) {
+    if (!accessToken || !canvasCourse || !user?.has_canvas_token) {
       return;
     }
 
     const token = accessToken;
+    const { canvasCourseId, canvasUrl } = canvasCourse;
     let cancelled = false;
 
     async function loadAssignments() {
+      setIsLoadingAssignments(true);
+
       try {
-        const data = await fetchCourseAssignments(parsedLocalCourseId, token);
+        const data = await fetchCourseAssignments(
+          canvasCourseId,
+          token,
+          canvasUrl,
+        );
         if (!cancelled) {
           setAssignments(data);
           setLoadError(null);
@@ -62,19 +77,17 @@ export function InstructorCourseAssignmentsPage() {
         }
       } finally {
         if (!cancelled) {
-          setIsLoading(false);
+          setIsLoadingAssignments(false);
         }
       }
     }
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- async data load
-    setIsLoading(true);
     void loadAssignments();
 
     return () => {
       cancelled = true;
     };
-  }, [accessToken, idIsValid, parsedLocalCourseId, user?.has_canvas_token]);
+  }, [accessToken, canvasCourse, user?.has_canvas_token]);
 
   if (!idIsValid) {
     return (
@@ -93,18 +106,36 @@ export function InstructorCourseAssignmentsPage() {
   if (!user?.has_canvas_token) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-        <PageHeader localCourseId={parsedLocalCourseId} />
+        <PageHeader
+          localCourseId={parsedLocalCourseId}
+          courseLabel={canvasCourse ? `${canvasCourse.code}: ${canvasCourse.name}` : undefined}
+        />
         <CanvasConnectionRequired />
       </div>
     );
   }
 
-  if (isLoading) {
+  if (isResolvingCourse || isLoadingAssignments) {
     return (
       <PageState
         title="Loading assignments"
         message="Fetching assignments from Canvas..."
         icon={<Loader2 className="size-5 animate-spin text-primary" aria-hidden="true" />}
+      />
+    );
+  }
+
+  if (resolveError) {
+    return (
+      <PageState
+        title="Unable to load course"
+        message={resolveError}
+        icon={<AlertCircle className="size-5 text-destructive" aria-hidden="true" />}
+        action={
+          <Button variant="outline" render={<Link to={paths.instructor.courses} />}>
+            Back to courses
+          </Button>
+        }
       />
     );
   }
@@ -126,7 +157,12 @@ export function InstructorCourseAssignmentsPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-      <PageHeader localCourseId={parsedLocalCourseId} />
+      <PageHeader
+        localCourseId={parsedLocalCourseId}
+        courseLabel={
+          canvasCourse ? `${canvasCourse.code}: ${canvasCourse.name}` : undefined
+        }
+      />
 
       {assignments.length === 0 ? (
         <Card className="shadow-sm ring-1 ring-border/60">
@@ -186,7 +222,13 @@ export function InstructorCourseAssignmentsPage() {
   );
 }
 
-function PageHeader({ localCourseId }: { localCourseId: number }) {
+function PageHeader({
+  localCourseId,
+  courseLabel,
+}: {
+  localCourseId: number;
+  courseLabel?: string;
+}) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="space-y-1">
@@ -194,7 +236,8 @@ function PageHeader({ localCourseId }: { localCourseId: number }) {
           Course Assignments
         </h1>
         <p className="text-muted-foreground">
-          Select an assignment to update details for course #{localCourseId}.
+          {courseLabel ??
+            `Select an assignment to update details for course #${localCourseId}.`}
         </p>
       </div>
       <Button variant="outline" render={<Link to={paths.instructor.courses} />}>

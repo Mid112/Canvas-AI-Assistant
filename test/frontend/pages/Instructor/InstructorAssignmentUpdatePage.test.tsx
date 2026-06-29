@@ -8,7 +8,15 @@ import {
   fetchAssignment,
   updateAssignment,
 } from "@/services/assignments";
-import { renderWithRouter } from "@test/utils/renderWithRouter";
+import { fetchCourses } from "@/services/canvas";
+import { renderWithInstitution } from "@test/utils/renderWithInstitution";
+
+vi.mock("@/services/canvas", () => ({
+  CanvasApiError: class CanvasApiError extends Error {
+    status = 500;
+  },
+  fetchCourses: vi.fn(),
+}));
 
 vi.mock("@/services/assignments", () => ({
   AssignmentApiError: class AssignmentApiError extends Error {
@@ -20,6 +28,9 @@ vi.mock("@/services/assignments", () => ({
 
 const mockedFetchAssignment = vi.mocked(fetchAssignment);
 const mockedUpdateAssignment = vi.mocked(updateAssignment);
+const mockedFetchCourses = vi.mocked(fetchCourses);
+
+const CANVAS_URL = "https://canvas.ubc.ca";
 
 const authWithCanvas = {
   user: {
@@ -36,6 +47,7 @@ const authWithCanvas = {
   login: vi.fn(),
   register: vi.fn(),
   logout: vi.fn(),
+  refreshUser: vi.fn(),
 };
 
 const mockUseAuth = vi.fn();
@@ -61,7 +73,7 @@ const assignment = {
 };
 
 function renderPage() {
-  return renderWithRouter(
+  return renderWithInstitution(
     <Routes>
       <Route
         path="/instructor/courses/:localCourseId/assignments/:assignmentId/edit"
@@ -80,6 +92,16 @@ describe("InstructorAssignmentUpdatePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseAuth.mockReturnValue(authWithCanvas);
+    mockedFetchCourses.mockResolvedValue([
+      {
+        canvas_id: 99,
+        local_id: 3,
+        name: "Database Systems",
+        course_code: "CS 250",
+        workflow_state: "available",
+        total_students: 52,
+      },
+    ]);
     mockedFetchAssignment.mockResolvedValue(assignment);
     mockedUpdateAssignment.mockResolvedValue({
       ...assignment,
@@ -96,7 +118,12 @@ describe("InstructorAssignmentUpdatePage", () => {
       expect(screen.getByLabelText("Assignment title")).toHaveValue("Lab 1");
     });
 
-    expect(mockedFetchAssignment).toHaveBeenCalledWith(3, 10, "token");
+    expect(mockedFetchAssignment).toHaveBeenCalledWith(
+      99,
+      10,
+      "token",
+      CANVAS_URL,
+    );
   });
 
   it("shows preview before confirming updates", async () => {

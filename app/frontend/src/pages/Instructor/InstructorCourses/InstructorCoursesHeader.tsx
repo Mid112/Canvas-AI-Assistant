@@ -1,9 +1,19 @@
-import { Plus } from "lucide-react";
+import { Plus, RefreshCw } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { useInstitution } from "@/contexts/useInstitution";
+import { getInstitutionCanvasNewCourseUrl } from "@/lib/institution-canvas";
+import { cn } from "@/lib/utils";
 
-export function InstructorCoursesHeader() {
+interface InstructorCoursesHeaderProps {
+  onRefreshCourses?: () => void;
+  isRefreshing?: boolean;
+}
+
+export function InstructorCoursesHeader({
+  onRefreshCourses,
+  isRefreshing = false,
+}: InstructorCoursesHeaderProps) {
   const { selectedInstitution } = useInstitution();
 
   return (
@@ -17,10 +27,33 @@ export function InstructorCoursesHeader() {
           {selectedInstitution.shortName}.
         </p>
       </div>
-      <Button size="lg">
-        <Plus data-icon="inline-start" />
-        New Course
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        {onRefreshCourses ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="lg"
+            onClick={onRefreshCourses}
+            disabled={isRefreshing}
+          >
+            <RefreshCw
+              className={isRefreshing ? "animate-spin" : undefined}
+              data-icon="inline-start"
+            />
+            Sync from Canvas
+          </Button>
+        ) : null}
+        {/* Course creation happens in Canvas; sync pulls the new course into this app. */}
+        <a
+          href={getInstitutionCanvasNewCourseUrl(selectedInstitution.id)}
+          target="_blank"
+          rel="noreferrer"
+          className={cn(buttonVariants({ size: "lg" }))}
+        >
+          <Plus data-icon="inline-start" />
+          New Course
+        </a>
+      </div>
     </div>
   );
 }
