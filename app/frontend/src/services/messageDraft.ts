@@ -9,6 +9,8 @@ import type {
 } from "@/types/messageDraft";
 
 /** Frontend-only mock service for AI message drafting until Canvas messaging API exists. */
+export const isMessageDraftSendMocked = true;
+
 export class MessageDraftApiError extends Error {
   constructor(message: string) {
     super(message);

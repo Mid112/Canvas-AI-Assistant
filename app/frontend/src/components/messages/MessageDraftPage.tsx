@@ -24,7 +24,11 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
-import { fetchMessageDraft, sendMessageDraft } from "@/services/messageDraft";
+import {
+  fetchMessageDraft,
+  isMessageDraftSendMocked,
+  sendMessageDraft,
+} from "@/services/messageDraft";
 import type {
   FetchMessageDraftOptions,
   MessageDraft,
@@ -146,9 +150,13 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
 
       setIsConfirmOpen(false);
       setSuccessMessage(
-        `Message sent successfully to ${draft.recipients.length} student${
-          draft.recipients.length === 1 ? "" : "s"
-        }.`,
+        isMessageDraftSendMocked
+          ? `Draft approved for ${draft.recipients.length} student${
+              draft.recipients.length === 1 ? "" : "s"
+            }. No message has been sent through Canvas yet.`
+          : `Message sent successfully to ${draft.recipients.length} student${
+              draft.recipients.length === 1 ? "" : "s"
+            }.`,
       );
       setPageState("success");
     } catch (error) {
@@ -185,10 +193,14 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
           <CardHeader className="space-y-3">
             <div className="flex items-center gap-3 text-emerald-700">
               <CheckCircle2 className="size-6" aria-hidden="true" />
-              <CardTitle>Message Sent</CardTitle>
+              <CardTitle>
+                {isMessageDraftSendMocked ? "Draft Approved" : "Message Sent"}
+              </CardTitle>
             </div>
             <p className="text-sm text-muted-foreground">
-              Your message has been queued for delivery through Canvas.
+              {isMessageDraftSendMocked
+                ? "Canvas messaging is not connected yet. This step recorded your review only—nothing was delivered to students."
+                : "Your message has been queued for delivery through Canvas."}
             </p>
           </CardHeader>
           <CardContent className="space-y-4">

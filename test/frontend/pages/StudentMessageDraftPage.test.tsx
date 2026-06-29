@@ -12,6 +12,7 @@ vi.mock("@/services/messageDraft", () => ({
   MessageDraftApiError: class MessageDraftApiError extends Error {
     name = "MessageDraftApiError";
   },
+  isMessageDraftSendMocked: true,
   fetchMessageDraft: vi.fn(),
   sendMessageDraft: vi.fn(),
 }));
@@ -90,8 +91,13 @@ describe("StudentMessageDraftPage", () => {
       });
     });
 
-    expect(await screen.findByText("Message Sent")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("Message sent successfully");
+    expect(await screen.findByText("Draft Approved")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "No message has been sent through Canvas yet",
+    );
+    expect(
+      screen.getByText(/Canvas messaging is not connected yet/i),
+    ).toBeInTheDocument();
   });
 
   it("shows an error notification when sending fails", async () => {
