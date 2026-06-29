@@ -4,11 +4,18 @@ import type {
 } from "@/types/submission";
 
 function escapeCsvValue(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
-    return `"${value.replaceAll('"', '""')}"`;
+  let escaped = value;
+
+  // Prefix spreadsheet formula characters so Excel/Sheets do not execute cell values.
+  if (/^[=+\-@]/.test(escaped)) {
+    escaped = `'${escaped}`;
   }
 
-  return value;
+  if (escaped.includes(",") || escaped.includes('"') || escaped.includes("\n")) {
+    return `"${escaped.replaceAll('"', '""')}"`;
+  }
+
+  return escaped;
 }
 
 function formatMissingRow(student: SubmissionStudent): string {
@@ -62,6 +69,9 @@ export function downloadSubmissionsReport(
   const link = document.createElement("a");
   link.href = url;
   link.download = `${assignment.id}-submissions-report.csv`;
+  link.style.display = "none";
+  document.body.appendChild(link);
   link.click();
+  document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }

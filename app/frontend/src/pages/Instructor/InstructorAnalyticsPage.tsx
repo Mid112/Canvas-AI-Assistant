@@ -15,6 +15,7 @@ import { downloadSubmissionsReport } from "./InstructorSubmissionsAnalysis/submi
 import {
   getCourseAssignments,
   parseSubmissionStatusFilter,
+  resolveEffectiveAssignmentId,
   usesSampleSubmissionData,
 } from "./InstructorSubmissionsAnalysis/submissionNavigation";
 import {
@@ -53,14 +54,11 @@ export function InstructorAnalyticsPage() {
   const [statusFilter, setStatusFilter] =
     useState<SubmissionStatusFilter>(statusParam);
 
-  const effectiveAssignmentId =
-    allAssignments.find(
-      (assignment) =>
-        assignment.id === selectedAssignmentId ||
-        assignment.id === assignmentIdParam,
-    )?.id ??
-    allAssignments[0]?.id ??
-    "";
+  const effectiveAssignmentId = resolveEffectiveAssignmentId(
+    allAssignments,
+    selectedAssignmentId,
+    assignmentIdParam,
+  );
 
   const selectedAssignment = useMemo(() => {
     return allAssignments.find(

@@ -10,7 +10,7 @@ import {
   InstructorCoursesList,
   InstructorCoursesSection,
 } from "@/pages/Instructor/InstructorCourses/InstructorCoursesSection";
-import { paths } from "@/routes/paths";
+import { instructorCourseAnalyticsPath } from "@/routes/paths";
 
 const courses = institutionCourseData[0]!.courses.slice(0, 2);
 
@@ -31,7 +31,7 @@ describe("InstructorCoursesCard", () => {
     ).toHaveAttribute("href", "/instructor/courses/1/assignments");
     expect(
       screen.getByRole("link", { name: "Analytics" }),
-    ).toHaveAttribute("href", paths.instructor.courseAnalytics(1));
+    ).toHaveAttribute("href", instructorCourseAnalyticsPath(1));
   });
 });
 
