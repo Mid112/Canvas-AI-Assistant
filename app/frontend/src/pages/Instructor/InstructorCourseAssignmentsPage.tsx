@@ -41,6 +41,7 @@ export function InstructorCourseAssignmentsPage() {
     course: canvasCourse,
     error: resolveError,
     isLoading: isResolvingCourse,
+    needsCanvasConnection,
   } = useCanvasCourseByLocalId(idIsValid ? parsedLocalCourseId : null);
 
   // Wait for local_id → canvas_id resolution before calling assignment endpoints.
@@ -103,13 +104,10 @@ export function InstructorCourseAssignmentsPage() {
     );
   }
 
-  if (!user?.has_canvas_token) {
+  if (!user?.has_canvas_token || needsCanvasConnection) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-        <PageHeader
-          localCourseId={parsedLocalCourseId}
-          courseLabel={canvasCourse ? `${canvasCourse.code}: ${canvasCourse.name}` : undefined}
-        />
+        <PageHeader localCourseId={parsedLocalCourseId} />
         <CanvasConnectionRequired />
       </div>
     );

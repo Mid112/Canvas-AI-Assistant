@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInstitution } from "@/contexts/useInstitution";
 import { getInstitutionCanvasUrl } from "@/lib/institution-canvas";
+import { isCanvasConnectionRequiredError } from "@/lib/canvas-connection";
 import { CanvasApiError, fetchCourses } from "@/services/canvas";
 
 export interface ResolvedCanvasCourse {
@@ -26,6 +27,7 @@ export function useCanvasCourseByLocalId(localCourseId: number | null) {
   const [course, setCourse] = useState<ResolvedCanvasCourse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsCanvasConnection, setNeedsCanvasConnection] = useState(false);
 
   const isEnabled = Boolean(
     accessToken &&
@@ -39,6 +41,7 @@ export function useCanvasCourseByLocalId(localCourseId: number | null) {
     if (!isEnabled || !accessToken || localCourseId == null) {
       setCourse(null);
       setError(null);
+      setNeedsCanvasConnection(false);
       setIsLoading(false);
       return;
     }
@@ -49,6 +52,7 @@ export function useCanvasCourseByLocalId(localCourseId: number | null) {
     async function resolveCourse() {
       setIsLoading(true);
       setError(null);
+      setNeedsCanvasConnection(false);
 
       try {
         const courses = await fetchCourses(token, canvasUrl);
@@ -82,6 +86,12 @@ export function useCanvasCourseByLocalId(localCourseId: number | null) {
           return;
         }
 
+        if (isCanvasConnectionRequiredError(resolveError)) {
+          setNeedsCanvasConnection(true);
+          setCourse(null);
+          return;
+        }
+
         setCourse(null);
         setError(
           resolveError instanceof CanvasApiError
@@ -106,5 +116,6 @@ export function useCanvasCourseByLocalId(localCourseId: number | null) {
     course,
     error,
     isLoading: isEnabled && isLoading,
+    needsCanvasConnection,
   };
 }

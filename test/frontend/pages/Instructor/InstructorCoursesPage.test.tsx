@@ -10,7 +10,12 @@ import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 vi.mock("@/services/canvas", () => ({
   CanvasApiError: class CanvasApiError extends Error {
-    status = 500;
+    status: number;
+
+    constructor(message: string, status = 500) {
+      super(message);
+      this.status = status;
+    }
   },
   fetchCourses: vi.fn(),
 }));
@@ -117,6 +122,24 @@ describe("InstructorCoursesPage", () => {
     expect(screen.getByText("Connect Canvas to continue")).toBeInTheDocument();
     expect(screen.queryByLabelText("Search courses")).not.toBeInTheDocument();
     expect(screen.queryByText("Course Analytics Overview")).not.toBeInTheDocument();
+  });
+
+  it("shows connect Canvas when no token exists for this institution URL", async () => {
+    const { CanvasApiError } = await import("@/services/canvas");
+    mockedFetchCourses.mockRejectedValue(
+      new CanvasApiError(
+        "No Canvas token for https://canvas.ubc.ca. PATCH to /api/v1/auth/me/canvas-token first.",
+        403,
+      ),
+    );
+
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    expect(
+      await screen.findByText("Connect Canvas to continue"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/PATCH to \/api\/v1/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Search courses")).not.toBeInTheDocument();
   });
 
   it("renders Canvas courses after they load", async () => {

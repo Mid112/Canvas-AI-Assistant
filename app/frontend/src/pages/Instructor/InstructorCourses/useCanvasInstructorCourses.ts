@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInstitution } from "@/contexts/useInstitution";
 import { getInstitutionCanvasUrl } from "@/lib/institution-canvas";
+import { isCanvasConnectionRequiredError } from "@/lib/canvas-connection";
 import { fetchCourseAssignments } from "@/services/assignments";
 import { CanvasApiError, fetchCourses } from "@/services/canvas";
 import type { InstructorCourse } from "@/types/course";
@@ -19,6 +20,7 @@ export function useCanvasInstructorCourses() {
   const [courses, setCourses] = useState<InstructorCourse[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsCanvasConnection, setNeedsCanvasConnection] = useState(false);
   const [reloadToken, setReloadToken] = useState(0);
 
   const hasCanvasToken = Boolean(accessToken && user?.has_canvas_token);
@@ -44,6 +46,7 @@ export function useCanvasInstructorCourses() {
     async function loadCanvasCourses() {
       setIsLoaded(false);
       setError(null);
+      setNeedsCanvasConnection(false);
 
       try {
         const data = await fetchCourses(token, canvasUrl);
@@ -90,6 +93,12 @@ export function useCanvasInstructorCourses() {
           return;
         }
 
+        if (isCanvasConnectionRequiredError(loadError)) {
+          setNeedsCanvasConnection(true);
+          setCourses([]);
+          return;
+        }
+
         const message =
           loadError instanceof CanvasApiError
             ? loadError.message
@@ -115,7 +124,8 @@ export function useCanvasInstructorCourses() {
     error,
     hasCanvasToken,
     isLoaded,
-    isLoading: hasCanvasToken && !isLoaded && !error,
+    isLoading: hasCanvasToken && !isLoaded && !error && !needsCanvasConnection,
+    needsCanvasConnection,
     reloadCourses,
   };
 }

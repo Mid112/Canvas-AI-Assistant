@@ -17,7 +17,7 @@ import type { CourseViewMode } from "@/types/course";
 
 export function InstructorCoursesPage() {
   const { user } = useAuth();
-  const { courses, error, isLoaded, isLoading, reloadCourses } =
+  const { courses, error, isLoaded, isLoading, needsCanvasConnection, reloadCourses } =
     useCanvasInstructorCourses();
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<CourseViewMode>("grid");
@@ -27,8 +27,8 @@ export function InstructorCoursesPage() {
     return sortInstructorCourses(filtered);
   }, [courses, search]);
 
-  // No mock fallback — show connect prompt only when Canvas is not linked.
-  if (!user?.has_canvas_token) {
+  // Show connect prompt when Canvas is not linked or not linked for this institution URL.
+  if (!user?.has_canvas_token || needsCanvasConnection) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
         <InstructorCoursesHeader />

@@ -49,6 +49,7 @@ export function InstructorAssignmentUpdatePage() {
     course: canvasCourse,
     error: resolveError,
     isLoading: isResolvingCourse,
+    needsCanvasConnection,
   } = useCanvasCourseByLocalId(idsAreValid ? parsedLocalCourseId : null);
 
   useEffect(() => {
@@ -220,7 +221,7 @@ export function InstructorAssignmentUpdatePage() {
     );
   }
 
-  if (!user?.has_canvas_token) {
+  if (!user?.has_canvas_token || needsCanvasConnection) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
         <div className="space-y-1">
