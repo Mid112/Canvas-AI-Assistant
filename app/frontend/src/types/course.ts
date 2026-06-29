@@ -29,3 +29,9 @@ export interface InstitutionCourseData {
 }
 
 export type CourseViewMode = "grid" | "list";
+
+/** Frontend-only active course selection persisted in local storage. */
+export interface ActiveCourseSelection {
+  localId: number;
+  displayName: string;
+}

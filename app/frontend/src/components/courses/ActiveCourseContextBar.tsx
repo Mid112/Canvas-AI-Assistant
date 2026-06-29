@@ -16,11 +16,11 @@ export function ActiveCourseContextBar() {
           {isLoading ? (
             <p className="text-sm text-muted-foreground">Loading active course...</p>
           ) : activeCourse ? (
-            <p className="truncate text-sm font-medium">{activeCourse.name}</p>
+            <p className="truncate text-sm font-medium">{activeCourse.displayName}</p>
           ) : (
             <p className="text-sm text-muted-foreground">
               No active course selected. Choose a course to scope assistant and
-              workflow actions.
+              workflow actions in this session.
             </p>
           )}
         </div>

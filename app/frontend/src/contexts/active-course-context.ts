@@ -1,10 +1,9 @@
 import { createContext } from "react";
 
-import type { ActiveCourse } from "@/types/canvas";
-import type { InstructorCourse } from "@/types/course";
+import type { ActiveCourseSelection, InstructorCourse } from "@/types/course";
 
 export interface ActiveCourseContextValue {
-  activeCourse: ActiveCourse | null;
+  activeCourse: ActiveCourseSelection | null;
   availableCourses: InstructorCourse[];
   isLoading: boolean;
   isSaving: boolean;

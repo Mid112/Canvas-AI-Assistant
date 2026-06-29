@@ -45,7 +45,7 @@ export function InstructorCoursesPage() {
       <InstructorCoursesSearch search={search} onSearchChange={setSearch} />
 
       {!user?.has_canvas_token ? (
-        <CanvasConnectionRequired description="Connect Canvas to sync your courses and persist an active course selection across sessions. You can still browse the sample course layout below." />
+        <CanvasConnectionRequired description="Connect Canvas to sync your course list from Canvas. You can still browse the sample course layout below and choose an active course locally." />
       ) : null}
 
       {user?.has_canvas_token && activeCourseError ? (
@@ -63,7 +63,10 @@ export function InstructorCoursesPage() {
 
       {activeCourse ? (
         <p className="text-sm text-muted-foreground">
-          Active course: <span className="font-medium text-foreground">{activeCourse.name}</span>
+          Active course:{" "}
+          <span className="font-medium text-foreground">
+            {activeCourse.displayName}
+          </span>
         </p>
       ) : null}
 
@@ -76,7 +79,7 @@ export function InstructorCoursesPage() {
           courses={filteredCourses}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
-          activeCourseId={activeCourse?.local_id ?? null}
+          activeCourseId={activeCourse?.localId ?? null}
           onSetActiveCourse={(courseId) => void selectActiveCourse(courseId)}
           isSettingActiveCourse={isSaving}
         />

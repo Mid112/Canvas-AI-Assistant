@@ -38,7 +38,7 @@ export function ActiveCourseSelector({
       />
       <select
         id={id}
-        value={activeCourse?.local_id ?? ""}
+        value={activeCourse?.localId ?? ""}
         onChange={(event) => {
           const value = Number(event.target.value);
           if (Number.isInteger(value) && value > 0) {

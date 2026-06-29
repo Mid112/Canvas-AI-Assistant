@@ -4,11 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useInstitution } from "@/contexts/useInstitution";
 import { InstructorCoursesPage } from "@/pages/Instructor/InstructorCoursesPage";
-import {
-  fetchActiveCourse,
-  fetchCourses,
-  setActiveCourse,
-} from "@/services/canvas";
+import { fetchCourses } from "@/services/canvas";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 vi.mock("@/services/canvas", async () => {
@@ -19,14 +15,10 @@ vi.mock("@/services/canvas", async () => {
   return {
     ...actual,
     fetchCourses: vi.fn(),
-    fetchActiveCourse: vi.fn(),
-    setActiveCourse: vi.fn(),
   };
 });
 
 const mockedFetchCourses = vi.mocked(fetchCourses);
-const mockedFetchActiveCourse = vi.mocked(fetchActiveCourse);
-const mockedSetActiveCourse = vi.mocked(setActiveCourse);
 
 function InstitutionSwitchHarness() {
   const { setSelectedInstitution } = useInstitution();
@@ -46,14 +38,6 @@ describe("InstructorCoursesPage", () => {
     localStorage.clear();
     vi.clearAllMocks();
     mockedFetchCourses.mockResolvedValue([]);
-    mockedFetchActiveCourse.mockResolvedValue(null);
-    mockedSetActiveCourse.mockResolvedValue({
-      local_id: 1,
-      canvas_course_id: "101",
-      canvas_url: "https://canvas.example.edu",
-      name: "CS 101: Introduction to Programming",
-      term: null,
-    });
   });
 
   it("renders the course management page instead of the placeholder", async () => {
