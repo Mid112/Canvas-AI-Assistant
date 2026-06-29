@@ -71,6 +71,11 @@ export async function createInstructor(
   await delay();
   assertUniqueEmail(payload.email);
 
+  // temporaryPassword is accepted for form/API shape parity only. This
+  // localStorage-backed mock intentionally does not store it — real backend
+  // integration must hash passwords server-side and never persist plaintext
+  // passwords client-side.
+
   const instructor: Instructor = {
     id: `instructor-${crypto.randomUUID()}`,
     firstName: payload.firstName.trim(),
@@ -78,7 +83,7 @@ export async function createInstructor(
     email: payload.email.trim(),
     status: "active",
     createdAt: new Date().toISOString(),
-    lastLoginAt: new Date().toISOString(),
+    lastLoginAt: null,
   };
 
   writeInstructors([instructor, ...getStoredInstructors()]);

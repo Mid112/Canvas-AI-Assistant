@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
 
 interface AdminToastProps {
@@ -14,10 +14,19 @@ export function AdminToast({
   type = "success",
   onDismiss,
 }: AdminToastProps) {
+  const onDismissRef = useRef(onDismiss);
+
   useEffect(() => {
-    const timer = window.setTimeout(onDismiss, AUTO_DISMISS_MS);
+    onDismissRef.current = onDismiss;
+  }, [onDismiss]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      onDismissRef.current();
+    }, AUTO_DISMISS_MS);
+
     return () => window.clearTimeout(timer);
-  }, [message, onDismiss]);
+  }, [message]);
 
   return (
     <div

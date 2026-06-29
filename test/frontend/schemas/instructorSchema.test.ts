@@ -20,6 +20,17 @@ describe("instructorSchema", () => {
     }
   });
 
+  it("rejects whitespace-only temporary passwords", () => {
+    const result = instructorFormSchema.safeParse({
+      firstName: "Jane",
+      lastName: "Doe",
+      email: "jane@university.edu",
+      temporaryPassword: "        ",
+    });
+
+    expect(result.success).toBe(false);
+  });
+
   it("validates edit instructor form fields", () => {
     const result = editInstructorFormSchema.safeParse({
       firstName: "",

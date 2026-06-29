@@ -10,6 +10,7 @@ export const instructorFormSchema = z.object({
     .email("Enter a valid email address"),
   temporaryPassword: z
     .string()
+    .trim()
     .min(8, "Temporary password must be at least 8 characters"),
 });
 

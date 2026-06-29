@@ -32,6 +32,7 @@ describe("instructorAccounts service", () => {
     expect((await fetchInstructors()).some((item) => item.id === created.id)).toBe(
       true,
     );
+    expect(created.lastLoginAt).toBeNull();
 
     await updateInstructor(created.id, {
       firstName: "Updated",

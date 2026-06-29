@@ -111,4 +111,59 @@ describe("InstructorManagementPage", () => {
       screen.getByText(/Revoke access for Dr. Jane Doe\?/i),
     ).toBeInTheDocument();
   });
+
+  it("creates an instructor through the full UI flow", async () => {
+    renderWithRouter(<InstructorManagementPage />);
+
+    await waitForLoaded();
+
+    await user.click(screen.getByRole("button", { name: "New Instructor" }));
+
+    await user.type(screen.getByLabelText("First Name"), "Alex");
+    await user.type(screen.getByLabelText("Last Name"), "Rivera");
+    await user.type(
+      screen.getByLabelText("Email Address"),
+      "alex@university.edu",
+    );
+    await user.type(
+      screen.getByLabelText("Temporary Password"),
+      "temp-password",
+    );
+    await user.click(screen.getByRole("button", { name: "Create instructor" }));
+
+    await waitFor(() => {
+      expect(
+        screen.queryByRole("heading", { name: "Create instructor account" }),
+      ).not.toBeInTheDocument();
+    });
+
+    expect(
+      await screen.findByText("Instructor account created successfully."),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Alex Rivera")).toBeInTheDocument();
+    expect(screen.getByText("Never")).toBeInTheDocument();
+    expect(screen.getByText("Instructors (5)")).toBeInTheDocument();
+  });
+
+  it("disables an instructor after confirmation", async () => {
+    renderWithRouter(<InstructorManagementPage />);
+
+    await waitForLoaded();
+
+    await openActionMenu("Dr. Jane Doe");
+    await user.click(screen.getByText("Disable"));
+    await user.click(screen.getByRole("button", { name: "Disable account" }));
+
+    expect(
+      await screen.findByText("Dr. Jane Doe has been disabled."),
+    ).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(screen.queryByText("Disable instructor account")).not.toBeInTheDocument();
+    });
+
+    const row = screen.getByText("Dr. Jane Doe").closest("tr");
+    expect(row).not.toBeNull();
+    expect(row).toHaveTextContent("Disabled");
+  });
 });

@@ -7,7 +7,7 @@ export interface Instructor {
   email: string;
   status: InstructorStatus;
   createdAt: string;
-  lastLoginAt: string;
+  lastLoginAt: string | null;
 }
 
 export interface CreateInstructorPayload {

@@ -1,4 +1,8 @@
-export function formatRelativeTime(isoDate: string): string {
+export function formatRelativeTime(isoDate: string | null): string {
+  if (isoDate === null) {
+    return "Never";
+  }
+
   const date = new Date(isoDate);
 
   if (Number.isNaN(date.getTime())) {
