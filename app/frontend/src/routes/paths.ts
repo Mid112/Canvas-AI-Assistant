@@ -22,14 +22,6 @@ export const paths = {
     settings: "/instructor/settings",
     profile: "/instructor/profile",
   },
-  ta: {
-    dashboard: "/ta/dashboard",
-    courses: "/ta/courses",
-    messages: "/ta/messages",
-    students: "/ta/students",
-    settings: "/ta/settings",
-    profile: "/ta/profile",
-  },
   admin: {
     dashboard: "/admin/dashboard",
     users: "/admin/users",
