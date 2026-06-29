@@ -27,6 +27,7 @@ export function MessageEditor({
 }: MessageEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const { ref: bodyRegisterRef, ...bodyRegister } = register("body");
+  const trimmedBodyLength = bodyValue.trim().length;
 
   useEffect(() => {
     const textarea = textareaRef.current;
@@ -77,10 +78,10 @@ export function MessageEditor({
             <span
               className={cn(
                 "text-xs text-muted-foreground",
-                bodyValue.length > 5000 && "text-destructive",
+                trimmedBodyLength > 5000 && "text-destructive",
               )}
             >
-              {bodyValue.length.toLocaleString()} / 5,000
+              {trimmedBodyLength.toLocaleString()} / 5,000
             </span>
           ) : null}
         </div>

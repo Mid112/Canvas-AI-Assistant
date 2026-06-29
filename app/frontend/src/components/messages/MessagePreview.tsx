@@ -1,4 +1,3 @@
-import type { MessageDraftFormSchema } from "./messageDraftSchema";
 import type { MessageRecipient } from "@/types/messageDraft";
 
 interface MessagePreviewProps {
@@ -55,5 +54,3 @@ export function MessagePreview({ recipients, subject, body }: MessagePreviewProp
     </div>
   );
 }
-
-export type { MessageDraftFormSchema };

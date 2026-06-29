@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertCircle, Bot, CheckCircle2, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 
 import { ConfirmationDialog } from "@/components/messages/ConfirmationDialog";
 import { MessageEditor } from "@/components/messages/MessageEditor";
@@ -47,7 +47,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
 
   const {
     register,
-    watch,
+    control,
     reset,
     trigger,
     formState: { errors, isValid, isDirty },
@@ -60,8 +60,8 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     mode: "onChange",
   });
 
-  const subjectValue = watch("subject");
-  const bodyValue = watch("body");
+  const subjectValue = useWatch({ control, name: "subject", defaultValue: "" });
+  const bodyValue = useWatch({ control, name: "body", defaultValue: "" });
 
   const loadDraft = useCallback(async () => {
     setPageState("loading");
@@ -70,6 +70,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     setSuccessMessage(null);
 
     try {
+      // Placeholder API — loads mock draft data until backend Canvas messaging exists.
       const loadedDraft = await fetchMessageDraft(fetchOptions);
       setDraft(loadedDraft);
       reset({
@@ -89,6 +90,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
   }, [fetchOptions, reset, trigger]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async draft load on mount
     void loadDraft();
   }, [loadDraft]);
 
@@ -134,6 +136,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     setSendError(null);
 
     try {
+      // Placeholder API — simulates Canvas send; no real message is delivered yet.
       await sendMessageDraft({
         draftId: draft.id,
         subject: subjectValue.trim(),
@@ -149,6 +152,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
       );
       setPageState("success");
     } catch (error) {
+      setIsConfirmOpen(false);
       setSendError(
         error instanceof Error
           ? error.message

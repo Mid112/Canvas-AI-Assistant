@@ -8,6 +8,7 @@ import type {
   SendMessageDraftPayload,
 } from "@/types/messageDraft";
 
+/** Frontend-only mock service for AI message drafting until Canvas messaging API exists. */
 export class MessageDraftApiError extends Error {
   constructor(message: string) {
     super(message);
@@ -25,7 +26,7 @@ function randomDelayMs(): number {
   return 800 + Math.floor(Math.random() * 600);
 }
 
-/** Placeholder mock — replace with real backend when available. */
+/** Loads a canned draft from mock data — replace with GET /messages/drafts/:id. */
 export async function fetchMessageDraft(
   options: FetchMessageDraftOptions = {},
 ): Promise<MessageDraft> {
@@ -47,7 +48,7 @@ export async function fetchMessageDraft(
   };
 }
 
-/** Placeholder mock — simulates sending a Canvas message. */
+/** Simulates Canvas send with a delay — replace with POST /messages/send. */
 export async function sendMessageDraft(
   payload: SendMessageDraftPayload,
 ): Promise<void> {
