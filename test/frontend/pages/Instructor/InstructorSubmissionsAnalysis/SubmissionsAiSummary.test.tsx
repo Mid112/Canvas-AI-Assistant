@@ -19,6 +19,6 @@ describe("SubmissionsAiSummary", () => {
     expect(screen.getByText(summary.lateSubmissionsNote)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Regenerate Summary" }),
-    ).toBeInTheDocument();
+    ).toBeDisabled();
   });
 });

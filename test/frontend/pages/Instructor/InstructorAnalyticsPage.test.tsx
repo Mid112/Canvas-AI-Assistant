@@ -7,14 +7,14 @@ import { describe, expect, it } from "vitest";
 
 import { useInstitution } from "@/contexts/useInstitution";
 import { InstructorAnalyticsPage } from "@/pages/Instructor/InstructorAnalyticsPage";
-import { paths } from "@/routes/paths";
+import { paths, instructorCourseAnalyticsPath } from "@/routes/paths";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 const analyticsRoutePath = "/instructor/courses/:courseId/analytics";
 
 function renderAnalyticsPage(
   ui: ReactElement = <InstructorAnalyticsPage />,
-  initialEntry = paths.instructor.courseAnalytics(1),
+  initialEntry = instructorCourseAnalyticsPath(1),
 ) {
   return renderWithInstitution(
     <Routes>
@@ -70,7 +70,7 @@ describe("InstructorAnalyticsPage", () => {
   it("applies assignment and status filters from the URL", () => {
     renderAnalyticsPage(
       <InstructorAnalyticsPage />,
-      `${paths.instructor.courseAnalytics(2)}?assignmentId=hw4&status=missing`,
+      `${instructorCourseAnalyticsPath(2)}?assignmentId=hw4&status=missing`,
     );
 
     expect(screen.getByText("Noah Patel")).toBeInTheDocument();
@@ -83,7 +83,7 @@ describe("InstructorAnalyticsPage", () => {
   it("redirects to courses when the course id is invalid", () => {
     renderAnalyticsPage(
       <InstructorAnalyticsPage />,
-      paths.instructor.courseAnalytics(999),
+      instructorCourseAnalyticsPath(999),
     );
 
     expect(screen.getByText("Courses page")).toBeInTheDocument();
@@ -106,7 +106,7 @@ describe("InstructorAnalyticsPage", () => {
 
     renderAnalyticsPage(
       <InstructorAnalyticsPage />,
-      paths.instructor.courseAnalytics(1),
+      instructorCourseAnalyticsPath(1),
     );
 
     const input = screen.getByLabelText("Search or select assignment");
@@ -172,7 +172,7 @@ describe("InstructorAnalyticsPage", () => {
   it("loads submission data for the selected institution's course", () => {
     renderAnalyticsPage(
       <UBCOAnalyticsHarness />,
-      paths.instructor.courseAnalytics(101),
+      instructorCourseAnalyticsPath(101),
     );
 
     expect(

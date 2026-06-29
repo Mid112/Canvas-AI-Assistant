@@ -57,4 +57,27 @@ describe("AssignmentSearchSelect", () => {
     expect(onAssignmentChange).toHaveBeenCalledWith("hw4");
     expect(input).toHaveValue("Homework 4: Recursion");
   });
+
+  it("supports keyboard navigation to select an assignment", async () => {
+    const user = userEvent.setup();
+    const onAssignmentChange = vi.fn();
+    const courseAssignments = getCourseAssignments(
+      institutionSubmissionsData[0]!.assignments,
+      { id: 2, code: "CS 201" },
+    );
+
+    render(
+      <AssignmentSearchSelect
+        assignments={courseAssignments}
+        selectedAssignmentId="hw4"
+        onAssignmentChange={onAssignmentChange}
+      />,
+    );
+
+    const input = screen.getByLabelText("Search or select assignment");
+    await user.click(input);
+    await user.keyboard("{ArrowDown}{Enter}");
+
+    expect(onAssignmentChange).toHaveBeenCalledWith("hw4");
+  });
 });

@@ -1,25 +1,27 @@
 import { describe, expect, it } from "vitest";
 
 import { institutionSubmissionsData } from "@/data/institutionSubmissionsData";
-import { paths } from "@/routes/paths";
+import { instructorCourseAnalyticsPath } from "@/routes/paths";
 import {
   getCourseAnalyticsPath,
   getCourseAssignments,
   parseSubmissionStatusFilter,
+  resolveEffectiveAssignmentId,
 } from "@/pages/Instructor/InstructorSubmissionsAnalysis/submissionNavigation";
+import type { AssignmentSubmissionAnalysis } from "@/types/submission";
 
 describe("getCourseAnalyticsPath", () => {
   it("builds course analytics paths with optional filters", () => {
-    expect(getCourseAnalyticsPath(1)).toBe(paths.instructor.courseAnalytics(1));
+    expect(getCourseAnalyticsPath(1)).toBe(instructorCourseAnalyticsPath(1));
     expect(getCourseAnalyticsPath(2, { status: "missing" })).toBe(
-      `${paths.instructor.courseAnalytics(2)}?status=missing`,
+      `${instructorCourseAnalyticsPath(2)}?status=missing`,
     );
     expect(
       getCourseAnalyticsPath(1, {
         assignmentId: "pa3",
         status: "late",
       }),
-    ).toBe(`${paths.instructor.courseAnalytics(1)}?assignmentId=pa3&status=late`);
+    ).toBe(`${instructorCourseAnalyticsPath(1)}?assignmentId=pa3&status=late`);
   });
 });
 
@@ -51,5 +53,24 @@ describe("parseSubmissionStatusFilter", () => {
     expect(parseSubmissionStatusFilter("late")).toBe("late");
     expect(parseSubmissionStatusFilter("all")).toBe("all");
     expect(parseSubmissionStatusFilter(null)).toBe("all");
+  });
+});
+
+describe("resolveEffectiveAssignmentId", () => {
+  const assignments = [
+    { id: "pa3", courseId: 1 },
+    { id: "hw4", courseId: 1 },
+  ] as AssignmentSubmissionAnalysis[];
+
+  it("prefers the user selection over the URL param", () => {
+    expect(resolveEffectiveAssignmentId(assignments, "hw4", "pa3")).toBe("hw4");
+  });
+
+  it("falls back to the URL param when the user has not selected", () => {
+    expect(resolveEffectiveAssignmentId(assignments, "", "pa3")).toBe("pa3");
+  });
+
+  it("falls back to the first assignment when neither source matches", () => {
+    expect(resolveEffectiveAssignmentId(assignments, "", null)).toBe("pa3");
   });
 });

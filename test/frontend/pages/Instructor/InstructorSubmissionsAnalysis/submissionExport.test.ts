@@ -18,4 +18,21 @@ describe("buildSubmissionsExportCsv", () => {
     expect(csv).toContain("missing,Alex Thompson,alex.thompson@student.ubc.ca");
     expect(csv).toContain("late,Emma Davis,emma.davis@student.ubc.ca");
   });
+
+  it("prefixes spreadsheet formula characters in exported values", () => {
+    const csv = buildSubmissionsExportCsv(
+      assignment,
+      [
+        {
+          id: "formula",
+          name: "=CMD()",
+          email: "+evil@example.com",
+          avatarColor: "bg-sky-500",
+        },
+      ],
+      [],
+    );
+
+    expect(csv).toContain("missing,'=CMD(),'+evil@example.com");
+  });
 });

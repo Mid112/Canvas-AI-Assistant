@@ -1,7 +1,8 @@
 import { ArrowLeft, Bell, Download } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import type { InstructorCourse } from "@/types/course";
 import { paths } from "@/routes/paths";
 
@@ -38,13 +39,13 @@ export function InstructorSubmissionsAnalysisHeader({
             <Download data-icon="inline-start" />
             Export Report
           </Button>
-          <Button
-            size="lg"
-            render={<Link to={paths.instructor.assistant} />}
+          <Link
+            to={paths.instructor.assistant}
+            className={cn(buttonVariants({ size: "lg" }))}
           >
             <Bell data-icon="inline-start" />
             Generate Reminder
-          </Button>
+          </Link>
         </div>
       </div>
     </div>

@@ -1,5 +1,12 @@
 import { Search } from "lucide-react";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -22,6 +29,7 @@ export function AssignmentSearchSelect({
   const containerRef = useRef<HTMLDivElement>(null);
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
 
   const selectedAssignment = useMemo(
     () => assignments.find((assignment) => assignment.id === selectedAssignmentId),
@@ -34,12 +42,15 @@ export function AssignmentSearchSelect({
   );
 
   const inputValue = isOpen ? query : (selectedAssignment?.label ?? "");
+  const activeOptionId =
+    activeIndex >= 0 ? `${listboxId}-option-${activeIndex}` : undefined;
 
   useEffect(() => {
     function handlePointerDown(event: MouseEvent) {
       if (!containerRef.current?.contains(event.target as Node)) {
         setIsOpen(false);
         setQuery(selectedAssignment?.label ?? "");
+        setActiveIndex(-1);
       }
     }
 
@@ -51,11 +62,61 @@ export function AssignmentSearchSelect({
     onAssignmentChange(assignment.id);
     setQuery(assignment.label);
     setIsOpen(false);
+    setActiveIndex(-1);
   }
 
   function openDropdown() {
     setIsOpen(true);
     setQuery(selectedAssignment?.label ?? "");
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (assignments.length === 0) {
+      return;
+    }
+
+    const options = filteredAssignments;
+
+    switch (event.key) {
+      case "ArrowDown":
+        event.preventDefault();
+        if (!isOpen) {
+          openDropdown();
+          setActiveIndex(options.length > 0 ? 0 : -1);
+          return;
+        }
+        setActiveIndex((current) =>
+          options.length === 0
+            ? -1
+            : Math.min(current < 0 ? 0 : current + 1, options.length - 1),
+        );
+        break;
+      case "ArrowUp":
+        event.preventDefault();
+        if (!isOpen) {
+          openDropdown();
+          setActiveIndex(options.length > 0 ? options.length - 1 : -1);
+          return;
+        }
+        setActiveIndex((current) =>
+          options.length === 0 ? -1 : Math.max(current - 1, 0),
+        );
+        break;
+      case "Enter":
+        if (isOpen && activeIndex >= 0 && options[activeIndex]) {
+          event.preventDefault();
+          selectAssignment(options[activeIndex]);
+        }
+        break;
+      case "Escape":
+        event.preventDefault();
+        setIsOpen(false);
+        setQuery(selectedAssignment?.label ?? "");
+        setActiveIndex(-1);
+        break;
+      default:
+        break;
+    }
   }
 
   return (
@@ -78,13 +139,16 @@ export function AssignmentSearchSelect({
           aria-expanded={isOpen}
           aria-controls={listboxId}
           aria-autocomplete="list"
+          aria-activedescendant={activeOptionId}
           placeholder="Search or select assignment..."
           value={inputValue}
           onChange={(event) => {
             setQuery(event.target.value);
             setIsOpen(true);
+            setActiveIndex(0);
           }}
           onFocus={openDropdown}
+          onKeyDown={handleKeyDown}
           className="pl-8"
           aria-label="Search or select assignment"
           disabled={assignments.length === 0}
@@ -103,9 +167,10 @@ export function AssignmentSearchSelect({
               No assignments match your search.
             </li>
           ) : (
-            filteredAssignments.map((assignment) => (
+            filteredAssignments.map((assignment, index) => (
               <li
                 key={assignment.id}
+                id={`${listboxId}-option-${index}`}
                 role="option"
                 aria-selected={assignment.id === selectedAssignmentId}
               >
@@ -113,7 +178,9 @@ export function AssignmentSearchSelect({
                   type="button"
                   className={cn(
                     "w-full rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted",
-                    assignment.id === selectedAssignmentId && "bg-muted font-medium",
+                    (assignment.id === selectedAssignmentId ||
+                      index === activeIndex) &&
+                      "bg-muted font-medium",
                   )}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => selectAssignment(assignment)}

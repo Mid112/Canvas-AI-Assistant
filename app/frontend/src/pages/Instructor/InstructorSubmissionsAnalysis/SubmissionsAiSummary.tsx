@@ -38,7 +38,7 @@ export function SubmissionsAiSummary({ summary }: SubmissionsAiSummaryProps) {
         </div>
       </CardContent>
       <CardFooter className="border-t bg-transparent pt-4">
-        <Button className="w-full" size="lg">
+        <Button className="w-full" size="lg" disabled>
           Regenerate Summary
         </Button>
       </CardFooter>

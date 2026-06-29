@@ -1,4 +1,3 @@
-import { paths } from "@/routes/paths";
 import type {
   AssignmentSubmissionAnalysis,
   SubmissionStatusFilter,
@@ -22,7 +21,7 @@ export function getCourseAnalyticsPath(
   }
 
   const query = params.toString();
-  const base = paths.instructor.courseAnalytics(courseId);
+  const base = `/instructor/courses/${courseId}/analytics`;
 
   return query ? `${base}?${query}` : base;
 }
@@ -61,6 +60,9 @@ export function getCourseAssignments(
     return byCode;
   }
 
+  // Dev-only: when Canvas local IDs do not match mock course IDs, show CS 101 sample
+  // data so the analytics page is usable without a Canvas sync. Remove once real
+  // Canvas submission data is wired up.
   if (import.meta.env.DEV) {
     return assignments.filter((assignment) => assignment.courseId === 1);
   }
@@ -68,10 +70,38 @@ export function getCourseAssignments(
   return [];
 }
 
+export function resolveEffectiveAssignmentId(
+  assignments: AssignmentSubmissionAnalysis[],
+  selectedAssignmentId: string,
+  assignmentIdFromUrl: string | null,
+): string {
+  if (selectedAssignmentId) {
+    const userSelection = assignments.find(
+      (assignment) => assignment.id === selectedAssignmentId,
+    );
+    if (userSelection) {
+      return userSelection.id;
+    }
+  }
+
+  if (assignmentIdFromUrl) {
+    const fromUrl = assignments.find(
+      (assignment) => assignment.id === assignmentIdFromUrl,
+    );
+    if (fromUrl) {
+      return fromUrl.id;
+    }
+  }
+
+  return assignments[0]?.id ?? "";
+}
+
 export function usesSampleSubmissionData(
   assignments: AssignmentSubmissionAnalysis[],
   courseId: number,
 ): boolean {
+  // True when mock assignments were matched by course code (or dev fallback) rather
+  // than the URL course id — used to show a banner until Canvas data replaces mocks.
   return (
     assignments.length > 0 &&
     assignments.every((assignment) => assignment.courseId !== courseId)
