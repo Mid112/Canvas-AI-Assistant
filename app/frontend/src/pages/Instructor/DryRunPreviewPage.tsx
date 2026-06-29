@@ -35,7 +35,13 @@ export function DryRunPreviewPage() {
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const loadPreview = useCallback(async () => {
+  const getLoadErrorMessage = useCallback((error: unknown) => {
+    return error instanceof DryRunPreviewError
+      ? error.message
+      : "Unable to load the workflow preview.";
+  }, []);
+
+  const reloadPreview = useCallback(async () => {
     setIsLoading(true);
     setLoadError(null);
     setPreview(null);
@@ -44,19 +50,44 @@ export function DryRunPreviewPage() {
       const data = await fetchDryRunPreview(previewId);
       setPreview(data);
     } catch (error) {
-      const message =
-        error instanceof DryRunPreviewError
-          ? error.message
-          : "Unable to load the workflow preview.";
-      setLoadError(message);
+      setLoadError(getLoadErrorMessage(error));
     } finally {
       setIsLoading(false);
     }
-  }, [previewId]);
+  }, [getLoadErrorMessage, previewId]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadPreview() {
+      try {
+        const data = await fetchDryRunPreview(previewId);
+        if (!cancelled) {
+          setPreview(data);
+          setLoadError(null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setLoadError(getLoadErrorMessage(error));
+          setPreview(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async data load
+    setIsLoading(true);
+    setLoadError(null);
+    setPreview(null);
     void loadPreview();
-  }, [loadPreview]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getLoadErrorMessage, previewId]);
 
   const handleReturn = () => {
     navigate(returnTo);
@@ -109,7 +140,7 @@ export function DryRunPreviewPage() {
             </div>
             <div className="flex flex-wrap justify-center gap-3">
               {!isEmpty ? (
-                <Button type="button" onClick={() => void loadPreview()}>
+                <Button type="button" onClick={() => void reloadPreview()}>
                   Try Again
                 </Button>
               ) : null}
