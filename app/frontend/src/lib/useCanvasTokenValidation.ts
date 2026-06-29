@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { normalizeCanvasUrl, validateCanvasUrl } from "@/lib/canvas-url";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
 import type { TokenValidationState } from "@/pages/Auth/ConnectCanvas/ConnectCanvasTokenStatus";
+import type { CanvasTokenValidationStatus } from "@/types/canvas";
 import { validateCanvasToken } from "@/services/canvas";
 
 const DEFAULT_DEBOUNCE_MS = 500;
@@ -22,29 +23,35 @@ export function useCanvasTokenValidation(
   const debounced = useDebouncedValue({ token, url }, debounceMs);
   const validationRequestId = useRef(0);
   const onSessionExpiredRef = useRef(options?.onSessionExpired);
-  const [validation, setValidation] = useState<TokenValidationState>({
-    status: "idle",
-  });
+  const [validatedKey, setValidatedKey] = useState<string | null>(null);
+  const [tokenStatus, setTokenStatus] =
+    useState<CanvasTokenValidationStatus>("invalid");
 
   useEffect(() => {
     onSessionExpiredRef.current = options?.onSessionExpired;
   }, [options?.onSessionExpired]);
 
   const urlError = validateCanvasUrl(url);
+  const debouncedUrlError = validateCanvasUrl(debounced.url);
+  const debouncedToken = debounced.token.trim();
+  const debouncedUrl = normalizeCanvasUrl(debounced.url);
+  const validationKey = `${debouncedUrl}:${debouncedToken}`;
+  const debouncedInputsReady =
+    debouncedToken !== "" && debouncedUrlError === null;
+
+  const validation: TokenValidationState =
+    token.trim() === "" || urlError
+      ? { status: "idle" }
+      : !debouncedInputsReady
+        ? { status: "idle" }
+        : !accessToken
+          ? { status: "validating" }
+          : validatedKey !== validationKey
+            ? { status: "validating" }
+            : { status: tokenStatus };
 
   useEffect(() => {
-    if (token.trim() === "") {
-      setValidation({ status: "idle" });
-    }
-  }, [token]);
-
-  useEffect(() => {
-    const trimmedToken = debounced.token.trim();
-    const trimmedUrl = normalizeCanvasUrl(debounced.url);
-    const debouncedUrlError = validateCanvasUrl(debounced.url);
-
-    if (trimmedToken === "" || debouncedUrlError) {
-      setValidation({ status: "idle" });
+    if (!debouncedInputsReady) {
       return;
     }
 
@@ -56,30 +63,36 @@ export function useCanvasTokenValidation(
     const requestId = validationRequestId.current + 1;
     validationRequestId.current = requestId;
 
-    setValidation({ status: "validating" });
-
     void (async () => {
       try {
         const status = await validateCanvasToken(
-          trimmedToken,
+          debouncedToken,
           accessToken,
-          trimmedUrl,
+          debouncedUrl,
         );
 
         if (validationRequestId.current !== requestId) {
           return;
         }
 
-        setValidation({ status });
+        setValidatedKey(validationKey);
+        setTokenStatus(status);
       } catch {
         if (validationRequestId.current !== requestId) {
           return;
         }
 
-        setValidation({ status: "invalid" });
+        setValidatedKey(validationKey);
+        setTokenStatus("invalid");
       }
     })();
-  }, [accessToken, debounced.token, debounced.url]);
+  }, [
+    accessToken,
+    debouncedInputsReady,
+    debouncedToken,
+    debouncedUrl,
+    validationKey,
+  ]);
 
   return { urlError, validation };
 }
