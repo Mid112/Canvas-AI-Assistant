@@ -694,3 +694,88 @@ The biggest time sink was debugging environment issues rather than the actual lo
 - **Goal 1:** Add the "request clarification for ambiguous requests" action, so the assistant can ask a follow-up question instead of guessing when the user's message is unclear
 - **Goal 2:** Build the action history service so every chat-triggered Canvas action is logged in a way users can review later
 - **Goal 3:** Add safe error handling for the remaining edge cases identified during testing
+
+
+
+
+# Cycle 12 Report: 06/26 – 06/29 (June 26 – June 29)
+
+## Timesheet
+
+### Clockify Report
+- **26/06 (Friday):** Using Clockify – Logged 03:53:20
+- **27/06 (Saturday):** Using Clockify – Logged 0
+- **28/06 (Sunday):** Using Clockify – Logged 01:42:06
+- **29/06 (Monday):** Using Clockify – Logged 02:10:57
+
+
+
+---
+
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Scope check, ambiguity handling, and intent preview (feature/llm-vague-message)
+
+- Implemented three new action types in the dispatcher: `out_of_scope`, `clarify`, and `intent_preview`. Out-of-scope requests now return a clear rejection message rather than being passed to Canvas. Ambiguous requests return a single clarifying question with a partial plan. Every in-scope action is shown to the user as a plain English preview before anything executes.
+- Added a `respond` action for meta-questions such as "what can you help me with?" so the LLM has a valid JSON path for natural language replies without breaking the JSON-only contract.
+- Added a dedicated `POST /chat/confirm` endpoint. When a user confirms a preview, the client passes the `pending_message_id` of the stored assistant message rather than re-submitting the action payload. The server loads the message, verifies it belongs to the current user and conversation, and only then executes what it originally stored. This closes the security gap where a client could previously submit any arbitrary action JSON to the confirm endpoint.
+- Fixed the conversation history duplication bug where the current user message was being logged before `_get_recent_messages` ran, causing it to appear twice in the LLM's context window on every turn.
+- Added a `make dev` target to the Makefile so Postgres, the Canvas sandbox, and the backend can all be started with one command instead of three separate terminals.
+- Resolved merge conflicts in `assignment.py` and `canvas.py` when rebasing onto develop after the assignment-retrieval-service PR landed.
+- Tested the full clarify/intent_preview/confirm pipeline end to end against a real Canvas sandbox and Groq-hosted Qwen3.6-27B. Confirmed out-of-scope detection, multi-turn clarification with context carryover, and deterministic confirm execution all work correctly.
+
+<img width="1228" height="179" alt="Screenshot 2026-06-30 at 12 48 26 PM" src="https://github.com/user-attachments/assets/858a08ac-d2a3-4225-8083-673a01bc732f" />
+<img width="1221" height="193" alt="Screenshot 2026-06-30 at 12 49 08 PM" src="https://github.com/user-attachments/assets/a3ea6da4-a8df-4e50-a2af-db570926f457" />
+<img width="1218" height="136" alt="Screenshot 2026-06-30 at 12 49 20 PM" src="https://github.com/user-attachments/assets/0ab6feca-8709-45bb-a3b3-aa7fc569958d" />
+
+
+
+---
+
+## Progress Update (since 26/06/2026)
+
+| TASK/ISSUE #                                       | STATUS      |
+| --------------------------------------------------- | ----------- |
+| Design document                                     | Completed   |
+| Project design video                                | Completed   |
+| Database design                                     | Completed   |
+| PR reviews and approvals                            | Completed   |
+| Project setup                                       | Completed   |
+| Dockerized environment for MCP/vLLM                 | Completed   |
+| Locally running vLLM                                | Completed   |
+| Setup for PostgreSQL                                | Completed   |
+| Canvas MCP server core tools                        | Completed   |
+| MCP server tests (19 passing)                       | Completed   |
+| Canvas LMS sandbox setup                            | Completed   |
+| Full integration tests with Canvas                  | Completed   |
+| Multi-institution Canvas token support (backend)    | Completed   |
+| Canvas Docker sandbox troubleshooting               | Completed   |
+| LLM adapter chat pipeline                           | Completed   |
+| Timeout and error handling                          | Completed   |
+| Chat pipeline tested against real Canvas data       | Completed   |
+| Scope check and out-of-scope rejection              | Completed   |
+| Ambiguous request clarification                     | Completed   |
+| Intent preview before execution                     | Completed   |
+| Server-side confirm by message ID                   | Completed   |
+| DEFAULT_LLM_PROVIDER config setting                 | Completed   |
+| make dev and make test-vague-llm Makefile targets   | Completed   |
+| Action history service                              | Not Started |
+| Write actions (feature/llm-post-request)            | In Progress |
+
+---
+
+## Cycle 12 Goal Review
+
+### Reflection:
+This cycle was focused on the `feature/llm-vague-message` PR, which took longer than planned because the review feedback was thorough and the fixes had real depth — the confirm-by-message-ID change in particular required touching the schema, service, router, and test script together, not just a small patch. The conversation history duplication fix and the provider config change were smaller but equally correct calls from the reviewer. Getting all of this addressed before the next branch (`feature/llm-post-request`) was the right call, since the confirm flow is infrastructure that the write-action pipeline will build directly on top of.
+
+### Retrospective:
+The biggest lesson from this cycle is that the confirm endpoint security issue was not obvious during initial implementation and it only became clear when a reviewer looked at the contract between client and server carefully. Writing the initial version as "client submits the action JSON" felt natural, but the reviewer correctly pointed out that it turned a confirmation into a second action-execution endpoint. Building the server-owned pending-message pattern now, even as a stepping stone, makes the next PR's job cleaner. It is also a good reminder to think about what the client is *allowed* to send, not just what a well-behaved client would send.
+
+---
+
+## Next Cycle 13 Goals
+- **Goal 1:** Implement the three-module write-action pipeline (write intent classification, context fetching, preview construction) for `feature/llm-post-request`
+- **Goal 2:** Add the no-invention guard for write actions, verifying current Canvas state against what the LLM claims before any write executes
+- **Goal 3:** Begin the action history service so every confirmed Canvas action is logged in a way users can review and reverse where possible
