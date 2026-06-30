@@ -122,6 +122,8 @@ def _parse_submission(raw: dict) -> SubmissionResponse:
 
 
 async def get_submissions(course_id: int, assignment_id: int, user: User, canvas_url: str) -> list[SubmissionResponse]:
+    # Parses and returns submissions from Canvas — does not persist to the submissions
+    # table yet. DB upsert is deferred to a follow-up PR.
     token = _require_canvas_token(user, canvas_url)
     data = await fetch_submissions(course_id, assignment_id, token, canvas_url)
     return [_parse_submission(raw) for raw in data]
