@@ -181,3 +181,29 @@ async def fetch_submissions(
     except httpx.RequestError as e:
         logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
+async def fetch_enrollments(
+    course_id: int,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> list[dict]:
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            return await _fetch_all_pages(
+                client,
+                f"{canvas_url}/api/v1/courses/{course_id}/enrollments",
+                headers=_headers(token),
+                params={
+                    # Students only — exclude teachers, TAs, observers
+                    "type[]": "StudentEnrollment",
+                    # Active enrollments only — exclude concluded/invited/inactive
+                    "state[]": "active",
+                    "per_page": 100,
+                },
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
