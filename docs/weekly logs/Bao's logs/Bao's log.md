@@ -590,15 +590,19 @@ Total: 9 hours
 
 ### 1: Team meeting (Friday, 26/6)
 - Meet the team to agree on the next cycle implementation
+<img width="1123" height="63" alt="Screenshot 2026-06-30 124305" src="https://github.com/user-attachments/assets/fefd4f3d-f20c-436f-94b4-3c2adb052d4a" />
 
 ### 2: PR Reviews (Saturday–Sunday, 27–28/6)
 - Reviewed open team PRs to validate implementation quality and flag integration issues before merge
+<img width="1123" height="67" alt="Screenshot 2026-06-30 124311" src="https://github.com/user-attachments/assets/a67ff5af-6f45-4d5a-aade-1bf433fd1171" />
+<img width="1121" height="62" alt="Screenshot 2026-06-30 124315" src="https://github.com/user-attachments/assets/0a10bece-d4b6-42e4-8f72-ec0f3441d4af" />
 
 ### 3: Admin Authentication API (Monday, 29/6)
 - Embedded role claim in JWT and added `hash_token` utility for secure token storage
 - Added `get_admin_user` dependency with DB session validation to gate admin-only routes
 - Implemented admin login/logout endpoints with audit logging and rate limiting
 - Added admin account seeder and management endpoint, with unit and integration tests for admin authentication
+<img width="1124" height="63" alt="Screenshot 2026-06-30 124319" src="https://github.com/user-attachments/assets/6129c78f-2240-464a-ae19-ea4dd1c0fdf4" />
 
 ### 4: RBAC Permissions (Monday, 29/6)
 - Restricted Canvas API endpoints to instructor-only access via `get_instructor_user` dependency
