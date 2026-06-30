@@ -32,6 +32,9 @@ function getPageTitle(pathname: string, role: UserRole): string {
 
   const navItems = getNavItemsForRole(role);
   const match = navItems.find((item) => pathname.startsWith(item.href));
+  if (pathname === paths.instructor.assignmentCreate) {
+    return "AI Assignment Creator";
+  }
   if (pathname.includes("/assignments/") && pathname.endsWith("/edit")) {
     return "Update Assignment";
   }
