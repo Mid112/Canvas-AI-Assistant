@@ -399,41 +399,6 @@ def test_list_submissions(client, auth_headers):
     data = response.json()[0]
     assert data["workflow_state"] == "submitted"
     assert data["status"] == "submitted"
-def test_list_submissions_student_name(client, auth_headers, synced_course_id):
-    raw = {
-        "id": 101, "assignment_id": 10, "user_id": 6,
-        "score": None, "grade": None, "graded_at": None,
-        "submitted_at": None, "workflow_state": "submitted",
-        "missing": False, "late": False, "excused": False,
-        "user": {"name": "Alice Example"},
-    }
-    with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
-        mock.return_value = [raw]
-        response = client.get(
-            f"/api/v1/canvas/courses/{synced_course_id}/assignments/10/submissions?canvas_url={CANVAS_URL}",
-            headers=auth_headers,
-        )
-    assert response.status_code == 200
-    assert response.json()[0]["student_name"] == "Alice Example"
-
-
-def test_list_submissions_student_name_absent_when_no_user(client, auth_headers, synced_course_id):
-    raw = {
-        "id": 102, "assignment_id": 10, "user_id": 7,
-        "score": None, "grade": None, "graded_at": None,
-        "submitted_at": None, "workflow_state": "unsubmitted",
-        "missing": False, "late": False, "excused": False,
-    }
-    with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
-        mock.return_value = [raw]
-        response = client.get(
-            f"/api/v1/canvas/courses/{synced_course_id}/assignments/10/submissions?canvas_url={CANVAS_URL}",
-            headers=auth_headers,
-        )
-    assert response.status_code == 200
-    assert response.json()[0]["student_name"] is None
-    assert response.json()[0]["workflow_state"] == "submitted"
-    mock.assert_awaited_once_with(12345, 10, "test-canvas-token", CANVAS_URL)
 
 
 def test_list_submissions_student_name(client, auth_headers, synced_course_id):
@@ -540,6 +505,10 @@ def _submission(**overrides) -> dict:
     ),
 ])
 def test_submission_status_parsing(client, auth_headers, synced_course_id, raw, expected_status):
+    with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
+        mock.return_value = [raw]
+        response = client.get(
+            f"/api/v1/canvas/courses/{synced_course_id}/assignments/10/submissions?canvas_url={CANVAS_URL}",
             headers=auth_headers,
         )
     assert response.status_code == 200
