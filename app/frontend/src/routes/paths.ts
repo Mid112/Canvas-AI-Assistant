@@ -13,21 +13,14 @@ export const paths = {
     courseAssignments: "/instructor/courses/:localCourseId/assignments",
     assignmentUpdate:
       "/instructor/courses/:localCourseId/assignments/:assignmentId/edit",
+    assignmentCreate: "/instructor/assignments/create",
+    courseAnalytics: "/instructor/courses/:courseId/analytics",
     assistant: "/instructor/assistant",
-    analytics: "/instructor/analytics",
     messages: "/instructor/messages",
     notifications: "/instructor/notifications",
     history: "/instructor/history",
     settings: "/instructor/settings",
     profile: "/instructor/profile",
-  },
-  ta: {
-    dashboard: "/ta/dashboard",
-    courses: "/ta/courses",
-    messages: "/ta/messages",
-    students: "/ta/students",
-    settings: "/ta/settings",
-    profile: "/ta/profile",
   },
   admin: {
     dashboard: "/admin/dashboard",
@@ -38,8 +31,20 @@ export const paths = {
   },
 } as const;
 
+export function instructorSettingsPath(tab?: "canvas" | "notifications" | "security") {
+  if (!tab) {
+    return paths.instructor.settings;
+  }
+
+  return `${paths.instructor.settings}?tab=${tab}`;
+}
+
 export function instructorCourseAssignmentsPath(localCourseId: number | string) {
   return `/instructor/courses/${localCourseId}/assignments`;
+}
+
+export function instructorCourseAnalyticsPath(courseId: number | string) {
+  return `/instructor/courses/${courseId}/analytics`;
 }
 
 export function instructorAssignmentUpdatePath(

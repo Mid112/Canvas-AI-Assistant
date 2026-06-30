@@ -12,6 +12,7 @@ from app.schemas.canvas import (
     CourseResponse,
     SubmissionResponse,
 )
+from app.schemas.student import StudentResponse
 from app.services.canvas import (
     get_active_course,
     get_assignments,
@@ -19,6 +20,7 @@ from app.services.canvas import (
     get_submissions,
     set_active_course,
 )
+from app.services.student import get_students
 
 router = APIRouter(prefix="/canvas", tags=["canvas"])
 
@@ -52,6 +54,16 @@ async def list_submissions(
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
 ):
     return await get_submissions(course_id, assignment_id, current_user, canvas_url)
+
+
+@router.get("/courses/{course_id}/students", response_model=list[StudentResponse])
+async def list_students(
+    course_id: int,
+    current_user: User = Depends(get_current_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_students(course_id, current_user, canvas_url, db)
 
 
 # Active course — stores which course the instructor is currently working in (UI selection state).

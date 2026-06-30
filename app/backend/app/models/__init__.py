@@ -9,6 +9,7 @@ from app.models.course import Course
 from app.models.message import Message
 from app.models.message_template import MessageTemplate
 from app.models.session import Session
+from app.models.student import Student
 from app.models.submission import Submission
 from app.models.user import User
 from app.models.user_preference import UserPreference
@@ -23,6 +24,7 @@ __all__ = [
     "Message",
     "MessageTemplate",
     "Session",
+    "Student",
     "Submission",
     "User",
     "UserPreference",
