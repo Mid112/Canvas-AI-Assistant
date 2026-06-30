@@ -102,7 +102,7 @@ export const router = createBrowserRouter([
                     element: <DryRunPreviewPage />,
                   },
                   {
-                    path: paths.instructor.analytics,
+                    path: paths.instructor.courseAnalytics,
                     element: <InstructorAnalyticsPage />,
                   },
                   {
