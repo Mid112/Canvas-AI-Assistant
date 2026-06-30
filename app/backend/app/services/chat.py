@@ -7,8 +7,8 @@ from fastapi import HTTPException
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from app.config import settings
 
+from app.config import settings
 from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_action
 from app.mcp_tools.schemas import ACTION_SCHEMAS
 from app.models.conversation import Conversation
