@@ -59,7 +59,7 @@ async def list_submissions(
 @router.get("/courses/{course_id}/students", response_model=list[StudentResponse])
 async def list_students(
     course_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_instructor_user),
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
     db: AsyncSession = Depends(get_db),
 ):
