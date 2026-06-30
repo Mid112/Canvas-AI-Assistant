@@ -1,11 +1,5 @@
-import { PlaceholderPage } from "@/components/common/PlaceholderPage";
+import { StudentMessageDraftPage } from "@/pages/StudentMessageDraftPage";
 
 export function InstructorMessagesPage() {
-  return (
-    <PlaceholderPage
-      title="Messages"
-      description="Review and send messages to students."
-      message="Messages coming soon"
-    />
-  );
+  return <StudentMessageDraftPage />;
 }
