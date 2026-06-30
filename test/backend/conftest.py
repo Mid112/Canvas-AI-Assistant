@@ -41,5 +41,11 @@ def admin_credentials():
             ))
             await db.commit()
 
-    asyncio.run(_create())
+    # asyncio.run() fails when pytest-asyncio (asyncio_mode=auto) has already
+    # set a running event loop for the session. Use a dedicated loop instead.
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(_create())
+    finally:
+        loop.close()
     return {"email": email, "password": password}
