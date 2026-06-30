@@ -5,7 +5,6 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
-DEFAULT_LLM_PROVIDER: str = "groq"
 
 
 class Settings(BaseSettings):
@@ -19,6 +18,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Canvas Helper AI Assistant"
     API_V1_PREFIX: str = "/api/v1"
     DEBUG: bool = False
+    DEFAULT_LLM_PROVIDER: str = "groq"
 
     # CORS. NoDecode stops pydantic-settings from trying to JSON-parse the env
     # value so our validator can split a plain comma-separated string instead.
