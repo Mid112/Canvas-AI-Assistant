@@ -367,3 +367,41 @@ Managing team pull requests proved to be an essential exercise in maintaining ve
 * Complete the UI implementation for the missing and late submissions analytic dashboard.
 * Integrate the new analytics dashboard with the backend API to render live submission data.
 * Continue conducting timely PR reviews to support smooth team integrations.
+
+# **Cycle 12: Friday (06/26) ~ Monday (06/29)**
+
+**Timesheet**
+
+**Clockify Report**
+
+**06/26 (Friday):** 03:05:03
+<img width="1206" height="108" alt="Untitled" src="https://github.com/user-attachments/assets/1eef2aa1-059d-4e78-9f00-b850cccf0fc5" />
+
+**06/28 (Saturday):** 02:29:25
+<img width="1207" height="110" alt="Untitled 2" src="https://github.com/user-attachments/assets/1c8f9ac6-f506-430e-a9fb-38f41dee4984" />
+
+**06/29 (Sunday):** 02:52:56
+<img width="1206" height="233" alt="Untitled 3" src="https://github.com/user-attachments/assets/f2c61f6f-c01f-4526-9053-8ca3f521c1d7" />
+
+**Current Tasks (Provide sufficient detail)**
+
+* **#1: Analytics Dashboard Implementation:** Dedicated significant time to building out the missing and late submission analytics features. Developed the UI components to clearly visualize student submission data, providing instructors with an accessible, high-level overview of class performance and pending items.
+
+* **#2: Course Management Fixes:** Addressed several issues related to the Course Management page such as replacing mock courses with Canvas-backed loading, gating the page when Canvas isn’t connected, restoring Sync from Canvas and New Course, and routing assignment pages through the correct Canvas course IDs.
+
+* **#3: Pull Request Reviews:** Continued reviewing team pull requests. Focused on verifying that incoming code merges maintain our established design patterns, do not introduce regressions into the connected pages, and are fully aligned with our MVP requirements.
+
+* **#4: Team Meeting:** Participated in an extended team meeting on Friday to coordinate our development efforts and map out our strategy for completing the bulk of the MVP milestone by the end of the next cycle.
+
+**Cycle Goal Review**
+
+* **Reflection:** This cycle was heavily focused on refinement and analytics. Shifting from building brand-new structural pages to creating data visualizations and responding to change requests means the application is maturing. Wrapping up these specific analytics features adds a lot of tangible value to the Instructor Dashboard.
+
+* **Retrospective:** Balancing new feature development with fixing existing issues (like the Course Management page bugs) is critical as we close in on the MVP deadline. The rigorous PR reviews continue to be our best defense against merge conflicts and technical debt, ensuring that the project remains stable and demo-ready.
+
+**Next Cycle Goals**
+
+* Successfully complete the majority of the remaining MVP milestone technical requirements.
+* Shift focus to targeted bug fixing, UI polish, and resolving smaller integration issues across the frontend.
+* Begin organizing our user flows and preparing the technical script for the upcoming MVP presentation.
+* Finalize end-to-end testing of the primary workflows (Canvas connection to analytics viewing).
