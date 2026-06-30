@@ -7,7 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.security import decrypt_canvas_token
-from app.integrations.canvas import fetch_assignments, fetch_courses, fetch_submissions
+from app.integrations.canvas import (
+    create_assignment,
+    fetch_assignment,
+    fetch_assignments,
+    fetch_courses,
+    fetch_submissions,
+    update_assignment,
+)
 from app.models.assignment import Assignment
 from app.models.course import Course
 from app.models.user import User
@@ -127,7 +134,7 @@ async def get_assignments(local_course_id: int, user: User, db: AsyncSession) ->
             detail="Course not found or does not belong to you.",
         )
 
-    token = _require_canvas_token(user, course.canvas_url)
+    token = require_canvas_token(user, course.canvas_url)
     data = await fetch_assignments(int(course.canvas_course_id), token, course.canvas_url)
 
     if not data:
