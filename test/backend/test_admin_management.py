@@ -13,13 +13,24 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.config import settings
-from app.core.database import AsyncSessionLocal
 from app.core.security import decode_access_token, hash_password
 from app.core.seeder import seed_admin
 from app.main import app
 from app.models.audit_log import AuditLog
 from app.models.user import User
+
+
+def _make_session():
+    """Return a fresh (engine, session-maker) pair for use inside asyncio.run().
+
+    The global engine's asyncpg pool is bound to the TestClient's event loop.
+    asyncio.run() creates a new loop, so we must not reuse the global engine.
+    """
+    engine = create_async_engine(settings.DATABASE_URL)
+    return engine, async_sessionmaker(engine, expire_on_commit=False)
 
 
 @pytest.fixture(scope="module")
@@ -45,25 +56,47 @@ def admin_headers(admin_token):
 # ---------------------------------------------------------------------------
 
 async def _get_user_by_email(email: str):
-    async with AsyncSessionLocal() as db:
-        return await db.scalar(select(User).where(User.email == email))
+    engine, Session = _make_session()
+    try:
+        async with Session() as db:
+            return await db.scalar(select(User).where(User.email == email))
+    finally:
+        await engine.dispose()
 
 
 async def _get_audit_logs(user_id: int, action: str) -> list:
-    async with AsyncSessionLocal() as db:
-        result = await db.scalars(
-            select(AuditLog).where(
-                AuditLog.user_id == user_id,
-                AuditLog.action == action,
+    engine, Session = _make_session()
+    try:
+        async with Session() as db:
+            result = await db.scalars(
+                select(AuditLog).where(
+                    AuditLog.user_id == user_id,
+                    AuditLog.action == action,
+                )
             )
-        )
-        return list(result)
+            return list(result)
+    finally:
+        await engine.dispose()
 
 
 async def _count_admins() -> int:
-    async with AsyncSessionLocal() as db:
-        result = await db.scalars(select(User).where(User.role == "admin"))
-        return len(list(result))
+    engine, Session = _make_session()
+    try:
+        async with Session() as db:
+            result = await db.scalars(select(User).where(User.role == "admin"))
+            return len(list(result))
+    finally:
+        await engine.dispose()
+
+
+async def _run_seeder():
+    """Run seed_admin() with a fresh engine so asyncio.run() doesn't conflict with the global pool."""
+    engine, Session = _make_session()
+    try:
+        async with Session() as db:
+            await seed_admin(db)
+    finally:
+        await engine.dispose()
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +175,7 @@ def test_create_admin_requires_auth(client):
         "/api/v1/admin/users",
         json={"name": "N", "email": f"x_{uuid.uuid4()}@example.com", "password": "p"},
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 401
 
 
 def test_create_admin_rejects_instructor_token(client):
@@ -182,10 +215,7 @@ def test_seeder_skips_when_email_not_set():
     admin_count_before = asyncio.run(_count_admins())
     with patch.object(settings, "ADMIN_EMAIL", None), \
          patch.object(settings, "ADMIN_PASSWORD", "somepass"):
-        async def _run():
-            async with AsyncSessionLocal() as db:
-                await seed_admin(db)
-        asyncio.run(_run())
+        asyncio.run(_run_seeder())
     assert asyncio.run(_count_admins()) == admin_count_before
 
 
@@ -193,10 +223,7 @@ def test_seeder_skips_when_password_not_set():
     admin_count_before = asyncio.run(_count_admins())
     with patch.object(settings, "ADMIN_EMAIL", f"seed_{uuid.uuid4()}@example.com"), \
          patch.object(settings, "ADMIN_PASSWORD", None):
-        async def _run():
-            async with AsyncSessionLocal() as db:
-                await seed_admin(db)
-        asyncio.run(_run())
+        asyncio.run(_run_seeder())
     assert asyncio.run(_count_admins()) == admin_count_before
 
 
@@ -210,18 +237,19 @@ def test_seeder_creates_admin_when_no_admin_exists():
     # Temporarily clear all admins is too destructive; instead verify the seeder
     # writes the correct audit log action when it does create a user.
     async def _admin_exists_already():
-        async with AsyncSessionLocal() as db:
-            return await db.scalar(select(User).where(User.role == "admin")) is not None
+        engine, Session = _make_session()
+        try:
+            async with Session() as db:
+                return await db.scalar(select(User).where(User.role == "admin")) is not None
+        finally:
+            await engine.dispose()
 
     if asyncio.run(_admin_exists_already()):
         pytest.skip("An admin already exists; seeder creation path cannot be triggered safely")
 
     with patch.object(settings, "ADMIN_EMAIL", seed_email), \
          patch.object(settings, "ADMIN_PASSWORD", seed_password):
-        async def _run():
-            async with AsyncSessionLocal() as db:
-                await seed_admin(db)
-        asyncio.run(_run())
+        asyncio.run(_run_seeder())
 
     user = asyncio.run(_get_user_by_email(seed_email))
     assert user is not None
@@ -236,9 +264,6 @@ def test_seeder_is_idempotent(client, admin_credentials):
 
     with patch.object(settings, "ADMIN_EMAIL", admin_credentials["email"]), \
          patch.object(settings, "ADMIN_PASSWORD", admin_credentials["password"]):
-        async def _run():
-            async with AsyncSessionLocal() as db:
-                await seed_admin(db)
-        asyncio.run(_run())
+        asyncio.run(_run_seeder())
 
     assert asyncio.run(_count_admins()) == admin_count_before

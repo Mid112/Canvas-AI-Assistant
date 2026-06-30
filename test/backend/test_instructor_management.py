@@ -11,10 +11,17 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.core.database import AsyncSessionLocal
+from app.config import settings
 from app.main import app
 from app.models.audit_log import AuditLog
+
+
+def _make_session():
+    """Fresh engine+session-maker for asyncio.run() calls (avoids pool/loop conflicts)."""
+    engine = create_async_engine(settings.DATABASE_URL)
+    return engine, async_sessionmaker(engine, expire_on_commit=False)
 
 BASE = "/api/v1/admin/instructors"
 
@@ -224,14 +231,17 @@ class TestAuditLog:
         iid = resp.json()["id"]
 
         async def _check():
-            async with AsyncSessionLocal() as db:
-                log = await db.scalar(
-                    select(AuditLog).where(
-                        AuditLog.action == "instructor_account_created",
-                        AuditLog.details["instructor_id"].as_integer() == iid,
+            engine, Session = _make_session()
+            try:
+                async with Session() as db:
+                    return await db.scalar(
+                        select(AuditLog).where(
+                            AuditLog.action == "instructor_account_created",
+                            AuditLog.details["instructor_id"].as_integer() == iid,
+                        )
                     )
-                )
-                return log
+            finally:
+                await engine.dispose()
 
         log = asyncio.run(_check())
         assert log is not None
@@ -243,14 +253,17 @@ class TestAuditLog:
         client.post(f"{BASE}/{iid}/disable", headers=_auth(admin_token))
 
         async def _check():
-            async with AsyncSessionLocal() as db:
-                log = await db.scalar(
-                    select(AuditLog).where(
-                        AuditLog.action == "instructor_account_disabled",
-                        AuditLog.details["instructor_id"].as_integer() == iid,
+            engine, Session = _make_session()
+            try:
+                async with Session() as db:
+                    return await db.scalar(
+                        select(AuditLog).where(
+                            AuditLog.action == "instructor_account_disabled",
+                            AuditLog.details["instructor_id"].as_integer() == iid,
+                        )
                     )
-                )
-                return log
+            finally:
+                await engine.dispose()
 
         log = asyncio.run(_check())
         assert log is not None
