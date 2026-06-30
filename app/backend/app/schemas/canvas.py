@@ -69,6 +69,7 @@ class SubmissionResponse(BaseModel):
     user_id: int
     student_name: str | None = None
     submitted_at: datetime | None = None
+    # Raw Canvas state — kept for debugging. API consumers should use `status` instead.
     workflow_state: str
 
     # Parsed status (#547) — one of: graded, submitted, late, missing, unsubmitted, excused

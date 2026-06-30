@@ -219,62 +219,6 @@ def _parse_submission(raw: dict) -> SubmissionResponse:
     )
 
 
-async def get_assignment(
-    local_course_id: int,
-    assignment_id: int,
-    user: User,
-    canvas_url: str,
-    db: AsyncSession,
-) -> AssignmentResponse:
-    token = require_canvas_token(user, canvas_url)
-    course = await get_owned_course(local_course_id, user, canvas_url, db)
-    data = await fetch_assignment(
-        int(course.canvas_course_id),
-        assignment_id,
-        token,
-        canvas_url,
-    )
-    return AssignmentResponse(**data)
-
-
-async def create_course_assignment(
-    local_course_id: int,
-    payload: AssignmentCreate,
-    user: User,
-    canvas_url: str,
-    db: AsyncSession,
-) -> AssignmentResponse:
-    token = require_canvas_token(user, canvas_url)
-    course = await get_owned_course(local_course_id, user, canvas_url, db)
-    data = await create_assignment(
-        int(course.canvas_course_id),
-        payload.model_dump(mode="json"),
-        token,
-        canvas_url,
-    )
-    return AssignmentResponse(**data)
-
-
-async def update_course_assignment(
-    local_course_id: int,
-    assignment_id: int,
-    payload: AssignmentUpdate,
-    user: User,
-    canvas_url: str,
-    db: AsyncSession,
-) -> AssignmentResponse:
-    token = require_canvas_token(user, canvas_url)
-    course = await get_owned_course(local_course_id, user, canvas_url, db)
-    data = await update_assignment(
-        int(course.canvas_course_id),
-        assignment_id,
-        payload.model_dump(mode="json"),
-        token,
-        canvas_url,
-    )
-    return AssignmentResponse(**data)
-
-
 async def get_submissions(
     local_course_id: int,
     assignment_id: int,
@@ -282,6 +226,8 @@ async def get_submissions(
     canvas_url: str,
     db: AsyncSession,
 ) -> list[SubmissionResponse]:
+    # Parses and returns submissions from Canvas — does not persist to the submissions
+    # table yet. DB upsert is deferred to a follow-up PR.
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     data = await fetch_submissions(
@@ -290,6 +236,8 @@ async def get_submissions(
         token,
         canvas_url,
     )
+    return [_parse_submission(raw) for raw in data]
+
     return [_parse_submission(raw) for raw in data]
 
 

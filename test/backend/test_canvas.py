@@ -389,8 +389,46 @@ def test_list_submissions(client, auth_headers):
             headers=auth_headers,
         )
     assert response.status_code == 200
-    assert response.json()[0]["workflow_state"] == "submitted"
+    data = response.json()[0]
+    assert data["workflow_state"] == "submitted"
+    assert data["status"] == "submitted"
     mock.assert_awaited_once_with(12345, 10, "test-canvas-token", CANVAS_URL)
+
+
+def test_list_submissions_student_name(client, auth_headers):
+    raw = {
+        "id": 101, "assignment_id": 10, "user_id": 6,
+        "score": None, "grade": None, "graded_at": None,
+        "submitted_at": None, "workflow_state": "submitted",
+        "missing": False, "late": False, "excused": False,
+        "user": {"name": "Alice Example"},
+    }
+    with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
+        mock.return_value = [raw]
+        response = client.get(
+            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            headers=auth_headers,
+        )
+    assert response.status_code == 200
+    assert response.json()[0]["student_name"] == "Alice Example"
+
+
+def test_list_submissions_student_name_absent_when_no_user(client, auth_headers):
+    raw = {
+        "id": 102, "assignment_id": 10, "user_id": 7,
+        "score": None, "grade": None, "graded_at": None,
+        "submitted_at": None, "workflow_state": "unsubmitted",
+        "missing": False, "late": False, "excused": False,
+    }
+    with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
+        mock.return_value = [raw]
+        response = client.get(
+            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            headers=auth_headers,
+        )
+    assert response.status_code == 200
+    assert response.json()[0]["student_name"] is None
+
 
 
 def test_list_submissions_unauthenticated(client):
