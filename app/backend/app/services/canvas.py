@@ -123,8 +123,7 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
     ]
 
 
-async def get_assignments(local_course_id: int, user: User, db: AsyncSession) -> list[AssignmentResponse]:
-    # Ownership check — also gives us canvas_course_id and canvas_url without a client param
+async def get_assignments(local_course_id: int, user: User, canvas_url: str, db: AsyncSession) -> list[AssignmentResponse]:
     course = await db.scalar(
         select(Course).where(Course.id == local_course_id, Course.instructor_id == user.id)
     )

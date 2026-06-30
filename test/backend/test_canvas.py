@@ -274,13 +274,15 @@ def test_list_assignments(client):
         mock.return_value = courses
         fetch_resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
     local_id = fetch_resp.json()[0]["local_id"]
+    canvas_course_id = courses[0]["id"]
 
     with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock:
         mock.return_value = MOCK_ASSIGNMENTS
         response = client.get(f"/api/v1/canvas/courses/{local_id}/assignments", headers=headers)
     assert response.status_code == 200
     assert response.json()[0]["name"] == "Assignment 1"
-    mock.assert_awaited_once_with(12345, "test-canvas-token", CANVAS_URL)
+    # token is "test-token" (set in _register_with_canvas); canvas_course_id is dynamic
+    mock.assert_awaited_once_with(canvas_course_id, "test-token", CANVAS_URL)
 
 
 def test_list_assignments_unauthenticated(client):
