@@ -6,6 +6,8 @@ from typing import Any
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.schemas.canvas import SubmissionResponse
+from app.integrations.canvas import fetch_enrollments
 
 from app.mcp_tools.schemas import ACTION_SCHEMAS
 from app.models.course import Course
@@ -16,8 +18,23 @@ from app.services.canvas import (
     get_courses,
     get_submissions,
     set_active_course,
+    require_canvas_token,
 )
 
+
+async def _add_person_submission_summary(course, submissions: list[SubmissionResponse], user, db) -> str:
+    """Resolves user_id -> name for display purposes only. This data
+    never goes back into the LLM's context"""
+    token = require_canvas_token(user, course.canvas_url)
+    enrollments = await fetch_enrollments(int(course.canvas_course_id), token, course.canvas_url)
+    name_by_id = {e["user_id"]: e["user"]["name"] for e in enrollments if "user" in e}
+
+    lines = []
+    for s in submissions:
+        name = name_by_id.get(s.user_id, f"Student {s.user_id}")
+        status = "submitted" if s.workflow_state == "submitted" else "has not submitted"
+        lines.append(f"{name} {status}")
+    return "\n".join(lines)
 
 def _extract_json(raw_llm_output: str) -> str:
     """Qwen3 and similar 'thinking' models wrap reasoning in <think>...</think>
@@ -118,12 +135,17 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             )
             return {"assignments": [a.model_dump() for a in assignments]}
 
+        
         case "fetch_submissions":
             course = await _resolve_course(db, user, action.local_course_id)
             submissions = await get_submissions(
                 int(course.canvas_course_id), action.assignment_id, user, course.canvas_url
             )
-            return {"submissions": [s.model_dump() for s in submissions]}
+            summary = await _add_person_submission_summary(course, submissions, user, db)
+            return {
+                "submissions": [s.model_dump() for s in submissions],
+                "summary": summary,
+            }
 
         case "set_active_course":
             result = await set_active_course(user, action.local_course_id, db)
@@ -132,6 +154,33 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
         case "get_active_course":
             result = await get_active_course(user, db)
             return {"active_course": result.model_dump() if result else None}
+        
+        case "out_of_scope":
+            return {
+                "out_of_scope": True,
+                "message": "Your Request is Out of Scope, it can't be processed.",
+                "detail": action.message,
+            }
+
+        case "clarify":
+            # stores the partial plan in the conversation history so the next prompt can be appended on top as a context
+            
+            return {
+                "clarify": True,
+                "question": action.question,
+                "partial_plan": action.partial_plan,
+            }
+
+        case "intent_preview":
+            # shows the user what will happen before executing anything
+           
+            return {
+                "intent_preview": True,
+                "summary": action.summary,
+                "proposed_action": action.proposed_action,
+            }
+        case "respond":
+            return {"message": action.message}
 
         case _:
             # unreachable given parse_action's validation, but keeps mypy/runtime honest
@@ -148,3 +197,5 @@ def _default_canvas_url(user: User) -> str:
             log_detail=f"user_id={user.id} has no canvas_connections",
         )
     return user.canvas_connections[0].canvas_url
+
+

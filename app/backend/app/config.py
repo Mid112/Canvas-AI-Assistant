@@ -46,6 +46,8 @@ class Settings(BaseSettings):
     VLLM_BASE_URL: str = "http://host.docker.internal:8001/v1"
     VLLM_MODEL: str = "Qwen/Qwen3-4B"
 
+    # LLM — Groq (hosted, OpenAI-compatible)
+    GROQ_API_KEY: str = ""
     @field_validator("CANVAS_TOKEN_ENCRYPTION_KEY", mode="before")
     @classmethod
     def _validate_encryption_key(cls, v: str) -> str:
