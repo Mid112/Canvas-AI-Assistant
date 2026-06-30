@@ -251,39 +251,20 @@ async def handle_chat_message(
         await db.commit()
         return conversation, {"error": e.user_message}, True
 
-    await log_message(db, conversation, role="assistant", content=str(result))
+
+    assistant_msg = await log_message(
+    db, conversation, role="assistant", content=json.dumps(result)
+)
     await db.commit()
+
+    # attach the stored message ID so the client can confirm by ID
+    # rather than re-submitting the action payload
+    if result.get("intent_preview"):
+        result["pending_message_id"] = assistant_msg.id
+
     return conversation, result, False
 
 
-async def handle_confirmed_action(
-    db: AsyncSession,
-    user: User,
-    conversation_id: int,
-    proposed_action: dict,
-) -> tuple[Conversation, dict, bool]:
-    """Executes a previously proposed action directly, with no LLM call.
-    This is what runs when the user confirms an intent_preview basically."""
-
-    conversation = await db.scalar(
-        select(Conversation).where(Conversation.id == conversation_id, Conversation.user_id == user.id)
-    )
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found.")
-
-    await log_message(db, conversation, role="user", content="[confirmed action]")
-
-    try:
-        action = parse_action(json.dumps(proposed_action))
-        result = await execute_tool(db, user, action)
-    except ToolExecutionError as e:
-        await log_message(db, conversation, role="assistant", content=e.log_detail)
-        await db.commit()
-        return conversation, {"error": e.user_message}, True
-
-    await log_message(db, conversation, role="assistant", content=json.dumps(result))
-    await db.commit()
-    return conversation, result, False
 
 
 async def get_conversation_with_messages(db: AsyncSession, user: User, conversation_id: int) -> Conversation | None:
