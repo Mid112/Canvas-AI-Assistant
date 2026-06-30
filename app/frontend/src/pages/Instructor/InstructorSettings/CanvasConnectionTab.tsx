@@ -82,6 +82,7 @@ export function CanvasConnectionTab() {
   } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [disconnectingId, setDisconnectingId] = useState<number | null>(null);
+  const [isEditingConnection, setIsEditingConnection] = useState(false);
   const { urlError, validation: tokenValidation } = useCanvasTokenValidation(
     formState.canvasToken,
     formState.canvasUrl,
@@ -89,6 +90,8 @@ export function CanvasConnectionTab() {
   );
 
   const connections = user?.canvas_connections ?? [];
+  const hasConnections = connections.length > 0;
+  const showConnectionForm = !hasConnections || isEditingConnection;
 
   const canSave =
     formState.canvasToken.trim() !== "" &&
@@ -112,6 +115,7 @@ export function CanvasConnectionTab() {
       );
       await refreshUser();
       setFormState({ canvasUrl: "", canvasToken: "" });
+      setIsEditingConnection(false);
       setStatusMessage({
         type: "success",
         text: "Canvas connection saved successfully.",
@@ -135,6 +139,12 @@ export function CanvasConnectionTab() {
       canvasToken: "",
     });
     setStatusMessage(null);
+    setIsEditingConnection(true);
+  };
+
+  const handleCancelEdit = () => {
+    setFormState({ canvasUrl: "", canvasToken: "" });
+    setIsEditingConnection(false);
   };
 
   const handleDisconnect = async (connectionId: number) => {
@@ -148,6 +158,8 @@ export function CanvasConnectionTab() {
     try {
       await removeCanvasConnection(connectionId, accessToken);
       await refreshUser();
+      setIsEditingConnection(false);
+      setFormState({ canvasUrl: "", canvasToken: "" });
       setStatusMessage({
         type: "success",
         text: "Canvas connection removed.",
@@ -239,66 +251,81 @@ export function CanvasConnectionTab() {
             </div>
           )}
 
-          <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
-            <p className="text-sm font-medium">
-              {connections.length > 0 ? "Add or replace connection" : "Connect Canvas"}
-            </p>
-
-            <div className="space-y-2">
-              <Label htmlFor="settings-canvas-url">Canvas URL</Label>
-              <Input
-                id="settings-canvas-url"
-                type="url"
-                autoComplete="url"
-                placeholder="https://canvas.university.edu"
-                value={formState.canvasUrl}
-                onChange={(event) =>
-                  setFormState((current) => ({
-                    ...current,
-                    canvasUrl: event.target.value,
-                  }))
-                }
-                aria-invalid={Boolean(urlError)}
-              />
-              {urlError ? (
-                <p role="alert" className="text-sm text-destructive">
-                  {urlError}
+          {showConnectionForm ? (
+            <div className="space-y-4 rounded-xl border bg-muted/20 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-medium">
+                  {hasConnections ? "Replace connection" : "Connect Canvas"}
                 </p>
-              ) : null}
-            </div>
+                {hasConnections ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={isSaving}
+                    onClick={handleCancelEdit}
+                  >
+                    Cancel
+                  </Button>
+                ) : null}
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="settings-canvas-token">Canvas API Token</Label>
-              <Input
-                id="settings-canvas-token"
-                type="password"
-                autoComplete="off"
-                placeholder="Paste a new Canvas access token"
-                value={formState.canvasToken}
-                onChange={(event) =>
-                  setFormState((current) => ({
-                    ...current,
-                    canvasToken: event.target.value,
-                  }))
-                }
-              />
-              <ConnectCanvasTokenStatus validation={tokenValidation} />
-              <p className="text-xs text-muted-foreground">
-                For security, saved tokens are never displayed after submission.
-              </p>
-            </div>
+              <div className="space-y-2">
+                <Label htmlFor="settings-canvas-url">Canvas URL</Label>
+                <Input
+                  id="settings-canvas-url"
+                  type="url"
+                  autoComplete="url"
+                  placeholder="https://canvas.university.edu"
+                  value={formState.canvasUrl}
+                  onChange={(event) =>
+                    setFormState((current) => ({
+                      ...current,
+                      canvasUrl: event.target.value,
+                    }))
+                  }
+                  aria-invalid={Boolean(urlError)}
+                />
+                {urlError ? (
+                  <p role="alert" className="text-sm text-destructive">
+                    {urlError}
+                  </p>
+                ) : null}
+              </div>
 
-            <Button type="button" disabled={!canSave} onClick={() => void handleSave()}>
-              {isSaving ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                  Saving...
-                </>
-              ) : (
-                "Save Canvas Connection"
-              )}
-            </Button>
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="settings-canvas-token">Canvas API Token</Label>
+                <Input
+                  id="settings-canvas-token"
+                  type="password"
+                  autoComplete="off"
+                  placeholder="Paste a new Canvas access token"
+                  value={formState.canvasToken}
+                  onChange={(event) =>
+                    setFormState((current) => ({
+                      ...current,
+                      canvasToken: event.target.value,
+                    }))
+                  }
+                />
+                <ConnectCanvasTokenStatus validation={tokenValidation} />
+                <p className="text-xs text-muted-foreground">
+                  For security, saved tokens are never displayed after submission.
+                </p>
+              </div>
+
+              <Button type="button" disabled={!canSave} onClick={() => void handleSave()}>
+                {isSaving ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Canvas Connection"
+                )}
+              </Button>
+            </div>
+          ) : null}
 
           <div className="space-y-3">
             <p className="text-sm font-medium">Permissions</p>

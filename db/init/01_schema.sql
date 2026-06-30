@@ -13,7 +13,7 @@ CREATE TABLE users (
     name             VARCHAR NOT NULL,
     email            VARCHAR UNIQUE NOT NULL,
     hashed_password  TEXT NOT NULL,                          -- bcrypt hashed
-    role             VARCHAR NOT NULL CHECK (role IN ('instructor', 'ta', 'admin')),
+    role             VARCHAR NOT NULL CHECK (role IN ('instructor', 'admin')), -- was ('instructor', 'ta', 'admin'); see db/migrations/002_remove_ta_role.sql
     is_active        BOOLEAN DEFAULT true,
     created_at       TIMESTAMPTZ DEFAULT NOW()
 );
@@ -73,6 +73,7 @@ CREATE TABLE assignments (
     canvas_assignment_id VARCHAR UNIQUE NOT NULL,
     course_id            INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     title                VARCHAR NOT NULL,
+    description          TEXT,
     due_date             TIMESTAMPTZ,
     points_possible      FLOAT,
     created_at           TIMESTAMPTZ DEFAULT NOW()
