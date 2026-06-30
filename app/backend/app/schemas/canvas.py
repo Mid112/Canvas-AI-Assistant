@@ -1,5 +1,5 @@
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -39,7 +39,7 @@ class AssignmentResponse(BaseModel):
     course_id: int
 
 
-class SubmissionStatus(str, Enum):
+class SubmissionStatus(StrEnum):
     graded = "graded"
     submitted = "submitted"
     late = "late"
