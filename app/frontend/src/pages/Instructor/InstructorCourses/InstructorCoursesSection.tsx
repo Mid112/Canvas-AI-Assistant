@@ -6,12 +6,13 @@ import {
   List,
   Users,
 } from "lucide-react";
-
 import { Link } from "react-router-dom";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { getCourseAnalyticsPath } from "@/pages/Instructor/InstructorSubmissionsAnalysis/submissionNavigation";
 import { instructorCourseAssignmentsPath } from "@/routes/paths";
+import { cn } from "@/lib/utils";
 import type { InstructorCourse } from "@/types/course";
 
 interface InstructorCoursesCardProps {
@@ -71,18 +72,19 @@ export function InstructorCoursesCard({ course }: InstructorCoursesCardProps) {
       </CardContent>
 
       <CardFooter className="grid grid-cols-2 gap-2 border-t bg-transparent pt-4">
-        <Button
-          className="w-full"
-          render={
-            <Link to={instructorCourseAssignmentsPath(course.id)} />
-          }
+        <Link
+          to={instructorCourseAssignmentsPath(course.id)}
+          className={cn(buttonVariants(), "w-full")}
         >
           View Course
-        </Button>
-        <Button variant="outline" className="w-full">
+        </Link>
+        <Link
+          to={getCourseAnalyticsPath(course.id)}
+          className={cn(buttonVariants({ variant: "outline" }), "w-full")}
+        >
           <BarChart3 data-icon="inline-start" />
           Analytics
-        </Button>
+        </Link>
       </CardFooter>
     </Card>
   );
@@ -114,14 +116,19 @@ export function InstructorCoursesList({ courses }: InstructorCoursesListProps) {
               <span className="text-sm font-medium tabular-nums">
                 {course.progress}%
               </span>
-              <Button
-                size="sm"
-                render={
-                  <Link to={instructorCourseAssignmentsPath(course.id)} />
-                }
+              <Link
+                to={getCourseAnalyticsPath(course.id)}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                <BarChart3 data-icon="inline-start" />
+                Analytics
+              </Link>
+              <Link
+                to={instructorCourseAssignmentsPath(course.id)}
+                className={buttonVariants({ size: "sm" })}
               >
                 View Course
-              </Button>
+              </Link>
             </div>
           </li>
         ))}

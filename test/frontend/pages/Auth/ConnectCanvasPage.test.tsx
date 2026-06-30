@@ -5,7 +5,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { ConnectCanvasPage } from "@/pages/Auth/ConnectCanvasPage";
 import { paths } from "@/routes/paths";
 import { markOnboardingComplete } from "@/lib/onboarding-storage";
-import { updateCanvasTokens, validateCanvasToken } from "@/services/canvas";
+import { updateCanvasConnections, validateCanvasToken } from "@/services/canvas";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 const mockNavigate = vi.fn();
@@ -45,7 +45,7 @@ vi.mock("@/lib/onboarding-storage", () => ({
 }));
 
 vi.mock("@/services/canvas", () => ({
-  updateCanvasTokens: vi.fn(),
+  updateCanvasConnections: vi.fn(),
   validateCanvasToken: vi.fn(),
   CanvasApiError: class CanvasApiError extends Error {
     status: number;
@@ -57,9 +57,11 @@ vi.mock("@/services/canvas", () => ({
   },
 }));
 
-const mockedUpdateCanvasTokens = vi.mocked(updateCanvasTokens);
+const mockedUpdateCanvasConnections = vi.mocked(updateCanvasConnections);
 const mockedValidateCanvasToken = vi.mocked(validateCanvasToken);
 const mockedMarkOnboardingComplete = vi.mocked(markOnboardingComplete);
+
+const CANVAS_URL = "https://canvas.university.edu";
 
 describe("ConnectCanvasPage", () => {
   beforeEach(() => {
@@ -80,12 +82,13 @@ describe("ConnectCanvasPage", () => {
     expect(
       screen.getByRole("heading", { name: "Connect Your Canvas Account" }),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("Canvas URL")).toBeInTheDocument();
     expect(screen.getByLabelText(/Canvas API Token/i)).toBeInTheDocument();
   });
 
   it("navigates to review permissions after a successful connection", async () => {
     const user = userEvent.setup();
-    mockedUpdateCanvasTokens.mockResolvedValue({
+    mockedUpdateCanvasConnections.mockResolvedValue({
       id: 1,
       email: "professor@university.edu",
       is_active: true,
@@ -94,24 +97,26 @@ describe("ConnectCanvasPage", () => {
 
     renderWithRouter(<ConnectCanvasPage />);
 
+    await user.type(screen.getByLabelText("Canvas URL"), CANVAS_URL);
     await user.type(screen.getByLabelText(/Canvas API Token/i), "valid-token");
     await vi.advanceTimersByTimeAsync(500);
     await screen.findByText("Token is valid");
     await user.click(screen.getByRole("button", { name: "Connect Canvas" }));
 
-    expect(mockedUpdateCanvasTokens).toHaveBeenCalledWith(
-      ["valid-token"],
+    expect(mockedUpdateCanvasConnections).toHaveBeenCalledWith(
+      [{ canvasUrl: CANVAS_URL, canvasToken: "valid-token" }],
       "access-token",
     );
     // Users move to the next step once the save succeeds; AuthContext still
     // refreshes afterward so later Canvas-backed pages get fresh connection data.
+    expect(mockedMarkOnboardingComplete).toHaveBeenCalledWith(1);
     expect(mockNavigate).toHaveBeenCalledWith(paths.reviewPermissions);
     expect(mockRefreshUser).toHaveBeenCalledTimes(1);
   });
 
   it("still navigates when the post-connect auth refresh fails", async () => {
     const user = userEvent.setup();
-    mockedUpdateCanvasTokens.mockResolvedValue({
+    mockedUpdateCanvasConnections.mockResolvedValue({
       id: 1,
       email: "professor@university.edu",
       is_active: true,
@@ -123,6 +128,7 @@ describe("ConnectCanvasPage", () => {
 
     renderWithRouter(<ConnectCanvasPage />);
 
+    await user.type(screen.getByLabelText("Canvas URL"), CANVAS_URL);
     await user.type(screen.getByLabelText(/Canvas API Token/i), "valid-token");
     await vi.advanceTimersByTimeAsync(500);
     await screen.findByText("Token is valid");
@@ -136,46 +142,16 @@ describe("ConnectCanvasPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("submits multiple tokens when provided", async () => {
-    const user = userEvent.setup();
-    mockedUpdateCanvasTokens.mockResolvedValue({
-      id: 1,
-      email: "professor@university.edu",
-      is_active: true,
-      has_canvas_token: true,
-    });
-
-    renderWithRouter(<ConnectCanvasPage />);
-
-    await user.type(screen.getByLabelText(/Canvas API Token/i), "token-one");
-    await vi.advanceTimersByTimeAsync(500);
-    await screen.findByText("Token is valid");
-    await user.click(
-      screen.getByRole("button", { name: "Add another institution" }),
-    );
-    await user.type(
-      screen.getByLabelText("Canvas API Token (Institution 2)"),
-      "token-two",
-    );
-    await vi.advanceTimersByTimeAsync(500);
-    await screen.findAllByText("Token is valid");
-    await user.click(screen.getByRole("button", { name: "Connect Canvas" }));
-
-    expect(mockedUpdateCanvasTokens).toHaveBeenCalledWith(
-      ["token-one", "token-two"],
-      "access-token",
-    );
-  });
-
   it("logs out when the session expires during connect", async () => {
     const user = userEvent.setup();
     const { CanvasApiError } = await import("@/services/canvas");
-    mockedUpdateCanvasTokens.mockRejectedValue(
+    mockedUpdateCanvasConnections.mockRejectedValue(
       new CanvasApiError("Invalid token", 401),
     );
 
     renderWithRouter(<ConnectCanvasPage />);
 
+    await user.type(screen.getByLabelText("Canvas URL"), CANVAS_URL);
     await user.type(screen.getByLabelText(/Canvas API Token/i), "valid-token");
     await vi.advanceTimersByTimeAsync(500);
     await screen.findByText("Token is valid");
@@ -196,6 +172,6 @@ describe("ConnectCanvasPage", () => {
 
     expect(mockedMarkOnboardingComplete).toHaveBeenCalledWith(1);
     expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant);
-    expect(mockedUpdateCanvasTokens).not.toHaveBeenCalled();
+    expect(mockedUpdateCanvasConnections).not.toHaveBeenCalled();
   });
 });

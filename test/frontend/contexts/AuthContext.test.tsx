@@ -124,6 +124,25 @@ describe("AuthContext", () => {
     expect(result.current.accessToken).toBeNull();
   });
 
+  it("clears auth state when /auth/me returns an unsupported role", async () => {
+    mockedGetStoredToken.mockReturnValue("stored-token");
+    mockedFetchCurrentUser.mockResolvedValue({
+      ...mockUserResponse,
+      role: "ta",
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(mockedClearStoredToken).toHaveBeenCalledTimes(1);
+    expect(result.current.isAuthenticated).toBe(false);
+    expect(result.current.user).toBeNull();
+    expect(result.current.accessToken).toBeNull();
+  });
+
   it("logs in and stores the token", async () => {
     mockedLoginUser.mockResolvedValue({
       access_token: "new-token",

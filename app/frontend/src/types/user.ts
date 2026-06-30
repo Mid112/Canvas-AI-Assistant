@@ -1,6 +1,7 @@
 import type { CanvasConnectionResponse } from "@/types/auth";
 
-export type UserRole = "instructor" | "ta" | "admin";
+export type UserRole = "instructor" | "admin";
+export type CanvasConnection = CanvasConnectionResponse;
 
 export interface User {
   id: number;

@@ -2,8 +2,7 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { paths } from "@/routes/paths";
-import { hasCompletedOnboarding } from "@/lib/onboarding-storage";
-import { isOnboardingPath, requiresOnboarding } from "@/utils/onboarding";
+import { isOnboardingComplete, isOnboardingPath, requiresOnboarding } from "@/utils/onboarding";
 
 export function ProtectedRoute() {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -24,7 +23,7 @@ export function ProtectedRoute() {
   if (
     user &&
     requiresOnboarding(user.role) &&
-    !hasCompletedOnboarding(user.id) &&
+    !isOnboardingComplete(user) &&
     !isOnboardingPath(location.pathname)
   ) {
     return <Navigate to={paths.canvasInfo} replace />;

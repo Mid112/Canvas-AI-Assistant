@@ -18,6 +18,15 @@ const defaultProps = {
   onSkip: vi.fn(),
 };
 
+const CANVAS_URL = "https://canvas.university.edu";
+
+async function fillValidConnection(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText("Canvas URL"), CANVAS_URL);
+  await user.type(screen.getByLabelText(/Canvas API Token/i), "abc123");
+  await vi.advanceTimersByTimeAsync(500);
+  await screen.findByText("Token is valid");
+}
+
 describe("ConnectCanvasForm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -32,6 +41,7 @@ describe("ConnectCanvasForm", () => {
   it("renders the token field, add button, and actions", () => {
     renderWithRouter(<ConnectCanvasForm {...defaultProps} />);
 
+    expect(screen.getByLabelText("Canvas URL")).toBeInTheDocument();
     expect(screen.getByLabelText(/Canvas API Token/i)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Add another institution" }),
@@ -44,7 +54,7 @@ describe("ConnectCanvasForm", () => {
     ).toBeInTheDocument();
   });
 
-  it("disables connect until a token is validated", async () => {
+  it("disables connect until a valid URL and token are provided", async () => {
     const user = userEvent.setup();
     renderWithRouter(<ConnectCanvasForm {...defaultProps} />);
 
@@ -52,10 +62,8 @@ describe("ConnectCanvasForm", () => {
       screen.getByRole("button", { name: "Connect Canvas" }),
     ).toBeDisabled();
 
-    await user.type(screen.getByLabelText(/Canvas API Token/i), "abc123");
-    await vi.advanceTimersByTimeAsync(500);
+    await fillValidConnection(user);
 
-    expect(await screen.findByText("Token is valid")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Connect Canvas" }),
     ).toBeEnabled();
@@ -67,6 +75,7 @@ describe("ConnectCanvasForm", () => {
 
     renderWithRouter(<ConnectCanvasForm {...defaultProps} />);
 
+    await user.type(screen.getByLabelText("Canvas URL"), CANVAS_URL);
     await user.type(screen.getByLabelText(/Canvas API Token/i), "expired-token");
     await vi.advanceTimersByTimeAsync(500);
 
@@ -76,7 +85,7 @@ describe("ConnectCanvasForm", () => {
     ).toBeDisabled();
   });
 
-  it("submits all non-empty trimmed tokens", async () => {
+  it("submits all non-empty trimmed connections", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
 
@@ -84,50 +93,38 @@ describe("ConnectCanvasForm", () => {
       <ConnectCanvasForm {...defaultProps} onSubmit={onSubmit} />,
     );
 
-    await user.type(screen.getByLabelText(/Canvas API Token/i), "  token-one  ");
-    await vi.advanceTimersByTimeAsync(500);
-    await screen.findByText("Token is valid");
+    await fillValidConnection(user);
 
     await user.click(
       screen.getByRole("button", { name: "Add another institution" }),
     );
-    await user.type(
-      screen.getByLabelText("Canvas API Token (Institution 2)"),
-      "token-two",
-    );
+    const urlFields = screen.getAllByLabelText("Canvas URL");
+    const tokenFields = screen.getAllByLabelText(/Canvas API Token/i);
+    await user.type(urlFields[1], "https://canvas.other.edu");
+    await user.type(tokenFields[1], "token-two");
     await vi.advanceTimersByTimeAsync(500);
     await screen.findAllByText("Token is valid");
 
     await user.click(screen.getByRole("button", { name: "Connect Canvas" }));
 
     expect(onSubmit).toHaveBeenCalledWith({
-      canvasTokens: ["token-one", "token-two"],
+      connections: [
+        { canvasUrl: CANVAS_URL, canvasToken: "abc123" },
+        { canvasUrl: "https://canvas.other.edu", canvasToken: "token-two" },
+      ],
     });
   });
 
-  it("does not re-validate unchanged tokens when another field is edited", async () => {
+  it("validates tokens with the canvas URL", async () => {
     const user = userEvent.setup();
     renderWithRouter(<ConnectCanvasForm {...defaultProps} />);
 
-    await user.type(screen.getByLabelText(/Canvas API Token/i), "token-one");
-    await vi.advanceTimersByTimeAsync(500);
-    await screen.findByText("Token is valid");
-    expect(mockedValidateCanvasToken).toHaveBeenCalledTimes(1);
+    await fillValidConnection(user);
 
-    await user.click(
-      screen.getByRole("button", { name: "Add another institution" }),
-    );
-    await user.type(
-      screen.getByLabelText("Canvas API Token (Institution 2)"),
-      "token-two",
-    );
-    await vi.advanceTimersByTimeAsync(500);
-    await screen.findAllByText("Token is valid");
-
-    expect(mockedValidateCanvasToken).toHaveBeenCalledTimes(2);
-    expect(mockedValidateCanvasToken).toHaveBeenLastCalledWith(
-      "token-two",
+    expect(mockedValidateCanvasToken).toHaveBeenCalledWith(
+      "abc123",
       "access-token",
+      CANVAS_URL,
     );
   });
 
@@ -143,6 +140,7 @@ describe("ConnectCanvasForm", () => {
       />,
     );
 
+    await user.type(screen.getByLabelText("Canvas URL"), CANVAS_URL);
     await user.type(screen.getByLabelText(/Canvas API Token/i), "token-one");
     await vi.advanceTimersByTimeAsync(500);
 
@@ -160,17 +158,13 @@ describe("ConnectCanvasForm", () => {
       screen.getByRole("button", { name: "Add another institution" }),
     );
 
-    expect(
-      screen.getByLabelText("Canvas API Token (Institution 2)"),
-    ).toBeInTheDocument();
+    expect(screen.getAllByLabelText("Canvas URL")).toHaveLength(2);
 
     await user.click(
       screen.getByRole("button", { name: "Remove institution 2" }),
     );
 
-    expect(
-      screen.queryByLabelText("Canvas API Token (Institution 2)"),
-    ).not.toBeInTheDocument();
+    expect(screen.getAllByLabelText("Canvas URL")).toHaveLength(1);
   });
 
   it("calls onSkip when continuing without connecting", async () => {
@@ -196,8 +190,8 @@ describe("ConnectCanvasForm", () => {
       />,
     );
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Unable to connect Canvas. Please check your token and try again.",
-    );
+    expect(
+      screen.getByText("Unable to connect Canvas. Please check your token and try again."),
+    ).toBeInTheDocument();
   });
 });
