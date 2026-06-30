@@ -38,6 +38,18 @@ class AssignmentResponse(BaseModel):
     course_id: int
 
 
+class AssignmentCreate(BaseModel):
+    name: str
+    description: str | None = None
+    due_at: datetime | None = None
+
+
+class AssignmentUpdate(BaseModel):
+    name: str
+    description: str | None = None
+    due_at: datetime | None = None
+
+
 class SubmissionResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

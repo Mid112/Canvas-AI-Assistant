@@ -117,9 +117,10 @@ export async function createAssignment(
   localCourseId: number,
   payload: AssignmentCreatePayload,
   accessToken: string,
+  canvasUrl?: string,
 ): Promise<Assignment> {
   return request<Assignment>(
-    buildCourseAssignmentsUrl(localCourseId),
+    buildCourseAssignmentsUrl(localCourseId, canvasUrl),
     accessToken,
     {
       method: "POST",

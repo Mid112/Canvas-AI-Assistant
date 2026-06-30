@@ -1,4 +1,5 @@
 import { formatDueDateForApi } from "@/lib/assignment-utils";
+import { createAssignment } from "@/services/assignments";
 import type { AssignmentCreatePayload } from "@/types/assignment";
 import type {
   AssignmentApprovePayload,
@@ -114,11 +115,20 @@ export function toAssignmentCreateRequest(
   };
 }
 
-/** Mock approve/create — simulates saving to Canvas. */
+interface ApproveAssignmentDraftOptions {
+  accessToken: string;
+  canvasUrl?: string;
+}
+
 export async function approveAssignmentDraft(
   payload: AssignmentApprovePayload,
+  options: ApproveAssignmentDraftOptions,
 ): Promise<void> {
   const request = toAssignmentCreateRequest(payload);
-  await delay(800);
-  void request;
+  await createAssignment(
+    request.courseId,
+    request.assignment,
+    options.accessToken,
+    options.canvasUrl,
+  );
 }
