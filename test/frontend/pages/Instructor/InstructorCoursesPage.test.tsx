@@ -41,7 +41,7 @@ vi.mock("@/contexts/AuthContext", async () => {
   };
 });
 
-const CANVAS_URL = "http://localhost:3000";
+const CANVAS_URL = "https://canvas.ubc.ca";
 
 const authWithCanvas = {
   user: {
@@ -124,7 +124,7 @@ describe("InstructorCoursesPage", () => {
     const { CanvasApiError } = await import("@/services/canvas");
     mockedFetchCourses.mockRejectedValue(
       new CanvasApiError(
-        "No Canvas token for http://localhost:3000. PATCH to /api/v1/auth/me/canvas-token first.",
+        "No Canvas token for https://canvas.ubc.ca. PATCH to /api/v1/auth/me/canvas-token first.",
         403,
       ),
     );

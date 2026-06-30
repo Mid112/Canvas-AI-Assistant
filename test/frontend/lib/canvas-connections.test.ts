@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
+import {
+  getCanvasConnectionUrlForInstitution,
+  getPrimaryCanvasConnectionUrl,
+} from "@/lib/canvas-connections";
 import type { User } from "@/types/user";
 
 const baseUser: User = {
@@ -24,8 +27,6 @@ describe("getPrimaryCanvasConnectionUrl", () => {
   });
 
   it("returns the first Canvas connection URL", () => {
-    // This documents the temporary multi-school rule until the app has an
-    // explicit institution selector for choosing among Canvas connections.
     expect(
       getPrimaryCanvasConnectionUrl({
         ...baseUser,
@@ -37,11 +38,58 @@ describe("getPrimaryCanvasConnectionUrl", () => {
           },
           {
             id: 2,
-            canvas_url: "https://canvas.example.edu",
+            canvas_url: "https://canvas.ubc.ca",
             created_at: "2026-06-27T00:00:00.000Z",
           },
         ],
       }),
     ).toBe("http://localhost:3000");
+  });
+});
+
+describe("getCanvasConnectionUrlForInstitution", () => {
+  it("returns undefined when the user has no connections", () => {
+    expect(getCanvasConnectionUrlForInstitution(baseUser, "ubc")).toBeUndefined();
+  });
+
+  it("returns the connection that matches the institution Canvas URL", () => {
+    expect(
+      getCanvasConnectionUrlForInstitution(
+        {
+          ...baseUser,
+          canvas_connections: [
+            {
+              id: 1,
+              canvas_url: "http://localhost:3000",
+              created_at: "2026-06-26T00:00:00.000Z",
+            },
+            {
+              id: 2,
+              canvas_url: "https://canvas.ubc.ca",
+              created_at: "2026-06-27T00:00:00.000Z",
+            },
+          ],
+        },
+        "ubc",
+      ),
+    ).toBe("https://canvas.ubc.ca");
+  });
+
+  it("does not fall back to the first connection when it does not match", () => {
+    expect(
+      getCanvasConnectionUrlForInstitution(
+        {
+          ...baseUser,
+          canvas_connections: [
+            {
+              id: 1,
+              canvas_url: "http://localhost:3000",
+              created_at: "2026-06-26T00:00:00.000Z",
+            },
+          ],
+        },
+        "ubc",
+      ),
+    ).toBeUndefined();
   });
 });

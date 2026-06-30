@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
+import { useInstitution } from "@/contexts/useInstitution";
+import { getCanvasConnectionUrlForInstitution } from "@/lib/canvas-connections";
 import { isCanvasConnectionRequiredError } from "@/lib/canvas-connection";
 import { fetchCourseAssignments } from "@/services/assignments";
 import { CanvasApiError, fetchCourses } from "@/services/canvas";
@@ -11,10 +12,11 @@ import { mapCanvasCourseToInstructorCourse } from "./mapCanvasCourse";
 
 /**
  * Loads instructor courses from Canvas for the selected institution.
- * Assignment counts are fetched per course using Canvas course IDs (see assignments.ts).
+ * Assignment counts use local course IDs (see assignments.ts).
  */
 export function useCanvasInstructorCourses() {
   const { accessToken, user, logout } = useAuth();
+  const { selectedInstitution } = useInstitution();
   const [courses, setCourses] = useState<InstructorCourse[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +24,10 @@ export function useCanvasInstructorCourses() {
   const [reloadToken, setReloadToken] = useState(0);
 
   const hasCanvasToken = Boolean(accessToken && user?.has_canvas_token);
-  const canvasUrl = getPrimaryCanvasConnectionUrl(user);
+  const canvasUrl = getCanvasConnectionUrlForInstitution(
+    user,
+    selectedInstitution.id,
+  );
 
   // Bumps reloadToken to re-run the effect after "Sync from Canvas" or institution switch.
   const reloadCourses = useCallback(() => {
@@ -117,7 +122,7 @@ export function useCanvasInstructorCourses() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, canvasUrl, hasCanvasToken, logout, reloadToken]);
+  }, [accessToken, canvasUrl, hasCanvasToken, logout, reloadToken, selectedInstitution.id]);
 
   return {
     courses,
