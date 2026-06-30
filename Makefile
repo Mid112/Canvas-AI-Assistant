@@ -1,4 +1,4 @@
-.PHONY: install install-vllm lint lint-fix test test-llm test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset run-vllm dev
+.PHONY: install install-vllm lint lint-fix test test-llm test-vague-llm test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset run-vllm dev
 
 # ── Install ──────────────────────────────────
 # Creates a venv (if one doesn't exist) and installs backend deps
@@ -106,6 +106,9 @@ run-vllm:
 		--host 0.0.0.0 \
 		--port 8001 \
 		--max-model-len 4096
+
+test-vague-llm:
+	app/backend/.venv/bin/python test/backend/test_vague_llm.py
 
 # ── Docker ───────────────────────────────────
 build:
