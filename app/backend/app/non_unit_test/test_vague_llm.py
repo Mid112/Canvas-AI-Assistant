@@ -40,17 +40,15 @@ async def chat(token: str, message: str, conversation_id: int | None = None) -> 
         return resp.json()
 
 
-async def confirm(token: str, conversation_id: int, proposed_action: dict) -> dict:
-    """Executes a previously-proposed action directly, bypassing the LLM.
-    This is what should run when the user confirms an intent_preview."""
+
+async def confirm(token: str, conversation_id: int, pending_message_id: int) -> dict:
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
             f"{BASE_URL}/chat/confirm",
             headers={"Authorization": f"Bearer {token}"},
-            json={"conversation_id": conversation_id, "proposed_action": proposed_action},
+            json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
         )
         return resp.json()
-
 
 async def main():
     print("Registering test user...")
@@ -82,9 +80,9 @@ async def main():
             confirm_choice = input("Confirm? (yes / modify / cancel): ").strip().lower()
 
             if confirm_choice == "yes":
-                # bypasses the LLM entirely — executes the exact proposed_action
-                result2 = await confirm(token, conversation_id, reply["proposed_action"])
+                result2 = await confirm(token, conversation_id, reply["pending_message_id"])
                 print(f"\nResult: {result2.get('reply')}\n")
+
             elif confirm_choice == "modify":
                 modification = input("What to change? ").strip()
                 result2 = await chat(token, modification, conversation_id)

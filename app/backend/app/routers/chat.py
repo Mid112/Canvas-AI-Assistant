@@ -17,8 +17,12 @@ async def confirm_action(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    conversation, reply, is_error = await handle_confirmed_action(db, current_user, body.conversation_id, body.proposed_action)
+    conversation, reply, is_error = await handle_confirmed_action(
+        db, current_user, body.conversation_id, body.pending_message_id
+    )
     return ChatResponse(conversation_id=conversation.id, reply=reply, is_error=is_error)
+
+
 
 
 @router.post("/", response_model=ChatResponse)

@@ -4,10 +4,11 @@ from datetime import datetime
 from pydantic import BaseModel
 
 
+
+
 class ConfirmActionRequest(BaseModel):
     conversation_id: int
-    proposed_action: dict
-
+    pending_message_id: int
 
 class ChatRequest(BaseModel):
     message: str
