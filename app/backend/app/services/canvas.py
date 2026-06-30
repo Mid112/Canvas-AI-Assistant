@@ -7,7 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.security import decrypt_canvas_token
-from app.integrations.canvas import fetch_assignments, fetch_courses, fetch_submissions
+from app.integrations.canvas import (
+    create_assignment,
+    fetch_assignment,
+    fetch_assignments,
+    fetch_courses,
+    fetch_submissions,
+    update_assignment,
+)
 from app.models.assignment import Assignment
 from app.models.course import Course
 from app.models.user import User
@@ -19,7 +26,7 @@ from app.schemas.canvas import (
     AssignmentUpdate,
     CourseResponse,
     SubmissionResponse,
-    SubmissionStatus
+    SubmissionStatus,
 )
 
 
@@ -128,7 +135,7 @@ async def get_assignments(local_course_id: int, user: User, db: AsyncSession) ->
             detail="Course not found or does not belong to you.",
         )
 
-    token = _require_canvas_token(user, course.canvas_url)
+    token = require_canvas_token(user, course.canvas_url)
     data = await fetch_assignments(int(course.canvas_course_id), token, course.canvas_url)
 
     if not data:
@@ -268,12 +275,6 @@ def _parse_submission(raw: dict) -> SubmissionResponse:
     )
 
 
-async def get_submissions(course_id: int, assignment_id: int, user: User, canvas_url: str) -> list[SubmissionResponse]:
-    # Parses and returns submissions from Canvas — does not persist to the submissions
-    # table yet. DB upsert is deferred to a follow-up PR.
-    token = require_canvas_token(user, canvas_url)
-    data = await fetch_submissions(course_id, assignment_id, token, canvas_url)
-    return [_parse_submission(raw) for raw in data]
 async def get_submissions(
     local_course_id: int,
     assignment_id: int,
@@ -289,7 +290,7 @@ async def get_submissions(
         token,
         canvas_url,
     )
-    return [SubmissionResponse(**item) for item in data]
+    return [_parse_submission(raw) for raw in data]
 
 
 async def get_active_course(user: User, db: AsyncSession) -> ActiveCourseResponse | None:
