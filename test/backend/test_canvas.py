@@ -81,6 +81,13 @@ def auth_headers(client):
     return headers
 
 
+@pytest.fixture(scope="module")
+def synced_course_id(client, auth_headers):
+    """One Canvas course synced into the DB for the auth_headers user.
+    Module-scoped so all submission tests share the same local course row."""
+    return _sync_local_course(client, auth_headers)
+
+
 def _register_with_canvas(client) -> dict:
     """Register a fresh user + connect a Canvas token. Returns auth headers."""
     email = f"test_{uuid.uuid4()}@example.com"
@@ -395,7 +402,7 @@ def test_list_submissions(client, auth_headers):
     mock.assert_awaited_once_with(12345, 10, "test-canvas-token", CANVAS_URL)
 
 
-def test_list_submissions_student_name(client, auth_headers):
+def test_list_submissions_student_name(client, auth_headers, synced_course_id):
     raw = {
         "id": 101, "assignment_id": 10, "user_id": 6,
         "score": None, "grade": None, "graded_at": None,
@@ -406,14 +413,14 @@ def test_list_submissions_student_name(client, auth_headers):
     with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
         mock.return_value = [raw]
         response = client.get(
-            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{synced_course_id}/assignments/10/submissions?canvas_url={CANVAS_URL}",
             headers=auth_headers,
         )
     assert response.status_code == 200
     assert response.json()[0]["student_name"] == "Alice Example"
 
 
-def test_list_submissions_student_name_absent_when_no_user(client, auth_headers):
+def test_list_submissions_student_name_absent_when_no_user(client, auth_headers, synced_course_id):
     raw = {
         "id": 102, "assignment_id": 10, "user_id": 7,
         "score": None, "grade": None, "graded_at": None,
@@ -423,7 +430,7 @@ def test_list_submissions_student_name_absent_when_no_user(client, auth_headers)
     with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
         mock.return_value = [raw]
         response = client.get(
-            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{synced_course_id}/assignments/10/submissions?canvas_url={CANVAS_URL}",
             headers=auth_headers,
         )
     assert response.status_code == 200
@@ -498,11 +505,11 @@ def _submission(**overrides) -> dict:
         "excused",
     ),
 ])
-def test_submission_status_parsing(client, auth_headers, raw, expected_status):
+def test_submission_status_parsing(client, auth_headers, synced_course_id, raw, expected_status):
     with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
         mock.return_value = [raw]
         response = client.get(
-            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{synced_course_id}/assignments/10/submissions?canvas_url={CANVAS_URL}",
             headers=auth_headers,
         )
     assert response.status_code == 200
@@ -513,7 +520,7 @@ def test_submission_status_parsing(client, auth_headers, raw, expected_status):
 # #548 — Grading information parsing
 # ---------------------------------------------------------------------------
 
-def test_submission_grading_fields_populated(client, auth_headers):
+def test_submission_grading_fields_populated(client, auth_headers, synced_course_id):
     raw = _submission(
         workflow_state="graded",
         score=92.5,
@@ -523,7 +530,7 @@ def test_submission_grading_fields_populated(client, auth_headers):
     with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
         mock.return_value = [raw]
         response = client.get(
-            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{synced_course_id}/assignments/10/submissions?canvas_url={CANVAS_URL}",
             headers=auth_headers,
         )
     data = response.json()[0]
@@ -532,12 +539,12 @@ def test_submission_grading_fields_populated(client, auth_headers):
     assert data["graded_at"] is not None
 
 
-def test_submission_grading_fields_null_when_ungraded(client, auth_headers):
+def test_submission_grading_fields_null_when_ungraded(client, auth_headers, synced_course_id):
     raw = _submission(workflow_state="submitted", submitted_at="2026-06-01T08:00:00Z")
     with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
         mock.return_value = [raw]
         response = client.get(
-            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{synced_course_id}/assignments/10/submissions?canvas_url={CANVAS_URL}",
             headers=auth_headers,
         )
     data = response.json()[0]
@@ -550,53 +557,53 @@ def test_submission_grading_fields_null_when_ungraded(client, auth_headers):
 # #549 — API failure handling
 # ---------------------------------------------------------------------------
 
-def test_list_submissions_invalid_canvas_token(client, auth_headers):
+def test_list_submissions_invalid_canvas_token(client, auth_headers, synced_course_id):
     with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
         mock.side_effect = HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Invalid Canvas API token",
         )
         response = client.get(
-            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{synced_course_id}/assignments/10/submissions?canvas_url={CANVAS_URL}",
             headers=auth_headers,
         )
     assert response.status_code == 422
 
 
-def test_list_submissions_canvas_permission_denied(client, auth_headers):
+def test_list_submissions_canvas_permission_denied(client, auth_headers, synced_course_id):
     with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
         mock.side_effect = HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Canvas token lacks permission for this resource",
         )
         response = client.get(
-            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{synced_course_id}/assignments/10/submissions?canvas_url={CANVAS_URL}",
             headers=auth_headers,
         )
     assert response.status_code == 403
 
 
-def test_list_submissions_canvas_unavailable(client, auth_headers):
+def test_list_submissions_canvas_unavailable(client, auth_headers, synced_course_id):
     with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
         mock.side_effect = HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Could not reach Canvas",
         )
         response = client.get(
-            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{synced_course_id}/assignments/10/submissions?canvas_url={CANVAS_URL}",
             headers=auth_headers,
         )
     assert response.status_code == 502
 
 
-def test_list_submissions_canvas_timeout(client, auth_headers):
+def test_list_submissions_canvas_timeout(client, auth_headers, synced_course_id):
     with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
         mock.side_effect = HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail="Canvas API timed out",
         )
         response = client.get(
-            f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{synced_course_id}/assignments/10/submissions?canvas_url={CANVAS_URL}",
             headers=auth_headers,
         )
     assert response.status_code == 504
