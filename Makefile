@@ -107,8 +107,9 @@ run-vllm:
 		--port 8001 \
 		--max-model-len 4096
 
+
 test-vague-llm:
-	app/backend/.venv/bin/python test/backend/test_vague_llm.py
+	app/backend/.venv/bin/python app/backend/app/non_unit_test/test_vague_llm.py
 
 # ── Docker ───────────────────────────────────
 build:
