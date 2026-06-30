@@ -7,11 +7,25 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.security import decrypt_canvas_token
-from app.integrations.canvas import fetch_assignments, fetch_courses, fetch_submissions
+from app.integrations.canvas import (
+    create_assignment,
+    fetch_assignment,
+    fetch_assignments,
+    fetch_courses,
+    fetch_submissions,
+    update_assignment,
+)
 from app.models.course import Course
 from app.models.user import User
 from app.models.user_preference import UserPreference
-from app.schemas.canvas import ActiveCourseResponse, AssignmentResponse, CourseResponse, SubmissionResponse
+from app.schemas.canvas import (
+    ActiveCourseResponse,
+    AssignmentCreate,
+    AssignmentResponse,
+    AssignmentUpdate,
+    CourseResponse,
+    SubmissionResponse,
+)
 
 
 def require_canvas_token(user: User, canvas_url: str) -> str:
@@ -29,6 +43,28 @@ def require_canvas_token(user: User, canvas_url: str) -> str:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Canvas token is corrupted — please reconnect Canvas.",
         )
+
+
+async def get_owned_course(
+    local_course_id: int,
+    user: User,
+    canvas_url: str,
+    db: AsyncSession,
+) -> Course:
+    course = await db.scalar(
+        select(Course).where(
+            Course.id == local_course_id,
+            Course.instructor_id == user.id,
+            Course.canvas_url == canvas_url.rstrip("/"),
+        )
+    )
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found or does not belong to you.",
+        )
+
+    return course
 
 
 async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[CourseResponse]:
@@ -75,33 +111,107 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
     await db.commit()
 
     return [
-        CourseResponse.model_validate({
-            **item,
-            "local_id": course_map[str(item["id"])].id,
-            "term_name": (item.get("term") or {}).get("name"),
-        })
+        CourseResponse.model_validate(
+            {
+                **item,
+                "local_id": course_map[str(item["id"])].id,
+                "term_name": (item.get("term") or {}).get("name"),
+            }
+        )
         for item in data
     ]
 
 
-async def get_assignments(course_id: int, user: User, canvas_url: str) -> list[AssignmentResponse]:
+async def get_assignments(
+    local_course_id: int,
+    user: User,
+    canvas_url: str,
+    db: AsyncSession,
+) -> list[AssignmentResponse]:
     token = require_canvas_token(user, canvas_url)
-    data = await fetch_assignments(course_id, token, canvas_url)
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    data = await fetch_assignments(int(course.canvas_course_id), token, canvas_url)
     return [AssignmentResponse(**item) for item in data]
 
 
-async def get_submissions(course_id: int, assignment_id: int, user: User, canvas_url: str) -> list[SubmissionResponse]:
+async def get_assignment(
+    local_course_id: int,
+    assignment_id: int,
+    user: User,
+    canvas_url: str,
+    db: AsyncSession,
+) -> AssignmentResponse:
     token = require_canvas_token(user, canvas_url)
-    data = await fetch_submissions(course_id, assignment_id, token, canvas_url)
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    data = await fetch_assignment(
+        int(course.canvas_course_id),
+        assignment_id,
+        token,
+        canvas_url,
+    )
+    return AssignmentResponse(**data)
+
+
+async def create_course_assignment(
+    local_course_id: int,
+    payload: AssignmentCreate,
+    user: User,
+    canvas_url: str,
+    db: AsyncSession,
+) -> AssignmentResponse:
+    token = require_canvas_token(user, canvas_url)
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    data = await create_assignment(
+        int(course.canvas_course_id),
+        payload.model_dump(mode="json"),
+        token,
+        canvas_url,
+    )
+    return AssignmentResponse(**data)
+
+
+async def update_course_assignment(
+    local_course_id: int,
+    assignment_id: int,
+    payload: AssignmentUpdate,
+    user: User,
+    canvas_url: str,
+    db: AsyncSession,
+) -> AssignmentResponse:
+    token = require_canvas_token(user, canvas_url)
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    data = await update_assignment(
+        int(course.canvas_course_id),
+        assignment_id,
+        payload.model_dump(mode="json"),
+        token,
+        canvas_url,
+    )
+    return AssignmentResponse(**data)
+
+
+async def get_submissions(
+    local_course_id: int,
+    assignment_id: int,
+    user: User,
+    canvas_url: str,
+    db: AsyncSession,
+) -> list[SubmissionResponse]:
+    token = require_canvas_token(user, canvas_url)
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    data = await fetch_submissions(
+        int(course.canvas_course_id),
+        assignment_id,
+        token,
+        canvas_url,
+    )
     return [SubmissionResponse(**item) for item in data]
 
 
 async def get_active_course(user: User, db: AsyncSession) -> ActiveCourseResponse | None:
     # joinedload fetches preference + course in a single JOIN query
     pref = await db.scalar(
-        select(UserPreference)
-        .where(UserPreference.user_id == user.id)
-        .options(joinedload(UserPreference.active_course))
+        select(UserPreference).where(UserPreference.user_id == user.id).options(joinedload(UserPreference.active_course))
     )
     if not pref or not pref.active_course:
         return None
@@ -116,9 +226,7 @@ async def get_active_course(user: User, db: AsyncSession) -> ActiveCourseRespons
 
 
 async def set_active_course(user: User, local_course_id: int, db: AsyncSession) -> ActiveCourseResponse:
-    course = await db.scalar(
-        select(Course).where(Course.id == local_course_id, Course.instructor_id == user.id)
-    )
+    course = await db.scalar(select(Course).where(Course.id == local_course_id, Course.instructor_id == user.id))
     if not course:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
