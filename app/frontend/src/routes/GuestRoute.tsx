@@ -15,7 +15,7 @@ export function GuestRoute() {
   }
 
   if (isAuthenticated && user) {
-    return <Navigate to={getPostAuthPath(user.id, user.role)} replace />;
+    return <Navigate to={getPostAuthPath(user)} replace />;
   }
 
   return <Outlet />;

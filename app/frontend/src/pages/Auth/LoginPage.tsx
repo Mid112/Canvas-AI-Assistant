@@ -29,7 +29,7 @@ export function LoginPage() {
 
             try {
               const user = await login(credentials);
-              navigate(getPostAuthPath(user.id, user.role));
+              navigate(getPostAuthPath(user));
             } catch (err) {
               setError(getLoginErrorMessage(err));
             } finally {
