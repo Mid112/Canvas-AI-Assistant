@@ -32,17 +32,24 @@ def admin_credentials():
     password = "AdminTestPass123!"
 
     async def _create():
-        async with AsyncSessionLocal() as db:
-            db.add(User(
-                name="Test Administrator",
-                email=email,
-                hashed_password=hash_password(password),
-                role="admin",
-            ))
-            await db.commit()
+        # Fresh engine so the global engine's asyncpg pool is never touched here.
+        # asyncpg pools are bound to the event loop they're created in; sharing
+        # the global engine across loops causes "Future attached to a different loop".
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+        from app.config import settings as _settings
+        _engine = create_async_engine(_settings.DATABASE_URL)
+        try:
+            async with async_sessionmaker(_engine, expire_on_commit=False)() as db:
+                db.add(User(
+                    name="Test Administrator",
+                    email=email,
+                    hashed_password=hash_password(password),
+                    role="admin",
+                ))
+                await db.commit()
+        finally:
+            await _engine.dispose()
 
-    # asyncio.run() fails when pytest-asyncio (asyncio_mode=auto) has already
-    # set a running event loop for the session. Use a dedicated loop instead.
     loop = asyncio.new_event_loop()
     try:
         loop.run_until_complete(_create())

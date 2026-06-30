@@ -12,12 +12,14 @@ All tests use a real PostgreSQL DB (same as test_auth.py).
 The `admin_credentials` fixture is defined in conftest.py.
 """
 import asyncio
+import contextlib
 import uuid
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.core.database import AsyncSessionLocal
+from app.config import settings
 from app.core.security import decode_access_token, hash_password, hash_token
 from app.main import app
 from app.models.audit_log import AuditLog
@@ -25,10 +27,23 @@ from app.models.session import Session
 from app.models.user import User
 
 
+@contextlib.asynccontextmanager
+async def _db():
+    """Isolated DB session for asyncio.run() helpers — never shares the global engine."""
+    _engine = create_async_engine(settings.DATABASE_URL)
+    try:
+        async with async_sessionmaker(_engine, expire_on_commit=False)() as session:
+            yield session
+    finally:
+        await _engine.dispose()
+
+
 @pytest.fixture(scope="module")
 def client():
+    app.state.limiter.enabled = False
     with TestClient(app) as c:
         yield c
+    app.state.limiter.enabled = True
 
 
 # One shared admin login per module — used by tests that only READ admin state.
@@ -50,7 +65,7 @@ def admin_headers(admin_token):
 # ---------------------------------------------------------------------------
 
 async def _get_audit_logs(user_id: int, action: str) -> list:
-    async with AsyncSessionLocal() as db:
+    async with _db() as db:
         result = await db.scalars(
             select(AuditLog).where(
                 AuditLog.user_id == user_id,
@@ -61,14 +76,14 @@ async def _get_audit_logs(user_id: int, action: str) -> list:
 
 
 async def _get_session_by_token(token: str):
-    async with AsyncSessionLocal() as db:
+    async with _db() as db:
         return await db.scalar(
             select(Session).where(Session.token_hash == hash_token(token))
         )
 
 
 async def _get_user_by_email(email: str):
-    async with AsyncSessionLocal() as db:
+    async with _db() as db:
         return await db.scalar(select(User).where(User.email == email))
 
 
@@ -139,7 +154,7 @@ def test_admin_login_disabled_account_returns_403(client):
     email = f"disabled_admin_{uuid.uuid4()}@example.com"
 
     async def _create_disabled():
-        async with AsyncSessionLocal() as db:
+        async with _db() as db:
             db.add(User(
                 name="Disabled Admin",
                 email=email,
@@ -202,7 +217,7 @@ def test_admin_logout_writes_audit_log(client, admin_credentials):
 
 def test_admin_logout_requires_auth(client):
     resp = client.post("/api/v1/auth/logout")
-    assert resp.status_code == 403  # HTTPBearer returns 403 when no credentials
+    assert resp.status_code == 401  # HTTPBearer returns 401 in FastAPI 0.136+
 
 
 def test_admin_logout_rejects_instructor_token(client):
