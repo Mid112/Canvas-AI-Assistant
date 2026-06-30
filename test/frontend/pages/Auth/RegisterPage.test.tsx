@@ -73,6 +73,7 @@ describe("RegisterPage", () => {
       role: "instructor",
       is_active: true,
       has_canvas_token: false,
+      canvas_connections: [],
     });
 
     renderWithRouter(<RegisterPage />);
@@ -97,9 +98,19 @@ describe("RegisterPage", () => {
       password: "secret123",
     });
     expect(mockNavigate).toHaveBeenCalledWith(
-      getPostAuthPath(1, "instructor"),
+      getPostAuthPath({
+        id: 1,
+        role: "instructor",
+        canvas_connections: [],
+      }),
     );
-    expect(getPostAuthPath(1, "instructor")).toBe(paths.canvasInfo);
+    expect(
+      getPostAuthPath({
+        id: 1,
+        role: "instructor",
+        canvas_connections: [],
+      }),
+    ).toBe(paths.canvasInfo);
   });
 
   it("shows an error when registration fails with a duplicate email", async () => {

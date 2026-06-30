@@ -1,22 +1,30 @@
 import { Plus, X } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useDebouncedValue } from "@/lib/useDebouncedValue";
+import { normalizeCanvasUrl, validateCanvasUrl } from "@/lib/canvas-url";
+import { useCanvasTokenValidation } from "@/lib/useCanvasTokenValidation";
 import {
   ConnectCanvasTokenStatus,
   type TokenValidationState,
 } from "@/pages/Auth/ConnectCanvas/ConnectCanvasTokenStatus";
-import { validateCanvasToken } from "@/services/canvas";
+import type { CanvasConnectionInput } from "@/services/canvas";
 
 interface ConnectCanvasFormProps {
   accessToken: string | null;
   error?: string | null;
   isSubmitting?: boolean;
   onSessionExpired?: () => void;
-  onSubmit: (values: { canvasTokens: string[] }) => void | Promise<void>;
+  onSubmit: (values: { connections: CanvasConnectionInput[] }) => void | Promise<void>;
   onSkip: () => void | Promise<void>;
+}
+
+interface ConnectionEntry {
+  id: string;
+  canvasUrl: string;
+  canvasToken: string;
+  validation: TokenValidationState;
 }
 
 const inputClassName =
@@ -24,18 +32,21 @@ const inputClassName =
 
 const labelClassName = "text-sm font-semibold text-[#1e293b]";
 
-const VALIDATION_DEBOUNCE_MS = 500;
-
-function getTokenLabel(index: number): string {
-  if (index === 0) {
-    return "Canvas API Token";
-  }
-
-  return `Canvas API Token (Institution ${index + 1})`;
+function createConnectionEntry(): ConnectionEntry {
+  return {
+    id: crypto.randomUUID(),
+    canvasUrl: "",
+    canvasToken: "",
+    validation: { status: "idle" },
+  };
 }
 
-function createIdleValidationStates(count: number): TokenValidationState[] {
-  return Array.from({ length: count }, () => ({ status: "idle" }));
+function getInstitutionLabel(index: number): string {
+  if (index === 0) {
+    return "Institution";
+  }
+
+  return `Institution ${index + 1}`;
 }
 
 function isTokenValidationComplete(
@@ -51,6 +62,129 @@ function isTokenValidationComplete(
   return validation.status === "valid";
 }
 
+interface ConnectCanvasConnectionEntryProps {
+  entry: ConnectionEntry;
+  index: number;
+  accessToken: string | null;
+  isSubmitting: boolean;
+  canRemove: boolean;
+  onSessionExpired?: () => void;
+  onFieldChange: (
+    id: string,
+    field: "canvasUrl" | "canvasToken",
+    value: string,
+  ) => void;
+  onValidationChange: (id: string, validation: TokenValidationState) => void;
+  onRemove: (id: string) => void;
+}
+
+function ConnectCanvasConnectionEntry({
+  entry,
+  index,
+  accessToken,
+  isSubmitting,
+  canRemove,
+  onSessionExpired,
+  onFieldChange,
+  onValidationChange,
+  onRemove,
+}: ConnectCanvasConnectionEntryProps) {
+  const { urlError, validation } = useCanvasTokenValidation(
+    entry.canvasToken,
+    entry.canvasUrl,
+    accessToken,
+    { onSessionExpired },
+  );
+  const onValidationChangeRef = useRef(onValidationChange);
+
+  useLayoutEffect(() => {
+    onValidationChangeRef.current = onValidationChange;
+  }, [onValidationChange]);
+
+  useLayoutEffect(() => {
+    onValidationChangeRef.current(entry.id, validation);
+  }, [entry.id, validation.status]);
+
+  return (
+    <div className="space-y-4 rounded-xl border border-[#e2e8f0] bg-[#f8fafc]/60 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-[#1e293b]">
+          {getInstitutionLabel(index)}
+        </p>
+        {canRemove && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`Remove institution ${index + 1}`}
+            disabled={isSubmitting}
+            onClick={() => onRemove(entry.id)}
+            className="size-8 text-[#94a3b8] hover:text-[#64748b]"
+          >
+            <X className="size-4" aria-hidden="true" />
+          </Button>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor={`canvas-url-${entry.id}`} className={labelClassName}>
+          Canvas URL
+        </label>
+        <Input
+          id={`canvas-url-${entry.id}`}
+          type="url"
+          autoComplete="url"
+          placeholder="https://canvas.university.edu"
+          value={entry.canvasUrl}
+          onChange={(event) =>
+            onFieldChange(entry.id, "canvasUrl", event.target.value)
+          }
+          aria-invalid={Boolean(urlError)}
+          aria-describedby={urlError ? `canvas-url-error-${entry.id}` : undefined}
+          className={inputClassName}
+        />
+        {urlError ? (
+          <p
+            id={`canvas-url-error-${entry.id}`}
+            role="alert"
+            className="text-sm text-[#dc2626]"
+          >
+            {urlError}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor={`canvas-token-${entry.id}`} className={labelClassName}>
+          Canvas API Token
+          {index === 0 && (
+            <span className="ml-1 font-normal text-[#94a3b8]">(optional)</span>
+          )}
+        </label>
+        <Input
+          id={`canvas-token-${entry.id}`}
+          type="password"
+          autoComplete="off"
+          placeholder="Paste your Canvas access token"
+          value={entry.canvasToken}
+          onChange={(event) =>
+            onFieldChange(entry.id, "canvasToken", event.target.value)
+          }
+          aria-describedby={
+            validation.status !== "idle"
+              ? `canvas-token-status-${entry.id}`
+              : undefined
+          }
+          className={inputClassName}
+        />
+        <div id={`canvas-token-status-${entry.id}`}>
+          <ConnectCanvasTokenStatus validation={validation} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ConnectCanvasForm({
   accessToken,
   error = null,
@@ -59,98 +193,40 @@ export function ConnectCanvasForm({
   onSubmit,
   onSkip,
 }: ConnectCanvasFormProps) {
-  const [canvasTokens, setCanvasTokens] = useState<string[]>([""]);
-  const [validationStates, setValidationStates] = useState<
-    TokenValidationState[]
-  >(() => createIdleValidationStates(1));
-  const debouncedTokens = useDebouncedValue(canvasTokens, VALIDATION_DEBOUNCE_MS);
-  const validationRequestIds = useRef<number[]>([0]);
-  const prevDebouncedTokens = useRef<string[]>([]);
-  const onSessionExpiredRef = useRef(onSessionExpired);
+  const [entries, setEntries] = useState<ConnectionEntry[]>(() => [
+    createConnectionEntry(),
+  ]);
 
-  useEffect(() => {
-    onSessionExpiredRef.current = onSessionExpired;
-  }, [onSessionExpired]);
+  const completedConnections = entries
+    .map((entry) => ({
+      canvasUrl: normalizeCanvasUrl(entry.canvasUrl),
+      canvasToken: entry.canvasToken.trim(),
+    }))
+    .filter((connection) => connection.canvasToken !== "");
 
-  const nonEmptyTokens = canvasTokens
-    .map((token) => token.trim())
-    .filter((token) => token !== "");
-
-  const isValidatingTokens = canvasTokens.some((token, index) => {
-    const trimmedToken = token.trim();
-    return trimmedToken !== "" && validationStates[index]?.status === "validating";
+  const isValidatingTokens = entries.some((entry) => {
+    const trimmedToken = entry.canvasToken.trim();
+    return trimmedToken !== "" && entry.validation.status === "validating";
   });
 
-  const allEnteredTokensValid = canvasTokens.every((token, index) =>
-    isTokenValidationComplete(token, validationStates[index] ?? { status: "idle" }),
-  );
+  const allConnectionsValid = entries.every((entry) => {
+    const trimmedToken = entry.canvasToken.trim();
+
+    if (trimmedToken === "") {
+      return true;
+    }
+
+    return (
+      validateCanvasUrl(entry.canvasUrl) === null &&
+      isTokenValidationComplete(entry.canvasToken, entry.validation)
+    );
+  });
 
   const canConnect =
-    nonEmptyTokens.length > 0 &&
-    allEnteredTokensValid &&
+    completedConnections.length > 0 &&
+    allConnectionsValid &&
     !isValidatingTokens &&
     !isSubmitting;
-
-  useEffect(() => {
-    debouncedTokens.forEach((token, index) => {
-      if (prevDebouncedTokens.current[index] === token) {
-        return;
-      }
-
-      const trimmedToken = token.trim();
-
-      if (trimmedToken === "") {
-        setValidationStates((current) =>
-          current.map((state, stateIndex) =>
-            stateIndex === index ? { status: "idle" } : state,
-          ),
-        );
-        return;
-      }
-
-      const requestId = (validationRequestIds.current[index] ?? 0) + 1;
-      validationRequestIds.current[index] = requestId;
-
-      setValidationStates((current) =>
-        current.map((state, stateIndex) =>
-          stateIndex === index ? { status: "validating" } : state,
-        ),
-      );
-
-      if (!accessToken) {
-        onSessionExpiredRef.current?.();
-        return;
-      }
-
-      void (async () => {
-        try {
-          const status = await validateCanvasToken(trimmedToken, accessToken);
-
-          if (validationRequestIds.current[index] !== requestId) {
-            return;
-          }
-
-          setValidationStates((current) =>
-            current.map((state, stateIndex) =>
-              stateIndex === index ? { status } : state,
-            ),
-          );
-        } catch {
-          if (validationRequestIds.current[index] !== requestId) {
-            return;
-          }
-
-          setValidationStates((current) =>
-            current.map((state, stateIndex) =>
-              stateIndex === index ? { status: "invalid" } : state,
-            ),
-          );
-        }
-      })();
-    });
-
-    prevDebouncedTokens.current = debouncedTokens;
-  }, [accessToken, debouncedTokens]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -158,7 +234,7 @@ export function ConnectCanvasForm({
       return;
     }
 
-    await onSubmit({ canvasTokens: nonEmptyTokens });
+    await onSubmit({ connections: completedConnections });
   };
 
   const handleSkip = async () => {
@@ -169,99 +245,72 @@ export function ConnectCanvasForm({
     await onSkip();
   };
 
-  const updateToken = (index: number, value: string) => {
-    setCanvasTokens((current) =>
-      current.map((token, tokenIndex) =>
-        tokenIndex === index ? value : token,
+  const updateField = (
+    id: string,
+    field: "canvasUrl" | "canvasToken",
+    value: string,
+  ) => {
+    setEntries((current) =>
+      current.map((entry) =>
+        entry.id === id ? { ...entry, [field]: value } : entry,
       ),
     );
-
-    if (value.trim() === "") {
-      setValidationStates((current) =>
-        current.map((state, stateIndex) =>
-          stateIndex === index ? { status: "idle" } : state,
-        ),
-      );
-    }
   };
 
-  const addTokenField = () => {
-    setCanvasTokens((current) => [...current, ""]);
-    setValidationStates((current) => [...current, { status: "idle" }]);
-    validationRequestIds.current = [...validationRequestIds.current, 0];
+  const updateValidation = useCallback(
+    (id: string, validation: TokenValidationState) => {
+      setEntries((current) => {
+        let changed = false;
+        const next = current.map((entry) => {
+          if (entry.id !== id || entry.validation.status === validation.status) {
+            return entry;
+          }
+
+          changed = true;
+          return { ...entry, validation };
+        });
+
+        return changed ? next : current;
+      });
+    },
+    [],
+  );
+
+  const addConnectionField = () => {
+    setEntries((current) => [...current, createConnectionEntry()]);
   };
 
-  const removeTokenField = (index: number) => {
-    setCanvasTokens((current) =>
+  const removeConnectionField = (id: string) => {
+    setEntries((current) =>
       current.length === 1
         ? current
-        : current.filter((_, tokenIndex) => tokenIndex !== index),
-    );
-    setValidationStates((current) =>
-      current.length === 1
-        ? current
-        : current.filter((_, stateIndex) => stateIndex !== index),
-    );
-    validationRequestIds.current = validationRequestIds.current.filter(
-      (_, requestIndex) => requestIndex !== index,
+        : current.filter((entry) => entry.id !== id),
     );
   };
 
   return (
     <form className="space-y-5" onSubmit={handleSubmit}>
       <div className="space-y-4">
-        {canvasTokens.map((token, index) => (
-          <div key={index} className="space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <label htmlFor={`canvas-token-${index}`} className={labelClassName}>
-                {getTokenLabel(index)}
-                {index === 0 && (
-                  <span className="ml-1 font-normal text-[#94a3b8]">
-                    (optional)
-                  </span>
-                )}
-              </label>
-              {canvasTokens.length > 1 && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Remove institution ${index + 1}`}
-                  disabled={isSubmitting}
-                  onClick={() => removeTokenField(index)}
-                  className="size-8 text-[#94a3b8] hover:text-[#64748b]"
-                >
-                  <X className="size-4" aria-hidden="true" />
-                </Button>
-              )}
-            </div>
-            <Input
-              id={`canvas-token-${index}`}
-              type="password"
-              autoComplete="off"
-              placeholder="Paste your Canvas access token"
-              value={token}
-              onChange={(event) => updateToken(index, event.target.value)}
-              aria-describedby={
-                validationStates[index]?.status !== "idle"
-                  ? `canvas-token-status-${index}`
-                  : undefined
-              }
-              className={inputClassName}
-            />
-            <div id={`canvas-token-status-${index}`}>
-              <ConnectCanvasTokenStatus
-                validation={validationStates[index] ?? { status: "idle" }}
-              />
-            </div>
-          </div>
+        {entries.map((entry, index) => (
+          <ConnectCanvasConnectionEntry
+            key={entry.id}
+            entry={entry}
+            index={index}
+            accessToken={accessToken}
+            isSubmitting={isSubmitting}
+            canRemove={entries.length > 1}
+            onSessionExpired={onSessionExpired}
+            onFieldChange={updateField}
+            onValidationChange={updateValidation}
+            onRemove={removeConnectionField}
+          />
         ))}
 
         <Button
           type="button"
           variant="outline"
           disabled={isSubmitting}
-          onClick={addTokenField}
+          onClick={addConnectionField}
           className="h-10 w-full rounded-lg border-[#e2e8f0] bg-white text-sm font-medium text-[#475569] hover:bg-[#f8fafc]"
         >
           <Plus className="size-4" aria-hidden="true" />
@@ -269,11 +318,11 @@ export function ConnectCanvasForm({
         </Button>
       </div>
 
-      {error && (
+      {error ? (
         <p className="text-sm text-[#dc2626]" role="alert">
           {error}
         </p>
-      )}
+      ) : null}
 
       <div className="space-y-3">
         <Button
