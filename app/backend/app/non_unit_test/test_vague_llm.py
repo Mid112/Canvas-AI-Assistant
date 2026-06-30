@@ -1,7 +1,6 @@
 # this test is to test how LLM handles vague instructions without our UI component yet.
 
 import asyncio
-from typing import Optional
 
 import httpx
 
@@ -31,7 +30,7 @@ async def register_and_login() -> str:
         return token
 
 
-async def chat(token: str, message: str, conversation_id: Optional[int] = None) -> dict:
+async def chat(token: str, message: str, conversation_id: int | None = None) -> dict:
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
             f"{BASE_URL}/chat/",
