@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Route, Routes } from "react-router-dom";
 
 import { DryRunPreviewPage } from "@/pages/Instructor/DryRunPreviewPage";
+import { InstructorAssistantPage } from "@/pages/Instructor/InstructorAssistantPage";
 import { mockStudentReminderPreview } from "@/data/mockDryRunPreview";
 import { paths } from "@/routes/paths";
 import {
@@ -27,7 +28,7 @@ function renderPage(initialEntry = paths.instructor.dryRunPreview) {
   return renderWithRouter(
     <Routes>
       <Route path={paths.instructor.dryRunPreview} element={<DryRunPreviewPage />} />
-      <Route path={paths.instructor.assistant} element={<div>Assistant page</div>} />
+      <Route path={paths.instructor.assistant} element={<InstructorAssistantPage />} />
     </Routes>,
     {
       routerProps: {
@@ -75,7 +76,42 @@ describe("DryRunPreviewPage", () => {
 
     await user.click(await screen.findByRole("button", { name: /Reject/ }));
 
-    expect(await screen.findByText("Assistant page")).toBeInTheDocument();
+    expect(await screen.findByText("AI Assistant")).toBeInTheDocument();
+  });
+
+  it("returns to the assistant with the original request when modify is clicked", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(await screen.findByRole("button", { name: /Modify Request/ }));
+
+    expect(await screen.findByText("AI Assistant")).toBeInTheDocument();
+    expect(
+      await screen.findByText(mockStudentReminderPreview.originalRequest),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps the success screen visible after the toast auto-dismisses", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    renderPage();
+
+    await user.click(
+      await screen.findByRole("button", { name: /Approve & Execute/ }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: "Workflow Approved" })).toBeInTheDocument();
+    });
+
+    await vi.advanceTimersByTimeAsync(4000);
+
+    expect(screen.getByRole("heading", { name: "Workflow Approved" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Workflow Preview" }),
+    ).not.toBeInTheDocument();
+
+    vi.useRealTimers();
   });
 
   it("shows success after approving the workflow", async () => {
