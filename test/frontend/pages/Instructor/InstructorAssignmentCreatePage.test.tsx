@@ -8,7 +8,29 @@ import {
   approveAssignmentDraft,
   generateAssignmentDraft,
 } from "@/services/assignmentCreator";
+import { fetchCourses } from "@/services/canvas";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
+
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => ({
+    accessToken: "access-token",
+    user: {
+      id: 1,
+      email: "professor@university.edu",
+      name: "Professor",
+      role: "instructor",
+      is_active: true,
+      has_canvas_token: true,
+      canvas_connections: [
+        {
+          id: 1,
+          canvas_url: "https://canvas.university.edu",
+          created_at: "2026-06-26T00:00:00.000Z",
+        },
+      ],
+    },
+  }),
+}));
 
 vi.mock("@/services/assignmentCreator", () => ({
   AssignmentCreatorApiError: class AssignmentCreatorApiError extends Error {
@@ -18,8 +40,21 @@ vi.mock("@/services/assignmentCreator", () => ({
   approveAssignmentDraft: vi.fn(),
 }));
 
+vi.mock("@/services/canvas", () => ({
+  fetchCourses: vi.fn(),
+  CanvasApiError: class CanvasApiError extends Error {
+    status: number;
+
+    constructor(message: string, status: number) {
+      super(message);
+      this.status = status;
+    }
+  },
+}));
+
 const mockedGenerate = vi.mocked(generateAssignmentDraft);
 const mockedApprove = vi.mocked(approveAssignmentDraft);
+const mockedFetchCourses = vi.mocked(fetchCourses);
 
 function renderPage() {
   return renderWithRouter(
@@ -47,6 +82,16 @@ describe("InstructorAssignmentCreatePage", () => {
       pointsPossible: 50,
     });
     mockedApprove.mockResolvedValue();
+    mockedFetchCourses.mockResolvedValue([
+      {
+        canvas_id: 101,
+        local_id: 42,
+        name: "Introduction to Programming",
+        course_code: "CS 101",
+        workflow_state: "available",
+        total_students: 35,
+      },
+    ]);
   });
 
   it("walks through describe, review, and approve steps", async () => {
@@ -55,8 +100,13 @@ describe("InstructorAssignmentCreatePage", () => {
 
     expect(screen.getByRole("heading", { name: "AI Assignment Creator" })).toBeInTheDocument();
     expect(screen.getByText("Describe Assignment")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("option", {
+        name: "CS 101: Introduction to Programming",
+      }),
+    ).toBeInTheDocument();
 
-    await user.selectOptions(screen.getByLabelText("Select Course"), "1");
+    await user.selectOptions(screen.getByLabelText("Select Course"), "42");
     await user.type(
       screen.getByLabelText("Assignment Prompt"),
       "Create a quiz on Python functions and parameters for beginners.",
@@ -76,12 +126,18 @@ describe("InstructorAssignmentCreatePage", () => {
     await user.click(screen.getByRole("button", { name: "Approve Assignment" }));
 
     await waitFor(() => {
-      expect(mockedApprove).toHaveBeenCalledWith({
-        courseId: "1",
-        name: "Python Functions Quiz",
-        description: "Complete a short quiz covering functions.",
-        dueDate: "2026-12-15T23:59",
-      });
+      expect(mockedApprove).toHaveBeenCalledWith(
+        {
+          courseId: "42",
+          name: "Python Functions Quiz",
+          description: "Complete a short quiz covering functions.",
+          dueDate: "2026-12-15T23:59",
+        },
+        {
+          accessToken: "access-token",
+          canvasUrl: "https://canvas.university.edu",
+        },
+      );
     });
 
     expect(await screen.findByText("Assignment Approved")).toBeInTheDocument();
@@ -91,7 +147,10 @@ describe("InstructorAssignmentCreatePage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.selectOptions(screen.getByLabelText("Select Course"), "1");
+    await screen.findByRole("option", {
+      name: "CS 101: Introduction to Programming",
+    });
+    await user.selectOptions(screen.getByLabelText("Select Course"), "42");
     await user.type(
       screen.getByLabelText("Assignment Prompt"),
       "Create a quiz on Python functions and parameters for beginners.",
@@ -105,12 +164,18 @@ describe("InstructorAssignmentCreatePage", () => {
     await user.click(screen.getByRole("button", { name: "Approve Assignment" }));
 
     await waitFor(() => {
-      expect(mockedApprove).toHaveBeenCalledWith({
-        courseId: "1",
-        name: "Edited Quiz Title",
-        description: "Complete a short quiz covering functions.",
-        dueDate: "2026-12-15T23:59",
-      });
+      expect(mockedApprove).toHaveBeenCalledWith(
+        {
+          courseId: "42",
+          name: "Edited Quiz Title",
+          description: "Complete a short quiz covering functions.",
+          dueDate: "2026-12-15T23:59",
+        },
+        {
+          accessToken: "access-token",
+          canvasUrl: "https://canvas.university.edu",
+        },
+      );
     });
   });
 
@@ -118,7 +183,10 @@ describe("InstructorAssignmentCreatePage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.selectOptions(screen.getByLabelText("Select Course"), "1");
+    await screen.findByRole("option", {
+      name: "CS 101: Introduction to Programming",
+    });
+    await user.selectOptions(screen.getByLabelText("Select Course"), "42");
     await user.type(
       screen.getByLabelText("Assignment Prompt"),
       "Create a quiz on Python functions and parameters for beginners.",
@@ -139,7 +207,10 @@ describe("InstructorAssignmentCreatePage", () => {
 
     renderPage();
 
-    await user.selectOptions(screen.getByLabelText("Select Course"), "1");
+    await screen.findByRole("option", {
+      name: "CS 101: Introduction to Programming",
+    });
+    await user.selectOptions(screen.getByLabelText("Select Course"), "42");
     await user.type(
       screen.getByLabelText("Assignment Prompt"),
       "Create a quiz on Python functions and parameters for beginners.",

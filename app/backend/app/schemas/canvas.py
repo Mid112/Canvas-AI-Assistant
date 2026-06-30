@@ -31,7 +31,8 @@ class CourseResponse(BaseModel):
 class AssignmentResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    id: int
+    id: int           # Canvas assignment ID — kept for frontend compatibility
+    local_id: int | None = None
     name: str
     description: str | None = None
     due_at: datetime | None = None
@@ -46,6 +47,16 @@ class SubmissionStatus(StrEnum):
     missing = "missing"
     unsubmitted = "unsubmitted"
     excused = "excused"
+class AssignmentCreate(BaseModel):
+    name: str
+    description: str | None = None
+    due_at: datetime | None = None
+
+
+class AssignmentUpdate(BaseModel):
+    name: str
+    description: str | None = None
+    due_at: datetime | None = None
 
 
 class SubmissionResponse(BaseModel):

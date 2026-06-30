@@ -36,6 +36,13 @@ const authWithCanvas = {
     role: "instructor",
     is_active: true,
     has_canvas_token: true,
+    canvas_connections: [
+      {
+        id: 1,
+        canvas_url: "http://localhost:3000",
+        created_at: "2026-06-26T00:00:00.000Z",
+      },
+    ],
   },
   accessToken: "token",
   isAuthenticated: true,
@@ -86,7 +93,11 @@ describe("InstructorCourseAssignmentsPage", () => {
       expect(screen.getByText("Lab 1")).toBeInTheDocument();
     });
 
-    expect(mockedFetchCourseAssignments).toHaveBeenCalledWith(3, "token");
+    expect(mockedFetchCourseAssignments).toHaveBeenCalledWith(
+      3,
+      "token",
+      "http://localhost:3000",
+    );
 
     const editLink = screen.getByRole("link", { name: "Edit" });
     expect(editLink).toHaveAttribute(

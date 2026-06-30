@@ -29,7 +29,7 @@ export function RegisterPage() {
 
             try {
               const user = await register(credentials);
-              navigate(getPostAuthPath(user.id, user.role));
+              navigate(getPostAuthPath(user));
             } catch (err) {
               setError(getRegisterErrorMessage(err));
             } finally {
