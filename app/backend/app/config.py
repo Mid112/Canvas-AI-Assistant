@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # Seed admin — set both to auto-create the first admin on startup.
+    # Unset (or leave empty) in production once the account exists.
+    ADMIN_EMAIL: str | None = None
+    ADMIN_PASSWORD: str | None = None
+    ADMIN_NAME: str = "Administrator"
+
     # Canvas API
     # base domain only — /api/v1 is appended by the integration layer
     CANVAS_API_URL: str = "https://canvas.ubc.ca"
