@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.database import get_db
-from app.dependencies import get_current_user
+from app.dependencies import get_instructor_user
 from app.models.user import User
 from app.schemas.canvas import (
     ActiveCourseResponse,
@@ -27,7 +27,7 @@ router = APIRouter(prefix="/canvas", tags=["canvas"])
 
 @router.get("/courses", response_model=list[CourseResponse])
 async def list_courses(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_instructor_user),
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
     db: AsyncSession = Depends(get_db),
 ):
@@ -37,7 +37,7 @@ async def list_courses(
 @router.get("/courses/{course_id}/assignments", response_model=list[AssignmentResponse])
 async def list_assignments(
     course_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_instructor_user),
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
 ):
     return await get_assignments(course_id, current_user, canvas_url)
@@ -50,7 +50,7 @@ async def list_assignments(
 async def list_submissions(
     course_id: int,
     assignment_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_instructor_user),
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
 ):
     return await get_submissions(course_id, assignment_id, current_user, canvas_url)
@@ -70,7 +70,7 @@ async def list_students(
 # This is separate from conversation.course_id, which is a historical record per chat session.
 @router.get("/active-course", response_model=ActiveCourseResponse | None)
 async def get_active_course_endpoint(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_instructor_user),
     db: AsyncSession = Depends(get_db),
 ):
     return await get_active_course(current_user, db)
@@ -79,7 +79,7 @@ async def get_active_course_endpoint(
 @router.patch("/active-course", response_model=ActiveCourseResponse)
 async def set_active_course_endpoint(
     body: ActiveCourseSet,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_instructor_user),
     db: AsyncSession = Depends(get_db),
 ):
     return await set_active_course(current_user, body.local_course_id, db)

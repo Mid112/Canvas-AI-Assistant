@@ -35,6 +35,28 @@ async def get_current_user(
     return user
 
 
+async def get_instructor_user(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
+    db: AsyncSession = Depends(get_db),
+) -> User:
+    try:
+        user_id, role = decode_access_token(credentials.credentials)
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+    if role != "instructor":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Instructor access required")
+
+    user = await db.scalar(
+        select(User)
+        .where(User.id == int(user_id))
+        .options(selectinload(User.canvas_connections))
+    )
+    if not user:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return user
+
+
 async def get_admin_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer),
     db: AsyncSession = Depends(get_db),
