@@ -787,6 +787,100 @@ Overall, this cycle balanced feature development, DevOps improvements, and colla
 * Prepare remaining MVP features for integration and testing
 * Maintain consistent Clockify tracking
 
+# **Cycle 12: Friday (26/6) ~ Monday (29/6)**
+
+### **Friday (26/6)**
+
+**Timesheet**  
+**Clockify Report:** 2:40:37
+<img width="1202" height="166" alt="Screenshot 2026-06-30 at 11 55 00 AM" src="https://github.com/user-attachments/assets/7ce8778a-bbee-4547-8bb6-77b3ee7a2808" />
+**Current Tasks**
+- Participated in the weekly team meeting
+- Discussed sprint progress, feature implementation, and project priorities
+- Continued development of the Instructor Settings page
+- Improved UI components and page layout
+- Tested frontend functionality and resolved styling issues
+- Prepared completed work for review and integration
+
+---
+
+### **Saturday (27/6)**
+
+**Timesheet**  
+**Clockify Report:** 1:50:05
+<img width="1198" height="224" alt="Screenshot 2026-06-30 at 11 55 09 AM" src="https://github.com/user-attachments/assets/ec2cb954-2136-4d44-ba83-89d055f9dbda" />
+
+**Current Tasks**
+- Continued development of the Instructor Account Management UI
+- Implemented the Student Draft Message interface
+- Reviewed teammate pull requests and provided feedback
+- Verified implementation quality and coding standards
+- Performed testing on completed frontend components before integration
+
+---
+
+### **Sunday (28/6)**
+
+**Timesheet**  
+**Clockify Report:** 2:39:45
+<img width="1198" height="400" alt="Screenshot 2026-06-30 at 11 55 17 AM" src="https://github.com/user-attachments/assets/1571ce20-743d-48f8-8842-054a347527dc" />
+
+**Current Tasks**
+- Addressed pull request review comments
+- Updated implementation based on reviewer feedback
+- Continued frontend development and UI refinement
+- Reviewed additional pull requests submitted by teammates
+- Tested application functionality after implementing requested changes
+- Verified that updates did not introduce regressions
+
+---
+
+### **Monday (29/6)**
+
+**Timesheet**  
+**Clockify Report:** 0:31:00
+<img width="1190" height="96" alt="Screenshot 2026-06-30 at 11 55 31 AM" src="https://github.com/user-attachments/assets/b52d405a-25eb-4f75-b58b-4c0b5fc9d38f" />
+
+**Current Tasks**
+- Continued frontend development
+- Refined existing UI components and styling
+- Performed final testing on completed frontend work
+- Verified application behavior after recent code changes
+- Prepared completed work for submission and future integration
+
+---
+
+## **Cycle 12 – Goal Review**
+
+### **Reflection**
+
+This cycle focused on continued frontend feature development, implementing new user interface pages, responding to pull request feedback, and ensuring completed features were ready for integration. Time was also dedicated to reviewing teammates' code, testing new functionality, and improving the overall stability of the application before moving into the next sprint.
+
+### **Retrospective**
+
+Throughout this cycle, frontend development remained the primary focus. Progress was made on the Instructor Settings page, Instructor Account Management interface, and Student Draft Message UI while maintaining consistency with the existing design system and reusable component structure.
+
+A considerable amount of time was also spent addressing pull request feedback. Reviewer comments were incorporated into the implementation, resulting in cleaner code, improved maintainability, and better adherence to project standards. Pull request reviews for teammates continued to ensure code quality across the project.
+
+Testing and UI verification were performed after each major update to confirm that recent changes functioned correctly and did not introduce regressions. Team meetings continued to support sprint planning, progress tracking, and coordination of upcoming development work.
+
+Overall, this cycle strengthened the frontend implementation while improving collaboration, code quality, and project readiness for continued MVP development.
+
+---
+
+## **Next Cycle Goals (Cycle 13: Tuesday 30/6 ~ Thursday 2/7)**
+
+* Continue frontend implementation for remaining MVP features
+* Complete outstanding Canvas LMS integration tasks
+* Resolve remaining UI issues identified during testing
+* Review and merge pending pull requests
+* Improve frontend component consistency and responsiveness
+* Perform integration testing for newly completed features
+* Update project board and sprint progress
+* Participate in team meetings and implementation discussions
+* Document completed features and testing results
+* Maintain consistent Clockify tracking
+
 
 
 
