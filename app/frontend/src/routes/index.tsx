@@ -97,7 +97,7 @@ export const router = createBrowserRouter([
                     element: <InstructorAssistantPage />,
                   },
                   {
-                    path: paths.instructor.analytics,
+                    path: paths.instructor.courseAnalytics,
                     element: <InstructorAnalyticsPage />,
                   },
                   {

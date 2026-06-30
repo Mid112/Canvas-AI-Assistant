@@ -1,15 +1,19 @@
 import { CheckCircle2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
+import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
-import { assignmentCreateCourseOptions } from "@/data/mockAssignmentCreator";
+import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
 import {
   approveAssignmentDraft,
   generateAssignmentDraft,
 } from "@/services/assignmentCreator";
+import { CanvasApiError, fetchCourses } from "@/services/canvas";
 import type {
+  AssignmentCreateCourseOption,
   AssignmentCreateStep,
   AssignmentDescribeValues,
   GeneratedAssignmentDraft,
@@ -26,6 +30,7 @@ const initialDescribeValues: AssignmentDescribeValues = {
 };
 
 export function InstructorAssignmentCreatePage() {
+  const { accessToken, user } = useAuth();
   const [step, setStep] = useState<AssignmentCreateStep>("describe");
   const [describeValues, setDescribeValues] =
     useState<AssignmentDescribeValues>(initialDescribeValues);
@@ -36,10 +41,66 @@ export function InstructorAssignmentCreatePage() {
   const [isApproving, setIsApproving] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
+  const [courseOptions, setCourseOptions] = useState<AssignmentCreateCourseOption[]>([]);
+  const [isLoadingCourses, setIsLoadingCourses] = useState(false);
+  const [courseLoadError, setCourseLoadError] = useState<string | null>(null);
 
   const courseLabel =
-    assignmentCreateCourseOptions.find((course) => course.id === describeValues.courseId)
+    courseOptions.find((course) => course.id === describeValues.courseId)
       ?.label ?? "your course";
+  const canvasUrl = getPrimaryCanvasConnectionUrl(user);
+
+  useEffect(() => {
+    if (!accessToken || !user?.has_canvas_token) {
+      return;
+    }
+
+    const token = accessToken;
+    const selectedCanvasUrl = canvasUrl;
+    let cancelled = false;
+
+    async function loadCourses() {
+      setIsLoadingCourses(true);
+
+      try {
+        const courses = await fetchCourses(token, selectedCanvasUrl);
+        if (cancelled) {
+          return;
+        }
+
+        setCourseOptions(
+          courses
+            .filter((course) => course.local_id !== null)
+            .map((course) => ({
+              id: String(course.local_id),
+              label: `${course.course_code}: ${course.name}`,
+            })),
+        );
+        setCourseLoadError(null);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setCourseOptions([]);
+        setCourseLoadError(
+          error instanceof CanvasApiError
+            ? error.message
+            : "Unable to load courses from Canvas.",
+        );
+      } finally {
+        if (!cancelled) {
+          setIsLoadingCourses(false);
+        }
+      }
+    }
+
+    void loadCourses();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, canvasUrl, user?.has_canvas_token]);
 
   const handleGenerate = async (values: AssignmentDescribeValues) => {
     setDescribeValues(values);
@@ -67,6 +128,11 @@ export function InstructorAssignmentCreatePage() {
   };
 
   const handleApprove = async (values: AssignmentReviewFormSchema) => {
+    if (!accessToken) {
+      setApproveError("Your session has expired. Please sign in again.");
+      return;
+    }
+
     setApproveError(null);
     setIsApproving(true);
 
@@ -76,6 +142,9 @@ export function InstructorAssignmentCreatePage() {
         name: values.name,
         description: values.description,
         dueDate: values.dueDate,
+      }, {
+        accessToken,
+        canvasUrl,
       });
       setApprovedValues(values);
     } catch (error) {
@@ -88,6 +157,22 @@ export function InstructorAssignmentCreatePage() {
       setIsApproving(false);
     }
   };
+
+  if (!user?.has_canvas_token) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-6">
+        <header className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">
+            AI Assignment Creator
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Generate assignments with AI assistance.
+          </p>
+        </header>
+        <CanvasConnectionRequired />
+      </div>
+    );
+  }
 
   const handleCreateAnother = () => {
     setStep("describe");
@@ -162,6 +247,9 @@ export function InstructorAssignmentCreatePage() {
           defaultValues={describeValues}
           isGenerating={isGenerating}
           generateError={generateError}
+          courseOptions={courseOptions}
+          courseLoadError={courseLoadError}
+          isLoadingCourses={isLoadingCourses}
           onGenerate={handleGenerate}
         />
       ) : draft ? (

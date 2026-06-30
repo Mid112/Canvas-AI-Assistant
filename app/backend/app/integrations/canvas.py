@@ -100,9 +100,7 @@ async def validate_token(token: str, canvas_url: str = settings.CANVAS_API_URL) 
 CanvasTokenStatus = Literal["valid", "expired", "invalid"]
 
 
-async def check_token_status(
-    token: str, canvas_url: str = settings.CANVAS_API_URL
-) -> CanvasTokenStatus:
+async def check_token_status(token: str, canvas_url: str = settings.CANVAS_API_URL) -> CanvasTokenStatus:
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await _get_with_retry(
@@ -155,6 +153,73 @@ async def fetch_assignments(course_id: int, token: str, canvas_url: str = settin
                 headers=_headers(token),
                 params={"per_page": 100},
             )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
+async def fetch_assignment(
+    course_id: int,
+    assignment_id: int,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await _get_with_retry(
+                client,
+                f"{canvas_url}/api/v1/courses/{course_id}/assignments/{assignment_id}",
+                headers=_headers(token),
+            )
+            _raise_for_canvas_error(response)
+            return response.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
+async def create_assignment(
+    course_id: int,
+    payload: dict,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.post(
+                f"{canvas_url}/api/v1/courses/{course_id}/assignments",
+                headers=_headers(token),
+                json={"assignment": payload},
+            )
+            _raise_for_canvas_error(response)
+            return response.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
+async def update_assignment(
+    course_id: int,
+    assignment_id: int,
+    payload: dict,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.put(
+                f"{canvas_url}/api/v1/courses/{course_id}/assignments/{assignment_id}",
+                headers=_headers(token),
+                json={"assignment": payload},
+            )
+            _raise_for_canvas_error(response)
+            return response.json()
     except httpx.TimeoutException:
         raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
     except httpx.RequestError as e:
