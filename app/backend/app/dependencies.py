@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from datetime import UTC, datetime
 
 from fastapi import Depends, HTTPException, status
@@ -33,51 +32,7 @@ async def get_current_user(
     )
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is disabled")
     return user
-
-
-def require_roles(*allowed_roles: str) -> Callable:
-    """Role-checking dependency factory (#598).
-
-    Returns a FastAPI dependency that validates the JWT role claim against
-    `allowed_roles` and enforces is_active.  Use it to create named guards:
-
-        get_instructor_user = require_roles("instructor", "ta", "admin")
-    """
-    async def _dependency(
-        credentials: HTTPAuthorizationCredentials = Depends(bearer),
-        db: AsyncSession = Depends(get_db),
-    ) -> User:
-        try:
-            user_id, role = decode_access_token(credentials.credentials)
-        except JWTError:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-        if role not in allowed_roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access requires one of: {', '.join(allowed_roles)}",
-            )
-
-        user = await db.scalar(
-            select(User)
-            .where(User.id == int(user_id))
-            .options(selectinload(User.canvas_connections))
-        )
-        if not user:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-        if not user.is_active:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account is disabled")
-
-        return user
-
-    return _dependency
-
-
-# Named role guards — drop these directly into Depends() on any route (#603)
-get_instructor_user = require_roles("instructor", "ta", "admin")
 
 
 async def get_admin_user(
