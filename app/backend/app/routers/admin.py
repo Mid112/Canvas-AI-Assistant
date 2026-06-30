@@ -20,7 +20,6 @@ from app.services.admin import (
     update_instructor,
 )
 
-
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
