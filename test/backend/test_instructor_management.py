@@ -28,7 +28,7 @@ def client():
 @pytest.fixture(scope="module")
 def admin_token(client, admin_credentials):
     resp = client.post(
-        "/api/v1/auth/login",
+        "/api/v1/auth/admin/login",
         json={"email": admin_credentials["email"], "password": admin_credentials["password"]},
     )
     assert resp.status_code == 200, f"Admin login failed: {resp.json()}"
@@ -86,7 +86,7 @@ class TestCreateInstructor:
 
     def test_no_token_rejected(self, client):
         resp = client.post(BASE, json={"name": "X", "email": _new_email(), "password": "Pass123!"})
-        assert resp.status_code == 403
+        assert resp.status_code == 401
 
 
 # ── #606 Update instructor account ────────────────────────────────────────────
