@@ -33,8 +33,8 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (credentials: LoginCredentials) => Promise<User>;
   register: (credentials: RegisterCredentials) => Promise<User>;
+  refreshUser: () => Promise<User | null>;
   logout: () => void;
-  refreshUser: () => Promise<User>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -142,20 +142,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [loadUser]);
 
+  const refreshUser = useCallback(async () => {
+    if (!accessToken) {
+      return null;
+    }
+
+    // Re-read /auth/me after profile-level mutations, such as connecting Canvas,
+    // so derived flags like has_canvas_token stay in sync without a new login.
+    return await loadUser(accessToken);
+  }, [accessToken, loadUser]);
+
   const logout = useCallback(() => {
     clearStoredToken();
     setAccessToken(null);
     setUser(null);
   }, []);
-
-  const refreshUser = useCallback(async () => {
-    const token = accessToken ?? getStoredToken();
-    if (!token) {
-      throw new Error("Not authenticated");
-    }
-
-    return loadUser(token);
-  }, [accessToken, loadUser]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -165,10 +166,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       login,
       register,
-      logout,
       refreshUser,
+      logout,
     }),
-    [user, accessToken, isLoading, login, register, logout, refreshUser],
+    [user, accessToken, isLoading, login, register, refreshUser, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
