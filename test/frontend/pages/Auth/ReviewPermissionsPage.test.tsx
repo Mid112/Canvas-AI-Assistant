@@ -11,7 +11,7 @@ const mockUser = {
   id: 1,
   email: "professor@university.edu",
   name: "professor",
-  role: "ta" as const,
+  role: "instructor" as const,
   is_active: true,
   has_canvas_token: false,
 };
@@ -96,7 +96,7 @@ describe("ReviewPermissionsPage", () => {
     );
 
     expect(mockedMarkOnboardingComplete).toHaveBeenCalledWith(mockUser.id);
-    expect(mockNavigate).toHaveBeenCalledWith(paths.ta.dashboard);
+    expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.dashboard);
   });
 
   it("navigates back to connect canvas on cancel", async () => {

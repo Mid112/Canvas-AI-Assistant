@@ -7,6 +7,12 @@ export interface Assignment {
   course_id: number;
 }
 
+export interface AssignmentCreatePayload {
+  name: string;
+  description: string | null;
+  due_at: string | null;
+}
+
 export interface AssignmentUpdatePayload {
   name: string;
   description: string | null;

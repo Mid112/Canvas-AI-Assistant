@@ -13,6 +13,7 @@ export const paths = {
     courseAssignments: "/instructor/courses/:localCourseId/assignments",
     assignmentUpdate:
       "/instructor/courses/:localCourseId/assignments/:assignmentId/edit",
+    assignmentCreate: "/instructor/assignments/create",
     assistant: "/instructor/assistant",
     analytics: "/instructor/analytics",
     messages: "/instructor/messages",
@@ -20,14 +21,6 @@ export const paths = {
     history: "/instructor/history",
     settings: "/instructor/settings",
     profile: "/instructor/profile",
-  },
-  ta: {
-    dashboard: "/ta/dashboard",
-    courses: "/ta/courses",
-    messages: "/ta/messages",
-    students: "/ta/students",
-    settings: "/ta/settings",
-    profile: "/ta/profile",
   },
   admin: {
     dashboard: "/admin/dashboard",
