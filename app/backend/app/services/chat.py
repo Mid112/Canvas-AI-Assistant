@@ -24,9 +24,7 @@ async def get_or_create_conversation(
 ) -> Conversation:
     if conversation_id is not None:
         conversation = await db.scalar(
-            select(Conversation).where(
-                Conversation.id == conversation_id, Conversation.user_id == user.id
-            )
+            select(Conversation).where(Conversation.id == conversation_id, Conversation.user_id == user.id)
         )
         if conversation:
             return conversation
@@ -51,10 +49,7 @@ async def _get_recent_messages(db: AsyncSession, conversation_id: int) -> list[d
     In a future iteration this step gets replaced by a vector retrieval
     call that fetches semantically relevant history rather than just recent."""
     rows = await db.scalars(
-        select(Message)
-        .where(Message.conversation_id == conversation_id)
-        .order_by(desc(Message.id))
-        .limit(HISTORY_WINDOW)
+        select(Message).where(Message.conversation_id == conversation_id).order_by(desc(Message.id)).limit(HISTORY_WINDOW)
     )
     messages = list(rows)
     messages.reverse()
@@ -68,25 +63,34 @@ def build_system_prompt() -> str:
         if name not in {"out_of_scope", "clarify", "intent_preview"}
     )
 
-    return """You are a Canvas LMS assistant for instructors. You help with course management, assignments, student submissions, and communicating with students.
+    return (
+        """You are a Canvas LMS assistant for instructors. You help
+with course management, assignments, student submissions, and
+communicating with students.
 
 SCOPE CHECK — do this first, before anything else:
-Decide whether the request is about Canvas course management or student communication.
-If the request is not about Canvas (e.g. creative writing, roleplay, general coding help, personal advice, anything unrelated to teaching), respond ONLY with:
-{"action": "out_of_scope", "message": "<brief description of what the request was actually about>"}
+Decide whether the request is about Canvas course management or student
+communication. If the request is not about Canvas (e.g. creative
+writing, roleplay, general coding help, personal advice, anything
+unrelated to teaching), respond ONLY with:
+{"action": "out_of_scope", "message": "<brief description of the request>"}
 
-AMBIGUITY CHECK — if the request is in scope but missing information you need:
-If you cannot confidently identify which course, assignment, or students the user means, respond ONLY with:
-{"action": "clarify", "question": "<one specific question that would unblock you>", "partial_plan": <whatever you have figured out so far as a dict>}
+AMBIGUITY CHECK — if the request is in scope but missing information:
+If you cannot confidently identify which course, assignment, or
+students the user means, respond ONLY with:
+{"action": "clarify", "question": "<one specific question>", "partial_plan": <dict>}
 Only ask ONE question per turn. Do not ask for information you can infer.
 
 INTENT PREVIEW — if the request is clear enough to act on:
 Before executing any action, always show the user what you are about to do:
-{"action": "intent_preview", "summary": "<plain English description of what you will do>", "proposed_action": <the exact action dict you would execute>}
+{"action": "intent_preview", "summary": "<plain English description>", "proposed_action": <dict>}
 The user will confirm, modify, or cancel from here.
 
 CONVERSATION HISTORY:
-Previous messages in this conversation are provided below. If this is a follow-up to a clarification question or a refinement of a previous plan, incorporate the user's feedback into the updated partial_plan before responding.
+Previous messages in this conversation are provided below. If this is
+a follow-up to a clarification question or a refinement of a previous
+plan, incorporate the user's feedback into the updated partial_plan
+before responding.
 
 META QUESTIONS — if the user asks what you can do, asks for help,
 or needs a natural language reply that isn't a Canvas tool call, respond with:
@@ -94,7 +98,9 @@ or needs a natural language reply that isn't a Canvas tool call, respond with:
 Use this for greetings, capability questions, and clarifying what is in scope.
 
 AVAILABLE ACTIONS (only used inside proposed_action):
-""" + tool_list
+"""
+        + tool_list
+    )
 
 
 async def handle_chat_message(
@@ -104,10 +110,7 @@ async def handle_chat_message(
     local_course_id: int | None,
     conversation_id: int | None,
 ) -> tuple[Conversation, dict, bool]:
-
-    conversation = await get_or_create_conversation(
-        db, user, conversation_id, local_course_id
-    )
+    conversation = await get_or_create_conversation(db, user, conversation_id, local_course_id)
     await log_message(db, conversation, role="user", content=message)
 
     history = await _get_recent_messages(db, conversation.id)
@@ -120,7 +123,7 @@ async def handle_chat_message(
             adapter.generate(system_prompt, message, history=history),
             timeout=LLM_TIMEOUT_SECONDS,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         log_detail = f"LLM request timed out after {LLM_TIMEOUT_SECONDS}s"
         await log_message(db, conversation, role="assistant", content=log_detail)
         await db.commit()
@@ -174,9 +177,7 @@ async def handle_confirmed_action(
     This is what runs when the user confirms an intent_preview basically."""
 
     conversation = await db.scalar(
-        select(Conversation).where(
-            Conversation.id == conversation_id, Conversation.user_id == user.id
-        )
+        select(Conversation).where(Conversation.id == conversation_id, Conversation.user_id == user.id)
     )
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found.")
@@ -196,9 +197,7 @@ async def handle_confirmed_action(
     return conversation, result, False
 
 
-async def get_conversation_with_messages(
-    db: AsyncSession, user: User, conversation_id: int
-) -> Conversation | None:
+async def get_conversation_with_messages(db: AsyncSession, user: User, conversation_id: int) -> Conversation | None:
     return await db.scalar(
         select(Conversation)
         .where(Conversation.id == conversation_id, Conversation.user_id == user.id)

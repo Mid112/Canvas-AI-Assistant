@@ -7,7 +7,8 @@ from pydantic import BaseModel
 class ConfirmActionRequest(BaseModel):
     conversation_id: int
     proposed_action: dict
-    
+
+
 class ChatRequest(BaseModel):
     message: str
     # If omitted, the service falls back to the user's active course

@@ -75,11 +75,13 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
     await db.commit()
 
     return [
-        CourseResponse.model_validate({
-            **item,
-            "local_id": course_map[str(item["id"])].id,
-            "term_name": (item.get("term") or {}).get("name"),
-        })
+        CourseResponse.model_validate(
+            {
+                **item,
+                "local_id": course_map[str(item["id"])].id,
+                "term_name": (item.get("term") or {}).get("name"),
+            }
+        )
         for item in data
     ]
 
@@ -99,9 +101,7 @@ async def get_submissions(course_id: int, assignment_id: int, user: User, canvas
 async def get_active_course(user: User, db: AsyncSession) -> ActiveCourseResponse | None:
     # joinedload fetches preference + course in a single JOIN query
     pref = await db.scalar(
-        select(UserPreference)
-        .where(UserPreference.user_id == user.id)
-        .options(joinedload(UserPreference.active_course))
+        select(UserPreference).where(UserPreference.user_id == user.id).options(joinedload(UserPreference.active_course))
     )
     if not pref or not pref.active_course:
         return None
@@ -116,9 +116,7 @@ async def get_active_course(user: User, db: AsyncSession) -> ActiveCourseRespons
 
 
 async def set_active_course(user: User, local_course_id: int, db: AsyncSession) -> ActiveCourseResponse:
-    course = await db.scalar(
-        select(Course).where(Course.id == local_course_id, Course.instructor_id == user.id)
-    )
+    course = await db.scalar(select(Course).where(Course.id == local_course_id, Course.instructor_id == user.id))
     if not course:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

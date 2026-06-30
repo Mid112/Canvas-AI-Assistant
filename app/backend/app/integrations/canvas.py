@@ -100,9 +100,7 @@ async def validate_token(token: str, canvas_url: str = settings.CANVAS_API_URL) 
 CanvasTokenStatus = Literal["valid", "expired", "invalid"]
 
 
-async def check_token_status(
-    token: str, canvas_url: str = settings.CANVAS_API_URL
-) -> CanvasTokenStatus:
+async def check_token_status(token: str, canvas_url: str = settings.CANVAS_API_URL) -> CanvasTokenStatus:
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await _get_with_retry(

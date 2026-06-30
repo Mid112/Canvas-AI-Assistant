@@ -53,11 +53,13 @@ class IntentPreviewAction(BaseModel):
     # the actual structured action that will run after the user sees this, and this will go into intent UI/preview page
     proposed_action: dict
 
+
 class RespondAction(BaseModel):
     action: Literal["respond"] = "respond"
-    # basically if a user asks a related or a meta question on canvas or this chat's capabilities, it should generate some action plan
-    # in json format that will guide the user towards available functions
+    # for meta/related questions about Canvas or this assistant's own
+    # capabilities and guides the user toward what they can actually ask
     message: str
+
 
 # Every action the LLM is allowed to request. Adding a new tool means
 # adding one class above and one entry here

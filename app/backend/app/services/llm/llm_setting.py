@@ -16,14 +16,13 @@ def get_llm_adapter(llm_settings: dict) -> LLMAdapter:
             model=settings.VLLM_MODEL,
         )
 
-
     if provider == "groq":
         return OpenAICompatibleAdapter(
             base_url="https://api.groq.com/openai/v1",
             model=llm_settings.get("model", "qwen/qwen3.6-27b"),
             api_key=llm_settings.get("api_key", settings.GROQ_API_KEY),
         )
-    
+
     if provider == "openai":
         return OpenAICompatibleAdapter(
             base_url="https://api.openai.com/v1",
