@@ -24,7 +24,6 @@ def admin_credentials():
     Using scope="module" means each test module gets its own isolated admin,
     so tests in different modules don't share or pollute each other's sessions.
     """
-    from app.core.database import AsyncSessionLocal
     from app.core.security import hash_password
     from app.models.user import User
 

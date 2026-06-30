@@ -2,7 +2,6 @@
 # Exposes tools for reading/writing Canvas data and fetching audit logs.
 
 import os
-from datetime import datetime, timezone
 from typing import Any
 
 import httpx
