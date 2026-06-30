@@ -870,3 +870,109 @@ development and testing.
 * **Goal 2:** Test the authentication flow across the full stack
 * **Goal 3:** Continue improving Canvas Docker integration and local setup
 * **Goal 4:** Continue active development toward MVP completion
+
+---
+
+<br>
+
+# Cycle 12 Report: 26/06 – 29/06 (June 26 – June 29)
+
+## Timesheet
+
+### Clockify Report
+
+* **26/06 (Friday):** Using Clockify – Logged 2.58 hours
+  *(2 hours and 35 minutes for Canvas URL integration)*
+<img width="2464" height="250" alt="image" src="https://github.com/user-attachments/assets/84d4eeb9-5ba0-45f9-bafd-8edcd08fc11d" />
+
+
+
+* **27/06 (Saturday):** Using Clockify – Logged 0.75 hours
+  *(45 minutes for Canvas URL integration)*
+  
+<img width="2456" height="242" alt="image" src="https://github.com/user-attachments/assets/71e047fa-adec-4156-b415-51130a1c1ebc" />
+
+* **28/06 (Sunday):** Using Clockify – Logged 0 hours
+
+* **29/06 (Monday):** Using Clockify – Logged 1.00 hour
+  *(1 hour for reviewing PR work)*
+<img width="2440" height="242" alt="image" src="https://github.com/user-attachments/assets/1a8edaf2-65c1-4c1e-87e1-df4f895d173a" />
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Canvas URL integration (June 26)
+
+* Worked for 2 hours and 35 minutes on Canvas URL integration.
+* Focused on improving how the frontend and backend handle the saved Canvas URL.
+* Continued connecting Canvas-related backend data to the frontend so the application can use real Canvas information instead of relying on mock data.
+* This work supported the larger goal of connecting backend Canvas endpoints to frontend components.
+
+### #2: Continued Canvas URL integration (June 27)
+
+* Worked for 45 minutes on additional Canvas URL integration changes.
+* Continued refining how Canvas connection information is used across the application.
+* Helped move the project closer to a smoother full-stack Canvas workflow.
+
+### #3: PR review (June 29)
+
+* Spent 1 hour reviewing PR work.
+* Reviewed requested changes and checked the progress of the current implementation.
+* Identified remaining areas that need attention as the project moves from Canvas Docker setup into connecting backend endpoints with frontend components.
+
+---
+
+## Progress Update (since 26/06/2026)
+
+| TASK/ISSUE #                             | STATUS      |
+| ---------------------------------------- | ----------- |
+| Canvas Docker setup                      | Complete    |
+| Docker integration                       | Complete    |
+| Canvas URL integration                   | In Progress |
+| PR review                                | Completed   |
+| Backend-to-frontend endpoint integration | In Progress |
+| MVP                                      | In Progress |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle focused on continuing Canvas integration work after completing the
+Canvas Docker setup. On June 26, I worked on Canvas URL integration for 2 hours
+and 35 minutes, focusing on how the application handles the Canvas URL and how
+Canvas-backed data can be connected between the backend and frontend.
+
+On June 27, I continued working on Canvas URL integration for 45 minutes. This
+helped refine the connection flow and supported the larger goal of making the
+Canvas integration more usable across the application.
+
+On June 29, I spent 1 hour reviewing PR work. This helped me understand the
+remaining changes needed and the next areas of focus. Canvas Docker is now
+officially complete, so the main focus has shifted toward implementing and
+connecting all backend endpoints to the frontend components.
+
+### Retrospective:
+
+This cycle was productive because it marked a transition from Docker setup work
+to deeper full-stack integration. With Canvas Docker now complete, the project
+has a stronger local development foundation for testing Canvas-related features.
+
+The Canvas URL integration work helped move the application closer to using
+real Canvas-backed data throughout the frontend. The PR review also helped
+clarify what still needs to be completed before the feature can be considered
+fully integrated.
+
+The main area to continue improving is connecting backend endpoints to the
+frontend components and testing those flows across the full stack.
+
+---
+
+## Next Cycle Goals
+
+* **Goal 1:** Continue implementing backend endpoints in frontend components
+* **Goal 2:** Test Canvas-backed frontend flows using real backend data
+* **Goal 3:** Continue reviewing and addressing PR feedback
+* **Goal 4:** Continue active development toward MVP completion
