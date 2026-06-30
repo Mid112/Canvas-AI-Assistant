@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from app.config import settings
 
 from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_action
 from app.mcp_tools.schemas import ACTION_SCHEMAS
@@ -116,7 +117,7 @@ async def handle_chat_message(
     history = await _get_recent_messages(db, conversation.id)
 
     system_prompt = build_system_prompt()
-    adapter = get_llm_adapter({"provider": "groq"})
+    adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
 
     try:
         raw_output = await asyncio.wait_for(
