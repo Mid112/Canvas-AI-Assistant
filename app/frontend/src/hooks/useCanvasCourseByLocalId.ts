@@ -7,8 +7,7 @@
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { useInstitution } from "@/contexts/useInstitution";
-import { getInstitutionCanvasUrl } from "@/lib/institution-canvas";
+import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
 import { isCanvasConnectionRequiredError } from "@/lib/canvas-connection";
 import { CanvasApiError, fetchCourses } from "@/services/canvas";
 
@@ -22,8 +21,7 @@ export interface ResolvedCanvasCourse {
 
 export function useCanvasCourseByLocalId(localCourseId: number | null) {
   const { accessToken, user, logout } = useAuth();
-  const { selectedInstitution } = useInstitution();
-  const canvasUrl = getInstitutionCanvasUrl(selectedInstitution.id);
+  const canvasUrl = getPrimaryCanvasConnectionUrl(user);
   const [course, setCourse] = useState<ResolvedCanvasCourse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

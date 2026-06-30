@@ -6,12 +6,12 @@ import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRe
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
-import { useCanvasCourseByLocalId } from "@/hooks/useCanvasCourseByLocalId";
 import {
   assignmentToFormValues,
   formValuesToUpdatePayload,
   hasAssignmentChanges,
 } from "@/lib/assignment-utils";
+import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
 import { AssignmentUpdateForm } from "@/pages/Instructor/InstructorAssignmentUpdate/AssignmentUpdateForm";
 import { AssignmentUpdatePreview } from "@/pages/Instructor/InstructorAssignmentUpdate/AssignmentUpdatePreview";
 import { paths } from "@/routes/paths";
@@ -35,6 +35,7 @@ export function InstructorAssignmentUpdatePage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const canvasUrl = getPrimaryCanvasConnectionUrl(user);
 
   const parsedLocalCourseId = Number(localCourseId);
   const parsedAssignmentId = Number(assignmentId);
@@ -44,32 +45,24 @@ export function InstructorAssignmentUpdatePage() {
     Number.isInteger(parsedAssignmentId) &&
     parsedAssignmentId > 0;
 
-  // Route param is local_id; assignment API needs canvas_id + canvas_url.
-  const {
-    course: canvasCourse,
-    error: resolveError,
-    isLoading: isResolvingCourse,
-    needsCanvasConnection,
-  } = useCanvasCourseByLocalId(idsAreValid ? parsedLocalCourseId : null);
-
   useEffect(() => {
-    if (!accessToken || !canvasCourse || !idsAreValid || !user?.has_canvas_token) {
+    if (!accessToken || !idsAreValid || !user?.has_canvas_token) {
       return;
     }
 
     const token = accessToken;
-    const { canvasCourseId, canvasUrl } = canvasCourse;
+    // Snapshot the URL used for this request so an auth/user refresh during the
+    // async load cannot switch Canvas hosts mid-flight.
+    const selectedCanvasUrl = canvasUrl;
     let cancelled = false;
 
     async function loadAssignment() {
-      setIsLoading(true);
-
       try {
         const data = await fetchAssignment(
-          canvasCourseId,
+          parsedLocalCourseId,
           parsedAssignmentId,
           token,
-          canvasUrl,
+          selectedCanvasUrl,
         );
 
         if (cancelled) {
@@ -108,27 +101,20 @@ export function InstructorAssignmentUpdatePage() {
     return () => {
       cancelled = true;
     };
-  }, [
-    accessToken,
-    canvasCourse,
-    idsAreValid,
-    parsedAssignmentId,
-    user?.has_canvas_token,
-  ]);
+  }, [accessToken, canvasUrl, idsAreValid, parsedAssignmentId, parsedLocalCourseId, user?.has_canvas_token]);
 
   const retryLoad = async () => {
-    if (!accessToken || !canvasCourse || !idsAreValid || !user?.has_canvas_token) {
+    if (!accessToken || !idsAreValid || !user?.has_canvas_token) {
       return;
     }
 
-    const { canvasCourseId, canvasUrl } = canvasCourse;
     setIsLoading(true);
     setLoadError(null);
     setSuccessMessage(null);
 
     try {
       const data = await fetchAssignment(
-        canvasCourseId,
+        parsedLocalCourseId,
         parsedAssignmentId,
         accessToken,
         canvasUrl,
@@ -172,18 +158,17 @@ export function InstructorAssignmentUpdatePage() {
   };
 
   const handleConfirm = async () => {
-    if (!assignment || !formValues || !accessToken || !canvasCourse) {
+    if (!assignment || !formValues || !accessToken) {
       return;
     }
 
-    const { canvasCourseId, canvasUrl } = canvasCourse;
     setIsSubmitting(true);
     setSubmitError(null);
     setSuccessMessage(null);
 
     try {
       const updated = await updateAssignment(
-        canvasCourseId,
+        parsedLocalCourseId,
         parsedAssignmentId,
         formValuesToUpdatePayload(formValues),
         accessToken,
@@ -221,7 +206,7 @@ export function InstructorAssignmentUpdatePage() {
     );
   }
 
-  if (!user?.has_canvas_token || needsCanvasConnection) {
+  if (!user?.has_canvas_token) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
         <div className="space-y-1">
@@ -234,30 +219,12 @@ export function InstructorAssignmentUpdatePage() {
     );
   }
 
-  if (isResolvingCourse || isLoading) {
+  if (isLoading) {
     return (
       <PageState
         title="Loading assignment"
         message="Fetching the latest assignment details from Canvas..."
         icon={<Loader2 className="size-5 animate-spin text-primary" aria-hidden="true" />}
-      />
-    );
-  }
-
-  if (resolveError) {
-    return (
-      <PageState
-        title="Unable to load course"
-        message={resolveError}
-        icon={<AlertCircle className="size-5 text-destructive" aria-hidden="true" />}
-        action={
-          <Link
-            to={paths.instructor.courses}
-            className="inline-flex h-8 items-center justify-center rounded-lg border border-border bg-background px-2.5 text-sm font-medium hover:bg-muted"
-          >
-            Back to courses
-          </Link>
-        }
       />
     );
   }

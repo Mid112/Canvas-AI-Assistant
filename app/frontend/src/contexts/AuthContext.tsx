@@ -33,8 +33,8 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (credentials: LoginCredentials) => Promise<User>;
   register: (credentials: RegisterCredentials) => Promise<User>;
+  refreshUser: () => Promise<User | null>;
   logout: () => void;
-  refreshUser: () => Promise<User>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -142,16 +142,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [loadUser]);
 
-  const logout = useCallback(() => {
-    clearStoredToken();
-    setAccessToken(null);
-    setUser(null);
-  }, []);
-
   const refreshUser = useCallback(async () => {
     const token = accessToken ?? getStoredToken();
     if (!token) {
-      throw new Error("Not authenticated");
+      return null;
     }
 
     try {
@@ -164,6 +158,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [accessToken, loadUser]);
 
+  const logout = useCallback(() => {
+    clearStoredToken();
+    setAccessToken(null);
+    setUser(null);
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       user,
@@ -172,10 +172,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       login,
       register,
-      logout,
       refreshUser,
+      logout,
     }),
-    [user, accessToken, isLoading, login, register, logout, refreshUser],
+    [user, accessToken, isLoading, login, register, refreshUser, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

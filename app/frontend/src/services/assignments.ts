@@ -1,13 +1,6 @@
 import { API_BASE_URL } from "@/config/api";
 import type { Assignment, AssignmentCreatePayload, AssignmentUpdatePayload } from "@/types/assignment";
 
-/**
- * Canvas assignment API client.
- *
- * On develop, /canvas/courses/{id}/assignments treats {id} as the Canvas course ID
- * and requires canvas_url so the backend can pick the right stored token.
- * In-app routes still use local_id — resolve via useCanvasCourseByLocalId first.
- */
 export class AssignmentApiError extends Error {
   status: number;
 
@@ -44,28 +37,34 @@ async function parseError(response: Response): Promise<string> {
   return "Something went wrong. Please try again.";
 }
 
-function withCanvasUrl(path: string, canvasUrl: string): string {
+function appendCanvasUrl(url: string, canvasUrl?: string): string {
+  if (!canvasUrl) {
+    return url;
+  }
+
+  // The backend can store tokens for multiple Canvas hosts. Passing canvas_url
+  // keeps assignment calls aligned with the connection selected by the UI.
   const params = new URLSearchParams({ canvas_url: canvasUrl });
-  return `${path}?${params.toString()}`;
+  return `${url}?${params.toString()}`;
 }
 
 function buildCourseAssignmentsUrl(
-  canvasCourseId: number,
-  canvasUrl: string,
+  localCourseId: number,
+  canvasUrl?: string,
 ): string {
-  return withCanvasUrl(
-    `${API_BASE_URL}/canvas/courses/${canvasCourseId}/assignments`,
+  return appendCanvasUrl(
+    `${API_BASE_URL}/canvas/courses/${localCourseId}/assignments`,
     canvasUrl,
   );
 }
 
 function buildAssignmentUrl(
-  canvasCourseId: number,
+  localCourseId: number,
   assignmentId: number,
-  canvasUrl: string,
+  canvasUrl?: string,
 ): string {
-  return withCanvasUrl(
-    `${API_BASE_URL}/canvas/courses/${canvasCourseId}/assignments/${assignmentId}`,
+  return appendCanvasUrl(
+    `${API_BASE_URL}/canvas/courses/${localCourseId}/assignments/${assignmentId}`,
     canvasUrl,
   );
 }
@@ -92,36 +91,36 @@ async function request<T>(
 }
 
 export async function fetchCourseAssignments(
-  canvasCourseId: number,
+  localCourseId: number,
   accessToken: string,
-  canvasUrl: string,
+  canvasUrl?: string,
 ): Promise<Assignment[]> {
   return request<Assignment[]>(
-    buildCourseAssignmentsUrl(canvasCourseId, canvasUrl),
+    buildCourseAssignmentsUrl(localCourseId, canvasUrl),
     accessToken,
   );
 }
 
 export async function fetchAssignment(
-  canvasCourseId: number,
+  localCourseId: number,
   assignmentId: number,
   accessToken: string,
-  canvasUrl: string,
+  canvasUrl?: string,
 ): Promise<Assignment> {
   return request<Assignment>(
-    buildAssignmentUrl(canvasCourseId, assignmentId, canvasUrl),
+    buildAssignmentUrl(localCourseId, assignmentId, canvasUrl),
     accessToken,
   );
 }
 
 export async function createAssignment(
-  canvasCourseId: number,
+  localCourseId: number,
   payload: AssignmentCreatePayload,
   accessToken: string,
-  canvasUrl: string,
+  canvasUrl?: string,
 ): Promise<Assignment> {
   return request<Assignment>(
-    buildCourseAssignmentsUrl(canvasCourseId, canvasUrl),
+    buildCourseAssignmentsUrl(localCourseId, canvasUrl),
     accessToken,
     {
       method: "POST",
@@ -131,14 +130,14 @@ export async function createAssignment(
 }
 
 export async function updateAssignment(
-  canvasCourseId: number,
+  localCourseId: number,
   assignmentId: number,
   payload: AssignmentUpdatePayload,
   accessToken: string,
-  canvasUrl: string,
+  canvasUrl?: string,
 ): Promise<Assignment> {
   return request<Assignment>(
-    buildAssignmentUrl(canvasCourseId, assignmentId, canvasUrl),
+    buildAssignmentUrl(localCourseId, assignmentId, canvasUrl),
     accessToken,
     {
       method: "PATCH",

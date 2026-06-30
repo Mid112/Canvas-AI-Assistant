@@ -2,7 +2,6 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useInstitution } from "@/contexts/useInstitution";
 import { InstructorCoursesPage } from "@/pages/Instructor/InstructorCoursesPage";
 import { fetchCourseAssignments } from "@/services/assignments";
 import { fetchCourses } from "@/services/canvas";
@@ -42,6 +41,8 @@ vi.mock("@/contexts/AuthContext", async () => {
   };
 });
 
+const CANVAS_URL = "http://localhost:3000";
+
 const authWithCanvas = {
   user: {
     id: 1,
@@ -50,6 +51,13 @@ const authWithCanvas = {
     role: "instructor",
     is_active: true,
     has_canvas_token: true,
+    canvas_connections: [
+      {
+        id: 1,
+        canvas_url: CANVAS_URL,
+        created_at: "2026-06-26T00:00:00.000Z",
+      },
+    ],
   },
   accessToken: "token",
   isAuthenticated: true,
@@ -62,7 +70,7 @@ const authWithCanvas = {
 
 const authWithoutCanvas = {
   ...authWithCanvas,
-  user: { ...authWithCanvas.user, has_canvas_token: false },
+  user: { ...authWithCanvas.user, has_canvas_token: false, canvas_connections: [] },
 };
 
 const canvasCourses = [
@@ -92,20 +100,8 @@ const canvasCourses = [
   },
 ];
 
-function InstitutionSwitchHarness() {
-  const { setSelectedInstitution } = useInstitution();
-
-  return (
-    <>
-      <button type="button" onClick={() => setSelectedInstitution("ubco")}>
-        Switch to UBCO
-      </button>
-      <InstructorCoursesPage />
-    </>
-  );
-}
-
 beforeEach(() => {
+  vi.clearAllMocks();
   mockUseAuth.mockReturnValue(authWithCanvas);
   mockedFetchCourses.mockResolvedValue(canvasCourses);
   mockedFetchCourseAssignments.mockResolvedValue([
@@ -124,11 +120,11 @@ describe("InstructorCoursesPage", () => {
     expect(screen.queryByText("Course Analytics Overview")).not.toBeInTheDocument();
   });
 
-  it("shows connect Canvas when no token exists for this institution URL", async () => {
+  it("shows connect Canvas when no token exists for the saved connection URL", async () => {
     const { CanvasApiError } = await import("@/services/canvas");
     mockedFetchCourses.mockRejectedValue(
       new CanvasApiError(
-        "No Canvas token for https://canvas.ubc.ca. PATCH to /api/v1/auth/me/canvas-token first.",
+        "No Canvas token for http://localhost:3000. PATCH to /api/v1/auth/me/canvas-token first.",
         403,
       ),
     );
@@ -142,14 +138,30 @@ describe("InstructorCoursesPage", () => {
     expect(screen.queryByLabelText("Search courses")).not.toBeInTheDocument();
   });
 
-  it("renders Canvas courses after they load", async () => {
+  it("loads Canvas courses with the saved connection URL", async () => {
     renderWithInstitution(<InstructorCoursesPage />);
+
+    await waitFor(() => {
+      expect(mockedFetchCourses).toHaveBeenCalledWith("token", CANVAS_URL);
+    });
 
     expect(await screen.findByText("Your Courses (3)")).toBeInTheDocument();
     expect(
       screen.getByText("CS 101: Introduction to Programming"),
     ).toBeInTheDocument();
     expect(screen.queryByText("Course Analytics Overview")).not.toBeInTheDocument();
+  });
+
+  it("shows a Canvas loading state while courses load", () => {
+    mockedFetchCourses.mockReturnValue(
+      new Promise<typeof canvasCourses>(() => undefined),
+    );
+
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    expect(
+      screen.getByText("Loading courses from Canvas..."),
+    ).toBeInTheDocument();
   });
 
   it("filters courses by search query", async () => {
@@ -178,6 +190,9 @@ describe("InstructorCoursesPage", () => {
     );
 
     expect(screen.getByText("No courses found")).toBeInTheDocument();
+    expect(
+      screen.getByText("No Canvas courses matched this search."),
+    ).toBeInTheDocument();
   });
 
   it("switches to list view when requested", async () => {
@@ -202,37 +217,8 @@ describe("InstructorCoursesPage", () => {
     await user.click(screen.getByRole("button", { name: "Sync from Canvas" }));
 
     await waitFor(() => {
-      expect(mockedFetchCourses).toHaveBeenCalled();
+      expect(mockedFetchCourses).toHaveBeenCalledWith("token", CANVAS_URL);
     });
-  });
-
-  it("reloads courses when the institution changes", async () => {
-    const user = userEvent.setup();
-
-    renderWithInstitution(<InstitutionSwitchHarness />);
-    await screen.findByText("Your Courses (3)");
-
-    mockedFetchCourses.mockClear();
-    mockedFetchCourses.mockResolvedValue([
-      {
-        canvas_id: 201,
-        local_id: 10,
-        name: "Computer Programming I",
-        course_code: "COSC 111",
-        workflow_state: "available",
-        total_students: 30,
-      },
-    ]);
-
-    await user.click(screen.getByRole("button", { name: "Switch to UBCO" }));
-
-    await waitFor(() => {
-      expect(mockedFetchCourses).toHaveBeenCalled();
-    });
-
-    expect(
-      await screen.findByText("COSC 111: Computer Programming I"),
-    ).toBeInTheDocument();
   });
 
   it("shows a Canvas empty state when Canvas returns no courses", async () => {

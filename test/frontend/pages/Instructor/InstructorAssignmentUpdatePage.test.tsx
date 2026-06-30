@@ -8,15 +8,7 @@ import {
   fetchAssignment,
   updateAssignment,
 } from "@/services/assignments";
-import { fetchCourses } from "@/services/canvas";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
-
-vi.mock("@/services/canvas", () => ({
-  CanvasApiError: class CanvasApiError extends Error {
-    status = 500;
-  },
-  fetchCourses: vi.fn(),
-}));
 
 vi.mock("@/services/assignments", () => ({
   AssignmentApiError: class AssignmentApiError extends Error {
@@ -28,9 +20,8 @@ vi.mock("@/services/assignments", () => ({
 
 const mockedFetchAssignment = vi.mocked(fetchAssignment);
 const mockedUpdateAssignment = vi.mocked(updateAssignment);
-const mockedFetchCourses = vi.mocked(fetchCourses);
 
-const CANVAS_URL = "https://canvas.ubc.ca";
+const CANVAS_URL = "http://localhost:3000";
 
 const authWithCanvas = {
   user: {
@@ -40,6 +31,13 @@ const authWithCanvas = {
     role: "instructor",
     is_active: true,
     has_canvas_token: true,
+    canvas_connections: [
+      {
+        id: 1,
+        canvas_url: "http://localhost:3000",
+        created_at: "2026-06-26T00:00:00.000Z",
+      },
+    ],
   },
   accessToken: "token",
   isAuthenticated: true,
@@ -92,16 +90,6 @@ describe("InstructorAssignmentUpdatePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseAuth.mockReturnValue(authWithCanvas);
-    mockedFetchCourses.mockResolvedValue([
-      {
-        canvas_id: 99,
-        local_id: 3,
-        name: "Database Systems",
-        course_code: "CS 250",
-        workflow_state: "available",
-        total_students: 52,
-      },
-    ]);
     mockedFetchAssignment.mockResolvedValue(assignment);
     mockedUpdateAssignment.mockResolvedValue({
       ...assignment,
@@ -119,7 +107,7 @@ describe("InstructorAssignmentUpdatePage", () => {
     });
 
     expect(mockedFetchAssignment).toHaveBeenCalledWith(
-      99,
+      3,
       10,
       "token",
       CANVAS_URL,

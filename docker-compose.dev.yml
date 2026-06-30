@@ -57,6 +57,7 @@ services:
 
   canvas-docker:
     image: lbjay/canvas-docker
+    platform: linux/amd64
     container_name: canvas_lms
     restart: unless-stopped
     ports:

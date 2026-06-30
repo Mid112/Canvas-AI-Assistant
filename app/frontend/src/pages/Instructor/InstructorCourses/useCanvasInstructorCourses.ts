@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { useInstitution } from "@/contexts/useInstitution";
-import { getInstitutionCanvasUrl } from "@/lib/institution-canvas";
+import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
 import { isCanvasConnectionRequiredError } from "@/lib/canvas-connection";
 import { fetchCourseAssignments } from "@/services/assignments";
 import { CanvasApiError, fetchCourses } from "@/services/canvas";
@@ -16,7 +15,6 @@ import { mapCanvasCourseToInstructorCourse } from "./mapCanvasCourse";
  */
 export function useCanvasInstructorCourses() {
   const { accessToken, user, logout } = useAuth();
-  const { selectedInstitution } = useInstitution();
   const [courses, setCourses] = useState<InstructorCourse[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +22,7 @@ export function useCanvasInstructorCourses() {
   const [reloadToken, setReloadToken] = useState(0);
 
   const hasCanvasToken = Boolean(accessToken && user?.has_canvas_token);
-  const canvasUrl = getInstitutionCanvasUrl(selectedInstitution.id);
+  const canvasUrl = getPrimaryCanvasConnectionUrl(user);
 
   // Bumps reloadToken to re-run the effect after "Sync from Canvas" or institution switch.
   const reloadCourses = useCallback(() => {
@@ -44,6 +42,13 @@ export function useCanvasInstructorCourses() {
     let cancelled = false;
 
     async function loadCanvasCourses() {
+      if (!canvasUrl) {
+        setNeedsCanvasConnection(true);
+        setCourses([]);
+        setIsLoaded(true);
+        return;
+      }
+
       setIsLoaded(false);
       setError(null);
       setNeedsCanvasConnection(false);
@@ -60,16 +65,11 @@ export function useCanvasInstructorCourses() {
 
         const coursesWithCounts = await Promise.all(
           baseCourses.map(async (course) => {
-            if (course.canvasCourseId == null || course.canvasUrl == null) {
-              return course;
-            }
-
             try {
-              // Backend expects Canvas course ID + canvas_url, not the local DB id in routes.
               const assignments = await fetchCourseAssignments(
-                course.canvasCourseId,
+                course.id,
                 token,
-                course.canvasUrl,
+                canvasUrl,
               );
               return { ...course, assignmentCount: assignments.length };
             } catch {
@@ -117,7 +117,7 @@ export function useCanvasInstructorCourses() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, canvasUrl, hasCanvasToken, logout, reloadToken, selectedInstitution.id]);
+  }, [accessToken, canvasUrl, hasCanvasToken, logout, reloadToken]);
 
   return {
     courses,

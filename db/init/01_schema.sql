@@ -73,6 +73,7 @@ CREATE TABLE assignments (
     canvas_assignment_id VARCHAR UNIQUE NOT NULL,
     course_id            INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     title                VARCHAR NOT NULL,
+    description          TEXT,
     due_date             TIMESTAMPTZ,
     points_possible      FLOAT,
     created_at           TIMESTAMPTZ DEFAULT NOW()

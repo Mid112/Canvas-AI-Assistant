@@ -1,6 +1,8 @@
+import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
+import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   filterInstructorCourses,
@@ -27,7 +29,6 @@ export function InstructorCoursesPage() {
     return sortInstructorCourses(filtered);
   }, [courses, search]);
 
-  // Show connect prompt when Canvas is not linked or not linked for this institution URL.
   if (!user?.has_canvas_token || needsCanvasConnection) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
@@ -56,7 +57,12 @@ export function InstructorCoursesPage() {
       ) : null}
 
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading courses from Canvas...</p>
+        <Card className="shadow-sm ring-1 ring-border/60">
+          <CardContent className="flex items-center gap-3 p-6 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />
+            Loading courses from Canvas...
+          </CardContent>
+        </Card>
       ) : isLoaded && !error && courses.length === 0 ? (
         <p
           role="status"
@@ -66,8 +72,7 @@ export function InstructorCoursesPage() {
           are available in your Canvas account.
         </p>
       ) : filteredCourses.length === 0 ? (
-        // Search returned no matches but Canvas still has courses.
-        <InstructorCoursesEmptyState />
+        <InstructorCoursesEmptyState description="No Canvas courses matched this search." />
       ) : (
         <InstructorCoursesSection
           courses={filteredCourses}
