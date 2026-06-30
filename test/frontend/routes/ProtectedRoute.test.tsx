@@ -10,14 +10,18 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: vi.fn(),
 }));
 
-vi.mock("@/lib/onboarding-storage", () => ({
-  hasCompletedOnboarding: vi.fn(),
-}));
+vi.mock("@/utils/onboarding", async () => {
+  const actual = await vi.importActual("@/utils/onboarding");
+  return {
+    ...actual,
+    isOnboardingComplete: vi.fn(),
+  };
+});
 
-import { hasCompletedOnboarding } from "@/lib/onboarding-storage";
+import { isOnboardingComplete } from "@/utils/onboarding";
 
 const mockedUseAuth = vi.mocked(useAuth);
-const mockedHasCompletedOnboarding = vi.mocked(hasCompletedOnboarding);
+const mockedIsOnboardingComplete = vi.mocked(isOnboardingComplete);
 
 const instructorUser = {
   id: 1,
@@ -26,6 +30,7 @@ const instructorUser = {
   role: "instructor" as const,
   is_active: true,
   has_canvas_token: false,
+  canvas_connections: [],
 };
 
 const adminUser = {
@@ -35,6 +40,7 @@ const adminUser = {
   role: "admin" as const,
   is_active: true,
   has_canvas_token: false,
+  canvas_connections: [],
 };
 
 describe("ProtectedRoute", () => {
@@ -88,7 +94,7 @@ describe("ProtectedRoute", () => {
   });
 
   it("renders child routes for authenticated users who completed onboarding", () => {
-    mockedHasCompletedOnboarding.mockReturnValue(true);
+    mockedIsOnboardingComplete.mockReturnValue(true);
     mockedUseAuth.mockReturnValue({
       user: instructorUser,
       isAuthenticated: true,
@@ -105,7 +111,7 @@ describe("ProtectedRoute", () => {
   });
 
   it("redirects authenticated users without completed onboarding to canvas info", () => {
-    mockedHasCompletedOnboarding.mockReturnValue(false);
+    mockedIsOnboardingComplete.mockReturnValue(false);
     mockedUseAuth.mockReturnValue({
       user: instructorUser,
       isAuthenticated: true,
@@ -122,7 +128,7 @@ describe("ProtectedRoute", () => {
   });
 
   it("allows onboarding routes before onboarding is complete", () => {
-    mockedHasCompletedOnboarding.mockReturnValue(false);
+    mockedIsOnboardingComplete.mockReturnValue(false);
     mockedUseAuth.mockReturnValue({
       user: instructorUser,
       isAuthenticated: true,
@@ -146,7 +152,7 @@ describe("ProtectedRoute", () => {
   });
 
   it("allows admins to access protected routes without completed onboarding", () => {
-    mockedHasCompletedOnboarding.mockReturnValue(false);
+    mockedIsOnboardingComplete.mockReturnValue(false);
     mockedUseAuth.mockReturnValue({
       user: adminUser,
       isAuthenticated: true,

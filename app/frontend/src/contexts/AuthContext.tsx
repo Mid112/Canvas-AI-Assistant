@@ -34,26 +34,35 @@ interface AuthContextValue {
   login: (credentials: LoginCredentials) => Promise<User>;
   register: (credentials: RegisterCredentials) => Promise<User>;
   logout: () => void;
-  /** Re-load the current user from /auth/me without a full re-login. */
-  refreshUser: () => Promise<User | null>;
+  refreshUser: () => Promise<User>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const DEFAULT_ROLE: UserRole = "instructor";
-
 function isUserRole(role: string): role is UserRole {
-  return role === "instructor" || role === "ta" || role === "admin";
+  return role === "instructor" || role === "admin";
+}
+
+export class UnsupportedUserRoleError extends Error {
+  constructor(role: string) {
+    super(`Unsupported user role: ${role}`);
+    this.name = "UnsupportedUserRoleError";
+  }
 }
 
 function mapUserResponse(response: UserResponse): User {
+  if (!isUserRole(response.role)) {
+    throw new UnsupportedUserRoleError(response.role);
+  }
+
   return {
     id: response.id,
     email: response.email,
     name: response.name ?? response.email.split("@")[0] ?? response.email,
-    role: isUserRole(response.role) ? response.role : DEFAULT_ROLE,
+    role: response.role,
     is_active: response.is_active,
     has_canvas_token: response.has_canvas_token,
+    canvas_connections: response.canvas_connections ?? [],
   };
 }
 
@@ -140,10 +149,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const refreshUser = useCallback(async () => {
-    // Re-fetch /auth/me — e.g. after saving a Canvas token so has_canvas_token updates.
     const token = accessToken ?? getStoredToken();
     if (!token) {
-      return null;
+      throw new Error("Not authenticated");
     }
 
     try {

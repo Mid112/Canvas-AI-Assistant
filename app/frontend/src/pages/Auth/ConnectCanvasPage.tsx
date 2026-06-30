@@ -8,12 +8,12 @@ import { ConnectCanvasHeader } from "@/pages/Auth/ConnectCanvas/ConnectCanvasHea
 import { ConnectCanvasHelp } from "@/pages/Auth/ConnectCanvas/ConnectCanvasHelp";
 import { OnboardingProgress } from "@/pages/Auth/Onboarding/OnboardingProgress";
 import { paths } from "@/routes/paths";
-import { CanvasApiError, updateCanvasTokens } from "@/services/canvas";
+import { CanvasApiError, updateCanvasConnections } from "@/services/canvas";
 import { getAssistantPath } from "@/utils/navigation";
 
 export function ConnectCanvasPage() {
   const navigate = useNavigate();
-  const { user, logout, accessToken } = useAuth();
+  const { user, logout, accessToken, refreshUser } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -40,17 +40,23 @@ export function ConnectCanvasPage() {
             isSubmitting={isSubmitting}
             onSessionExpired={logout}
             onSkip={finishWithoutCanvas}
-            onSubmit={async ({ canvasTokens }) => {
+            onSubmit={async ({ connections }) => {
               setError(null);
               setIsSubmitting(true);
 
-              if (!accessToken) {
-                logout();
-                return;
-              }
-
               try {
-                await updateCanvasTokens(canvasTokens, accessToken);
+                if (!accessToken) {
+                  logout();
+                  return;
+                }
+
+                await updateCanvasConnections(connections, accessToken);
+                await refreshUser();
+
+                if (user) {
+                  markOnboardingComplete(user.id);
+                }
+
                 navigate(paths.reviewPermissions);
               } catch (err) {
                 if (err instanceof CanvasApiError && err.status === 401) {
