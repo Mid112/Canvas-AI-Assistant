@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { ChatWindow } from "@/components/chat/ChatWindow";
@@ -12,20 +12,20 @@ interface InstructorAssistantLocationState {
   initialPrompt?: string;
 }
 
+function getInitialPromptFromLocation(
+  state: InstructorAssistantLocationState | null | undefined,
+): string | null {
+  return state?.initialPrompt ?? null;
+}
+
 export function InstructorAssistantPage() {
   const location = useLocation();
-  const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(() =>
+    getInitialPromptFromLocation(
+      location.state as InstructorAssistantLocationState | null,
+    ),
+  );
   const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    const initialPrompt = (
-      location.state as InstructorAssistantLocationState | null
-    )?.initialPrompt;
-
-    if (initialPrompt) {
-      setPendingPrompt(initialPrompt);
-    }
-  }, [location.state]);
 
   const handleSuggestedAction = (prompt: string) => {
     setPendingPrompt(prompt);
