@@ -33,7 +33,8 @@ export function DryRunPreviewPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [confirmedMessage, setConfirmedMessage] = useState<string | null>(null);
+  const [showSuccessToast, setShowSuccessToast] = useState(false);
 
   const getLoadErrorMessage = useCallback((error: unknown) => {
     return error instanceof DryRunPreviewError
@@ -93,6 +94,14 @@ export function DryRunPreviewPage() {
     navigate(returnTo);
   };
 
+  const handleModify = () => {
+    if (!preview) {
+      return;
+    }
+
+    navigate(returnTo, { state: { initialPrompt: preview.originalRequest } });
+  };
+
   const handleConfirm = async () => {
     if (!preview) {
       return;
@@ -103,7 +112,8 @@ export function DryRunPreviewPage() {
 
     try {
       const result = await confirmDryRunPreview(preview.id);
-      setSuccessMessage(result.message);
+      setConfirmedMessage(result.message);
+      setShowSuccessToast(true);
     } catch (error) {
       const message =
         error instanceof DryRunPreviewError
@@ -154,11 +164,14 @@ export function DryRunPreviewPage() {
     );
   }
 
-  if (successMessage) {
+  if (confirmedMessage) {
     return (
       <div className="mx-auto w-full max-w-3xl flex-1 space-y-6 p-4 md:p-6 lg:p-8">
-        {successMessage ? (
-          <AdminToast message={successMessage} onDismiss={() => setSuccessMessage(null)} />
+        {showSuccessToast ? (
+          <AdminToast
+            message={confirmedMessage}
+            onDismiss={() => setShowSuccessToast(false)}
+          />
         ) : null}
         <Card className="border-emerald-200 bg-emerald-50/50 shadow-sm ring-1 ring-emerald-100">
           <CardContent className="flex flex-col items-center gap-4 px-6 py-12 text-center">
@@ -166,7 +179,7 @@ export function DryRunPreviewPage() {
             <div className="space-y-2">
               <h1 className="text-xl font-semibold text-[#1e293b]">Workflow Approved</h1>
               <p className="text-sm text-muted-foreground" role="status">
-                {successMessage}
+                {confirmedMessage}
               </p>
             </div>
             <Button type="button" onClick={handleReturn}>
@@ -189,7 +202,7 @@ export function DryRunPreviewPage() {
         isConfirming={isConfirming}
         confirmError={confirmError}
         onReject={handleReturn}
-        onModify={handleReturn}
+        onModify={handleModify}
         onConfirm={() => void handleConfirm()}
       />
     </div>

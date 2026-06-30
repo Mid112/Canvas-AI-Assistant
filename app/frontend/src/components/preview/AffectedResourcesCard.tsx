@@ -124,7 +124,7 @@ export function AffectedResourcesCard({ resources }: AffectedResourcesCardProps)
               Students
             </p>
             <p className="text-sm font-semibold text-[#1e293b]">
-              {resources.students.count} Students
+              {resources.students.count} Student{resources.students.count === 1 ? "" : "s"}
             </p>
           </div>
         ) : null}

@@ -10,6 +10,7 @@ const reversibilityConfig: Record<
     label: string;
     badgeClassName: string;
     bannerClassName: string;
+    iconClassName: string;
     Icon: typeof CheckCircle2;
     heading: string;
   }
@@ -19,6 +20,7 @@ const reversibilityConfig: Record<
     badgeClassName:
       "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-50",
     bannerClassName: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    iconClassName: "text-emerald-600",
     Icon: RotateCcw,
     heading: "Reversible Action",
   },
@@ -27,6 +29,7 @@ const reversibilityConfig: Record<
     badgeClassName:
       "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-50",
     bannerClassName: "border-amber-200 bg-amber-50 text-amber-900",
+    iconClassName: "text-amber-600",
     Icon: AlertTriangle,
     heading: "Review Recommended",
   },
@@ -35,6 +38,7 @@ const reversibilityConfig: Record<
     badgeClassName:
       "border-destructive/20 bg-destructive/10 text-destructive hover:bg-destructive/10",
     bannerClassName: "border-amber-200 bg-amber-50 text-amber-900",
+    iconClassName: "text-amber-600",
     Icon: AlertTriangle,
     heading: "Review Required",
   },
@@ -62,7 +66,10 @@ export function ReversibilityStatus({
         role="status"
       >
         <div className="flex items-start gap-3">
-          <Icon className="mt-0.5 size-5 shrink-0 text-amber-600" aria-hidden="true" />
+          <Icon
+            className={cn("mt-0.5 size-5 shrink-0", config.iconClassName)}
+            aria-hidden="true"
+          />
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-sm font-semibold">{config.heading}</p>
