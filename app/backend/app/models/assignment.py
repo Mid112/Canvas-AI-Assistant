@@ -20,6 +20,7 @@ class Assignment(Base):
     canvas_assignment_id: Mapped[str] = mapped_column(
         String, unique=True, nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
     due_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True)
     points_possible: Mapped[float | None] = mapped_column(Float, nullable=True)
