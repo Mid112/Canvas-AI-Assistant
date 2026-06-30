@@ -31,7 +31,6 @@ def admin_credentials():
     password = "AdminTestPass123!"
 
     async def _create():
-    async def _create():
         # Fresh engine so the global engine's asyncpg pool is never touched here.
         # asyncpg pools are bound to the event loop they're created in; sharing
         # the global engine across loops causes "Future attached to a different loop".

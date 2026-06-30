@@ -139,5 +139,3 @@ async def _get_instructor(db: AsyncSession, instructor_id: int) -> User:
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Instructor not found")
     return user
-
-    return user

@@ -46,7 +46,6 @@ app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(canvas.router, prefix=settings.API_V1_PREFIX)
 app.include_router(admin.router, prefix=settings.API_V1_PREFIX)
 app.include_router(chat.router, prefix=settings.API_V1_PREFIX)
-app.include_router(admin.router, prefix=settings.API_V1_PREFIX)
 
 
 
