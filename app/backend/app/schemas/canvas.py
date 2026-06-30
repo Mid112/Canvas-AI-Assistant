@@ -47,8 +47,6 @@ class SubmissionStatus(StrEnum):
     missing = "missing"
     unsubmitted = "unsubmitted"
     excused = "excused"
-
-
 class AssignmentCreate(BaseModel):
     name: str
     description: str | None = None

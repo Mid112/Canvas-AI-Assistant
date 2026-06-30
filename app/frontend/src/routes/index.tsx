@@ -98,7 +98,7 @@ export const router = createBrowserRouter([
                     element: <InstructorAssistantPage />,
                   },
                   {
-path: paths.instructor.dryRunPreview,
+                    path: paths.instructor.dryRunPreview,
                     element: <DryRunPreviewPage />, 
                   },
                   {

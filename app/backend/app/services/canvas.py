@@ -294,7 +294,6 @@ async def get_submissions(
     return [_parse_submission(raw) for raw in data]
 
 
-
 async def get_active_course(user: User, db: AsyncSession) -> ActiveCourseResponse | None:
     # joinedload fetches preference + course in a single JOIN query
     pref = await db.scalar(
