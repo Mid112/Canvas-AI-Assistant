@@ -15,7 +15,7 @@ from app.models.user_preference import UserPreference
 from app.schemas.canvas import ActiveCourseResponse, AssignmentResponse, CourseResponse, SubmissionResponse
 
 
-def _require_canvas_token(user: User, canvas_url: str) -> str:
+def require_canvas_token(user: User, canvas_url: str) -> str:
     canvas_url = canvas_url.rstrip("/")
     conn = next((c for c in user.canvas_connections if c.canvas_url == canvas_url), None)
     if not conn:
@@ -33,7 +33,7 @@ def _require_canvas_token(user: User, canvas_url: str) -> str:
 
 
 async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[CourseResponse]:
-    token = _require_canvas_token(user, canvas_url)
+    token = require_canvas_token(user, canvas_url)
     data = await fetch_courses(token, canvas_url)
 
     if not data:
@@ -150,7 +150,7 @@ def _parse_dt(value: str | None) -> datetime | None:
 
 
 async def get_submissions(course_id: int, assignment_id: int, user: User, canvas_url: str) -> list[SubmissionResponse]:
-    token = _require_canvas_token(user, canvas_url)
+    token = require_canvas_token(user, canvas_url)
     data = await fetch_submissions(course_id, assignment_id, token, canvas_url)
     return [SubmissionResponse(**item) for item in data]
 

@@ -29,7 +29,7 @@ class User(Base):
     email: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # instructor / ta / admin — enforced by CHECK in SQL schema
+    # instructor / admin — enforced by CHECK in SQL schema
     role: Mapped[str] = mapped_column(String, nullable=False, default="instructor")
 
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)

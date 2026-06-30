@@ -13,7 +13,7 @@ CREATE TABLE users (
     name             VARCHAR NOT NULL,
     email            VARCHAR UNIQUE NOT NULL,
     hashed_password  TEXT NOT NULL,                          -- bcrypt hashed
-    role             VARCHAR NOT NULL CHECK (role IN ('instructor', 'ta', 'admin')),
+    role             VARCHAR NOT NULL CHECK (role IN ('instructor', 'admin')), -- was ('instructor', 'ta', 'admin'); see db/migrations/002_remove_ta_role.sql
     is_active        BOOLEAN DEFAULT true,
     created_at       TIMESTAMPTZ DEFAULT NOW()
 );
@@ -169,6 +169,25 @@ CREATE TABLE message_templates (
 );
 
 CREATE INDEX idx_message_templates_user_id ON message_templates(user_id);
+
+-- ─────────────────────────────────────────────
+-- Students (enrolled students per course, synced from Canvas)
+-- ─────────────────────────────────────────────
+CREATE TABLE students (
+    id               SERIAL PRIMARY KEY,
+    canvas_user_id   VARCHAR NOT NULL,
+    course_id        INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    name             VARCHAR NOT NULL,
+    sortable_name    VARCHAR,
+    -- login_id is the institution-issued identifier (typically email); may be absent
+    -- when the Canvas instance restricts personal info visibility
+    login_id         VARCHAR,
+    enrollment_state VARCHAR NOT NULL,
+    updated_at       TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_student_per_course UNIQUE (canvas_user_id, course_id)
+);
+
+CREATE INDEX idx_students_course_id ON students(course_id);
 
 -- ─────────────────────────────────────────────
 -- User Preferences (one row per user)
