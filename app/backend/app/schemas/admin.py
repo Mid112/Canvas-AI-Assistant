@@ -9,7 +9,32 @@ class CreateAdminRequest(BaseModel):
     password: str
 
 
+class CreateInstructorRequest(BaseModel):
+    name: str
+    email: EmailStr
+    password: str
+
+    name: str
+    email: EmailStr
+    password: str
+
+
+class UpdateInstructorRequest(BaseModel):
+    name: str | None = None
+    email: EmailStr | None = None
+
+
+class InstructorResponse(BaseModel):
+    id: int
+    name: str
+    email: str
+
+
 class AdminUserResponse(BaseModel):
+    id: int
+    name: str
+    email: str
+
     id: int
     name: str
     email: str
