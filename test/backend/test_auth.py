@@ -91,6 +91,62 @@ def test_get_current_user_invalid_token(client):
     assert response.status_code == 401
 
 
+def test_update_current_user(client):
+    email = f"test_{uuid.uuid4()}@example.com"
+    new_email = f"updated_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Test User", "email": email, "password": "secret123"}
+    )
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+
+    response = client.patch(
+        "/api/v1/auth/me",
+        json={"name": "Updated User", "email": new_email},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Updated User"
+    assert response.json()["email"] == new_email
+
+
+def test_update_current_user_duplicate_email(client):
+    email_a = f"test_{uuid.uuid4()}@example.com"
+    email_b = f"test_{uuid.uuid4()}@example.com"
+    client.post(
+        "/api/v1/auth/register",
+        json={"name": "User A", "email": email_a, "password": "secret123"}
+    )
+    reg_b = client.post(
+        "/api/v1/auth/register",
+        json={"name": "User B", "email": email_b, "password": "secret123"}
+    )
+    headers_b = {"Authorization": f"Bearer {reg_b.json()['access_token']}"}
+
+    response = client.patch(
+        "/api/v1/auth/me",
+        json={"email": email_a},
+        headers=headers_b,
+    )
+
+    assert response.status_code == 400
+
+
+def test_delete_current_user(client):
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Delete Me", "email": email, "password": "secret123"}
+    )
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+
+    response = client.delete("/api/v1/auth/me", headers=headers)
+
+    assert response.status_code == 204
+    assert client.get("/api/v1/auth/me", headers=headers).status_code == 403
+
+
 def test_set_canvas_token(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})

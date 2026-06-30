@@ -20,6 +20,11 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class UserUpdateRequest(BaseModel):
+    name: str | None = Field(default=None, min_length=1)
+    email: EmailStr | None = None
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

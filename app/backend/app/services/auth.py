@@ -12,7 +12,7 @@ from app.core.security import (
 from app.integrations.canvas import validate_token
 from app.models.canvas_connection import CanvasConnection
 from app.models.user import User
-from app.schemas.auth import RegisterRequest, TokenResponse
+from app.schemas.auth import RegisterRequest, TokenResponse, UserUpdateRequest
 
 
 async def register_user(
@@ -57,6 +57,43 @@ async def login_user(
         )
 
     return TokenResponse(access_token=create_access_token(user.id))
+
+
+async def update_current_user(db: AsyncSession, user: User, body: UserUpdateRequest) -> User:
+    if body.email is not None and body.email != user.email:
+        existing = await db.scalar(select(User).where(User.email == body.email, User.id != user.id))
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Email already registered",
+            )
+        user.email = str(body.email)
+
+    if body.name is not None:
+        name = body.name.strip()
+        if not name:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Name cannot be empty",
+            )
+        user.name = name
+
+    await db.commit()
+
+    return await db.scalar(
+        select(User)
+        .where(User.id == user.id)
+        .options(selectinload(User.canvas_connections))
+        .execution_options(populate_existing=True)
+    )
+
+
+async def delete_current_user(db: AsyncSession, user: User) -> None:
+    connections = await db.scalars(select(CanvasConnection).where(CanvasConnection.user_id == user.id))
+    for connection in connections:
+        await db.delete(connection)
+    user.is_active = False
+    await db.commit()
 
 
 async def remove_canvas_connection(db: AsyncSession, user: User, connection_id: int) -> None:

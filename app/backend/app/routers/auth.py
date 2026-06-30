@@ -12,8 +12,16 @@ from app.schemas.auth import (
     RegisterRequest,
     TokenResponse,
     UserResponse,
+    UserUpdateRequest,
 )
-from app.services.auth import login_user, register_user, remove_canvas_connection, update_canvas_token
+from app.services.auth import (
+    delete_current_user,
+    login_user,
+    register_user,
+    remove_canvas_connection,
+    update_canvas_token,
+    update_current_user,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -42,6 +50,23 @@ async def login(
 @router.get("/me", response_model=UserResponse)
 async def me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_me(
+    body: UserUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await update_current_user(db, current_user, body)
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_me(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await delete_current_user(db, current_user)
 
 
 @router.patch("/me/canvas-token", response_model=UserResponse)
