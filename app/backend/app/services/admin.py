@@ -9,6 +9,13 @@ from app.models.user import User
 from app.schemas.admin import CreateAdminRequest, CreateInstructorRequest, UpdateInstructorRequest
 
 
+async def list_instructors(db: AsyncSession) -> list[User]:
+    result = await db.scalars(
+        select(User).where(User.role == "instructor").order_by(User.created_at.desc())
+    )
+    return list(result)
+
+
 async def create_admin_user(
     db: AsyncSession, body: CreateAdminRequest, created_by: User
 ) -> User:
