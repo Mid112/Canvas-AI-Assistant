@@ -3,6 +3,7 @@ import { Plus, RefreshCw } from "lucide-react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useInstitution } from "@/contexts/useInstitution";
 import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
+import { getInstitutionCanvasUrl } from "@/lib/institution-canvas";
 import { cn } from "@/lib/utils";
 
 interface InstructorCoursesHeaderProps {
@@ -15,8 +16,10 @@ export function InstructorCoursesHeader({
   isRefreshing = false,
 }: InstructorCoursesHeaderProps) {
   const { selectedInstitution } = useInstitution();
-  const canvasUrl = useCanvasConnectionUrl();
-  const newCourseUrl = canvasUrl ? `${canvasUrl}/courses` : undefined;
+  const connectionUrl = useCanvasConnectionUrl();
+  const canvasHost =
+    connectionUrl ?? getInstitutionCanvasUrl(selectedInstitution.id);
+  const newCourseUrl = canvasHost ? `${canvasHost}/courses` : undefined;
 
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">

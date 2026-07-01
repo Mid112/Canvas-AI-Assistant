@@ -111,6 +111,7 @@ beforeEach(() => {
 
 describe("InstructorCoursesPage", () => {
   it("requires Canvas before showing courses", () => {
+    vi.stubEnv("VITE_CANVAS_UBC_URL", CANVAS_URL);
     mockUseAuth.mockReturnValue(authWithoutCanvas);
 
     renderWithInstitution(<InstructorCoursesPage />);
@@ -118,6 +119,12 @@ describe("InstructorCoursesPage", () => {
     expect(screen.getByText("Connect Canvas to continue")).toBeInTheDocument();
     expect(screen.queryByLabelText("Search courses")).not.toBeInTheDocument();
     expect(screen.queryByText("Course Analytics Overview")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "New Course" })).toHaveAttribute(
+      "href",
+      `${CANVAS_URL}/courses`,
+    );
+
+    vi.unstubAllEnvs();
   });
 
   it("shows connect Canvas when no token exists for the saved connection URL", async () => {

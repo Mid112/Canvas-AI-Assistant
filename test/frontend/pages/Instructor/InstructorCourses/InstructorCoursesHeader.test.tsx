@@ -7,12 +7,16 @@ import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 const CANVAS_URL = "https://canvas.ubc.ca";
 
+const mockUseCanvasConnectionUrl = vi.fn(() => CANVAS_URL);
+
 vi.mock("@/hooks/useCanvasConnectionUrl", () => ({
-  useCanvasConnectionUrl: () => CANVAS_URL,
+  useCanvasConnectionUrl: () => mockUseCanvasConnectionUrl(),
 }));
 
 describe("InstructorCoursesHeader", () => {
   it("renders the course management heading and institution context", () => {
+    mockUseCanvasConnectionUrl.mockReturnValue(CANVAS_URL);
+
     renderWithInstitution(<InstructorCoursesHeader />);
 
     expect(
@@ -24,6 +28,19 @@ describe("InstructorCoursesHeader", () => {
     expect(
       screen.getByRole("link", { name: "New Course" }),
     ).toHaveAttribute("href", `${CANVAS_URL}/courses`);
+  });
+
+  it("falls back to the configured institution Canvas URL when not connected", () => {
+    vi.stubEnv("VITE_CANVAS_UBC_URL", CANVAS_URL);
+    mockUseCanvasConnectionUrl.mockReturnValue(undefined);
+
+    renderWithInstitution(<InstructorCoursesHeader />);
+
+    expect(
+      screen.getByRole("link", { name: "New Course" }),
+    ).toHaveAttribute("href", `${CANVAS_URL}/courses`);
+
+    vi.unstubAllEnvs();
   });
 
   it("renders a sync button when refresh is available", () => {

@@ -4,12 +4,7 @@ import type { Assignment, AssignmentCreatePayload, AssignmentUpdatePayload } fro
 /**
  * Canvas assignment API client.
  *
- * Integration note (base branch / backend): on current develop, assignment routes in
- * `routers/canvas.py` call `get_assignments` with a `canvas_url` argument, but
- * `services/canvas.py` only accepts `(local_course_id, user, db)`. That breaks
- * `test_backend/test_canvas.py` locally and blocks full end-to-end assignment-page
- * manual QA until the backend signature is fixed. This PR is frontend-only; these
- * calls already use local course IDs and pass `canvas_url` as a query param.
+ * Assignment calls use local course IDs and optional canvas_url.
  */
 export class AssignmentApiError extends Error {
   status: number;
