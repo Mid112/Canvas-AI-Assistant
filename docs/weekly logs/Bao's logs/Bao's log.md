@@ -570,3 +570,65 @@ Total: 9 hours
 - Wire up course context to the chat UI so the active course is displayed and selectable from the frontend
 
 ---
+
+# Cycle 12 Report: June 26 – June 39
+
+## Timesheet
+
+### Clockify Report
+
+- 26/6 (Friday): Team meeting - 2.5 hours
+- 27/6 (Saturday): PRs review — 1.5 hours
+- 28/6 (Sunday): PRs review — 2 hours
+- 29/6 (Monday): implement 3 backend features (authenticationAPI, RBAC permissions, instructor account management) — 7.5 hours
+
+**Total: 13.5 hours**
+
+---
+
+## Completed Tasks
+
+### 1: Team meeting (Friday, 26/6)
+- Meet the team to agree on the next cycle implementation
+<img width="1123" height="63" alt="Screenshot 2026-06-30 124305" src="https://github.com/user-attachments/assets/fefd4f3d-f20c-436f-94b4-3c2adb052d4a" />
+
+### 2: PR Reviews (Saturday–Sunday, 27–28/6)
+- Reviewed open team PRs to validate implementation quality and flag integration issues before merge
+<img width="1123" height="67" alt="Screenshot 2026-06-30 124311" src="https://github.com/user-attachments/assets/a67ff5af-6f45-4d5a-aade-1bf433fd1171" />
+<img width="1121" height="62" alt="Screenshot 2026-06-30 124315" src="https://github.com/user-attachments/assets/0a10bece-d4b6-42e4-8f72-ec0f3441d4af" />
+
+### 3: Admin Authentication API (Monday, 29/6)
+- Embedded role claim in JWT and added `hash_token` utility for secure token storage
+- Added `get_admin_user` dependency with DB session validation to gate admin-only routes
+- Implemented admin login/logout endpoints with audit logging and rate limiting
+- Added admin account seeder and management endpoint, with unit and integration tests for admin authentication
+<img width="1124" height="63" alt="Screenshot 2026-06-30 124319" src="https://github.com/user-attachments/assets/6129c78f-2240-464a-ae19-ea4dd1c0fdf4" />
+
+### 4: RBAC Permissions (Monday, 29/6)
+- Restricted Canvas API endpoints to instructor-only access via `get_instructor_user` dependency
+- Applied the `get_instructor_user` guard to the `list_students` endpoint, fixing a ruff F821 from the prior partial implementation
+- Fixed lint and test failures introduced by the RBAC changes
+
+### 5: Instructor Account Management (Monday, 29/6)
+- Built out instructor account management endpoints and schema updates
+- Added a check for whether the current account user is active before allowing access
+- Fixed tests and ruff issues across the new schema and endpoints
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- The cycle delivered the three backend features planned: authenticationAPI (admin login/JWT roles), RBAC permissions (instructor-only Canvas access), and instructor account management. Merging three parallel feature branches in the same cycle surfaced several integration conflicts that took extra time to resolve.
+
+### Retrospective:
+- Running PR reviews over the weekend before the Monday implementation push helped catch issues early, but merging three sizeable feature branches together still produced lint/test breakage that needed a dedicated cleanup pass on Tuesday. Next time, merge and lint-check each branch individually before combining them.
+
+---
+
+## Next Cycle Goals
+- Add caching to `GET /canvas/courses` with a `last_synced_at` timestamp so repeated page loads don't hit Canvas on every request
+- Wire up course context to the chat UI so the active course is displayed and selectable from the frontend
+- Continue resolving any remaining integration issues between authAPI, RBAC, and instructor account management
+
+---
