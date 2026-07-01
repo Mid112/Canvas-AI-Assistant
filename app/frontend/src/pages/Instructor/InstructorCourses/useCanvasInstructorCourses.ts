@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { useInstitution } from "@/contexts/useInstitution";
-import { getCanvasConnectionUrlForInstitution } from "@/lib/canvas-connections";
+import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { isCanvasConnectionRequiredError } from "@/lib/canvas-connection";
 import { fetchCourseAssignments } from "@/services/assignments";
 import { CanvasApiError, fetchCourses } from "@/services/canvas";
@@ -10,13 +9,51 @@ import type { InstructorCourse } from "@/types/course";
 
 import { mapCanvasCourseToInstructorCourse } from "./mapCanvasCourse";
 
+const ASSIGNMENT_COUNT_CONCURRENCY = 3;
+
+async function loadAssignmentCounts(
+  courses: InstructorCourse[],
+  token: string,
+  canvasUrl: string,
+): Promise<InstructorCourse[]> {
+  const results = courses.map((course) => ({ ...course }));
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < results.length) {
+      const index = nextIndex++;
+      const course = results[index]!;
+
+      try {
+        const assignments = await fetchCourseAssignments(
+          course.id,
+          token,
+          canvasUrl,
+        );
+        results[index] = { ...course, assignmentCount: assignments.length };
+      } catch {
+        // Keep the course visible even if assignment count fails for one card.
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from(
+      { length: Math.min(ASSIGNMENT_COUNT_CONCURRENCY, results.length) },
+      () => worker(),
+    ),
+  );
+
+  return results;
+}
+
 /**
  * Loads instructor courses from Canvas for the selected institution.
- * Assignment counts use local course IDs (see assignments.ts).
+ * Assignment counts are fetched in the background with limited concurrency.
  */
 export function useCanvasInstructorCourses() {
   const { accessToken, user, logout } = useAuth();
-  const { selectedInstitution } = useInstitution();
+  const canvasUrl = useCanvasConnectionUrl();
   const [courses, setCourses] = useState<InstructorCourse[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,12 +61,7 @@ export function useCanvasInstructorCourses() {
   const [reloadToken, setReloadToken] = useState(0);
 
   const hasCanvasToken = Boolean(accessToken && user?.has_canvas_token);
-  const canvasUrl = getCanvasConnectionUrlForInstitution(
-    user,
-    selectedInstitution.id,
-  );
 
-  // Bumps reloadToken to re-run the effect after "Sync from Canvas" or institution switch.
   const reloadCourses = useCallback(() => {
     if (!hasCanvasToken) {
       return;
@@ -68,32 +100,21 @@ export function useCanvasInstructorCourses() {
           .map((course) => mapCanvasCourseToInstructorCourse(course, canvasUrl))
           .filter((course): course is InstructorCourse => course !== null);
 
-        const coursesWithCounts = await Promise.all(
-          baseCourses.map(async (course) => {
-            try {
-              const assignments = await fetchCourseAssignments(
-                course.id,
-                token,
-                canvasUrl,
-              );
-              return { ...course, assignmentCount: assignments.length };
-            } catch {
-              // Keep the course visible even if assignment count fails for one card.
-              return course;
-            }
-          }),
-        );
+        setCourses(baseCourses);
 
-        if (!cancelled) {
-          setCourses(coursesWithCounts);
-        }
+        void loadAssignmentCounts(baseCourses, token, canvasUrl).then(
+          (coursesWithCounts) => {
+            if (!cancelled) {
+              setCourses(coursesWithCounts);
+            }
+          },
+        );
       } catch (loadError) {
         if (cancelled) {
           return;
         }
 
         if (loadError instanceof CanvasApiError && loadError.status === 401) {
-          // Session or Canvas token is no longer valid.
           logout();
           return;
         }
@@ -122,7 +143,7 @@ export function useCanvasInstructorCourses() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, canvasUrl, hasCanvasToken, logout, reloadToken, selectedInstitution.id]);
+  }, [accessToken, canvasUrl, hasCanvasToken, logout, reloadToken]);
 
   return {
     courses,

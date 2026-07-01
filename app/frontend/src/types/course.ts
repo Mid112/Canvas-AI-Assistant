@@ -3,9 +3,9 @@ import type { InstructorDashboardData } from "@/types/dashboard";
 export interface InstructorCourse {
   /** Local DB id — used in routes like /instructor/courses/:localCourseId/assignments. */
   id: number;
-  /** Canvas course ID — required for assignment API calls. */
+  /** Canvas course id from the sync response (display/metadata only). */
   canvasCourseId?: number;
-  /** Institution Canvas base URL — required for assignment API calls. */
+  /** Canvas host the course was loaded from (display/metadata only). */
   canvasUrl?: string;
   code: string;
   name: string;

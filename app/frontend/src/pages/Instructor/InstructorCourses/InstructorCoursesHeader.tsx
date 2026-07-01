@@ -2,7 +2,7 @@ import { Plus, RefreshCw } from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { useInstitution } from "@/contexts/useInstitution";
-import { getInstitutionCanvasNewCourseUrl } from "@/lib/institution-canvas";
+import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { cn } from "@/lib/utils";
 
 interface InstructorCoursesHeaderProps {
@@ -15,6 +15,8 @@ export function InstructorCoursesHeader({
   isRefreshing = false,
 }: InstructorCoursesHeaderProps) {
   const { selectedInstitution } = useInstitution();
+  const canvasUrl = useCanvasConnectionUrl();
+  const newCourseUrl = canvasUrl ? `${canvasUrl}/courses` : undefined;
 
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
@@ -43,16 +45,17 @@ export function InstructorCoursesHeader({
             Sync from Canvas
           </Button>
         ) : null}
-        {/* Course creation happens in Canvas; sync pulls the new course into this app. */}
-        <a
-          href={getInstitutionCanvasNewCourseUrl(selectedInstitution.id)}
-          target="_blank"
-          rel="noreferrer"
-          className={cn(buttonVariants({ size: "lg" }))}
-        >
-          <Plus data-icon="inline-start" />
-          New Course
-        </a>
+        {newCourseUrl ? (
+          <a
+            href={newCourseUrl}
+            target="_blank"
+            rel="noreferrer"
+            className={cn(buttonVariants({ size: "lg" }))}
+          >
+            <Plus data-icon="inline-start" />
+            New Course
+          </a>
+        ) : null}
       </div>
     </div>
   );

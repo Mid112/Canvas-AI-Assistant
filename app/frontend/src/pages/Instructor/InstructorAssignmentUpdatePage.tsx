@@ -6,12 +6,12 @@ import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRe
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import {
   assignmentToFormValues,
   formValuesToUpdatePayload,
   hasAssignmentChanges,
 } from "@/lib/assignment-utils";
-import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
 import { AssignmentUpdateForm } from "@/pages/Instructor/InstructorAssignmentUpdate/AssignmentUpdateForm";
 import { AssignmentUpdatePreview } from "@/pages/Instructor/InstructorAssignmentUpdate/AssignmentUpdatePreview";
 import { paths } from "@/routes/paths";
@@ -35,7 +35,7 @@ export function InstructorAssignmentUpdatePage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const canvasUrl = getPrimaryCanvasConnectionUrl(user);
+  const canvasUrl = useCanvasConnectionUrl();
 
   const parsedLocalCourseId = Number(localCourseId);
   const parsedAssignmentId = Number(assignmentId);

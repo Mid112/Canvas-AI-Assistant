@@ -203,7 +203,9 @@ describe("InstructorCoursesPage", () => {
 
     await user.click(screen.getByRole("button", { name: "List View" }));
 
-    expect(screen.getByText(/45 students · 1 assignments/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/45 students · 1 assignments/),
+    ).toBeInTheDocument();
   });
 
   it("reloads courses when sync from Canvas is clicked", async () => {

@@ -7,6 +7,10 @@ import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 const CANVAS_URL = "https://canvas.ubc.ca";
 
+vi.mock("@/hooks/useCanvasConnectionUrl", () => ({
+  useCanvasConnectionUrl: () => CANVAS_URL,
+}));
+
 describe("InstructorCoursesHeader", () => {
   it("renders the course management heading and institution context", () => {
     renderWithInstitution(<InstructorCoursesHeader />);

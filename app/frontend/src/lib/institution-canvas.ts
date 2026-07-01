@@ -1,21 +1,22 @@
 /**
- * Institution-specific Canvas base URLs.
+ * Institution-specific Canvas base URLs from frontend env only.
  *
- * The backend stores tokens per canvas_url and requires the same URL on course/
- * assignment requests — keep these in sync with backend CANVAS_API_URL / connect flow.
+ * Set per deployment — there is no hardcoded production default:
+ *   VITE_CANVAS_UBC_URL=https://canvas.ubc.ca
+ *   VITE_CANVAS_UBCO_URL=https://canvas.ubc.ca
+ *
+ * Local Canvas Docker:
+ *   VITE_CANVAS_UBC_URL=http://localhost:3000
+ *
+ * When unset, course/assignment API calls use the user's saved Canvas
+ * connection(s) via getCanvasConnectionUrlForInstitution instead.
  */
-const DEFAULT_UBC_CANVAS_URL = "https://canvas.ubc.ca";
-const DEFAULT_UBCO_CANVAS_URL = "https://canvas.ubc.ca";
+export function getInstitutionCanvasUrl(institutionId: string): string | undefined {
+  const url =
+    institutionId === "ubco"
+      ? import.meta.env.VITE_CANVAS_UBCO_URL
+      : import.meta.env.VITE_CANVAS_UBC_URL;
 
-export function getInstitutionCanvasUrl(institutionId: string): string {
-  if (institutionId === "ubco") {
-    return import.meta.env.VITE_CANVAS_UBCO_URL ?? DEFAULT_UBCO_CANVAS_URL;
-  }
-
-  return import.meta.env.VITE_CANVAS_UBC_URL ?? DEFAULT_UBC_CANVAS_URL;
-}
-
-/** Canvas courses list page — instructors create new courses here, then sync back. */
-export function getInstitutionCanvasNewCourseUrl(institutionId: string): string {
-  return `${getInstitutionCanvasUrl(institutionId)}/courses`;
+  const trimmed = url?.trim();
+  return trimmed ? trimmed : undefined;
 }

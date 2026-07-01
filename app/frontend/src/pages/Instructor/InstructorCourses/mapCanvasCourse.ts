@@ -14,7 +14,7 @@ export function mapCanvasCourseToInstructorCourse(
   return {
     // id is the local DB id — used in React Router paths and active-course preference.
     id: course.local_id,
-    // canvasUrl is stored on each course for display/debug; assignment APIs use local id.
+    // Metadata from the Canvas sync response; assignment APIs use local id + connection URL.
     canvasCourseId: course.canvas_id,
     canvasUrl,
     code: course.course_code,
