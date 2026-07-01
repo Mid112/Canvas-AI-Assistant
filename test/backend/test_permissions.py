@@ -67,6 +67,13 @@ async def _disable(email: str) -> None:
         await db.commit()
 
 
+async def _set_role(email: str, role: str) -> None:
+    async with _db() as db:
+        user = await db.scalar(select(User).where(User.email == email))
+        user.role = role
+        await db.commit()
+
+
 # ---------------------------------------------------------------------------
 # get_current_user — any authenticated, active user (#600)
 # ---------------------------------------------------------------------------
@@ -150,3 +157,44 @@ def test_admin_route_rejects_unauthenticated(client):
         json={"name": "N", "email": f"x_{uuid.uuid4()}@example.com", "password": "p"},
     )
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Role changes take effect immediately — guards must not trust the token's
+# stale role claim (#600, #602, #599 hardening)
+# ---------------------------------------------------------------------------
+
+def test_canvas_route_rejects_instructor_demoted_after_token_issued(client):
+    """A token minted with role=instructor must lose Canvas access the moment
+    the DB role changes, without waiting for the token to expire."""
+    reg = _register(client)
+    asyncio.run(_set_role(reg["email"], "admin"))
+
+    resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=reg["headers"])
+    assert resp.status_code == 403
+
+
+def test_admin_route_rejects_admin_demoted_after_token_issued(client, admin_credentials):
+    """A token minted via admin login must lose admin access immediately if the
+    DB role changes, even though its session row is still valid."""
+    bootstrap = client.post("/api/v1/auth/admin/login", json=admin_credentials)
+    bootstrap_headers = {"Authorization": f"Bearer {bootstrap.json()['access_token']}"}
+
+    email = f"demote_{uuid.uuid4()}@example.com"
+    password = "DemoteMe123!"
+    client.post(
+        "/api/v1/admin/users",
+        json={"name": "Demote Target", "email": email, "password": password},
+        headers=bootstrap_headers,
+    )
+    login = client.post("/api/v1/auth/admin/login", json={"email": email, "password": password})
+    token = login.json()["access_token"]
+
+    asyncio.run(_set_role(email, "instructor"))
+
+    resp = client.post(
+        "/api/v1/admin/users",
+        json={"name": "N", "email": f"x_{uuid.uuid4()}@example.com", "password": "p"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 403

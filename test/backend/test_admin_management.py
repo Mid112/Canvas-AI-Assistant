@@ -2,8 +2,8 @@
 Integration tests for admin user management and the startup seeder.
 
 Covers:
-  - POST /api/v1/admin/users       
-  - seed_admin()                   
+  - POST /api/v1/admin/users
+  - seed_admin()
   - Audit log entries for admin_created / admin_seeded
 """
 import asyncio
@@ -16,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config import settings
-from app.core.security import decode_access_token, hash_password
+from app.core.security import decode_access_token
 from app.core.seeder import seed_admin
 from app.main import app
 from app.models.audit_log import AuditLog
