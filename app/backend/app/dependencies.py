@@ -25,15 +25,9 @@ def require_roles(*roles: str):
         db: AsyncSession = Depends(get_db),
     ) -> User:
         try:
-            user_id, role = decode_access_token(credentials.credentials)
+            user_id, _ = decode_access_token(credentials.credentials)
         except JWTError:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-        if roles and role not in roles:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Requires role: {' or '.join(roles)}",
-            )
 
         # selectinload eager-loads canvas_connections here so service layer can access them
         # without hitting the DB again — async SQLAlchemy can't lazy-load inside async context
@@ -44,6 +38,15 @@ def require_roles(*roles: str):
         )
         if not user or not user.is_active:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+
+        # Authorize against the current DB role rather than the token's role claim,
+        # so a role change takes effect immediately instead of waiting for the old
+        # token to expire.
+        if roles and user.role not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Requires role: {' or '.join(roles)}",
+            )
         return user
 
     return _guard
@@ -58,11 +61,22 @@ async def get_admin_user(
     db: AsyncSession = Depends(get_db),
 ) -> User:
     try:
-        user_id, role = decode_access_token(credentials.credentials)
+        user_id, _ = decode_access_token(credentials.credentials)
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    if role != "admin":
+    user = await db.scalar(
+        select(User)
+        .where(User.id == int(user_id))
+        .options(selectinload(User.canvas_connections))
+    )
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+
+    # Authorize against the current DB role rather than the token's role claim,
+    # so a role change takes effect immediately instead of waiting for the old
+    # token to expire.
+    if user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
     # Validate that the session hasn't been logged out (token hash must exist and not be expired)
@@ -74,13 +88,5 @@ async def get_admin_user(
     )
     if not session:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired or invalid")
-
-    user = await db.scalar(
-        select(User)
-        .where(User.id == int(user_id))
-        .options(selectinload(User.canvas_connections))
-    )
-    if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
     return user
