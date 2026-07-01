@@ -98,17 +98,19 @@ We had 1 team meeting this cycle on Friday to coordinate the MVP push and agree 
 | 499 | Instructor account management UI | Jessica | Not started |
 
 ## Burn-up Chart (Velocity):
-[ADD BURN-UP CHART SCREENSHOT HERE]
+
+<img width="930" height="556" alt="Screenshot 2026-06-30 at 9 59 11 PM" src="https://github.com/user-attachments/assets/402ecb4f-b168-4d58-87f7-2db8c47d95e1" />
+
 
 ## Times for Team/Individual:
 
 | Team Member | Logged Hours |
 | ----------- | ------------ |
-| Mridul      | [ADD HOURS] |
-| Jessica     | [ADD HOURS] |
-| Bao         | 13:30:00 |
+| Mridul      | 04:20:00 |
+| Jessica     | 07:21:47 |
+| Bao         | 12:54:10 |
 | Yerdana     | 07:46:23 |
-| Rhythm      | [ADD HOURS] |
+| Rhythm      | 08:27:24 |
 
 ## Completed Tasks:
 
