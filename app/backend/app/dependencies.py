@@ -15,46 +15,42 @@ from app.models.user import User
 bearer = HTTPBearer()
 
 
-async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer),
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    try:
-        user_id, _ = decode_access_token(credentials.credentials)
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-    # selectinload eager-loads canvas_connections here so service layer can access them
-    # without hitting the DB again — async SQLAlchemy can't lazy-load inside async context
-    user = await db.scalar(
-        select(User)
-        .where(User.id == int(user_id))
-        .options(selectinload(User.canvas_connections))
-    )
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
+def require_roles(*roles: str):
+    """Build a FastAPI dependency that authenticates the bearer token and enforces
+    both role membership and account status. Pass no roles to allow any
+    authenticated, active user (used for get_current_user).
+    """
+    async def _guard(
+        credentials: HTTPAuthorizationCredentials = Depends(bearer),
+        db: AsyncSession = Depends(get_db),
+    ) -> User:
+        try:
+            user_id, role = decode_access_token(credentials.credentials)
+        except JWTError:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+        if roles and role not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Requires role: {' or '.join(roles)}",
+            )
+
+        # selectinload eager-loads canvas_connections here so service layer can access them
+        # without hitting the DB again — async SQLAlchemy can't lazy-load inside async context
+        user = await db.scalar(
+            select(User)
+            .where(User.id == int(user_id))
+            .options(selectinload(User.canvas_connections))
+        )
+        if not user or not user.is_active:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+        return user
+
+    return _guard
 
 
-async def get_instructor_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer),
-    db: AsyncSession = Depends(get_db),
-) -> User:
-    try:
-        user_id, role = decode_access_token(credentials.credentials)
-    except JWTError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-
-    if role != "instructor":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Instructor access required")
-
-    user = await db.scalar(
-        select(User)
-        .where(User.id == int(user_id))
-        .options(selectinload(User.canvas_connections))
-    )
-    if not user:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return user
+get_current_user = require_roles()
+get_instructor_user = require_roles("instructor")
 
 
 async def get_admin_user(
