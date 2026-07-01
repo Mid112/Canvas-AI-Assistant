@@ -65,4 +65,9 @@ async def get_admin_user(
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
+    # Re-check role against the DB, not just the JWT claim — if an admin is
+    # demoted, their still-valid session must lose admin access immediately.
+    if user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
     return user
