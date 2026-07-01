@@ -81,7 +81,29 @@ describe("getCanvasConnectionUrlForInstitution", () => {
     ).toBe("https://canvas.ubc.ca");
   });
 
-  it("falls back to the sole saved connection when it does not match the institution URL", () => {
+  it("falls back to the sole saved connection when institution env is unset", () => {
+    vi.unstubAllEnvs();
+
+    expect(
+      getCanvasConnectionUrlForInstitution(
+        {
+          ...baseUser,
+          canvas_connections: [
+            {
+              id: 1,
+              canvas_url: "http://localhost:3000",
+              created_at: "2026-06-26T00:00:00.000Z",
+            },
+          ],
+        },
+        "ubc",
+      ),
+    ).toBe("http://localhost:3000");
+  });
+
+  it("falls back to the sole local connection even when env points at production", () => {
+    vi.stubEnv("VITE_CANVAS_UBC_URL", "https://canvas.ubc.ca");
+
     expect(
       getCanvasConnectionUrlForInstitution(
         {

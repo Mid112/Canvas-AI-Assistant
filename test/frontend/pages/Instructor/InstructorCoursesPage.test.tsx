@@ -1,6 +1,6 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { InstructorCoursesPage } from "@/pages/Instructor/InstructorCoursesPage";
 import { fetchCourseAssignments } from "@/services/assignments";
@@ -42,6 +42,7 @@ vi.mock("@/contexts/AuthContext", async () => {
 });
 
 const CANVAS_URL = "https://canvas.ubc.ca";
+const LOCAL_CANVAS_URL = "http://localhost:3000";
 
 const authWithCanvas = {
   user: {
@@ -102,6 +103,7 @@ const canvasCourses = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
   mockUseAuth.mockReturnValue(authWithCanvas);
   mockedFetchCourses.mockResolvedValue(canvasCourses);
   mockedFetchCourseAssignments.mockResolvedValue([
@@ -110,6 +112,48 @@ beforeEach(() => {
 });
 
 describe("InstructorCoursesPage", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("loads courses from local Canvas Docker without VITE_CANVAS_UBC_URL", async () => {
+    mockUseAuth.mockReturnValue({
+      ...authWithCanvas,
+      user: {
+        ...authWithCanvas.user,
+        canvas_connections: [
+          {
+            id: 1,
+            canvas_url: LOCAL_CANVAS_URL,
+            created_at: "2026-06-26T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    await waitFor(() => {
+      expect(mockedFetchCourses).toHaveBeenCalledWith("token", LOCAL_CANVAS_URL);
+    });
+
+    expect(await screen.findByText("Your Courses (3)")).toBeInTheDocument();
+    expect(screen.queryByText("Connect Canvas to continue")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "New Course" })).toHaveAttribute(
+      "href",
+      `${LOCAL_CANVAS_URL}/courses`,
+    );
+  });
+
+  it("hides New Course on connect state when env is unset and no saved connection", () => {
+    mockUseAuth.mockReturnValue(authWithoutCanvas);
+
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    expect(screen.getByText("Connect Canvas to continue")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "New Course" })).not.toBeInTheDocument();
+  });
+
   it("requires Canvas before showing courses", () => {
     vi.stubEnv("VITE_CANVAS_UBC_URL", CANVAS_URL);
     mockUseAuth.mockReturnValue(authWithoutCanvas);

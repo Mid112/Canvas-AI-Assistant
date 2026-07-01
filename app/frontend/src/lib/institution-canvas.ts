@@ -8,8 +8,8 @@
  * Local Canvas Docker:
  *   VITE_CANVAS_UBC_URL=http://localhost:3000
  *
- * When unset, course/assignment API calls use the user's saved Canvas
- * connection(s) via getCanvasConnectionUrlForInstitution instead.
+ * When unset, API calls use the sole saved Canvas connection (e.g. local Docker at
+ * http://localhost:3000). Set VITE_CANVAS_*_URL to disambiguate multiple connections.
  */
 export function getInstitutionCanvasUrl(institutionId: string): string | undefined {
   const url =
