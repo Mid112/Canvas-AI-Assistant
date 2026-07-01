@@ -16,6 +16,7 @@ from app.services.admin import (
     create_instructor,
     disable_instructor,
     enable_instructor,
+    list_instructors,
     revoke_instructor_access,
     update_instructor,
 )
@@ -30,6 +31,14 @@ async def create_admin(
     db: AsyncSession = Depends(get_db),
 ):
     return await create_admin_user(db, body, current_user)
+
+
+@router.get("/instructors", response_model=list[InstructorResponse])
+async def list_instructor_accounts(
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await list_instructors(db)
 
 
 @router.post("/instructors", response_model=InstructorResponse, status_code=status.HTTP_201_CREATED)

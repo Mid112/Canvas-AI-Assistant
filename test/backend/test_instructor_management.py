@@ -96,6 +96,34 @@ class TestCreateInstructor:
         assert resp.status_code == 401
 
 
+# ── List instructor accounts ───────────────────────────────────────────────────
+
+class TestListInstructors:
+    def test_admin_can_list_instructors(self, client, admin_token):
+        email = _new_email()
+        create_resp = client.post(BASE, json={
+            "name": "Listed Instructor",
+            "email": email,
+            "password": "Pass123!",
+        }, headers=_auth(admin_token))
+        created_id = create_resp.json()["id"]
+
+        resp = client.get(BASE, headers=_auth(admin_token))
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert any(item["id"] == created_id for item in data)
+        assert all(item["role"] == "instructor" for item in data)
+
+    def test_instructor_cannot_list(self, client, instructor_token):
+        resp = client.get(BASE, headers=_auth(instructor_token))
+        assert resp.status_code == 403
+
+    def test_no_token_rejected(self, client):
+        resp = client.get(BASE)
+        assert resp.status_code == 401
+
+
 # ── #606 Update instructor account ────────────────────────────────────────────
 
 class TestUpdateInstructor:
