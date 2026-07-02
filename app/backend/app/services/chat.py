@@ -209,7 +209,7 @@ async def handle_chat_message(
 
     try:
         raw_output = await asyncio.wait_for(
-            adapter.generate(system_prompt, message, history=history),
+            adapter.generate(system_prompt, message, history=history, timeout=LLM_TIMEOUT_SECONDS),
             timeout=LLM_TIMEOUT_SECONDS,
         )
     except TimeoutError:

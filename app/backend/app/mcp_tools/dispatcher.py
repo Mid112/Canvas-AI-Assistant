@@ -124,14 +124,15 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             courses = await get_courses(user, _default_canvas_url(user), db)
             return {"courses": [c.model_dump() for c in courses]}
 
+        
         case "fetch_assignments":
             course = await _resolve_course(db, user, action.local_course_id)
-            assignments = await get_assignments(int(course.canvas_course_id), user, course.canvas_url)
+            assignments = await get_assignments(course.id, user, course.canvas_url, db)
             return {"assignments": [a.model_dump() for a in assignments]}
 
         case "fetch_submissions":
             course = await _resolve_course(db, user, action.local_course_id)
-            submissions = await get_submissions(int(course.canvas_course_id), action.assignment_id, user, course.canvas_url)
+            submissions = await get_submissions(course.id, action.assignment_id, user, course.canvas_url, db)
             summary = await _add_person_submission_summary(course, submissions, user, db)
             return {
                 "submissions": [s.model_dump() for s in submissions],
