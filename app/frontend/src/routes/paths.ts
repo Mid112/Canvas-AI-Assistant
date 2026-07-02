@@ -17,6 +17,7 @@ export const paths = {
     courseAnalytics: "/instructor/courses/:courseId/analytics",
     assistant: "/instructor/assistant",
     dryRunPreview: "/instructor/actions/preview",
+    analytics: "/instructor/analytics",
     messages: "/instructor/messages",
     notifications: "/instructor/notifications",
     history: "/instructor/history",

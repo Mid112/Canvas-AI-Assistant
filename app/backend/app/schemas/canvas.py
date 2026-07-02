@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -39,6 +40,13 @@ class AssignmentResponse(BaseModel):
     course_id: int
 
 
+class SubmissionStatus(StrEnum):
+    graded = "graded"
+    submitted = "submitted"
+    late = "late"
+    missing = "missing"
+    unsubmitted = "unsubmitted"
+    excused = "excused"
 class AssignmentCreate(BaseModel):
     name: str
     description: str | None = None
@@ -57,10 +65,18 @@ class SubmissionResponse(BaseModel):
     id: int
     assignment_id: int
     user_id: int
+    student_name: str | None = None
+    submitted_at: datetime | None = None
+    # Raw Canvas state — kept for debugging. API consumers should use `status` instead.
+    workflow_state: str
+
+    # Parsed status (#547) — one of: graded, submitted, late, missing, unsubmitted, excused
+    status: SubmissionStatus
+
+    # Grading info (#548)
     score: float | None = None
     grade: str | None = None
-    submitted_at: datetime | None = None
-    workflow_state: str
+    graded_at: datetime | None = None
 
 
 class ActiveCourseSet(BaseModel):

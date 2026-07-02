@@ -7,7 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.core.security import decrypt_canvas_token
-from app.integrations.canvas import fetch_assignments, fetch_courses, fetch_submissions
+from app.integrations.canvas import (
+    create_assignment,
+    fetch_assignment,
+    fetch_assignments,
+    fetch_courses,
+    fetch_submissions,
+    update_assignment,
+)
 from app.models.assignment import Assignment
 from app.models.course import Course
 from app.models.user import User
@@ -19,6 +26,7 @@ from app.schemas.canvas import (
     AssignmentUpdate,
     CourseResponse,
     SubmissionResponse,
+    SubmissionStatus,
 )
 
 
@@ -116,8 +124,7 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
     ]
 
 
-async def get_assignments(local_course_id: int, user: User, db: AsyncSession) -> list[AssignmentResponse]:
-    # Ownership check — also gives us canvas_course_id and canvas_url without a client param
+async def get_assignments(local_course_id: int, user: User, canvas_url: str, db: AsyncSession) -> list[AssignmentResponse]:
     course = await db.scalar(
         select(Course).where(Course.id == local_course_id, Course.instructor_id == user.id)
     )
@@ -127,7 +134,7 @@ async def get_assignments(local_course_id: int, user: User, db: AsyncSession) ->
             detail="Course not found or does not belong to you.",
         )
 
-    token = _require_canvas_token(user, course.canvas_url)
+    token = require_canvas_token(user, course.canvas_url)
     data = await fetch_assignments(int(course.canvas_course_id), token, course.canvas_url)
 
     if not data:
@@ -236,6 +243,37 @@ async def update_course_assignment(
     return AssignmentResponse(**data)
 
 
+def _parse_submission_status(raw: dict) -> SubmissionStatus:
+    # Priority: excused > missing > graded > late > submitted > unsubmitted
+    if raw.get("excused"):
+        return SubmissionStatus.excused
+    if raw.get("missing"):
+        return SubmissionStatus.missing
+    state = raw.get("workflow_state", "unsubmitted")
+    if state == "graded":
+        return SubmissionStatus.graded
+    if state in ("submitted", "pending_review"):
+        return SubmissionStatus.late if raw.get("late") else SubmissionStatus.submitted
+    return SubmissionStatus.unsubmitted
+
+
+def _parse_submission(raw: dict) -> SubmissionResponse:
+    # Canvas returns user data when include[]=user is set; fall back to None if absent
+    user = raw.get("user") or {}
+    return SubmissionResponse(
+        id=raw["id"],
+        assignment_id=raw["assignment_id"],
+        user_id=raw["user_id"],
+        student_name=user.get("name"),
+        submitted_at=raw.get("submitted_at"),
+        workflow_state=raw.get("workflow_state", "unsubmitted"),
+        status=_parse_submission_status(raw),
+        score=raw.get("score"),
+        grade=raw.get("grade"),
+        graded_at=raw.get("graded_at"),
+    )
+
+
 async def get_submissions(
     local_course_id: int,
     assignment_id: int,
@@ -243,6 +281,8 @@ async def get_submissions(
     canvas_url: str,
     db: AsyncSession,
 ) -> list[SubmissionResponse]:
+    # Parses and returns submissions from Canvas — does not persist to the submissions
+    # table yet. DB upsert is deferred to a follow-up PR.
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     data = await fetch_submissions(
@@ -251,7 +291,7 @@ async def get_submissions(
         token,
         canvas_url,
     )
-    return [SubmissionResponse(**item) for item in data]
+    return [_parse_submission(raw) for raw in data]
 
 
 async def get_active_course(user: User, db: AsyncSession) -> ActiveCourseResponse | None:

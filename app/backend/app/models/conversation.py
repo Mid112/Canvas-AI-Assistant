@@ -20,15 +20,11 @@ class Conversation(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
-    )
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
     # The course this conversation session is scoped to.
     # Distinct from user_preferences.active_course_id (which is the UI selection state).
-    course_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("courses.id", ondelete="SET NULL"), nullable=True
-    )
+    course_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("courses.id", ondelete="SET NULL"), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -37,9 +33,5 @@ class Conversation(Base):
 
     user: Mapped[User] = relationship("User", back_populates="conversations")
     course: Mapped[Course | None] = relationship("Course")
-    messages: Mapped[list[Message]] = relationship(
-        "Message", back_populates="conversation", cascade="all, delete-orphan"
-    )
-    workflows: Mapped[list[Workflow]] = relationship(
-        "Workflow", back_populates="conversation", cascade="all, delete-orphan"
-    )
+    messages: Mapped[list[Message]] = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
+    workflows: Mapped[list[Workflow]] = relationship("Workflow", back_populates="conversation", cascade="all, delete-orphan")
