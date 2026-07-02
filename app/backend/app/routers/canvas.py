@@ -5,6 +5,7 @@ from app.config import settings
 from app.core.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
+from app.schemas.analysis import MissingSubmissionAnalysis
 from app.schemas.canvas import (
     ActiveCourseResponse,
     ActiveCourseSet,
@@ -15,6 +16,7 @@ from app.schemas.canvas import (
     SubmissionResponse,
 )
 from app.schemas.student import StudentResponse
+from app.services.analysis import analyze_missing_submissions
 from app.services.canvas import (
     create_course_assignment,
     get_active_course,
@@ -102,6 +104,28 @@ async def list_submissions(
     db: AsyncSession = Depends(get_db),
 ):
     return await get_submissions(
+        course_id,
+        assignment_id,
+        current_user,
+        canvas_url,
+        db,
+    )
+
+
+# Missing submission analysis (#550–#553) — compares the enrolled roster against
+# submissions for one assignment and returns missing students plus summary stats.
+@router.get(
+    "/courses/{course_id}/assignments/{assignment_id}/missing-submissions",
+    response_model=MissingSubmissionAnalysis,
+)
+async def missing_submission_analysis(
+    course_id: int,
+    assignment_id: int,
+    current_user: User = Depends(get_current_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await analyze_missing_submissions(
         course_id,
         assignment_id,
         current_user,
