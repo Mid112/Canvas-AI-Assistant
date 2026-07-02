@@ -12,7 +12,10 @@ import {
   assignmentCreateCourseOptions,
   assignmentCreateSuggestedPrompts,
 } from "@/data/mockAssignmentCreator";
-import type { AssignmentDescribeValues } from "@/types/assignmentCreate";
+import type {
+  AssignmentCreateCourseOption,
+  AssignmentDescribeValues,
+} from "@/types/assignmentCreate";
 
 import {
   assignmentDescribeSchema,
@@ -23,6 +26,9 @@ interface AssignmentDescribeStepProps {
   defaultValues: AssignmentDescribeValues;
   isGenerating: boolean;
   generateError?: string | null;
+  courseOptions?: AssignmentCreateCourseOption[];
+  courseLoadError?: string | null;
+  isLoadingCourses?: boolean;
   onGenerate: (values: AssignmentDescribeValues) => void;
 }
 
@@ -36,6 +42,9 @@ export function AssignmentDescribeStep({
   defaultValues,
   isGenerating,
   generateError,
+  courseOptions = assignmentCreateCourseOptions,
+  courseLoadError = null,
+  isLoadingCourses = false,
   onGenerate,
 }: AssignmentDescribeStepProps) {
   const {
@@ -74,10 +83,13 @@ export function AssignmentDescribeStep({
               className={selectClassName}
               aria-invalid={Boolean(errors.courseId)}
               aria-describedby={errors.courseId ? "assignment-course-error" : undefined}
+              disabled={isLoadingCourses}
               {...register("courseId")}
             >
-              <option value="">Choose a course...</option>
-              {assignmentCreateCourseOptions.map((course) => (
+              <option value="">
+                {isLoadingCourses ? "Loading courses..." : "Choose a course..."}
+              </option>
+              {courseOptions.map((course) => (
                 <option key={course.id} value={course.id}>
                   {course.label}
                 </option>
@@ -90,6 +102,11 @@ export function AssignmentDescribeStep({
                 className="text-sm text-destructive"
               >
                 {errors.courseId.message}
+              </p>
+            ) : null}
+            {courseLoadError ? (
+              <p role="alert" className="text-sm text-destructive">
+                {courseLoadError}
               </p>
             ) : null}
           </div>

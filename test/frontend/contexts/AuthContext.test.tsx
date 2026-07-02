@@ -15,6 +15,7 @@ import {
   loginUser,
   registerUser,
 } from "@/services/auth";
+import type { User } from "@/types/user";
 
 vi.mock("@/lib/auth-storage", () => ({
   getStoredToken: vi.fn(),
@@ -101,6 +102,8 @@ describe("AuthContext", () => {
       role: "instructor",
       is_active: true,
       has_canvas_token: false,
+      // AuthContext preserves Canvas connection metadata so downstream pages
+      // can call the correct Canvas host without another /auth/me request.
       canvas_connections: [],
     });
   });
@@ -173,6 +176,78 @@ describe("AuthContext", () => {
     expect(result.current.accessToken).toBe("new-token");
     expect(result.current.isAuthenticated).toBe(true);
     expect(result.current.user?.email).toBe("user@university.edu");
+  });
+
+  it("refreshes the current user after login", async () => {
+    mockedLoginUser.mockResolvedValue({
+      access_token: "new-token",
+      token_type: "bearer",
+    });
+    // First response represents login before Canvas is connected; second response
+    // proves refreshUser replaces derived Canvas state from a fresh /auth/me read.
+    mockedFetchCurrentUser
+      .mockResolvedValueOnce({
+        ...mockUserResponse,
+        has_canvas_token: false,
+        canvas_connections: [],
+      })
+      .mockResolvedValueOnce({
+        ...mockUserResponse,
+        has_canvas_token: true,
+        canvas_connections: [
+          {
+            id: 1,
+            canvas_url: "http://localhost:3000",
+            created_at: "2026-06-26T00:00:00.000Z",
+          },
+        ],
+      });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.login({
+        email: "professor@university.edu",
+        password: "secret123",
+      });
+    });
+
+    await act(async () => {
+      await result.current.refreshUser();
+    });
+
+    expect(mockedFetchCurrentUser).toHaveBeenCalledTimes(2);
+    expect(mockedFetchCurrentUser).toHaveBeenLastCalledWith("new-token");
+    expect(result.current.user?.has_canvas_token).toBe(true);
+    expect(result.current.user?.canvas_connections).toEqual([
+      {
+        id: 1,
+        canvas_url: "http://localhost:3000",
+        created_at: "2026-06-26T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("returns null from refreshUser when there is no access token", async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    // Without a token, refreshUser should be a harmless no-op for callers that
+    // invoke it defensively from onboarding or other profile update flows.
+    let refreshedUser: User | null | undefined;
+    await act(async () => {
+      refreshedUser = await result.current.refreshUser();
+    });
+
+    expect(refreshedUser).toBeNull();
+    expect(mockedFetchCurrentUser).not.toHaveBeenCalled();
   });
 
   it("registers and stores the token", async () => {

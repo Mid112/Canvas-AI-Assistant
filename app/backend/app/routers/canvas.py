@@ -8,17 +8,22 @@ from app.models.user import User
 from app.schemas.canvas import (
     ActiveCourseResponse,
     ActiveCourseSet,
+    AssignmentCreate,
     AssignmentResponse,
+    AssignmentUpdate,
     CourseResponse,
     SubmissionResponse,
 )
 from app.schemas.student import StudentResponse
 from app.services.canvas import (
+    create_course_assignment,
     get_active_course,
+    get_assignment,
     get_assignments,
     get_courses,
     get_submissions,
     set_active_course,
+    update_course_assignment,
 )
 from app.services.student import get_students
 
@@ -39,8 +44,50 @@ async def list_assignments(
     course_id: int,
     current_user: User = Depends(get_instructor_user),
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
 ):
-    return await get_assignments(course_id, current_user, canvas_url)
+    return await get_assignments(course_id, current_user, canvas_url, db)
+
+
+@router.post("/courses/{course_id}/assignments", response_model=AssignmentResponse)
+async def create_assignment_endpoint(
+    course_id: int,
+    body: AssignmentCreate,
+    current_user: User = Depends(get_current_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await create_course_assignment(course_id, body, current_user, canvas_url, db)
+
+
+@router.get("/courses/{course_id}/assignments/{assignment_id}", response_model=AssignmentResponse)
+async def get_assignment_endpoint(
+    course_id: int,
+    assignment_id: int,
+    current_user: User = Depends(get_current_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_assignment(course_id, assignment_id, current_user, canvas_url, db)
+
+
+@router.patch("/courses/{course_id}/assignments/{assignment_id}", response_model=AssignmentResponse)
+async def update_assignment_endpoint(
+    course_id: int,
+    assignment_id: int,
+    body: AssignmentUpdate,
+    current_user: User = Depends(get_current_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await update_course_assignment(
+        course_id,
+        assignment_id,
+        body,
+        current_user,
+        canvas_url,
+        db,
+    )
 
 
 @router.get(
@@ -52,8 +99,15 @@ async def list_submissions(
     assignment_id: int,
     current_user: User = Depends(get_instructor_user),
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
 ):
-    return await get_submissions(course_id, assignment_id, current_user, canvas_url)
+    return await get_submissions(
+        course_id,
+        assignment_id,
+        current_user,
+        canvas_url,
+        db,
+    )
 
 
 @router.get("/courses/{course_id}/students", response_model=list[StudentResponse])

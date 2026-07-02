@@ -17,13 +17,9 @@ class MessageTemplate(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
-    )
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
-    course_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("courses.id"), nullable=True
-    )
+    course_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("courses.id"), nullable=True)
 
     title: Mapped[str] = mapped_column(String, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -33,5 +29,4 @@ class MessageTemplate(Base):
         default=lambda: datetime.now(UTC),
     )
 
-    user: Mapped[User] = relationship(
-        "User", back_populates="message_templates")
+    user: Mapped[User] = relationship("User", back_populates="message_templates")

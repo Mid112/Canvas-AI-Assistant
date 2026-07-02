@@ -1,4 +1,4 @@
-.PHONY: install install-vllm lint lint-fix test test-llm test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset run-vllm
+.PHONY: install install-vllm lint lint-fix test test-llm test-vague-llm test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset run-vllm dev
 
 # ── Install ──────────────────────────────────
 # Creates a venv (if one doesn't exist) and installs backend deps
@@ -72,6 +72,27 @@ test-fresh:
 	cd app/backend && .venv/bin/pip install -r requirements.txt
 	make test
 
+# ── Dev ──────────────────────────────────────
+# Starts the full local dev environment in one command:
+# Postgres (Docker), Canvas sandbox (Docker), and the FastAPI backend
+# (native uvicorn with hot reload). Frontend is not started here since
+# it's a separate long-running process — run `cd app/frontend && npm
+# run dev` in its own terminal if you need the UI.
+# Canvas sandbox (canvas_lms) must already exist — run
+# `docker run -d --name canvas_lms -p 3000:3000 lbjay/canvas-docker`
+# once to create it. This target just starts it if it's stopped.
+# Uses Groq as the LLM provider by default — no vLLM needed.
+# Ctrl+C stops the backend; Postgres and Canvas keep running.
+dev:
+	@echo "Starting Postgres..."
+	docker compose -f docker-compose.dev.yml up -d postgres
+	@echo "Starting Canvas sandbox..."
+	docker start canvas_lms 2>/dev/null || echo "canvas_lms container not found — run: docker run -d --name canvas_lms -p 3000:3000 lbjay/canvas-docker"
+	@echo "Waiting for Postgres..."
+	sleep 3
+	@echo "Starting backend on :8000..."
+	cd app/backend && source .venv/bin/activate && uvicorn app.main:app --reload
+
 # ── Run vLLM ─────────────────────────────────
 # Starts vLLM's OpenAI-compatible server on port 8001 (8000 is
 # reserved for the FastAPI backend — do not change this port without
@@ -85,6 +106,10 @@ run-vllm:
 		--host 0.0.0.0 \
 		--port 8001 \
 		--max-model-len 4096
+
+
+test-vague-llm:
+	app/backend/.venv/bin/python app/backend/app/non_unit_test/test_vague_llm.py
 
 # ── Docker ───────────────────────────────────
 build:

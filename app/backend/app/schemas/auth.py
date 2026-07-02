@@ -39,11 +39,7 @@ class CanvasTokenRequest(BaseModel):
         # allow plain http:// for local Canvas instances when DEBUG is on
         if not v.startswith("https://"):
             parsed_url = urlparse(v)
-            if not (
-                settings.DEBUG
-                and parsed_url.scheme == "http"
-                and parsed_url.hostname in _LOCAL_HTTP_HOSTS
-            ):
+            if not (settings.DEBUG and parsed_url.scheme == "http" and parsed_url.hostname in _LOCAL_HTTP_HOSTS):
                 raise ValueError("canvas_url must be an https:// URL")
         return v
 
