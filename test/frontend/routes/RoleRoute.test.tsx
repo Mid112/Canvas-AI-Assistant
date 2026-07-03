@@ -88,4 +88,20 @@ describe("RoleRoute", () => {
     expect(screen.getByText("Instructor dashboard")).toBeInTheDocument();
     expect(screen.queryByText("Protected role content")).not.toBeInTheDocument();
   });
+
+  it("blocks instructors from admin audit logs route", () => {
+    mockedUseAuth.mockReturnValue({
+      user: instructorUser,
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    renderRoleRoute("admin", paths.admin.audit);
+
+    expect(screen.getByText("Instructor dashboard")).toBeInTheDocument();
+    expect(screen.queryByText("Protected role content")).not.toBeInTheDocument();
+  });
 });
