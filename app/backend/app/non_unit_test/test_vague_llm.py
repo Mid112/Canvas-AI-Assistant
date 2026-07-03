@@ -11,14 +11,18 @@ PASSWORD = "password123"
 
 async def register_and_login() -> str:
     async with httpx.AsyncClient() as client:
-        # try register, ignore 400 if the user already exists from a previous run
-        await client.post(f"{BASE_URL}/auth/register",
+        reg = await client.post(f"{BASE_URL}/auth/register",
             json={"name": "Test", "email": EMAIL, "password": PASSWORD})
-        resp = await client.post(f"{BASE_URL}/auth/login",
-            json={"email": EMAIL, "password": PASSWORD})
-        token = resp.json()["access_token"]
 
-        # connect to the Canvas sandbox automatically so every run is ready to test
+        if reg.status_code == 201:
+            # fresh DB — use the register token directly
+            token = reg.json()["access_token"]
+        else:
+            # user already exists — log in
+            resp = await client.post(f"{BASE_URL}/auth/login",
+                json={"email": EMAIL, "password": PASSWORD})
+            token = resp.json()["access_token"]
+
         await client.patch(
             f"{BASE_URL}/auth/me/canvas-token",
             headers={"Authorization": f"Bearer {token}"},
@@ -30,14 +34,26 @@ async def register_and_login() -> str:
         return token
 
 
-async def chat(token: str, message: str, conversation_id: int | None = None) -> dict:
+    
+async def chat(
+    token: str,
+    message: str,
+    conversation_id: int | None = None,
+    pending_message_id: int | None = None,
+) -> dict:
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
             f"{BASE_URL}/chat/",
             headers={"Authorization": f"Bearer {token}"},
-            json={"message": message, "conversation_id": conversation_id or 0},
+            json={
+                "message": message,
+                "conversation_id": conversation_id or 0,
+                "pending_message_id": pending_message_id,
+            },
         )
         return resp.json()
+
+
 
 
 
@@ -58,8 +74,12 @@ async def main():
     print("\n--- Canvas LMS Assistant Terminal Test ---")
     print("Type 'quit' to exit\n")
 
+    
+
     while True:
-        message = input("You: ").strip()
+        message = input("> ").strip()
+        if message.lower().startswith("you:"):
+            message = message[4:].strip()
         if message.lower() == "quit":
             break
 
@@ -85,7 +105,11 @@ async def main():
 
             elif confirm_choice == "modify":
                 modification = input("What to change? ").strip()
-                result2 = await chat(token, modification, conversation_id)
+                # pass the pending_message_id so the old preview gets overwritten
+                result2 = await chat(
+                    token, modification, conversation_id,
+                    pending_message_id=reply.get("pending_message_id")
+                )
                 print(f"\nAssistant: {result2.get('reply')}\n")
             else:
                 print("Cancelled.\n")
