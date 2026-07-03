@@ -976,3 +976,83 @@ frontend components and testing those flows across the full stack.
 * **Goal 2:** Test Canvas-backed frontend flows using real backend data
 * **Goal 3:** Continue reviewing and addressing PR feedback
 * **Goal 4:** Continue active development toward MVP completion
+
+---
+<br> 
+
+# Cycle 13 Report: 30/06 – 02/07 (June 30 – July 2)
+
+## Timesheet
+
+### Clockify Report
+
+* **30/06 (Tuesday):** Using Clockify – Logged 3.25 hours
+  *(3 hours and 15 minutes for Canvas integration from backend endpoints and MVP progress)*
+
+* **01/07 (Wednesday):** Using Clockify – Logged 0 hours
+
+* **02/07 (Thursday):** Using Clockify – Logged 0 hours
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Canvas integration from backend endpoints and MVP progress (June 30)
+
+* Worked for 3 hours and 15 minutes on Canvas integration across backend endpoints.
+* Focused on connecting backend endpoint functionality into the frontend components.
+* Continued moving the application away from mock/local-only data and toward real Canvas-backed data flows.
+* Worked on MVP progress by improving how Canvas-related features connect across the full stack.
+* This work built on the previous cycle’s Canvas URL integration and backend-to-frontend endpoint connection work.
+
+---
+
+## Progress Update (since 30/06/2026)
+
+| TASK/ISSUE #                             | STATUS      |
+| ---------------------------------------- | ----------- |
+| Canvas Docker setup                      | Complete    |
+| Docker integration                       | Complete    |
+| Canvas URL integration                   | Complete    |
+| Backend-to-frontend endpoint integration | In Progress |
+| Canvas backend endpoint integration      | In Progress |
+| MVP                                      | In Progress |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle focused on continuing Canvas integration work and making progress
+toward the MVP. On June 30, I worked for 3 hours and 15 minutes on connecting
+Canvas-related backend endpoints into the frontend components. This work helped
+move the application closer to using real backend and Canvas data instead of
+mock or local-only frontend data.
+
+Since Canvas Docker and Canvas URL integration are now complete, the main focus
+has shifted toward implementing the remaining backend endpoints in the frontend
+and making sure the full-stack Canvas workflows function properly. This cycle
+helped continue that transition by focusing on endpoint integration and MVP
+functionality.
+
+### Retrospective:
+
+This cycle was productive because the work directly supported the project’s
+MVP goals. The focus was no longer on setting up the development environment,
+but on using that setup to connect real backend functionality to the frontend.
+
+The main area to continue improving is completing the backend-to-frontend
+integration for all remaining endpoints and testing those flows with real
+Canvas-backed data. Continued work is also needed to identify any gaps between
+the backend API contracts and the frontend components that depend on them.
+
+---
+
+## Next Cycle Goals
+
+* **Goal 1:** Continue implementing backend endpoints in frontend components
+* **Goal 2:** Test Canvas-backed frontend flows using real backend data
+* **Goal 3:** Continue identifying and fixing API/frontend integration gaps
+* **Goal 4:** Continue active development toward MVP completion
+
