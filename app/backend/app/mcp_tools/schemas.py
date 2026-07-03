@@ -5,6 +5,18 @@ from dateutil import parser as date_parser
 from pydantic import BaseModel, field_validator
 
 
+def _normalize_due_date_str(value: str) -> str:
+    """The LLM sometimes emits natural-language dates (e.g. "July 30
+    2026") instead of ISO 8601. Normalize anything dateutil can parse
+    to ISO so validate_assignment_for_create/_update's fromisoformat
+    check succeeds; leave unparseable input as-is so that check still
+    produces a clean user-facing error instead of this one."""
+    try:
+        return date_parser.parse(value).isoformat()
+    except (date_parser.ParserError, ValueError, OverflowError, TypeError):
+        return value
+
+
 class FetchCoursesAction(BaseModel):
     action: Literal["fetch_courses"] = "fetch_courses"
 
@@ -44,15 +56,29 @@ class CreateAssignmentAction(BaseModel):
     @field_validator("due_date")
     @classmethod
     def _normalize_due_date(cls, value: str) -> str:
-        """The LLM sometimes emits natural-language dates (e.g. "July 30
-        2026") instead of ISO 8601. Normalize anything dateutil can parse
-        to ISO so validate_assignment_for_create's fromisoformat check
-        succeeds; leave unparseable input as-is so that check still
-        produces a clean user-facing error instead of this one."""
-        try:
-            return date_parser.parse(value).isoformat()
-        except (date_parser.ParserError, ValueError, OverflowError, TypeError):
-            return value
+        return _normalize_due_date_str(value)
+
+
+class UpdateAssignmentAction(BaseModel):
+    action: Literal["update_assignment"] = "update_assignment"
+    local_course_id: int
+    # Canvas assignment ID — same convention as FetchSubmissionsAction.assignment_id,
+    # NOT the local Assignment.id. Every function this reuses (get_assignment,
+    # update_course_assignment) already takes the Canvas ID, and the LLM already
+    # sees this value as "id" in fetch_assignments/fetch_submissions results.
+    assignment_id: int
+    # All optional — natural-language updates are almost always partial
+    # (e.g. "push the due date back a week"). None means "leave unchanged";
+    # the dispatcher merges omitted fields in from the current Canvas state.
+    title: str | None = None
+    description: str | None = None
+    due_date: str | None = None
+    points_possible: float | None = None
+
+    @field_validator("due_date")
+    @classmethod
+    def _normalize_due_date(cls, value: str | None) -> str | None:
+        return value if value is None else _normalize_due_date_str(value)
 
 
 class OutOfScopeAction(BaseModel):
@@ -98,6 +124,7 @@ ACTION_SCHEMAS: dict[str, type[BaseModel]] = {
     "set_active_course": SetActiveCourseAction,
     "get_active_course": GetActiveCourseAction,
     "create_assignment": CreateAssignmentAction,
+    "update_assignment": UpdateAssignmentAction,
     "out_of_scope": OutOfScopeAction,
     "clarify": ClarifyAction,
     "intent_preview": IntentPreviewAction,

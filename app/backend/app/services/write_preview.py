@@ -22,6 +22,8 @@ def generate_write_preview(proposed_action: dict, course: Course) -> dict:
     match action_type:
         case "create_assignment":
             return _preview_create_assignment(course, proposed_action)
+        case "update_assignment":
+            return _preview_update_assignment(course, proposed_action)
         case "send_reminder":
             return _preview_send_reminder(course, proposed_action)
         case "update_grade":
@@ -60,6 +62,54 @@ def _preview_create_assignment(course: Course, params: dict) -> dict:
             f"Create assignment '{title.strip()}' in {course.name}, "
             f"due {due_display}, worth {points_display}."
         ),
+    }
+
+
+def _preview_update_assignment(course: Course, params: dict) -> dict:
+    assignment_id = params.get("assignment_id", "?")
+    title = params.get("title")
+    description = params.get("description")
+    due_date = params.get("due_date")
+    points_possible = params.get("points_possible")
+
+    changes: dict[str, str] = {}
+    if title is not None:
+        changes["title"] = title.strip()
+    if description is not None:
+        changes["description"] = description[:200] + ("..." if len(description) > 200 else "")
+    if due_date is not None:
+        changes["due_date"] = _format_due_date(due_date)
+    if points_possible is not None:
+        changes["points_possible"] = f"{points_possible} points"
+
+    unchanged = [
+        label
+        for label, value in (
+            ("title", title),
+            ("description", description),
+            ("due date", due_date),
+            ("points possible", points_possible),
+        )
+        if value is None
+    ]
+
+    if changes:
+        change_text = "; ".join(f"{k.replace('_', ' ')} → {v}" for k, v in changes.items())
+        summary = f"Update assignment (ID {assignment_id}) in {course.name}: {change_text}."
+        if unchanged:
+            summary += f" Everything else ({', '.join(unchanged)}) stays the same."
+    else:
+        summary = f"No fields were specified to update assignment (ID {assignment_id}) in {course.name}."
+
+    return {
+        "action": "update_assignment",
+        "course": course.name,
+        "metadata": {
+            "assignment_id": assignment_id,
+            "changes": changes,
+            "unchanged_fields": unchanged,
+        },
+        "summary": summary,
     }
 
 

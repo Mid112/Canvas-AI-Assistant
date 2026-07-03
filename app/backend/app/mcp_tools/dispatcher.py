@@ -11,17 +11,22 @@ from app.mcp_tools.schemas import ACTION_SCHEMAS
 from app.models.course import Course
 from app.models.message import Message
 from app.models.user import User
-from app.schemas.canvas import AssignmentCreate, SubmissionResponse
+from app.schemas.canvas import AssignmentCreate, AssignmentResponse, AssignmentUpdate, SubmissionResponse
 from app.integrations.canvas import fetch_enrollments
-from app.services.assignment_validation import validate_assignment_for_create
+from app.services.assignment_validation import (
+    validate_assignment_for_create,
+    validate_assignment_for_update,
+)
 from app.services.canvas import (
     create_course_assignment,
     get_active_course,
+    get_assignment,
     get_assignments,
     get_courses,
     get_submissions,
     require_canvas_token,
     set_active_course,
+    update_course_assignment,
 )
 from app.services.canvas_status import CanvasWriteResult
 from app.services.write_preview import generate_write_preview
@@ -129,6 +134,18 @@ async def _add_person_submission_summary(
     return "\n".join(lines)
 
 
+def _merge_assignment_update(current: AssignmentResponse, action: Any) -> AssignmentUpdate:
+    """Canvas's assignment PUT is a full overwrite — fields left out of the
+    payload get blanked, not left alone. Any field the user didn't ask to
+    change is carried over from the just-fetched current Canvas state."""
+    return AssignmentUpdate(
+        name=action.title if action.title is not None else current.name,
+        description=action.description if action.description is not None else current.description,
+        due_at=action.due_date if action.due_date is not None else current.due_at,
+        points_possible=action.points_possible if action.points_possible is not None else current.points_possible,
+    )
+
+
 async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
     """Dispatch on the validated action's type.
 
@@ -225,6 +242,36 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             )
             return result.to_dict()
 
+        case "update_assignment":
+            course = await _resolve_course(db, user, action.local_course_id)
+
+            await validate_assignment_for_update(
+                action.local_course_id,
+                user,
+                action.title,
+                action.description,
+                action.due_date,
+                action.points_possible,
+                db,
+            )
+
+            # fetch fresh Canvas state right before merging — the assignment
+            # may have changed since the preview was shown, and this is also
+            # where a bad/stale assignment_id surfaces as a Canvas 404
+            current = await get_assignment(
+                course.id, action.assignment_id, user, course.canvas_url, db
+            )
+            payload = _merge_assignment_update(current, action)
+
+            assignment = await update_course_assignment(
+                course.id, action.assignment_id, payload, user, course.canvas_url, db
+            )
+            result = CanvasWriteResult(
+                action="update_assignment",
+                data=assignment,
+            )
+            return result.to_dict()
+
         # ── Conversational actions ────────────────────────────────────
         # These results are logged verbatim as the assistant's message
         # content and fed back to the LLM as conversation history on the
@@ -254,7 +301,7 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             # proposed_action tells generate_write_preview which write type
             # this is — it dispatches internally and returns the right metadata.
             proposed = action.proposed_action
-            write_actions = {"create_assignment", "send_reminder", "update_grade"}
+            write_actions = {"create_assignment", "update_assignment", "send_reminder", "update_grade"}
 
             if proposed.get("action") in write_actions:
                 # resolve the course for preview metadata (not for writing)
