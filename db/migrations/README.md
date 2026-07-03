@@ -7,3 +7,4 @@ If you have an **existing** local or shared database created before the `ta` rol
 | Migration | Purpose |
 |-----------|---------|
 | `002_remove_ta_role.sql` | Reassigns legacy `ta` users to `instructor` and tightens the role check constraint |
+| `003_workflow_auditlog_redesign.sql` | Drops and recreates `workflows`/`audit_logs` with the action-lifecycle schema that fixes the confirm replay bug (both tables were unused, so no data migration is needed) |

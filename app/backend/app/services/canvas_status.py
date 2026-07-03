@@ -18,6 +18,8 @@ class CanvasExecutionStatus:
     data: Any = None
 
 
+
+
 @dataclass
 class CanvasWriteResult:
     """Wraps the result of a Canvas write operation at the dispatcher layer.

@@ -5,6 +5,7 @@ import json
 import httpx
 from fastapi import HTTPException
 from sqlalchemy import desc, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.models.canvas_connection import CanvasConnection
@@ -12,17 +13,35 @@ from app.models.canvas_connection import CanvasConnection
 
 from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_action
 from app.mcp_tools.schemas import ACTION_SCHEMAS
+from app.models.audit_log import AuditLog
 from app.models.conversation import Conversation
 from app.models.message import Message
 from app.models.user import User
+from app.models.workflow import Workflow
 from app.services.llm.llm_setting import get_llm_adapter
 from app.config import settings
 
 LLM_TIMEOUT_SECONDS = 90.0
 HISTORY_WINDOW = 10
 
+# Actions that get a Workflow row (the replay-safe confirm state machine).
+# Read actions are structurally free to be wrapped in an intent_preview too
+# (see dispatcher.py's intent_preview case), but replaying a read is
+# harmless, so they're deliberately excluded — scoping this to writes only
+# also avoids a real collision: a modify-turn's Workflow lookup keys off
+# preview_message_id, and a stray read-preview sharing that id with an
+# unrelated pending write could otherwise corrupt it.
+WRITE_ACTIONS = {"create_assignment", "update_assignment", "send_message"}
 
-from datetime import datetime, date
+# action_name -> (resource_type, operation) for AuditLog rows.
+_AUDIT_RESOURCE_MAP = {
+    "create_assignment": ("assignment", "create"),
+    "update_assignment": ("assignment", "update"),
+    "send_message": ("announcement", "create"),
+}
+
+
+from datetime import UTC, datetime, date
 
 def _json_dumps(obj) -> str:
     """json.dumps with datetime serialization support.
@@ -102,6 +121,74 @@ async def update_message_content(
     await db.flush()
     await db.refresh(message)
     return message
+
+
+async def _sync_workflow_for_preview(
+    db: AsyncSession,
+    conversation: Conversation,
+    user: User,
+    source_user_message_id: int,
+    pending_message_id: int | None,
+    preview_message_id: int,
+    user_prompt: str,
+    proposed_action: dict,
+) -> None:
+    """Creates or updates the Workflow row backing a write-action
+    intent_preview — the state machine handle_confirmed_action checks to
+    guarantee an action executes at most once. Scoped to WRITE_ACTIONS
+    only; read-action previews never get a row (see WRITE_ACTIONS comment).
+
+    Also backfills conversation.course_id from the proposed action the
+    first time one is seen, since the client (e.g. the manual test
+    harness) doesn't always send local_course_id up front."""
+    action_name = proposed_action.get("action")
+    if action_name not in WRITE_ACTIONS:
+        return
+
+    if conversation.course_id is None:
+        local_course_id = proposed_action.get("local_course_id")
+        if local_course_id is not None:
+            conversation.course_id = local_course_id
+
+    existing = None
+    if pending_message_id:
+        existing = await db.scalar(
+            select(Workflow).where(
+                Workflow.preview_message_id == pending_message_id,
+                Workflow.conversation_id == conversation.id,
+            )
+        )
+
+    if existing:
+        # preview_message_id is unique, so a second Workflow can never be
+        # created for the same message row — reuse this one regardless of
+        # its current status. Reopening an already-settled workflow (only
+        # reachable if a client replays a modify against a message id that
+        # was already confirmed/cancelled) resets it back to pending with
+        # the new proposed action, clearing the stale execution outcome.
+        existing.action_name = action_name
+        existing.user_prompt = user_prompt
+        existing.proposed_action = proposed_action
+        existing.course_id = conversation.course_id
+        existing.status = "pending"
+        existing.error_detail = None
+        existing.executed_at = None
+        existing.result_message_id = None
+        return
+
+    db.add(
+        Workflow(
+            conversation_id=conversation.id,
+            user_id=user.id,
+            course_id=conversation.course_id,
+            source_user_message_id=source_user_message_id,
+            preview_message_id=preview_message_id,
+            action_name=action_name,
+            user_prompt=user_prompt,
+            proposed_action=proposed_action,
+            status="pending",
+        )
+    )
 
 
 async def _get_recent_messages(
@@ -215,7 +302,7 @@ async def handle_chat_message(
     conversation = await get_or_create_conversation(
         db, user, conversation_id, local_course_id
     )
-    await log_message(db, conversation, role="user", content=message)
+    user_msg = await log_message(db, conversation, role="user", content=message)
 
     history = await _get_recent_messages(db, conversation.id)
 
@@ -279,6 +366,16 @@ async def handle_chat_message(
             db, conversation, role="assistant", content=_json_dumps(result)
         )
 
+    if result.get("intent_preview"):
+        await _sync_workflow_for_preview(
+            db, conversation, user,
+            source_user_message_id=user_msg.id,
+            pending_message_id=pending_message_id,
+            preview_message_id=assistant_msg.id,
+            user_prompt=message,
+            proposed_action=result.get("proposed_action", {}),
+        )
+
     await db.commit()
 
     # attach the stored message ID so the client can confirm by ID
@@ -297,8 +394,19 @@ async def handle_confirmed_action(
     """Executes the action stored in a previous intent_preview message.
     The client confirms by message ID only — it cannot redefine what
     action gets executed. The server loads the proposed_action from its
-    own stored message, verifying ownership and that the message actually
-    contains an intent_preview, before executing anything.
+    own Workflow record, verifying ownership and that the workflow is
+    still pending, before executing anything.
+
+    Replay safety: the pending->executing transition is an atomic
+    conditional UPDATE (`WHERE status='pending'`), not a Python-side
+    read-then-check — two simultaneous confirm requests each run in
+    their own DB transaction, so a plain SELECT-then-check race would let
+    both pass under READ COMMITTED. The conditional UPDATE takes a row
+    lock instead: a concurrent duplicate blocks until the first
+    transaction commits, then correctly re-evaluates against committed
+    state and affects 0 rows. Committing immediately after (rather than
+    holding the lock through the Canvas call) means a concurrent
+    duplicate gets an instant 409 instead of hanging.
 
     This is PATH B in the dispatcher's two-path architecture: by the
     time execute_tool is called here, the user has already confirmed,
@@ -314,33 +422,30 @@ async def handle_confirmed_action(
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found.")
 
-    preview_message = await db.scalar(
-        select(Message).where(
-            Message.id == pending_message_id,
-            Message.conversation_id == conversation_id,
-            Message.role == "assistant",
+    workflow = await db.scalar(
+        select(Workflow).where(
+            Workflow.preview_message_id == pending_message_id,
+            Workflow.conversation_id == conversation_id,
         )
     )
-    if not preview_message:
+    if not workflow:
         raise HTTPException(
             status_code=404,
-            detail="Preview message not found in this conversation.",
+            detail="Preview not found in this conversation.",
         )
 
-    try:
-        stored = json.loads(preview_message.content)
-    except (json.JSONDecodeError, TypeError):
+    claim = await db.execute(
+        sa_update(Workflow)
+        .where(Workflow.id == workflow.id, Workflow.status == "pending")
+        .values(status="executing")
+    )
+    if claim.rowcount == 0:
         raise HTTPException(
             status_code=409,
-            detail="Referenced message is not a confirmable action.",
+            detail=f"This action is no longer pending (status: {workflow.status}).",
         )
-    
-
-    if not stored.get("intent_preview") or "proposed_action" not in stored:
-        raise HTTPException(
-            status_code=409,
-            detail="Referenced message is not a confirmable action.",
-        )
+    await db.commit()
+    workflow.status = "executing"
 
     # reload user with relationships eagerly loaded for this db session —
     # the user object from get_current_user may have canvas_connections
@@ -355,13 +460,13 @@ async def handle_confirmed_action(
 
     await log_message(db, conversation, role="user", content="[confirmed action]")
 
-
-
     try:
-        action = parse_action(json.dumps(stored["proposed_action"]))
+        action = parse_action(json.dumps(workflow.proposed_action))
         result = await execute_tool(db, user, action)
     except ToolExecutionError as e:
         await log_message(db, conversation, role="assistant", content=e.log_detail)
+        workflow.status = "failed"
+        workflow.error_detail = e.log_detail
         await db.commit()
         return conversation, {"error": e.user_message}, True
     except HTTPException as e:
@@ -372,13 +477,44 @@ async def handle_confirmed_action(
         # with no "reply" key. Fold it into the same error-reply shape
         # so the user actually sees why the confirmed action failed.
         detail = e.detail if isinstance(e.detail, str) else str(e.detail)
-        await log_message(db, conversation, role="assistant", content=f"HTTPException {e.status_code}: {detail}")
+        error_detail = f"HTTPException {e.status_code}: {detail}"
+        await log_message(db, conversation, role="assistant", content=error_detail)
+        workflow.status = "failed"
+        workflow.error_detail = error_detail
         await db.commit()
         return conversation, {"error": detail}, True
 
-    await log_message(
+    result_msg = await log_message(
         db, conversation, role="assistant", content=_json_dumps(result)
     )
+    workflow.status = "executed"
+    workflow.executed_at = datetime.now(UTC)
+    workflow.result_message_id = result_msg.id
+
+    resource_type, operation = _AUDIT_RESOURCE_MAP.get(
+        workflow.action_name, (workflow.action_name, "create")
+    )
+    # result["data"] comes from CanvasWriteResult.to_dict()'s plain
+    # .model_dump() (not mode="json"), so it can still contain native
+    # datetime objects — JSONB needs JSON-safe values. Round-trip through
+    # the same _json_dumps used for Message.content to normalize them.
+    data = json.loads(_json_dumps(result.get("data") or {}))
+    resource_id = str(data["id"]) if isinstance(data, dict) and data.get("id") is not None else None
+    db.add(
+        AuditLog(
+            user_id=user.id,
+            workflow_id=workflow.id,
+            course_id=workflow.course_id,
+            action=workflow.action_name,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            operation=operation,
+            status="success",
+            after_data=data,
+            request_payload=workflow.proposed_action,
+        )
+    )
+
     await db.commit()
     return conversation, result, False
 

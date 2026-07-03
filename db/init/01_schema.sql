@@ -125,35 +125,66 @@ CREATE INDEX idx_messages_conversation_id ON messages(conversation_id);
 
 -- ─────────────────────────────────────────────
 -- Workflows
+-- Action-lifecycle state machine for LLM-proposed actions. `messages` is
+-- the chat transcript; this table is what handle_confirmed_action checks
+-- to guarantee an action executes at most once, no matter how many times
+-- its pending_message_id is replayed.
 -- ─────────────────────────────────────────────
 CREATE TABLE workflows (
-    id               SERIAL PRIMARY KEY,
-    conversation_id  INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    intent           VARCHAR NOT NULL,
-    generated_query  JSONB,
-    preview_data     JSONB,
-    status           VARCHAR NOT NULL CHECK (status IN ('pending', 'approved', 'rejected')),
-    created_at       TIMESTAMPTZ DEFAULT NOW()
+    id                       SERIAL PRIMARY KEY,
+    conversation_id          INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    user_id                  INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    course_id                INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    -- The user message that originally started this preview chain — stays
+    -- pinned across "modify" revisions.
+    source_user_message_id   INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    -- The assistant message holding the current intent_preview. Unique —
+    -- this is the join key handle_confirmed_action looks the workflow up by.
+    preview_message_id       INTEGER NOT NULL UNIQUE REFERENCES messages(id) ON DELETE CASCADE,
+    result_message_id        INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+    action_name              VARCHAR NOT NULL,
+    user_prompt              TEXT NOT NULL,
+    proposed_action          JSONB NOT NULL,
+    status                   VARCHAR NOT NULL DEFAULT 'pending'
+                             CHECK (status IN ('pending', 'executing', 'executed', 'failed', 'cancelled', 'superseded')),
+    error_detail             TEXT,
+    executed_at              TIMESTAMPTZ,
+    created_at               TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_workflows_user_id ON workflows(user_id);
 CREATE INDEX idx_workflows_conversation_id ON workflows(conversation_id);
+CREATE INDEX idx_workflows_course_id ON workflows(course_id);
 CREATE INDEX idx_workflows_status ON workflows(status);
 
 -- ─────────────────────────────────────────────
 -- Audit Logs
+-- Records an actual Canvas data mutation performed by a confirmed
+-- Workflow. Only written on success.
+-- NOTE: workflow_id is required, so deleting a conversation would cascade
+-- through its workflows to its audit rows too — backwards for a feature
+-- whose point is outliving what it describes. No delete-conversation
+-- endpoint exists today, so this is dormant; flagging for whoever builds one.
 -- ─────────────────────────────────────────────
 CREATE TABLE audit_logs (
-    id           SERIAL PRIMARY KEY,
-    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
-    workflow_id  INTEGER REFERENCES workflows(id) ON DELETE SET NULL,
-    action       VARCHAR NOT NULL,
-    details      JSONB,
-    timestamp    TIMESTAMPTZ DEFAULT NOW()
+    id                SERIAL PRIMARY KEY,
+    user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    workflow_id       INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
+    course_id         INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    action            VARCHAR NOT NULL,
+    resource_type     VARCHAR NOT NULL CHECK (resource_type IN ('assignment', 'announcement')),
+    resource_id       VARCHAR,
+    operation         VARCHAR NOT NULL CHECK (operation IN ('create', 'update')),
+    status            VARCHAR NOT NULL DEFAULT 'success' CHECK (status IN ('success', 'failed')),
+    before_data       JSONB,
+    after_data        JSONB,
+    request_payload   JSONB,
+    timestamp         TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
+CREATE INDEX idx_audit_logs_workflow_id ON audit_logs(workflow_id);
+CREATE INDEX idx_audit_logs_course_id ON audit_logs(course_id);
 CREATE INDEX idx_audit_logs_timestamp ON audit_logs(timestamp);
 
 -- ─────────────────────────────────────────────
