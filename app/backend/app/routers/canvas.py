@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.database import get_db
-from app.dependencies import get_current_user, get_instructor_user
+from app.dependencies import get_instructor_user
 from app.models.user import User
 from app.schemas.canvas import (
     ActiveCourseResponse,
@@ -53,7 +53,7 @@ async def list_assignments(
 async def create_assignment_endpoint(
     course_id: int,
     body: AssignmentCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_instructor_user),
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
     db: AsyncSession = Depends(get_db),
 ):
@@ -64,7 +64,7 @@ async def create_assignment_endpoint(
 async def get_assignment_endpoint(
     course_id: int,
     assignment_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_instructor_user),
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
     db: AsyncSession = Depends(get_db),
 ):
@@ -76,7 +76,7 @@ async def update_assignment_endpoint(
     course_id: int,
     assignment_id: int,
     body: AssignmentUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_instructor_user),
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
     db: AsyncSession = Depends(get_db),
 ):
