@@ -50,6 +50,7 @@ class AssignmentUpdate(BaseModel):
     name: str
     description: str | None = None
     due_at: datetime | None = None
+    points_possible: float | None = None
 
 
 class SubmissionResponse(BaseModel):

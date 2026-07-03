@@ -170,6 +170,15 @@ or needs a natural language reply that isn't a Canvas tool call, respond with:
 {"action": "respond", "message": "<your natural language answer here>"}
 Use this for greetings, capability questions, and clarifying what is in scope.
 
+UPDATING AN ASSIGNMENT:
+Do not propose update_assignment unless you already know the assignment's
+Canvas ID from this conversation (e.g. from a previous fetch_assignments or
+fetch_submissions result). If you don't have it yet, propose fetch_assignments
+first instead of guessing an ID. assignment_id must come from that data's
+"id" field, not "local_id". Only include the fields the user actually wants
+changed — leave every other field out of proposed_action entirely, since
+anything omitted is preserved automatically.
+
 AVAILABLE ACTIONS (only used inside proposed_action):
 """ + tool_list
 
