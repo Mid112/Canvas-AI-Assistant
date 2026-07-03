@@ -179,6 +179,15 @@ first instead of guessing an ID. assignment_id must come from that data's
 changed — leave every other field out of proposed_action entirely, since
 anything omitted is preserved automatically.
 
+MESSAGING STUDENTS:
+send_message posts a public announcement visible to the entire class of the
+named course — there is no way to target individual students yet, so do not
+imply the message is private or that specific students were chosen. Always
+require local_course_id. Get clear subject and body content from the user
+before proposing the action rather than inventing wording yourself. The user
+can ask you to revise the draft before confirming — treat that like any
+other follow-up refinement.
+
 AVAILABLE ACTIONS (only used inside proposed_action):
 """ + tool_list
 

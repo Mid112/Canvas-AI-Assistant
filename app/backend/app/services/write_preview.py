@@ -24,8 +24,8 @@ def generate_write_preview(proposed_action: dict, course: Course) -> dict:
             return _preview_create_assignment(course, proposed_action)
         case "update_assignment":
             return _preview_update_assignment(course, proposed_action)
-        case "send_reminder":
-            return _preview_send_reminder(course, proposed_action)
+        case "send_message":
+            return _preview_send_message(course, proposed_action)
         case "update_grade":
             return _preview_update_grade(course, proposed_action)
         case _:
@@ -113,21 +113,21 @@ def _preview_update_assignment(course: Course, params: dict) -> dict:
     }
 
 
-def _preview_send_reminder(course: Course, params: dict) -> dict:
-    student_ids = params.get("target_student_ids", [])
-    message_draft = params.get("message_draft", "")
-    count = len(student_ids)
+def _preview_send_message(course: Course, params: dict) -> dict:
+    subject = params.get("subject", "")
+    body = params.get("body", "")
+    body_preview = body[:200] + ("..." if len(body) > 200 else "")
 
     return {
-        "action": "send_reminder",
+        "action": "send_message",
         "course": course.name,
         "metadata": {
-            "recipient_count": count,
-            "message_preview": message_draft[:200] + ("..." if len(message_draft) > 200 else ""),
+            "subject": subject.strip(),
+            "body_preview": body_preview,
         },
         "summary": (
-            f"Send a reminder to {count} student{'s' if count != 1 else ''} "
-            f"in {course.name}."
+            f"Post \"{subject.strip()}\" as a public announcement visible to "
+            f"the entire class in {course.name}."
         ),
     }
 

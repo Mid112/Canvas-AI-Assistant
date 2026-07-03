@@ -2,28 +2,11 @@
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.course import Course
 from app.models.user import User
-
-
-async def _get_owned_course_or_404(
-    local_course_id: int, user: User, db: AsyncSession
-) -> Course:
-    course = await db.scalar(
-        select(Course).where(
-            Course.id == local_course_id,
-            Course.instructor_id == user.id,
-        )
-    )
-    if not course:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Course not found or does not belong to you.",
-        )
-    return course
+from app.services.course_access import get_owned_course_or_404
 
 
 def _check_title(title: str) -> None:
@@ -83,7 +66,7 @@ async def validate_assignment_for_create(
     ownership. Returns the resolved Course on success so callers do
     not have to look it up again."""
 
-    course = await _get_owned_course_or_404(local_course_id, user, db)
+    course = await get_owned_course_or_404(local_course_id, user, db)
 
     _check_title(title)
     _check_description(description)
@@ -117,7 +100,7 @@ async def validate_assignment_for_update(
     already-overdue assignment must not trip the future-date check,
     since that check only ever applies to a newly-provided due date."""
 
-    course = await _get_owned_course_or_404(local_course_id, user, db)
+    course = await get_owned_course_or_404(local_course_id, user, db)
 
     if title is None and description is None and due_date is None and points_possible is None:
         raise HTTPException(

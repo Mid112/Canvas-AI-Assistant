@@ -81,6 +81,16 @@ class UpdateAssignmentAction(BaseModel):
         return value if value is None else _normalize_due_date_str(value)
 
 
+class SendMessageAction(BaseModel):
+    action: Literal["send_message"] = "send_message"
+    local_course_id: int
+    # Posted as a public Canvas announcement visible to the entire enrolled
+    # class — there is no per-student recipient targeting yet (that lands
+    # once recipient identification, e.g. missing/late submissions, exists).
+    subject: str
+    body: str
+
+
 class OutOfScopeAction(BaseModel):
     action: Literal["out_of_scope"] = "out_of_scope"
     # to filter out completely unrelated topics from starting and potentially diluting the chat
@@ -125,6 +135,7 @@ ACTION_SCHEMAS: dict[str, type[BaseModel]] = {
     "get_active_course": GetActiveCourseAction,
     "create_assignment": CreateAssignmentAction,
     "update_assignment": UpdateAssignmentAction,
+    "send_message": SendMessageAction,
     "out_of_scope": OutOfScopeAction,
     "clarify": ClarifyAction,
     "intent_preview": IntentPreviewAction,

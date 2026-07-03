@@ -8,6 +8,7 @@ from sqlalchemy.orm import joinedload
 
 from app.core.security import decrypt_canvas_token
 from app.integrations.canvas import (
+    create_announcement,
     create_assignment,
     fetch_assignment,
     fetch_assignments,
@@ -25,6 +26,7 @@ from app.schemas.canvas import (
     AssignmentResponse,
     AssignmentUpdate,
     CourseResponse,
+    MessageSendResult,
     SubmissionResponse,
 )
 
@@ -240,6 +242,36 @@ async def update_course_assignment(
         canvas_url,
     )
     return AssignmentResponse(**data)
+
+
+async def send_course_message(
+    local_course_id: int,
+    subject: str,
+    body: str,
+    user: User,
+    canvas_url: str,
+    db: AsyncSession,
+) -> MessageSendResult:
+    # Local import — services/student.py imports require_canvas_token from
+    # this module, so importing get_students at module level here would
+    # create a circular import. Safe as a function-local import since both
+    # modules are fully loaded by the time this actually runs.
+    from app.services.student import get_students
+
+    token = require_canvas_token(user, canvas_url)
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    await create_announcement(
+        int(course.canvas_course_id), subject, body, token, canvas_url
+    )
+    # Roster is fetched purely to report audience_size — an empty class is
+    # not an error for an announcement, unlike a targeted send would be.
+    roster = await get_students(int(course.canvas_course_id), user, canvas_url, db)
+    return MessageSendResult(
+        course_id=int(course.canvas_course_id),
+        subject=subject,
+        body=body,
+        audience_size=len(roster),
+    )
 
 
 async def get_submissions(

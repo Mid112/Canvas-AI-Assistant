@@ -17,6 +17,7 @@ from app.services.assignment_validation import (
     validate_assignment_for_create,
     validate_assignment_for_update,
 )
+from app.services.message_validation import validate_message_for_send
 from app.services.canvas import (
     create_course_assignment,
     get_active_course,
@@ -25,6 +26,7 @@ from app.services.canvas import (
     get_courses,
     get_submissions,
     require_canvas_token,
+    send_course_message,
     set_active_course,
     update_course_assignment,
 )
@@ -272,6 +274,26 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             )
             return result.to_dict()
 
+        case "send_message":
+            course = await _resolve_course(db, user, action.local_course_id)
+
+            await validate_message_for_send(
+                action.local_course_id,
+                user,
+                action.subject,
+                action.body,
+                db,
+            )
+
+            message_result = await send_course_message(
+                course.id, action.subject, action.body, user, course.canvas_url, db
+            )
+            result = CanvasWriteResult(
+                action="send_message",
+                data=message_result,
+            )
+            return result.to_dict()
+
         # ── Conversational actions ────────────────────────────────────
         # These results are logged verbatim as the assistant's message
         # content and fed back to the LLM as conversation history on the
@@ -301,7 +323,7 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             # proposed_action tells generate_write_preview which write type
             # this is — it dispatches internally and returns the right metadata.
             proposed = action.proposed_action
-            write_actions = {"create_assignment", "update_assignment", "send_reminder", "update_grade"}
+            write_actions = {"create_assignment", "update_assignment", "send_message", "update_grade"}
 
             if proposed.get("action") in write_actions:
                 # resolve the course for preview metadata (not for writing)
