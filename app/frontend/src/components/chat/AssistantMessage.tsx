@@ -1,4 +1,4 @@
-import { Bot } from "lucide-react";
+import { AlertTriangle, Bot } from "lucide-react";
 
 import { ActionCard } from "@/components/chat/ActionCard";
 import { ExplanationCard } from "@/components/chat/ExplanationCard";
@@ -33,6 +33,16 @@ export function AssistantMessage({ message }: AssistantMessageProps) {
         <div className="rounded-2xl rounded-tl-md bg-muted/70 px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap">
           {message.content}
         </div>
+
+        {message.safetyBlocked && message.safetyMessage ? (
+          <div
+            role="alert"
+            className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-950"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <p>{message.safetyMessage}</p>
+          </div>
+        ) : null}
 
         {message.explanation ? (
           <ExplanationCard explanation={message.explanation} />

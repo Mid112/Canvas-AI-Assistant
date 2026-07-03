@@ -11,7 +11,7 @@ import {
   confirmDryRunPreview,
   fetchDryRunPreview,
 } from "@/services/dryRunPreview";
-import { renderWithRouter } from "@test/utils/renderWithRouter";
+import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 vi.mock("@/services/dryRunPreview", () => ({
   DryRunPreviewError: class DryRunPreviewError extends Error {
@@ -25,7 +25,7 @@ const mockedFetch = vi.mocked(fetchDryRunPreview);
 const mockedConfirm = vi.mocked(confirmDryRunPreview);
 
 function renderPage(initialEntry = paths.instructor.dryRunPreview) {
-  return renderWithRouter(
+  return renderWithInstitution(
     <Routes>
       <Route path={paths.instructor.dryRunPreview} element={<DryRunPreviewPage />} />
       <Route path={paths.instructor.assistant} element={<InstructorAssistantPage />} />

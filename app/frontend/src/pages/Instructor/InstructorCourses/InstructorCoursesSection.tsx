@@ -11,7 +11,10 @@ import { Link } from "react-router-dom";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { getCourseAnalyticsPath } from "@/pages/Instructor/InstructorSubmissionsAnalysis/submissionNavigation";
-import { instructorCourseAssignmentsPath } from "@/routes/paths";
+import {
+  instructorCourseAssignmentsPath,
+  instructorCourseStudentsPath,
+} from "@/routes/paths";
 import { cn } from "@/lib/utils";
 import type { InstructorCourse } from "@/types/course";
 
@@ -96,11 +99,18 @@ export function InstructorCoursesCard({
           to={instructorCourseAssignmentsPath(course.id)}
           className={cn(buttonVariants(), "w-full")}
         >
-          View Course
+          Assignments
+        </Link>
+        <Link
+          to={instructorCourseStudentsPath(course.id)}
+          className={cn(buttonVariants({ variant: "outline" }), "w-full")}
+        >
+          <Users data-icon="inline-start" />
+          Students
         </Link>
         <Link
           to={getCourseAnalyticsPath(course.id)}
-          className={cn(buttonVariants({ variant: "outline" }), "w-full")}
+          className={cn(buttonVariants({ variant: "outline" }), "col-span-2 w-full")}
         >
           <BarChart3 data-icon="inline-start" />
           Analytics
@@ -174,10 +184,17 @@ export function InstructorCoursesList({
                 {activeCourseId === course.id ? "Active" : "Set Active"}
               </Button>
               <Link
+                to={instructorCourseStudentsPath(course.id)}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                <Users data-icon="inline-start" />
+                Students
+              </Link>
+              <Link
                 to={instructorCourseAssignmentsPath(course.id)}
                 className={buttonVariants({ size: "sm" })}
               >
-                View Course
+                Assignments
               </Link>
             </div>
           </li>

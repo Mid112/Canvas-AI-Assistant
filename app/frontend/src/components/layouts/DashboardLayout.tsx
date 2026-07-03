@@ -40,6 +40,12 @@ function getPageTitle(pathname: string, role: UserRole): string {
   if (pathname === paths.instructor.dryRunPreview) {
     return "Workflow Preview";
   }
+  if (pathname.includes("/students")) {
+    return "Course Students";
+  }
+  if (pathname.includes("/submissions")) {
+    return "Assignment Submissions";
+  }
   if (pathname.includes("/assignments/") && pathname.endsWith("/edit")) {
     return "Update Assignment";
   }

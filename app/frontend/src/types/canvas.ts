@@ -29,3 +29,12 @@ export interface CanvasTokenUpdateResponse {
   is_active: boolean;
   has_canvas_token: boolean;
 }
+
+/** Matches GET/PATCH /api/v1/canvas/active-course response body. */
+export interface ActiveCourseResponse {
+  local_id: number;
+  canvas_course_id: string;
+  canvas_url: string;
+  name: string;
+  term: string | null;
+}

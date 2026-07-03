@@ -14,6 +14,8 @@ import { ReviewPermissionsPage } from "@/pages/Auth/ReviewPermissionsPage";
 import { InstructorDashboardPage } from "@/pages/Instructor/InstructorDashboardPage";
 import { InstructorCoursesPage } from "@/pages/Instructor/InstructorCoursesPage";
 import { InstructorCourseAssignmentsPage } from "@/pages/Instructor/InstructorCourseAssignmentsPage";
+import { InstructorCourseStudentsPage } from "@/pages/Instructor/InstructorCourseStudentsPage";
+import { InstructorCourseSubmissionsPage } from "@/pages/Instructor/InstructorCourseSubmissionsPage";
 import { InstructorAssignmentCreatePage } from "@/pages/Instructor/InstructorAssignmentCreatePage";
 import { InstructorAssignmentUpdatePage } from "@/pages/Instructor/InstructorAssignmentUpdatePage";
 import { DryRunPreviewPage } from "@/pages/Instructor/DryRunPreviewPage";
@@ -84,6 +86,14 @@ export const router = createBrowserRouter([
                   {
                     path: paths.instructor.courseAssignments,
                     element: <InstructorCourseAssignmentsPage />,
+                  },
+                  {
+                    path: paths.instructor.courseStudents,
+                    element: <InstructorCourseStudentsPage />,
+                  },
+                  {
+                    path: paths.instructor.courseSubmissions,
+                    element: <InstructorCourseSubmissionsPage />,
                   },
                   {
                     path: paths.instructor.assignmentUpdate,

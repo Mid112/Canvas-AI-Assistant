@@ -7,6 +7,7 @@ import { LoadingIndicator } from "@/components/chat/LoadingIndicator";
 import { UserMessage } from "@/components/chat/UserMessage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { seedChatMessages } from "@/data/mockAssistantChat";
 import {
   AssistantApiError,
@@ -29,6 +30,7 @@ export function ChatWindow({
   onInitialPromptConsumed,
   onLoadingChange,
 }: ChatWindowProps) {
+  const { activeCourse } = useActiveCourse();
   const [messages, setMessages] = useState<ChatMessage[]>(seedChatMessages);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +59,10 @@ export function ChatWindow({
     setRetryMessage(userText);
 
     try {
-      const response = await sendAssistantMessage(userText);
+      const response = await sendAssistantMessage(userText, {
+        activeCourseLabel: activeCourse?.displayName,
+        activeCourseId: activeCourse?.localId,
+      });
 
       const assistantMessage: ChatMessage = {
         id: createMessageId(),
@@ -66,6 +71,8 @@ export function ChatWindow({
         timestamp: new Date(),
         explanation: response.explanation,
         interpretedAction: response.interpretedAction,
+        safetyBlocked: response.safetyBlocked,
+        safetyMessage: response.safetyMessage,
       };
 
       setMessages((current) => [...current, assistantMessage]);
@@ -80,7 +87,7 @@ export function ChatWindow({
       isDeliveringRef.current = false;
       setIsLoading(false);
     }
-  }, []);
+  }, [activeCourse?.displayName, activeCourse?.localId]);
 
   const handleSend = useCallback(
     (text: string) => {

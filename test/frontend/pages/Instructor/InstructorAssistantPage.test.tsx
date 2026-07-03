@@ -2,11 +2,11 @@ import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { InstructorAssistantPage } from "@/pages/Instructor/InstructorAssistantPage";
-import { renderWithRouter } from "@test/utils/renderWithRouter";
+import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 describe("InstructorAssistantPage", () => {
   it("renders the assistant header, suggested actions, and chat", () => {
-    renderWithRouter(<InstructorAssistantPage />);
+    renderWithInstitution(<InstructorAssistantPage />);
 
     expect(screen.getByText("AI Assistant")).toBeInTheDocument();
     expect(

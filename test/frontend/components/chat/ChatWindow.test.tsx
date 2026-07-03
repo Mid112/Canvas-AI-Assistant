@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +7,7 @@ import {
   AssistantApiError,
   sendAssistantMessage,
 } from "@/services/assistant";
+import { renderWithInstitution } from "../../utils/renderWithInstitution";
 
 vi.mock("@/services/assistant", async () => {
   const actual = await vi.importActual<typeof import("@/services/assistant")>(
@@ -32,7 +33,7 @@ describe("ChatWindow", () => {
   });
 
   it("shows the seeded welcome message", () => {
-    render(<ChatWindow />);
+    renderWithInstitution(<ChatWindow />);
 
     expect(
       screen.getByText(/Hello! I'm your Canvas AI Assistant/),
@@ -42,7 +43,7 @@ describe("ChatWindow", () => {
   it("shows an error for empty submissions", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
-    render(<ChatWindow />);
+    renderWithInstitution(<ChatWindow />);
 
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
@@ -54,7 +55,7 @@ describe("ChatWindow", () => {
   it("adds a user message and assistant reply after a delay", async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
-    render(<ChatWindow />);
+    renderWithInstitution(<ChatWindow />);
 
     await user.type(
       screen.getByRole("textbox", { name: "Chat message" }),
@@ -88,7 +89,7 @@ describe("ChatWindow", () => {
         explanation: "The assistant responded after a retry.",
       });
 
-    render(<ChatWindow />);
+    renderWithInstitution(<ChatWindow />);
 
     await user.type(
       screen.getByRole("textbox", { name: "Chat message" }),

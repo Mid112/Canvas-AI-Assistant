@@ -1,8 +1,10 @@
-import { AlertCircle, Loader2, Pencil } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { AlertCircle, Eye, Loader2, Pencil, Users } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
+import { DataTableToolbar } from "@/components/common/DataTableToolbar";
+import { TablePagination } from "@/components/common/TablePagination";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -17,7 +19,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
 import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
 import {
+  DEFAULT_PAGE_SIZE,
+  filterBySearch,
+  paginateItems,
+} from "@/lib/table-pagination";
+import {
   instructorAssignmentUpdatePath,
+  instructorCourseStudentsPath,
+  instructorCourseSubmissionsPath,
   paths,
 } from "@/routes/paths";
 import {
@@ -32,6 +41,9 @@ export function InstructorCourseAssignmentsPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const canvasUrl = getPrimaryCanvasConnectionUrl(user);
 
   const parsedLocalCourseId = Number(localCourseId);
@@ -44,8 +56,6 @@ export function InstructorCourseAssignmentsPage() {
     }
 
     const token = accessToken;
-    // Snapshot the URL used for this request so an auth/user refresh during the
-    // async load cannot switch Canvas hosts mid-flight.
     const selectedCanvasUrl = canvasUrl;
     let cancelled = false;
 
@@ -84,6 +94,29 @@ export function InstructorCourseAssignmentsPage() {
       cancelled = true;
     };
   }, [accessToken, canvasUrl, idIsValid, parsedLocalCourseId, user?.has_canvas_token]);
+
+  const filteredAssignments = useMemo(
+    () =>
+      filterBySearch(assignments, search, (assignment) =>
+        [assignment.name, String(assignment.id)].join(" "),
+      ),
+    [assignments, search],
+  );
+
+  const paginated = useMemo(
+    () => paginateItems(filteredAssignments, page, pageSize),
+    [filteredAssignments, page, pageSize],
+  );
+
+  const handleSearchChange = (value: string) => {
+    setSearch(value);
+    setPage(1);
+  };
+
+  const handlePageSizeChange = (value: number) => {
+    setPageSize(value);
+    setPage(1);
+  };
 
   if (!idIsValid) {
     return (
@@ -137,6 +170,13 @@ export function InstructorCourseAssignmentsPage() {
     <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
       <PageHeader localCourseId={parsedLocalCourseId} />
 
+      <DataTableToolbar
+        search={search}
+        onSearchChange={handleSearchChange}
+        searchLabel="Search assignments"
+        searchPlaceholder="Search by name or ID..."
+      />
+
       {assignments.length === 0 ? (
         <Card className="shadow-sm ring-1 ring-border/60">
           <CardContent className="p-6 text-center text-sm text-muted-foreground">
@@ -146,48 +186,81 @@ export function InstructorCourseAssignmentsPage() {
       ) : (
         <Card className="overflow-hidden shadow-sm ring-1 ring-border/60">
           <CardContent className="p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Assignment</TableHead>
-                  <TableHead>Due date</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {assignments.map((assignment) => (
-                  <TableRow key={assignment.id}>
-                    <TableCell>
-                      <div className="space-y-1">
-                        <p className="font-medium">{assignment.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          ID: {assignment.id}
-                        </p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {formatDueDateForDisplay(assignment.due_at)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        size="sm"
-                        render={
-                          <Link
-                            to={instructorAssignmentUpdatePath(
-                              parsedLocalCourseId,
-                              assignment.id,
-                            )}
-                          />
-                        }
-                      >
-                        <Pencil data-icon="inline-start" />
-                        Edit
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            {paginated.totalItems === 0 ? (
+              <p className="px-4 py-8 text-center text-sm text-muted-foreground">
+                No assignments match your search.
+              </p>
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Assignment</TableHead>
+                      <TableHead>Due date</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginated.items.map((assignment) => (
+                      <TableRow key={assignment.id}>
+                        <TableCell>
+                          <div className="space-y-1">
+                            <p className="font-medium">{assignment.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              ID: {assignment.id}
+                            </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {formatDueDateForDisplay(assignment.due_at)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              render={
+                                <Link
+                                  to={instructorCourseSubmissionsPath(
+                                    parsedLocalCourseId,
+                                    assignment.id,
+                                  )}
+                                />
+                              }
+                            >
+                              <Eye data-icon="inline-start" />
+                              Submissions
+                            </Button>
+                            <Button
+                              size="sm"
+                              render={
+                                <Link
+                                  to={instructorAssignmentUpdatePath(
+                                    parsedLocalCourseId,
+                                    assignment.id,
+                                  )}
+                                />
+                              }
+                            >
+                              <Pencil data-icon="inline-start" />
+                              Edit
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <TablePagination
+                  page={paginated.page}
+                  totalPages={paginated.totalPages}
+                  totalItems={paginated.totalItems}
+                  pageSize={paginated.pageSize}
+                  onPageChange={setPage}
+                  onPageSizeChange={handlePageSizeChange}
+                />
+              </>
+            )}
           </CardContent>
         </Card>
       )}
@@ -203,12 +276,21 @@ function PageHeader({ localCourseId }: { localCourseId: number }) {
           Course Assignments
         </h1>
         <p className="text-muted-foreground">
-          Select an assignment to update details for course #{localCourseId}.
+          Manage assignments and view submissions for course #{localCourseId}.
         </p>
       </div>
-      <Button variant="outline" render={<Link to={paths.instructor.courses} />}>
-        Back to courses
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          render={<Link to={instructorCourseStudentsPath(localCourseId)} />}
+        >
+          <Users data-icon="inline-start" />
+          Students
+        </Button>
+        <Button variant="outline" render={<Link to={paths.instructor.courses} />}>
+          Back to courses
+        </Button>
+      </div>
     </div>
   );
 }

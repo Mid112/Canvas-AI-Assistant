@@ -1,5 +1,8 @@
-import { Zap } from "lucide-react";
+import { ArrowRight, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
 
+import { Button } from "@/components/ui/button";
+import { paths } from "@/routes/paths";
 import type { InterpretedAction } from "@/types/chat";
 
 interface ActionCardProps {
@@ -7,6 +10,8 @@ interface ActionCardProps {
 }
 
 export function ActionCard({ action }: ActionCardProps) {
+  const hasLinks = action.primaryLink || action.secondaryLink;
+
   return (
     <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5">
       <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -27,6 +32,31 @@ export function ActionCard({ action }: ActionCardProps) {
           <dd className="font-medium">{action.affectedStudents}</dd>
         </div>
       </dl>
+
+      {hasLinks ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {action.primaryLink ? (
+            <Button
+              type="button"
+              size="sm"
+              render={<Link to={action.primaryLink.href} state={{ returnTo: paths.instructor.assistant }} />}
+            >
+              {action.primaryLink.label}
+              <ArrowRight className="size-3.5" aria-hidden="true" />
+            </Button>
+          ) : null}
+          {action.secondaryLink ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              render={<Link to={action.secondaryLink.href} />}
+            >
+              {action.secondaryLink.label}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

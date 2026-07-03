@@ -38,8 +38,11 @@ describe("InstructorCoursesCard", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("82%")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "View Course" }),
+      screen.getByRole("link", { name: "Assignments" }),
     ).toHaveAttribute("href", "/instructor/courses/1/assignments");
+    expect(
+      screen.getByRole("link", { name: "Students" }),
+    ).toHaveAttribute("href", "/instructor/courses/1/students");
     expect(
       screen.getByRole("button", { name: "Set Active" }),
     ).toBeInTheDocument();
@@ -83,7 +86,7 @@ describe("InstructorCoursesSection", () => {
     );
 
     expect(screen.getByText("Your Courses (2)")).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "View Course" })).toHaveLength(
+    expect(screen.getAllByRole("link", { name: "Assignments" })).toHaveLength(
       2,
     );
   });

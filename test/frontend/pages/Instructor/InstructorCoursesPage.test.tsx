@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInstitution } from "@/contexts/useInstitution";
 import { InstructorCoursesPage } from "@/pages/Instructor/InstructorCoursesPage";
-import { fetchCourses } from "@/services/canvas";
+import { fetchActiveCourse, fetchCourses } from "@/services/canvas";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 vi.mock("@/contexts/AuthContext", async () => {
@@ -29,10 +29,13 @@ vi.mock("@/services/canvas", () => ({
     }
   },
   fetchCourses: vi.fn(),
+  fetchActiveCourse: vi.fn(),
+  setActiveCourse: vi.fn(),
 }));
 
 const mockedUseAuth = vi.mocked(useAuth);
 const mockedFetchCourses = vi.mocked(fetchCourses);
+const mockedFetchActiveCourse = vi.mocked(fetchActiveCourse);
 
 const authWithoutCanvas = {
   user: {
@@ -96,6 +99,7 @@ describe("InstructorCoursesPage", () => {
     vi.clearAllMocks();
     mockedUseAuth.mockReturnValue(authWithoutCanvas);
     mockedFetchCourses.mockResolvedValue([]);
+    mockedFetchActiveCourse.mockResolvedValue(null);
   });
 
   it("renders the course management page instead of the placeholder", async () => {
