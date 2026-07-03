@@ -93,12 +93,12 @@ Time was tracked using Clockify for Jun 30, 2026 - Jul 2, 2026.
 
 | Team Member | Clockify Username | Logged Hours |
 |-------------|-------------------|--------------|
-| Mridul | mridulnohria21 | 02:37:10 |
+| Mridul | mridulnohria21 | 03:15:00 |
 | Bao | thanhvoiban | 04:02:57 |
 | Jessica | jessica goel | 04:52:28 |
 | Rhythm | trivedirhythm | 07:04:12 |
 | Yerdana | yerdana | 12:46:01 |
-| **Total** |  | **31:22:48** |
+| **Total** |  | **32:00:38** |
 
 ## Completed Tasks:
 
