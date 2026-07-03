@@ -19,13 +19,9 @@ class AuditLog(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False, index=True
-    )
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
 
-    workflow_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("workflows.id"), nullable=True
-    )
+    workflow_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("workflows.id"), nullable=True)
 
     action: Mapped[str] = mapped_column(String, nullable=False)
     details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
@@ -37,6 +33,4 @@ class AuditLog(Base):
     )
 
     user: Mapped[User] = relationship("User", back_populates="audit_logs")
-    workflow: Mapped[Workflow | None] = relationship(
-        "Workflow", back_populates="audit_logs"
-    )
+    workflow: Mapped[Workflow | None] = relationship("Workflow", back_populates="audit_logs")

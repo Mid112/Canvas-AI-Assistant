@@ -1,11 +1,12 @@
-# app/backend/app/services/llm/openai_compatible.py
 import httpx
 
 from app.services.llm.base import LLMAdapter
 
 
 class OpenAICompatibleAdapter(LLMAdapter):
-    """Works for any provider exposing POST {base_url}/chat/completions following the OpenAI API spec"""
+    """Works for any provider exposing POST {base_url}/chat/completions
+    following the OpenAI API spec. Covers vLLM (local) and any third-party
+    provider with an OpenAI-compatible endpoint (Groq, Together, etc.)."""
 
     def __init__(self, base_url: str, model: str, api_key: str | None = None):
         self.base_url = base_url.rstrip("/")
@@ -17,25 +18,25 @@ class OpenAICompatibleAdapter(LLMAdapter):
         system_prompt: str,
         user_message: str,
         timeout: float = 30.0,
+        history: list[dict] | None = None,
     ) -> str:
         headers = {"Content-Type": "application/json"}
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        payload = {
-            "model": self.model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-        }
+        messages = [{"role": "system", "content": system_prompt}]
+        if history:
+            # inject previous turns between the system prompt and the
+            # current user message so the LLM sees the full conversation
+            # context for follow up and refinement turns
+            messages.extend(history)
+        messages.append({"role": "user", "content": user_message})
 
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(
                 f"{self.base_url}/chat/completions",
                 headers=headers,
-                json=payload,
+                json={"model": self.model, "messages": messages},
             )
             response.raise_for_status()
-            data = response.json()
-            return data["choices"][0]["message"]["content"]
+            return response.json()["choices"][0]["message"]["content"]
