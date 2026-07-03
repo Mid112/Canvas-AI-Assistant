@@ -81,20 +81,16 @@ The project board for the **MVP Demo** milestone shows strong progress toward th
 | 1003 | Feature/student retrieval service | Bao | Done |
 | 1005 | Update feature/assignment retrieval service | Bao | Done |
 | 1007 | Feature/submission retrieval service | Bao | Done |
-| 1009 | Update cycle 11 log for Bao | Bao | Done |
 | 1011 | Add Canvas connection refresh & URL support | Mridul | Done |
-| 1012 | Document Cycle 11 report and project progress | Mridul | Done |
 | 1018 | Feature/missing submissions page | Rhythm | Done |
 | 1022 | Feature/backend authentication api | Bao | Done |
 | 1025 | Feature/backend instructor account manage | Bao | Done |
-| 1027 | Update Cycle 12 Report with detailed progress and goals | Mridul | Done |
 | 1029 | Add Canvas-backed course management page | Rhythm | Done |
 | 1035 | Feature/backend late submission analysis | Bao | Done |
 | 1037 | Feature/LLM update assignment | Yerdana | Done |
 | 1038 | Feature/LLM student messaging | Yerdana | Done |
 | 1036 | Feature/LLM post request | Yerdana | Done |
 | 1042 | Feature/LLM preview status | Yerdana | Done |
-| 971 | Team Log Cycle 13 | Yerdana | Done |
 
 ---
 
