@@ -70,6 +70,9 @@ We had team coordination this cycle to continue preparing the Canvas AI Assistan
 
 Add burn-up chart screenshot here.
 
+<img width="2048" height="1024" alt="image" src="https://github.com/user-attachments/assets/0d8b51dc-b308-425c-a291-23cf4512e77b" />
+
+
 Current project board progress shown:
 
 | Date | Open | Completed |
