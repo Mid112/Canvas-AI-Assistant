@@ -141,3 +141,41 @@ ACTION_SCHEMAS: dict[str, type[BaseModel]] = {
     "intent_preview": IntentPreviewAction,
     "respond": RespondAction,
 }
+
+
+ActionClassification = Literal["read_only", "modifying", "irreversible"]
+
+# Classifies every Canvas-touching action (conversational/meta actions like
+# out_of_scope/clarify/intent_preview/respond are intentionally absent —
+# they're not Canvas operations). "modifying" covers every reversible
+# write, both creating new resources (create_assignment) and updating
+# existing ones (update_assignment, set_active_course, update_grade) —
+# there's no separate "creating" bucket. "irreversible" is only actions
+# that can never be undone once submitted (send_message — posts a public
+# announcement that can't be un-sent).
+ACTION_CLASSIFICATION: dict[str, ActionClassification] = {
+    "fetch_courses": "read_only",
+    "fetch_assignments": "read_only",
+    "fetch_submissions": "read_only",
+    "get_active_course": "read_only",
+    # Writes a local UserPreference row only — no Canvas footprint, and not
+    # gated by the preview/confirm flow at all (not in dispatcher.py's
+    # write_actions set, executes immediately). Classified here purely for
+    # #863-865 metadata completeness, not because it goes through preview/confirm.
+    "set_active_course": "modifying",
+    "create_assignment": "modifying",
+    "update_assignment": "modifying",
+    # Dangling pre-existing action: previewable (write_preview.py has a
+    # builder for it) but never confirmable (no schema in ACTION_SCHEMAS,
+    # no execute case in dispatcher.py). Classified for consistency, not
+    # newly wired up here.
+    "update_grade": "modifying",
+    "send_message": "irreversible",
+}
+
+
+def is_reversible(action: str) -> bool:
+    """Fail-closed on unrecognized actions — this drives safety-facing
+    "can this be undone" messaging, so an unknown action should never be
+    silently treated as reversible."""
+    return ACTION_CLASSIFICATION.get(action) in ("read_only", "modifying")
