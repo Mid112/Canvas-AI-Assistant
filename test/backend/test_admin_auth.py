@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.config import settings
 from app.core.security import decode_access_token, hash_password, hash_token
 from app.main import app
-from app.models.audit_log import AuditLog
+from app.models.audit_log_session import AuditLogSession
 from app.models.session import Session
 from app.models.user import User
 
@@ -67,9 +67,9 @@ def admin_headers(admin_token):
 async def _get_audit_logs(user_id: int, action: str) -> list:
     async with _db() as db:
         result = await db.scalars(
-            select(AuditLog).where(
-                AuditLog.user_id == user_id,
-                AuditLog.action == action,
+            select(AuditLogSession).where(
+                AuditLogSession.user_id == user_id,
+                AuditLogSession.action == action,
             )
         )
         return list(result)

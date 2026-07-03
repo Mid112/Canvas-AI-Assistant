@@ -3,8 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password
-from app.models.audit_log import AuditLog
-from app.models.canvas_connection import CanvasConnection
+from app.models.audit_log_session import AuditLogSession
 from app.models.user import User
 from app.schemas.admin import CreateAdminRequest, CreateInstructorRequest, UpdateInstructorRequest
 
@@ -34,7 +33,7 @@ async def create_admin_user(
     )
     db.add(user)
     await db.flush()
-    db.add(AuditLog(
+    db.add(AuditLogSession(
         user_id=created_by.id,
         action="admin_created",
         details={"email": body.email, "new_admin_id": user.id},
