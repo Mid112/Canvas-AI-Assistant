@@ -25,6 +25,12 @@ class Submission(Base):
 
     status: Mapped[str] = mapped_column(String, nullable=False)
     score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    grade: Mapped[str | None] = mapped_column(String, nullable=True)
+    graded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    submitted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     assignment: Mapped[Assignment] = relationship("Assignment", back_populates="submissions")
