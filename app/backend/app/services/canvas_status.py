@@ -31,17 +31,31 @@ class CanvasWriteResult:
 
     success is always True here — services/canvas.py raises HTTPException
     on any Canvas error before returning, so a returned Pydantic object
-    always means the write succeeded."""
+    always means the write succeeded.
+
+    reversible/affected_resources are deliberately required (no default)
+    rather than action-name-derived internally — this envelope stays
+    action-agnostic (SRP: dispatcher.py already knows the action name and
+    is the one place that should decide what's reversible and what got
+    touched), and a required field forces each write case to wire them
+    correctly rather than silently default to something wrong."""
     action: str
     data: Any
+    reversible: bool
+    affected_resources: list[dict]
     success: bool = True
 
     def to_dict(self) -> dict:
-        return {
+        result = {
             "success": self.success,
             "action": self.action,
             "data": self.data.model_dump() if hasattr(self.data, "model_dump") else self.data,
+            "reversible": self.reversible,
+            "affected_resources": self.affected_resources,
         }
+        if not self.reversible:
+            result["reversibility_note"] = "This action was not reversible."
+        return result
 
 
 def return_execution_status(

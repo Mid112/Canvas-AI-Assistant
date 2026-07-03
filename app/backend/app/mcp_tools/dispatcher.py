@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.mcp_tools.schemas import ACTION_SCHEMAS
+from app.mcp_tools.schemas import ACTION_SCHEMAS, is_reversible
 from app.models.course import Course
 from app.models.message import Message
 from app.models.user import User
@@ -241,6 +241,11 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             result = CanvasWriteResult(
                 action="create_assignment",
                 data=assignment,
+                reversible=is_reversible("create_assignment"),
+                affected_resources=[
+                    {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
+                    {"type": "assignment", "id": assignment.id, "name": assignment.name, "status": "created"},
+                ],
             )
             return result.to_dict()
 
@@ -268,9 +273,30 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             assignment = await update_course_assignment(
                 course.id, action.assignment_id, payload, user, course.canvas_url, db
             )
+            changed_fields = [
+                field
+                for field, value in (
+                    ("title", action.title),
+                    ("description", action.description),
+                    ("due_date", action.due_date),
+                    ("points_possible", action.points_possible),
+                )
+                if value is not None
+            ]
             result = CanvasWriteResult(
                 action="update_assignment",
                 data=assignment,
+                reversible=is_reversible("update_assignment"),
+                affected_resources=[
+                    {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
+                    {
+                        "type": "assignment",
+                        "id": assignment.id,
+                        "name": assignment.name,
+                        "status": "modified",
+                        "changed_fields": changed_fields,
+                    },
+                ],
             )
             return result.to_dict()
 
@@ -291,6 +317,14 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             result = CanvasWriteResult(
                 action="send_message",
                 data=message_result,
+                reversible=is_reversible("send_message"),
+                affected_resources=[
+                    {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
+                    # id stays None — send_course_message discards
+                    # create_announcement's response, so the real Canvas
+                    # discussion-topic id isn't captured anywhere yet.
+                    {"type": "announcement", "id": None, "name": action.subject, "status": "created"},
+                ],
             )
             return result.to_dict()
 

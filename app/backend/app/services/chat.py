@@ -133,17 +133,21 @@ async def _sync_workflow_for_preview(
     user_prompt: str,
     proposed_action: dict,
 ) -> None:
-    """Creates or updates the Workflow row backing a write-action
-    intent_preview — the state machine handle_confirmed_action checks to
-    guarantee an action executes at most once. Scoped to WRITE_ACTIONS
-    only; read-action previews never get a row (see WRITE_ACTIONS comment).
+    """Creates or updates the Workflow row backing an intent_preview — the
+    state machine handle_confirmed_action checks to guarantee an action
+    executes at most once. Covers every action, not just WRITE_ACTIONS:
+    the system prompt requires *every* action, read or write, to go
+    through intent_preview -> confirm, so scoping this to writes only
+    would 404 every read-action confirm (e.g. "what courses do I have?")
+    — a real regression caught during manual verification, not a
+    deliberate design choice. AuditLog writing in handle_confirmed_action
+    stays gated to WRITE_ACTIONS separately, since audit rows are only
+    ever about actual Canvas mutations.
 
     Also backfills conversation.course_id from the proposed action the
     first time one is seen, since the client (e.g. the manual test
     harness) doesn't always send local_course_id up front."""
     action_name = proposed_action.get("action")
-    if action_name not in WRITE_ACTIONS:
-        return
 
     if conversation.course_id is None:
         local_course_id = proposed_action.get("local_course_id")
@@ -385,6 +389,26 @@ async def handle_chat_message(
     return conversation, result, False
 
 
+async def _claim_pending_workflow(db: AsyncSession, workflow: Workflow, new_status: str) -> bool:
+    """Atomically transitions a workflow from pending to new_status via a
+    conditional UPDATE, not a read-then-check race — two simultaneous
+    requests each run in their own DB transaction, so a plain
+    SELECT-then-check would let both pass under READ COMMITTED. The
+    conditional UPDATE takes a row lock instead: a concurrent duplicate
+    blocks until the first transaction commits, then correctly
+    re-evaluates against committed state and affects 0 rows. Returns
+    whether the claim succeeded; caller must commit immediately after a
+    successful claim to release the row lock before doing anything slow.
+    Shared by handle_confirmed_action (pending->executing) and
+    handle_cancelled_action (pending->cancelled) — same race, same fix."""
+    claim = await db.execute(
+        sa_update(Workflow)
+        .where(Workflow.id == workflow.id, Workflow.status == "pending")
+        .values(status=new_status)
+    )
+    return claim.rowcount > 0
+
+
 async def handle_confirmed_action(
     db: AsyncSession,
     user: User,
@@ -434,12 +458,7 @@ async def handle_confirmed_action(
             detail="Preview not found in this conversation.",
         )
 
-    claim = await db.execute(
-        sa_update(Workflow)
-        .where(Workflow.id == workflow.id, Workflow.status == "pending")
-        .values(status="executing")
-    )
-    if claim.rowcount == 0:
+    if not await _claim_pending_workflow(db, workflow, "executing"):
         raise HTTPException(
             status_code=409,
             detail=f"This action is no longer pending (status: {workflow.status}).",
@@ -491,29 +510,124 @@ async def handle_confirmed_action(
     workflow.executed_at = datetime.now(UTC)
     workflow.result_message_id = result_msg.id
 
-    resource_type, operation = _AUDIT_RESOURCE_MAP.get(
-        workflow.action_name, (workflow.action_name, "create")
-    )
-    # result["data"] comes from CanvasWriteResult.to_dict()'s plain
-    # .model_dump() (not mode="json"), so it can still contain native
-    # datetime objects — JSONB needs JSON-safe values. Round-trip through
-    # the same _json_dumps used for Message.content to normalize them.
-    data = json.loads(_json_dumps(result.get("data") or {}))
-    resource_id = str(data["id"]) if isinstance(data, dict) and data.get("id") is not None else None
-    db.add(
-        AuditLog(
-            user_id=user.id,
-            workflow_id=workflow.id,
-            course_id=workflow.course_id,
-            action=workflow.action_name,
-            resource_type=resource_type,
-            resource_id=resource_id,
-            operation=operation,
-            status="success",
-            after_data=data,
-            request_payload=workflow.proposed_action,
+    # AuditLog is only ever about actual Canvas mutations — read actions
+    # (e.g. fetch_courses) now get Workflow rows too (see
+    # _sync_workflow_for_preview), but must NOT get an audit row: their
+    # action_name isn't in _AUDIT_RESOURCE_MAP and would violate
+    # audit_logs' resource_type/operation CHECK constraints if written.
+    if workflow.action_name in WRITE_ACTIONS:
+        resource_type, operation = _AUDIT_RESOURCE_MAP.get(
+            workflow.action_name, (workflow.action_name, "create")
+        )
+        # result["data"] comes from CanvasWriteResult.to_dict()'s plain
+        # .model_dump() (not mode="json"), so it can still contain native
+        # datetime objects — JSONB needs JSON-safe values. Round-trip
+        # through the same _json_dumps used for Message.content to
+        # normalize them.
+        data = json.loads(_json_dumps(result.get("data") or {}))
+        resource_id = str(data["id"]) if isinstance(data, dict) and data.get("id") is not None else None
+        db.add(
+            AuditLog(
+                user_id=user.id,
+                workflow_id=workflow.id,
+                course_id=workflow.course_id,
+                action=workflow.action_name,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                operation=operation,
+                status="success",
+                after_data=data,
+                request_payload=workflow.proposed_action,
+            )
+        )
+
+    await db.commit()
+    return conversation, result, False
+
+
+async def handle_cancelled_action(
+    db: AsyncSession,
+    user: User,
+    conversation_id: int,
+    pending_message_id: int,
+) -> tuple[Conversation, dict, bool]:
+    """Cancels the action stored in a previous intent_preview message.
+    Mirrors handle_confirmed_action's load/verify steps, but never calls
+    execute_tool — cancelling never touches Canvas, only the Workflow's
+    status. Uses the same atomic claim as confirm (pending->cancelled
+    instead of pending->executing), which means a second cancel attempt,
+    or a confirm attempt after a cancel, both 409 for the identical
+    structural reason: only one pending->X transition can ever win.
+
+    Deliberately does NOT overwrite the preview Message's content (unlike
+    the "modify" flow) — messages stays the immutable transcript of what
+    was proposed, Workflow.status is the mutable state layer that actually
+    blocks re-use. Blurring that line again is exactly what the
+    Workflow/AuditLog redesign was for."""
+
+    conversation = await db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == user.id,
         )
     )
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+
+    workflow = await db.scalar(
+        select(Workflow).where(
+            Workflow.preview_message_id == pending_message_id,
+            Workflow.conversation_id == conversation_id,
+        )
+    )
+    if not workflow:
+        raise HTTPException(
+            status_code=404,
+            detail="Preview not found in this conversation.",
+        )
+
+    if not await _claim_pending_workflow(db, workflow, "cancelled"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"This action is no longer pending (status: {workflow.status}).",
+        )
+    await db.commit()
+    workflow.status = "cancelled"
+
+    # Workflow doesn't store the LLM's natural-language summary itself
+    # (only structured action_name/proposed_action) — load the preview
+    # message it's still linked to for a human-readable description.
+    preview_message = await db.scalar(
+        select(Message).where(Message.id == workflow.preview_message_id)
+    )
+    try:
+        stored = json.loads(preview_message.content) if preview_message else {}
+    except (json.JSONDecodeError, TypeError):
+        stored = {}
+    cancelled_action = stored.get("summary", workflow.action_name)
+
+    # source_user_message_id is a direct FK, pinned to the first turn that
+    # started this preview chain — reliable across any number of "modify"
+    # revisions without needing to infer position from message ids.
+    source_message = await db.scalar(
+        select(Message).where(Message.id == workflow.source_user_message_id)
+    )
+    original_request = source_message.content if source_message else workflow.user_prompt
+
+    await log_message(db, conversation, role="user", content="[cancelled action]")
+
+    result = {
+        "action": "cancelled",
+        "cancelled": True,
+        "cancelled_action": cancelled_action,
+        "cancelled_proposed_action": workflow.proposed_action,
+        "original_request": original_request,
+        "message": (
+            f'Cancelled — no changes were made. Your original request '
+            f'("{original_request}") was not completed.'
+        ),
+    }
+    await log_message(db, conversation, role="assistant", content=_json_dumps(result))
 
     await db.commit()
     return conversation, result, False

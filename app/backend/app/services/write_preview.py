@@ -2,6 +2,7 @@
 from datetime import datetime
 from typing import Any
 
+from app.mcp_tools.schemas import is_reversible
 from app.models.course import Course
 
 
@@ -39,6 +40,16 @@ def generate_write_preview(proposed_action: dict, course: Course) -> dict:
 # Course object, and returns a structured preview dict. They share the
 # same return shape so the frontend/terminal can handle them uniformly.
 
+def _reversibility_fields(action_type: str) -> dict:
+    """Shared #581 metadata every write preview carries — single source
+    of truth is is_reversible(), never hand-duplicated per builder."""
+    reversible = is_reversible(action_type)
+    fields = {"reversible": reversible}
+    if not reversible:
+        fields["reversibility_note"] = "This action cannot be undone once submitted."
+    return fields
+
+
 def _preview_create_assignment(course: Course, params: dict) -> dict:
     title = params.get("title", "Untitled")
     description = params.get("description", "")
@@ -62,6 +73,11 @@ def _preview_create_assignment(course: Course, params: dict) -> dict:
             f"Create assignment '{title.strip()}' in {course.name}, "
             f"due {due_display}, worth {points_display}."
         ),
+        "affected_resources": [
+            {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
+            {"type": "assignment", "id": None, "name": title.strip(), "status": "created"},
+        ],
+        **_reversibility_fields("create_assignment"),
     }
 
 
@@ -110,6 +126,17 @@ def _preview_update_assignment(course: Course, params: dict) -> dict:
             "unchanged_fields": unchanged,
         },
         "summary": summary,
+        "affected_resources": [
+            {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
+            {
+                "type": "assignment",
+                "id": assignment_id if assignment_id != "?" else None,
+                "name": None,
+                "status": "modified",
+                "changed_fields": list(changes.keys()),
+            },
+        ],
+        **_reversibility_fields("update_assignment"),
     }
 
 
@@ -129,6 +156,16 @@ def _preview_send_message(course: Course, params: dict) -> dict:
             f"Post \"{subject.strip()}\" as a public announcement visible to "
             f"the entire class in {course.name}."
         ),
+        "affected_resources": [
+            {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
+            {"type": "announcement", "id": None, "name": subject.strip(), "status": "created"},
+        ],
+        # Not a resource entry — an audience isn't an addressable object
+        # with a mutation status, it's a visibility scope. size is unknown
+        # at preview time (Canvas-free); populated with the real enrolled
+        # count at confirm time.
+        "audience": {"scope": "entire_class", "size": None},
+        **_reversibility_fields("send_message"),
     }
 
 
@@ -149,6 +186,18 @@ def _preview_update_grade(course: Course, params: dict) -> dict:
             f"Update grade for student {student_id} on assignment "
             f"{assignment_id} to {new_grade} in {course.name}."
         ),
+        "affected_resources": [
+            {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
+            {"type": "assignment", "id": assignment_id if assignment_id != "?" else None, "name": None, "status": "unchanged"},
+            {
+                "type": "submission",
+                "id": student_id if student_id != "?" else None,
+                "name": None,
+                "status": "modified",
+                "changed_fields": ["grade"],
+            },
+        ],
+        **_reversibility_fields("update_grade"),
     }
 
 
@@ -159,6 +208,8 @@ def _preview_generic(course: Course, params: dict) -> dict:
         "course": course.name,
         "metadata": {k: v for k, v in params.items() if k != "action"},
         "summary": f"Perform '{action_type}' on {course.name}.",
+        "affected_resources": [],
+        **_reversibility_fields(action_type),
     }
 
 
