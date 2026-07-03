@@ -19,7 +19,7 @@ from app.config import settings
 from app.core.security import decode_access_token
 from app.core.seeder import seed_admin
 from app.main import app
-from app.models.audit_log import AuditLog
+from app.models.audit_log_session import AuditLogSession
 from app.models.user import User
 
 
@@ -66,9 +66,9 @@ async def _get_user_by_email(email: str):
 async def _get_audit_logs(user_id: int, action: str) -> list:
     async with _db() as db:
         result = await db.scalars(
-            select(AuditLog).where(
-                AuditLog.user_id == user_id,
-                AuditLog.action == action,
+            select(AuditLogSession).where(
+                AuditLogSession.user_id == user_id,
+                AuditLogSession.action == action,
             )
         )
         return list(result)
