@@ -987,7 +987,9 @@ frontend components and testing those flows across the full stack.
 ### Clockify Report
 
 * **30/06 (Tuesday):** Using Clockify – Logged 3.25 hours
-  *(3 hours and 15 minutes for Canvas integration from backend endpoints and MVP progress)*
+
+<img width="2458" height="232" alt="image" src="https://github.com/user-attachments/assets/58ea7121-e87d-4d4e-9f8e-05e633358ae0" />
+
 
 * **01/07 (Wednesday):** Using Clockify – Logged 0 hours
 
