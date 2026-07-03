@@ -73,6 +73,7 @@ CREATE TABLE assignments (
     canvas_assignment_id VARCHAR UNIQUE NOT NULL,
     course_id            INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     title                VARCHAR NOT NULL,
+    description          TEXT,
     due_date             TIMESTAMPTZ,
     points_possible      FLOAT,
     created_at           TIMESTAMPTZ DEFAULT NOW()
@@ -89,8 +90,10 @@ CREATE TABLE submissions (
     assignment_id         INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
     student_canvas_id     VARCHAR NOT NULL,
     student_name          VARCHAR,
-    status                VARCHAR NOT NULL CHECK (status IN ('missing', 'late', 'submitted')),
+    status                VARCHAR NOT NULL CHECK (status IN ('missing', 'late', 'submitted', 'graded', 'unsubmitted', 'excused')),
     score                 FLOAT,
+    grade                 VARCHAR,
+    graded_at             TIMESTAMPTZ,
     submitted_at          TIMESTAMPTZ
 );
 
@@ -141,9 +144,9 @@ CREATE INDEX idx_workflows_conversation_id ON workflows(conversation_id);
 CREATE INDEX idx_workflows_status ON workflows(status);
 
 -- ─────────────────────────────────────────────
--- Audit Logs
+-- Audit Log Sessions
 -- ─────────────────────────────────────────────
-CREATE TABLE audit_logs (
+CREATE TABLE audit_logs_session (
     id           SERIAL PRIMARY KEY,
     user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     workflow_id  INTEGER REFERENCES workflows(id) ON DELETE SET NULL,
@@ -152,8 +155,8 @@ CREATE TABLE audit_logs (
     timestamp    TIMESTAMPTZ DEFAULT NOW()
 );
 
-CREATE INDEX idx_audit_logs_user_id ON audit_logs(user_id);
-CREATE INDEX idx_audit_logs_timestamp ON audit_logs(timestamp);
+CREATE INDEX idx_audit_logs_session_user_id ON audit_logs_session(user_id);
+CREATE INDEX idx_audit_logs_session_timestamp ON audit_logs_session(timestamp);
 
 -- ─────────────────────────────────────────────
 -- Message Templates

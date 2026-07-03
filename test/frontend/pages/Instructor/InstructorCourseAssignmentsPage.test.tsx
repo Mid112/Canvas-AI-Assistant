@@ -4,7 +4,7 @@ import { Route, Routes } from "react-router-dom";
 
 import { InstructorCourseAssignmentsPage } from "@/pages/Instructor/InstructorCourseAssignmentsPage";
 import { fetchCourseAssignments } from "@/services/assignments";
-import { renderWithRouter } from "@test/utils/renderWithRouter";
+import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 vi.mock("@/services/assignments", () => ({
   AssignmentApiError: class AssignmentApiError extends Error {
@@ -14,6 +14,7 @@ vi.mock("@/services/assignments", () => ({
 }));
 
 const mockUseAuth = vi.fn();
+const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
 
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
@@ -26,7 +27,7 @@ vi.mock("@/contexts/AuthContext", async () => {
   };
 });
 
-const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
+const CANVAS_URL = "http://localhost:3000";
 
 const authWithCanvas = {
   user: {
@@ -39,7 +40,7 @@ const authWithCanvas = {
     canvas_connections: [
       {
         id: 1,
-        canvas_url: "http://localhost:3000",
+        canvas_url: CANVAS_URL,
         created_at: "2026-06-26T00:00:00.000Z",
       },
     ],
@@ -50,10 +51,11 @@ const authWithCanvas = {
   login: vi.fn(),
   register: vi.fn(),
   logout: vi.fn(),
+  refreshUser: vi.fn(),
 };
 
 function renderPage(localCourseId = "3") {
-  return renderWithRouter(
+  return renderWithInstitution(
     <Routes>
       <Route
         path="/instructor/courses/:localCourseId/assignments"
@@ -96,7 +98,7 @@ describe("InstructorCourseAssignmentsPage", () => {
     expect(mockedFetchCourseAssignments).toHaveBeenCalledWith(
       3,
       "token",
-      "http://localhost:3000",
+      CANVAS_URL,
     );
 
     const editLink = screen.getByRole("link", { name: "Edit" });

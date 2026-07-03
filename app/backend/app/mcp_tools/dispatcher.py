@@ -7,16 +7,34 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.integrations.canvas import fetch_enrollments
 from app.mcp_tools.schemas import ACTION_SCHEMAS
 from app.models.course import Course
 from app.models.user import User
+from app.schemas.canvas import SubmissionResponse
 from app.services.canvas import (
     get_active_course,
     get_assignments,
     get_courses,
     get_submissions,
+    require_canvas_token,
     set_active_course,
 )
+
+
+async def _add_person_submission_summary(course, submissions: list[SubmissionResponse], user, db) -> str:
+    """Resolves user_id -> name for display purposes only. This data
+    never goes back into the LLM's context"""
+    token = require_canvas_token(user, course.canvas_url)
+    enrollments = await fetch_enrollments(int(course.canvas_course_id), token, course.canvas_url)
+    name_by_id = {e["user_id"]: e["user"]["name"] for e in enrollments if "user" in e}
+
+    lines = []
+    for s in submissions:
+        name = name_by_id.get(s.user_id, f"Student {s.user_id}")
+        status = "submitted" if s.workflow_state == "submitted" else "has not submitted"
+        lines.append(f"{name} {status}")
+    return "\n".join(lines)
 
 
 def _extract_json(raw_llm_output: str) -> str:
@@ -32,9 +50,6 @@ def _extract_json(raw_llm_output: str) -> str:
         return match.group(0)
 
     return without_thinking.strip()
-
-
-
 
 
 class ToolExecutionError(Exception):
@@ -90,9 +105,7 @@ async def _resolve_course(db: AsyncSession, user: User, local_course_id: int) ->
     """Shared ownership check used by every action that takes a course ID.
     Centralizing this means the 'is this course actually yours' check
     can never be forgotten in a new tool."""
-    course = await db.scalar(
-        select(Course).where(Course.id == local_course_id, Course.instructor_id == user.id)
-    )
+    course = await db.scalar(select(Course).where(Course.id == local_course_id, Course.instructor_id == user.id))
     if not course:
         raise ToolExecutionError(
             "That course could not be found in your account.",
@@ -113,17 +126,17 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
 
         case "fetch_assignments":
             course = await _resolve_course(db, user, action.local_course_id)
-            assignments = await get_assignments(
-                int(course.canvas_course_id), user, course.canvas_url
-            )
+            assignments = await get_assignments(int(course.canvas_course_id), user, course.canvas_url)
             return {"assignments": [a.model_dump() for a in assignments]}
 
         case "fetch_submissions":
             course = await _resolve_course(db, user, action.local_course_id)
-            submissions = await get_submissions(
-                int(course.canvas_course_id), action.assignment_id, user, course.canvas_url
-            )
-            return {"submissions": [s.model_dump() for s in submissions]}
+            submissions = await get_submissions(int(course.canvas_course_id), action.assignment_id, user, course.canvas_url)
+            summary = await _add_person_submission_summary(course, submissions, user, db)
+            return {
+                "submissions": [s.model_dump() for s in submissions],
+                "summary": summary,
+            }
 
         case "set_active_course":
             result = await set_active_course(user, action.local_course_id, db)
@@ -132,6 +145,33 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
         case "get_active_course":
             result = await get_active_course(user, db)
             return {"active_course": result.model_dump() if result else None}
+
+        case "out_of_scope":
+            return {
+                "out_of_scope": True,
+                "message": "Your Request is Out of Scope, it can't be processed.",
+                "detail": action.message,
+            }
+
+        case "clarify":
+            # stores the partial plan in the conversation history so the next prompt can be appended on top as a context
+
+            return {
+                "clarify": True,
+                "question": action.question,
+                "partial_plan": action.partial_plan,
+            }
+
+        case "intent_preview":
+            # shows the user what will happen before executing anything
+
+            return {
+                "intent_preview": True,
+                "summary": action.summary,
+                "proposed_action": action.proposed_action,
+            }
+        case "respond":
+            return {"message": action.message}
 
         case _:
             # unreachable given parse_action's validation, but keeps mypy/runtime honest

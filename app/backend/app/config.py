@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Canvas Helper AI Assistant"
     API_V1_PREFIX: str = "/api/v1"
     DEBUG: bool = False
+    DEFAULT_LLM_PROVIDER: str = "groq"
 
     # CORS. NoDecode stops pydantic-settings from trying to JSON-parse the env
     # value so our validator can split a plain comma-separated string instead.
@@ -36,6 +37,12 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
+    # Seed admin — set both to auto-create the first admin on startup.
+    # Unset (or leave empty) in production once the account exists.
+    ADMIN_EMAIL: str | None = None
+    ADMIN_PASSWORD: str | None = None
+    ADMIN_NAME: str = "Administrator"
+
     # Canvas API
     # base domain only — /api/v1 is appended by the integration layer
     CANVAS_API_URL: str = "https://canvas.ubc.ca"
@@ -46,13 +53,16 @@ class Settings(BaseSettings):
     VLLM_BASE_URL: str = "http://host.docker.internal:8001/v1"
     VLLM_MODEL: str = "Qwen/Qwen3-4B"
 
+    # LLM — Groq (hosted, OpenAI-compatible)
+    GROQ_API_KEY: str = ""
+
     @field_validator("CANVAS_TOKEN_ENCRYPTION_KEY", mode="before")
     @classmethod
     def _validate_encryption_key(cls, v: str) -> str:
         if not v:
             raise ValueError(
                 "CANVAS_TOKEN_ENCRYPTION_KEY must be set. "
-                "Generate one with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\""
+                'Generate one with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
             )
         return v
 
@@ -60,5 +70,6 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
 
 settings = get_settings()

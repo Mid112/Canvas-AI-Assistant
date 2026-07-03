@@ -17,9 +17,7 @@ class Message(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    conversation_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("conversations.id"), nullable=False, index=True
-    )
+    conversation_id: Mapped[int] = mapped_column(Integer, ForeignKey("conversations.id"), nullable=False, index=True)
 
     role: Mapped[str] = mapped_column(String, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -29,6 +27,4 @@ class Message(Base):
         default=lambda: datetime.now(UTC),
     )
 
-    conversation: Mapped[Conversation] = relationship(
-        "Conversation", back_populates="messages"
-    )
+    conversation: Mapped[Conversation] = relationship("Conversation", back_populates="messages")

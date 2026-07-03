@@ -32,6 +32,10 @@ vi.mock("@/contexts/AuthContext", () => ({
   }),
 }));
 
+vi.mock("@/hooks/useCanvasConnectionUrl", () => ({
+  useCanvasConnectionUrl: () => "https://canvas.university.edu",
+}));
+
 vi.mock("@/services/assignmentCreator", () => ({
   AssignmentCreatorApiError: class AssignmentCreatorApiError extends Error {
     name = "AssignmentCreatorApiError";

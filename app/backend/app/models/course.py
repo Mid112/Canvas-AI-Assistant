@@ -26,9 +26,7 @@ class Course(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     term: Mapped[str | None] = mapped_column(String, nullable=True)
 
-    instructor_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False
-    )
+    instructor_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -36,9 +34,5 @@ class Course(Base):
     )
 
     instructor: Mapped[User] = relationship("User", back_populates="courses")
-    assignments: Mapped[list[Assignment]] = relationship(
-        "Assignment", back_populates="course", cascade="all, delete-orphan"
-    )
-    students: Mapped[list[Student]] = relationship(
-        "Student", back_populates="course", cascade="all, delete-orphan"
-    )
+    assignments: Mapped[list[Assignment]] = relationship("Assignment", back_populates="course", cascade="all, delete-orphan")
+    students: Mapped[list[Student]] = relationship("Student", back_populates="course", cascade="all, delete-orphan")
