@@ -170,6 +170,9 @@ Time was tracked using Clockify for **Cycle 13 (Jun 30, 2026 – Jul 2, 2026)**.
 
 ### Team Summary
 
+<img width="2456" height="1552" alt="image" src="https://github.com/user-attachments/assets/a8239ed2-f727-435b-8a89-e24c3a90f445" />
+
+
 | Team Member | Clockify Username | Logged Time |
 |---|---|---:|
 | Mridul | mridulnohria21 | 02:37:10 |
@@ -181,23 +184,28 @@ Time was tracked using Clockify for **Cycle 13 (Jun 30, 2026 – Jul 2, 2026)**.
 
 ### Jessica
 
-Add Jessica Clockify screenshot here.
+<img width="2438" height="776" alt="image" src="https://github.com/user-attachments/assets/694dee9d-822b-48a0-ae73-643a6b4898d0" />
+
 
 ### Rhythm
 
-Add Rhythm Clockify screenshot here.
+<img width="2458" height="804" alt="image" src="https://github.com/user-attachments/assets/8a8df430-fe60-45a8-ab62-d30ef5fbe641" />
+
 
 ### Mridul
 
-Add Mridul Clockify screenshot here.
+<img width="2448" height="772" alt="image" src="https://github.com/user-attachments/assets/dea0d6cf-3a5e-46f1-929a-b6236cdde50f" />
+
 
 ### Bao
 
-Add Bao Clockify screenshot here.
+<img width="2454" height="820" alt="image" src="https://github.com/user-attachments/assets/7fe439c9-a200-42b5-b6f4-5706c10e36dc" />
+
 
 ### Yerdana
 
-Add Yerdana Clockify screenshot here.
+<img width="2434" height="760" alt="image" src="https://github.com/user-attachments/assets/23d57a12-1f15-41de-8cd4-5e313871a243" />
+
 
 ---
 
