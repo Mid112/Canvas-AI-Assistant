@@ -163,12 +163,26 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             }
 
         case "intent_preview":
-            # shows the user what will happen before executing anything
+            action_name = action.proposed_action.get("action", "unknown")
+            course_name = None
+            local_course_id = action.proposed_action.get("local_course_id")
+            if local_course_id is not None:
+                course = await db.scalar(select(Course).where(Course.id == local_course_id))
+                course_name = course.name if course else None
 
+            from app.services.preview import build_action_preview
+
+            preview = build_action_preview(
+                action_name,
+                action.summary,
+                action.proposed_action,
+                course_name=course_name,
+            )
             return {
                 "intent_preview": True,
                 "summary": action.summary,
                 "proposed_action": action.proposed_action,
+                **preview,
             }
         case "respond":
             return {"message": action.message}

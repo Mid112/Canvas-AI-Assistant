@@ -195,7 +195,45 @@ CREATE INDEX idx_students_course_id ON students(course_id);
 -- User Preferences (one row per user)
 -- ─────────────────────────────────────────────
 CREATE TABLE user_preferences (
-    user_id          INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    active_course_id INTEGER REFERENCES courses(id) ON DELETE SET NULL,
-    updated_at       TIMESTAMPTZ DEFAULT NOW()
+    user_id                 INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    active_course_id        INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    notification_settings   JSONB NOT NULL DEFAULT '{}',
+    updated_at              TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Password reset tokens
+CREATE TABLE password_reset_tokens (
+    id           SERIAL PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash   VARCHAR NOT NULL UNIQUE,
+    expires_at   TIMESTAMPTZ NOT NULL,
+    used_at      TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
+
+-- Message drafts
+CREATE TABLE message_drafts (
+    id             SERIAL PRIMARY KEY,
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    course_id      INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    subject        VARCHAR NOT NULL,
+    body           TEXT NOT NULL,
+    template_id    VARCHAR,
+    template_name  VARCHAR,
+    recipients     JSONB NOT NULL DEFAULT '[]',
+    status         VARCHAR NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'sent')),
+    sent_at        TIMESTAMPTZ,
+    created_at     TIMESTAMPTZ DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_message_drafts_user_id ON message_drafts(user_id);
+
+-- Admin system settings
+CREATE TABLE system_settings (
+    key         VARCHAR PRIMARY KEY,
+    value       JSONB NOT NULL,
+    updated_at  TIMESTAMPTZ DEFAULT NOW()
 );

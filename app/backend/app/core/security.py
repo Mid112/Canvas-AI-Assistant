@@ -1,4 +1,6 @@
 from datetime import UTC, datetime, timedelta
+import hashlib
+import secrets
 
 from cryptography.fernet import Fernet
 from jose import jwt
@@ -17,15 +19,32 @@ def verify_password(plain: str, hashed: str) -> bool:
     return pwd_context.verify(plain, hashed)
 
 
-def create_access_token(subject: str | int) -> str:
+def create_access_token(subject: str | int, role: str = "instructor") -> str:
+    token, _ = create_access_token_with_expiry(subject, role=role)
+    return token
+
+
+def create_access_token_with_expiry(
+    subject: str | int,
+    role: str = "instructor",
+) -> tuple[str, datetime]:
     expire = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {"sub": str(subject), "exp": expire}
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    payload = {"sub": str(subject), "role": role, "exp": expire}
+    token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    return token, expire
 
 
-def decode_access_token(token: str) -> str:
+def decode_access_token(token: str) -> tuple[str, str]:
     payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-    return payload["sub"]
+    return payload["sub"], payload.get("role", "instructor")
+
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def generate_reset_token() -> str:
+    return secrets.token_urlsafe(32)
 
 
 def _fernet() -> Fernet:

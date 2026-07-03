@@ -15,6 +15,8 @@ from app.schemas.canvas import (
     SubmissionResponse,
 )
 from app.schemas.student import StudentResponse
+from app.schemas.preview import ActionPreviewResponse, AssignmentDraftRequest, AssignmentDraftResponse
+from app.services.assignment_draft import generate_assignment_draft
 from app.services.canvas import (
     create_course_assignment,
     get_active_course,
@@ -26,6 +28,7 @@ from app.services.canvas import (
     update_course_assignment,
 )
 from app.services.student import get_students
+from app.services.preview import build_action_preview
 
 router = APIRouter(prefix="/canvas", tags=["canvas"])
 
@@ -47,6 +50,35 @@ async def list_assignments(
     db: AsyncSession = Depends(get_db),
 ):
     return await get_assignments(course_id, current_user, canvas_url, db)
+
+
+@router.post("/courses/{course_id}/assignments/generate-draft", response_model=AssignmentDraftResponse)
+async def generate_assignment_draft_endpoint(
+    course_id: int,
+    body: AssignmentDraftRequest,
+    current_user: User = Depends(get_current_user),
+):
+    return await generate_assignment_draft(body)
+
+
+@router.post("/courses/{course_id}/assignments/preview", response_model=ActionPreviewResponse)
+async def preview_assignment_endpoint(
+    course_id: int,
+    body: AssignmentCreate,
+    current_user: User = Depends(get_current_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.canvas import get_owned_course
+
+    course = await get_owned_course(course_id, current_user, canvas_url, db)
+    preview = build_action_preview(
+        "create_assignment",
+        f"Create assignment '{body.name}' in {course.name}",
+        body.model_dump(mode="json"),
+        course_name=course.name,
+    )
+    return ActionPreviewResponse(**preview)
 
 
 @router.post("/courses/{course_id}/assignments", response_model=AssignmentResponse)

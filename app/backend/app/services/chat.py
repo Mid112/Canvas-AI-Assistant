@@ -11,10 +11,12 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_action
 from app.mcp_tools.schemas import ACTION_SCHEMAS
+from app.models.audit_log import AuditLog
 from app.models.conversation import Conversation
 from app.models.message import Message
 from app.models.user import User
 from app.services.llm.llm_setting import get_llm_adapter
+from app.services.workflow import record_workflow_from_chat
 
 LLM_TIMEOUT_SECONDS = 90.0
 HISTORY_WINDOW = 10  # how many previous messages to send to the LLM
@@ -164,6 +166,17 @@ async def handle_chat_message(
         return conversation, {"error": e.user_message}, True
 
     await log_message(db, conversation, role="assistant", content=str(result))
+
+    if result.get("intent_preview"):
+        await record_workflow_from_chat(
+            db,
+            user,
+            conversation.id,
+            intent=result.get("proposed_action", {}).get("action", "intent_preview"),
+            preview_data=result,
+            status="pending",
+        )
+
     await db.commit()
     return conversation, result, False
 
@@ -194,6 +207,24 @@ async def handle_confirmed_action(
         return conversation, {"error": e.user_message}, True
 
     await log_message(db, conversation, role="assistant", content=str(result))
+
+    workflow = await record_workflow_from_chat(
+        db,
+        user,
+        conversation.id,
+        intent=proposed_action.get("action", "confirmed_action"),
+        preview_data={"proposed_action": proposed_action, "result": result},
+        status="approved",
+    )
+    db.add(
+        AuditLog(
+            user_id=user.id,
+            workflow_id=workflow.id,
+            action="workflow_executed",
+            details={"proposed_action": proposed_action},
+        )
+    )
+
     await db.commit()
     return conversation, result, False
 
