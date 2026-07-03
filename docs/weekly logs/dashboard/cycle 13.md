@@ -166,41 +166,46 @@ Time was tracked using Clockify for **Cycle 13 (Jun 30, 2026 – Jul 2, 2026)**.
 
 ### Team Summary
 
-<img width="2456" height="1552" alt="image" src="https://github.com/user-attachments/assets/a8239ed2-f727-435b-8a89-e24c3a90f445" />
-
-
 | Team Member | Clockify Username | Logged Time |
 |---|---|---:|
-| Mridul | mridulnohria21 | 02:37:10 |
+| Mridul | mridulnohria21 | 03:15:00 |
 | Bao | thanhvoiban | 04:02:57 |
 | Jessica | jessica goel | 04:52:28 |
 | Rhythm | trivedirhythm | 07:04:12 |
 | Yerdana | yerdana | 12:46:01 |
-| **Total** |  | **31:22:48** |
+| **Total** |  | **32:00:38** |
+
+<img width="2430" height="1520" alt="image" src="https://github.com/user-attachments/assets/34a3a4f3-6d8a-4c54-9ce9-a3371e91f677" />
+
+
+
 
 ### Jessica
 
-<img width="2438" height="776" alt="image" src="https://github.com/user-attachments/assets/694dee9d-822b-48a0-ae73-643a6b4898d0" />
+<img width="2444" height="822" alt="image" src="https://github.com/user-attachments/assets/80d8d146-0a37-4c4c-ab5c-89b36d2b4323" />
 
 
 ### Rhythm
 
-<img width="2458" height="804" alt="image" src="https://github.com/user-attachments/assets/8a8df430-fe60-45a8-ab62-d30ef5fbe641" />
+<img width="2446" height="774" alt="image" src="https://github.com/user-attachments/assets/cad06dc4-b968-45d7-9e08-3005ce78151a" />
 
 
 ### Mridul
 
-<img width="2448" height="772" alt="image" src="https://github.com/user-attachments/assets/dea0d6cf-3a5e-46f1-929a-b6236cdde50f" />
+<img width="2472" height="832" alt="image" src="https://github.com/user-attachments/assets/1c72b620-f1fd-4866-aaf0-a5650674381a" />
+
 
 
 ### Bao
 
-<img width="2454" height="820" alt="image" src="https://github.com/user-attachments/assets/7fe439c9-a200-42b5-b6f4-5706c10e36dc" />
+<img width="2470" height="806" alt="image" src="https://github.com/user-attachments/assets/8013b804-8994-44de-a08a-8e3d93b2bb4b" />
+
 
 
 ### Yerdana
 
-<img width="2434" height="760" alt="image" src="https://github.com/user-attachments/assets/23d57a12-1f15-41de-8cd4-5e313871a243" />
+<img width="2442" height="778" alt="image" src="https://github.com/user-attachments/assets/3897a623-8f04-44d5-bc7e-96ae81dbf166" />
+
 
 
 ---
