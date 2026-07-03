@@ -19,7 +19,10 @@ export function InstructorCoursesHeader({
   const connectionUrl = useCanvasConnectionUrl();
   const canvasHost =
     connectionUrl ?? getInstitutionCanvasUrl(selectedInstitution.id);
-  const newCourseUrl = canvasHost ? `${canvasHost}/courses` : undefined;
+  const normalizedCanvasHost = canvasHost?.replace(/\/$/, "");
+  const newCourseUrl = normalizedCanvasHost
+    ? `${normalizedCanvasHost}/courses`
+    : undefined;
 
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">

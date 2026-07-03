@@ -43,6 +43,16 @@ describe("InstructorCoursesHeader", () => {
     vi.unstubAllEnvs();
   });
 
+  it("strips a trailing slash from the Canvas host before building the new course URL", () => {
+    mockUseCanvasConnectionUrl.mockReturnValue(`${CANVAS_URL}/`);
+
+    renderWithInstitution(<InstructorCoursesHeader />);
+
+    expect(
+      screen.getByRole("link", { name: "New Course" }),
+    ).toHaveAttribute("href", `${CANVAS_URL}/courses`);
+  });
+
   it("renders a sync button when refresh is available", () => {
     renderWithInstitution(
       <InstructorCoursesHeader onRefreshCourses={() => undefined} />,
