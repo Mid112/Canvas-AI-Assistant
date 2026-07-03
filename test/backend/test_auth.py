@@ -144,7 +144,7 @@ def test_delete_current_user(client):
     response = client.delete("/api/v1/auth/me", headers=headers)
 
     assert response.status_code == 204
-    assert client.get("/api/v1/auth/me", headers=headers).status_code == 403
+    assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
 
 
 def test_set_canvas_token(client):

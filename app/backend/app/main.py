@@ -11,7 +11,7 @@ from app.config import settings
 from app.core.database import AsyncSessionLocal, Base, engine
 from app.core.limiter import limiter
 from app.core.seeder import seed_admin
-from app.routers import admin, auth, canvas, chat
+from app.routers import admin, auth, canvas, chat, message_templates
 
 
 @asynccontextmanager

@@ -17,20 +17,14 @@ from app.schemas.auth import (
     UserUpdateRequest,
 )
 from app.services.auth import (
-    delete_current_user,
-    login_user,
-    register_user,
-    remove_canvas_connection,
-    update_canvas_token,
-    update_current_user,
-)
-from app.services.auth import (
     admin_login_user,
+    delete_current_user,
     login_user,
     logout_admin,
     register_user,
     remove_canvas_connection,
     update_canvas_token,
+    update_current_user,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
