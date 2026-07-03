@@ -881,6 +881,80 @@ Overall, this cycle strengthened the frontend implementation while improving col
 * Document completed features and testing results
 * Maintain consistent Clockify tracking
 
+# **Cycle 13: Tuesday (30/6) ~ Thursday (2/7)**
+
+### **Tuesday (30/6)**
+
+**Timesheet**  
+**Clockify Report:** 2:12:31
+<img width="1333" height="164" alt="Screenshot 2026-07-03 at 12 28 49 PM" src="https://github.com/user-attachments/assets/dff36827-4f17-4fb6-af3e-26646c82968a" />
+
+**Current Tasks**
+- Participated in the weekly team meeting
+- Discussed sprint progress, outstanding issues, and upcoming deliverables
+- Reviewed teammate pull requests
+- Verified code quality and provided implementation feedback
+- Discussed frontend and backend integration plans with the team
+
+---
+
+### **Wednesday (1/7)**
+
+**Timesheet**  
+**Clockify Report:** 0:00:00
+
+**Current Tasks**
+- No project work completed
+- No Clockify hours logged
+
+---
+
+### **Thursday (2/7)**
+
+**Timesheet**  
+**Clockify Report:** 2:39:57
+<img width="1325" height="153" alt="Screenshot 2026-07-03 at 12 28 55 PM" src="https://github.com/user-attachments/assets/e58e47cb-b0cb-4f91-9c47-343dde4d7395" />
+
+**Current Tasks**
+- Continued frontend development
+- Worked on backend implementation tasks
+- Integrated frontend components with backend functionality
+- Tested implemented changes locally
+- Fixed minor issues discovered during development
+- Prepared completed work for future code review
+
+---
+
+## **Cycle 13 – Goal Review**
+
+### **Reflection**
+
+This cycle focused on progressing both frontend and backend implementation while maintaining collaboration through the weekly team meeting. Development efforts centered on implementing new functionality, testing completed work, and preparing code for integration. Pull request reviews also helped maintain code quality and ensure project consistency.
+
+### **Retrospective**
+
+The cycle began with the weekly team meeting, where the team reviewed sprint progress, discussed current implementation challenges, and planned upcoming development tasks. These discussions helped coordinate frontend and backend priorities for the next stage of the project.
+
+Development work during the cycle focused on implementing frontend features alongside backend functionality. Time was spent integrating components, testing changes locally, and resolving minor issues identified during implementation. Pull request reviews remained an important part of the workflow, ensuring that contributions met the project's coding standards before integration.
+
+No project work was completed on Wednesday, allowing development to resume on Thursday with a focus on implementation and testing.
+
+Overall, this cycle contributed to steady progress toward completing remaining project functionality while maintaining collaboration and code quality through regular reviews and team communication.
+
+---
+
+## **Next Cycle Goals (Cycle 14: Friday 3/7 ~ Monday 6/7)**
+
+* Continue frontend and backend feature implementation
+* Complete remaining integration tasks
+* Review and merge outstanding pull requests
+* Perform additional testing and bug fixing
+* Improve application stability before the next milestone
+* Continue project board maintenance and sprint planning
+* Participate in team meetings and implementation discussions
+* Update documentation for completed features
+* Prepare completed functionality for final integration
+* Maintain consistent Clockify tracking
 
 
 
