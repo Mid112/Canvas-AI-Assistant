@@ -46,9 +46,15 @@ export function AuditLogsPage() {
     [filteredLogs, page],
   );
 
-  useEffect(() => {
+  const handleFiltersChange = useCallback((next: AuditLogFilters) => {
+    setFilters(next);
     setPage(1);
-  }, [filters, sort]);
+  }, []);
+
+  const handleSortChange = useCallback((next: AuditLogSort) => {
+    setSort(next);
+    setPage(1);
+  }, []);
 
   const loadLogs = useCallback(async () => {
     const requestId = loadRequestId.current + 1;
@@ -74,8 +80,33 @@ export function AuditLogsPage() {
   }, []);
 
   useEffect(() => {
-    void loadLogs();
-  }, [loadLogs]);
+    let cancelled = false;
+    const requestId = loadRequestId.current + 1;
+    loadRequestId.current = requestId;
+
+    void (async () => {
+      try {
+        const data = await fetchAuditLogs();
+        if (!cancelled && loadRequestId.current === requestId) {
+          setLogs(data);
+          setLoadError(null);
+        }
+      } catch {
+        if (!cancelled && loadRequestId.current === requestId) {
+          setLoadError("Unable to load audit logs. Please try again.");
+          setLogs([]);
+        }
+      } finally {
+        if (!cancelled && loadRequestId.current === requestId) {
+          setIsLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleExport = () => {
     downloadAuditLogsCsv(filteredLogs);
@@ -110,7 +141,7 @@ export function AuditLogsPage() {
           filters={filters}
           userOptions={userOptions}
           actionOptions={actionOptions}
-          onChange={setFilters}
+          onChange={handleFiltersChange}
         />
       </div>
 
@@ -124,8 +155,8 @@ export function AuditLogsPage() {
         totalPages={pagination.totalPages}
         sort={sort}
         filters={filters}
-        onSortChange={setSort}
-        onFiltersChange={setFilters}
+        onSortChange={handleSortChange}
+        onFiltersChange={handleFiltersChange}
         onPageChange={setPage}
         onRetry={loadLogs}
         isLoading={isLoading}
