@@ -1,7 +1,8 @@
 # app/backend/app/mcp_tools/schemas.py
 from typing import Literal
 
-from pydantic import BaseModel
+from dateutil import parser as date_parser
+from pydantic import BaseModel, field_validator
 
 
 class FetchCoursesAction(BaseModel):
@@ -26,6 +27,32 @@ class SetActiveCourseAction(BaseModel):
 
 class GetActiveCourseAction(BaseModel):
     action: Literal["get_active_course"] = "get_active_course"
+
+
+class CreateAssignmentAction(BaseModel):
+    action: Literal["create_assignment"] = "create_assignment"
+    # local DB course ID — dispatcher resolves canvas_course_id and
+    # canvas_url from this, so the LLM never has to know either value
+    local_course_id: int
+    title: str
+    description: str
+    # ISO 8601 string, e.g. "2026-09-01T23:59:00" — validated by
+    # validate_assignment_for_create before any Canvas call is made
+    due_date: str
+    points_possible: float | None = None
+
+    @field_validator("due_date")
+    @classmethod
+    def _normalize_due_date(cls, value: str) -> str:
+        """The LLM sometimes emits natural-language dates (e.g. "July 30
+        2026") instead of ISO 8601. Normalize anything dateutil can parse
+        to ISO so validate_assignment_for_create's fromisoformat check
+        succeeds; leave unparseable input as-is so that check still
+        produces a clean user-facing error instead of this one."""
+        try:
+            return date_parser.parse(value).isoformat()
+        except (date_parser.ParserError, ValueError, OverflowError, TypeError):
+            return value
 
 
 class OutOfScopeAction(BaseModel):
@@ -62,13 +89,15 @@ class RespondAction(BaseModel):
 
 
 # Every action the LLM is allowed to request. Adding a new tool means
-# adding one class above and one entry here
+# adding one class above and one entry here — nothing else in the
+# dispatcher or schema-generation step needs to change.
 ACTION_SCHEMAS: dict[str, type[BaseModel]] = {
     "fetch_courses": FetchCoursesAction,
     "fetch_assignments": FetchAssignmentsAction,
     "fetch_submissions": FetchSubmissionsAction,
     "set_active_course": SetActiveCourseAction,
     "get_active_course": GetActiveCourseAction,
+    "create_assignment": CreateAssignmentAction,
     "out_of_scope": OutOfScopeAction,
     "clarify": ClarifyAction,
     "intent_preview": IntentPreviewAction,

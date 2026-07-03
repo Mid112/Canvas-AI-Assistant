@@ -32,7 +32,12 @@ async def chat(
     db: AsyncSession = Depends(get_db),
 ):
     conversation, reply, is_error = await handle_chat_message(
-        db, current_user, body.message, body.local_course_id, body.conversation_id
+        db,
+        current_user,
+        body.message,
+        body.local_course_id,
+        body.conversation_id,
+        body.pending_message_id,
     )
     return ChatResponse(conversation_id=conversation.id, reply=reply, is_error=is_error)
 
