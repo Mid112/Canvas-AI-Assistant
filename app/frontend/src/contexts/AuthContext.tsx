@@ -143,13 +143,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [loadUser]);
 
   const refreshUser = useCallback(async () => {
-    if (!accessToken) {
+    const token = accessToken ?? getStoredToken();
+    if (!token) {
       return null;
     }
 
-    // Re-read /auth/me after profile-level mutations, such as connecting Canvas,
-    // so derived flags like has_canvas_token stay in sync without a new login.
-    return await loadUser(accessToken);
+    try {
+      return await loadUser(token);
+    } catch (error) {
+      clearStoredToken();
+      setAccessToken(null);
+      setUser(null);
+      throw error;
+    }
   }, [accessToken, loadUser]);
 
   const logout = useCallback(() => {

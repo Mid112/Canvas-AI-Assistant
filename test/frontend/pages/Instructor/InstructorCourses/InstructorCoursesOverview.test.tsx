@@ -1,13 +1,14 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { institutionCourseData } from "@/data/institutionCourseData";
 import { InstructorCoursesOverview } from "@/pages/Instructor/InstructorCourses/InstructorCoursesOverview";
 import type { CourseAnalyticsOverview } from "@/types/course";
+import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 describe("InstructorCoursesOverview", () => {
   it("renders analytics overview cards", () => {
-    render(
+    renderWithRouter(
       <InstructorCoursesOverview
         analytics={institutionCourseData[0]!.analytics}
       />,
@@ -22,7 +23,9 @@ describe("InstructorCoursesOverview", () => {
     expect(screen.getByText("142/156")).toBeInTheDocument();
     expect(screen.getByText("Completed Assignments")).toBeInTheDocument();
     expect(screen.getByText("At-Risk Students")).toBeInTheDocument();
-    expect(screen.getByText("View Full Report")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("link", { name: "View Full Report" }),
+    ).not.toBeInTheDocument();
   });
 
   it("colors trend details based on metric direction", () => {
@@ -37,7 +40,7 @@ describe("InstructorCoursesOverview", () => {
       atRiskStudentsTrend: 3,
     };
 
-    render(<InstructorCoursesOverview analytics={analytics} />);
+    renderWithRouter(<InstructorCoursesOverview analytics={analytics} />);
 
     expect(screen.getByText("-4%")).toHaveClass("text-destructive");
     expect(screen.getByText("+2%")).toHaveClass("text-emerald-600");
@@ -46,7 +49,7 @@ describe("InstructorCoursesOverview", () => {
   });
 
   it("shows green for a decreasing at-risk trend", () => {
-    render(
+    renderWithRouter(
       <InstructorCoursesOverview
         analytics={institutionCourseData[0]!.analytics}
       />,
