@@ -5,7 +5,7 @@ from app.config import settings
 from app.core.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.schemas.analysis import MissingSubmissionAnalysis
+from app.schemas.analysis import LateSubmissionAnalysis, MissingSubmissionAnalysis
 from app.schemas.canvas import (
     ActiveCourseResponse,
     ActiveCourseSet,
@@ -16,7 +16,7 @@ from app.schemas.canvas import (
     SubmissionResponse,
 )
 from app.schemas.student import StudentResponse
-from app.services.analysis import analyze_missing_submissions
+from app.services.analysis import analyze_late_submissions, analyze_missing_submissions
 from app.services.canvas import (
     create_course_assignment,
     get_active_course,
@@ -126,6 +126,28 @@ async def missing_submission_analysis(
     db: AsyncSession = Depends(get_db),
 ):
     return await analyze_missing_submissions(
+        course_id,
+        assignment_id,
+        current_user,
+        canvas_url,
+        db,
+    )
+
+
+# Late submission analysis (#554–#557) — detects late submissions among the enrolled
+# roster for one assignment and returns late students plus timing statistics.
+@router.get(
+    "/courses/{course_id}/assignments/{assignment_id}/late-submissions",
+    response_model=LateSubmissionAnalysis,
+)
+async def late_submission_analysis(
+    course_id: int,
+    assignment_id: int,
+    current_user: User = Depends(get_current_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await analyze_late_submissions(
         course_id,
         assignment_id,
         current_user,
