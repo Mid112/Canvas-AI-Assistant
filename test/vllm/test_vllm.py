@@ -1,7 +1,6 @@
 # Tests for vLLM connection — works whether vLLM is native or dockerized
 # Run with: pytest -v from test/vllm with venv active
 
-import pytest
 import httpx
 import os
 
