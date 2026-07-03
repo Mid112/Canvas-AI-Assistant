@@ -2,9 +2,7 @@ import type { UserRole } from "@/types/user";
 import type {
   AuditLogApiRecord,
   AuditLogEntry,
-  AuditLogFilters,
   AuditLogResult,
-  AuditLogSort,
 } from "@/types/auditLog";
 
 const AUDIT_RESULTS = new Set<AuditLogResult>(["success", "failed"]);
@@ -24,7 +22,7 @@ function readAuditLogResult(details: Record<string, unknown>): AuditLogResult {
   const value = details.result;
   return typeof value === "string" && AUDIT_RESULTS.has(value as AuditLogResult)
     ? (value as AuditLogResult)
-    : "success";
+    : "unknown";
 }
 
 /** Display label for roles stored as instructor | admin in the API/DB. */
@@ -93,34 +91,3 @@ export function auditLogSearchText(log: AuditLogEntry): string {
   ].join(" ");
 }
 
-/** Query string for the proposed admin audit logs list endpoint. */
-export function buildAuditLogQueryParams(
-  filters: AuditLogFilters,
-  sort: AuditLogSort,
-  page: number,
-  pageSize: number,
-): URLSearchParams {
-  const params = new URLSearchParams();
-
-  if (filters.date) {
-    params.set("date", filters.date);
-  }
-  if (filters.user) {
-    params.set("user", filters.user);
-  }
-  if (filters.action) {
-    params.set("action", filters.action);
-  }
-  if (filters.result) {
-    params.set("result", filters.result);
-  }
-  if (filters.search) {
-    params.set("search", filters.search);
-  }
-
-  params.set("sort", `${sort.field}:${sort.direction}`);
-  params.set("page", String(page));
-  params.set("page_size", String(pageSize));
-
-  return params;
-}

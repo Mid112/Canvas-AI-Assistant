@@ -1,7 +1,7 @@
 import type { UserRole } from "@/types/user";
 
 /** Outcome of an audited action — stored in audit_logs.details.result (JSONB). */
-export type AuditLogResult = "success" | "failed";
+export type AuditLogResult = "success" | "failed" | "unknown";
 
 export interface AuditLogEntry {
   id: string;

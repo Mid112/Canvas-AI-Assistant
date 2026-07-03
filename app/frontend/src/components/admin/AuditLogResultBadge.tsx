@@ -1,4 +1,4 @@
-import { CheckCircle2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import type { AuditLogResult } from "@/types/auditLog";
@@ -18,6 +18,12 @@ const resultConfig: Record<
     className:
       "border-destructive/20 bg-destructive/10 text-destructive hover:bg-destructive/10",
     Icon: XCircle,
+  },
+  unknown: {
+    label: "Unknown",
+    className:
+      "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-50",
+    Icon: AlertTriangle,
   },
 };
 

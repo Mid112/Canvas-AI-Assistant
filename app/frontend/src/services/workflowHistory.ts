@@ -53,9 +53,13 @@ function readHistory(): WorkflowHistoryEntry[] {
     }
 
     const valid = parsed.filter(isStoredEntry);
-    if (valid.length !== parsed.length) {
+    if (valid.length === 0) {
       localStorage.removeItem(STORAGE_KEY);
       return [...mockWorkflowHistory];
+    }
+
+    if (valid.length !== parsed.length) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(valid));
     }
 
     return valid;

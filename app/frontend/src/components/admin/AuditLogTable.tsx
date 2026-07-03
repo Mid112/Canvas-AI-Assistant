@@ -201,6 +201,7 @@ export function AuditLogTable({
                         { value: "", label: "All results" },
                         { value: "success", label: "Success only" },
                         { value: "failed", label: "Failed only" },
+                        { value: "unknown", label: "Unknown only" },
                       ]}
                       onResultFilterChange={(result) =>
                         onFiltersChange({ ...filters, result })

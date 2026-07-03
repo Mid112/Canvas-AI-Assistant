@@ -2,14 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { mockAuditLogApiRecords } from "@/data/mockAuditLogs";
 import {
-  buildAuditLogQueryParams,
   formatAuditLogUserRole,
   mapAuditLogApiToEntry,
 } from "@/lib/map-audit-log";
-import {
-  defaultAuditLogSort,
-  emptyAuditLogFilters,
-} from "@/types/auditLog";
 
 describe("mapAuditLogApiToEntry", () => {
   it("maps backend audit_logs fields and JSONB details to the UI model", () => {
@@ -27,6 +22,28 @@ describe("mapAuditLogApiToEntry", () => {
     expect(entry.details.resource).toBeUndefined();
     expect(entry.details.result).toBeUndefined();
   });
+
+  it("defaults result to 'unknown' when details.result is missing", () => {
+    const record = {
+      ...mockAuditLogApiRecords[0]!,
+      details: { resource: "Test Resource" },
+    };
+
+    const entry = mapAuditLogApiToEntry(record);
+
+    expect(entry.result).toBe("unknown");
+  });
+
+  it("defaults result to 'unknown' when details.result is unrecognized", () => {
+    const record = {
+      ...mockAuditLogApiRecords[0]!,
+      details: { resource: "Test Resource", result: "partial" },
+    };
+
+    const entry = mapAuditLogApiToEntry(record);
+
+    expect(entry.result).toBe("unknown");
+  });
 });
 
 describe("formatAuditLogUserRole", () => {
@@ -36,29 +53,3 @@ describe("formatAuditLogUserRole", () => {
   });
 });
 
-describe("buildAuditLogQueryParams", () => {
-  it("serializes filters, sort, and pagination for the proposed admin endpoint", () => {
-    const params = buildAuditLogQueryParams(
-      {
-        ...emptyAuditLogFilters,
-        date: "2026-05-31",
-        user: "jane",
-        action: "Create",
-        result: "success",
-        search: "draft",
-      },
-      defaultAuditLogSort,
-      2,
-      10,
-    );
-
-    expect(params.get("date")).toBe("2026-05-31");
-    expect(params.get("user")).toBe("jane");
-    expect(params.get("action")).toBe("Create");
-    expect(params.get("result")).toBe("success");
-    expect(params.get("search")).toBe("draft");
-    expect(params.get("sort")).toBe("timestamp:desc");
-    expect(params.get("page")).toBe("2");
-    expect(params.get("page_size")).toBe("10");
-  });
-});

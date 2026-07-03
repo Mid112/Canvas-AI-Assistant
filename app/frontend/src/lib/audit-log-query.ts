@@ -13,13 +13,20 @@ function matchesQuery(haystack: string, query: string): boolean {
   return haystack.toLowerCase().includes(query.trim().toLowerCase());
 }
 
+/** Returns the local-time date string (YYYY-MM-DD) matching what the user sees. */
+function toLocalDateString(isoDate: string): string {
+  const d = new Date(isoDate);
+  const pad = (v: number) => String(v).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /** Client-side filter used until the audit API supports query parameters. */
 export function filterAuditLogs(
   logs: AuditLogEntry[],
   filters: AuditLogFilters,
 ): AuditLogEntry[] {
   return logs.filter((log) => {
-    if (filters.date && log.timestamp.slice(0, 10) !== filters.date) {
+    if (filters.date && toLocalDateString(log.timestamp) !== filters.date) {
       return false;
     }
 

@@ -39,7 +39,25 @@ describe("workflowHistory service", () => {
     expect(csv).toContain("'=SUM(A1:A10)");
   });
 
-  it("falls back to seed data when localStorage has stale status values", async () => {
+  it("drops invalid entries and keeps valid ones from localStorage", async () => {
+    localStorage.setItem(
+      "canvas-workflow-instructor-history",
+      JSON.stringify([
+        mockWorkflowHistory[0],
+        {
+          ...mockWorkflowHistory[1],
+          status: "completed",
+        },
+      ]),
+    );
+
+    const entries = await fetchWorkflowHistory();
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.id).toBe(mockWorkflowHistory[0]!.id);
+  });
+
+  it("falls back to seed data when all localStorage entries are invalid", async () => {
     localStorage.setItem(
       "canvas-workflow-instructor-history",
       JSON.stringify([

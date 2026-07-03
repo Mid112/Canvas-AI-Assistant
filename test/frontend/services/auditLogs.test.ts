@@ -38,7 +38,25 @@ describe("auditLogs service", () => {
     expect(csv).toContain("'=SUM(A1:A10)");
   });
 
-  it("falls back to seed data when localStorage has stale role values", async () => {
+  it("drops invalid entries and keeps valid ones from localStorage", async () => {
+    localStorage.setItem(
+      "canvas-workflow-admin-audit-logs",
+      JSON.stringify([
+        mockAuditLogs[0],
+        {
+          ...mockAuditLogs[1],
+          userRole: "Teaching Assistant",
+        },
+      ]),
+    );
+
+    const logs = await fetchAuditLogs();
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.id).toBe(mockAuditLogs[0]!.id);
+  });
+
+  it("falls back to seed data when all localStorage entries are invalid", async () => {
     localStorage.setItem(
       "canvas-workflow-admin-audit-logs",
       JSON.stringify([

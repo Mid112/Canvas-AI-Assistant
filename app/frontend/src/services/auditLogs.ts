@@ -27,7 +27,7 @@ function isUserRole(value: unknown): value is UserRole {
 }
 
 function isAuditLogResult(value: unknown): value is AuditLogResult {
-  return value === "success" || value === "failed";
+  return value === "success" || value === "failed" || value === "unknown";
 }
 
 function isStoredAuditLogEntry(value: unknown): value is AuditLogEntry {
@@ -63,9 +63,13 @@ function readAuditLogs(): AuditLogEntry[] {
     }
 
     const valid = parsed.filter(isStoredAuditLogEntry);
-    if (valid.length !== parsed.length) {
+    if (valid.length === 0) {
       localStorage.removeItem(STORAGE_KEY);
       return [...mockAuditLogs];
+    }
+
+    if (valid.length !== parsed.length) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(valid));
     }
 
     return valid;
@@ -92,8 +96,10 @@ export function resetMockAuditLogs(): void {
 export async function fetchAuditLogs(): Promise<AuditLogEntry[]> {
   await delay();
 
-  // API: GET `${API_BASE_URL}${AUDIT_LOGS_ADMIN_PATH}?${buildAuditLogQueryParams(...)}`
-  // return response.items.map(mapAuditLogApiToEntry);
+  // API: replace with server-driven fetch accepting filters/sort/page,
+  // returning { items, total } — see FetchAuditLogsResponse in auditLog.ts.
+  // The current client-side filter/sort/paginate pipeline in AuditLogsPage.tsx
+  // will be replaced by server-side query params at that point.
 
   return getStoredAuditLogs();
 }
