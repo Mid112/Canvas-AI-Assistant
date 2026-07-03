@@ -18,24 +18,14 @@ from app.services.auth import login_user, register_user, remove_canvas_connectio
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post(
-    "/register",
-    response_model=TokenResponse,
-    status_code=status.HTTP_201_CREATED
-)
-async def register(
-    body: RegisterRequest,
-    db: AsyncSession = Depends(get_db)
-):
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     # Pass full body so service can access name and role
     return await register_user(db, body)
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(
-    body: LoginRequest,
-    db: AsyncSession = Depends(get_db)
-):
+async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     return await login_user(db, body.email, body.password)
 
 
@@ -58,9 +48,7 @@ async def validate_canvas_token(
     body: CanvasTokenRequest,
     current_user: User = Depends(get_current_user),
 ):
-    return CanvasTokenValidationResponse(
-        status=await check_token_status(body.canvas_token, body.canvas_url)
-    )
+    return CanvasTokenValidationResponse(status=await check_token_status(body.canvas_token, body.canvas_url))
 
 
 @router.delete("/me/canvas-connections/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)

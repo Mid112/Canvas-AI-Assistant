@@ -33,25 +33,36 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (credentials: LoginCredentials) => Promise<User>;
   register: (credentials: RegisterCredentials) => Promise<User>;
+  refreshUser: () => Promise<User | null>;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const DEFAULT_ROLE: UserRole = "instructor";
-
 function isUserRole(role: string): role is UserRole {
-  return role === "instructor" || role === "ta" || role === "admin";
+  return role === "instructor" || role === "admin";
+}
+
+export class UnsupportedUserRoleError extends Error {
+  constructor(role: string) {
+    super(`Unsupported user role: ${role}`);
+    this.name = "UnsupportedUserRoleError";
+  }
 }
 
 function mapUserResponse(response: UserResponse): User {
+  if (!isUserRole(response.role)) {
+    throw new UnsupportedUserRoleError(response.role);
+  }
+
   return {
     id: response.id,
     email: response.email,
     name: response.name ?? response.email.split("@")[0] ?? response.email,
-    role: isUserRole(response.role) ? response.role : DEFAULT_ROLE,
+    role: response.role,
     is_active: response.is_active,
     has_canvas_token: response.has_canvas_token,
+    canvas_connections: response.canvas_connections ?? [],
   };
 }
 
@@ -131,6 +142,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [loadUser]);
 
+  const refreshUser = useCallback(async () => {
+    if (!accessToken) {
+      return null;
+    }
+
+    // Re-read /auth/me after profile-level mutations, such as connecting Canvas,
+    // so derived flags like has_canvas_token stay in sync without a new login.
+    return await loadUser(accessToken);
+  }, [accessToken, loadUser]);
+
   const logout = useCallback(() => {
     clearStoredToken();
     setAccessToken(null);
@@ -145,9 +166,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isLoading,
       login,
       register,
+      refreshUser,
       logout,
     }),
-    [user, accessToken, isLoading, login, register, logout],
+    [user, accessToken, isLoading, login, register, refreshUser, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

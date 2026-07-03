@@ -16,17 +16,23 @@ class AnthropicAdapter(LLMAdapter):
         system_prompt: str,
         user_message: str,
         timeout: float = 30.0,
+        history: list[dict] | None = None,
     ) -> str:
-        headers = {
-            "x-api-key": self.api_key,
-            "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json",
-        }
+        messages = []
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": user_message})
+
         payload = {
             "model": self.model,
             "max_tokens": 1024,
             "system": system_prompt,
-            "messages": [{"role": "user", "content": user_message}],
+            "messages": messages,
+        }
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
         }
 
         async with httpx.AsyncClient(timeout=timeout) as client:

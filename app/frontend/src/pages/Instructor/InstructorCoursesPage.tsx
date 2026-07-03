@@ -1,8 +1,11 @@
+import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
+import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInstitution } from "@/contexts/useInstitution";
+import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
 import { CanvasApiError, fetchCourses } from "@/services/canvas";
 import {
   filterInstructorCourses,
@@ -19,6 +22,8 @@ import type { CourseViewMode, InstructorCourse } from "@/types/course";
 import type { CanvasCourse } from "@/types/canvas";
 
 function mapCanvasCourseToInstructorCourse(course: CanvasCourse): InstructorCourse | null {
+  // The backend creates/persists local courses while syncing Canvas courses.
+  // Skip any Canvas item that could not be matched to a local course record.
   if (course.local_id == null) {
     return null;
   }
@@ -39,8 +44,10 @@ export function InstructorCoursesPage() {
   const { accessToken, user } = useAuth();
   const [canvasCourses, setCanvasCourses] = useState<InstructorCourse[]>([]);
   const [canvasError, setCanvasError] = useState<string | null>(null);
+  const [isLoadingCanvasCourses, setIsLoadingCanvasCourses] = useState(false);
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<CourseViewMode>("grid");
+  const canvasUrl = getPrimaryCanvasConnectionUrl(user);
 
   useEffect(() => {
     if (!accessToken || !user?.has_canvas_token) {
@@ -48,11 +55,16 @@ export function InstructorCoursesPage() {
     }
 
     const token = accessToken;
+    // Use the saved connection URL so local Canvas Docker and production Canvas
+    // tokens are never accidentally sent to the wrong Canvas host.
+    const selectedCanvasUrl = canvasUrl;
     let cancelled = false;
 
     async function loadCanvasCourses() {
+      setIsLoadingCanvasCourses(true);
+
       try {
-        const data = await fetchCourses(token);
+        const data = await fetchCourses(token, selectedCanvasUrl);
         if (cancelled) {
           return;
         }
@@ -74,6 +86,10 @@ export function InstructorCoursesPage() {
             : "Unable to load courses from Canvas.";
         setCanvasError(message);
         setCanvasCourses([]);
+      } finally {
+        if (!cancelled) {
+          setIsLoadingCanvasCourses(false);
+        }
       }
     }
 
@@ -82,11 +98,11 @@ export function InstructorCoursesPage() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, user?.has_canvas_token]);
+  }, [accessToken, canvasUrl, user?.has_canvas_token]);
 
-  const courses = user?.has_canvas_token && canvasCourses.length > 0
-    ? canvasCourses
-    : mockCourses;
+  // Once Canvas is connected, treat Canvas as the source of truth. Mock courses
+  // are only shown before connection so missing real data is visible to devs.
+  const courses = user?.has_canvas_token ? canvasCourses : mockCourses;
 
   const filteredCourses = useMemo(() => {
     const filtered = filterInstructorCourses(courses, search);
@@ -108,14 +124,27 @@ export function InstructorCoursesPage() {
           role="alert"
           className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
         >
-          {canvasError} Showing sample course data instead.
+          {canvasError}
         </p>
       ) : null}
 
       <InstructorCoursesOverview analytics={analytics} />
 
-      {filteredCourses.length === 0 ? (
-        <InstructorCoursesEmptyState />
+      {user?.has_canvas_token && isLoadingCanvasCourses ? (
+        <Card className="shadow-sm ring-1 ring-border/60">
+          <CardContent className="flex items-center gap-3 p-6 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />
+            Loading courses from Canvas...
+          </CardContent>
+        </Card>
+      ) : filteredCourses.length === 0 ? (
+        <InstructorCoursesEmptyState
+          description={
+            user?.has_canvas_token
+              ? "No Canvas courses matched this search."
+              : "Try adjusting your search or switch institutions."
+          }
+        />
       ) : (
         <InstructorCoursesSection
           courses={filteredCourses}

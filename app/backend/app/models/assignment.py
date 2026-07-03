@@ -17,24 +17,19 @@ class Assignment(Base):
     __tablename__ = "assignments"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    canvas_assignment_id: Mapped[str] = mapped_column(
-        String, unique=True, nullable=False)
+    canvas_assignment_id: Mapped[str] = mapped_column(String, unique=True, nullable=False)
     title: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(String, nullable=True)
     due_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True)
     points_possible: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    course_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("courses.id"), nullable=False
-    )
+    course_id: Mapped[int] = mapped_column(Integer, ForeignKey("courses.id"), nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
     )
 
-    course: Mapped[Course] = relationship(
-        "Course", back_populates="assignments")
-    submissions: Mapped[list[Submission]] = relationship(
-        "Submission", back_populates="assignment", cascade="all, delete-orphan"
-    )
+    course: Mapped[Course] = relationship("Course", back_populates="assignments")
+    submissions: Mapped[list[Submission]] = relationship("Submission", back_populates="assignment", cascade="all, delete-orphan")

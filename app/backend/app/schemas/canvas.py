@@ -1,4 +1,5 @@
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -30,12 +31,41 @@ class CourseResponse(BaseModel):
 class AssignmentResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    id: int
+    id: int           # Canvas assignment ID — kept for frontend compatibility
+    local_id: int | None = None
     name: str
     description: str | None = None
     due_at: datetime | None = None
     points_possible: float | None = None
     course_id: int
+
+
+class SubmissionStatus(StrEnum):
+    graded = "graded"
+    submitted = "submitted"
+    late = "late"
+    missing = "missing"
+    unsubmitted = "unsubmitted"
+    excused = "excused"
+class AssignmentCreate(BaseModel):
+    name: str
+    description: str | None = None
+    due_at: datetime | None = None
+    points_possible: float | None = None
+
+
+class AssignmentUpdate(BaseModel):
+    name: str
+    description: str | None = None
+    due_at: datetime | None = None
+    points_possible: float | None = None
+
+
+class MessageSendResult(BaseModel):
+    course_id: int         # Canvas course ID — matches AssignmentResponse.course_id convention, not the local DB id
+    subject: str
+    body: str
+    audience_size: int     # enrolled-class size at post time, for display only — not used to build the request
 
 
 class SubmissionResponse(BaseModel):
@@ -44,10 +74,18 @@ class SubmissionResponse(BaseModel):
     id: int
     assignment_id: int
     user_id: int
+    student_name: str | None = None
+    submitted_at: datetime | None = None
+    # Raw Canvas state — kept for debugging. API consumers should use `status` instead.
+    workflow_state: str
+
+    # Parsed status (#547) — one of: graded, submitted, late, missing, unsubmitted, excused
+    status: SubmissionStatus
+
+    # Grading info (#548)
     score: float | None = None
     grade: str | None = None
-    submitted_at: datetime | None = None
-    workflow_state: str
+    graded_at: datetime | None = None
 
 
 class ActiveCourseSet(BaseModel):

@@ -80,7 +80,4 @@ async def get_students(
     await db.flush()
     await db.commit()
 
-    return [
-        StudentResponse.model_validate(student_map[str(item["user_id"])])
-        for item in data
-    ]
+    return [StudentResponse.model_validate(student_map[str(item["user_id"])]) for item in data]
