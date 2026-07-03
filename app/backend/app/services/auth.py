@@ -14,7 +14,7 @@ from app.core.security import (
     verify_password,
 )
 from app.integrations.canvas import validate_token
-from app.models.audit_log import AuditLog
+from app.models.audit_log_session import AuditLogSession
 from app.models.canvas_connection import CanvasConnection
 from app.models.session import Session
 from app.models.user import User
@@ -79,7 +79,7 @@ async def admin_login_user(
 
     expires_at = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     db.add(Session(user_id=user.id, token_hash=hash_token(token), expires_at=expires_at))
-    db.add(AuditLog(user_id=user.id, action="admin_login", details={"email": user.email}))
+    db.add(AuditLogSession(user_id=user.id, action="admin_login", details={"email": user.email}))
     await db.commit()
 
     return TokenResponse(access_token=token)
@@ -91,7 +91,7 @@ async def logout_admin(db: AsyncSession, token: str, user: User) -> None:
     )
     if session:
         await db.delete(session)
-    db.add(AuditLog(user_id=user.id, action="admin_logout", details={"email": user.email}))
+    db.add(AuditLogSession(user_id=user.id, action="admin_logout", details={"email": user.email}))
     await db.commit()
 
 

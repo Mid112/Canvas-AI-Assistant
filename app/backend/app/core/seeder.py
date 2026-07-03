@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.security import hash_password
-from app.models.audit_log import AuditLog
+from app.models.audit_log_session import AuditLogSession
 from app.models.user import User
 
 
@@ -28,9 +28,9 @@ async def seed_admin(db: AsyncSession) -> None:
         role="admin",
     )
     db.add(user)
-    # flush assigns user.id without committing so AuditLog FK is satisfied
+    # flush assigns user.id without committing so AuditLogSession FK is satisfied
     await db.flush()
-    db.add(AuditLog(
+    db.add(AuditLogSession(
         user_id=user.id,
         action="admin_seeded",
         details={"email": user.email},
