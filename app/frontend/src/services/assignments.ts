@@ -1,6 +1,11 @@
 import { API_BASE_URL } from "@/config/api";
 import type { Assignment, AssignmentCreatePayload, AssignmentUpdatePayload } from "@/types/assignment";
 
+/**
+ * Canvas assignment API client.
+ *
+ * Assignment calls use local course IDs and optional canvas_url.
+ */
 export class AssignmentApiError extends Error {
   status: number;
 

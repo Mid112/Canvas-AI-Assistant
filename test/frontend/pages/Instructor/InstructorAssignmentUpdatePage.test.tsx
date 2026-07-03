@@ -8,7 +8,7 @@ import {
   fetchAssignment,
   updateAssignment,
 } from "@/services/assignments";
-import { renderWithRouter } from "@test/utils/renderWithRouter";
+import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 vi.mock("@/services/assignments", () => ({
   AssignmentApiError: class AssignmentApiError extends Error {
@@ -20,6 +20,8 @@ vi.mock("@/services/assignments", () => ({
 
 const mockedFetchAssignment = vi.mocked(fetchAssignment);
 const mockedUpdateAssignment = vi.mocked(updateAssignment);
+
+const CANVAS_URL = "http://localhost:3000";
 
 const authWithCanvas = {
   user: {
@@ -43,6 +45,7 @@ const authWithCanvas = {
   login: vi.fn(),
   register: vi.fn(),
   logout: vi.fn(),
+  refreshUser: vi.fn(),
 };
 
 const mockUseAuth = vi.fn();
@@ -68,7 +71,7 @@ const assignment = {
 };
 
 function renderPage() {
-  return renderWithRouter(
+  return renderWithInstitution(
     <Routes>
       <Route
         path="/instructor/courses/:localCourseId/assignments/:assignmentId/edit"
@@ -107,7 +110,7 @@ describe("InstructorAssignmentUpdatePage", () => {
       3,
       10,
       "token",
-      "http://localhost:3000",
+      CANVAS_URL,
     );
   });
 

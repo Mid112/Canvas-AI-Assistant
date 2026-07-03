@@ -59,17 +59,10 @@ export function InstructorCoursesOverview({
 
   return (
     <section aria-labelledby="course-analytics-heading" className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
-        <h2 id="course-analytics-heading" className="text-lg font-semibold">
-          Course Analytics Overview
-        </h2>
-        <button
-          type="button"
-          className="text-sm font-medium text-primary hover:underline"
-        >
-          View Full Report
-        </button>
-      </div>
+      {/* Overview cards only — full analytics live on the per-course analytics route. */}
+      <h2 id="course-analytics-heading" className="text-lg font-semibold">
+        Course Analytics Overview
+      </h2>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <OverviewCard
           title="Average Performance"
