@@ -19,13 +19,11 @@ We had team coordination this cycle to continue preparing the Canvas AI Assistan
 - Assignment create/update backend integration
 - Assignment approval connected to real Canvas API
 - Testing Event 1 preparation
-- Team Log Cycle 12
 
 ## Associated Tasks from Project Board:
 
 | Task ID | Description | Assigned To | Status |
 |---------|-------------|-------------|--------|
-| 971 | Team Log Cycle 12 | Yerdana | Completed |
 | 546 | Fetch submissions from Canvas API | Bao | Completed |
 | 547 | Parse submission status | Bao | Completed |
 | 548 | Parse grading information | Bao | Completed |
@@ -106,7 +104,6 @@ Time was tracked using Clockify for Jun 30, 2026 - Jul 2, 2026.
 
 | Task ID | Description | Completed By |
 |---------|-------------|--------------|
-| 971 | Team Log Cycle 12 | Yerdana |
 | 546 | Fetch submissions from Canvas API | Bao |
 | 547 | Parse submission status | Bao |
 | 548 | Parse grading information | Bao |
