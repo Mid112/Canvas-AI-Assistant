@@ -2,7 +2,6 @@ import {
   defaultDryRunPreviewId,
   mockDryRunPreviews,
 } from "@/data/mockDryRunPreview";
-import { recordActionHistoryEntry } from "@/services/actionHistory";
 import type { DryRunPreviewData } from "@/types/dryRunPreview";
 
 const MOCK_LOAD_DELAY_MS = 600;
@@ -19,10 +18,6 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => {
     window.setTimeout(resolve, ms);
   });
-}
-
-function getCourseLabel(preview: DryRunPreviewData): string {
-  return preview.affectedResources.course.name;
 }
 
 export async function fetchDryRunPreview(
@@ -54,19 +49,6 @@ export async function confirmDryRunPreview(
 
   if (previewId === "confirm-error") {
     throw new DryRunPreviewError("Unable to approve this workflow. Please try again.");
-  }
-
-  const preview = mockDryRunPreviews[previewId];
-
-  if (preview) {
-    await recordActionHistoryEntry({
-      originalRequest: preview.originalRequest,
-      actionType: preview.actionType,
-      courseLabel: getCourseLabel(preview),
-      status: "approved",
-      requestedAt: preview.requestedAt,
-      requestedBy: preview.requestedBy,
-    });
   }
 
   return {

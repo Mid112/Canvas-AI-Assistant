@@ -2,7 +2,6 @@ import {
   emptyRecipientsMessageDraft,
   mockMessageDraft,
 } from "@/data/mockMessageDraft";
-import { recordActionHistoryEntry } from "@/services/actionHistory";
 import type {
   FetchMessageDraftOptions,
   MessageDraft,
@@ -68,14 +67,4 @@ export async function sendMessageDraft(
       "At least one recipient is required to send a message.",
     );
   }
-
-  await recordActionHistoryEntry({
-    originalRequest: `Send message: ${payload.subject}`,
-    actionType: "Send Message",
-    courseLabel: "COSC 499 Capstone",
-    status: "executed",
-    requestedAt: new Date().toISOString(),
-    executedAt: new Date().toISOString(),
-    requestedBy: "Current instructor",
-  });
 }
