@@ -42,21 +42,13 @@ class User(Base):
     canvas_connections: Mapped[list["CanvasConnection"]] = relationship(
         "CanvasConnection", back_populates="user", cascade="all, delete-orphan"
     )
-    sessions: Mapped[list["Session"]] = relationship(
-        "Session", back_populates="user", cascade="all, delete-orphan"
-    )
-    courses: Mapped[list["Course"]] = relationship(
-        "Course", back_populates="instructor"
-    )
+    sessions: Mapped[list["Session"]] = relationship("Session", back_populates="user", cascade="all, delete-orphan")
+    courses: Mapped[list["Course"]] = relationship("Course", back_populates="instructor")
     conversations: Mapped[list["Conversation"]] = relationship(
         "Conversation", back_populates="user", cascade="all, delete-orphan"
     )
-    workflows: Mapped[list["Workflow"]] = relationship(
-        "Workflow", back_populates="user"
-    )
-    audit_logs: Mapped[list["AuditLog"]] = relationship(
-        "AuditLog", back_populates="user"
-    )
+    workflows: Mapped[list["Workflow"]] = relationship("Workflow", back_populates="user")
+    audit_logs: Mapped[list["AuditLog"]] = relationship("AuditLog", back_populates="user")
     message_templates: Mapped[list["MessageTemplate"]] = relationship(
         "MessageTemplate", back_populates="user", cascade="all, delete-orphan"
     )

@@ -16,6 +16,7 @@ import { InstructorCoursesPage } from "@/pages/Instructor/InstructorCoursesPage"
 import { InstructorCourseAssignmentsPage } from "@/pages/Instructor/InstructorCourseAssignmentsPage";
 import { InstructorAssignmentCreatePage } from "@/pages/Instructor/InstructorAssignmentCreatePage";
 import { InstructorAssignmentUpdatePage } from "@/pages/Instructor/InstructorAssignmentUpdatePage";
+import { DryRunPreviewPage } from "@/pages/Instructor/DryRunPreviewPage";
 import { InstructorAssistantPage } from "@/pages/Instructor/InstructorAssistantPage";
 import { InstructorAnalyticsPage } from "@/pages/Instructor/InstructorAnalyticsPage";
 import { InstructorMessagesPage } from "@/pages/Instructor/InstructorMessagesPage";
@@ -97,7 +98,11 @@ export const router = createBrowserRouter([
                     element: <InstructorAssistantPage />,
                   },
                   {
-                    path: paths.instructor.analytics,
+                    path: paths.instructor.dryRunPreview,
+                    element: <DryRunPreviewPage />, 
+                  },
+                  {
+                    path: paths.instructor.courseAnalytics,
                     element: <InstructorAnalyticsPage />,
                   },
                   {

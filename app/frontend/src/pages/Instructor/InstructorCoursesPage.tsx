@@ -1,6 +1,8 @@
+import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
+import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useInstitution } from "@/contexts/useInstitution";
@@ -57,10 +59,6 @@ export function InstructorCoursesPage() {
         </p>
       ) : null}
 
-      {user?.has_canvas_token && isLoading ? (
-        <p className="text-sm text-muted-foreground">Syncing courses from Canvas...</p>
-      ) : null}
-
       {activeCourse ? (
         <p className="text-sm text-muted-foreground">
           Active course:{" "}
@@ -72,8 +70,21 @@ export function InstructorCoursesPage() {
 
       <InstructorCoursesOverview analytics={analytics} />
 
-      {filteredCourses.length === 0 ? (
-        <InstructorCoursesEmptyState />
+      {user?.has_canvas_token && isLoading ? (
+        <Card className="shadow-sm ring-1 ring-border/60">
+          <CardContent className="flex items-center gap-3 p-6 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />
+            Loading courses from Canvas...
+          </CardContent>
+        </Card>
+      ) : filteredCourses.length === 0 ? (
+        <InstructorCoursesEmptyState
+          description={
+            user?.has_canvas_token
+              ? "No Canvas courses matched this search."
+              : "Try adjusting your search or switch institutions."
+          }
+        />
       ) : (
         <InstructorCoursesSection
           courses={filteredCourses}

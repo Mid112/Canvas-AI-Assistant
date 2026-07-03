@@ -1,15 +1,16 @@
 import {
+  BarChart3,
   BookOpen,
   ClipboardList,
   LayoutGrid,
   List,
   Users,
 } from "lucide-react";
-
 import { Link } from "react-router-dom";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { getCourseAnalyticsPath } from "@/pages/Instructor/InstructorSubmissionsAnalysis/submissionNavigation";
 import { instructorCourseAssignmentsPath } from "@/routes/paths";
 import { cn } from "@/lib/utils";
 import type { InstructorCourse } from "@/types/course";
@@ -91,18 +92,23 @@ export function InstructorCoursesCard({
       </CardContent>
 
       <CardFooter className="grid grid-cols-2 gap-2 border-t bg-transparent pt-4">
-        <Button
-          className="w-full"
-          render={
-            <Link to={instructorCourseAssignmentsPath(course.id)} />
-          }
+        <Link
+          to={instructorCourseAssignmentsPath(course.id)}
+          className={cn(buttonVariants(), "w-full")}
         >
           View Course
-        </Button>
+        </Link>
+        <Link
+          to={getCourseAnalyticsPath(course.id)}
+          className={cn(buttonVariants({ variant: "outline" }), "w-full")}
+        >
+          <BarChart3 data-icon="inline-start" />
+          Analytics
+        </Link>
         <Button
           type="button"
           variant={isActive ? "secondary" : "outline"}
-          className="w-full"
+          className="col-span-2 w-full"
           onClick={onSetActive}
           disabled={isActive || isSettingActive}
         >
@@ -152,6 +158,13 @@ export function InstructorCoursesList({
               <span className="text-sm font-medium tabular-nums">
                 {course.progress}%
               </span>
+              <Link
+                to={getCourseAnalyticsPath(course.id)}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                <BarChart3 data-icon="inline-start" />
+                Analytics
+              </Link>
               <Button
                 size="sm"
                 variant="outline"
@@ -160,14 +173,12 @@ export function InstructorCoursesList({
               >
                 {activeCourseId === course.id ? "Active" : "Set Active"}
               </Button>
-              <Button
-                size="sm"
-                render={
-                  <Link to={instructorCourseAssignmentsPath(course.id)} />
-                }
+              <Link
+                to={instructorCourseAssignmentsPath(course.id)}
+                className={buttonVariants({ size: "sm" })}
               >
                 View Course
-              </Button>
+              </Link>
             </div>
           </li>
         ))}
@@ -247,14 +258,16 @@ export function InstructorCoursesSection({
   );
 }
 
-export function InstructorCoursesEmptyState() {
+export function InstructorCoursesEmptyState({
+  description = "Try adjusting your search or switch institutions.",
+}: {
+  description?: string;
+}) {
   return (
     <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed p-12 text-center">
       <div className="space-y-1">
         <p className="font-medium">No courses found</p>
-        <p className="text-sm text-muted-foreground">
-          Try adjusting your search or switch institutions.
-        </p>
+        <p className="text-sm text-muted-foreground">{description}</p>
       </div>
     </div>
   );

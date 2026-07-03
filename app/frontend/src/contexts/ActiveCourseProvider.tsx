@@ -13,6 +13,7 @@ import {
   getStoredActiveCourseId,
   setStoredActiveCourseId,
 } from "@/lib/active-course-storage";
+import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
 import { CanvasApiError, fetchCourses } from "@/services/canvas";
 import type { CanvasCourse } from "@/types/canvas";
 import type { ActiveCourseSelection, InstructorCourse } from "@/types/course";
@@ -57,6 +58,7 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
 
   const usesCanvasCourses = Boolean(accessToken && user?.has_canvas_token);
+  const canvasUrl = getPrimaryCanvasConnectionUrl(user);
   const persistenceScope = user
     ? String(user.id)
     : `institution-${selectedInstitution.id}`;
@@ -76,7 +78,7 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
 
     try {
       if (usesCanvasCourses && accessToken) {
-        const coursesData = await fetchCourses(accessToken);
+        const coursesData = await fetchCourses(accessToken, canvasUrl);
         const courses = coursesData
           .map(mapCanvasCourseToInstructorCourse)
           .filter((course): course is InstructorCourse => course !== null);
@@ -103,6 +105,7 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
     }
   }, [
     accessToken,
+    canvasUrl,
     mockCourses,
     resolveStoredActiveCourse,
     usesCanvasCourses,
