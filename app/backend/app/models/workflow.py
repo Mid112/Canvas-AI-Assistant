@@ -11,6 +11,7 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.audit_log import AuditLog
+    from app.models.audit_log_session import AuditLogSession
     from app.models.conversation import Conversation
     from app.models.course import Course
     from app.models.user import User
@@ -73,3 +74,4 @@ class Workflow(Base):
     user: Mapped[User] = relationship("User", back_populates="workflows")
     course: Mapped[Course | None] = relationship("Course")
     audit_logs: Mapped[list[AuditLog]] = relationship("AuditLog", back_populates="workflow")
+    audit_log_sessions: Mapped[list[AuditLogSession]] = relationship("AuditLogSession", back_populates="workflow")

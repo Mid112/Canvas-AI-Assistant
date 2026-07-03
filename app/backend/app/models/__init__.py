@@ -3,6 +3,7 @@
 # on startup and all relationships can be resolved correctly.
 from app.models.assignment import Assignment
 from app.models.audit_log import AuditLog
+from app.models.audit_log_session import AuditLogSession
 from app.models.canvas_connection import CanvasConnection
 from app.models.conversation import Conversation
 from app.models.course import Course
@@ -18,6 +19,7 @@ from app.models.workflow import Workflow
 __all__ = [
     "Assignment",
     "AuditLog",
+    "AuditLogSession",
     "CanvasConnection",
     "Conversation",
     "Course",

@@ -14,8 +14,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
-import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
 import {
   instructorAssignmentUpdatePath,
   paths,
@@ -32,7 +32,7 @@ export function InstructorCourseAssignmentsPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const canvasUrl = getPrimaryCanvasConnectionUrl(user);
+  const canvasUrl = useCanvasConnectionUrl();
 
   const parsedLocalCourseId = Number(localCourseId);
   const idIsValid =

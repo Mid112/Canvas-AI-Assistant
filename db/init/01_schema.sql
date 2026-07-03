@@ -190,6 +190,21 @@ CREATE INDEX idx_audit_logs_course_id ON audit_logs(course_id);
 CREATE INDEX idx_audit_logs_timestamp ON audit_logs(timestamp);
 
 -- ─────────────────────────────────────────────
+-- Audit Log Sessions
+-- ─────────────────────────────────────────────
+CREATE TABLE audit_logs_session (
+    id           SERIAL PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    workflow_id  INTEGER REFERENCES workflows(id) ON DELETE SET NULL,
+    action       VARCHAR NOT NULL,
+    details      JSONB,
+    timestamp    TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_audit_logs_session_user_id ON audit_logs_session(user_id);
+CREATE INDEX idx_audit_logs_session_timestamp ON audit_logs_session(timestamp);
+
+-- ─────────────────────────────────────────────
 -- Message Templates
 -- ─────────────────────────────────────────────
 CREATE TABLE message_templates (
