@@ -779,3 +779,84 @@ The biggest lesson from this cycle is that the confirm endpoint security issue w
 - **Goal 1:** Implement the three-module write-action pipeline (write intent classification, context fetching, preview construction) for `feature/llm-post-request`
 - **Goal 2:** Add the no-invention guard for write actions, verifying current Canvas state against what the LLM claims before any write executes
 - **Goal 3:** Begin the action history service so every confirmed Canvas action is logged in a way users can review and reverse where possible
+
+
+
+
+
+
+
+# Cycle 13 Report: 06/30 – 07/02 (June 30 – July 2)
+
+## Timesheet
+
+### Clockify Report
+- **30/06 (Tuesday):** Using Clockify – Logged 03:54:36 hours
+- **01/07 (Wednesday):** Using Clockify – Logged  0
+- **02/07 (Thursday):** Using Clockify – Logged 08:51:25 hours
+
+
+<img width="1223" height="313" alt="Screenshot 2026-07-03 at 12 44 33 PM" src="https://github.com/user-attachments/assets/bad4b948-1fa2-4926-a4e1-232625c8e235" />
+
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Close out feature/llm-vague-message (config, message handling, confirm verification)
+- Replaced the hardcoded Groq hosting provider with a `DEFAULT_LLM_PROVIDER` setting read from `config.py`, then fixed a bug where the constant was misplaced during that refactor.
+- Fixed message handling and preview return so the stored preview message is correctly reconstructed on confirm.
+- Added preview-message logging so the LLM verifies against the actual stored `preview_message_id` when confirming an action, closing a gap left over from the confirm-by-message-ID work in Cycle 12.
+- Moved `test_vague_llm.py` into `app/backend/app/non_unit_test/` so it no longer runs as part of the standard unit test collection.
+- Resolved CI linting issues and merge conflicts against `develop` picked up while this branch was open.
+
+### #2: Update assignment via natural language (feature/llm-update-assignment)
+- Extracted the validation logic that `create_assignment` used into shared helpers (`_check_title`, `_check_description`, `_check_due_date`, `_check_points_possible`, `_get_owned_course_or_404`) so `update_assignment` could reuse the same checks instead of duplicating them.
+- Added `validate_assignment_for_update`, which confirms the target assignment and course actually exist and belong to the requesting instructor before any field is changed — the "no-invention" guard for updates.
+- Wired `update_assignment` through the dispatcher and preview builder, reusing the same intent-preview/confirm flow as assignment creation.
+- Fixed a dispatcher field-name mismatch (`title` vs. the schema's `name`, and a missing `points_possible`) caught during end-to-end testing.
+
+### #3: Student messaging via Canvas announcements (feature/llm-student-messaging)
+- Added a `send_message` action that posts a Canvas announcement, defaulting to the entire class when no specific recipient is named, per the agreed design.
+- Reused the existing preview/confirm pipeline; the preview explicitly states the message will be a public announcement when no recipients are specified, to avoid the case where a user assumes a message is private.
+- Added `send_course_message` in `services/canvas.py`, resolving a circular-import risk with `services/student.py` by importing `get_students` locally inside the function instead of at module scope.
+
+### #4: Workflow/AuditLog schema redesign (feature/workflow-auditlog-update)
+- Redesigned the `workflows` and `audit_logs` schemas around an explicit action-lifecycle state machine (`pending → executing → executed/failed`, plus `cancelled`/`superseded`) so the LLM's output and the resulting Canvas action can both be logged and traced correctly.
+- This is the direct successor to Cycle 12's Goal 3 (action history service): instead of just logging actions, the redesign first closes a replay risk — nothing previously marked a confirmed `intent_preview` as consumed, so the same `pending_message_id` could in principle be confirmed more than once.
+
+---
+
+## Progress Update (since 30/06/2026)
+
+| TASK/ISSUE #                                                    | STATUS      |
+| ---------------------------------------------------------------- | ----------- |
+| Scope check and out-of-scope rejection                          | Completed   |
+| Ambiguous request clarification                                  | Completed   |
+| Intent preview before execution                                 | Completed   |
+| Server-side confirm by message ID                                | Completed   |
+| DEFAULT_LLM_PROVIDER config setting                              | Completed   |
+| Preview-message verification on confirm                          | Completed   |
+| Write actions pipeline (feature/llm-post-request)                | Completed   |
+| Update assignment via natural language (feature/llm-update-assignment) | Completed   |
+| No-invention validation guard (shared create/update checks)      | Completed   |
+| Student messaging via Canvas announcements (feature/llm-student-messaging) | Completed   |
+| Workflow/AuditLog action-lifecycle schema redesign               | In Progress |
+| Action classification, reversibility, and cancellation           | Not Started |
+
+---
+
+## Cycle 13 Goal Review
+
+### Reflection:
+All three goals from Cycle 12 moved forward, but not in exactly the shape they were planned in. The "three-module write-action pipeline" goal collapsed into something simpler once `update_assignment` and `send_message` turned out to need the same validation and preview scaffolding `create_assignment` already had — extending and sharing that scaffolding was less work and less risk than building a separate pipeline. The "no-invention guard" goal ended up folded into that same validation extraction rather than existing as its own module, which is a better outcome than what was originally scoped. The action history service goal grew in scope once it became clear that logging actions safely required fixing a replay gap in the confirm flow first, which is why that item is still "In Progress" rather than done.
+
+### Retrospective:
+The biggest lesson this cycle was that reuse has a cost that only shows up once you try it: `create_assignment`'s validation code was written assuming it was the only caller, so making `update_assignment` reuse it required first extracting and generalizing several functions before either path could be trusted. That extraction work wasn't in the original plan but was clearly the right call once it was needed. The schema redesign also surfaced a coordination problem worth remembering — a different in-progress branch (`feature/backend-authenticationAPI`) had independently added its own `audit_logs` table to `develop`, so landing this redesign will need a deliberate rename-first strategy rather than a normal merge, which will carry into next cycle.
+
+---
+
+## Next Cycle 14 Goals
+- **Goal 1:** Land the Workflow/AuditLog schema redesign into `develop` without colliding with the `audit_logs` table introduced independently by `feature/backend-authenticationAPI`, using a rename-first migration strategy.
+- **Goal 2:** Finish action classification, reversibility status, and cancellation support (`feature/llm-preview-status`) on top of the new Workflow state machine.
+- **Goal 3:** Connect the dry-run-preview frontend components (reversibility status, affected-resources card) to the real backend endpoints instead of mock data.
