@@ -6,15 +6,9 @@ Covers the changes introduced in the admin-auth feature:
   - decode_access_token now returns (user_id, role) and handles old tokens
   - hash_token produces a stable SHA-256 hex digest
 """
-import sys
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
-import pytest
 from jose import jwt
-
-backend_path = Path(__file__).parent.parent.parent / "app" / "backend"
-sys.path.insert(0, str(backend_path))
 
 from app.config import settings
 from app.core.security import create_access_token, decode_access_token, hash_token
