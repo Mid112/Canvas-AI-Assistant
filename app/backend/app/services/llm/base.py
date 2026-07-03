@@ -13,6 +13,7 @@ class LLMAdapter(ABC):
         system_prompt: str,
         user_message: str,
         timeout: float = 30.0,
+        history: list[dict] | None = None,
     ) -> str:
         """Returns the raw text response from the LLM. Raises on timeout
         or HTTP failure — callers handle those, adapters don't swallow them."""

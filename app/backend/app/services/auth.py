@@ -15,15 +15,10 @@ from app.models.user import User
 from app.schemas.auth import RegisterRequest, TokenResponse
 
 
-async def register_user(
-    db: AsyncSession, body: RegisterRequest
-) -> TokenResponse:
+async def register_user(db: AsyncSession, body: RegisterRequest) -> TokenResponse:
     existing = await db.scalar(select(User).where(User.email == body.email))
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
 
     user = User(
         name=body.name,
@@ -38,23 +33,15 @@ async def register_user(
     return TokenResponse(access_token=create_access_token(user.id))
 
 
-async def login_user(
-    db: AsyncSession, email: str, password: str
-) -> TokenResponse:
+async def login_user(db: AsyncSession, email: str, password: str) -> TokenResponse:
     user = await db.scalar(select(User).where(User.email == email))
 
     # Deliberate vague error — don't reveal whether email exists
     if not user or not verify_password(password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is disabled"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
 
     return TokenResponse(access_token=create_access_token(user.id))
 
@@ -73,9 +60,7 @@ async def remove_canvas_connection(db: AsyncSession, user: User, connection_id: 
     await db.commit()
 
 
-async def update_canvas_token(
-    db: AsyncSession, user: User, canvas_token: str, canvas_url: str
-) -> User:
+async def update_canvas_token(db: AsyncSession, user: User, canvas_token: str, canvas_url: str) -> User:
     await validate_token(canvas_token, canvas_url)
     encrypted = encrypt_canvas_token(canvas_token)
 
