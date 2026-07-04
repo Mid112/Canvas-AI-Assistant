@@ -654,24 +654,27 @@ Total: 9 hours
 - Team sync, then closed out the lint/test breakage flagged in Cycle 12's retrospective from merging the authenticationAPI, RBAC, and instructor-account-management branches together
 - Fixed ruff and pytest failures across `feature/submission-retrieval-service` and `feature/llm-vague-message` after their merges
 - Updated `config.py` and `test_canvas.py` to keep both branches green post-merge
-<!-- add screenshot -->
+<img width="1118" height="70" alt="Screenshot 2026-07-03 194856" src="https://github.com/user-attachments/assets/9dffb669-844f-455f-bae8-30907ba34d26" />
+
 
 ### 2: PR Review & Requested-Changes Fixes (Wednesday, 1/7)
 - Reviewed and addressed reviewer feedback on the RBAC permissions PR
 - Fixed a JWT role-claim staleness bug in `dependencies.py` (role was being enforced from the token claim instead of re-checked against the DB), with regression tests added to `test_permissions.py` and `test_admin_management.py`
 - Added tests for admin auth and admin rate limiting (`test_admin_auth.py`, `test_admin_rate_limit.py`)
 - Added the `GET /admin/instructors` endpoint, service method, and test coverage
-<!-- add screenshot -->
+<img width="1118" height="64" alt="Screenshot 2026-07-03 194902" src="https://github.com/user-attachments/assets/4ff83074-fb48-44ee-8bfb-071fd4904e10" />
+
 
 ### 3: Missing Submissions Analysis (Thursday, 2/7)
 - Added the analysis schema, endpoint, and service for identifying missing student submissions
 - Added test coverage for the missing-submissions analysis flow
-<!-- add screenshot -->
+<img width="1129" height="65" alt="Screenshot 2026-07-03 194845" src="https://github.com/user-attachments/assets/992341e2-f752-4c77-8976-e52ea9cf3a60" />
+
 
 ### 4: Late Submission Analysis (Thursday, 2/7)
 - Added the router, schema, and service for late-submission analysis
 - Added test coverage for the late-submission analysis flow
-<!-- add screenshot -->
+
 
 ---
 
