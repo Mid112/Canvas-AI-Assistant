@@ -29,6 +29,10 @@ describe("workflowHistory service", () => {
           user_prompt: "create a midterm exam",
           status: "pending",
           proposed_action: { action: "create_assignment", title: "Midterm Exam" },
+          affected_resources: [
+            { type: "course", id: 1, name: "CPSC 310", status: "unchanged" },
+            { type: "assignment", id: null, name: "Midterm Exam", status: "created" },
+          ],
           created_at: "2026-05-01T12:00:00.000Z",
           executed_at: null,
           user_name: "Dr. Jane Doe",
@@ -52,6 +56,7 @@ describe("workflowHistory service", () => {
     expect(entries[0]?.workflowName).toBe("Create Assignment");
     expect(entries[0]?.description).toBe("create a midterm exam");
     expect(entries[0]?.status).toBe("pending");
+    expect(entries[0]?.affectedResources).toHaveLength(2);
   });
 
   it("maps executed workflows to approved status", () => {
@@ -62,6 +67,9 @@ describe("workflowHistory service", () => {
       user_prompt: "remind missing students",
       status: "executed",
       proposed_action: { action: "send_message" },
+      affected_resources: [
+        { type: "course", id: 1, name: "CPSC 310", status: "unchanged" },
+      ],
       created_at: "2026-05-01T12:00:00.000Z",
       executed_at: "2026-05-01T12:05:00.000Z",
       user_name: "Dr. Jane Doe",

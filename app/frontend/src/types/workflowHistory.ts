@@ -7,6 +7,7 @@ export interface WorkflowHistoryEntry {
   description: string;
   userName: string;
   status: WorkflowStatus;
+  affectedResources: Array<Record<string, unknown>>;
 }
 
 /**
@@ -20,6 +21,7 @@ export interface WorkflowHistoryApiItem {
   user_prompt: string;
   status: string;
   proposed_action: Record<string, unknown>;
+  affected_resources: Array<Record<string, unknown>>;
   created_at: string;
   executed_at: string | null;
   user_name: string;

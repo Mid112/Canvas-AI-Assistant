@@ -147,6 +147,7 @@ CREATE TABLE workflows (
     action_name              VARCHAR NOT NULL,
     user_prompt              TEXT NOT NULL,
     proposed_action          JSONB NOT NULL,
+    affected_resources       JSONB NOT NULL DEFAULT '[]'::jsonb,
     status                   VARCHAR NOT NULL DEFAULT 'pending'
                              CHECK (status IN ('pending', 'executing', 'executed', 'failed', 'cancelled', 'superseded')),
     error_detail             TEXT,

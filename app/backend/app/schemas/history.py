@@ -12,6 +12,7 @@ class WorkflowHistoryItem(BaseModel):
     user_prompt: str
     status: str
     proposed_action: dict
+    affected_resources: list[dict]
     created_at: datetime
     executed_at: datetime | None = None
     user_name: str
@@ -25,6 +26,7 @@ class WorkflowHistoryItem(BaseModel):
             user_prompt=workflow.user_prompt,
             status=workflow.status,
             proposed_action=workflow.proposed_action,
+            affected_resources=workflow.affected_resources,
             created_at=workflow.created_at,
             executed_at=workflow.executed_at,
             user_name=workflow.user.name,

@@ -129,6 +129,7 @@ async def _sync_workflow_for_preview(
     preview_message_id: int,
     user_prompt: str,
     proposed_action: dict,
+    affected_resources: list[dict] | None = None,
 ) -> None:
     """Creates or updates the Workflow row backing an intent_preview — the
     state machine handle_confirmed_action checks to guarantee an action
@@ -145,6 +146,7 @@ async def _sync_workflow_for_preview(
     first time one is seen, since the client (e.g. the manual test
     harness) doesn't always send local_course_id up front."""
     action_name = proposed_action.get("action")
+    resources = affected_resources or []
 
     if conversation.course_id is None:
         local_course_id = proposed_action.get("local_course_id")
@@ -170,6 +172,7 @@ async def _sync_workflow_for_preview(
         existing.action_name = action_name
         existing.user_prompt = user_prompt
         existing.proposed_action = proposed_action
+        existing.affected_resources = resources
         existing.course_id = conversation.course_id
         existing.status = "pending"
         existing.error_detail = None
@@ -187,6 +190,7 @@ async def _sync_workflow_for_preview(
             action_name=action_name,
             user_prompt=user_prompt,
             proposed_action=proposed_action,
+            affected_resources=resources,
             status="pending",
         )
     )
@@ -375,6 +379,7 @@ async def handle_chat_message(
         )
 
     if result.get("intent_preview"):
+        preview_metadata = result.get("preview_metadata") or {}
         await _sync_workflow_for_preview(
             db, conversation, user,
             source_user_message_id=user_msg.id,
@@ -382,6 +387,7 @@ async def handle_chat_message(
             preview_message_id=assistant_msg.id,
             user_prompt=message,
             proposed_action=result.get("proposed_action", {}),
+            affected_resources=preview_metadata.get("affected_resources", []),
         )
 
     await db.commit()
@@ -513,6 +519,8 @@ async def handle_confirmed_action(
     workflow.status = "executed"
     workflow.executed_at = datetime.now(UTC)
     workflow.result_message_id = result_msg.id
+    if result.get("affected_resources"):
+        workflow.affected_resources = result["affected_resources"]
 
     # AuditLog is only ever about actual Canvas mutations — read actions
     # (e.g. fetch_courses) now get Workflow rows too (see

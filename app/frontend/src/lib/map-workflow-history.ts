@@ -7,10 +7,11 @@ import type {
 const ACTION_LABELS: Record<string, string> = {
   create_assignment: "Create Assignment",
   update_assignment: "Update Assignment",
-  send_message: "Send Message",
+  send_message: "Send Reminder Emails",
   fetch_courses: "Fetch Courses",
   fetch_assignments: "Fetch Assignments",
   fetch_submissions: "Fetch Submissions",
+  fetch_students: "Fetch Students",
   set_active_course: "Set Active Course",
   get_active_course: "Get Active Course",
 };
@@ -22,20 +23,18 @@ function formatActionName(actionName: string): string {
 
   return actionName
     .split("_")
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(" ");
 }
 
-export function mapWorkflowStatus(status: string): WorkflowStatus {
+function mapWorkflowStatus(status: string): WorkflowStatus {
   switch (status) {
     case "executed":
       return "approved";
-    case "cancelled":
     case "failed":
+    case "cancelled":
     case "superseded":
       return "rejected";
-    case "pending":
-    case "executing":
     default:
       return "pending";
   }
@@ -51,5 +50,6 @@ export function mapWorkflowHistoryApiToEntry(
     description: item.user_prompt,
     userName: item.user_name,
     status: mapWorkflowStatus(item.status),
+    affectedResources: item.affected_resources,
   };
 }
