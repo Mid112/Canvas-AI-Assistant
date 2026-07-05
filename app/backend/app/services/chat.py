@@ -1,31 +1,67 @@
 # app/backend/app/services/chat.py
 import asyncio
 import json
+from datetime import UTC, date, datetime
 
 import httpx
 from fastapi import HTTPException
 from sqlalchemy import desc, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_action
 from app.mcp_tools.schemas import ACTION_SCHEMAS
+from app.models.audit_log import AuditLog
 from app.models.conversation import Conversation
 from app.models.message import Message
 from app.models.user import User
+from app.models.workflow import Workflow
 from app.services.llm.llm_setting import get_llm_adapter
 
 LLM_TIMEOUT_SECONDS = 90.0
-HISTORY_WINDOW = 10  # how many previous messages to send to the LLM
+HISTORY_WINDOW = 10
 
+# Actions that get a Workflow row (the replay-safe confirm state machine).
+# Read actions are structurally free to be wrapped in an intent_preview too
+# (see dispatcher.py's intent_preview case), but replaying a read is
+# harmless, so they're deliberately excluded — scoping this to writes only
+# also avoids a real collision: a modify-turn's Workflow lookup keys off
+# preview_message_id, and a stray read-preview sharing that id with an
+# unrelated pending write could otherwise corrupt it.
+WRITE_ACTIONS = {"create_assignment", "update_assignment", "send_message"}
+
+# action_name -> (resource_type, operation) for AuditLog rows.
+_AUDIT_RESOURCE_MAP = {
+    "create_assignment": ("assignment", "create"),
+    "update_assignment": ("assignment", "update"),
+    "send_message": ("announcement", "create"),
+}
+
+
+def _json_dumps(obj) -> str:
+    """json.dumps with datetime serialization support.
+    Pydantic model_dump() returns Python datetime objects for
+    DateTime fields — standard json.dumps can't handle these."""
+    def default(o):
+        if isinstance(o, datetime | date):
+            return o.isoformat()
+        raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
+    return json.dumps(obj, default=default)
 
 async def get_or_create_conversation(
-    db: AsyncSession, user: User, conversation_id: int | None, local_course_id: int | None
+    db: AsyncSession,
+    user: User,
+    conversation_id: int | None,
+    local_course_id: int | None,
 ) -> Conversation:
     if conversation_id is not None:
         conversation = await db.scalar(
-            select(Conversation).where(Conversation.id == conversation_id, Conversation.user_id == user.id)
+            select(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.user_id == user.id,
+            )
         )
         if conversation:
             return conversation
@@ -36,24 +72,149 @@ async def get_or_create_conversation(
     return conversation
 
 
-async def log_message(db: AsyncSession, conversation: Conversation, role: str, content: str) -> Message:
-    message = Message(conversation_id=conversation.id, role=role, content=content)
+async def log_message(
+    db: AsyncSession,
+    conversation: Conversation,
+    role: str,
+    content: str,
+) -> Message:
+    message = Message(
+        conversation_id=conversation.id, role=role, content=content
+    )
     db.add(message)
     await db.flush()
+    await db.refresh(message)
     return message
 
 
-async def _get_recent_messages(db: AsyncSession, conversation_id: int) -> list[dict]:
-    """Fetch the last N messages from this conversation to give the LLM
-    context for follow-up turns. This is what lets the LLM see its own
-    previous clarify/partial_plan response when the user sends a refinement.
+async def update_message_content(
+    db: AsyncSession,
+    conversation_id: int,
+    message_id: int,
+    new_content: str,
+) -> Message:
+    """Updates the content of an existing message row in place.
+    Used when a user modifies a proposed action — the old intent_preview
+    message is overwritten with the new preview so conversation history
+    reflects only the latest agreed plan. This prevents the LLM from
+    seeing both the old and new preview on the next turn, and keeps the
+    messages table as a clean record of current state rather than an
+    append-only log of every intermediate draft.
+
+    Ownership is enforced via conversation_id — only messages belonging
+    to the given conversation can be updated."""
+    message = await db.scalar(
+        select(Message).where(
+            Message.id == message_id,
+            Message.conversation_id == conversation_id,
+        )
+    )
+    if not message:
+        raise ToolExecutionError(
+            "Preview message not found.",
+            log_detail=f"message_id={message_id} not found in conversation_id={conversation_id}",
+        )
+    message.content = new_content
+    await db.flush()
+    await db.refresh(message)
+    return message
+
+
+async def _sync_workflow_for_preview(
+    db: AsyncSession,
+    conversation: Conversation,
+    user: User,
+    source_user_message_id: int,
+    pending_message_id: int | None,
+    preview_message_id: int,
+    user_prompt: str,
+    proposed_action: dict,
+) -> None:
+    """Creates or updates the Workflow row backing an intent_preview — the
+    state machine handle_confirmed_action checks to guarantee an action
+    executes at most once. Covers every action, not just WRITE_ACTIONS:
+    the system prompt requires *every* action, read or write, to go
+    through intent_preview -> confirm, so scoping this to writes only
+    would 404 every read-action confirm (e.g. "what courses do I have?")
+    — a real regression caught during manual verification, not a
+    deliberate design choice. AuditLog writing in handle_confirmed_action
+    stays gated to WRITE_ACTIONS separately, since audit rows are only
+    ever about actual Canvas mutations.
+
+    Also backfills conversation.course_id from the proposed action the
+    first time one is seen, since the client (e.g. the manual test
+    harness) doesn't always send local_course_id up front."""
+    action_name = proposed_action.get("action")
+
+    if conversation.course_id is None:
+        local_course_id = proposed_action.get("local_course_id")
+        if local_course_id is not None:
+            conversation.course_id = local_course_id
+
+    existing = None
+    if pending_message_id:
+        existing = await db.scalar(
+            select(Workflow).where(
+                Workflow.preview_message_id == pending_message_id,
+                Workflow.conversation_id == conversation.id,
+            )
+        )
+
+    if existing:
+        # preview_message_id is unique, so a second Workflow can never be
+        # created for the same message row — reuse this one regardless of
+        # its current status. Reopening an already-settled workflow (only
+        # reachable if a client replays a modify against a message id that
+        # was already confirmed/cancelled) resets it back to pending with
+        # the new proposed action, clearing the stale execution outcome.
+        existing.action_name = action_name
+        existing.user_prompt = user_prompt
+        existing.proposed_action = proposed_action
+        existing.course_id = conversation.course_id
+        existing.status = "pending"
+        existing.error_detail = None
+        existing.executed_at = None
+        existing.result_message_id = None
+        return
+
+    db.add(
+        Workflow(
+            conversation_id=conversation.id,
+            user_id=user.id,
+            course_id=conversation.course_id,
+            source_user_message_id=source_user_message_id,
+            preview_message_id=preview_message_id,
+            action_name=action_name,
+            user_prompt=user_prompt,
+            proposed_action=proposed_action,
+            status="pending",
+        )
+    )
+
+
+async def _get_recent_messages(
+    db: AsyncSession, conversation_id: int
+) -> list[dict]:
+    """Fetch the last N messages for LLM context. Excludes the most
+    recently logged message since generate() appends the current user
+    turn explicitly — including it here would cause the current message
+    to appear twice in the LLM's context window.
+
     In a future iteration this step gets replaced by a vector retrieval
-    call that fetches semantically relevant history rather than just recent."""
+    call that fetches semantically relevant history rather than just
+    the most recent N messages."""
     rows = await db.scalars(
-        select(Message).where(Message.conversation_id == conversation_id).order_by(desc(Message.id)).limit(HISTORY_WINDOW)
+        select(Message)
+        .where(Message.conversation_id == conversation_id)
+        .order_by(desc(Message.id))
+        .limit(HISTORY_WINDOW + 1)
     )
     messages = list(rows)
     messages.reverse()
+    # drop the last message — it's the current user turn, which generate()
+    # will append separately, and including it here causes duplication
+    if messages:
+        messages = messages[:-1]
     return [{"role": m.role, "content": m.content} for m in messages]
 
 
@@ -61,11 +222,10 @@ def build_system_prompt() -> str:
     tool_list = "\n".join(
         f"- {name}: {schema.model_json_schema()}"
         for name, schema in ACTION_SCHEMAS.items()
-        if name not in {"out_of_scope", "clarify", "intent_preview"}
+        if name not in {"out_of_scope", "clarify", "intent_preview", "respond"}
     )
 
-    return (
-        """You are a Canvas LMS assistant for instructors. You help
+    return """You are a Canvas LMS assistant for instructors. You help
 with course management, assignments, student submissions, and
 communicating with students.
 
@@ -98,10 +258,26 @@ or needs a natural language reply that isn't a Canvas tool call, respond with:
 {"action": "respond", "message": "<your natural language answer here>"}
 Use this for greetings, capability questions, and clarifying what is in scope.
 
+UPDATING AN ASSIGNMENT:
+Do not propose update_assignment unless you already know the assignment's
+Canvas ID from this conversation (e.g. from a previous fetch_assignments or
+fetch_submissions result). If you don't have it yet, propose fetch_assignments
+first instead of guessing an ID. assignment_id must come from that data's
+"id" field, not "local_id". Only include the fields the user actually wants
+changed — leave every other field out of proposed_action entirely, since
+anything omitted is preserved automatically.
+
+MESSAGING STUDENTS:
+send_message posts a public announcement visible to the entire class of the
+named course — there is no way to target individual students yet, so do not
+imply the message is private or that specific students were chosen. Always
+require local_course_id. Get clear subject and body content from the user
+before proposing the action rather than inventing wording yourself. The user
+can ask you to revise the draft before confirming — treat that like any
+other follow-up refinement.
+
 AVAILABLE ACTIONS (only used inside proposed_action):
-"""
-        + tool_list
-    )
+""" + tool_list
 
 
 async def handle_chat_message(
@@ -110,9 +286,24 @@ async def handle_chat_message(
     message: str,
     local_course_id: int | None,
     conversation_id: int | None,
+    pending_message_id: int | None = None,
 ) -> tuple[Conversation, dict, bool]:
-    conversation = await get_or_create_conversation(db, user, conversation_id, local_course_id)
-    await log_message(db, conversation, role="user", content=message)
+    """Main chat handler. Two distinct flows:
+
+    Normal turn (pending_message_id=None):
+      logs user message, calls LLM, parses response, executes tool,
+      logs assistant message as a new row, returns result.
+
+    Modify turn (pending_message_id=<id>):
+      same as normal, but if the result is an intent_preview, the old
+      preview message is overwritten in place rather than a new row
+      being appended. This keeps conversation history clean so the LLM
+      sees only the latest agreed plan on subsequent turns."""
+
+    conversation = await get_or_create_conversation(
+        db, user, conversation_id, local_course_id
+    )
+    user_msg = await log_message(db, conversation, role="user", content=message)
 
     history = await _get_recent_messages(db, conversation.id)
 
@@ -121,7 +312,10 @@ async def handle_chat_message(
 
     try:
         raw_output = await asyncio.wait_for(
-            adapter.generate(system_prompt, message, history=history),
+            adapter.generate(
+                system_prompt, message, history=history,
+                timeout=LLM_TIMEOUT_SECONDS,
+            ),
             timeout=LLM_TIMEOUT_SECONDS,
         )
     except TimeoutError:
@@ -133,7 +327,6 @@ async def handle_chat_message(
             {"error": "The assistant took too long to respond. Please try again."},
             True,
         )
-
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 429:
             log_detail = "Groq rate limit hit"
@@ -144,7 +337,6 @@ async def handle_chat_message(
         await log_message(db, conversation, role="assistant", content=log_detail)
         await db.commit()
         return conversation, {"error": user_message}, True
-
     except Exception as e:
         log_detail = f"LLM request failed: {type(e).__name__}: {e}"
         await log_message(db, conversation, role="assistant", content=log_detail)
@@ -163,44 +355,289 @@ async def handle_chat_message(
         await db.commit()
         return conversation, {"error": e.user_message}, True
 
-    await log_message(db, conversation, role="assistant", content=str(result))
+    # Log the assistant result — if this is a modify turn superseding a
+    # previous intent_preview, overwrite that message in place rather than
+    # appending a new row, so the LLM's next turn sees only the updated plan
+    if result.get("intent_preview") and pending_message_id:
+        assistant_msg = await update_message_content(
+            db, conversation.id, pending_message_id, _json_dumps(result)
+        )
+    else:
+        assistant_msg = await log_message(
+            db, conversation, role="assistant", content=_json_dumps(result)
+        )
+
+    if result.get("intent_preview"):
+        await _sync_workflow_for_preview(
+            db, conversation, user,
+            source_user_message_id=user_msg.id,
+            pending_message_id=pending_message_id,
+            preview_message_id=assistant_msg.id,
+            user_prompt=message,
+            proposed_action=result.get("proposed_action", {}),
+        )
+
     await db.commit()
+
+    # attach the stored message ID so the client can confirm by ID
+    if result.get("intent_preview"):
+        result["pending_message_id"] = assistant_msg.id
+
     return conversation, result, False
+
+
+async def _claim_pending_workflow(db: AsyncSession, workflow: Workflow, new_status: str) -> bool:
+    """Atomically transitions a workflow from pending to new_status via a
+    conditional UPDATE, not a read-then-check race — two simultaneous
+    requests each run in their own DB transaction, so a plain
+    SELECT-then-check would let both pass under READ COMMITTED. The
+    conditional UPDATE takes a row lock instead: a concurrent duplicate
+    blocks until the first transaction commits, then correctly
+    re-evaluates against committed state and affects 0 rows. Returns
+    whether the claim succeeded; caller must commit immediately after a
+    successful claim to release the row lock before doing anything slow.
+    Shared by handle_confirmed_action (pending->executing) and
+    handle_cancelled_action (pending->cancelled) — same race, same fix."""
+    claim = await db.execute(
+        sa_update(Workflow)
+        .where(Workflow.id == workflow.id, Workflow.status == "pending")
+        .values(status=new_status)
+    )
+    return claim.rowcount > 0
 
 
 async def handle_confirmed_action(
     db: AsyncSession,
     user: User,
     conversation_id: int,
-    proposed_action: dict,
+    pending_message_id: int,
 ) -> tuple[Conversation, dict, bool]:
-    """Executes a previously proposed action directly, with no LLM call.
-    This is what runs when the user confirms an intent_preview basically."""
+    """Executes the action stored in a previous intent_preview message.
+    The client confirms by message ID only — it cannot redefine what
+    action gets executed. The server loads the proposed_action from its
+    own Workflow record, verifying ownership and that the workflow is
+    still pending, before executing anything.
+
+    Replay safety: the pending->executing transition is an atomic
+    conditional UPDATE (`WHERE status='pending'`), not a Python-side
+    read-then-check — two simultaneous confirm requests each run in
+    their own DB transaction, so a plain SELECT-then-check race would let
+    both pass under READ COMMITTED. The conditional UPDATE takes a row
+    lock instead: a concurrent duplicate blocks until the first
+    transaction commits, then correctly re-evaluates against committed
+    state and affects 0 rows. Committing immediately after (rather than
+    holding the lock through the Canvas call) means a concurrent
+    duplicate gets an instant 409 instead of hanging.
+
+    This is PATH B in the dispatcher's two-path architecture: by the
+    time execute_tool is called here, the user has already confirmed,
+    so write action cases call Canvas directly without generating another
+    preview."""
 
     conversation = await db.scalar(
-        select(Conversation).where(Conversation.id == conversation_id, Conversation.user_id == user.id)
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == user.id,
+        )
     )
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found.")
 
+    workflow = await db.scalar(
+        select(Workflow).where(
+            Workflow.preview_message_id == pending_message_id,
+            Workflow.conversation_id == conversation_id,
+        )
+    )
+    if not workflow:
+        raise HTTPException(
+            status_code=404,
+            detail="Preview not found in this conversation.",
+        )
+
+    if not await _claim_pending_workflow(db, workflow, "executing"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"This action is no longer pending (status: {workflow.status}).",
+        )
+    await db.commit()
+    workflow.status = "executing"
+
+    # reload user with relationships eagerly loaded for this db session —
+    # the user object from get_current_user may have canvas_connections
+    # loaded in a different session context, causing greenlet errors when
+    # execute_tool accesses them during async execution
+    from sqlalchemy import select as sa_select
+    user = await db.scalar(
+        sa_select(User)
+        .where(User.id == user.id)
+        .options(selectinload(User.canvas_connections))
+    )
+
     await log_message(db, conversation, role="user", content="[confirmed action]")
 
     try:
-        action = parse_action(json.dumps(proposed_action))
+        action = parse_action(json.dumps(workflow.proposed_action))
         result = await execute_tool(db, user, action)
     except ToolExecutionError as e:
         await log_message(db, conversation, role="assistant", content=e.log_detail)
+        workflow.status = "failed"
+        workflow.error_detail = e.log_detail
         await db.commit()
         return conversation, {"error": e.user_message}, True
+    except HTTPException as e:
+        # Semantic validators (e.g. validate_assignment_for_create) and
+        # services/canvas.py raise HTTPException directly rather than
+        # ToolExecutionError. Left uncaught, this propagates past
+        # ChatResponse and the client gets a bare {"detail": ...} body
+        # with no "reply" key. Fold it into the same error-reply shape
+        # so the user actually sees why the confirmed action failed.
+        detail = e.detail if isinstance(e.detail, str) else str(e.detail)
+        error_detail = f"HTTPException {e.status_code}: {detail}"
+        await log_message(db, conversation, role="assistant", content=error_detail)
+        workflow.status = "failed"
+        workflow.error_detail = error_detail
+        await db.commit()
+        return conversation, {"error": detail}, True
 
-    await log_message(db, conversation, role="assistant", content=str(result))
+    result_msg = await log_message(
+        db, conversation, role="assistant", content=_json_dumps(result)
+    )
+    workflow.status = "executed"
+    workflow.executed_at = datetime.now(UTC)
+    workflow.result_message_id = result_msg.id
+
+    # AuditLog is only ever about actual Canvas mutations — read actions
+    # (e.g. fetch_courses) now get Workflow rows too (see
+    # _sync_workflow_for_preview), but must NOT get an audit row: their
+    # action_name isn't in _AUDIT_RESOURCE_MAP and would violate
+    # audit_logs' resource_type/operation CHECK constraints if written.
+    if workflow.action_name in WRITE_ACTIONS:
+        resource_type, operation = _AUDIT_RESOURCE_MAP.get(
+            workflow.action_name, (workflow.action_name, "create")
+        )
+        # result["data"] comes from CanvasWriteResult.to_dict()'s plain
+        # .model_dump() (not mode="json"), so it can still contain native
+        # datetime objects — JSONB needs JSON-safe values. Round-trip
+        # through the same _json_dumps used for Message.content to
+        # normalize them.
+        data = json.loads(_json_dumps(result.get("data") or {}))
+        resource_id = str(data["id"]) if isinstance(data, dict) and data.get("id") is not None else None
+        db.add(
+            AuditLog(
+                user_id=user.id,
+                workflow_id=workflow.id,
+                course_id=workflow.course_id,
+                action=workflow.action_name,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                operation=operation,
+                status="success",
+                after_data=data,
+                request_payload=workflow.proposed_action,
+            )
+        )
+
     await db.commit()
     return conversation, result, False
 
 
-async def get_conversation_with_messages(db: AsyncSession, user: User, conversation_id: int) -> Conversation | None:
+async def handle_cancelled_action(
+    db: AsyncSession,
+    user: User,
+    conversation_id: int,
+    pending_message_id: int,
+) -> tuple[Conversation, dict, bool]:
+    """Cancels the action stored in a previous intent_preview message.
+    Mirrors handle_confirmed_action's load/verify steps, but never calls
+    execute_tool — cancelling never touches Canvas, only the Workflow's
+    status. Uses the same atomic claim as confirm (pending->cancelled
+    instead of pending->executing), which means a second cancel attempt,
+    or a confirm attempt after a cancel, both 409 for the identical
+    structural reason: only one pending->X transition can ever win.
+
+    Deliberately does NOT overwrite the preview Message's content (unlike
+    the "modify" flow) — messages stays the immutable transcript of what
+    was proposed, Workflow.status is the mutable state layer that actually
+    blocks re-use. Blurring that line again is exactly what the
+    Workflow/AuditLog redesign was for."""
+
+    conversation = await db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == user.id,
+        )
+    )
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+
+    workflow = await db.scalar(
+        select(Workflow).where(
+            Workflow.preview_message_id == pending_message_id,
+            Workflow.conversation_id == conversation_id,
+        )
+    )
+    if not workflow:
+        raise HTTPException(
+            status_code=404,
+            detail="Preview not found in this conversation.",
+        )
+
+    if not await _claim_pending_workflow(db, workflow, "cancelled"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"This action is no longer pending (status: {workflow.status}).",
+        )
+    await db.commit()
+    workflow.status = "cancelled"
+
+    # Workflow doesn't store the LLM's natural-language summary itself
+    # (only structured action_name/proposed_action) — load the preview
+    # message it's still linked to for a human-readable description.
+    preview_message = await db.scalar(
+        select(Message).where(Message.id == workflow.preview_message_id)
+    )
+    try:
+        stored = json.loads(preview_message.content) if preview_message else {}
+    except (json.JSONDecodeError, TypeError):
+        stored = {}
+    cancelled_action = stored.get("summary", workflow.action_name)
+
+    # source_user_message_id is a direct FK, pinned to the first turn that
+    # started this preview chain — reliable across any number of "modify"
+    # revisions without needing to infer position from message ids.
+    source_message = await db.scalar(
+        select(Message).where(Message.id == workflow.source_user_message_id)
+    )
+    original_request = source_message.content if source_message else workflow.user_prompt
+
+    await log_message(db, conversation, role="user", content="[cancelled action]")
+
+    result = {
+        "action": "cancelled",
+        "cancelled": True,
+        "cancelled_action": cancelled_action,
+        "cancelled_proposed_action": workflow.proposed_action,
+        "original_request": original_request,
+        "message": (
+            f'Cancelled — no changes were made. Your original request '
+            f'("{original_request}") was not completed.'
+        ),
+    }
+    await log_message(db, conversation, role="assistant", content=_json_dumps(result))
+
+    await db.commit()
+    return conversation, result, False
+
+
+async def get_conversation_with_messages(
+    db: AsyncSession, user: User, conversation_id: int
+) -> Conversation | None:
     return await db.scalar(
         select(Conversation)
-        .where(Conversation.id == conversation_id, Conversation.user_id == user.id)
+        .where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == user.id,
+        )
         .options(selectinload(Conversation.messages))
     )
