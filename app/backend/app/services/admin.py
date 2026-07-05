@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password
 from app.models.audit_log_session import AuditLogSession
+from app.models.canvas_connection import CanvasConnection
 from app.models.user import User
 from app.schemas.admin import CreateAdminRequest, CreateInstructorRequest, UpdateInstructorRequest
 
@@ -57,7 +58,7 @@ async def create_instructor(db: AsyncSession, body: CreateInstructorRequest, adm
     db.add(instructor)
     await db.flush()
 
-    db.add(AuditLog(
+    db.add(AuditLogSession(
         user_id=admin.id,
         action="instructor_account_created",
         details={"instructor_id": instructor.id, "email": instructor.email},
@@ -85,7 +86,7 @@ async def update_instructor(
         instructor.email = body.email
         changes["email"] = body.email
 
-    db.add(AuditLog(
+    db.add(AuditLogSession(
         user_id=admin.id,
         action="instructor_account_updated",
         details={"instructor_id": instructor_id, "changes": changes},
@@ -98,7 +99,7 @@ async def update_instructor(
 async def enable_instructor(db: AsyncSession, instructor_id: int, admin: User) -> User:
     instructor = await _get_instructor(db, instructor_id)
     instructor.is_active = True
-    db.add(AuditLog(
+    db.add(AuditLogSession(
         user_id=admin.id,
         action="instructor_account_enabled",
         details={"instructor_id": instructor_id},
@@ -111,7 +112,7 @@ async def enable_instructor(db: AsyncSession, instructor_id: int, admin: User) -
 async def disable_instructor(db: AsyncSession, instructor_id: int, admin: User) -> User:
     instructor = await _get_instructor(db, instructor_id)
     instructor.is_active = False
-    db.add(AuditLog(
+    db.add(AuditLogSession(
         user_id=admin.id,
         action="instructor_account_disabled",
         details={"instructor_id": instructor_id},
@@ -130,7 +131,7 @@ async def revoke_instructor_access(db: AsyncSession, instructor_id: int, admin: 
     for conn in connections:
         await db.delete(conn)
 
-    db.add(AuditLog(
+    db.add(AuditLogSession(
         user_id=admin.id,
         action="instructor_access_revoked",
         details={"instructor_id": instructor_id, "connections_removed": len(connections)},
