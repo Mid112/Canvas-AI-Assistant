@@ -16,8 +16,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
-import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
 import {
   DEFAULT_PAGE_SIZE,
   filterBySearch,
@@ -44,7 +44,7 @@ export function InstructorCourseAssignmentsPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const canvasUrl = getPrimaryCanvasConnectionUrl(user);
+  const canvasUrl = useCanvasConnectionUrl();
 
   const parsedLocalCourseId = Number(localCourseId);
   const idIsValid =

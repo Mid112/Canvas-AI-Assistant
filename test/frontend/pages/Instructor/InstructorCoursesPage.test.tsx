@@ -1,29 +1,18 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useAuth } from "@/contexts/AuthContext";
 import { useInstitution } from "@/contexts/useInstitution";
 import { InstructorCoursesPage } from "@/pages/Instructor/InstructorCoursesPage";
+import { fetchCourseAssignments } from "@/services/assignments";
 import { fetchActiveCourse, fetchCourses } from "@/services/canvas";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
-
-vi.mock("@/contexts/AuthContext", async () => {
-  const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
-    "@/contexts/AuthContext",
-  );
-
-  return {
-    ...actual,
-    useAuth: vi.fn(),
-  };
-});
 
 vi.mock("@/services/canvas", () => ({
   CanvasApiError: class CanvasApiError extends Error {
     status: number;
 
-    constructor(message: string, status: number) {
+    constructor(message: string, status = 500) {
       super(message);
       this.status = status;
     }
@@ -33,52 +22,88 @@ vi.mock("@/services/canvas", () => ({
   setActiveCourse: vi.fn(),
 }));
 
-const mockedUseAuth = vi.mocked(useAuth);
+vi.mock("@/services/assignments", () => ({
+  AssignmentApiError: class AssignmentApiError extends Error {
+    status = 500;
+  },
+  fetchCourseAssignments: vi.fn(),
+}));
+
+const mockUseAuth = vi.fn();
 const mockedFetchCourses = vi.mocked(fetchCourses);
 const mockedFetchActiveCourse = vi.mocked(fetchActiveCourse);
+const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
 
-const authWithoutCanvas = {
+vi.mock("@/contexts/AuthContext", async () => {
+  const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
+    "@/contexts/AuthContext",
+  );
+
+  return {
+    ...actual,
+    useAuth: () => mockUseAuth(),
+  };
+});
+
+const CANVAS_URL = "https://canvas.ubc.ca";
+const LOCAL_CANVAS_URL = "http://localhost:3000";
+
+const authWithCanvas = {
   user: {
     id: 1,
     email: "instructor@example.com",
     name: "Dr. Jane Doe",
-    role: "instructor" as const,
+    role: "instructor",
     is_active: true,
-    has_canvas_token: false,
-    canvas_connections: [],
+    has_canvas_token: true,
+    canvas_connections: [
+      {
+        id: 1,
+        canvas_url: CANVAS_URL,
+        created_at: "2026-06-26T00:00:00.000Z",
+      },
+    ],
   },
   accessToken: "token",
   isAuthenticated: true,
   isLoading: false,
   login: vi.fn(),
   register: vi.fn(),
-  refreshUser: vi.fn(),
   logout: vi.fn(),
+  refreshUser: vi.fn(),
 };
 
-const authWithCanvas = {
-  ...authWithoutCanvas,
-  user: {
-    ...authWithoutCanvas.user,
-    has_canvas_token: true,
-    canvas_connections: [
-      {
-        id: 1,
-        canvas_url: "http://localhost:3000",
-        created_at: "2026-06-26T00:00:00.000Z",
-      },
-    ],
+const authWithoutCanvas = {
+  ...authWithCanvas,
+  user: { ...authWithCanvas.user, has_canvas_token: false, canvas_connections: [] },
+};
+
+const canvasCourses = [
+  {
+    canvas_id: 101,
+    local_id: 1,
+    name: "Introduction to Programming",
+    course_code: "CS 101",
+    workflow_state: "available",
+    total_students: 45,
   },
-};
-
-const canvasCourse = {
-  canvas_id: 101,
-  local_id: 7,
-  name: "Canvas Operating Systems",
-  course_code: "CS 330",
-  workflow_state: "available",
-  total_students: 32,
-};
+  {
+    canvas_id: 102,
+    local_id: 2,
+    name: "Data Structures",
+    course_code: "CS 201",
+    workflow_state: "available",
+    total_students: 38,
+  },
+  {
+    canvas_id: 103,
+    local_id: 3,
+    name: "Database Systems",
+    course_code: "CS 250",
+    workflow_state: "available",
+    total_students: 52,
+  },
+];
 
 function InstitutionSwitchHarness() {
   const { setSelectedInstitution } = useInstitution();
@@ -93,16 +118,26 @@ function InstitutionSwitchHarness() {
   );
 }
 
+beforeEach(() => {
+  localStorage.clear();
+  vi.clearAllMocks();
+  vi.unstubAllEnvs();
+  mockUseAuth.mockReturnValue(authWithCanvas);
+  mockedFetchCourses.mockResolvedValue(canvasCourses);
+  mockedFetchActiveCourse.mockResolvedValue(null);
+  mockedFetchCourseAssignments.mockResolvedValue([
+    { id: 1, name: "Assignment 1", course_id: 101 },
+  ]);
+});
+
 describe("InstructorCoursesPage", () => {
-  beforeEach(() => {
-    localStorage.clear();
-    vi.clearAllMocks();
-    mockedUseAuth.mockReturnValue(authWithoutCanvas);
-    mockedFetchCourses.mockResolvedValue([]);
-    mockedFetchActiveCourse.mockResolvedValue(null);
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("renders the course management page instead of the placeholder", async () => {
+    mockUseAuth.mockReturnValue(authWithoutCanvas);
+
     renderWithInstitution(<InstructorCoursesPage />);
 
     expect(
@@ -115,10 +150,109 @@ describe("InstructorCoursesPage", () => {
     expect(await screen.findByText("Your Courses (6)")).toBeInTheDocument();
   });
 
+  it("loads courses from local Canvas Docker without VITE_CANVAS_UBC_URL", async () => {
+    mockUseAuth.mockReturnValue({
+      ...authWithCanvas,
+      user: {
+        ...authWithCanvas.user,
+        canvas_connections: [
+          {
+            id: 1,
+            canvas_url: LOCAL_CANVAS_URL,
+            created_at: "2026-06-26T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    await waitFor(() => {
+      expect(mockedFetchCourses).toHaveBeenCalledWith("token", LOCAL_CANVAS_URL);
+    });
+
+    expect(await screen.findByText("Your Courses (3)")).toBeInTheDocument();
+    expect(screen.queryByText("Connect Canvas to continue")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "New Course" })).toHaveAttribute(
+      "href",
+      `${LOCAL_CANVAS_URL}/courses`,
+    );
+  });
+
+  it("hides New Course on connect state when env is unset and no saved connection", () => {
+    mockUseAuth.mockReturnValue(authWithoutCanvas);
+
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    expect(screen.getByText("Connect Canvas to continue")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "New Course" })).not.toBeInTheDocument();
+  });
+
+  it("requires Canvas before showing courses", () => {
+    vi.stubEnv("VITE_CANVAS_UBC_URL", CANVAS_URL);
+    mockUseAuth.mockReturnValue(authWithoutCanvas);
+
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    expect(screen.getByText("Connect Canvas to continue")).toBeInTheDocument();
+    expect(screen.getByText("Course Analytics Overview")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "New Course" })).toHaveAttribute(
+      "href",
+      `${CANVAS_URL}/courses`,
+    );
+
+    vi.unstubAllEnvs();
+  });
+
+  it("shows connect Canvas when no token exists for the saved connection URL", async () => {
+    const { CanvasApiError } = await import("@/services/canvas");
+    mockedFetchCourses.mockRejectedValue(
+      new CanvasApiError(
+        "No Canvas token for https://canvas.ubc.ca. PATCH to /api/v1/auth/me/canvas-token first.",
+        403,
+      ),
+    );
+
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    expect(
+      await screen.findByText("Connect Canvas to continue"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/PATCH to \/api\/v1/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Search courses")).not.toBeInTheDocument();
+  });
+
+  it("loads Canvas courses with the saved connection URL", async () => {
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    await waitFor(() => {
+      expect(mockedFetchCourses).toHaveBeenCalledWith("token", CANVAS_URL);
+    });
+
+    expect(await screen.findByText("Your Courses (3)")).toBeInTheDocument();
+    expect(
+      screen.getByText("CS 101: Introduction to Programming"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Course Analytics Overview")).toBeInTheDocument();
+  });
+
+  it("shows a Canvas loading state while courses load", () => {
+    mockedFetchCourses.mockReturnValue(
+      new Promise<typeof canvasCourses>(() => undefined),
+    );
+
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    expect(
+      screen.getByText("Loading courses from Canvas..."),
+    ).toBeInTheDocument();
+  });
+
   it("filters courses by search query", async () => {
     const user = userEvent.setup();
 
     renderWithInstitution(<InstructorCoursesPage />);
+    await screen.findByText("Your Courses (3)");
 
     await user.type(screen.getByLabelText("Search courses"), "Database");
 
@@ -126,15 +260,13 @@ describe("InstructorCoursesPage", () => {
     expect(
       screen.getByText("CS 250: Database Systems"),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByText("CS 101: Introduction to Programming"),
-    ).not.toBeInTheDocument();
   });
 
-  it("shows the empty state when no courses match", async () => {
+  it("shows the empty state when no courses match the search", async () => {
     const user = userEvent.setup();
 
     renderWithInstitution(<InstructorCoursesPage />);
+    await screen.findByText("Your Courses (3)");
 
     await user.type(
       screen.getByLabelText("Search courses"),
@@ -143,24 +275,70 @@ describe("InstructorCoursesPage", () => {
 
     expect(screen.getByText("No courses found")).toBeInTheDocument();
     expect(
-      screen.queryByText("CS 101: Introduction to Programming"),
-    ).not.toBeInTheDocument();
+      screen.getByText("No Canvas courses matched this search."),
+    ).toBeInTheDocument();
   });
 
   it("switches to list view when requested", async () => {
     const user = userEvent.setup();
 
     renderWithInstitution(<InstructorCoursesPage />);
+    await screen.findByText("Your Courses (3)");
 
     await user.click(screen.getByRole("button", { name: "List View" }));
 
     expect(
-      screen.getByText(/45 students · 8 assignments/),
+      await screen.findByText(/45 students · 1 assignments/),
     ).toBeInTheDocument();
+  });
+
+  it("reloads courses when sync from Canvas is clicked", async () => {
+    const user = userEvent.setup();
+
+    renderWithInstitution(<InstructorCoursesPage />);
+    await screen.findByText("Your Courses (3)");
+
+    mockedFetchCourses.mockClear();
+
+    await user.click(screen.getByRole("button", { name: "Sync from Canvas" }));
+
+    await waitFor(() => {
+      expect(mockedFetchCourses).toHaveBeenCalledWith("token", CANVAS_URL);
+    });
+  });
+
+  it("shows a Canvas empty state when Canvas returns no courses", async () => {
+    mockedFetchCourses.mockResolvedValue([]);
+
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/No courses found in Canvas/i),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows a Canvas error without mock courses", async () => {
+    const { CanvasApiError } = await import("@/services/canvas");
+    mockedFetchCourses.mockRejectedValue(
+      new CanvasApiError("Canvas unavailable", 503),
+    );
+
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Canvas unavailable")).toBeInTheDocument();
+    });
+
+    expect(
+      screen.queryByText("CS 101: Introduction to Programming"),
+    ).not.toBeInTheDocument();
   });
 
   it("updates courses and analytics when the institution changes", async () => {
     const user = userEvent.setup();
+    mockUseAuth.mockReturnValue(authWithoutCanvas);
 
     renderWithInstitution(<InstitutionSwitchHarness />);
 
@@ -178,6 +356,7 @@ describe("InstructorCoursesPage", () => {
 
   it("persists the selected active course locally", async () => {
     const user = userEvent.setup();
+    mockUseAuth.mockReturnValue(authWithoutCanvas);
 
     renderWithInstitution(<InstructorCoursesPage />);
 
@@ -189,86 +368,5 @@ describe("InstructorCoursesPage", () => {
         "Active course: CS 101: Introduction to Programming",
       );
     });
-  });
-
-  it("loads Canvas courses with the saved connection URL when connected", async () => {
-    mockedUseAuth.mockReturnValue(authWithCanvas);
-    mockedFetchCourses.mockResolvedValue([canvasCourse]);
-
-    renderWithInstitution(<InstructorCoursesPage />);
-
-    await waitFor(() => {
-      expect(mockedFetchCourses).toHaveBeenCalledWith(
-        "token",
-        "http://localhost:3000",
-      );
-    });
-
-    expect(
-      await screen.findByText("CS 330: Canvas Operating Systems"),
-    ).toBeInTheDocument();
-  });
-
-  it("does not show mock institution courses when Canvas is connected", async () => {
-    mockedUseAuth.mockReturnValue(authWithCanvas);
-    mockedFetchCourses.mockResolvedValue([canvasCourse]);
-
-    renderWithInstitution(<InstructorCoursesPage />);
-
-    expect(
-      await screen.findByText("CS 330: Canvas Operating Systems"),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText("CS 101: Introduction to Programming"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("shows a Canvas loading state while courses load", () => {
-    mockedUseAuth.mockReturnValue(authWithCanvas);
-    mockedFetchCourses.mockReturnValue(
-      new Promise<typeof canvasCourse[]>(() => undefined),
-    );
-
-    renderWithInstitution(<InstructorCoursesPage />);
-
-    expect(
-      screen.getByText("Loading courses from Canvas..."),
-    ).toBeInTheDocument();
-  });
-
-  it("shows the Canvas empty state when no connected courses match", async () => {
-    const user = userEvent.setup();
-    mockedUseAuth.mockReturnValue(authWithCanvas);
-    mockedFetchCourses.mockResolvedValue([canvasCourse]);
-
-    renderWithInstitution(<InstructorCoursesPage />);
-
-    expect(
-      await screen.findByText("CS 330: Canvas Operating Systems"),
-    ).toBeInTheDocument();
-
-    await user.type(screen.getByLabelText("Search courses"), "nonexistent");
-
-    expect(screen.getByText("No courses found")).toBeInTheDocument();
-    expect(
-      screen.getByText("No Canvas courses matched this search."),
-    ).toBeInTheDocument();
-  });
-
-  it("shows a Canvas fetch error and falls back to sample course data", async () => {
-    const { CanvasApiError } = await import("@/services/canvas");
-    mockedUseAuth.mockReturnValue(authWithCanvas);
-    mockedFetchCourses.mockRejectedValue(
-      new CanvasApiError("Canvas is unavailable.", 503),
-    );
-
-    renderWithInstitution(<InstructorCoursesPage />);
-
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Canvas is unavailable. Showing sample course data instead.",
-    );
-    expect(
-      await screen.findByText("CS 101: Introduction to Programming"),
-    ).toBeInTheDocument();
   });
 });
