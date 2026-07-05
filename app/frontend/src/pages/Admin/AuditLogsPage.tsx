@@ -65,11 +65,7 @@ export function AuditLogsPage() {
     setLoadError(null);
 
     try {
-      if (!accessToken) {
-        throw new Error("You must be signed in to view audit logs.");
-      }
-
-      const data = await fetchAuditLogs(accessToken);
+      const data = await fetchAuditLogs(accessToken!);
       if (loadRequestId.current === requestId) {
         setLogs(data);
       }
@@ -87,8 +83,6 @@ export function AuditLogsPage() {
 
   useEffect(() => {
     if (!accessToken) {
-      setIsLoading(false);
-      setLoadError("You must be signed in to view audit logs.");
       return;
     }
 
@@ -97,11 +91,18 @@ export function AuditLogsPage() {
     loadRequestId.current = requestId;
 
     void (async () => {
+      await Promise.resolve();
+      if (cancelled || loadRequestId.current !== requestId) {
+        return;
+      }
+
+      setIsLoading(true);
+      setLoadError(null);
+
       try {
         const data = await fetchAuditLogs(accessToken);
         if (!cancelled && loadRequestId.current === requestId) {
           setLogs(data);
-          setLoadError(null);
         }
       } catch {
         if (!cancelled && loadRequestId.current === requestId) {
@@ -119,6 +120,12 @@ export function AuditLogsPage() {
       cancelled = true;
     };
   }, [accessToken]);
+
+  const signedOutError = accessToken
+    ? null
+    : "You must be signed in to view audit logs.";
+  const effectiveLoading = accessToken ? isLoading : false;
+  const effectiveError = signedOutError ?? loadError;
 
   const handleExport = () => {
     downloadAuditLogsCsv(filteredLogs);
@@ -138,7 +145,7 @@ export function AuditLogsPage() {
         <Button
           type="button"
           onClick={handleExport}
-          disabled={isLoading || filteredLogs.length === 0}
+          disabled={effectiveLoading || filteredLogs.length === 0}
         >
           <Download className="size-4" aria-hidden="true" />
           Export
@@ -171,8 +178,8 @@ export function AuditLogsPage() {
         onFiltersChange={handleFiltersChange}
         onPageChange={setPage}
         onRetry={loadLogs}
-        isLoading={isLoading}
-        errorMessage={loadError}
+        isLoading={effectiveLoading}
+        errorMessage={effectiveError}
       />
     </div>
   );

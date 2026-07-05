@@ -6,7 +6,6 @@ from app.core.database import get_db
 from app.dependencies import get_current_user, get_instructor_user
 from app.models.user import User
 from app.schemas.analysis import LateSubmissionAnalysis, MissingSubmissionAnalysis
-from app.schemas.dashboard import InstructorDashboardResponse
 from app.schemas.canvas import (
     ActiveCourseResponse,
     ActiveCourseSet,
@@ -16,10 +15,10 @@ from app.schemas.canvas import (
     CourseResponse,
     SubmissionResponse,
 )
-from app.schemas.student import StudentResponse
+from app.schemas.dashboard import InstructorDashboardResponse
 from app.schemas.preview import ActionPreviewResponse, AssignmentDraftRequest, AssignmentDraftResponse
+from app.schemas.student import StudentResponse
 from app.services.analysis import analyze_late_submissions, analyze_missing_submissions
-from app.services.dashboard import get_instructor_dashboard
 from app.services.assignment_draft import generate_assignment_draft
 from app.services.canvas import (
     create_course_assignment,
@@ -31,8 +30,9 @@ from app.services.canvas import (
     set_active_course,
     update_course_assignment,
 )
-from app.services.student import get_students
+from app.services.dashboard import get_instructor_dashboard
 from app.services.preview import build_action_preview
+from app.services.student import get_students
 
 router = APIRouter(prefix="/canvas", tags=["canvas"])
 

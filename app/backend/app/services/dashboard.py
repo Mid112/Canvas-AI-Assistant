@@ -1,12 +1,9 @@
-from datetime import UTC, datetime
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.assignment import Assignment
 from app.models.course import Course
-from app.models.student import Student
 from app.models.submission import Submission
 from app.models.user import User
 from app.models.workflow import Workflow

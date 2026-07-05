@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.limiter import limiter
-from app.dependencies import bearer, get_admin_user, get_current_user
+from app.dependencies import bearer, get_current_user
 from app.integrations.canvas import check_token_status
 from app.models.session import Session
 from app.models.user import User

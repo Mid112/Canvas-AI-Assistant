@@ -83,6 +83,7 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
     resolveInstitutionId(userId),
   );
   const [previousUserId, setPreviousUserId] = useState(userId);
+  const [previousAccessToken, setPreviousAccessToken] = useState(accessToken);
   const [apiDashboard, setApiDashboard] = useState<InstructorDashboardData | null>(
     null,
   );
@@ -93,9 +94,15 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
     setApiDashboard(null);
   }
 
-  useEffect(() => {
+  if (accessToken !== previousAccessToken) {
+    setPreviousAccessToken(accessToken);
     if (!accessToken) {
       setApiDashboard(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!accessToken) {
       return;
     }
 

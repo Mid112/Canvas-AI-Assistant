@@ -28,9 +28,9 @@ from app.services.canvas import (
     set_active_course,
     update_course_assignment,
 )
-from app.services.student import get_students
 from app.services.canvas_status import CanvasWriteResult
 from app.services.message_validation import validate_message_for_send
+from app.services.student import get_students
 from app.services.write_preview import generate_write_preview
 
 
