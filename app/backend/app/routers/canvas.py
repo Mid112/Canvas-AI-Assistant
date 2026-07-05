@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.dependencies import get_current_user, get_instructor_user
 from app.models.user import User
 from app.schemas.analysis import LateSubmissionAnalysis, MissingSubmissionAnalysis
+from app.schemas.dashboard import InstructorDashboardResponse
 from app.schemas.canvas import (
     ActiveCourseResponse,
     ActiveCourseSet,
@@ -18,6 +19,7 @@ from app.schemas.canvas import (
 from app.schemas.student import StudentResponse
 from app.schemas.preview import ActionPreviewResponse, AssignmentDraftRequest, AssignmentDraftResponse
 from app.services.analysis import analyze_late_submissions, analyze_missing_submissions
+from app.services.dashboard import get_instructor_dashboard
 from app.services.assignment_draft import generate_assignment_draft
 from app.services.canvas import (
     create_course_assignment,
@@ -33,6 +35,14 @@ from app.services.student import get_students
 from app.services.preview import build_action_preview
 
 router = APIRouter(prefix="/canvas", tags=["canvas"])
+
+
+@router.get("/dashboard", response_model=InstructorDashboardResponse)
+async def instructor_dashboard(
+    current_user: User = Depends(get_instructor_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_instructor_dashboard(current_user, db)
 
 
 @router.get("/courses", response_model=list[CourseResponse])

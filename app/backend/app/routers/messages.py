@@ -64,4 +64,6 @@ async def send_draft(
         draft_id=draft.id,
         status=draft.status,
         canvas_topic_id=getattr(draft, "canvas_topic_id", None),
+        delivery_mode=getattr(draft, "delivery_mode", None),
+        recipient_count=getattr(draft, "recipient_count", None),
     )

@@ -323,3 +323,32 @@ async def post_announcement(
     except httpx.RequestError as e:
         logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
+async def send_conversation(
+    course_id: int,
+    recipient_canvas_user_ids: list[int],
+    subject: str,
+    body: str,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.post(
+                f"{canvas_url}/api/v1/conversations",
+                headers=_headers(token),
+                data={
+                    "subject": subject,
+                    "body": body,
+                    "context_code": f"course_{course_id}",
+                    "recipients[]": [str(user_id) for user_id in recipient_canvas_user_ids],
+                },
+            )
+            _raise_for_canvas_error(response)
+            return response.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")

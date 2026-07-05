@@ -1,7 +1,7 @@
 import pytest
 
 from app.mcp_tools.dispatcher import ToolExecutionError, parse_action, _extract_json
-from app.mcp_tools.schemas import FetchAssignmentsAction, FetchCoursesAction
+from app.mcp_tools.schemas import FetchAssignmentsAction, FetchCoursesAction, FetchStudentsAction
 
 
 #testing the _extract_json function
@@ -34,6 +34,20 @@ def test_fetch_assignments():
     action = parse_action('{"action": "fetch_assignments", "local_course_id": 4}')
     assert isinstance(action, FetchAssignmentsAction)
     assert action.local_course_id == 4
+
+
+def test_fetch_students():
+    action = parse_action('{"action": "fetch_students", "local_course_id": 7}')
+    assert isinstance(action, FetchStudentsAction)
+    assert action.local_course_id == 7
+
+
+def test_send_message_with_recipients():
+    action = parse_action(
+        '{"action": "send_message", "local_course_id": 2, "subject": "Reminder", '
+        '"body": "Please submit", "recipient_canvas_user_ids": [101, 102]}'
+    )
+    assert action.recipient_canvas_user_ids == [101, 102]
 
 
 def test_thinking_json():

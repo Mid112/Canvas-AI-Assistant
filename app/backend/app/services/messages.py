@@ -5,11 +5,9 @@ from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.integrations.canvas import post_announcement
 from app.models.message_draft import MessageDraft
 from app.models.user import User
 from app.schemas.messages import MessageDraftCreate, MessageDraftUpdate
-from app.services.canvas import get_owned_course, require_canvas_token
 from app.services.llm.llm_setting import get_llm_adapter
 
 
@@ -90,14 +88,26 @@ async def send_message_draft(
     if not draft.course_id:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Draft has no course")
 
-    course = await get_owned_course(draft.course_id, user, canvas_url, db)
-    token = require_canvas_token(user, canvas_url)
-    result = await post_announcement(
-        int(course.canvas_course_id),
+    recipient_canvas_user_ids: list[int] | None = None
+    if draft.recipients:
+        try:
+            recipient_canvas_user_ids = [int(recipient["id"]) for recipient in draft.recipients]
+        except (KeyError, TypeError, ValueError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Draft recipients must include valid Canvas user IDs.",
+            ) from error
+
+    from app.services.canvas import send_course_message
+
+    result = await send_course_message(
+        draft.course_id,
         draft.subject,
         draft.body,
-        token,
+        user,
         canvas_url,
+        db,
+        recipient_canvas_user_ids=recipient_canvas_user_ids,
     )
 
     draft.status = "sent"
@@ -105,5 +115,7 @@ async def send_message_draft(
     draft.updated_at = datetime.now(UTC)
     await db.commit()
     await db.refresh(draft)
-    draft.canvas_topic_id = result.get("id")  # type: ignore[attr-defined]
+    draft.canvas_topic_id = None  # type: ignore[attr-defined]
+    draft.delivery_mode = result.delivery_mode  # type: ignore[attr-defined]
+    draft.recipient_count = result.audience_size  # type: ignore[attr-defined]
     return draft

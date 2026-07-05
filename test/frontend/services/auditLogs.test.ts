@@ -1,21 +1,43 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mockAuditLogs } from "@/data/mockAuditLogs";
+import { mockAuditLogApiRecords } from "@/data/mockAuditLogs";
 import {
   buildAuditLogsCsv,
   fetchAuditLogs,
-  resetMockAuditLogs,
+  AUDIT_LOGS_ADMIN_PATH,
 } from "@/services/auditLogs";
+
+vi.mock("@/config/api", () => ({
+  API_BASE_URL: "http://localhost:8000/api/v1",
+}));
 
 describe("auditLogs service", () => {
   beforeEach(() => {
-    resetMockAuditLogs();
+    vi.restoreAllMocks();
   });
 
-  it("returns seeded audit logs from the mock API", async () => {
-    const logs = await fetchAuditLogs();
-    expect(logs).toHaveLength(mockAuditLogs.length);
-    expect(logs[0]?.action).toBe("Create Message Draft");
+  it("fetches and maps audit logs from the API", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          items: mockAuditLogApiRecords,
+          total: mockAuditLogApiRecords.length,
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const logs = await fetchAuditLogs("access-token");
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `http://localhost:8000/api/v1${AUDIT_LOGS_ADMIN_PATH}?limit=200&offset=0`,
+      expect.objectContaining({
+        headers: expect.any(Headers),
+      }),
+    );
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.action).toBe("send_message");
   });
 
   it("builds a CSV export with headers and rows", () => {
@@ -36,40 +58,5 @@ describe("auditLogs service", () => {
     ]);
 
     expect(csv).toContain("'=SUM(A1:A10)");
-  });
-
-  it("drops invalid entries and keeps valid ones from localStorage", async () => {
-    localStorage.setItem(
-      "canvas-workflow-admin-audit-logs",
-      JSON.stringify([
-        mockAuditLogs[0],
-        {
-          ...mockAuditLogs[1],
-          userRole: "Teaching Assistant",
-        },
-      ]),
-    );
-
-    const logs = await fetchAuditLogs();
-
-    expect(logs).toHaveLength(1);
-    expect(logs[0]?.id).toBe(mockAuditLogs[0]!.id);
-  });
-
-  it("falls back to seed data when all localStorage entries are invalid", async () => {
-    localStorage.setItem(
-      "canvas-workflow-admin-audit-logs",
-      JSON.stringify([
-        {
-          ...mockAuditLogs[0],
-          userRole: "Teaching Assistant",
-        },
-      ]),
-    );
-
-    const logs = await fetchAuditLogs();
-
-    expect(logs).toHaveLength(mockAuditLogs.length);
-    expect(logs[0]?.userRole).toBe("instructor");
   });
 });

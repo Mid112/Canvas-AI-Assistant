@@ -14,6 +14,7 @@ from app.integrations.canvas import (
     fetch_assignments,
     fetch_courses,
     fetch_submissions,
+    send_conversation,
     update_assignment,
 )
 from app.models.assignment import Assignment
@@ -252,6 +253,7 @@ async def send_course_message(
     user: User,
     canvas_url: str,
     db: AsyncSession,
+    recipient_canvas_user_ids: list[int] | None = None,
 ) -> MessageSendResult:
     # Local import — services/student.py imports require_canvas_token from
     # this module, so importing get_students at module level here would
@@ -261,17 +263,35 @@ async def send_course_message(
 
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
-    await create_announcement(
-        int(course.canvas_course_id), subject, body, token, canvas_url
-    )
-    # Roster is fetched purely to report audience_size — an empty class is
-    # not an error for an announcement, unlike a targeted send would be.
-    roster = await get_students(int(course.canvas_course_id), user, canvas_url, db)
+    canvas_course_id = int(course.canvas_course_id)
+
+    if recipient_canvas_user_ids:
+        await send_conversation(
+            canvas_course_id,
+            recipient_canvas_user_ids,
+            subject,
+            body,
+            token,
+            canvas_url,
+        )
+        return MessageSendResult(
+            course_id=canvas_course_id,
+            subject=subject,
+            body=body,
+            audience_size=len(recipient_canvas_user_ids),
+            delivery_mode="conversation",
+            recipient_canvas_user_ids=recipient_canvas_user_ids,
+        )
+
+    await create_announcement(canvas_course_id, subject, body, token, canvas_url)
+    roster = await get_students(canvas_course_id, user, canvas_url, db)
     return MessageSendResult(
-        course_id=int(course.canvas_course_id),
+        course_id=canvas_course_id,
         subject=subject,
         body=body,
         audience_size=len(roster),
+        delivery_mode="announcement",
+        recipient_canvas_user_ids=[],
     )
 
 

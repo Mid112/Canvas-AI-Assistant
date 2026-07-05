@@ -8,6 +8,7 @@ import { EditInstructorDialog } from "@/components/admin/EditInstructorDialog";
 import { InstructorSearch } from "@/components/admin/InstructorSearch";
 import { InstructorTable } from "@/components/admin/InstructorTable";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 import { filterInstructors } from "@/data/mockInstructors";
 import type { EditInstructorFormValues, InstructorFormValues } from "@/schemas/instructorSchema";
 import {
@@ -35,6 +36,7 @@ type ToastState = {
 };
 
 export function InstructorManagementPage() {
+  const { accessToken } = useAuth();
   const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -62,7 +64,11 @@ export function InstructorManagementPage() {
     }
 
     try {
-      const data = await fetchInstructors();
+      if (!accessToken) {
+        throw new Error("You must be signed in to manage instructors.");
+      }
+
+      const data = await fetchInstructors(accessToken);
       if (loadRequestId.current === requestId) {
         setInstructors(data);
         setLoadError(null);
@@ -77,14 +83,20 @@ export function InstructorManagementPage() {
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [accessToken]);
 
   useEffect(() => {
+    if (!accessToken) {
+      setIsLoading(false);
+      setLoadError("You must be signed in to manage instructors.");
+      return;
+    }
+
     let cancelled = false;
 
     void (async () => {
       try {
-        const data = await fetchInstructors();
+        const data = await fetchInstructors(accessToken);
         if (!cancelled) {
           setInstructors(data);
           setLoadError(null);
@@ -104,7 +116,7 @@ export function InstructorManagementPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [accessToken]);
 
   const showToast = (message: string, type: ToastState["type"] = "success") => {
     setToast({ message, type });
@@ -115,7 +127,11 @@ export function InstructorManagementPage() {
     setFormError(null);
 
     try {
-      await createInstructor(values);
+      if (!accessToken) {
+        throw new Error("You must be signed in to manage instructors.");
+      }
+
+      await createInstructor(accessToken, values);
       await refreshInstructors();
       setIsCreateOpen(false);
       showToast("Instructor account created successfully.");
@@ -139,7 +155,11 @@ export function InstructorManagementPage() {
     setFormError(null);
 
     try {
-      await updateInstructor(editingInstructor.id, values);
+      if (!accessToken) {
+        throw new Error("You must be signed in to manage instructors.");
+      }
+
+      await updateInstructor(accessToken, editingInstructor.id, values);
       await refreshInstructors();
       setEditingInstructor(null);
       showToast("Instructor account updated successfully.");
@@ -165,14 +185,18 @@ export function InstructorManagementPage() {
     const fullName = getInstructorFullName(instructor);
 
     try {
+      if (!accessToken) {
+        throw new Error("You must be signed in to manage instructors.");
+      }
+
       if (action === "enable") {
-        await enableInstructor(instructor.id);
+        await enableInstructor(accessToken, instructor.id);
         showToast(`${fullName} has been enabled.`);
       } else if (action === "disable") {
-        await disableInstructor(instructor.id);
+        await disableInstructor(accessToken, instructor.id);
         showToast(`${fullName} has been disabled.`);
       } else {
-        await revokeInstructorAccess(instructor.id);
+        await revokeInstructorAccess(accessToken, instructor.id);
         showToast(`${fullName}'s access has been revoked.`);
       }
 

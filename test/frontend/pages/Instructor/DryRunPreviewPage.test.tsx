@@ -21,6 +21,33 @@ vi.mock("@/services/dryRunPreview", () => ({
   confirmDryRunPreview: vi.fn(),
 }));
 
+vi.mock("@/contexts/AuthContext", async () => {
+  const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
+    "@/contexts/AuthContext",
+  );
+
+  return {
+    ...actual,
+    useAuth: () => ({
+      accessToken: "access-token",
+      user: { name: "Dr. Jane Doe", role: "instructor" },
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    }),
+  };
+});
+
+vi.mock("@/services/assistant", () => ({
+  AssistantApiError: class AssistantApiError extends Error {
+    name = "AssistantApiError";
+  },
+  sendAssistantMessage: vi.fn(),
+}));
+
 const mockedFetch = vi.mocked(fetchDryRunPreview);
 const mockedConfirm = vi.mocked(confirmDryRunPreview);
 

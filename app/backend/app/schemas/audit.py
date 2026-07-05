@@ -6,12 +6,16 @@ from pydantic import BaseModel
 class AuditLogResponse(BaseModel):
     id: int
     user_id: int
-    workflow_id: int | None
+    workflow_id: int
+    course_id: int | None
     action: str
-    details: dict | None
+    resource_type: str
+    resource_id: str | None
+    operation: str
+    status: str
     timestamp: datetime
-
-    model_config = {"from_attributes": True}
+    user_email: str
+    user_role: str
 
 
 class AuditLogListResponse(BaseModel):

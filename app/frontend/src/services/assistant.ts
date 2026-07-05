@@ -1,4 +1,6 @@
-import type { AssistantResponse } from "@/types/chat";
+import { apiRequest } from "@/lib/api-request";
+import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
+import type { AssistantContext, AssistantResponse } from "@/types/chat";
 
 export class AssistantApiError extends Error {
   constructor(message: string) {
@@ -7,79 +9,101 @@ export class AssistantApiError extends Error {
   }
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
+export interface SendAssistantMessageOptions {
+  conversationId?: number;
+  localCourseId?: number;
+  pendingMessageId?: number;
+  context?: AssistantContext;
+}
+
+export interface AssistantMessageResult extends AssistantResponse {
+  conversationId: number;
+  pendingMessageId?: number;
+}
+
+interface ChatApiResponse {
+  conversation_id: number;
+  reply: Record<string, unknown>;
+  is_error: boolean;
+}
+
+export async function sendAssistantMessage(
+  accessToken: string,
+  message: string,
+  options: SendAssistantMessageOptions = {},
+): Promise<AssistantMessageResult> {
+  const context = options.context ?? {};
+  const localCourseId = options.localCourseId ?? context.activeCourseId;
+
+  try {
+    const response = await apiRequest<ChatApiResponse>("/chat/", accessToken, {
+      method: "POST",
+      body: JSON.stringify({
+        message,
+        conversation_id: options.conversationId,
+        local_course_id: localCourseId,
+        pending_message_id: options.pendingMessageId,
+      }),
+    });
+
+    const mapped = mapChatReplyToAssistantResponse(response.reply, response.is_error);
+
+    return {
+      ...mapped,
+      conversationId: response.conversation_id,
+      pendingMessageId:
+        typeof response.reply.pending_message_id === "number"
+          ? response.reply.pending_message_id
+          : undefined,
+    };
+  } catch (error) {
+    const messageText =
+      error instanceof Error
+        ? error.message
+        : "The assistant is temporarily unavailable. Please try again.";
+
+    throw new AssistantApiError(messageText);
+  }
+}
+
+export async function confirmAssistantAction(
+  accessToken: string,
+  conversationId: number,
+  pendingMessageId: number,
+): Promise<AssistantMessageResult> {
+  const response = await apiRequest<ChatApiResponse>("/chat/confirm", accessToken, {
+    method: "POST",
+    body: JSON.stringify({
+      conversation_id: conversationId,
+      pending_message_id: pendingMessageId,
+    }),
   });
-}
 
-function randomDelayMs(): number {
-  return 1000 + Math.floor(Math.random() * 1000);
-}
-
-// Placeholder mock response routing — delete and replace with real backend/LLM
-// integration once the frontend sends messages to the API.
-function buildMockResponse(message: string): AssistantResponse {
-  const normalized = message.toLowerCase();
-
-  if (
-    normalized.includes("missing") ||
-    normalized.includes("reminder") ||
-    normalized.includes("submission")
-  ) {
-    return {
-      content:
-        "I found students who have not submitted the assignment yet. I can help you send a reminder if you'd like.",
-      explanation:
-        "I analyzed submission data and identified students who have not submitted Assignment 3.",
-      interpretedAction: {
-        action: "Send Reminder",
-        course: "COSC 499",
-        affectedStudents: "12 students",
-      },
-    };
-  }
-
-  if (normalized.includes("quiz") || normalized.includes("summarize")) {
-    return {
-      content:
-        "Quiz 2 had an average score of 78%. Most students performed well on questions 1–3, while question 4 had the lowest scores.",
-      explanation:
-        "I reviewed gradebook data and grouped results by question to highlight areas where students struggled.",
-    };
-  }
-
-  if (normalized.includes("late") || normalized.includes("overdue")) {
-    return {
-      content:
-        "There are 5 late assignments in COSC 499. Would you like me to draft reminder messages for those students?",
-      explanation:
-        "I compared due dates against submission timestamps to identify overdue work.",
-      interpretedAction: {
-        action: "Draft Reminders",
-        course: "COSC 499",
-        affectedStudents: "5 students",
-      },
-    };
-  }
+  const mapped = mapChatReplyToAssistantResponse(response.reply, response.is_error);
 
   return {
-    content:
-      "I can help with course management, assignments, announcements, and student performance. Try asking about missing submissions, quiz summaries, or late assignments.",
+    ...mapped,
+    conversationId: response.conversation_id,
   };
 }
 
-/** Mock assistant API — simulates network delay and optional failure. */
-export async function sendAssistantMessage(
-  message: string,
-): Promise<AssistantResponse> {
-  await delay(randomDelayMs());
+export async function cancelAssistantAction(
+  accessToken: string,
+  conversationId: number,
+  pendingMessageId: number,
+): Promise<AssistantMessageResult> {
+  const response = await apiRequest<ChatApiResponse>("/chat/cancel", accessToken, {
+    method: "POST",
+    body: JSON.stringify({
+      conversation_id: conversationId,
+      pending_message_id: pendingMessageId,
+    }),
+  });
 
-  if (message.toLowerCase().includes("fail please")) {
-    throw new AssistantApiError(
-      "The assistant is temporarily unavailable. Please try again.",
-    );
-  }
+  const mapped = mapChatReplyToAssistantResponse(response.reply, response.is_error);
 
-  return buildMockResponse(message);
+  return {
+    ...mapped,
+    conversationId: response.conversation_id,
+  };
 }

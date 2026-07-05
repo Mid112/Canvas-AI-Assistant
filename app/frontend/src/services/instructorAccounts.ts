@@ -1,163 +1,95 @@
-import { mockInstructors } from "@/data/mockInstructors";
+import {
+  buildInstructorApiName,
+  mapInstructorApiToInstructor,
+  type InstructorApiRecord,
+} from "@/lib/map-instructor";
+import { apiRequest } from "@/lib/api-request";
 import type {
   CreateInstructorPayload,
   Instructor,
   UpdateInstructorPayload,
 } from "@/types/instructor";
 
-const STORAGE_KEY = "canvas-workflow-admin-instructors";
-const MOCK_DELAY_MS = 350;
+const INSTRUCTORS_PATH = "/admin/instructors";
 
-function delay(ms: number = MOCK_DELAY_MS): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-function readInstructors(): Instructor[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return [...mockInstructors];
-    }
-
-    const parsed = JSON.parse(raw) as Instructor[];
-    return Array.isArray(parsed) ? parsed : [...mockInstructors];
-  } catch {
-    return [...mockInstructors];
-  }
-}
-
-function writeInstructors(instructors: Instructor[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(instructors));
-}
-
-function getStoredInstructors(): Instructor[] {
-  const instructors = readInstructors();
-
-  if (!localStorage.getItem(STORAGE_KEY)) {
-    writeInstructors(instructors);
-  }
-
-  return instructors;
-}
-
-function assertUniqueEmail(email: string, excludeId?: string): void {
-  const normalizedEmail = email.trim().toLowerCase();
-  const exists = getStoredInstructors().some(
-    (instructor) =>
-      instructor.id !== excludeId &&
-      instructor.email.toLowerCase() === normalizedEmail,
+export async function fetchInstructors(
+  accessToken: string,
+): Promise<Instructor[]> {
+  const records = await apiRequest<InstructorApiRecord[]>(
+    INSTRUCTORS_PATH,
+    accessToken,
   );
 
-  if (exists) {
-    throw new Error("An instructor with this email already exists.");
-  }
-}
-
-/** Resets instructor list to seed data — useful for tests. */
-export function resetMockInstructors(): void {
-  localStorage.removeItem(STORAGE_KEY);
-}
-
-export async function fetchInstructors(): Promise<Instructor[]> {
-  await delay();
-  return getStoredInstructors();
+  return records.map(mapInstructorApiToInstructor);
 }
 
 export async function createInstructor(
+  accessToken: string,
   payload: CreateInstructorPayload,
 ): Promise<Instructor> {
-  await delay();
-  assertUniqueEmail(payload.email);
+  const record = await apiRequest<InstructorApiRecord>(INSTRUCTORS_PATH, accessToken, {
+    method: "POST",
+    body: JSON.stringify({
+      name: buildInstructorApiName(payload.firstName, payload.lastName),
+      email: payload.email.trim(),
+      password: payload.temporaryPassword,
+    }),
+  });
 
-  // temporaryPassword is accepted for form/API shape parity only. This
-  // localStorage-backed mock intentionally does not store it — real backend
-  // integration must hash passwords server-side and never persist plaintext
-  // passwords client-side.
-
-  const instructor: Instructor = {
-    id: `instructor-${crypto.randomUUID()}`,
-    firstName: payload.firstName.trim(),
-    lastName: payload.lastName.trim(),
-    email: payload.email.trim(),
-    status: "active",
-    createdAt: new Date().toISOString(),
-    lastLoginAt: null,
-  };
-
-  writeInstructors([instructor, ...getStoredInstructors()]);
-  return instructor;
+  return mapInstructorApiToInstructor(record);
 }
 
 export async function updateInstructor(
+  accessToken: string,
   id: string,
   payload: UpdateInstructorPayload,
 ): Promise<Instructor> {
-  await delay();
-  assertUniqueEmail(payload.email, id);
+  const record = await apiRequest<InstructorApiRecord>(
+    `${INSTRUCTORS_PATH}/${id}`,
+    accessToken,
+    {
+      method: "PATCH",
+      body: JSON.stringify({
+        name: buildInstructorApiName(payload.firstName, payload.lastName),
+        email: payload.email.trim(),
+      }),
+    },
+  );
 
-  const instructors = getStoredInstructors();
-  const index = instructors.findIndex((instructor) => instructor.id === id);
-
-  if (index === -1) {
-    throw new Error("Instructor not found.");
-  }
-
-  const updated: Instructor = {
-    ...instructors[index]!,
-    firstName: payload.firstName.trim(),
-    lastName: payload.lastName.trim(),
-    email: payload.email.trim(),
-  };
-
-  const nextInstructors = [...instructors];
-  nextInstructors[index] = updated;
-  writeInstructors(nextInstructors);
-  return updated;
+  return mapInstructorApiToInstructor(record);
 }
 
-export async function enableInstructor(id: string): Promise<Instructor> {
-  await delay();
-  return setInstructorStatus(id, "active");
-}
-
-export async function disableInstructor(id: string): Promise<Instructor> {
-  await delay();
-  return setInstructorStatus(id, "disabled");
-}
-
-export async function revokeInstructorAccess(id: string): Promise<void> {
-  await delay();
-
-  const instructors = getStoredInstructors();
-  const nextInstructors = instructors.filter((instructor) => instructor.id !== id);
-
-  if (nextInstructors.length === instructors.length) {
-    throw new Error("Instructor not found.");
-  }
-
-  writeInstructors(nextInstructors);
-}
-
-function setInstructorStatus(
+export async function enableInstructor(
+  accessToken: string,
   id: string,
-  status: Instructor["status"],
-): Instructor {
-  const instructors = getStoredInstructors();
-  const index = instructors.findIndex((instructor) => instructor.id === id);
+): Promise<Instructor> {
+  const record = await apiRequest<InstructorApiRecord>(
+    `${INSTRUCTORS_PATH}/${id}/enable`,
+    accessToken,
+    { method: "POST" },
+  );
 
-  if (index === -1) {
-    throw new Error("Instructor not found.");
-  }
+  return mapInstructorApiToInstructor(record);
+}
 
-  const updated: Instructor = {
-    ...instructors[index]!,
-    status,
-  };
+export async function disableInstructor(
+  accessToken: string,
+  id: string,
+): Promise<Instructor> {
+  const record = await apiRequest<InstructorApiRecord>(
+    `${INSTRUCTORS_PATH}/${id}/disable`,
+    accessToken,
+    { method: "POST" },
+  );
 
-  const nextInstructors = [...instructors];
-  nextInstructors[index] = updated;
-  writeInstructors(nextInstructors);
-  return updated;
+  return mapInstructorApiToInstructor(record);
+}
+
+export async function revokeInstructorAccess(
+  accessToken: string,
+  id: string,
+): Promise<void> {
+  await apiRequest<void>(`${INSTRUCTORS_PATH}/${id}/access`, accessToken, {
+    method: "DELETE",
+  });
 }

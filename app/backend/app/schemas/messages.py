@@ -45,3 +45,5 @@ class MessageSendResponse(BaseModel):
     draft_id: int
     status: str
     canvas_topic_id: int | None = None
+    delivery_mode: str | None = None
+    recipient_count: int | None = None

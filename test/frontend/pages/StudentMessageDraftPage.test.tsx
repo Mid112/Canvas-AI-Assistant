@@ -12,10 +12,30 @@ vi.mock("@/services/messageDraft", () => ({
   MessageDraftApiError: class MessageDraftApiError extends Error {
     name = "MessageDraftApiError";
   },
-  isMessageDraftSendMocked: true,
+  isMessageDraftSendMocked: false,
   fetchMessageDraft: vi.fn(),
   sendMessageDraft: vi.fn(),
 }));
+
+vi.mock("@/contexts/AuthContext", async () => {
+  const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
+    "@/contexts/AuthContext",
+  );
+
+  return {
+    ...actual,
+    useAuth: () => ({
+      accessToken: "access-token",
+      user: { name: "Dr. Jane Doe", role: "instructor" },
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    }),
+  };
+});
 
 const mockedFetch = vi.mocked(fetchMessageDraft);
 const mockedSend = vi.mocked(sendMessageDraft);
@@ -83,7 +103,7 @@ describe("StudentMessageDraftPage", () => {
     await user.click(screen.getByRole("button", { name: "Confirm Send" }));
 
     await waitFor(() => {
-      expect(mockedSend).toHaveBeenCalledWith({
+      expect(mockedSend).toHaveBeenCalledWith("access-token", {
         draftId: mockMessageDraft.id,
         subject: mockMessageDraft.subject,
         body: mockMessageDraft.body,
@@ -91,13 +111,10 @@ describe("StudentMessageDraftPage", () => {
       });
     });
 
-    expect(await screen.findByText("Draft Approved")).toBeInTheDocument();
+    expect(await screen.findByText("Message Sent")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(
-      "No message has been sent through Canvas yet",
+      "Message sent successfully to 5 students.",
     );
-    expect(
-      screen.getByText(/Canvas messaging is not connected yet/i),
-    ).toBeInTheDocument();
   });
 
   it("shows an error notification when sending fails", async () => {
@@ -143,7 +160,7 @@ describe("StudentMessageDraftPage", () => {
     renderPage("/instructor/messages?empty=true");
 
     await waitFor(() => {
-      expect(mockedFetch).toHaveBeenCalledWith({
+      expect(mockedFetch).toHaveBeenCalledWith("access-token", {
         emptyRecipients: true,
         simulateLoadError: false,
       });

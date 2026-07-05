@@ -28,6 +28,7 @@ from app.services.canvas import (
     set_active_course,
     update_course_assignment,
 )
+from app.services.student import get_students
 from app.services.canvas_status import CanvasWriteResult
 from app.services.message_validation import validate_message_for_send
 from app.services.write_preview import generate_write_preview
@@ -197,6 +198,24 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 "summary": summary,
             }
 
+        case "fetch_students":
+            course = await _resolve_course(db, user, action.local_course_id)
+            students = await get_students(
+                int(course.canvas_course_id), user, course.canvas_url, db
+            )
+            active_students = [
+                student for student in students if student.enrollment_state == "active"
+            ]
+            return {
+                "students": [student.model_dump() for student in students],
+                "count": len(students),
+                "active_count": len(active_students),
+                "summary": (
+                    f"{course.name} has {len(active_students)} active students "
+                    f"and {len(students)} total enrollments."
+                ),
+            }
+
         case "set_active_course":
             result = await set_active_course(user, action.local_course_id, db)
             return {"active_course": result.model_dump()}
@@ -308,10 +327,23 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 action.subject,
                 action.body,
                 db,
+                canvas_url=course.canvas_url,
+                recipient_canvas_user_ids=action.recipient_canvas_user_ids,
             )
 
             message_result = await send_course_message(
-                course.id, action.subject, action.body, user, course.canvas_url, db
+                course.id,
+                action.subject,
+                action.body,
+                user,
+                course.canvas_url,
+                db,
+                recipient_canvas_user_ids=action.recipient_canvas_user_ids,
+            )
+            resource_type = (
+                "conversation"
+                if message_result.delivery_mode == "conversation"
+                else "announcement"
             )
             result = CanvasWriteResult(
                 action="send_message",
@@ -319,10 +351,12 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 reversible=is_reversible("send_message"),
                 affected_resources=[
                     {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
-                    # id stays None — send_course_message discards
-                    # create_announcement's response, so the real Canvas
-                    # discussion-topic id isn't captured anywhere yet.
-                    {"type": "announcement", "id": None, "name": action.subject, "status": "created"},
+                    {
+                        "type": resource_type,
+                        "id": None,
+                        "name": action.subject,
+                        "status": "created",
+                    },
                 ],
             )
             return result.to_dict()

@@ -25,9 +25,13 @@ export interface AuditLogEntry {
 export interface AuditLogApiRecord {
   id: number;
   user_id: number;
-  workflow_id: number | null;
+  workflow_id: number;
+  course_id: number | null;
   action: string;
-  details: Record<string, unknown> | null;
+  resource_type: string;
+  resource_id: string | null;
+  operation: string;
+  status: string;
   timestamp: string;
   user_email: string;
   user_role: UserRole;

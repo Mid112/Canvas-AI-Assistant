@@ -1,6 +1,12 @@
 """Preview metadata helpers for dry-run / intent_preview flows."""
 
-REVERSIBLE_ACTIONS = frozenset({"fetch_courses", "fetch_assignments", "fetch_submissions", "get_active_course"})
+REVERSIBLE_ACTIONS = frozenset({
+    "fetch_courses",
+    "fetch_assignments",
+    "fetch_submissions",
+    "fetch_students",
+    "get_active_course",
+})
 IRREVERSIBLE_ACTIONS = frozenset({"create_assignment", "update_assignment", "send_message", "update_grade"})
 
 

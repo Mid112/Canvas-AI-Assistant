@@ -7,26 +7,26 @@ import {
 } from "@/lib/map-audit-log";
 
 describe("mapAuditLogApiToEntry", () => {
-  it("maps backend audit_logs fields and JSONB details to the UI model", () => {
+  it("maps backend audit_logs fields to the UI model", () => {
     const entry = mapAuditLogApiToEntry(mockAuditLogApiRecords[0]!);
 
     expect(entry).toMatchObject({
       id: "1",
       userEmail: "jane.doe@university.edu",
       userRole: "instructor",
-      action: "Create Message Draft",
-      resource: "Message Draft #4521",
+      action: "send_message",
+      resource: "announcement #4521",
       result: "success",
     });
     expect(entry.details.workflowId).toBe(128);
-    expect(entry.details.resource).toBeUndefined();
-    expect(entry.details.result).toBeUndefined();
+    expect(entry.details.courseId).toBe(3);
+    expect(entry.details.operation).toBe("create");
   });
 
-  it("defaults result to 'unknown' when details.result is missing", () => {
+  it("defaults result to 'unknown' when status is unrecognized", () => {
     const record = {
       ...mockAuditLogApiRecords[0]!,
-      details: { resource: "Test Resource" },
+      status: "partial",
     };
 
     const entry = mapAuditLogApiToEntry(record);
@@ -34,15 +34,15 @@ describe("mapAuditLogApiToEntry", () => {
     expect(entry.result).toBe("unknown");
   });
 
-  it("defaults result to 'unknown' when details.result is unrecognized", () => {
+  it("uses resource type alone when resource_id is missing", () => {
     const record = {
       ...mockAuditLogApiRecords[0]!,
-      details: { resource: "Test Resource", result: "partial" },
+      resource_id: null,
     };
 
     const entry = mapAuditLogApiToEntry(record);
 
-    expect(entry.result).toBe("unknown");
+    expect(entry.resource).toBe("announcement");
   });
 });
 
@@ -52,4 +52,3 @@ describe("formatAuditLogUserRole", () => {
     expect(formatAuditLogUserRole("admin")).toBe("Administrator");
   });
 });
-

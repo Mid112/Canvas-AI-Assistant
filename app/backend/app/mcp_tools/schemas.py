@@ -32,6 +32,11 @@ class FetchSubmissionsAction(BaseModel):
     assignment_id: int
 
 
+class FetchStudentsAction(BaseModel):
+    action: Literal["fetch_students"] = "fetch_students"
+    local_course_id: int
+
+
 class SetActiveCourseAction(BaseModel):
     action: Literal["set_active_course"] = "set_active_course"
     local_course_id: int
@@ -84,11 +89,11 @@ class UpdateAssignmentAction(BaseModel):
 class SendMessageAction(BaseModel):
     action: Literal["send_message"] = "send_message"
     local_course_id: int
-    # Posted as a public Canvas announcement visible to the entire enrolled
-    # class — there is no per-student recipient targeting yet (that lands
-    # once recipient identification, e.g. missing/late submissions, exists).
     subject: str
     body: str
+    # When omitted or empty, posts a public class announcement. When provided,
+    # sends a Canvas conversation to the listed student Canvas user IDs.
+    recipient_canvas_user_ids: list[int] | None = None
 
 
 class OutOfScopeAction(BaseModel):
@@ -131,6 +136,7 @@ ACTION_SCHEMAS: dict[str, type[BaseModel]] = {
     "fetch_courses": FetchCoursesAction,
     "fetch_assignments": FetchAssignmentsAction,
     "fetch_submissions": FetchSubmissionsAction,
+    "fetch_students": FetchStudentsAction,
     "set_active_course": SetActiveCourseAction,
     "get_active_course": GetActiveCourseAction,
     "create_assignment": CreateAssignmentAction,
@@ -157,6 +163,7 @@ ACTION_CLASSIFICATION: dict[str, ActionClassification] = {
     "fetch_courses": "read_only",
     "fetch_assignments": "read_only",
     "fetch_submissions": "read_only",
+    "fetch_students": "read_only",
     "get_active_course": "read_only",
     # Writes a local UserPreference row only — no Canvas footprint, and not
     # gated by the preview/confirm flow at all (not in dispatcher.py's

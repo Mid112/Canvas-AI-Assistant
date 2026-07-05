@@ -8,6 +8,19 @@ import {
   sendAssistantMessage,
 } from "@/services/assistant";
 
+const mockUseAuth = vi.fn();
+
+vi.mock("@/contexts/AuthContext", async () => {
+  const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
+    "@/contexts/AuthContext",
+  );
+
+  return {
+    ...actual,
+    useAuth: () => mockUseAuth(),
+  };
+});
+
 vi.mock("@/services/assistant", async () => {
   const actual = await vi.importActual<typeof import("@/services/assistant")>(
     "@/services/assistant",
@@ -24,11 +37,28 @@ const mockedSendAssistantMessage = vi.mocked(sendAssistantMessage);
 describe("ChatWindow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
+    mockUseAuth.mockReturnValue({
+      accessToken: "access-token",
+      user: { name: "Dr. Jane Doe", role: "instructor" },
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    });
+    mockedSendAssistantMessage.mockResolvedValue({
+      content:
+        "I found students who have not submitted the assignment yet. I can help you send a reminder if you'd like.",
+      explanation:
+        "I analyzed submission data and identified students who have not submitted Assignment 3.",
+      interpretedAction: {
+        action: "Send Reminder",
+        course: "COSC 499",
+        affectedStudents: "12 students",
+      },
+      conversationId: 1,
+    });
   });
 
   it("shows the seeded welcome message", () => {
@@ -40,7 +70,7 @@ describe("ChatWindow", () => {
   });
 
   it("shows an error for empty submissions", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const user = userEvent.setup();
 
     render(<ChatWindow />);
 
@@ -52,7 +82,7 @@ describe("ChatWindow", () => {
   });
 
   it("adds a user message and assistant reply after a delay", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const user = userEvent.setup();
 
     render(<ChatWindow />);
 
@@ -63,9 +93,6 @@ describe("ChatWindow", () => {
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
     expect(screen.getByText("Show missing submissions")).toBeInTheDocument();
-    expect(screen.getByLabelText("Assistant is typing")).toBeInTheDocument();
-
-    await vi.advanceTimersByTimeAsync(2000);
 
     await waitFor(() => {
       expect(screen.getByText("Explanation")).toBeInTheDocument();
@@ -75,7 +102,7 @@ describe("ChatWindow", () => {
   });
 
   it("shows an error banner and retry button when the mock request fails", async () => {
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    const user = userEvent.setup();
 
     mockedSendAssistantMessage
       .mockRejectedValueOnce(
@@ -86,6 +113,7 @@ describe("ChatWindow", () => {
       .mockResolvedValueOnce({
         content: "Retry succeeded.",
         explanation: "The assistant responded after a retry.",
+        conversationId: 1,
       });
 
     render(<ChatWindow />);
@@ -96,15 +124,12 @@ describe("ChatWindow", () => {
     );
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
-    await vi.advanceTimersByTimeAsync(2000);
-
     expect(
       await screen.findByText(/assistant is temporarily unavailable/i),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Retry" }));
-    await vi.advanceTimersByTimeAsync(2000);
 
     await waitFor(() => {
       expect(screen.getByText("Retry succeeded.")).toBeInTheDocument();

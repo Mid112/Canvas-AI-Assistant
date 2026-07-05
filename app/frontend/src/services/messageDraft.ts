@@ -1,15 +1,13 @@
-import {
-  emptyRecipientsMessageDraft,
-  mockMessageDraft,
-} from "@/data/mockMessageDraft";
+import { mockMessageRecipients } from "@/data/mockMessageDraft";
+import { apiRequest } from "@/lib/api-request";
 import type {
   FetchMessageDraftOptions,
   MessageDraft,
+  MessageRecipient,
   SendMessageDraftPayload,
 } from "@/types/messageDraft";
 
-/** Frontend-only mock service for AI message drafting until Canvas messaging API exists. */
-export const isMessageDraftSendMocked = true;
+export const isMessageDraftSendMocked = false;
 
 export class MessageDraftApiError extends Error {
   constructor(message: string) {
@@ -18,53 +16,115 @@ export class MessageDraftApiError extends Error {
   }
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
+interface MessageDraftApiResponse {
+  id: number;
+  course_id: number | null;
+  subject: string;
+  body: string;
+  template_id: string | null;
+  template_name: string | null;
+  recipients: MessageRecipient[];
+  status: string;
+  sent_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
-function randomDelayMs(): number {
-  return 800 + Math.floor(Math.random() * 600);
+function mapDraftResponse(response: MessageDraftApiResponse): MessageDraft {
+  return {
+    id: String(response.id),
+    recipients: response.recipients,
+    subject: response.subject,
+    body: response.body,
+    templateName: response.template_name ?? undefined,
+    templateId: response.template_id ?? undefined,
+  };
 }
 
-/** Loads a canned draft from mock data — replace with GET /messages/drafts/:id. */
+function buildCreatePayload(options: FetchMessageDraftOptions) {
+  return {
+    template_id: options.templateId ?? "assignment-reminder",
+    template_name: options.templateName ?? "Assignment Reminder",
+    prompt:
+      options.prompt ??
+      "Draft a friendly reminder about an upcoming assignment deadline.",
+    recipients: options.emptyRecipients
+      ? []
+      : mockMessageRecipients.map((recipient) => ({ ...recipient })),
+  };
+}
+
 export async function fetchMessageDraft(
+  accessToken: string,
   options: FetchMessageDraftOptions = {},
 ): Promise<MessageDraft> {
-  await delay(randomDelayMs());
-
   if (options.simulateLoadError) {
     throw new MessageDraftApiError(
       "Unable to load message draft. Please try again.",
     );
   }
 
-  const source = options.emptyRecipients
-    ? emptyRecipientsMessageDraft
-    : mockMessageDraft;
+  try {
+    if (options.draftId) {
+      const response = await apiRequest<MessageDraftApiResponse>(
+        `/messages/drafts/${options.draftId}`,
+        accessToken,
+      );
+      return mapDraftResponse(response);
+    }
 
-  return {
-    ...source,
-    recipients: [...source.recipients],
-  };
+    const created = await apiRequest<MessageDraftApiResponse>(
+      "/messages/drafts",
+      accessToken,
+      {
+        method: "POST",
+        body: JSON.stringify(buildCreatePayload(options)),
+      },
+    );
+
+    return mapDraftResponse(created);
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unable to load message draft. Please try again.";
+
+    throw new MessageDraftApiError(message);
+  }
 }
 
-/** Simulates Canvas send with a delay — replace with POST /messages/send. */
 export async function sendMessageDraft(
+  accessToken: string,
   payload: SendMessageDraftPayload,
 ): Promise<void> {
-  await delay(1000);
-
-  if (payload.subject.toLowerCase().includes("fail")) {
-    throw new MessageDraftApiError(
-      "Unable to send message. Canvas messaging is temporarily unavailable.",
-    );
-  }
-
   if (payload.recipientIds.length === 0) {
     throw new MessageDraftApiError(
       "At least one recipient is required to send a message.",
     );
+  }
+
+  try {
+    await apiRequest<MessageDraftApiResponse>(
+      `/messages/drafts/${payload.draftId}`,
+      accessToken,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          subject: payload.subject,
+          body: payload.body,
+        }),
+      },
+    );
+
+    await apiRequest(`/messages/drafts/${payload.draftId}/send`, accessToken, {
+      method: "POST",
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unable to send message. Canvas messaging is temporarily unavailable.";
+
+    throw new MessageDraftApiError(message);
   }
 }
