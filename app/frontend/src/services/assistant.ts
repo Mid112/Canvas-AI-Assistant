@@ -31,9 +31,9 @@ function defaultCourseId(context: AssistantContext): number {
 }
 
 const UNSAFE_PATTERNS = [
-  /delete\s+(all|every)/,
+  /\b(delete|erase|remove|wipe|purge)\s+(all|every)\b/,
+  /\b(delete|erase|remove|wipe|purge)\s+(all|every)\s+\w*\s*students?\b/,
   /drop\s+(the\s+)?course/,
-  /remove\s+all\s+students/,
   /fail\s+(all|every)/,
   /grade\s+.*\s+to\s+0/,
   /without\s+(approval|preview|confirm)/,
@@ -87,7 +87,7 @@ function isVagueRequest(message: string): string | null {
   if (
     /\bsend\b/.test(trimmed.toLowerCase()) &&
     /\bmessage\b/.test(trimmed.toLowerCase()) &&
-    !/\bstudent|reminder|missing|late\b/.test(trimmed.toLowerCase())
+    !/\b(student|reminder|missing|late)\b/.test(trimmed.toLowerCase())
   ) {
     return "To draft a message, tell me which students or group should receive it and what the message is about.";
   }

@@ -38,6 +38,37 @@ describe("sendAssistantMessage", () => {
     });
   });
 
+  it("blocks rephrased destructive requests", async () => {
+    const responsePromise = sendAssistantMessage("erase every student");
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(responsePromise).resolves.toMatchObject({
+      safetyBlocked: true,
+      safetyMessage: expect.stringContaining("cannot complete"),
+    });
+  });
+
+  it("asks who should receive a message when recipients are omitted", async () => {
+    const responsePromise = sendAssistantMessage(
+      "send a message about the midterm exam",
+    );
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(responsePromise).resolves.toMatchObject({
+      safetyBlocked: true,
+      safetyMessage: expect.stringContaining("which students or group"),
+    });
+  });
+
+  it("does not treat escalate as a late-submission keyword", async () => {
+    const responsePromise = sendAssistantMessage(
+      "send a message to escalate this issue",
+    );
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(responsePromise).resolves.toMatchObject({
+      safetyBlocked: true,
+      safetyMessage: expect.stringContaining("which students or group"),
+    });
+  });
+
   it("asks for clarification on vague requests", async () => {
     const responsePromise = sendAssistantMessage("help");
     await vi.advanceTimersByTimeAsync(2000);
