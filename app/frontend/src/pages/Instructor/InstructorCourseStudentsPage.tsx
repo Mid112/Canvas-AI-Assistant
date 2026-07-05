@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
