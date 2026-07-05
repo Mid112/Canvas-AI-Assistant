@@ -288,6 +288,8 @@ async def fetch_enrollments(
                     "type[]": "StudentEnrollment",
                     # Active enrollments only — exclude concluded/invited/inactive
                     "state[]": "active",
+                    # Nested user object required for name/login_id formatting
+                    "include[]": "user",
                     "per_page": 100,
                 },
             )
