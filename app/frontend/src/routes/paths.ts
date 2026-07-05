@@ -49,6 +49,10 @@ export function instructorCourseAnalyticsPath(courseId: number | string) {
   return `/instructor/courses/${courseId}/analytics`;
 }
 
+export function instructorDryRunPreviewPath(previewId: string) {
+  return `${paths.instructor.dryRunPreview}?preview=${encodeURIComponent(previewId)}`;
+}
+
 export function instructorAssignmentUpdatePath(
   localCourseId: number | string,
   assignmentId: number | string,
