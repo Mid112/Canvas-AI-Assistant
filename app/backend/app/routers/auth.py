@@ -1,10 +1,14 @@
-from fastapi import APIRouter, Depends, Query, status
+from datetime import UTC, datetime
+
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.dependencies import bearer, get_current_user
+from app.core.limiter import limiter
+from app.dependencies import bearer, get_admin_user, get_current_user
+from app.integrations.canvas import check_token_status
 from app.models.session import Session
 from app.models.user import User
 from app.schemas.auth import (
@@ -24,12 +28,14 @@ from app.schemas.auth import (
     UserResponse,
 )
 from app.services.auth import (
+    admin_login_user,
     change_password,
     confirm_password_reset,
     delete_account,
     get_notification_settings,
     list_user_sessions,
     login_user,
+    logout_admin,
     logout_user,
     register_user,
     remove_canvas_connection,
@@ -39,7 +45,6 @@ from app.services.auth import (
     update_notification_settings,
     update_profile,
 )
-from datetime import UTC, datetime
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -54,12 +59,26 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     return await login_user(db, body.email, body.password)
 
 
+@router.post("/admin/login", response_model=TokenResponse)
+@limiter.limit("5/minute")
+async def admin_login(
+    request: Request,
+    body: LoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    return await admin_login_user(db, body.email, body.password)
+
+
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
     credentials: HTTPAuthorizationCredentials = Depends(bearer),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await logout_user(db, credentials.credentials)
+    if current_user.role == "admin":
+        await logout_admin(db, credentials.credentials, current_user)
+    else:
+        await logout_user(db, credentials.credentials)
 
 
 @router.post("/password-reset/request", status_code=status.HTTP_204_NO_CONTENT)
@@ -166,8 +185,6 @@ async def validate_canvas_token(
     body: CanvasTokenRequest,
     current_user: User = Depends(get_current_user),
 ):
-    from app.integrations.canvas import check_token_status
-
     return CanvasTokenValidationResponse(status=await check_token_status(body.canvas_token, body.canvas_url))
 
 

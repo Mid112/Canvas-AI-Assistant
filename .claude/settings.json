@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git mv *)",
+      "Bash(echo \"exit:$?\")",
+      "Bash(grep -rlE *)",
+      "Bash(echo \"unmerged-check-exit:$?\")",
+      "Bash(app/backend/.venv/bin/pytest test/backend/ -q)",
+      "Bash(git stash *)"
+    ]
+  }
+}

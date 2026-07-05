@@ -5,8 +5,8 @@ import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRe
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
-import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
 import {
   approveAssignmentDraft,
   generateAssignmentDraft,
@@ -48,7 +48,7 @@ export function InstructorAssignmentCreatePage() {
   const courseLabel =
     courseOptions.find((course) => course.id === describeValues.courseId)
       ?.label ?? "your course";
-  const canvasUrl = getPrimaryCanvasConnectionUrl(user);
+  const canvasUrl = useCanvasConnectionUrl();
 
   useEffect(() => {
     if (!accessToken || !user?.has_canvas_token) {

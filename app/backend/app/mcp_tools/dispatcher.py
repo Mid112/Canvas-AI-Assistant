@@ -8,53 +8,34 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.canvas import fetch_enrollments
-from app.mcp_tools.schemas import ACTION_SCHEMAS
+from app.mcp_tools.schemas import ACTION_SCHEMAS, is_reversible
 from app.models.course import Course
 from app.models.user import User
-from app.schemas.canvas import SubmissionResponse
+from app.schemas.canvas import AssignmentCreate, AssignmentResponse, AssignmentUpdate, SubmissionResponse
+from app.services.assignment_validation import (
+    validate_assignment_for_create,
+    validate_assignment_for_update,
+)
 from app.services.canvas import (
+    create_course_assignment,
     get_active_course,
+    get_assignment,
     get_assignments,
     get_courses,
     get_submissions,
     require_canvas_token,
+    send_course_message,
     set_active_course,
+    update_course_assignment,
 )
-
-
-async def _add_person_submission_summary(course, submissions: list[SubmissionResponse], user, db) -> str:
-    """Resolves user_id -> name for display purposes only. This data
-    never goes back into the LLM's context"""
-    token = require_canvas_token(user, course.canvas_url)
-    enrollments = await fetch_enrollments(int(course.canvas_course_id), token, course.canvas_url)
-    name_by_id = {e["user_id"]: e["user"]["name"] for e in enrollments if "user" in e}
-
-    lines = []
-    for s in submissions:
-        name = name_by_id.get(s.user_id, f"Student {s.user_id}")
-        status = "submitted" if s.workflow_state == "submitted" else "has not submitted"
-        lines.append(f"{name} {status}")
-    return "\n".join(lines)
-
-
-def _extract_json(raw_llm_output: str) -> str:
-    """Qwen3 and similar 'thinking' models wrap reasoning in <think>...</think>
-    before the actual answer. Strip that block, then pull out the first
-    {...} object found in what remains — handles both thinking-model output
-    and any incidental prose/markdown fences around the JSON."""
-
-    without_thinking = re.sub(r"<think>.*?</think>", "", raw_llm_output, flags=re.DOTALL)
-
-    match = re.search(r"\{.*\}", without_thinking, re.DOTALL)
-    if match:
-        return match.group(0)
-
-    return without_thinking.strip()
+from app.services.canvas_status import CanvasWriteResult
+from app.services.message_validation import validate_message_for_send
+from app.services.write_preview import generate_write_preview
 
 
 class ToolExecutionError(Exception):
-    """Callers catch this and turn it into a user-facing message —
-    the raw exception text is for logs, not for the chatbox."""
+    """Callers catch this and turn it into a user-facing message.
+    The raw exception text is for logs, not for the chatbox."""
 
     def __init__(self, message: str, *, log_detail: str | None = None):
         super().__init__(message)
@@ -62,13 +43,25 @@ class ToolExecutionError(Exception):
         self.log_detail = log_detail or message
 
 
-def parse_action(raw_llm_output: str) -> Any:
-    """Step 1: the LLM's raw text must be valid JSON.
-    Step 2: that JSON must have an 'action' field naming a known tool.
-    Step 3: the rest of the JSON must validate against that tool's schema.
-    Any failure raises ToolExecutionError with a message safe to show
-    the user, plus a more detailed message for the audit log."""
+def _extract_json(raw_llm_output: str) -> str:
+    """Qwen3 and similar 'thinking' models wrap reasoning in <think>...</think>
+    before the actual answer. Strip that block, then pull out the first
+    {...} object found in what remains."""
+    without_thinking = re.sub(
+        r"<think>.*?</think>", "", raw_llm_output, flags=re.DOTALL
+    )
+    match = re.search(r"\{.*\}", without_thinking, re.DOTALL)
+    if match:
+        return match.group(0)
+    return without_thinking.strip()
 
+
+def parse_action(raw_llm_output: str) -> Any:
+    """Validates the LLM's raw text output into a typed Pydantic action object.
+    Step 1: strip <think> blocks and extract the first JSON object.
+    Step 2: verify the 'action' field names a known tool.
+    Step 3: validate remaining fields against that tool's schema.
+    Any failure raises ToolExecutionError with a user-safe message."""
     cleaned = _extract_json(raw_llm_output)
     try:
         data = json.loads(cleaned)
@@ -101,11 +94,15 @@ def parse_action(raw_llm_output: str) -> Any:
         )
 
 
-async def _resolve_course(db: AsyncSession, user: User, local_course_id: int) -> Course:
-    """Shared ownership check used by every action that takes a course ID.
-    Centralizing this means the 'is this course actually yours' check
-    can never be forgotten in a new tool."""
-    course = await db.scalar(select(Course).where(Course.id == local_course_id, Course.instructor_id == user.id))
+async def _resolve_course(
+    db: AsyncSession, user: User, local_course_id: int
+) -> Course:
+    """Shared ownership check used by every action that takes a course ID."""
+    course = await db.scalar(
+        select(Course).where(
+            Course.id == local_course_id, Course.instructor_id == user.id
+        )
+    )
     if not course:
         raise ToolExecutionError(
             "That course could not be found in your account.",
@@ -114,25 +111,87 @@ async def _resolve_course(db: AsyncSession, user: User, local_course_id: int) ->
     return course
 
 
+async def _add_person_submission_summary(
+    course: Course,
+    submissions: list[SubmissionResponse],
+    user: User,
+    db: AsyncSession,
+) -> str:
+    """Resolves user_id to name for display. Names are assembled here
+    in Python from Canvas enrollment data — the LLM never sees or
+    generates student PII directly."""
+    token = require_canvas_token(user, course.canvas_url)
+    enrollments = await fetch_enrollments(
+        int(course.canvas_course_id), token, course.canvas_url
+    )
+    name_by_id = {
+        e["user_id"]: e["user"]["name"] for e in enrollments if "user" in e
+    }
+    lines = []
+    for s in submissions:
+        name = name_by_id.get(s.user_id, f"Student {s.user_id}")
+        status = "submitted" if s.workflow_state == "submitted" else "has not submitted"
+        lines.append(f"{name} {status}")
+    return "\n".join(lines)
+
+
+def _merge_assignment_update(current: AssignmentResponse, action: Any) -> AssignmentUpdate:
+    """Canvas's assignment PUT is a full overwrite — fields left out of the
+    payload get blanked, not left alone. Any field the user didn't ask to
+    change is carried over from the just-fetched current Canvas state."""
+    return AssignmentUpdate(
+        name=action.title if action.title is not None else current.name,
+        description=action.description if action.description is not None else current.description,
+        due_at=action.due_date if action.due_date is not None else current.due_at,
+        points_possible=action.points_possible if action.points_possible is not None else current.points_possible,
+    )
+
+
 async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
-    """Dispatch on the validated action's type. Each branch calls straight
-    into the existing services/canvas.py functions — no Canvas-calling
-    logic is duplicated here, this function only resolves IDs and routes."""
+    """Dispatch on the validated action's type.
+
+    Architecture note — two distinct call paths:
+
+    PATH A (normal chat turn, called from handle_chat_message):
+      The LLM produces an intent_preview wrapping a proposed_action.
+      execute_tool hits case 'intent_preview':, which calls
+      generate_write_preview to build metadata, stores everything,
+      and returns the preview to the user. No Canvas write happens.
+
+    PATH B (confirm turn, called from handle_confirmed_action):
+      The stored proposed_action is re-parsed and execute_tool is called
+      with the specific write action (e.g. CreateAssignmentAction).
+      execute_tool hits case 'create_assignment': (or another write case),
+      which calls Canvas directly via services/canvas.py, wraps the result
+      in CanvasWriteResult, and returns the execution status. No preview
+      is generated.
+
+    This separation means write action cases ONLY call Canvas — they never
+    generate previews. Preview generation ONLY happens in case 'intent_preview':.
+    This is the SRP boundary."""
 
     match action.action:
+
+        # ── Read actions ──────────────────────────────────────────────
         case "fetch_courses":
             courses = await get_courses(user, _default_canvas_url(user), db)
             return {"courses": [c.model_dump() for c in courses]}
 
         case "fetch_assignments":
             course = await _resolve_course(db, user, action.local_course_id)
-            assignments = await get_assignments(int(course.canvas_course_id), user, course.canvas_url)
+            assignments = await get_assignments(
+                course.id, user, course.canvas_url, db
+            )
             return {"assignments": [a.model_dump() for a in assignments]}
 
         case "fetch_submissions":
             course = await _resolve_course(db, user, action.local_course_id)
-            submissions = await get_submissions(int(course.canvas_course_id), action.assignment_id, user, course.canvas_url)
-            summary = await _add_person_submission_summary(course, submissions, user, db)
+            submissions = await get_submissions(
+                course.id, action.assignment_id, user, course.canvas_url, db
+            )
+            summary = await _add_person_submission_summary(
+                course, submissions, user, db
+            )
             return {
                 "submissions": [s.model_dump() for s in submissions],
                 "summary": summary,
@@ -146,56 +205,190 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             result = await get_active_course(user, db)
             return {"active_course": result.model_dump() if result else None}
 
+        # ── Write actions (PATH B only — Canvas write, no preview) ────
+        # These cases are only reached from handle_confirmed_action after
+        # the user has already seen and confirmed the intent_preview.
+        # They call Canvas directly and wrap the result in CanvasWriteResult.
+        # If services/canvas.py raises HTTPException, it propagates up and
+        # handle_confirmed_action catches it as a ToolExecutionError.
+        case "create_assignment":
+            course = await _resolve_course(db, user, action.local_course_id)
+
+            # re-validate at execution time — the preview may have been
+            # shown seconds or minutes ago; Canvas state could have changed
+            await validate_assignment_for_create(
+                action.local_course_id,
+                user,
+                action.title,
+                action.description,
+                action.due_date,
+                action.points_possible,
+                db,
+            )
+
+            payload = AssignmentCreate(
+                name=action.title,
+                description=action.description,
+                due_at=action.due_date,
+                points_possible=action.points_possible,
+            )
+            # services/canvas.py raises HTTPException on any Canvas error,
+            # so a returned object always means success
+            assignment = await create_course_assignment(
+                course.id, payload, user, course.canvas_url, db
+            )
+            result = CanvasWriteResult(
+                action="create_assignment",
+                data=assignment,
+                reversible=is_reversible("create_assignment"),
+                affected_resources=[
+                    {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
+                    {"type": "assignment", "id": assignment.id, "name": assignment.name, "status": "created"},
+                ],
+            )
+            return result.to_dict()
+
+        case "update_assignment":
+            course = await _resolve_course(db, user, action.local_course_id)
+
+            await validate_assignment_for_update(
+                action.local_course_id,
+                user,
+                action.title,
+                action.description,
+                action.due_date,
+                action.points_possible,
+                db,
+            )
+
+            # fetch fresh Canvas state right before merging — the assignment
+            # may have changed since the preview was shown, and this is also
+            # where a bad/stale assignment_id surfaces as a Canvas 404
+            current = await get_assignment(
+                course.id, action.assignment_id, user, course.canvas_url, db
+            )
+            payload = _merge_assignment_update(current, action)
+
+            assignment = await update_course_assignment(
+                course.id, action.assignment_id, payload, user, course.canvas_url, db
+            )
+            changed_fields = [
+                field
+                for field, value in (
+                    ("title", action.title),
+                    ("description", action.description),
+                    ("due_date", action.due_date),
+                    ("points_possible", action.points_possible),
+                )
+                if value is not None
+            ]
+            result = CanvasWriteResult(
+                action="update_assignment",
+                data=assignment,
+                reversible=is_reversible("update_assignment"),
+                affected_resources=[
+                    {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
+                    {
+                        "type": "assignment",
+                        "id": assignment.id,
+                        "name": assignment.name,
+                        "status": "modified",
+                        "changed_fields": changed_fields,
+                    },
+                ],
+            )
+            return result.to_dict()
+
+        case "send_message":
+            course = await _resolve_course(db, user, action.local_course_id)
+
+            await validate_message_for_send(
+                action.local_course_id,
+                user,
+                action.subject,
+                action.body,
+                db,
+            )
+
+            message_result = await send_course_message(
+                course.id, action.subject, action.body, user, course.canvas_url, db
+            )
+            result = CanvasWriteResult(
+                action="send_message",
+                data=message_result,
+                reversible=is_reversible("send_message"),
+                affected_resources=[
+                    {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
+                    # id stays None — send_course_message discards
+                    # create_announcement's response, so the real Canvas
+                    # discussion-topic id isn't captured anywhere yet.
+                    {"type": "announcement", "id": None, "name": action.subject, "status": "created"},
+                ],
+            )
+            return result.to_dict()
+
+        # ── Conversational actions ────────────────────────────────────
+        # These results are logged verbatim as the assistant's message
+        # content and fed back to the LLM as conversation history on the
+        # next turn. Each must keep a top-level "action" key matching what
+        # the system prompt teaches the model to produce — otherwise the
+        # model imitates its own past (action-less) turn from history
+        # instead of the system prompt's schema, and later outputs fail
+        # to parse.
         case "out_of_scope":
             return {
+                "action": "out_of_scope",
                 "out_of_scope": True,
                 "message": "Your Request is Out of Scope, it can't be processed.",
                 "detail": action.message,
             }
 
         case "clarify":
-            # stores the partial plan in the conversation history so the next prompt can be appended on top as a context
-
             return {
+                "action": "clarify",
                 "clarify": True,
                 "question": action.question,
                 "partial_plan": action.partial_plan,
             }
 
         case "intent_preview":
-            action_name = action.proposed_action.get("action", "unknown")
-            course_name = None
-            local_course_id = action.proposed_action.get("local_course_id")
-            if local_course_id is not None:
-                course = await db.scalar(select(Course).where(Course.id == local_course_id))
-                course_name = course.name if course else None
+            # PATH A: build the write preview here, not inside each write case.
+            # proposed_action tells generate_write_preview which write type
+            # this is — it dispatches internally and returns the right metadata.
+            proposed = action.proposed_action
+            write_actions = {"create_assignment", "update_assignment", "send_message", "update_grade"}
 
-            from app.services.preview import build_action_preview
+            if proposed.get("action") in write_actions:
+                # resolve the course for preview metadata (not for writing)
+                course = await _resolve_course(
+                    db, user, proposed.get("local_course_id", 0)
+                )
+                preview_metadata = generate_write_preview(proposed, course)
+            else:
+                # read-action previews don't need course-level metadata
+                preview_metadata = {"action": proposed.get("action")}
 
-            preview = build_action_preview(
-                action_name,
-                action.summary,
-                action.proposed_action,
-                course_name=course_name,
-            )
             return {
+                "action": "intent_preview",
                 "intent_preview": True,
                 "summary": action.summary,
-                "proposed_action": action.proposed_action,
-                **preview,
+                "proposed_action": proposed,
+                "preview_metadata": preview_metadata,
             }
+
         case "respond":
-            return {"message": action.message}
+            return {"action": "respond", "message": action.message}
 
         case _:
-            # unreachable given parse_action's validation, but keeps mypy/runtime honest
-            raise ToolExecutionError(f"No handler implemented for action '{action.action}'.")
+            raise ToolExecutionError(
+                f"No handler implemented for action '{action.action}'."
+            )
 
 
 def _default_canvas_url(user: User) -> str:
-    """fetch_courses doesn't take a course ID so it needs a canvas_url from the user's first
-    connected Canvas school, for now. Once multi-school selection exists
-    in the chat flow itself, this should take an explicit param instead."""
+    """fetch_courses needs a canvas_url but has no course to look it up from.
+    Uses the user's first connected Canvas school as a fallback until
+    per-conversation institution scoping (feature/multi-institution) is in."""
     if not user.canvas_connections:
         raise ToolExecutionError(
             "You haven't connected a Canvas account yet. Please connect one in Settings first.",

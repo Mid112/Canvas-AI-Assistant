@@ -1,12 +1,14 @@
 from datetime import UTC, datetime, timedelta
 
-from cryptography.fernet import InvalidToken
 from fastapi import HTTPException, status
-from sqlalchemy import delete, desc, func, select
+from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import settings
 from app.core.security import (
+    create_access_token,
+    encrypt_canvas_token,
     generate_reset_token,
     hash_password,
     hash_token,
@@ -14,6 +16,7 @@ from app.core.security import (
 )
 from app.integrations.canvas import validate_token
 from app.models.audit_log import AuditLog
+from app.models.audit_log_session import AuditLogSession
 from app.models.canvas_connection import CanvasConnection
 from app.models.password_reset_token import PasswordResetToken
 from app.models.session import Session
@@ -27,7 +30,6 @@ from app.schemas.auth import (
     RegisterRequest,
     TokenResponse,
 )
-from app.core.security import encrypt_canvas_token
 from app.services.sessions import issue_token_for_user, revoke_session
 
 
@@ -61,8 +63,51 @@ async def login_user(db: AsyncSession, email: str, password: str) -> TokenRespon
     return TokenResponse(access_token=token)
 
 
+async def admin_login_user(
+    db: AsyncSession, email: str, password: str
+) -> TokenResponse:
+    user = await db.scalar(select(User).where(User.email == email))
+
+    if not user or not verify_password(password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
+
+    if user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is disabled",
+        )
+
+    token = create_access_token(user.id, role="admin")
+
+    expires_at = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    db.add(Session(user_id=user.id, token_hash=hash_token(token), expires_at=expires_at))
+    db.add(AuditLogSession(user_id=user.id, action="admin_login", details={"email": user.email}))
+    await db.commit()
+
+    return TokenResponse(access_token=token)
+
+
 async def logout_user(db: AsyncSession, token: str) -> None:
     await revoke_session(db, token)
+
+
+async def logout_admin(db: AsyncSession, token: str, user: User) -> None:
+    session = await db.scalar(
+        select(Session).where(Session.token_hash == hash_token(token))
+    )
+    if session:
+        await db.delete(session)
+    db.add(AuditLogSession(user_id=user.id, action="admin_logout", details={"email": user.email}))
+    await db.commit()
 
 
 async def update_profile(db: AsyncSession, user: User, body: ProfileUpdateRequest) -> User:

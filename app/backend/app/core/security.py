@@ -1,6 +1,6 @@
-from datetime import UTC, datetime, timedelta
 import hashlib
 import secrets
+from datetime import UTC, datetime, timedelta
 
 from cryptography.fernet import Fernet
 from jose import jwt
@@ -36,6 +36,7 @@ def create_access_token_with_expiry(
 
 def decode_access_token(token: str) -> tuple[str, str]:
     payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
+    # role defaults to "instructor" so tokens minted before this change remain valid
     return payload["sub"], payload.get("role", "instructor")
 
 

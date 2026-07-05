@@ -1,6 +1,7 @@
 # Import all models here so SQLAlchemy registers them with Base.metadata.
 from app.models.assignment import Assignment
 from app.models.audit_log import AuditLog
+from app.models.audit_log_session import AuditLogSession
 from app.models.canvas_connection import CanvasConnection
 from app.models.conversation import Conversation
 from app.models.course import Course
@@ -19,6 +20,7 @@ from app.models.workflow import Workflow
 __all__ = [
     "Assignment",
     "AuditLog",
+    "AuditLogSession",
     "CanvasConnection",
     "Conversation",
     "Course",

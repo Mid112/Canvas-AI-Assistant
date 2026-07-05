@@ -4,6 +4,7 @@ pydantic==2.13.4
 pydantic-settings==2.14.1
 python-dotenv==1.2.2
 email-validator==2.2.0
+python-dateutil==2.9.0.post0
 httpx==0.28.1
 
 # Database
@@ -15,3 +16,4 @@ alembic==1.14.0
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.2.1
+slowapi==0.1.9
