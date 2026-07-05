@@ -1,0 +1,142 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  ChatReplyMappingError,
+  mapChatReply,
+} from "@/lib/map-chat-reply";
+
+describe("mapChatReply", () => {
+  it("throws for backend error replies", () => {
+    expect(() =>
+      mapChatReply({ error: "The assistant took too long to respond." }, true),
+    ).toThrow(ChatReplyMappingError);
+  });
+
+  it("maps out_of_scope replies", () => {
+    expect(
+      mapChatReply(
+        {
+          action: "out_of_scope",
+          out_of_scope: true,
+          message: "Your request is out of scope.",
+          detail: "Deleting all students is not supported.",
+        },
+        false,
+      ),
+    ).toEqual({
+      content: "Your request is out of scope.",
+      safetyBlocked: true,
+      safetyMessage: "Deleting all students is not supported.",
+    });
+  });
+
+  it("maps clarify replies", () => {
+    expect(
+      mapChatReply(
+        {
+          action: "clarify",
+          clarify: true,
+          question: "Which assignment should I update?",
+          partial_plan: {},
+        },
+        false,
+      ),
+    ).toEqual({
+      content: "Which assignment should I update?",
+    });
+  });
+
+  it("maps intent_preview replies", () => {
+    expect(
+      mapChatReply(
+        {
+          action: "intent_preview",
+          intent_preview: true,
+          summary: "Create assignment Midterm Exam in CPSC 310.",
+          proposed_action: {
+            action: "create_assignment",
+            title: "Midterm Exam",
+          },
+          preview_metadata: {
+            action: "create_assignment",
+            course: "CPSC 310",
+            audience: { scope: "entire_class" },
+          },
+          pending_message_id: 42,
+        },
+        false,
+        {},
+        7,
+      ),
+    ).toEqual({
+      content: "Create assignment Midterm Exam in CPSC 310.",
+      interpretedAction: {
+        action: "Create Assignment",
+        course: "CPSC 310",
+        affectedStudents: "Entire class",
+        primaryLink: {
+          label: "Review preview",
+          href: "/instructor/actions/preview?conversation=7&pending=42",
+        },
+      },
+      pendingMessageId: 42,
+    });
+  });
+
+  it("maps cancelled replies", () => {
+    expect(
+      mapChatReply(
+        {
+          action: "cancelled",
+          cancelled: true,
+          message: "Cancelled — no changes were made.",
+        },
+        false,
+      ),
+    ).toEqual({
+      content: "Cancelled — no changes were made.",
+    });
+  });
+
+  it("maps respond replies", () => {
+    expect(
+      mapChatReply(
+        { action: "respond", message: "I can help with course management." },
+        false,
+      ),
+    ).toEqual({
+      content: "I can help with course management.",
+    });
+  });
+
+  it("maps fetch_courses results", () => {
+    expect(
+      mapChatReply(
+        {
+          courses: [
+            { name: "CPSC 310", course_code: "CPSC310" },
+            { name: "CPSC 313", course_code: "CPSC313" },
+          ],
+        },
+        false,
+      ),
+    ).toEqual({
+      content: "- CPSC 310\n- CPSC 313",
+    });
+  });
+
+  it("maps successful confirm results", () => {
+    expect(
+      mapChatReply(
+        {
+          success: true,
+          action: "create_assignment",
+          data: { id: 12, name: "Midterm Exam" },
+        },
+        false,
+      ),
+    ).toEqual({
+      content: "Successfully completed Create Assignment: Midterm Exam.",
+    });
+  });
+});

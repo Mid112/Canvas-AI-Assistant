@@ -2,6 +2,8 @@ import {
   defaultDryRunPreviewId,
   mockDryRunPreviews,
 } from "@/data/mockDryRunPreview";
+import { mapIntentPreviewToDryRun } from "@/lib/map-intent-preview-to-dry-run";
+import { fetchConversation } from "@/services/assistant";
 import type { DryRunPreviewData } from "@/types/dryRunPreview";
 
 const MOCK_LOAD_DELAY_MS = 600;
@@ -40,6 +42,21 @@ export async function fetchDryRunPreview(
   }
 
   return preview;
+}
+
+export async function fetchChatIntentPreview(
+  accessToken: string,
+  conversationId: number,
+  pendingMessageId: number,
+  requestedBy: string,
+): Promise<DryRunPreviewData> {
+  const conversation = await fetchConversation(accessToken, conversationId);
+  return mapIntentPreviewToDryRun(
+    conversationId,
+    pendingMessageId,
+    conversation.messages,
+    requestedBy,
+  );
 }
 
 export async function confirmDryRunPreview(

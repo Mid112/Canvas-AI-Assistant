@@ -2,11 +2,16 @@ import { AlertTriangle, Bot } from "lucide-react";
 
 import { ActionCard } from "@/components/chat/ActionCard";
 import { ExplanationCard } from "@/components/chat/ExplanationCard";
+import { PendingActionControls } from "@/components/chat/PendingActionControls";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/types/chat";
 
 interface AssistantMessageProps {
   message: ChatMessage;
+  isResolvingPendingAction?: boolean;
+  pendingActionError?: string | null;
+  onConfirmPendingAction?: () => void;
+  onCancelPendingAction?: () => void;
 }
 
 function formatTimestamp(timestamp: Date): string {
@@ -16,7 +21,18 @@ function formatTimestamp(timestamp: Date): string {
   });
 }
 
-export function AssistantMessage({ message }: AssistantMessageProps) {
+export function AssistantMessage({
+  message,
+  isResolvingPendingAction = false,
+  pendingActionError = null,
+  onConfirmPendingAction,
+  onCancelPendingAction,
+}: AssistantMessageProps) {
+  const showPendingControls =
+    message.pendingMessageId !== undefined &&
+    onConfirmPendingAction &&
+    onCancelPendingAction;
+
   return (
     <div className="flex gap-3">
       <div
@@ -50,6 +66,16 @@ export function AssistantMessage({ message }: AssistantMessageProps) {
 
         {message.interpretedAction ? (
           <ActionCard action={message.interpretedAction} />
+        ) : null}
+
+        {showPendingControls ? (
+          <PendingActionControls
+            status={message.pendingActionStatus}
+            isLoading={isResolvingPendingAction}
+            error={pendingActionError}
+            onConfirm={onConfirmPendingAction}
+            onCancel={onCancelPendingAction}
+          />
         ) : null}
 
         <time

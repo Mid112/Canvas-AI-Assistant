@@ -7,10 +7,13 @@ import { LoadingIndicator } from "@/components/chat/LoadingIndicator";
 import { UserMessage } from "@/components/chat/UserMessage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
-import { seedChatMessages } from "@/data/mockAssistantChat";
+import { seedChatMessages } from "@/data/assistantSeedData";
 import {
   AssistantApiError,
+  cancelAssistantAction,
+  confirmAssistantAction,
   sendAssistantMessage,
 } from "@/services/assistant";
 import type { ChatMessage } from "@/types/chat";
@@ -30,15 +33,28 @@ export function ChatWindow({
   onInitialPromptConsumed,
   onLoadingChange,
 }: ChatWindowProps) {
+  const { accessToken } = useAuth();
   const { activeCourse } = useActiveCourse();
   const [messages, setMessages] = useState<ChatMessage[]>(seedChatMessages);
+  const [conversationId, setConversationId] = useState<number | undefined>();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
+  const [resolvingMessageId, setResolvingMessageId] = useState<string | null>(
+    null,
+  );
+  const [pendingActionError, setPendingActionError] = useState<string | null>(
+    null,
+  );
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const initialPromptHandledRef = useRef<string | null>(null);
   const isDeliveringRef = useRef(false);
+
+  const assistantContext = {
+    activeCourseLabel: activeCourse?.displayName,
+    activeCourseId: activeCourse?.localId,
+  };
 
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView?.({ behavior: "smooth" });
@@ -47,6 +63,32 @@ export function ChatWindow({
   useEffect(() => {
     onLoadingChange?.(isLoading);
   }, [isLoading, onLoadingChange]);
+
+  const appendAssistantMessage = useCallback((response: {
+    content: string;
+    conversationId: number;
+    explanation?: string;
+    interpretedAction?: ChatMessage["interpretedAction"];
+    safetyBlocked?: boolean;
+    safetyMessage?: string;
+    pendingMessageId?: number;
+  }) => {
+    const assistantMessage: ChatMessage = {
+      id: createMessageId(),
+      role: "assistant",
+      content: response.content,
+      timestamp: new Date(),
+      conversationId: response.conversationId,
+      pendingMessageId: response.pendingMessageId,
+      pendingActionStatus: response.pendingMessageId ? "pending" : undefined,
+      explanation: response.explanation,
+      interpretedAction: response.interpretedAction,
+      safetyBlocked: response.safetyBlocked,
+      safetyMessage: response.safetyMessage,
+    };
+
+    setMessages((current) => [...current, assistantMessage]);
+  }, []);
 
   const deliverAssistantResponse = useCallback(async (userText: string) => {
     if (isDeliveringRef.current) {
@@ -58,24 +100,22 @@ export function ChatWindow({
     setError(null);
     setRetryMessage(userText);
 
+    if (!accessToken) {
+      setError("You must be signed in to use the assistant.");
+      isDeliveringRef.current = false;
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const response = await sendAssistantMessage(userText, {
-        activeCourseLabel: activeCourse?.displayName,
-        activeCourseId: activeCourse?.localId,
+        accessToken,
+        context: assistantContext,
+        conversationId,
       });
 
-      const assistantMessage: ChatMessage = {
-        id: createMessageId(),
-        role: "assistant",
-        content: response.content,
-        timestamp: new Date(),
-        explanation: response.explanation,
-        interpretedAction: response.interpretedAction,
-        safetyBlocked: response.safetyBlocked,
-        safetyMessage: response.safetyMessage,
-      };
-
-      setMessages((current) => [...current, assistantMessage]);
+      setConversationId(response.conversationId);
+      appendAssistantMessage(response);
       setRetryMessage(null);
     } catch (requestError) {
       const message =
@@ -87,7 +127,75 @@ export function ChatWindow({
       isDeliveringRef.current = false;
       setIsLoading(false);
     }
-  }, [activeCourse]);
+  }, [accessToken, appendAssistantMessage, assistantContext, conversationId]);
+
+  const resolvePendingAction = useCallback(
+    async (
+      message: ChatMessage,
+      action: "confirm" | "cancel",
+    ) => {
+      if (
+        !accessToken ||
+        message.pendingMessageId === undefined ||
+        message.pendingActionStatus !== "pending"
+      ) {
+        return;
+      }
+
+      const activeConversationId = message.conversationId ?? conversationId;
+      if (activeConversationId === undefined) {
+        return;
+      }
+
+      setResolvingMessageId(message.id);
+      setPendingActionError(null);
+
+      try {
+        const response =
+          action === "confirm"
+            ? await confirmAssistantAction(
+                accessToken,
+                activeConversationId,
+                message.pendingMessageId,
+                assistantContext,
+              )
+            : await cancelAssistantAction(
+                accessToken,
+                activeConversationId,
+                message.pendingMessageId,
+                assistantContext,
+              );
+
+        setConversationId(response.conversationId);
+        setMessages((current) =>
+          current.map((entry) =>
+            entry.id === message.id
+              ? {
+                  ...entry,
+                  pendingActionStatus:
+                    action === "confirm" ? "confirmed" : "cancelled",
+                }
+              : entry,
+          ),
+        );
+        appendAssistantMessage(response);
+      } catch (requestError) {
+        const errorMessage =
+          requestError instanceof AssistantApiError
+            ? requestError.message
+            : "Unable to update this proposed action. Please try again.";
+        setPendingActionError(errorMessage);
+      } finally {
+        setResolvingMessageId(null);
+      }
+    },
+    [
+      accessToken,
+      appendAssistantMessage,
+      assistantContext,
+      conversationId,
+    ],
+  );
 
   const handleSend = useCallback(
     (text: string) => {
@@ -137,7 +245,24 @@ export function ChatWindow({
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
           {messages.map((message) =>
             message.role === "assistant" ? (
-              <AssistantMessage key={message.id} message={message} />
+              <AssistantMessage
+                key={message.id}
+                message={message}
+                isResolvingPendingAction={resolvingMessageId === message.id}
+                pendingActionError={
+                  resolvingMessageId === message.id ? pendingActionError : null
+                }
+                onConfirmPendingAction={
+                  message.pendingMessageId
+                    ? () => void resolvePendingAction(message, "confirm")
+                    : undefined
+                }
+                onCancelPendingAction={
+                  message.pendingMessageId
+                    ? () => void resolvePendingAction(message, "cancel")
+                    : undefined
+                }
+              />
             ) : (
               <UserMessage key={message.id} message={message} />
             ),

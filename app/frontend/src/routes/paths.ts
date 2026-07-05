@@ -74,3 +74,14 @@ export function instructorDryRunPreviewPath(previewId: string) {
   const params = new URLSearchParams({ preview: previewId });
   return `${paths.instructor.dryRunPreview}?${params.toString()}`;
 }
+
+export function instructorChatPreviewPath(
+  conversationId: number,
+  pendingMessageId: number,
+) {
+  const params = new URLSearchParams({
+    conversation: String(conversationId),
+    pending: String(pendingMessageId),
+  });
+  return `${paths.instructor.dryRunPreview}?${params.toString()}`;
+}

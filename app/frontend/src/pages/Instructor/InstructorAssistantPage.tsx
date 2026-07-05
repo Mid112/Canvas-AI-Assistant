@@ -3,7 +3,7 @@ import { useLocation } from "react-router-dom";
 
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
-import { suggestedActions } from "@/data/mockAssistantChat";
+import { suggestedActions } from "@/data/assistantSeedData";
 import {
   InstructorAssistantHeader,
   InstructorAssistantSuggestedActions,
