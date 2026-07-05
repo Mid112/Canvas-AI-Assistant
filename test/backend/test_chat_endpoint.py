@@ -2,6 +2,7 @@ import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -86,3 +87,32 @@ def test_user_log(client):
     assert history.status_code == 200
     roles = [m["role"] for m in history.json()["messages"]]
     assert "user" in roles
+
+
+def test_canvas_failure_returns_chat_error(client):
+    """Canvas API failures during read actions return a user-friendly chat error."""
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "fetch_courses"}'
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter), \
+         patch(
+             "app.mcp_tools.dispatcher.get_courses",
+             new=AsyncMock(
+                 side_effect=HTTPException(
+                     status_code=status.HTTP_502_BAD_GATEWAY,
+                     detail="Canvas server error: 503",
+                 )
+             ),
+         ):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "List my courses"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_error"] is True
+    assert body["reply"]["error"] == "Canvas server error: 503"

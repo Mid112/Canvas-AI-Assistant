@@ -1,21 +1,74 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mockWorkflowHistory } from "@/data/mockWorkflowHistory";
+import { mapWorkflowHistoryApiToEntry } from "@/lib/map-workflow-history";
 import {
   buildWorkflowHistoryCsv,
   fetchWorkflowHistory,
-  resetMockWorkflowHistory,
+  WORKFLOW_HISTORY_PATH,
 } from "@/services/workflowHistory";
+import type { WorkflowHistoryApiResponse } from "@/types/workflowHistory";
+
+vi.mock("@/config/api", () => ({
+  API_BASE_URL: "http://localhost:8000/api/v1",
+}));
 
 describe("workflowHistory service", () => {
   beforeEach(() => {
-    resetMockWorkflowHistory();
+    vi.restoreAllMocks();
   });
 
-  it("returns seeded workflow history entries from the mock API", async () => {
-    const entries = await fetchWorkflowHistory();
-    expect(entries).toHaveLength(mockWorkflowHistory.length);
-    expect(entries[0]?.workflowName).toBe("Send Reminder Emails");
+  it("fetches and maps workflow history from the API", async () => {
+    const apiResponse: WorkflowHistoryApiResponse = {
+      total: 1,
+      items: [
+        {
+          id: 1,
+          conversation_id: 10,
+          action_name: "create_assignment",
+          user_prompt: "create a midterm exam",
+          status: "pending",
+          proposed_action: { action: "create_assignment", title: "Midterm Exam" },
+          created_at: "2026-05-01T12:00:00.000Z",
+          executed_at: null,
+          user_name: "Dr. Jane Doe",
+        },
+      ],
+    };
+
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify(apiResponse), { status: 200 }),
+    );
+
+    const entries = await fetchWorkflowHistory("access-token");
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `http://localhost:8000/api/v1${WORKFLOW_HISTORY_PATH}`,
+      expect.objectContaining({
+        headers: expect.any(Headers),
+      }),
+    );
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.workflowName).toBe("Create Assignment");
+    expect(entries[0]?.description).toBe("create a midterm exam");
+    expect(entries[0]?.status).toBe("pending");
+  });
+
+  it("maps executed workflows to approved status", () => {
+    const entry = mapWorkflowHistoryApiToEntry({
+      id: 2,
+      conversation_id: 11,
+      action_name: "send_message",
+      user_prompt: "remind missing students",
+      status: "executed",
+      proposed_action: { action: "send_message" },
+      created_at: "2026-05-01T12:00:00.000Z",
+      executed_at: "2026-05-01T12:05:00.000Z",
+      user_name: "Dr. Jane Doe",
+    });
+
+    expect(entry.status).toBe("approved");
+    expect(entry.timestamp).toBe("2026-05-01T12:05:00.000Z");
   });
 
   it("builds a CSV export with headers and rows", () => {
@@ -37,40 +90,5 @@ describe("workflowHistory service", () => {
     ]);
 
     expect(csv).toContain("'=SUM(A1:A10)");
-  });
-
-  it("drops invalid entries and keeps valid ones from localStorage", async () => {
-    localStorage.setItem(
-      "canvas-workflow-instructor-history",
-      JSON.stringify([
-        mockWorkflowHistory[0],
-        {
-          ...mockWorkflowHistory[1],
-          status: "completed",
-        },
-      ]),
-    );
-
-    const entries = await fetchWorkflowHistory();
-
-    expect(entries).toHaveLength(1);
-    expect(entries[0]?.id).toBe(mockWorkflowHistory[0]!.id);
-  });
-
-  it("falls back to seed data when all localStorage entries are invalid", async () => {
-    localStorage.setItem(
-      "canvas-workflow-instructor-history",
-      JSON.stringify([
-        {
-          ...mockWorkflowHistory[0],
-          status: "completed",
-        },
-      ]),
-    );
-
-    const entries = await fetchWorkflowHistory();
-
-    expect(entries).toHaveLength(mockWorkflowHistory.length);
-    expect(entries[0]?.status).toBe("approved");
   });
 });

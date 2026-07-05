@@ -2,6 +2,7 @@ import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -130,3 +131,31 @@ def test_course_id_backfill(client):
     history = client.get(f"/api/v1/chat/conversations/{conversation_id}", headers=headers)
     assert history.status_code == 200
     assert history.json()["course_id"] == local_course_id
+
+
+def test_confirm_canvas_failure_returns_chat_error(client):
+    """Canvas failures on confirm return a user-friendly chat error, not a bare HTTP response."""
+    headers, local_course_id = _register_with_canvas(client)
+    conversation_id, pending_message_id = _propose_create_assignment(
+        client, headers, local_course_id
+    )
+
+    with patch(
+        "app.mcp_tools.dispatcher.create_course_assignment",
+        new=AsyncMock(
+            side_effect=HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Canvas server error: 503",
+            )
+        ),
+    ):
+        response = client.post(
+            "/api/v1/chat/confirm",
+            json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_error"] is True
+    assert body["reply"]["error"] == "Canvas server error: 503"

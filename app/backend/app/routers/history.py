@@ -19,7 +19,7 @@ async def get_workflow_history(
 ):
     items, total = await list_workflow_history(db, current_user, limit=limit, offset=offset)
     return WorkflowHistoryResponse(
-        items=[WorkflowHistoryItem.model_validate(i) for i in items],
+        items=[WorkflowHistoryItem.from_workflow(i) for i in items],
         total=total,
     )
 
@@ -31,4 +31,4 @@ async def cancel_workflow_endpoint(
     db: AsyncSession = Depends(get_db),
 ):
     workflow = await cancel_workflow(db, current_user, workflow_id)
-    return WorkflowHistoryItem.model_validate(workflow)
+    return WorkflowHistoryItem.from_workflow(workflow)

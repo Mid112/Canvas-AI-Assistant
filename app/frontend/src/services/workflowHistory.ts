@@ -1,101 +1,82 @@
-import {
-  getWorkflowStatusCounts,
-  mockWorkflowHistory,
-} from "@/data/mockWorkflowHistory";
+import { API_BASE_URL } from "@/config/api";
 import { formatAuditTimestamp } from "@/lib/format-audit-timestamp";
+import { mapWorkflowHistoryApiToEntry } from "@/lib/map-workflow-history";
 import type {
+  WorkflowHistoryApiResponse,
   WorkflowHistoryEntry,
   WorkflowStatusCounts,
 } from "@/types/workflowHistory";
 import { isWorkflowStatus } from "@/types/workflowHistory";
 
-/**
- * Mock workflow history service backed by localStorage until the backend
- * exposes a per-user workflow history endpoint. Swap fetchWorkflowHistory()
- * to call the API and filter by the signed-in user's ID.
- */
-const STORAGE_KEY = "canvas-workflow-instructor-history";
-const MOCK_DELAY_MS = 350;
+export const WORKFLOW_HISTORY_PATH = "/history/workflows";
 
-function delay(ms: number = MOCK_DELAY_MS): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
+class WorkflowHistoryApiError extends Error {
+  status: number;
 
-function isStoredEntry(value: unknown): value is WorkflowHistoryEntry {
-  if (!value || typeof value !== "object") {
-    return false;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "WorkflowHistoryApiError";
+    this.status = status;
   }
-
-  const entry = value as WorkflowHistoryEntry;
-
-  return (
-    typeof entry.id === "string" &&
-    typeof entry.timestamp === "string" &&
-    typeof entry.workflowName === "string" &&
-    typeof entry.description === "string" &&
-    typeof entry.userName === "string" &&
-    isWorkflowStatus(entry.status)
-  );
 }
 
-function readHistory(): WorkflowHistoryEntry[] {
+async function parseError(response: Response): Promise<string> {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return [...mockWorkflowHistory];
+    const data = (await response.json()) as { detail?: string };
+    if (typeof data.detail === "string") {
+      return data.detail;
     }
-
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) {
-      return [...mockWorkflowHistory];
-    }
-
-    const valid = parsed.filter(isStoredEntry);
-    if (valid.length === 0) {
-      localStorage.removeItem(STORAGE_KEY);
-      return [...mockWorkflowHistory];
-    }
-
-    if (valid.length !== parsed.length) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(valid));
-    }
-
-    return valid;
   } catch {
-    return [...mockWorkflowHistory];
-  }
-}
-
-function getStoredHistory(): WorkflowHistoryEntry[] {
-  const entries = readHistory();
-
-  if (!localStorage.getItem(STORAGE_KEY)) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+    // Fall through to default message.
   }
 
-  return entries;
+  return "Unable to load workflow history. Please try again.";
 }
 
-/** Resets workflow history to seed data — useful for tests. */
-export function resetMockWorkflowHistory(): void {
-  localStorage.removeItem(STORAGE_KEY);
+async function request<T>(
+  path: string,
+  accessToken: string,
+  options: RequestInit = {},
+): Promise<T> {
+  const headers = new Headers(options.headers);
+  headers.set("Content-Type", "application/json");
+  headers.set("Authorization", `Bearer ${accessToken}`);
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    throw new WorkflowHistoryApiError(await parseError(response), response.status);
+  }
+
+  return response.json() as Promise<T>;
 }
 
-export async function fetchWorkflowHistory(): Promise<WorkflowHistoryEntry[]> {
-  await delay();
+export async function fetchWorkflowHistory(
+  accessToken: string,
+): Promise<WorkflowHistoryEntry[]> {
+  const data = await request<WorkflowHistoryApiResponse>(
+    WORKFLOW_HISTORY_PATH,
+    accessToken,
+  );
 
-  // API: GET `${API_BASE_URL}/audit/logs?user_id=${currentUserId}`
-  // return response.items.map(mapToWorkflowHistoryEntry);
-
-  return getStoredHistory();
+  return data.items.map(mapWorkflowHistoryApiToEntry);
 }
 
 export function getWorkflowHistoryStatusCounts(
   entries: WorkflowHistoryEntry[],
 ): WorkflowStatusCounts {
-  return getWorkflowStatusCounts(entries);
+  return entries.reduce<WorkflowStatusCounts>(
+    (counts, entry) => {
+      if (isWorkflowStatus(entry.status)) {
+        counts[entry.status] += 1;
+      }
+      return counts;
+    },
+    { approved: 0, rejected: 0, pending: 0 },
+  );
 }
 
 function escapeCsvField(value: string): string {

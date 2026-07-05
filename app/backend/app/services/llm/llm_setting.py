@@ -16,6 +16,12 @@ def get_llm_adapter(llm_settings: dict) -> LLMAdapter:
             model=settings.VLLM_MODEL,
         )
 
+    if provider == "ollama":
+        return OpenAICompatibleAdapter(
+            base_url=settings.OLLAMA_BASE_URL,
+            model=settings.OLLAMA_MODEL,
+        )
+
     if provider == "groq":
         return OpenAICompatibleAdapter(
             base_url="https://api.groq.com/openai/v1",

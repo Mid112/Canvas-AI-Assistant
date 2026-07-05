@@ -7,6 +7,7 @@ import { WorkflowStatusSummary } from "@/components/workflow/WorkflowStatusSumma
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   filterWorkflowHistory,
   paginateWorkflowHistory,
@@ -27,6 +28,7 @@ import {
 } from "@/types/workflowHistory";
 
 export function WorkflowHistoryPage() {
+  const { accessToken } = useAuth();
   const [entries, setEntries] = useState<WorkflowHistoryEntry[]>([]);
   const [filters, setFilters] = useState<WorkflowHistoryFilters>(
     emptyWorkflowHistoryFilters,
@@ -74,11 +76,15 @@ export function WorkflowHistoryPage() {
   );
 
   const loadEntries = useCallback(async () => {
+    if (!accessToken) {
+      return;
+    }
+
     setIsLoading(true);
     setLoadError(null);
 
     try {
-      const data = await fetchWorkflowHistory();
+      const data = await fetchWorkflowHistory(accessToken);
       setEntries(data);
     } catch {
       setLoadError(
@@ -88,14 +94,18 @@ export function WorkflowHistoryPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [accessToken]);
 
   useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+
     let cancelled = false;
 
     void (async () => {
       try {
-        const data = await fetchWorkflowHistory();
+        const data = await fetchWorkflowHistory(accessToken);
         if (!cancelled) {
           setEntries(data);
           setLoadError(null);
@@ -117,7 +127,7 @@ export function WorkflowHistoryPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [accessToken]);
 
   const handleExport = () => {
     downloadWorkflowHistoryCsv(filteredEntries);

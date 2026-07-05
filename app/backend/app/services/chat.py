@@ -354,6 +354,12 @@ async def handle_chat_message(
         await log_message(db, conversation, role="assistant", content=e.log_detail)
         await db.commit()
         return conversation, {"error": e.user_message}, True
+    except HTTPException as e:
+        detail = e.detail if isinstance(e.detail, str) else str(e.detail)
+        error_detail = f"HTTPException {e.status_code}: {detail}"
+        await log_message(db, conversation, role="assistant", content=error_detail)
+        await db.commit()
+        return conversation, {"error": detail}, True
 
     # Log the assistant result — if this is a modify turn superseding a
     # previous intent_preview, overwrite that message in place rather than

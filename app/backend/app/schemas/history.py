@@ -2,16 +2,33 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from app.models.workflow import Workflow
+
 
 class WorkflowHistoryItem(BaseModel):
     id: int
     conversation_id: int
-    intent: str
+    action_name: str
+    user_prompt: str
     status: str
-    preview_data: dict | None
+    proposed_action: dict
     created_at: datetime
+    executed_at: datetime | None = None
+    user_name: str
 
-    model_config = {"from_attributes": True}
+    @classmethod
+    def from_workflow(cls, workflow: Workflow) -> "WorkflowHistoryItem":
+        return cls(
+            id=workflow.id,
+            conversation_id=workflow.conversation_id,
+            action_name=workflow.action_name,
+            user_prompt=workflow.user_prompt,
+            status=workflow.status,
+            proposed_action=workflow.proposed_action,
+            created_at=workflow.created_at,
+            executed_at=workflow.executed_at,
+            user_name=workflow.user.name,
+        )
 
 
 class WorkflowHistoryResponse(BaseModel):
