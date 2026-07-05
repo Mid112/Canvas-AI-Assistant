@@ -632,3 +632,64 @@ Total: 9 hours
 - Continue resolving any remaining integration issues between authAPI, RBAC, and instructor account management
 
 ---
+
+
+# Cycle 13 Report: June 30 – July 2
+
+## Timesheet
+
+### Clockify Report
+
+- 30/6 (Tuesday): Team meeting & branch integration cleanup — 2.68 hours
+- 1/7 (Wednesday): PR review & requested-changes fixes — 1.37 hours
+- 2/7 (Thursday): implement 2 backend features (missing submissions analysis, late submission analysis) — 3.93 hours
+
+**Total: 7.98 hours**
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting & Branch Integration Cleanup (Tuesday, 30/6)
+- Team sync, then closed out the lint/test breakage flagged in Cycle 12's retrospective from merging the authenticationAPI, RBAC, and instructor-account-management branches together
+- Fixed ruff and pytest failures across `feature/submission-retrieval-service` and `feature/llm-vague-message` after their merges
+- Updated `config.py` and `test_canvas.py` to keep both branches green post-merge
+<img width="1118" height="70" alt="Screenshot 2026-07-03 194856" src="https://github.com/user-attachments/assets/9dffb669-844f-455f-bae8-30907ba34d26" />
+
+
+### 2: PR Review & Requested-Changes Fixes (Wednesday, 1/7)
+- Reviewed and addressed reviewer feedback on the RBAC permissions PR
+- Fixed a JWT role-claim staleness bug in `dependencies.py` (role was being enforced from the token claim instead of re-checked against the DB), with regression tests added to `test_permissions.py` and `test_admin_management.py`
+- Added tests for admin auth and admin rate limiting (`test_admin_auth.py`, `test_admin_rate_limit.py`)
+- Added the `GET /admin/instructors` endpoint, service method, and test coverage
+<img width="1118" height="64" alt="Screenshot 2026-07-03 194902" src="https://github.com/user-attachments/assets/4ff83074-fb48-44ee-8bfb-071fd4904e10" />
+
+
+### 3: Missing Submissions Analysis (Thursday, 2/7)
+- Added the analysis schema, endpoint, and service for identifying missing student submissions
+- Added test coverage for the missing-submissions analysis flow
+<img width="1129" height="65" alt="Screenshot 2026-07-03 194845" src="https://github.com/user-attachments/assets/992341e2-f752-4c77-8976-e52ea9cf3a60" />
+
+
+### 4: Late Submission Analysis (Thursday, 2/7)
+- Added the router, schema, and service for late-submission analysis
+- Added test coverage for the late-submission analysis flow
+
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle's actual work diverged from Cycle 12's stated goals (Canvas caching, chat UI course-context wiring) — instead, priority shifted to closing out lingering RBAC/integration issues from Cycle 12 and shipping two new submission-analysis features. Worth flagging that the caching and course-context goals are still outstanding.
+
+### Retrospective:
+- The "merge and lint-check each branch individually" lesson from Cycle 12 wasn't fully applied — Tuesday still required a dedicated cleanup pass after two more branches (`submission-retrieval-service`, `llm-vague-message`) were merged together. This is a recurring pattern worth addressing directly next cycle rather than absorbing as cleanup time after the fact.
+- Addressing PR-requested changes surfaced a real security-relevant bug (JWT role staleness) that wouldn't have been caught without the review — reinforces that the review pass before merging is paying off.
+
+## Next Cycle Goals
+- Resolve the outstanding merge conflicts between `feature/backend-rbac-permissions` and `develop`
+- Carry over from Cycle 12: add caching to `GET /canvas/courses` with a `last_synced_at` timestamp
+- Carry over from Cycle 12: wire up active-course context to the chat UI (note: a frontend `ActiveCourseProvider` has since landed on `frontend-fixes` — check whether this goal is already partially covered before starting new work)
+- Adopt one-branch-at-a-time merging to avoid repeating this cycle's Tuesday cleanup pattern
+
