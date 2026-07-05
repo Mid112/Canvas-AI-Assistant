@@ -79,16 +79,16 @@ describe("DryRunPreviewPage", () => {
     expect(await screen.findByText("AI Assistant")).toBeInTheDocument();
   });
 
-  it("returns to the assistant with the original request when modify is clicked", async () => {
+  it("returns to the assistant with the original request prefilled when modify is clicked", async () => {
     const user = userEvent.setup();
     renderPage();
 
     await user.click(await screen.findByRole("button", { name: /Modify Request/ }));
 
     expect(await screen.findByText("AI Assistant")).toBeInTheDocument();
-    expect(
-      await screen.findByText(mockStudentReminderPreview.originalRequest),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Chat message" })).toHaveValue(
+      mockStudentReminderPreview.originalRequest,
+    );
   });
 
   it("keeps the success screen visible after the toast auto-dismisses", async () => {
