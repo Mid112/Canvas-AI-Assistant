@@ -54,4 +54,5 @@ def admin_credentials():
         loop.run_until_complete(_create())
     finally:
         loop.close()
+
     return {"email": email, "password": password}
