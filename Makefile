@@ -91,7 +91,8 @@ dev:
 	@echo "Waiting for Postgres..."
 	sleep 3
 	@echo "Starting backend on :8000..."
-	cd app/backend && source .venv/bin/activate && uvicorn app.main:app --reload
+	lsof -ti :8000 | xargs kill -9
+	cd app/backend && .venv/bin/python -m uvicorn app.main:app --reload
 
 # ── Run vLLM ─────────────────────────────────
 # Starts vLLM's OpenAI-compatible server on port 8001 (8000 is

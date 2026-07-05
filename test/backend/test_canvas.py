@@ -357,7 +357,9 @@ def test_create_assignment(client, auth_headers):
     assert response.status_code == 200
     assert response.json()["id"] == 11
     mock.assert_awaited_once()
-    assert mock.await_args.args[:2] == (12345, payload)
+    # payload passes through AssignmentCreate, which fills in points_possible=None
+    # for any field the client didn't send
+    assert mock.await_args.args[:2] == (12345, payload | {"points_possible": None})
 
 
 def test_update_assignment(client, auth_headers):
@@ -379,7 +381,11 @@ def test_update_assignment(client, auth_headers):
 
     assert response.status_code == 200
     assert response.json()["name"] == "Updated Assignment"
-    mock.assert_awaited_once_with(12345, 10, payload, "test-canvas-token", CANVAS_URL)
+    # payload passes through AssignmentUpdate, which fills in points_possible=None
+    # for any field the client didn't send
+    mock.assert_awaited_once_with(
+        12345, 10, payload | {"points_possible": None}, "test-canvas-token", CANVAS_URL
+    )
 
 
 # ---------------------------------------------------------------------------
