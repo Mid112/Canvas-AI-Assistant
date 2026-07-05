@@ -1,6 +1,7 @@
 # app/backend/app/services/chat.py
 import asyncio
 import json
+from datetime import UTC, date, datetime
 
 import httpx
 from fastapi import HTTPException
@@ -8,9 +9,8 @@ from sqlalchemy import desc, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from app.models.canvas_connection import CanvasConnection
 
-
+from app.config import settings
 from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_action
 from app.mcp_tools.schemas import ACTION_SCHEMAS
 from app.models.audit_log import AuditLog
@@ -19,7 +19,6 @@ from app.models.message import Message
 from app.models.user import User
 from app.models.workflow import Workflow
 from app.services.llm.llm_setting import get_llm_adapter
-from app.config import settings
 
 LLM_TIMEOUT_SECONDS = 90.0
 HISTORY_WINDOW = 10
@@ -41,14 +40,12 @@ _AUDIT_RESOURCE_MAP = {
 }
 
 
-from datetime import UTC, datetime, date
-
 def _json_dumps(obj) -> str:
     """json.dumps with datetime serialization support.
     Pydantic model_dump() returns Python datetime objects for
     DateTime fields — standard json.dumps can't handle these."""
     def default(o):
-        if isinstance(o, (datetime, date)):
+        if isinstance(o, datetime | date):
             return o.isoformat()
         raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
     return json.dumps(obj, default=default)
@@ -321,7 +318,7 @@ async def handle_chat_message(
             ),
             timeout=LLM_TIMEOUT_SECONDS,
         )
-    except asyncio.TimeoutError:
+    except TimeoutError:
         log_detail = f"LLM request timed out after {LLM_TIMEOUT_SECONDS}s"
         await log_message(db, conversation, role="assistant", content=log_detail)
         await db.commit()

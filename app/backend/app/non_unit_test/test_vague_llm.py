@@ -34,7 +34,6 @@ async def register_and_login() -> str:
         return token
 
 
-    
 async def chat(
     token: str,
     message: str,
@@ -73,8 +72,6 @@ async def main():
 
     print("\n--- Canvas LMS Assistant Terminal Test ---")
     print("Type 'quit' to exit\n")
-
-    
 
     while True:
         message = input("> ").strip()

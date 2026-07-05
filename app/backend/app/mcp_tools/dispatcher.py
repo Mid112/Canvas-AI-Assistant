@@ -7,17 +7,15 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.integrations.canvas import fetch_enrollments
 from app.mcp_tools.schemas import ACTION_SCHEMAS, is_reversible
 from app.models.course import Course
-from app.models.message import Message
 from app.models.user import User
 from app.schemas.canvas import AssignmentCreate, AssignmentResponse, AssignmentUpdate, SubmissionResponse
-from app.integrations.canvas import fetch_enrollments
 from app.services.assignment_validation import (
     validate_assignment_for_create,
     validate_assignment_for_update,
 )
-from app.services.message_validation import validate_message_for_send
 from app.services.canvas import (
     create_course_assignment,
     get_active_course,
@@ -31,6 +29,7 @@ from app.services.canvas import (
     update_course_assignment,
 )
 from app.services.canvas_status import CanvasWriteResult
+from app.services.message_validation import validate_message_for_send
 from app.services.write_preview import generate_write_preview
 
 

@@ -1,6 +1,5 @@
 # app/backend/app/services/write_preview.py
 from datetime import datetime
-from typing import Any
 
 from app.mcp_tools.schemas import is_reversible
 from app.models.course import Course

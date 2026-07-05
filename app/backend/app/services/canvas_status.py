@@ -85,5 +85,6 @@ def _extract_canvas_error(response: httpx.Response) -> str:
         if "message" in body:
             return body["message"]
         return f"Canvas returned {response.status_code}"
+
     except Exception:
         return f"Canvas returned {response.status_code}"
