@@ -87,7 +87,7 @@ export function ChatWindow({
       isDeliveringRef.current = false;
       setIsLoading(false);
     }
-  }, [activeCourse?.displayName, activeCourse?.localId]);
+  }, [activeCourse]);
 
   const handleSend = useCallback(
     (text: string) => {

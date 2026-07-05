@@ -103,7 +103,7 @@ function ConnectCanvasConnectionEntry({
 
   useLayoutEffect(() => {
     onValidationChangeRef.current(entry.id, validation);
-  }, [entry.id, validation.status]);
+  }, [entry.id, validation]);
 
   return (
     <div className="space-y-4 rounded-xl border border-[#e2e8f0] bg-[#f8fafc]/60 p-4">

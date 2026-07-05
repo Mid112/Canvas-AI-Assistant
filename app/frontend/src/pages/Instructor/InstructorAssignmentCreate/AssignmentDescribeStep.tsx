@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -51,7 +51,7 @@ export function AssignmentDescribeStep({
     register,
     handleSubmit,
     setValue,
-    watch,
+    control,
     formState: { errors, isValid },
   } = useForm<AssignmentDescribeFormSchema>({
     resolver: zodResolver(assignmentDescribeSchema),
@@ -59,7 +59,11 @@ export function AssignmentDescribeStep({
     mode: "onChange",
   });
 
-  const promptValue = watch("prompt");
+  const promptValue = useWatch({
+    control,
+    name: "prompt",
+    defaultValue: defaultValues.prompt,
+  });
 
   const applySuggestedPrompt = (text: string) => {
     setValue("prompt", text, { shouldValidate: true, shouldDirty: true });
