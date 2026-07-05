@@ -33,6 +33,10 @@ HISTORY_WINDOW = 10
 WRITE_ACTIONS = {"create_assignment", "update_assignment", "send_message"}
 
 # action_name -> (resource_type, operation) for AuditLog rows.
+# send_message's entry here is only a default: the action can produce
+# either a public announcement or a private conversation depending on
+# recipient_canvas_user_ids, and the actual outcome is resolved dynamically
+# from the write result below rather than assumed from action_name alone.
 _AUDIT_RESOURCE_MAP = {
     "create_assignment": ("assignment", "create"),
     "update_assignment": ("assignment", "update"),
@@ -531,6 +535,21 @@ async def handle_confirmed_action(
         resource_type, operation = _AUDIT_RESOURCE_MAP.get(
             workflow.action_name, (workflow.action_name, "create")
         )
+        if workflow.action_name == "send_message":
+            # Use the resource type the write actually produced (announcement
+            # vs. conversation) instead of the static default above, since
+            # the same action can go either way depending on whether
+            # recipient_canvas_user_ids was set.
+            created_resource = next(
+                (
+                    resource
+                    for resource in result.get("affected_resources", [])
+                    if resource.get("status") == "created"
+                ),
+                None,
+            )
+            if created_resource and created_resource.get("type"):
+                resource_type = created_resource["type"]
         # result["data"] comes from CanvasWriteResult.to_dict()'s plain
         # .model_dump() (not mode="json"), so it can still contain native
         # datetime objects — JSONB needs JSON-safe values. Round-trip

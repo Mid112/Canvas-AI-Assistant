@@ -5,6 +5,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.user import User
 from app.models.workflow import Workflow
+from app.services.chat import _claim_pending_workflow
 
 
 async def list_workflow_history(
@@ -37,13 +38,17 @@ async def cancel_workflow(db: AsyncSession, user: User, workflow_id: int) -> Wor
     if not workflow:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
 
-    if workflow.status != "pending":
+    # Atomic conditional UPDATE, not a read-then-check race — see
+    # _claim_pending_workflow's docstring in services/chat.py. A plain
+    # "if workflow.status != 'pending'" check here would let this race
+    # against handle_confirmed_action/handle_cancelled_action and
+    # potentially overwrite an already-executed workflow's status back to
+    # "cancelled" after its Canvas action already succeeded.
+    if not await _claim_pending_workflow(db, workflow, "cancelled"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Cannot cancel workflow with status '{workflow.status}'",
         )
-
-    workflow.status = "cancelled"
     await db.commit()
-    await db.refresh(workflow)
+    workflow.status = "cancelled"
     return workflow

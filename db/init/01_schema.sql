@@ -175,7 +175,7 @@ CREATE TABLE audit_logs (
     workflow_id       INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
     course_id         INTEGER REFERENCES courses(id) ON DELETE SET NULL,
     action            VARCHAR NOT NULL,
-    resource_type     VARCHAR NOT NULL CHECK (resource_type IN ('assignment', 'announcement')),
+    resource_type     VARCHAR NOT NULL CHECK (resource_type IN ('assignment', 'announcement', 'conversation')),
     resource_id       VARCHAR,
     operation         VARCHAR NOT NULL CHECK (operation IN ('create', 'update')),
     status            VARCHAR NOT NULL DEFAULT 'success' CHECK (status IN ('success', 'failed')),
