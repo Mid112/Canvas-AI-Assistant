@@ -56,8 +56,7 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
   const [activeCourse, setActiveCourseState] = useState<ActiveCourseSelection | null>(
     null,
   );
-  const [availableCourses, setAvailableCourses] =
-    useState<InstructorCourse[]>(mockCourses);
+  const [availableCourses, setAvailableCourses] = useState<InstructorCourse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,11 +108,10 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
           .map(mapCanvasCourseToInstructorCourse)
           .filter((course): course is InstructorCourse => course !== null);
 
-        const resolvedCourses = courses.length > 0 ? courses : mockCourses;
-        setAvailableCourses(resolvedCourses);
+        setAvailableCourses(courses);
         setActiveCourseState(
           applyActiveCourseFromList(
-            resolvedCourses,
+            courses,
             serverActive?.local_id ?? getStoredActiveCourseId(persistenceScope),
           ),
         );
@@ -128,8 +126,13 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
           ? err.message
           : "Unable to load courses.";
       setError(message);
-      setAvailableCourses(mockCourses);
-      setActiveCourseState(resolveStoredActiveCourse(mockCourses));
+      if (usesCanvasCourses) {
+        setAvailableCourses([]);
+        setActiveCourseState(null);
+      } else {
+        setAvailableCourses(mockCourses);
+        setActiveCourseState(resolveStoredActiveCourse(mockCourses));
+      }
     } finally {
       setIsLoading(false);
     }
