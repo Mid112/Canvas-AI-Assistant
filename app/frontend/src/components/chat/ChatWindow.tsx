@@ -1,5 +1,5 @@
 import { AlertCircle } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AssistantMessage } from "@/components/chat/AssistantMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -51,10 +51,13 @@ export function ChatWindow({
   const initialPromptHandledRef = useRef<string | null>(null);
   const isDeliveringRef = useRef(false);
 
-  const assistantContext = {
-    activeCourseLabel: activeCourse?.displayName,
-    activeCourseId: activeCourse?.localId,
-  };
+  const assistantContext = useMemo(
+    () => ({
+      activeCourseLabel: activeCourse?.displayName,
+      activeCourseId: activeCourse?.localId,
+    }),
+    [activeCourse?.displayName, activeCourse?.localId],
+  );
 
   useEffect(() => {
     scrollAnchorRef.current?.scrollIntoView?.({ behavior: "smooth" });

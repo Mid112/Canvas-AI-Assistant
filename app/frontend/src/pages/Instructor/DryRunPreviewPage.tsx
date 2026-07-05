@@ -35,20 +35,33 @@ function parsePositiveInt(value: string | null): number | undefined {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
-export function DryRunPreviewPage() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const { accessToken, user } = useAuth();
-  const [searchParams] = useSearchParams();
-  const previewId = searchParams.get("preview") ?? defaultDryRunPreviewId;
-  const conversationId = parsePositiveInt(searchParams.get("conversation"));
-  const pendingMessageId = parsePositiveInt(searchParams.get("pending"));
-  const isChatPreview =
-    conversationId !== undefined && pendingMessageId !== undefined;
-  const returnTo =
-    (location.state as DryRunPreviewLocationState | null)?.returnTo ??
-    paths.instructor.assistant;
+function getLoadErrorMessage(error: unknown): string {
+  if (error instanceof DryRunPreviewError || error instanceof AssistantApiError) {
+    return error.message;
+  }
 
+  return "Unable to load the workflow preview.";
+}
+
+interface DryRunPreviewContentProps {
+  previewKey: string;
+  isChatPreview: boolean;
+  conversationId?: number;
+  pendingMessageId?: number;
+  previewId: string;
+  returnTo: string;
+}
+
+function DryRunPreviewContent({
+  previewKey,
+  isChatPreview,
+  conversationId,
+  pendingMessageId,
+  previewId,
+  returnTo,
+}: DryRunPreviewContentProps) {
+  const navigate = useNavigate();
+  const { accessToken, user } = useAuth();
   const [preview, setPreview] = useState<DryRunPreviewData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -57,73 +70,36 @@ export function DryRunPreviewPage() {
   const [confirmedMessage, setConfirmedMessage] = useState<string | null>(null);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
 
-  const getLoadErrorMessage = useCallback((error: unknown) => {
-    if (error instanceof DryRunPreviewError || error instanceof AssistantApiError) {
-      return error.message;
-    }
-
-    return "Unable to load the workflow preview.";
-  }, []);
-
-  const reloadPreview = useCallback(async () => {
-    setIsLoading(true);
-    setLoadError(null);
-    setPreview(null);
-
-    try {
-      if (isChatPreview) {
-        if (!accessToken) {
-          throw new DryRunPreviewError("You must be signed in to review this preview.");
-        }
-
-        const data = await fetchChatIntentPreview(
-          accessToken,
-          conversationId,
-          pendingMessageId,
-          user?.name ?? "Instructor",
-        );
-        setPreview(data);
-      } else {
-        const data = await fetchDryRunPreview(previewId);
-        setPreview(data);
+  const loadPreview = useCallback(async () => {
+    if (isChatPreview) {
+      if (!accessToken || conversationId === undefined || pendingMessageId === undefined) {
+        throw new DryRunPreviewError("You must be signed in to review this preview.");
       }
-    } catch (error) {
-      setLoadError(getLoadErrorMessage(error));
-    } finally {
-      setIsLoading(false);
+
+      return fetchChatIntentPreview(
+        accessToken,
+        conversationId,
+        pendingMessageId,
+        user?.name ?? "Instructor",
+      );
     }
+
+    return fetchDryRunPreview(previewId);
   }, [
     accessToken,
     conversationId,
-    getLoadErrorMessage,
     isChatPreview,
     pendingMessageId,
     previewId,
-    user?.name,
+    user,
   ]);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadPreview() {
+    async function runLoad() {
       try {
-        const data = isChatPreview
-          ? await (async () => {
-              if (!accessToken) {
-                throw new DryRunPreviewError(
-                  "You must be signed in to review this preview.",
-                );
-              }
-
-              return fetchChatIntentPreview(
-                accessToken,
-                conversationId!,
-                pendingMessageId!,
-                user?.name ?? "Instructor",
-              );
-            })()
-          : await fetchDryRunPreview(previewId);
-
+        const data = await loadPreview();
         if (!cancelled) {
           setPreview(data);
           setLoadError(null);
@@ -140,23 +116,29 @@ export function DryRunPreviewPage() {
       }
     }
 
-    setIsLoading(true);
-    setLoadError(null);
-    setPreview(null);
-    void loadPreview();
+    void runLoad();
 
     return () => {
       cancelled = true;
     };
-  }, [
-    accessToken,
-    conversationId,
-    getLoadErrorMessage,
-    isChatPreview,
-    pendingMessageId,
-    previewId,
-    user?.name,
-  ]);
+  }, [loadPreview, previewKey]);
+
+  const reloadPreview = async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    setPreview(null);
+
+    try {
+      const data = await loadPreview();
+      setPreview(data);
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(getLoadErrorMessage(error));
+      setPreview(null);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleReturn = () => {
     navigate(returnTo);
@@ -168,7 +150,7 @@ export function DryRunPreviewPage() {
       return;
     }
 
-    if (!accessToken) {
+    if (!accessToken || conversationId === undefined || pendingMessageId === undefined) {
       setConfirmError("You must be signed in to cancel this preview.");
       return;
     }
@@ -177,11 +159,7 @@ export function DryRunPreviewPage() {
     setConfirmError(null);
 
     try {
-      await cancelAssistantAction(
-        accessToken,
-        conversationId,
-        pendingMessageId,
-      );
+      await cancelAssistantAction(accessToken, conversationId, pendingMessageId);
       handleReturn();
     } catch (error) {
       const message =
@@ -212,7 +190,7 @@ export function DryRunPreviewPage() {
 
     try {
       if (isChatPreview) {
-        if (!accessToken) {
+        if (!accessToken || conversationId === undefined || pendingMessageId === undefined) {
           throw new DryRunPreviewError("You must be signed in to confirm this preview.");
         }
 
@@ -320,5 +298,33 @@ export function DryRunPreviewPage() {
         onConfirm={() => void handleConfirm()}
       />
     </div>
+  );
+}
+
+export function DryRunPreviewPage() {
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const previewId = searchParams.get("preview") ?? defaultDryRunPreviewId;
+  const conversationId = parsePositiveInt(searchParams.get("conversation"));
+  const pendingMessageId = parsePositiveInt(searchParams.get("pending"));
+  const isChatPreview =
+    conversationId !== undefined && pendingMessageId !== undefined;
+  const returnTo =
+    (location.state as DryRunPreviewLocationState | null)?.returnTo ??
+    paths.instructor.assistant;
+  const previewKey = isChatPreview
+    ? `chat:${conversationId}:${pendingMessageId}`
+    : `mock:${previewId}`;
+
+  return (
+    <DryRunPreviewContent
+      key={previewKey}
+      previewKey={previewKey}
+      isChatPreview={isChatPreview}
+      conversationId={conversationId}
+      pendingMessageId={pendingMessageId}
+      previewId={previewId}
+      returnTo={returnTo}
+    />
   );
 }
