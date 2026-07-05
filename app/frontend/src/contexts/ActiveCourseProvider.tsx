@@ -171,7 +171,6 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!usesCanvasCourses && isMountedRef.current) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync mock courses when Canvas is disconnected
       setAvailableCourses(mockCourses);
       setActiveCourseState(resolveStoredActiveCourse(mockCourses));
     }

@@ -1,5 +1,5 @@
 import { Send } from "lucide-react";
-import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useState, type FormEvent, type KeyboardEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,10 +20,6 @@ export function ChatInput({
   initialValue = "",
 }: ChatInputProps) {
   const [value, setValue] = useState(initialValue);
-
-  useEffect(() => {
-    setValue(initialValue);
-  }, [initialValue]);
 
   const submitMessage = () => {
     const trimmed = value.trim();

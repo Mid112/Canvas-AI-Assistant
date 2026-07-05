@@ -60,7 +60,6 @@ export function ChatWindow({
   const [pendingActionError, setPendingActionError] = useState<string | null>(
     null,
   );
-  const [draftValue, setDraftValue] = useState(initialDraft ?? "");
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const initialPromptHandledRef = useRef<string | null>(null);
   const isDeliveringRef = useRef(false);
@@ -243,7 +242,6 @@ export function ChatWindow({
       }
 
       setInputError(null);
-      setDraftValue("");
 
       const userMessage: ChatMessage = {
         id: createMessageId(),
@@ -257,14 +255,6 @@ export function ChatWindow({
     },
     [deliverAssistantResponse],
   );
-
-  useEffect(() => {
-    if (!initialDraft) {
-      return;
-    }
-
-    setDraftValue(initialDraft);
-  }, [initialDraft]);
 
   useEffect(() => {
     if (!initialPrompt || initialPromptHandledRef.current === initialPrompt) {
@@ -340,10 +330,11 @@ export function ChatWindow({
         ) : null}
 
         <ChatInput
+          key={initialDraft ?? ""}
           onSend={handleSend}
           isLoading={isLoading}
           inputError={inputError}
-          initialValue={draftValue}
+          initialValue={initialDraft ?? ""}
         />
       </CardContent>
     </Card>
