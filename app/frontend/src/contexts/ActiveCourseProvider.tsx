@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -60,6 +61,13 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   const usesCanvasCourses = Boolean(accessToken && user?.has_canvas_token);
   const canvasUrl = getPrimaryCanvasConnectionUrl(user);
@@ -94,8 +102,10 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
   );
 
   const refreshActiveCourse = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+    if (isMountedRef.current) {
+      setIsLoading(true);
+      setError(null);
+    }
 
     try {
       if (usesCanvasCourses && accessToken) {
@@ -108,33 +118,41 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
           .map(mapCanvasCourseToInstructorCourse)
           .filter((course): course is InstructorCourse => course !== null);
 
-        setAvailableCourses(courses);
-        setActiveCourseState(
-          applyActiveCourseFromList(
-            courses,
-            serverActive?.local_id ?? getStoredActiveCourseId(persistenceScope),
-          ),
-        );
+        if (isMountedRef.current) {
+          setAvailableCourses(courses);
+          setActiveCourseState(
+            applyActiveCourseFromList(
+              courses,
+              serverActive?.local_id ?? getStoredActiveCourseId(persistenceScope),
+            ),
+          );
+        }
         return;
       }
 
-      setAvailableCourses(mockCourses);
-      setActiveCourseState(resolveStoredActiveCourse(mockCourses));
+      if (isMountedRef.current) {
+        setAvailableCourses(mockCourses);
+        setActiveCourseState(resolveStoredActiveCourse(mockCourses));
+      }
     } catch (err) {
       const message =
         err instanceof CanvasApiError
           ? err.message
           : "Unable to load courses.";
-      setError(message);
-      if (usesCanvasCourses) {
-        setAvailableCourses([]);
-        setActiveCourseState(null);
-      } else {
-        setAvailableCourses(mockCourses);
-        setActiveCourseState(resolveStoredActiveCourse(mockCourses));
+      if (isMountedRef.current) {
+        setError(message);
+        if (usesCanvasCourses) {
+          setAvailableCourses([]);
+          setActiveCourseState(null);
+        } else {
+          setAvailableCourses(mockCourses);
+          setActiveCourseState(resolveStoredActiveCourse(mockCourses));
+        }
       }
     } finally {
-      setIsLoading(false);
+      if (isMountedRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [
     accessToken,
@@ -152,7 +170,7 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
   }, [refreshActiveCourse]);
 
   useEffect(() => {
-    if (!usesCanvasCourses) {
+    if (!usesCanvasCourses && isMountedRef.current) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- sync mock courses when Canvas is disconnected
       setAvailableCourses(mockCourses);
       setActiveCourseState(resolveStoredActiveCourse(mockCourses));
@@ -163,12 +181,16 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
     async (localCourseId: number) => {
       const selected = availableCourses.find((course) => course.id === localCourseId);
       if (!selected) {
-        setError("Selected course is not available.");
+        if (isMountedRef.current) {
+          setError("Selected course is not available.");
+        }
         return;
       }
 
-      setIsSaving(true);
-      setError(null);
+      if (isMountedRef.current) {
+        setIsSaving(true);
+        setError(null);
+      }
 
       try {
         if (usesCanvasCourses && accessToken) {
@@ -176,15 +198,21 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
         }
 
         setStoredActiveCourseId(persistenceScope, localCourseId);
-        setActiveCourseState(toActiveCourseSelection(selected));
+        if (isMountedRef.current) {
+          setActiveCourseState(toActiveCourseSelection(selected));
+        }
       } catch (err) {
         const message =
           err instanceof CanvasApiError
             ? err.message
             : "Unable to save active course.";
-        setError(message);
+        if (isMountedRef.current) {
+          setError(message);
+        }
       } finally {
-        setIsSaving(false);
+        if (isMountedRef.current) {
+          setIsSaving(false);
+        }
       }
     },
     [accessToken, availableCourses, persistenceScope, usesCanvasCourses],

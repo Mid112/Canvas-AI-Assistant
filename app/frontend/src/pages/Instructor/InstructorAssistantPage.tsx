@@ -11,21 +11,36 @@ import {
 
 interface InstructorAssistantLocationState {
   initialPrompt?: string;
+  initialDraft?: string;
+  initialConversationId?: number;
+  initialPendingMessageId?: number;
 }
 
-function getInitialPromptFromLocation(
+function getLocationState(
   state: InstructorAssistantLocationState | null | undefined,
-): string | null {
-  return state?.initialPrompt ?? null;
+): InstructorAssistantLocationState {
+  return state ?? {};
 }
 
 export function InstructorAssistantPage() {
   const location = useLocation();
   const { activeCourse } = useActiveCourse();
-  const [pendingPrompt, setPendingPrompt] = useState<string | null>(() =>
-    getInitialPromptFromLocation(
+  const [locationState] = useState(() =>
+    getLocationState(
       location.state as InstructorAssistantLocationState | null,
     ),
+  );
+  const [pendingPrompt, setPendingPrompt] = useState<string | null>(
+    () => locationState.initialPrompt ?? null,
+  );
+  const [pendingDraft, setPendingDraft] = useState<string | null>(
+    () => locationState.initialDraft ?? null,
+  );
+  const [pendingConversationId, setPendingConversationId] = useState<
+    number | undefined
+  >(() => locationState.initialConversationId);
+  const [pendingMessageId, setPendingMessageId] = useState<number | undefined>(
+    () => locationState.initialPendingMessageId,
   );
   const [isLoading, setIsLoading] = useState(false);
 
@@ -64,7 +79,15 @@ export function InstructorAssistantPage() {
 
       <ChatWindow
         initialPrompt={pendingPrompt}
+        initialDraft={pendingDraft}
+        initialConversationId={pendingConversationId}
+        initialPendingMessageId={pendingMessageId}
         onInitialPromptConsumed={() => setPendingPrompt(null)}
+        onModifyContextConsumed={() => {
+          setPendingDraft(null);
+          setPendingConversationId(undefined);
+          setPendingMessageId(undefined);
+        }}
         onLoadingChange={setIsLoading}
       />
     </div>

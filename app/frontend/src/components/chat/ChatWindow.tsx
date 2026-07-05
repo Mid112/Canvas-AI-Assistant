@@ -24,19 +24,32 @@ function createMessageId(): string {
 
 interface ChatWindowProps {
   initialPrompt?: string | null;
+  initialDraft?: string | null;
+  initialConversationId?: number;
+  initialPendingMessageId?: number;
   onInitialPromptConsumed?: () => void;
+  onModifyContextConsumed?: () => void;
   onLoadingChange?: (isLoading: boolean) => void;
 }
 
 export function ChatWindow({
   initialPrompt = null,
+  initialDraft = null,
+  initialConversationId,
+  initialPendingMessageId,
   onInitialPromptConsumed,
+  onModifyContextConsumed,
   onLoadingChange,
 }: ChatWindowProps) {
   const { accessToken } = useAuth();
   const { activeCourse } = useActiveCourse();
   const [messages, setMessages] = useState<ChatMessage[]>(seedChatMessages);
-  const [conversationId, setConversationId] = useState<number | undefined>();
+  const [conversationId, setConversationId] = useState<number | undefined>(
+    initialConversationId,
+  );
+  const [activePendingMessageId, setActivePendingMessageId] = useState<
+    number | undefined
+  >(initialPendingMessageId);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
@@ -47,6 +60,7 @@ export function ChatWindow({
   const [pendingActionError, setPendingActionError] = useState<string | null>(
     null,
   );
+  const [draftValue, setDraftValue] = useState(initialDraft ?? "");
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const initialPromptHandledRef = useRef<string | null>(null);
   const isDeliveringRef = useRef(false);
@@ -91,6 +105,10 @@ export function ChatWindow({
     };
 
     setMessages((current) => [...current, assistantMessage]);
+
+    if (response.pendingMessageId) {
+      setActivePendingMessageId(response.pendingMessageId);
+    }
   }, []);
 
   const deliverAssistantResponse = useCallback(async (userText: string) => {
@@ -110,12 +128,20 @@ export function ChatWindow({
       return;
     }
 
+    const pendingMessageIdToSend = activePendingMessageId;
+
     try {
       const response = await sendAssistantMessage(userText, {
         accessToken,
         context: assistantContext,
         conversationId,
+        pendingMessageId: pendingMessageIdToSend,
       });
+
+      if (pendingMessageIdToSend !== undefined) {
+        setActivePendingMessageId(undefined);
+        onModifyContextConsumed?.();
+      }
 
       setConversationId(response.conversationId);
       appendAssistantMessage(response);
@@ -130,7 +156,14 @@ export function ChatWindow({
       isDeliveringRef.current = false;
       setIsLoading(false);
     }
-  }, [accessToken, appendAssistantMessage, assistantContext, conversationId]);
+  }, [
+    accessToken,
+    activePendingMessageId,
+    appendAssistantMessage,
+    assistantContext,
+    conversationId,
+    onModifyContextConsumed,
+  ]);
 
   const resolvePendingAction = useCallback(
     async (
@@ -170,6 +203,7 @@ export function ChatWindow({
               );
 
         setConversationId(response.conversationId);
+        setActivePendingMessageId(undefined);
         setMessages((current) =>
           current.map((entry) =>
             entry.id === message.id
@@ -209,6 +243,7 @@ export function ChatWindow({
       }
 
       setInputError(null);
+      setDraftValue("");
 
       const userMessage: ChatMessage = {
         id: createMessageId(),
@@ -222,6 +257,14 @@ export function ChatWindow({
     },
     [deliverAssistantResponse],
   );
+
+  useEffect(() => {
+    if (!initialDraft) {
+      return;
+    }
+
+    setDraftValue(initialDraft);
+  }, [initialDraft]);
 
   useEffect(() => {
     if (!initialPrompt || initialPromptHandledRef.current === initialPrompt) {
@@ -300,6 +343,7 @@ export function ChatWindow({
           onSend={handleSend}
           isLoading={isLoading}
           inputError={inputError}
+          initialValue={draftValue}
         />
       </CardContent>
     </Card>

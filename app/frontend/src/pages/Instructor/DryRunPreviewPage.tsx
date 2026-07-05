@@ -177,7 +177,13 @@ function DryRunPreviewContent({
       return;
     }
 
-    navigate(returnTo, { state: { initialPrompt: preview.originalRequest } });
+    navigate(returnTo, {
+      state: {
+        initialDraft: preview.originalRequest,
+        initialConversationId: conversationId,
+        initialPendingMessageId: pendingMessageId,
+      },
+    });
   };
 
   const handleConfirm = async () => {
