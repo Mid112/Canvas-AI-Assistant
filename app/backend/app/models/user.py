@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.audit_log import AuditLog
     from app.models.audit_log_session import AuditLogSession
     from app.models.canvas_connection import CanvasConnection
     from app.models.conversation import Conversation
@@ -48,6 +49,7 @@ class User(Base):
         "Conversation", back_populates="user", cascade="all, delete-orphan"
     )
     workflows: Mapped[list["Workflow"]] = relationship("Workflow", back_populates="user")
+    audit_logs: Mapped[list["AuditLog"]] = relationship("AuditLog", back_populates="user")
     audit_log_sessions: Mapped[list["AuditLogSession"]] = relationship("AuditLogSession", back_populates="user")
     message_templates: Mapped[list["MessageTemplate"]] = relationship(
         "MessageTemplate", back_populates="user", cascade="all, delete-orphan"

@@ -22,6 +22,17 @@ class Settings(BaseSettings):
     # value so our validator can split a plain comma-separated string instead.
     BACKEND_CORS_ORIGINS: Annotated[list[str], NoDecode] = []
 
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def _normalize_debug(cls, v: bool | str) -> bool | str:
+        if isinstance(v, str):
+            normalized = v.strip().lower()
+            if normalized in {"debug", "development", "dev"}:
+                return True
+            if normalized in {"release", "production", "prod"}:
+                return False
+        return v
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
     def _split_origins(cls, v: "str | list[str]") -> list[str]:

@@ -51,12 +51,21 @@ class AssignmentCreate(BaseModel):
     name: str
     description: str | None = None
     due_at: datetime | None = None
+    points_possible: float | None = None
 
 
 class AssignmentUpdate(BaseModel):
     name: str
     description: str | None = None
     due_at: datetime | None = None
+    points_possible: float | None = None
+
+
+class MessageSendResult(BaseModel):
+    course_id: int         # Canvas course ID — matches AssignmentResponse.course_id convention, not the local DB id
+    subject: str
+    body: str
+    audience_size: int     # enrolled-class size at post time, for display only — not used to build the request
 
 
 class SubmissionResponse(BaseModel):

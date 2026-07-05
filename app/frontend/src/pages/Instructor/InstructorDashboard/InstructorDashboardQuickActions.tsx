@@ -63,6 +63,7 @@ export function InstructorDashboardQuickActions({
               key={action.id}
               type="button"
               onClick={() => openQuickAction(action.id)}
+
               className={dashboardInteractive.actionCard}
             >
               <div
@@ -90,7 +91,7 @@ export function InstructorDashboardQuickActions({
         <Button
           className={cn("w-full", dashboardColors.blue.button)}
           size="lg"
-          onClick={openAssistant}
+          onClick={() => navigate(paths.instructor.assistant)}
         >
           Open AI Assistant
         </Button>
