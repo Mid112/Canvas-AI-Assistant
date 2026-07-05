@@ -346,10 +346,7 @@ async def get_submissions(
     parsed = [_parse_submission(raw) for raw in data]
 
     assignment = await db.scalar(
-        select(Assignment).where(
-            Assignment.canvas_assignment_id == str(assignment_id),
-            Assignment.course_id == course.id,
-        )
+        select(Assignment).where(Assignment.canvas_assignment_id == str(assignment_id))
     )
     if not assignment:
         assignment = Assignment(

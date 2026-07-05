@@ -15,7 +15,6 @@ from app.core.security import (
     verify_password,
 )
 from app.integrations.canvas import validate_token
-from app.models.audit_log import AuditLog
 from app.models.audit_log_session import AuditLogSession
 from app.models.canvas_connection import CanvasConnection
 from app.models.password_reset_token import PasswordResetToken
@@ -120,7 +119,7 @@ async def update_profile(db: AsyncSession, user: User, body: ProfileUpdateReques
         user.name = body.name
 
     db.add(
-        AuditLog(
+        AuditLogSession(
             user_id=user.id,
             action="profile_updated",
             details={"name": user.name, "email": user.email},
@@ -135,7 +134,7 @@ async def delete_account(db: AsyncSession, user: User, password: str) -> None:
     if not verify_password(password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password")
 
-    db.add(AuditLog(user_id=user.id, action="account_deleted", details={"email": user.email}))
+    db.add(AuditLogSession(user_id=user.id, action="account_deleted", details={"email": user.email}))
     await db.delete(user)
     await db.commit()
 
@@ -145,7 +144,7 @@ async def change_password(db: AsyncSession, user: User, body: ChangePasswordRequ
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Current password is incorrect")
 
     user.hashed_password = hash_password(body.new_password)
-    db.add(AuditLog(user_id=user.id, action="password_changed", details={}))
+    db.add(AuditLogSession(user_id=user.id, action="password_changed", details={}))
     await db.commit()
 
 
@@ -184,7 +183,7 @@ async def confirm_password_reset(db: AsyncSession, body: PasswordResetConfirmReq
     user.hashed_password = hash_password(body.new_password)
     token_row.used_at = datetime.now(UTC)
     await db.execute(delete(Session).where(Session.user_id == user.id))
-    db.add(AuditLog(user_id=user.id, action="password_reset", details={}))
+    db.add(AuditLogSession(user_id=user.id, action="password_reset", details={}))
     await db.commit()
 
 

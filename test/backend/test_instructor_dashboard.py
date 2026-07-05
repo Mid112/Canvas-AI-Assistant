@@ -46,6 +46,7 @@ def test_instructor_dashboard_empty_state(client):
 
 def test_instructor_dashboard_with_seeded_course(client):
     headers = _register(client)
+    canvas_url = "https://canvas.ubc.ca"
     canvas_course_id = uuid.uuid4().int % 10_000_000
     course_payload = [
         {
@@ -57,9 +58,16 @@ def test_instructor_dashboard_with_seeded_course(client):
         }
     ]
 
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": canvas_url},
+            headers=headers,
+        )
+
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock_fetch:
         mock_fetch.return_value = course_payload
-        client.get("/api/v1/canvas/courses?canvas_url=http://localhost:3000", headers=headers)
+        client.get(f"/api/v1/canvas/courses?canvas_url={canvas_url}", headers=headers)
 
     response = client.get("/api/v1/canvas/dashboard", headers=headers)
     assert response.status_code == 200
