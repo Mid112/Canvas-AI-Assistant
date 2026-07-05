@@ -8,11 +8,11 @@ Covers:
 """
 import asyncio
 import uuid
-import pytest
 from unittest.mock import patch
+
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
-
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config import settings
@@ -65,11 +65,14 @@ async def _get_user_by_email(email: str):
 
 
 async def _get_audit_logs(user_id: int, action: str) -> list:
-    async with _db() as db:
-        result = await db.scalars(
-            select(AuditLogSession).where(
-                AuditLogSession.user_id == user_id,
-                AuditLogSession.action == action,
+    engine, Session = _make_session()
+    try:
+        async with Session() as db:
+            result = await db.scalars(
+                select(AuditLogSession).where(
+                    AuditLogSession.user_id == user_id,
+                    AuditLogSession.action == action,
+                )
             )
             return list(result)
     finally:

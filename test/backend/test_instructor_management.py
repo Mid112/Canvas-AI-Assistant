@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config import settings
 from app.main import app
-from app.models.audit_log import AuditLog
+from app.models.audit_log_session import AuditLogSession
 
 
 def _make_session():
@@ -263,9 +263,9 @@ class TestAuditLog:
             try:
                 async with Session() as db:
                     return await db.scalar(
-                        select(AuditLog).where(
-                            AuditLog.action == "instructor_account_created",
-                            AuditLog.details["instructor_id"].as_integer() == iid,
+                        select(AuditLogSession).where(
+                            AuditLogSession.action == "instructor_account_created",
+                            AuditLogSession.details["instructor_id"].as_integer() == iid,
                         )
                     )
             finally:
@@ -285,9 +285,9 @@ class TestAuditLog:
             try:
                 async with Session() as db:
                     return await db.scalar(
-                        select(AuditLog).where(
-                            AuditLog.action == "instructor_account_disabled",
-                            AuditLog.details["instructor_id"].as_integer() == iid,
+                        select(AuditLogSession).where(
+                            AuditLogSession.action == "instructor_account_disabled",
+                            AuditLogSession.details["instructor_id"].as_integer() == iid,
                         )
                     )
             finally:
