@@ -39,7 +39,13 @@ export function ActionCard({ action }: ActionCardProps) {
             <Button
               type="button"
               size="sm"
-              render={<Link to={action.primaryLink.href} state={{ returnTo: paths.instructor.assistant }} />}
+              nativeButton={false}
+              render={
+                <Link
+                  to={action.primaryLink.href}
+                  state={{ returnTo: paths.instructor.assistant }}
+                />
+              }
             >
               {action.primaryLink.label}
               <ArrowRight className="size-3.5" aria-hidden="true" />
@@ -50,6 +56,7 @@ export function ActionCard({ action }: ActionCardProps) {
               type="button"
               size="sm"
               variant="outline"
+              nativeButton={false}
               render={<Link to={action.secondaryLink.href} />}
             >
               {action.secondaryLink.label}

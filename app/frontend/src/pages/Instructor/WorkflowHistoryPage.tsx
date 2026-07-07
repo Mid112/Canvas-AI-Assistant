@@ -31,6 +31,7 @@ import {
 export function WorkflowHistoryPage() {
   const { accessToken } = useAuth();
   const [entries, setEntries] = useState<WorkflowHistoryEntry[]>([]);
+  const [totalWorkflows, setTotalWorkflows] = useState(0);
   const [filters, setFilters] = useState<WorkflowHistoryFilters>(
     emptyWorkflowHistoryFilters,
   );
@@ -87,7 +88,8 @@ export function WorkflowHistoryPage() {
 
     try {
       const data = await fetchWorkflowHistory(accessToken);
-      setEntries(data);
+      setEntries(data.entries);
+      setTotalWorkflows(data.total);
     } catch (error) {
       const message =
         error instanceof WorkflowHistoryApiError
@@ -95,6 +97,7 @@ export function WorkflowHistoryPage() {
           : "Unable to load workflow history. Please try again.";
       setLoadError(message);
       setEntries([]);
+      setTotalWorkflows(0);
     } finally {
       setIsLoading(false);
     }
@@ -110,7 +113,7 @@ export function WorkflowHistoryPage() {
   };
 
   function formatFooter(): string {
-    const total = entries.length;
+    const total = totalWorkflows || entries.length;
     const matching = filteredEntries.length;
 
     if (matching === 0) {

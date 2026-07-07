@@ -7,6 +7,12 @@ import { WorkflowHistoryPage } from "@/pages/Instructor/WorkflowHistoryPage";
 import * as workflowHistoryService from "@/services/workflowHistory";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
+function mockWorkflowHistoryResult(
+  entries: typeof mockWorkflowHistory = mockWorkflowHistory,
+) {
+  return { entries, total: entries.length };
+}
+
 const mockUseAuth = vi.fn();
 
 vi.mock("@/contexts/AuthContext", async () => {
@@ -42,7 +48,7 @@ describe("WorkflowHistoryPage", () => {
       refreshUser: vi.fn(),
     });
     vi.spyOn(workflowHistoryService, "fetchWorkflowHistory").mockResolvedValue(
-      mockWorkflowHistory,
+      mockWorkflowHistoryResult(),
     );
   });
 
@@ -203,7 +209,7 @@ describe("WorkflowHistoryPage", () => {
 
     const retrySpy = vi
       .spyOn(workflowHistoryService, "fetchWorkflowHistory")
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce(mockWorkflowHistoryResult([]));
 
     await user.click(screen.getByRole("button", { name: "Try again" }));
 
@@ -248,7 +254,9 @@ describe("WorkflowHistoryPage", () => {
       workflowName: `Workflow ${index}`,
     }));
 
-    vi.spyOn(workflowHistoryService, "fetchWorkflowHistory").mockResolvedValueOnce(manyEntries);
+    vi.spyOn(workflowHistoryService, "fetchWorkflowHistory").mockResolvedValueOnce(
+      mockWorkflowHistoryResult(manyEntries),
+    );
 
     renderWithRouter(<WorkflowHistoryPage />);
 
@@ -290,7 +298,9 @@ describe("WorkflowHistoryPage", () => {
       workflowName: `Workflow ${index}`,
     }));
 
-    vi.spyOn(workflowHistoryService, "fetchWorkflowHistory").mockResolvedValueOnce(manyEntries);
+    vi.spyOn(workflowHistoryService, "fetchWorkflowHistory").mockResolvedValueOnce(
+      mockWorkflowHistoryResult(manyEntries),
+    );
     const downloadSpy = vi
       .spyOn(workflowHistoryService, "downloadWorkflowHistoryCsv")
       .mockImplementation(() => {});

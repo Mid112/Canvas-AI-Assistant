@@ -1,6 +1,18 @@
 -- Repair databases where 004_workflow_auditlog_redesign.sql could not drop the
 -- legacy workflows table because audit_logs_session still referenced it.
--- Safe when workflows/audit_logs are empty (the expected case before 004).
+--
+-- WARNING: This drops and recreates workflows/audit_logs. Only run when both
+-- tables are empty or you accept losing their contents. Prefer `make db-reset`
+-- for local dev when a full schema refresh is needed.
+
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM workflows LIMIT 1)
+        OR EXISTS (SELECT 1 FROM audit_logs LIMIT 1) THEN
+        RAISE EXCEPTION
+            '010_workflow_schema_repair.sql refuses to run while workflows or audit_logs contain data. Use make db-reset or migrate manually.';
+    END IF;
+END $$;
 
 ALTER TABLE IF EXISTS audit_logs_session
     DROP CONSTRAINT IF EXISTS audit_logs_session_workflow_id_fkey;
@@ -37,7 +49,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     workflow_id       INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
     course_id         INTEGER REFERENCES courses(id) ON DELETE SET NULL,
     action            VARCHAR NOT NULL,
-    resource_type     VARCHAR NOT NULL CHECK (resource_type IN ('assignment', 'announcement')),
+    resource_type     VARCHAR NOT NULL CHECK (resource_type IN ('assignment', 'announcement', 'conversation')),
     resource_id       VARCHAR,
     operation         VARCHAR NOT NULL CHECK (operation IN ('create', 'update')),
     status            VARCHAR NOT NULL DEFAULT 'success' CHECK (status IN ('success', 'failed')),

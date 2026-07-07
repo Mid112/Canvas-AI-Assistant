@@ -9,6 +9,12 @@ import type {
 import { isWorkflowStatus } from "@/types/workflowHistory";
 
 export const WORKFLOW_HISTORY_PATH = "/history/workflows";
+const WORKFLOW_HISTORY_PAGE_SIZE = 200;
+
+export interface WorkflowHistoryResult {
+  entries: WorkflowHistoryEntry[];
+  total: number;
+}
 
 export class WorkflowHistoryApiError extends ApiRequestError {
   constructor(message: string, status: number) {
@@ -19,14 +25,32 @@ export class WorkflowHistoryApiError extends ApiRequestError {
 
 export async function fetchWorkflowHistory(
   accessToken: string,
-): Promise<WorkflowHistoryEntry[]> {
+): Promise<WorkflowHistoryResult> {
   try {
-    const data = await apiRequest<WorkflowHistoryApiResponse>(
-      WORKFLOW_HISTORY_PATH,
-      accessToken,
-    );
+    const items = [];
+    let total = 0;
+    let offset = 0;
 
-    return data.items.map(mapWorkflowHistoryApiToEntry);
+    while (true) {
+      const data = await apiRequest<WorkflowHistoryApiResponse>(
+        `${WORKFLOW_HISTORY_PATH}?limit=${WORKFLOW_HISTORY_PAGE_SIZE}&offset=${offset}`,
+        accessToken,
+      );
+
+      total = data.total;
+      items.push(...data.items);
+
+      if (items.length >= total || data.items.length === 0) {
+        break;
+      }
+
+      offset += WORKFLOW_HISTORY_PAGE_SIZE;
+    }
+
+    return {
+      entries: items.map(mapWorkflowHistoryApiToEntry),
+      total,
+    };
   } catch (error) {
     const message =
       error instanceof Error

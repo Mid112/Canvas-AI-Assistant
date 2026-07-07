@@ -71,7 +71,9 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const usesCanvasCourses = Boolean(accessToken && user?.has_canvas_token);
+  const usesCanvasCourses = Boolean(
+    accessToken && user?.has_canvas_token && user.role === "instructor",
+  );
   const canvasUrl = resolveCanvasApiUrl(user, selectedInstitution.id);
   const persistenceScope = user
     ? String(user.id)

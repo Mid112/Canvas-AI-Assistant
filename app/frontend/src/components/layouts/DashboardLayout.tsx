@@ -107,11 +107,15 @@ function DashboardShell({ role }: DashboardLayoutProps) {
 }
 
 export function DashboardLayout({ role }: DashboardLayoutProps) {
+  const content = <DashboardShell role={role} />;
+
   return (
     <InstitutionProvider>
-      <ActiveCourseProvider>
-        <DashboardShell role={role} />
-      </ActiveCourseProvider>
+      {role === "instructor" ? (
+        <ActiveCourseProvider>{content}</ActiveCourseProvider>
+      ) : (
+        content
+      )}
     </InstitutionProvider>
   );
 }

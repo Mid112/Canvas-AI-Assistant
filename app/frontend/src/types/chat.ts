@@ -1,6 +1,10 @@
 export type ChatMessageRole = "user" | "assistant";
 
-export type PendingActionStatus = "pending" | "confirmed" | "cancelled";
+export type PendingActionStatus =
+  | "pending"
+  | "confirmed"
+  | "cancelled"
+  | "superseded";
 
 export interface ActionLink {
   label: string;

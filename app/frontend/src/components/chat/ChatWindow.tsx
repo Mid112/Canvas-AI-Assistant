@@ -139,6 +139,14 @@ export function ChatWindow({
         });
 
         if (pendingMessageIdToSend !== undefined) {
+          setMessages((current) =>
+            current.map((entry) =>
+              entry.pendingMessageId === pendingMessageIdToSend &&
+              entry.pendingActionStatus === "pending"
+                ? { ...entry, pendingActionStatus: "superseded" }
+                : entry,
+            ),
+          );
           setActivePendingMessageId(undefined);
           onModifyContextConsumed?.();
         }
