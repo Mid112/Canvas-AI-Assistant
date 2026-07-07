@@ -57,16 +57,16 @@ def require_canvas_token(user: User, canvas_url: str) -> str:
 async def get_owned_course(
     local_course_id: int,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
 ) -> Course:
-    normalized = normalize_canvas_url(canvas_url)
     course = await db.scalar(
         select(Course).where(
             Course.id == local_course_id,
             Course.instructor_id == user.id,
         )
     )
+    normalized = normalize_canvas_url(canvas_url or course.canvas_url) if course else None
     if not course or not canvas_urls_equivalent(course.canvas_url, normalized):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -135,10 +135,11 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
     ]
 
 
-async def get_assignments(local_course_id: int, user: User, canvas_url: str, db: AsyncSession) -> list[AssignmentResponse]:
+async def get_assignments(local_course_id: int, user: User, canvas_url: str | None, db: AsyncSession) -> list[AssignmentResponse]:
     course = await get_owned_course(local_course_id, user, canvas_url, db)
-    token = require_canvas_token(user, canvas_url)
-    data = await fetch_assignments(int(course.canvas_course_id), token, canvas_url)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
+    data = await fetch_assignments(int(course.canvas_course_id), token, resolved_canvas_url)
 
     if not data:
         return []

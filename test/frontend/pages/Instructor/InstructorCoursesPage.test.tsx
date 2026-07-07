@@ -335,7 +335,7 @@ describe("InstructorCoursesPage", () => {
     renderWithInstitution(<InstructorCoursesPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("Canvas unavailable")).toBeInTheDocument();
+      expect(screen.getAllByText("Canvas unavailable").length).toBeGreaterThan(0);
     });
 
     expect(

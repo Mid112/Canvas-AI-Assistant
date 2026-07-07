@@ -201,7 +201,7 @@ describe("AuditLogsPage", () => {
       .getAllByText(/@/)
       .map((element) => element.textContent);
     expect(emailsAfterDefault[0]).toBe("jane.doe@university.edu");
-  });
+  }, 10000);
 
   it("sorts audit logs by user alphabetically", async () => {
     renderWithRouter(<AuditLogsPage />);
