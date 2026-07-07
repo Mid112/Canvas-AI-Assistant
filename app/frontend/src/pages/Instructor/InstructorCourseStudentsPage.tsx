@@ -82,12 +82,13 @@ export function InstructorCourseStudentsPage() {
 
     const token = accessToken;
     const selectedCanvasUrl = canvasUrl;
+    const resolvedCanvasCourseId = canvasCourseId;
     let cancelled = false;
 
     async function loadStudents() {
       try {
         const data = await fetchCourseStudents(
-          canvasCourseId,
+          resolvedCanvasCourseId,
           token,
           selectedCanvasUrl,
         );

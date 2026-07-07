@@ -55,6 +55,7 @@ export function useResolvedInstructorCourse(
     }
 
     const token = accessToken;
+    const selectedCanvasUrl = fallbackCanvasUrl;
     let cancelled = false;
 
     async function loadCourse() {
@@ -63,14 +64,14 @@ export function useResolvedInstructorCourse(
       setNeedsCanvasConnection(false);
 
       try {
-        const courses = await fetchCourses(token, fallbackCanvasUrl);
+        const courses = await fetchCourses(token, selectedCanvasUrl);
         if (cancelled) {
           return;
         }
 
         const matched = courses
           .map((entry) =>
-            mapCanvasCourseToInstructorCourse(entry, fallbackCanvasUrl),
+            mapCanvasCourseToInstructorCourse(entry, selectedCanvasUrl),
           )
           .find((entry) => entry?.id === localCourseId);
 
