@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { ChatWindow } from "@/components/chat/ChatWindow";
-import { suggestedActions } from "@/data/mockAssistantChat";
+import { useActiveCourse } from "@/contexts/useActiveCourse";
+import { suggestedActions } from "@/data/assistantSeedData";
 import {
   InstructorAssistantHeader,
   InstructorAssistantSuggestedActions,
@@ -20,6 +21,7 @@ function getInitialPromptFromLocation(
 
 export function InstructorAssistantPage() {
   const location = useLocation();
+  const { activeCourse } = useActiveCourse();
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(() =>
     getInitialPromptFromLocation(
       location.state as InstructorAssistantLocationState | null,
@@ -34,6 +36,25 @@ export function InstructorAssistantPage() {
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
       <InstructorAssistantHeader />
+
+      {activeCourse ? (
+        <p
+          role="status"
+          className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-[#1e293b]"
+        >
+          Answering in the context of{" "}
+          <span className="font-medium">{activeCourse.displayName}</span>. Select
+          a different course from the header to change context.
+        </p>
+      ) : (
+        <p
+          role="status"
+          className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-950"
+        >
+          No active course selected. Choose a course from the header for
+          course-specific answers.
+        </p>
+      )}
 
       <InstructorAssistantSuggestedActions
         actions={suggestedActions}

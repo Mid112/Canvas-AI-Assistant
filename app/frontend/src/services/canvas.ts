@@ -1,5 +1,6 @@
 import { API_BASE_URL } from "@/config/api";
 import type {
+  ActiveCourseResponse,
   CanvasCourse,
   CanvasTokenUpdateRequest,
   CanvasTokenUpdateResponse,
@@ -186,4 +187,39 @@ export async function fetchCourses(
   }
 
   return response.json() as Promise<CanvasCourse[]>;
+}
+
+export async function fetchActiveCourse(
+  accessToken: string,
+): Promise<ActiveCourseResponse | null> {
+  const response = await fetch(`${API_BASE_URL}/canvas/active-course`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    throw new CanvasApiError(await parseError(response), response.status);
+  }
+
+  const data = await response.json();
+  return data as ActiveCourseResponse | null;
+}
+
+export async function setActiveCourse(
+  localCourseId: number,
+  accessToken: string,
+): Promise<ActiveCourseResponse> {
+  const response = await fetch(`${API_BASE_URL}/canvas/active-course`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ local_course_id: localCourseId }),
+  });
+
+  if (!response.ok) {
+    throw new CanvasApiError(await parseError(response), response.status);
+  }
+
+  return response.json() as Promise<ActiveCourseResponse>;
 }

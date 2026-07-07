@@ -11,6 +11,9 @@ export const paths = {
     dashboard: "/instructor/dashboard",
     courses: "/instructor/courses",
     courseAssignments: "/instructor/courses/:localCourseId/assignments",
+    courseStudents: "/instructor/courses/:localCourseId/students",
+    courseSubmissions:
+      "/instructor/courses/:localCourseId/assignments/:assignmentId/submissions",
     assignmentUpdate:
       "/instructor/courses/:localCourseId/assignments/:assignmentId/edit",
     assignmentCreate: "/instructor/assignments/create",
@@ -45,6 +48,17 @@ export function instructorCourseAssignmentsPath(localCourseId: number | string) 
   return `/instructor/courses/${localCourseId}/assignments`;
 }
 
+export function instructorCourseStudentsPath(localCourseId: number | string) {
+  return `/instructor/courses/${localCourseId}/students`;
+}
+
+export function instructorCourseSubmissionsPath(
+  localCourseId: number | string,
+  assignmentId: number | string,
+) {
+  return `/instructor/courses/${localCourseId}/assignments/${assignmentId}/submissions`;
+}
+
 export function instructorCourseAnalyticsPath(courseId: number | string) {
   return `/instructor/courses/${courseId}/analytics`;
 }
@@ -54,4 +68,20 @@ export function instructorAssignmentUpdatePath(
   assignmentId: number | string,
 ) {
   return `/instructor/courses/${localCourseId}/assignments/${assignmentId}/edit`;
+}
+
+export function instructorDryRunPreviewPath(previewId: string) {
+  const params = new URLSearchParams({ preview: previewId });
+  return `${paths.instructor.dryRunPreview}?${params.toString()}`;
+}
+
+export function instructorChatPreviewPath(
+  conversationId: number,
+  pendingMessageId: number,
+) {
+  const params = new URLSearchParams({
+    conversation: String(conversationId),
+    pending: String(pendingMessageId),
+  });
+  return `${paths.instructor.dryRunPreview}?${params.toString()}`;
 }
