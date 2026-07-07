@@ -11,7 +11,7 @@ def build_action_preview(action: str, summary: str, proposed_action: dict, cours
         affected.append({"type": "course", "name": course_name})
 
     if action in {"create_assignment", "update_assignment"}:
-        affected.append({"type": "assignment", "name": proposed_action.get("title", "Assignment")})
+        affected.append({"type": "assignment", "name": proposed_action.get("name", "Assignment")})
     elif action == "send_message":
         affected.append({"type": "announcement", "name": proposed_action.get("subject", "Message")})
 

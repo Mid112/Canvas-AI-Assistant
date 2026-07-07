@@ -11,17 +11,20 @@ import { formatInstructorCourseTitle } from "@/lib/format-course-title";
 import {
   approveAssignmentDraft,
   generateAssignmentDraft,
+  previewAssignmentDraft,
 } from "@/services/assignmentCreator";
 import { CanvasApiError, fetchCourses } from "@/services/canvas";
 import type {
   AssignmentCreateCourseOption,
   AssignmentCreateStep,
   AssignmentDescribeValues,
+  AssignmentPreviewSummary,
   GeneratedAssignmentDraft,
 } from "@/types/assignmentCreate";
 
 import { AssignmentCreateStepper } from "./InstructorAssignmentCreate/AssignmentCreateStepper";
 import { AssignmentDescribeStep } from "./InstructorAssignmentCreate/AssignmentDescribeStep";
+import { AssignmentPreviewDialog } from "./InstructorAssignmentCreate/AssignmentPreviewDialog";
 import { AssignmentReviewApproveStep } from "./InstructorAssignmentCreate/AssignmentReviewApproveStep";
 import type { AssignmentReviewFormSchema } from "./InstructorAssignmentCreate/assignmentCreateSchema";
 
@@ -42,6 +45,11 @@ export function InstructorAssignmentCreatePage() {
   const [isApproving, setIsApproving] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [approveError, setApproveError] = useState<string | null>(null);
+  const [pendingApproval, setPendingApproval] =
+    useState<AssignmentReviewFormSchema | null>(null);
+  const [preview, setPreview] = useState<AssignmentPreviewSummary | null>(null);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [courseOptions, setCourseOptions] = useState<AssignmentCreateCourseOption[]>([]);
   const [isLoadingCourses, setIsLoadingCourses] = useState(false);
   const [courseLoadError, setCourseLoadError] = useState<string | null>(null);
@@ -107,12 +115,21 @@ export function InstructorAssignmentCreatePage() {
   }, [accessToken, canvasUrl, user?.has_canvas_token]);
 
   const handleGenerate = async (values: AssignmentDescribeValues) => {
+    if (!accessToken) {
+      setGenerateError("Your session has expired. Please sign in again.");
+      return;
+    }
+
     setDescribeValues(values);
     setGenerateError(null);
     setIsGenerating(true);
 
     try {
-      const generated = await generateAssignmentDraft(values.prompt);
+      const courseId = Number(values.courseId);
+      const generated = await generateAssignmentDraft(courseId, values.prompt, {
+        accessToken,
+        canvasUrl,
+      });
       setDraft(generated);
       setStep("review");
     } catch (error) {
@@ -131,8 +148,43 @@ export function InstructorAssignmentCreatePage() {
     setApproveError(null);
   };
 
-  const handleApprove = async (values: AssignmentReviewFormSchema) => {
+  const handleRequestApproval = async (values: AssignmentReviewFormSchema) => {
     if (!accessToken) {
+      setApproveError("Your session has expired. Please sign in again.");
+      return;
+    }
+
+    const payload = {
+      courseId: describeValues.courseId,
+      name: values.name,
+      description: values.description,
+      dueDate: values.dueDate,
+    };
+
+    setApproveError(null);
+    setIsPreviewLoading(true);
+
+    try {
+      const previewSummary = await previewAssignmentDraft(payload, {
+        accessToken,
+        canvasUrl,
+      });
+      setPreview(previewSummary);
+      setPendingApproval(values);
+      setIsPreviewOpen(true);
+    } catch (error) {
+      setApproveError(
+        error instanceof Error
+          ? error.message
+          : "Unable to preview this assignment. Please try again.",
+      );
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  };
+
+  const handleConfirmCreate = async () => {
+    if (!accessToken || !pendingApproval) {
       setApproveError("Your session has expired. Please sign in again.");
       return;
     }
@@ -143,14 +195,15 @@ export function InstructorAssignmentCreatePage() {
     try {
       await approveAssignmentDraft({
         courseId: describeValues.courseId,
-        name: values.name,
-        description: values.description,
-        dueDate: values.dueDate,
+        name: pendingApproval.name,
+        description: pendingApproval.description,
+        dueDate: pendingApproval.dueDate,
       }, {
         accessToken,
         canvasUrl,
       });
-      setApprovedValues(values);
+      setApprovedValues(pendingApproval);
+      setIsPreviewOpen(false);
     } catch (error) {
       setApproveError(
         error instanceof Error
@@ -185,6 +238,9 @@ export function InstructorAssignmentCreatePage() {
     setApprovedValues(null);
     setGenerateError(null);
     setApproveError(null);
+    setPendingApproval(null);
+    setPreview(null);
+    setIsPreviewOpen(false);
   };
 
   if (approvedValues) {
@@ -261,11 +317,19 @@ export function InstructorAssignmentCreatePage() {
           courseLabel={courseLabel}
           draft={draft}
           approveError={approveError}
-          isApproving={isApproving}
-          onApprove={handleApprove}
+          isApproving={isPreviewLoading}
+          onApprove={handleRequestApproval}
           onBack={handleBack}
         />
       ) : null}
+
+      <AssignmentPreviewDialog
+        open={isPreviewOpen}
+        onOpenChange={setIsPreviewOpen}
+        preview={preview}
+        isCreating={isApproving}
+        onConfirm={() => void handleConfirmCreate()}
+      />
     </div>
   );
 }

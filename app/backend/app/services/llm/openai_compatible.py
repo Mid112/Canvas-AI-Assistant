@@ -36,7 +36,10 @@ class OpenAICompatibleAdapter(LLMAdapter):
             response = await client.post(
                 f"{self.base_url}/chat/completions",
                 headers=headers,
-                json={"model": self.model, "messages": messages},
+                # "Thinking" models (e.g. Qwen3) spend several hundred tokens on
+                # <think> reasoning before ever emitting the answer — too low a
+                # cap truncates mid-thought and the caller never sees any JSON.
+                json={"model": self.model, "messages": messages, "max_tokens": 2048},
             )
             response.raise_for_status()
             return response.json()["choices"][0]["message"]["content"]

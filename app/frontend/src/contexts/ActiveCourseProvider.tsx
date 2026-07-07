@@ -107,6 +107,11 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
   const isMountedRef = useRef(true);
 
   useEffect(() => {
+    // Reset on every (re)mount — without this, React 18 StrictMode's dev-only
+    // mount -> cleanup -> remount cycle runs the cleanup below once and never
+    // sets the ref back to true, permanently poisoning every isMountedRef
+    // check for the rest of the component's real lifetime.
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
     };

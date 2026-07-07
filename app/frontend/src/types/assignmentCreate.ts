@@ -23,3 +23,9 @@ export interface AssignmentApprovePayload {
   description: string;
   dueDate: string;
 }
+
+export interface AssignmentPreviewSummary {
+  summary: string;
+  reversible: boolean;
+  affectedResources: { type: string; name: string }[];
+}

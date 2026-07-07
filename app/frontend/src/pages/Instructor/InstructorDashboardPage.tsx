@@ -13,21 +13,24 @@ import type { DashboardMetrics } from "@/types/dashboard";
 import { sharedDashboardQuickActions } from "@/types/dashboard";
 import type { InstructorCourse } from "@/types/course";
 
-function deriveDashboardMetrics(courses: InstructorCourse[]): DashboardMetrics {
+function deriveDashboardMetrics(
+  courses: InstructorCourse[],
+  dashboardMetrics: DashboardMetrics,
+): DashboardMetrics {
   return {
     activeCourses: courses.length,
     activeCoursesTrend: 0,
     totalStudents: courses.reduce((sum, course) => sum + course.studentCount, 0),
     totalStudentsTrend: 0,
-    missingSubmissions: 0,
-    missingSubmissionsTrend: 0,
-    pendingApprovals: 0,
+    missingSubmissions: dashboardMetrics.missingSubmissions,
+    missingSubmissionsTrend: dashboardMetrics.missingSubmissionsTrend,
+    pendingApprovals: dashboardMetrics.pendingApprovals,
   };
 }
 
 export function InstructorDashboardPage() {
   const { user } = useAuth();
-  const { selectedInstitution } = useInstitution();
+  const { selectedInstitution, dashboard } = useInstitution();
   const {
     courses,
     error,
@@ -74,7 +77,7 @@ export function InstructorDashboardPage() {
       ) : (
         <>
           <InstructorDashboardOverview
-            metrics={deriveDashboardMetrics(courses)}
+            metrics={deriveDashboardMetrics(courses, dashboard.metrics)}
           />
 
           <div className="grid gap-6 lg:grid-cols-2">

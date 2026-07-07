@@ -1,4 +1,5 @@
 import { API_BASE_URL } from "@/config/api";
+import { parseApiError } from "@/lib/api-request";
 import type {
   ActiveCourseResponse,
   CanvasCourse,
@@ -16,36 +17,6 @@ export class CanvasApiError extends Error {
     this.name = "CanvasApiError";
     this.status = status;
   }
-}
-
-async function parseError(response: Response): Promise<string> {
-  if (response.status === 404) {
-    return "The requested API endpoint was not found. Make sure the backend is running.";
-  }
-
-  try {
-    const data = (await response.json()) as {
-      detail?: string | Array<{ msg?: string }>;
-    };
-
-    if (typeof data.detail === "string") {
-      return data.detail;
-    }
-
-    if (Array.isArray(data.detail) && data.detail.length > 0) {
-      const firstMessage = data.detail.find(
-        (item) => typeof item.msg === "string",
-      )?.msg;
-
-      if (firstMessage) {
-        return firstMessage;
-      }
-    }
-  } catch {
-    // Fall through to default message.
-  }
-
-  return "Something went wrong. Please try again.";
 }
 
 export interface CanvasConnectionInput {
@@ -73,7 +44,7 @@ export async function updateCanvasToken(
   });
 
   if (!response.ok) {
-    throw new CanvasApiError(await parseError(response), response.status);
+    throw new CanvasApiError(await parseApiError(response), response.status);
   }
 
   return response.json() as Promise<CanvasTokenUpdateResponse>;
@@ -128,7 +99,7 @@ export async function removeCanvasConnection(
   );
 
   if (!response.ok) {
-    throw new CanvasApiError(await parseError(response), response.status);
+    throw new CanvasApiError(await parseApiError(response), response.status);
   }
 }
 
@@ -183,7 +154,7 @@ export async function fetchCourses(
   );
 
   if (!response.ok) {
-    throw new CanvasApiError(await parseError(response), response.status);
+    throw new CanvasApiError(await parseApiError(response), response.status);
   }
 
   return response.json() as Promise<CanvasCourse[]>;
@@ -197,7 +168,7 @@ export async function fetchActiveCourse(
   });
 
   if (!response.ok) {
-    throw new CanvasApiError(await parseError(response), response.status);
+    throw new CanvasApiError(await parseApiError(response), response.status);
   }
 
   const data = await response.json();
@@ -218,7 +189,7 @@ export async function setActiveCourse(
   });
 
   if (!response.ok) {
-    throw new CanvasApiError(await parseError(response), response.status);
+    throw new CanvasApiError(await parseApiError(response), response.status);
   }
 
   return response.json() as Promise<ActiveCourseResponse>;

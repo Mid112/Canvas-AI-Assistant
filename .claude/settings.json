@@ -6,7 +6,8 @@
       "Bash(grep -rlE *)",
       "Bash(echo \"unmerged-check-exit:$?\")",
       "Bash(app/backend/.venv/bin/pytest test/backend/ -q)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb SECRET_KEY=localdevsecret CANVAS_API_URL=http://localhost:3001 CANVAS_TOKEN_ENCRYPTION_KEY=ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4= .venv/Scripts/python.exe -c ' *)"
     ]
   }
 }
