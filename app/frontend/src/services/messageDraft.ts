@@ -29,10 +29,16 @@ interface MessageDraftApiResponse {
   updated_at: string;
 }
 
-function mapDraftResponse(response: MessageDraftApiResponse): MessageDraft {
+function mapDraftResponse(
+  response: MessageDraftApiResponse,
+  fallbackRecipients: MessageRecipient[] = [],
+): MessageDraft {
+  const recipients =
+    response.recipients.length > 0 ? response.recipients : fallbackRecipients;
+
   return {
     id: String(response.id),
-    recipients: response.recipients,
+    recipients,
     subject: response.subject,
     body: response.body,
     templateName: response.template_name ?? undefined,
@@ -89,7 +95,10 @@ export async function fetchMessageDraft(
       },
     );
 
-    return mapDraftResponse(created);
+    return mapDraftResponse(
+      created,
+      options.emptyRecipients ? [] : (options.recipients ?? []),
+    );
   } catch (error) {
     const message =
       error instanceof Error

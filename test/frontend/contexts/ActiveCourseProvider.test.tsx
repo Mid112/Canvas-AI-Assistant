@@ -6,6 +6,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { InstitutionProvider } from "@/contexts/InstitutionProvider";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { getInstitutionData } from "@/data/institutionCourseData";
+import { setStoredActiveCourseSelection } from "@/lib/active-course-storage";
 import {
   fetchActiveCourse,
   fetchCourses,
@@ -197,6 +198,24 @@ describe("ActiveCourseProvider", () => {
 
     expect(result.current.availableCourses).toEqual([]);
     expect(result.current.error).toBe("Canvas unavailable");
+  });
+
+  it("hydrates the saved active course before Canvas finishes loading", async () => {
+    setStoredActiveCourseSelection("1", {
+      localId: 499,
+      displayName: "COSC 499",
+    });
+    mockedFetchActiveCourse.mockReturnValue(new Promise(() => undefined));
+
+    const { result } = renderHook(() => useActiveCourse(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.activeCourse).toEqual({
+        localId: 499,
+        displayName: "COSC 499",
+      });
+    });
+    expect(result.current.isLoading).toBe(true);
   });
 
   it("uses the backend response when the provider course cache is stale", async () => {

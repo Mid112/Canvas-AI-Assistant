@@ -13,7 +13,8 @@ import { useInstitution } from "@/contexts/useInstitution";
 import { formatInstructorCourseTitle } from "@/lib/format-course-title";
 import {
   getStoredActiveCourseId,
-  setStoredActiveCourseId,
+  getStoredActiveCourseSelection,
+  setStoredActiveCourseSelection,
 } from "@/lib/active-course-storage";
 import { resolveCanvasApiUrl } from "@/lib/canvas-connections";
 import { isCanvasConnectionRequiredError } from "@/lib/canvas-connection";
@@ -121,7 +122,8 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
 
   const resolveStoredActiveCourse = useCallback(
     (courses: InstructorCourse[]): ActiveCourseSelection | null => {
-      const storedId = getStoredActiveCourseId(persistenceScope);
+      const stored = getStoredActiveCourseSelection(persistenceScope);
+      const storedId = stored?.localId ?? null;
       const matched = courses.find((course) => course.id === storedId);
       return matched ? toActiveCourseSelection(matched) : null;
     },
@@ -149,6 +151,9 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
     if (isMountedRef.current) {
       setIsLoading(true);
       setError(null);
+      // Hydrate from local storage before any Canvas request so navigation to
+      // the assistant can display and use the chosen course immediately.
+      setActiveCourseState(getStoredActiveCourseSelection(persistenceScope));
     }
 
     try {
@@ -267,13 +272,13 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
           persistedSelection = toActiveCourseSelectionFromResponse(persisted);
         }
 
-        setStoredActiveCourseId(persistenceScope, localCourseId);
+        const nextSelection =
+          selected
+            ? toActiveCourseSelection(selected)
+            : persistedSelection ?? optimisticSelection;
+        setStoredActiveCourseSelection(persistenceScope, nextSelection);
         if (isMountedRef.current) {
-          setActiveCourseState(
-            selected
-              ? toActiveCourseSelection(selected)
-              : persistedSelection ?? optimisticSelection,
-          );
+          setActiveCourseState(nextSelection);
         }
         return true;
       } catch (err) {
@@ -285,6 +290,7 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
           setError(message);
           setActiveCourseState(previousActiveCourse);
         }
+        setStoredActiveCourseSelection(persistenceScope, previousActiveCourse);
         return false;
       } finally {
         if (isMountedRef.current) {

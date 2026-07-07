@@ -67,6 +67,23 @@ describe("messageDraft service", () => {
     expect(draft.recipients).toHaveLength(0);
   });
 
+  it("keeps provided course recipients when the draft API returns none", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ ...draftResponse, recipients: [] }),
+        { status: 201 },
+      ),
+    );
+
+    const recipients = [
+      { id: "student-101", name: "Alex Student", email: "alex@example.edu" },
+    ];
+
+    const draft = await fetchMessageDraft("access-token", { recipients });
+
+    expect(draft.recipients).toEqual(recipients);
+  });
+
   it("throws when simulateLoadError is true", async () => {
     await expect(
       fetchMessageDraft("access-token", { simulateLoadError: true }),
