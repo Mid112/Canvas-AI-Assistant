@@ -1,8 +1,14 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  fetchNotificationSettings,
+  updateNotificationSettings,
+} from "@/services/auth";
+import type { NotificationSettings } from "@/types/auth";
 
 interface NotificationToggle {
   id: string;
@@ -54,11 +60,95 @@ const notificationGroups: { title: string; items: NotificationToggle[] }[] = [
   },
 ];
 
-export function NotificationSettingsTab() {
-  const [savedMessage, setSavedMessage] = useState<string | null>(null);
+function buildDefaultSettings(): NotificationSettings {
+  return notificationGroups
+    .flatMap((group) => group.items)
+    .reduce<NotificationSettings>((settings, item) => {
+      settings[item.id] = item.defaultChecked;
+      return settings;
+    }, {});
+}
 
-  const handleSave = () => {
-    setSavedMessage("Notification preferences saved.");
+export function NotificationSettingsTab() {
+  const { accessToken } = useAuth();
+  const defaults = useMemo(() => buildDefaultSettings(), []);
+  const [settings, setSettings] = useState<NotificationSettings>(defaults);
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+
+    const token = accessToken;
+    let cancelled = false;
+
+    async function loadSettings() {
+      setIsLoading(true);
+      setErrorMessage(null);
+
+      try {
+        const remoteSettings = await fetchNotificationSettings(token);
+
+        if (cancelled) {
+          return;
+        }
+
+        setSettings({ ...defaults, ...remoteSettings });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Unable to load notification preferences.",
+        );
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    void loadSettings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, defaults]);
+
+  const handleSave = async () => {
+    if (!accessToken) {
+      setErrorMessage("You need to sign in again before saving preferences.");
+      setSavedMessage(null);
+      return;
+    }
+
+    setIsSaving(true);
+    setSavedMessage(null);
+    setErrorMessage(null);
+
+    try {
+      const savedSettings = await updateNotificationSettings(
+        accessToken,
+        settings,
+      );
+      setSettings({ ...defaults, ...savedSettings });
+      setSavedMessage("Notification preferences saved.");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to save notification preferences.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -71,6 +161,10 @@ export function NotificationSettingsTab() {
         </p>
       </CardHeader>
       <CardContent className="space-y-6">
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading preferences...</p>
+        ) : null}
+
         {notificationGroups.map((group) => (
           <div key={group.title} className="space-y-3">
             <p className="text-sm font-semibold">{group.title}</p>
@@ -91,7 +185,13 @@ export function NotificationSettingsTab() {
                   <input
                     id={item.id}
                     type="checkbox"
-                    defaultChecked={item.defaultChecked}
+                    checked={Boolean(settings[item.id])}
+                    onChange={(event) =>
+                      setSettings((current) => ({
+                        ...current,
+                        [item.id]: event.target.checked,
+                      }))
+                    }
                     className="mt-1 size-4 rounded border-input"
                   />
                 </li>
@@ -105,9 +205,14 @@ export function NotificationSettingsTab() {
             {savedMessage}
           </p>
         ) : null}
+        {errorMessage ? (
+          <p role="alert" className="text-sm text-destructive">
+            {errorMessage}
+          </p>
+        ) : null}
 
-        <Button type="button" onClick={handleSave}>
-          Save Preferences
+        <Button type="button" onClick={() => void handleSave()} disabled={isSaving}>
+          {isSaving ? "Saving..." : "Save Preferences"}
         </Button>
       </CardContent>
     </Card>

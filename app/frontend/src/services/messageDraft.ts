@@ -1,4 +1,3 @@
-import { mockMessageRecipients } from "@/data/mockMessageDraft";
 import { apiRequest } from "@/lib/api-request";
 import type {
   FetchMessageDraftOptions,
@@ -42,11 +41,7 @@ function mapDraftResponse(response: MessageDraftApiResponse): MessageDraft {
 }
 
 function buildCreatePayload(options: FetchMessageDraftOptions) {
-  const recipients =
-    options.recipients ??
-    (options.emptyRecipients
-      ? []
-      : mockMessageRecipients.map((recipient) => ({ ...recipient })));
+  const recipients = options.emptyRecipients ? [] : (options.recipients ?? []);
 
   return {
     course_id: options.courseId ?? null,

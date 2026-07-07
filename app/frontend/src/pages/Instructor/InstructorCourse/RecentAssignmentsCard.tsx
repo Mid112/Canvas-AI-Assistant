@@ -12,26 +12,36 @@ const STATUS_STYLES = {
   completed: "bg-muted text-muted-foreground ring-border",
 } as const;
 
-function formatAssignmentMeta(assignment: RecentAssignmentSummary): string {
+function formatAssignmentMeta(
+  assignment: RecentAssignmentSummary,
+  totalStudentsOverride?: number,
+): string {
+  const totalStudents =
+    totalStudentsOverride && totalStudentsOverride > assignment.totalStudents
+      ? totalStudentsOverride
+      : assignment.totalStudents;
+
   if (assignment.status === "completed") {
-    return `Completed · ${assignment.submittedCount}/${assignment.totalStudents} submitted`;
+    return `Completed · ${assignment.submittedCount}/${totalStudents} submitted`;
   }
 
   const dueLabel = assignment.dueDate
     ? `Due ${formatDueDateForDisplay(assignment.dueDate)}`
     : "No due date";
 
-  return `${dueLabel} · ${assignment.submittedCount}/${assignment.totalStudents} submitted`;
+  return `${dueLabel} · ${assignment.submittedCount}/${totalStudents} submitted`;
 }
 
 interface RecentAssignmentsCardProps {
   localCourseId: number;
   assignments: RecentAssignmentSummary[];
+  totalStudents?: number;
 }
 
 export function RecentAssignmentsCard({
   localCourseId,
   assignments,
+  totalStudents,
 }: RecentAssignmentsCardProps) {
   return (
     <Card className="shadow-sm ring-1 ring-border/60">
@@ -58,7 +68,7 @@ export function RecentAssignmentsCard({
               <div className="min-w-0 space-y-1">
                 <p className="font-medium leading-snug">{assignment.title}</p>
                 <p className="text-sm text-muted-foreground">
-                  {formatAssignmentMeta(assignment)}
+                  {formatAssignmentMeta(assignment, totalStudents)}
                 </p>
               </div>
               <span

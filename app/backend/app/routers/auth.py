@@ -107,11 +107,11 @@ async def update_me(
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_me(
-    body: DeleteAccountRequest | None = None,
+    body: DeleteAccountRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await delete_account(db, current_user, body.password if body else None)
+    await delete_account(db, current_user, body.password)
 
 
 @router.post("/me/change-password", status_code=status.HTTP_204_NO_CONTENT)

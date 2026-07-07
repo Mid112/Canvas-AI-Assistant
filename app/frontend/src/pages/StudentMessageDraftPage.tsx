@@ -7,15 +7,30 @@ import {
 } from "@/components/messages/MessageDraftPage";
 import type { FetchMessageDraftOptions } from "@/types/messageDraft";
 
-export function StudentMessageDraftPage() {
+interface StudentMessageDraftPageProps {
+  fetchOptions?: FetchMessageDraftOptions;
+}
+
+export function StudentMessageDraftPage({
+  fetchOptions: providedFetchOptions,
+}: StudentMessageDraftPageProps = {}) {
   const [searchParams] = useSearchParams();
 
-  const fetchOptions = useMemo<FetchMessageDraftOptions>(
+  const queryFetchOptions = useMemo<FetchMessageDraftOptions>(
     () => ({
       emptyRecipients: searchParams.get("empty") === "true",
       simulateLoadError: searchParams.get("loadError") === "true",
     }),
     [searchParams],
+  );
+
+  const fetchOptions = useMemo<FetchMessageDraftOptions>(
+    () => ({
+      ...queryFetchOptions,
+      ...providedFetchOptions,
+      simulateLoadError: queryFetchOptions.simulateLoadError,
+    }),
+    [providedFetchOptions, queryFetchOptions],
   );
 
   return (

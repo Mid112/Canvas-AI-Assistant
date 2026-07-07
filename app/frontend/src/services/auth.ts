@@ -1,7 +1,12 @@
 import { API_BASE_URL } from "@/config/api";
 import type {
   LoginCredentials,
+  ChangePasswordPayload,
+  NotificationSettings,
+  ProfileUpdatePayload,
   RegisterCredentials,
+  SecurityStatusResponse,
+  SessionResponse,
   TokenResponse,
   UserResponse,
 } from "@/types/auth";
@@ -83,6 +88,10 @@ async function request<T>(
     throw new AuthApiError(await parseError(response), response.status);
   }
 
+  if (response.status === 204) {
+    return undefined as T;
+  }
+
   return response.json() as Promise<T>;
 }
 
@@ -106,6 +115,106 @@ export async function registerUser(
 
 export async function fetchCurrentUser(token: string): Promise<UserResponse> {
   return request<UserResponse>("/auth/me", { method: "GET" }, token);
+}
+
+export async function updateCurrentUser(
+  token: string,
+  payload: ProfileUpdatePayload,
+): Promise<UserResponse> {
+  return request<UserResponse>(
+    "/auth/me",
+    {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    },
+    token,
+  );
+}
+
+export async function deleteCurrentUser(
+  token: string,
+  password: string,
+): Promise<void> {
+  return request<void>(
+    "/auth/me",
+    {
+      method: "DELETE",
+      body: JSON.stringify({ password }),
+    },
+    token,
+  );
+}
+
+export async function changeCurrentPassword(
+  token: string,
+  payload: ChangePasswordPayload,
+): Promise<void> {
+  return request<void>(
+    "/auth/me/change-password",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        current_password: payload.currentPassword,
+        new_password: payload.newPassword,
+      }),
+    },
+    token,
+  );
+}
+
+export async function fetchNotificationSettings(
+  token: string,
+): Promise<NotificationSettings> {
+  return request<NotificationSettings>(
+    "/auth/me/notifications",
+    { method: "GET" },
+    token,
+  );
+}
+
+export async function updateNotificationSettings(
+  token: string,
+  settings: NotificationSettings,
+): Promise<NotificationSettings> {
+  return request<NotificationSettings>(
+    "/auth/me/notifications",
+    {
+      method: "PATCH",
+      body: JSON.stringify({ settings }),
+    },
+    token,
+  );
+}
+
+export async function fetchUserSessions(
+  token: string,
+): Promise<SessionResponse[]> {
+  return request<SessionResponse[]>(
+    "/auth/me/sessions",
+    { method: "GET" },
+    token,
+  );
+}
+
+export async function revokeUserSession(
+  token: string,
+  sessionId: number,
+): Promise<void> {
+  return request<void>(
+    `/auth/me/sessions/${sessionId}`,
+    { method: "DELETE" },
+    token,
+  );
+}
+
+export async function fetchSecurityStatus(
+  token: string,
+): Promise<SecurityStatusResponse> {
+  return request<SecurityStatusResponse>(
+    "/auth/me/security",
+    { method: "GET" },
+    token,
+  );
 }
 
 export { AuthApiError };

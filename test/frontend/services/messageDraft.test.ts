@@ -36,16 +36,20 @@ describe("messageDraft service", () => {
   });
 
   it("creates and returns a draft from the API", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(JSON.stringify(draftResponse), { status: 201 }),
     );
 
     const draft = await fetchMessageDraft("access-token");
+    const requestBody = JSON.parse(
+      String(fetchSpy.mock.calls[0]?.[1]?.body),
+    ) as { recipients: unknown[] };
 
     expect(draft.id).toBe("7");
     expect(draft.recipients.length).toBeGreaterThan(0);
     expect(draft.subject).toBeTruthy();
     expect(draft.templateName).toBe("Assignment Reminder");
+    expect(requestBody.recipients).toEqual([]);
   });
 
   it("returns empty recipients when requested", async () => {

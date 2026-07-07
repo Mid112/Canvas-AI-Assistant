@@ -72,10 +72,12 @@ def test_course_overview_empty_state(client):
     headers = _register_with_canvas(client)
     local_id = _sync_local_course(client, headers)
 
-    response = client.get(
-        f"/api/v1/canvas/courses/{local_id}/overview?canvas_url={CANVAS_URL}",
-        headers=headers,
-    )
+    with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock:
+        mock.return_value = []
+        response = client.get(
+            f"/api/v1/canvas/courses/{local_id}/overview?canvas_url={CANVAS_URL}",
+            headers=headers,
+        )
     assert response.status_code == 200
     payload = response.json()
     assert payload["local_id"] == local_id
@@ -124,14 +126,31 @@ def test_course_overview_with_assignments_and_submissions(client):
             headers=headers,
         )
 
-    response = client.get(
-        f"/api/v1/canvas/courses/{local_id}/overview?canvas_url={CANVAS_URL}",
-        headers=headers,
-    )
+    enrollments = [
+        {
+            "user_id": 1001,
+            "enrollment_state": "active",
+            "user": {"name": "Ada Lovelace", "sortable_name": "Lovelace, Ada"},
+        },
+        {
+            "user_id": 1002,
+            "enrollment_state": "active",
+            "user": {"name": "Grace Hopper", "sortable_name": "Hopper, Grace"},
+        },
+    ]
+
+    with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock:
+        mock.return_value = enrollments
+        response = client.get(
+            f"/api/v1/canvas/courses/{local_id}/overview?canvas_url={CANVAS_URL}",
+            headers=headers,
+        )
     assert response.status_code == 200
     payload = response.json()
+    assert payload["student_count"] == 2
     assert payload["assignment_count"] == 2
     assert payload["average_grade"] is None
     assert len(payload["recent_assignments"]) == 2
     assert payload["recent_assignments"][0]["title"] in {"Variables Quiz", "Loops Lab"}
+    assert payload["recent_assignments"][0]["total_students"] == 2
     assert payload["recent_activity"] == []

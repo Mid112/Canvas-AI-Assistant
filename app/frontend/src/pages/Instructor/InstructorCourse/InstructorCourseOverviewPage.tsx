@@ -52,6 +52,7 @@ export function InstructorCourseOverviewPage() {
         <RecentAssignmentsCard
           localCourseId={localCourseId}
           assignments={overview?.recentAssignments ?? []}
+          totalStudents={course.studentCount}
         />
         <StudentActivityCard
           localCourseId={localCourseId}

@@ -116,6 +116,18 @@ describe("InstructorCourseOverviewMetrics", () => {
     expect(screen.getByText("82%")).toBeInTheDocument();
     expect(screen.getByText("91%")).toBeInTheDocument();
   });
+
+  it("prefers the Canvas course student count when overview has a stale zero", () => {
+    render(
+      <InstructorCourseOverviewMetrics
+        course={course}
+        overview={{ ...overview, studentCount: 0 }}
+      />,
+    );
+
+    expect(screen.getByText("Total Students")).toBeInTheDocument();
+    expect(screen.getByText(String(course.studentCount))).toBeInTheDocument();
+  });
 });
 
 describe("RecentAssignmentsCard", () => {
@@ -135,5 +147,27 @@ describe("RecentAssignmentsCard", () => {
       "href",
       `/instructor/courses/${course.id}/assignments`,
     );
+  });
+
+  it("uses the course student total when assignment summaries have a stale zero", () => {
+    render(
+      <MemoryRouter>
+        <RecentAssignmentsCard
+          localCourseId={course.id}
+          totalStudents={course.studentCount}
+          assignments={[
+            {
+              ...overview.recentAssignments[0]!,
+              submittedCount: 1,
+              totalStudents: 0,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByText(`Due Oct 15, 2026 · 1/${course.studentCount} submitted`),
+    ).toBeInTheDocument();
   });
 });

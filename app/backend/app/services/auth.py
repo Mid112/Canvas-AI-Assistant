@@ -135,8 +135,8 @@ async def update_profile(db: AsyncSession, user: User, body: ProfileUpdateReques
     )
 
 
-async def delete_account(db: AsyncSession, user: User, password: str | None = None) -> None:
-    if password is not None and not verify_password(password, user.hashed_password):
+async def delete_account(db: AsyncSession, user: User, password: str) -> None:
+    if not verify_password(password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password")
 
     db.add(AuditLogSession(user_id=user.id, action="account_deleted", details={"email": user.email}))
