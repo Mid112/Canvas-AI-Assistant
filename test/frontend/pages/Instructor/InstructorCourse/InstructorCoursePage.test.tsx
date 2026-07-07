@@ -70,10 +70,9 @@ describe("InstructorCourseHeader", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/45 Students · 8 Assignments/)).toBeInTheDocument();
     expect(screen.getByText("Active")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Back to Courses/i })).toHaveAttribute(
-      "href",
-      "/instructor/courses",
-    );
+    expect(
+      screen.getByRole("link", { name: /Back to Courses/i }),
+    ).toHaveAttribute("href", "/instructor/courses");
   });
 });
 
@@ -141,7 +140,9 @@ describe("RecentAssignmentsCard", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByText("Variables and Data Types Quiz")).toBeInTheDocument();
+    expect(
+      screen.getByText("Variables and Data Types Quiz"),
+    ).toBeInTheDocument();
     expect(screen.getByText("active")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "View All" })).toHaveAttribute(
       "href",
@@ -166,8 +167,9 @@ describe("RecentAssignmentsCard", () => {
       </MemoryRouter>,
     );
 
+    expect(screen.getByText(/Due Oct 14, 2026, 5:00 PM/)).toBeInTheDocument();
     expect(
-      screen.getByText(`Due Oct 15, 2026 · 1/${course.studentCount} submitted`),
+      screen.getByText(new RegExp(`1/${course.studentCount} submitted`)),
     ).toBeInTheDocument();
   });
 });

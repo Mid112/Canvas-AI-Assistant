@@ -28,10 +28,18 @@ describe("workflowHistory service", () => {
           action_name: "create_assignment",
           user_prompt: "create a midterm exam",
           status: "pending",
-          proposed_action: { action: "create_assignment", title: "Midterm Exam" },
+          proposed_action: {
+            action: "create_assignment",
+            title: "Midterm Exam",
+          },
           affected_resources: [
             { type: "course", id: 1, name: "CPSC 310", status: "unchanged" },
-            { type: "assignment", id: null, name: "Midterm Exam", status: "created" },
+            {
+              type: "assignment",
+              id: null,
+              name: "Midterm Exam",
+              status: "created",
+            },
           ],
           created_at: "2026-05-01T12:00:00.000Z",
           executed_at: null,
@@ -55,7 +63,7 @@ describe("workflowHistory service", () => {
     expect(result.entries).toHaveLength(1);
     expect(result.total).toBe(1);
     expect(result.entries[0]?.workflowName).toBe("Create Assignment");
-    expect(result.entries[0]?.description).toBe("create a midterm exam");
+    expect(result.entries[0]?.prompt).toBe("create a midterm exam");
     expect(result.entries[0]?.status).toBe("pending");
     expect(result.entries[0]?.affectedResources).toHaveLength(2);
   });
@@ -97,7 +105,9 @@ describe("workflowHistory service", () => {
     };
 
     vi.spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(new Response(JSON.stringify(firstPage), { status: 200 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(firstPage), { status: 200 }),
+      )
       .mockResolvedValueOnce(
         new Response(JSON.stringify(secondPage), { status: 200 }),
       );
@@ -133,7 +143,7 @@ describe("workflowHistory service", () => {
     const csv = buildWorkflowHistoryCsv(mockWorkflowHistory.slice(0, 2));
 
     expect(csv).toContain(
-      "Date & Time,Workflow,Description,User,Status",
+      "Date & Time,Action,Prompt,User,Status,Affected Resources",
     );
     expect(csv).toContain("Send Reminder Emails");
     expect(csv).toContain("Create Assignment");
@@ -143,7 +153,7 @@ describe("workflowHistory service", () => {
     const csv = buildWorkflowHistoryCsv([
       {
         ...mockWorkflowHistory[0]!,
-        description: "=SUM(A1:A10)",
+        prompt: "=SUM(A1:A10)",
       },
     ]);
 
