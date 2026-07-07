@@ -217,6 +217,7 @@ async def list_students(
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
     db: AsyncSession = Depends(get_db),
 ):
+    """List enrolled students for a course. ``course_id`` is the local DB course id."""
     return await get_students(course_id, current_user, canvas_url, db)
 
 

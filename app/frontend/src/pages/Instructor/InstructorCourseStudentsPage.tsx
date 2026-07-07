@@ -67,28 +67,26 @@ export function InstructorCourseStudentsPage() {
     : resolvedCourse;
 
   useEffect(() => {
-    const canvasCourseId = course?.canvasCourseId;
     if (
       !accessToken ||
       !idIsValid ||
       !user?.has_canvas_token ||
       isResolvingCourse ||
       !course ||
-      !canvasUrl ||
-      canvasCourseId == null
+      !canvasUrl
     ) {
       return;
     }
 
     const token = accessToken;
     const selectedCanvasUrl = canvasUrl;
-    const resolvedCanvasCourseId = canvasCourseId;
+    const resolvedLocalCourseId = parsedLocalCourseId;
     let cancelled = false;
 
     async function loadStudents() {
       try {
         const data = await fetchCourseStudents(
-          resolvedCanvasCourseId,
+          resolvedLocalCourseId,
           token,
           selectedCanvasUrl,
         );

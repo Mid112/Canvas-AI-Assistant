@@ -7,10 +7,16 @@
 
 DO $$
 BEGIN
-    IF EXISTS (SELECT 1 FROM workflows LIMIT 1)
-        OR EXISTS (SELECT 1 FROM audit_logs LIMIT 1) THEN
+    IF to_regclass('public.workflows') IS NOT NULL
+        AND EXISTS (SELECT 1 FROM workflows LIMIT 1) THEN
         RAISE EXCEPTION
-            '010_workflow_schema_repair.sql refuses to run while workflows or audit_logs contain data. Use make db-reset or migrate manually.';
+            '010_workflow_schema_repair.sql refuses to run while workflows contain data. Use make db-reset or migrate manually.';
+    END IF;
+
+    IF to_regclass('public.audit_logs') IS NOT NULL
+        AND EXISTS (SELECT 1 FROM audit_logs LIMIT 1) THEN
+        RAISE EXCEPTION
+            '010_workflow_schema_repair.sql refuses to run while audit_logs contain data. Use make db-reset or migrate manually.';
     END IF;
 END $$;
 

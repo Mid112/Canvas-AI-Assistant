@@ -58,17 +58,11 @@ export function InstructorCourseMessagesPage() {
       : null);
 
   useEffect(() => {
-    if (
-      !layoutContext ||
-      !accessToken ||
-      !course?.canvasCourseId ||
-      !canvasUrl
-    ) {
+    if (!layoutContext || !accessToken || !canvasUrl) {
       return;
     }
 
     const token = accessToken;
-    const canvasCourseId = course.canvasCourseId;
     const selectedCanvasUrl = canvasUrl;
     let cancelled = false;
 
@@ -77,7 +71,7 @@ export function InstructorCourseMessagesPage() {
 
       try {
         const students = await fetchCourseStudents(
-          canvasCourseId,
+          localCourseId,
           token,
           selectedCanvasUrl,
         );
@@ -118,14 +112,7 @@ export function InstructorCourseMessagesPage() {
     return () => {
       cancelled = true;
     };
-  }, [
-    accessToken,
-    basePrompt,
-    canvasUrl,
-    course?.canvasCourseId,
-    layoutContext,
-    localCourseId,
-  ]);
+  }, [accessToken, basePrompt, canvasUrl, layoutContext, localCourseId]);
 
   if (!layoutContext) {
     return null;

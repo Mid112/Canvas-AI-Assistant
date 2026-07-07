@@ -287,7 +287,7 @@ async def send_course_message(
         )
 
     await create_announcement(canvas_course_id, subject, body, token, canvas_url)
-    roster = await get_students(canvas_course_id, user, canvas_url, db)
+    roster = await get_students(local_course_id, user, canvas_url, db)
     return MessageSendResult(
         course_id=canvas_course_id,
         subject=subject,
