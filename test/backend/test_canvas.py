@@ -455,7 +455,11 @@ def test_list_submissions_student_name(client, auth_headers, synced_course_id):
         "score": None, "grade": None, "graded_at": None,
         "submitted_at": None, "workflow_state": "submitted",
         "missing": False, "late": False, "excused": False,
-        "user": {"name": "Alice Example"},
+        "user": {
+            "name": "Alice Example",
+            "email": "alice@example.edu",
+            "login_id": "alice@example.edu",
+        },
     }
     with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
         mock.return_value = [raw]
@@ -465,6 +469,35 @@ def test_list_submissions_student_name(client, auth_headers, synced_course_id):
         )
     assert response.status_code == 200
     assert response.json()[0]["student_name"] == "Alice Example"
+    assert response.json()[0]["student_email"] == "alice@example.edu"
+    assert response.json()[0]["student_login_id"] == "alice@example.edu"
+
+
+def test_list_submissions_enriches_email_from_user_profile(client, auth_headers, synced_course_id):
+    raw = {
+        "id": 103, "assignment_id": 10, "user_id": 8,
+        "score": None, "grade": None, "graded_at": None,
+        "submitted_at": None, "workflow_state": "submitted",
+        "missing": False, "late": False, "excused": False,
+        "user": {"name": "Mina Name"},
+    }
+    with (
+        patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock_submissions,
+        patch("app.services.canvas.fetch_user_profile", new_callable=AsyncMock) as mock_profile,
+    ):
+        mock_submissions.return_value = [raw]
+        mock_profile.return_value = {
+            "primary_email": "mina@example.edu",
+            "login_id": "mina_login@example.edu",
+        }
+        response = client.get(
+            f"/api/v1/canvas/courses/{synced_course_id}/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 200
+    assert response.json()[0]["student_email"] == "mina@example.edu"
+    assert response.json()[0]["student_login_id"] == "mina_login@example.edu"
 
 
 def test_list_submissions_student_name_absent_when_no_user(client, auth_headers, synced_course_id):

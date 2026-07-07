@@ -34,6 +34,7 @@ import type {
   FetchMessageDraftOptions,
   MessageDraft,
   MessageDraftPageState,
+  MessageRecipient,
 } from "@/types/messageDraft";
 
 interface MessageDraftPageProps {
@@ -50,6 +51,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>([]);
 
   const {
     register,
@@ -82,6 +84,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
 
       const loadedDraft = await fetchMessageDraft(accessToken, fetchOptions);
       setDraft(loadedDraft);
+      setSelectedRecipientIds(loadedDraft.recipients.map((recipient) => recipient.id));
       reset({
         subject: loadedDraft.subject,
         body: loadedDraft.body,
@@ -111,6 +114,37 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     [subjectValue, bodyValue],
   );
 
+  const selectedRecipients = useMemo<MessageRecipient[]>(() => {
+    if (!draft) {
+      return [];
+    }
+
+    const selectedIdSet = new Set(selectedRecipientIds);
+    return draft.recipients.filter((recipient) => selectedIdSet.has(recipient.id));
+  }, [draft, selectedRecipientIds]);
+
+  const handleToggleRecipient = (recipientId: string) => {
+    setSelectedRecipientIds((currentIds) =>
+      currentIds.includes(recipientId)
+        ? currentIds.filter((id) => id !== recipientId)
+        : [...currentIds, recipientId],
+    );
+  };
+
+  const handleSelectAllRecipients = () => {
+    if (!draft) {
+      return;
+    }
+
+    // Treat the header control as a quick all/none toggle while keeping the
+    // individual checkboxes as the source of truth for the send payload.
+    setSelectedRecipientIds((currentIds) =>
+      currentIds.length === draft.recipients.length
+        ? []
+        : draft.recipients.map((recipient) => recipient.id),
+    );
+  };
+
   const handleCancel = () => {
     if (onCancel) {
       onCancel();
@@ -122,6 +156,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
         subject: draft.subject,
         body: draft.body,
       });
+      setSelectedRecipientIds(draft.recipients.map((recipient) => recipient.id));
     }
 
     setSendError(null);
@@ -153,17 +188,18 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
         draftId: draft.id,
         subject: subjectValue.trim(),
         body: bodyValue.trim(),
-        recipientIds: draft.recipients.map((recipient) => recipient.id),
+        recipientIds: selectedRecipients.map((recipient) => recipient.id),
+        recipients: selectedRecipients,
       });
 
       setIsConfirmOpen(false);
       setSuccessMessage(
         isMessageDraftSendMocked
-          ? `Draft approved for ${draft.recipients.length} student${
-              draft.recipients.length === 1 ? "" : "s"
+          ? `Draft approved for ${selectedRecipients.length} student${
+              selectedRecipients.length === 1 ? "" : "s"
             }. No message has been sent through Canvas yet.`
-          : `Message sent successfully to ${draft.recipients.length} student${
-              draft.recipients.length === 1 ? "" : "s"
+          : `Message sent successfully to ${selectedRecipients.length} student${
+              selectedRecipients.length === 1 ? "" : "s"
             }.`,
       );
       setPageState("success");
@@ -213,7 +249,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
           </CardHeader>
           <CardContent className="space-y-4">
             <MessagePreview
-              recipients={draft.recipients}
+              recipients={selectedRecipients}
               subject={subjectValue}
               body={bodyValue}
             />
@@ -229,7 +265,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
   }
 
   const isLoading = pageState === "loading";
-  const recipientCount = draft?.recipients.length ?? 0;
+  const recipientCount = selectedRecipients.length;
 
   return (
     <div className="space-y-6">
@@ -266,7 +302,12 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
 
       <div className="grid gap-6 lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
         <aside className="space-y-4">
-          <RecipientSummary recipients={draft?.recipients ?? []} />
+          <RecipientSummary
+            recipients={draft?.recipients ?? []}
+            selectedRecipientIds={selectedRecipientIds}
+            onToggleRecipient={handleToggleRecipient}
+            onSelectAll={handleSelectAllRecipients}
+          />
           <MessageTemplateSummary
             selectedTemplateId={draft?.templateId}
             selectedTemplateName={draft?.templateName}
@@ -330,7 +371,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
             </DialogDescription>
           </DialogHeader>
           <MessagePreview
-            recipients={draft?.recipients ?? []}
+            recipients={selectedRecipients}
             subject={previewValues.subject}
             body={previewValues.body}
           />

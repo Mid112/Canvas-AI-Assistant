@@ -16,6 +16,25 @@ def _headers(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _canvas_error_detail(response: httpx.Response) -> str:
+    try:
+        data = response.json()
+    except ValueError:
+        return response.text.strip()
+
+    if isinstance(data, dict):
+        for key in ("message", "error", "errors"):
+            value = data.get(key)
+            if isinstance(value, str):
+                return value
+            if isinstance(value, list) and value:
+                return "; ".join(str(item) for item in value)
+            if isinstance(value, dict):
+                return "; ".join(f"{field}: {message}" for field, message in value.items())
+
+    return str(data)
+
+
 def _raise_for_canvas_error(response: httpx.Response) -> None:
     # Canvas 401 means bad/expired token — re-map to 422 so callers don't confuse it
     # with our own JWT 401 (two different auth layers)
@@ -28,7 +47,11 @@ def _raise_for_canvas_error(response: httpx.Response) -> None:
     if response.is_server_error:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Canvas server error: {response.status_code}")
     if response.is_error:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Canvas API error: {response.status_code}")
+        detail = _canvas_error_detail(response)
+        message = f"Canvas API error: {response.status_code}"
+        if detail:
+            message = f"{message} - {detail}"
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=message)
 
 
 _TIMEOUT = httpx.Timeout(10.0)
@@ -282,6 +305,28 @@ async def fetch_submissions(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
 
 
+async def fetch_user_profile(
+    user_id: int,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> dict:
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await _get_with_retry(
+                client,
+                f"{canvas_url}/api/v1/users/{user_id}/profile",
+                headers=_headers(token),
+            )
+            _raise_for_canvas_error(response)
+            return response.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
 async def fetch_enrollments(
     course_id: int,
     token: str,
@@ -346,17 +391,25 @@ async def send_conversation(
     token: str,
     canvas_url: str = settings.CANVAS_API_URL,
 ) -> dict:
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    form_data = [
+        ("subject", subject),
+        ("body", body),
+        ("context_code", f"course_{course_id}"),
+        ("group_conversation", "false"),
+    ]
+    # Canvas expects repeated recipients[] form fields. Keeping these as tuples
+    # avoids client-library ambiguity around dict values that are arrays.
+    form_data.extend(
+        ("recipients[]", str(user_id)) for user_id in recipient_canvas_user_ids
+    )
+
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.post(
                 f"{canvas_url}/api/v1/conversations",
                 headers=_headers(token),
-                data={
-                    "subject": subject,
-                    "body": body,
-                    "context_code": f"course_{course_id}",
-                    "recipients[]": [str(user_id) for user_id in recipient_canvas_user_ids],
-                },
+                data=form_data,
             )
             _raise_for_canvas_error(response)
             return response.json()

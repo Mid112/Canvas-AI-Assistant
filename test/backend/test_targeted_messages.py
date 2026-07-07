@@ -1,6 +1,11 @@
 import asyncio
 from unittest.mock import AsyncMock, patch
 
+import httpx
+import pytest
+from fastapi import HTTPException
+
+from app.integrations.canvas import _raise_for_canvas_error, send_conversation
 from app.models.course import Course
 from app.models.user import User
 from app.services.canvas import send_course_message
@@ -75,3 +80,40 @@ def test_send_course_message_uses_announcement_without_recipients():
     mock_conversation.assert_not_called()
     assert result.delivery_mode == "announcement"
     assert result.audience_size == 3
+
+
+def test_canvas_error_includes_response_detail():
+    response = httpx.Response(
+        400,
+        json={"errors": [{"message": "recipient is not a valid conversation user"}]},
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _raise_for_canvas_error(response)
+
+    assert exc_info.value.status_code == 502
+    assert "Canvas API error: 400" in exc_info.value.detail
+    assert "recipient is not a valid conversation user" in exc_info.value.detail
+
+
+def test_send_conversation_posts_repeated_recipient_fields():
+    response = httpx.Response(200, json={"id": 123})
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=response) as mock_post:
+        result = asyncio.run(
+            send_conversation(
+                42,
+                [101, 102],
+                "Reminder",
+                "Please submit",
+                "token",
+                "http://localhost:3000",
+            )
+        )
+
+    assert result == {"id": 123}
+    request_data = mock_post.await_args.kwargs["data"]
+    assert ("context_code", "course_42") in request_data
+    assert ("group_conversation", "false") in request_data
+    assert ("recipients[]", "101") in request_data
+    assert ("recipients[]", "102") in request_data

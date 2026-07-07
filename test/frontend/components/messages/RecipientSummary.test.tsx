@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
 
 import { RecipientSummary } from "@/components/messages/RecipientSummary";
 
@@ -17,6 +18,28 @@ describe("RecipientSummary", () => {
     expect(screen.getByText("Select Students")).toBeInTheDocument();
     expect(screen.getByText("John Smith")).toBeInTheDocument();
     expect(screen.getByText("2 students selected")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /John Smith/i })).toBeChecked();
+  });
+
+  it("toggles a single recipient", async () => {
+    const user = userEvent.setup();
+    const onToggleRecipient = vi.fn();
+
+    render(
+      <RecipientSummary
+        recipients={[
+          { id: "1", name: "John Smith", email: "john@university.edu" },
+          { id: "2", name: "Sarah Lee", email: "sarah@university.edu" },
+        ]}
+        selectedRecipientIds={["1"]}
+        onToggleRecipient={onToggleRecipient}
+      />,
+    );
+
+    await user.click(screen.getByRole("checkbox", { name: /Sarah Lee/i }));
+
+    expect(screen.getByText("1 student selected")).toBeInTheDocument();
+    expect(onToggleRecipient).toHaveBeenCalledWith("2");
   });
 
   it("renders empty state when no recipients", () => {

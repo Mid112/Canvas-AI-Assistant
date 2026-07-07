@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 
 from cryptography.fernet import InvalidToken
@@ -15,6 +16,7 @@ from app.integrations.canvas import (
     fetch_assignments,
     fetch_courses,
     fetch_submissions,
+    fetch_user_profile,
     send_conversation,
     update_assignment,
 )
@@ -32,6 +34,8 @@ from app.schemas.canvas import (
     SubmissionResponse,
     SubmissionStatus,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def require_canvas_token(user: User, canvas_url: str) -> str:
@@ -321,6 +325,8 @@ def _parse_submission(raw: dict) -> SubmissionResponse:
         assignment_id=raw["assignment_id"],
         user_id=raw["user_id"],
         student_name=user.get("name"),
+        student_email=user.get("email") or user.get("primary_email"),
+        student_login_id=user.get("login_id"),
         submitted_at=raw.get("submitted_at"),
         workflow_state=raw.get("workflow_state", "unsubmitted"),
         status=_parse_submission_status(raw),
@@ -328,6 +334,40 @@ def _parse_submission(raw: dict) -> SubmissionResponse:
         grade=raw.get("grade"),
         graded_at=raw.get("graded_at"),
     )
+
+
+async def _fill_submission_contact_fields(
+    submissions: list[SubmissionResponse],
+    token: str,
+    canvas_url: str,
+) -> None:
+    missing_contact = [
+        submission
+        for submission in submissions
+        if submission.student_name
+        and not submission.student_email
+        and not submission.student_login_id
+    ]
+
+    for submission in missing_contact:
+        try:
+            profile = await fetch_user_profile(submission.user_id, token, canvas_url)
+        except HTTPException as error:
+            # Email is only needed for display/diagnostics; losing it should not
+            # make the submissions or analytics views fail.
+            logger.info(
+                "Could not enrich Canvas user %s profile for submissions: %s",
+                submission.user_id,
+                error.detail,
+            )
+            continue
+
+        submission.student_email = (
+            profile.get("primary_email")
+            or profile.get("email")
+            or profile.get("login_id")
+        )
+        submission.student_login_id = profile.get("login_id")
 
 
 async def get_submissions(
@@ -348,6 +388,7 @@ async def get_submissions(
         canvas_url,
     )
     parsed = [_parse_submission(raw) for raw in data]
+    await _fill_submission_contact_fields(parsed, token, canvas_url)
 
     try:
         assignment = await db.scalar(

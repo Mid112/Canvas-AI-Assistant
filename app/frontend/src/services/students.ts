@@ -103,7 +103,7 @@ export async function fetchStudentsFromSubmissions(
       course_id: localCourseId,
       name: submission.student_name ?? `Student ${canvasUserId}`,
       sortable_name: null,
-      login_id: null,
+      login_id: submission.student_email ?? submission.student_login_id,
       enrollment_state: "active",
     });
   });

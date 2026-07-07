@@ -90,6 +90,8 @@ describe("students service", () => {
           assignment_id: 11,
           user_id: 303,
           student_name: "MN Student",
+          student_email: "mn@example.edu",
+          student_login_id: "mn@example.edu",
           submitted_at: null,
           workflow_state: "unsubmitted",
           status: "missing",
@@ -110,6 +112,7 @@ describe("students service", () => {
       expect.objectContaining({
         canvas_user_id: "303",
         name: "MN Student",
+        login_id: "mn@example.edu",
       }),
     ]);
     expect(mockedFetchAssignments).toHaveBeenCalledWith(

@@ -128,6 +128,10 @@ export async function sendMessageDraft(
         body: JSON.stringify({
           subject: payload.subject,
           body: payload.body,
+          // The backend sends whatever recipients are stored on the draft.
+          // Persist the UI selection first so sending one student does not
+          // accidentally send to the originally loaded full roster.
+          recipients: payload.recipients,
         }),
       },
     );

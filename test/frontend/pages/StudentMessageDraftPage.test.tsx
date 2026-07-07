@@ -108,6 +108,7 @@ describe("StudentMessageDraftPage", () => {
         subject: mockMessageDraft.subject,
         body: mockMessageDraft.body,
         recipientIds: mockMessageDraft.recipients.map((recipient) => recipient.id),
+        recipients: mockMessageDraft.recipients,
       });
     });
 
@@ -134,6 +135,37 @@ describe("StudentMessageDraftPage", () => {
         "Unable to send message. Canvas messaging is temporarily unavailable.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("sends only the selected student", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByLabelText("Subject");
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+    await user.click(screen.getByRole("checkbox", { name: /John Smith/i }));
+
+    expect(screen.getByText("1 student selected")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("1 student");
+    await user.click(screen.getByRole("button", { name: "Confirm Send" }));
+
+    await waitFor(() => {
+      expect(mockedSend).toHaveBeenCalledWith("access-token", {
+        draftId: mockMessageDraft.id,
+        subject: mockMessageDraft.subject,
+        body: mockMessageDraft.body,
+        recipientIds: ["student-3"],
+        recipients: [
+          {
+            id: "student-3",
+            name: "John Smith",
+            email: "john.smith@university.edu",
+          },
+        ],
+      });
+    });
   });
 
   it("resets edits when cancel is clicked", async () => {

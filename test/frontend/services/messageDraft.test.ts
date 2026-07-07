@@ -100,4 +100,41 @@ describe("messageDraft service", () => {
       }),
     ).rejects.toThrow(/At least one recipient/i);
   });
+
+  it("persists selected recipients before sending", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(draftResponse), { status: 200 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ...draftResponse, status: "sent" }), {
+          status: 200,
+        }),
+      );
+
+    const recipients = [
+      { id: "student-1", name: "Alex Thompson", email: "alex.t@university.edu" },
+    ];
+
+    await sendMessageDraft("access-token", {
+      draftId: "7",
+      subject: "Reminder",
+      body: "Please submit.",
+      recipientIds: ["student-1"],
+      recipients,
+    });
+
+    expect(fetchSpy.mock.calls[0]?.[0]).toBe(
+      "http://localhost:8000/api/v1/messages/drafts/7",
+    );
+    expect(JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body))).toEqual({
+      subject: "Reminder",
+      body: "Please submit.",
+      recipients,
+    });
+    expect(fetchSpy.mock.calls[1]?.[0]).toBe(
+      "http://localhost:8000/api/v1/messages/drafts/7/send",
+    );
+  });
 });
