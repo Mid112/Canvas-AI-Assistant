@@ -1,4 +1,4 @@
-.PHONY: install install-vllm install-ollama lint lint-fix test test-llm test-ollama test-vague-llm test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset run-vllm run-ollama dev e2e-up
+.PHONY: install install-vllm install-ollama lint lint-fix test test-llm test-ollama test-vague-llm test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset run-vllm run-ollama dev e2e-up reload
 
 # ── Install ──────────────────────────────────
 # Creates a venv (if one doesn't exist) and installs backend deps
@@ -138,6 +138,22 @@ e2e-up:
 		ADMIN_NAME=$${ADMIN_NAME:-Administrator} \
 		.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload) & \
 	(cd app/frontend && npm run dev -- --host 0.0.0.0) & \
+	wait
+
+# ── Reload ───────────────────────────────────
+# Kills whatever's on :8000/:5173 and restarts the native backend and
+# frontend cleanly — use this after a `git pull` to pick up new code
+# without touching Postgres/Canvas (assumes they're already running via
+# `make dev` or `make e2e-up`; if they're not, start those first).
+# Ctrl+C stops both together.
+reload:
+	@echo "Freeing backend/frontend ports..."
+	@pids=$$(lsof -ti :8000 :5173 2>/dev/null); if [ -n "$$pids" ]; then kill -9 $$pids; fi
+	@sleep 1
+	@echo "Starting backend on http://localhost:8000 and frontend on http://localhost:5173"
+	@trap 'kill 0' INT TERM EXIT; \
+	(cd app/backend && .venv/bin/python -m uvicorn app.main:app --reload) & \
+	(cd app/frontend && npm run dev) & \
 	wait
 
 # ── Run vLLM ─────────────────────────────────

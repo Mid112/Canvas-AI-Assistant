@@ -104,7 +104,6 @@ export function ChatWindow({
     }
 
     let cancelled = false;
-    hydratedConversationRef.current = initialConversationId;
 
     async function hydrateConversation() {
       try {
@@ -201,7 +200,12 @@ export function ChatWindow({
         setMessages(restoredMessages.length > 0 ? restoredMessages : seedChatMessages);
         setConversationId(conversation.id);
         setActivePendingMessageId(nextActivePendingMessageId);
+        hydratedConversationRef.current = initialConversationId;
       } catch {
+        if (cancelled) {
+          return;
+        }
+
         // Keep the seeded assistant greeting if restoring history fails; the
         // next send still continues in the existing conversation id.
         setConversationId(initialConversationId);
