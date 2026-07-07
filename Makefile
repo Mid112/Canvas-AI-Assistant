@@ -1,4 +1,4 @@
-.PHONY: install install-vllm lint lint-fix test test-llm test-vague-llm test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset run-vllm dev
+.PHONY: install install-vllm lint lint-fix test test-llm test-vague-llm test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset run-vllm dev e2e-up
 
 # ── Install ──────────────────────────────────
 # Creates a venv (if one doesn't exist) and installs backend deps
@@ -93,6 +93,39 @@ dev:
 	@echo "Starting backend on :8000..."
 	lsof -ti :8000 | xargs kill -9
 	cd app/backend && .venv/bin/python -m uvicorn app.main:app --reload
+
+# ── E2E Dev Stack ────────────────────────────
+# Starts the stack used for manual end-to-end testing:
+#   - Postgres and Canvas sandbox in Docker
+#   - FastAPI backend natively from app/backend/.venv on :8000
+#   - Vite frontend on :5173
+#
+# The Docker backend is stopped because the current image can lag behind
+# local backend dependencies. Ctrl+C stops the native backend/frontend;
+# Postgres and Canvas keep running for the next e2e session.
+e2e-up:
+	@echo "Starting Postgres and Canvas sandbox..."
+	docker compose -f docker-compose.dev.yml up -d postgres canvas-docker
+	@echo "Stopping Docker backend container; e2e uses the native backend..."
+	-docker compose -f docker-compose.dev.yml stop backend >/dev/null 2>&1
+	@echo "Freeing backend/frontend ports..."
+	@pids=$$(lsof -ti :8000 :5173 2>/dev/null); if [ -n "$$pids" ]; then kill $$pids; fi
+	@echo "Starting backend on http://localhost:8000 and frontend on http://localhost:5173"
+	@echo "Default e2e admin seed: admin@example.com / AdminPass123!"
+	@trap 'kill 0' INT TERM EXIT; \
+	(cd app/backend && \
+		DATABASE_URL=$${DATABASE_URL:-postgresql+asyncpg://appuser:localdev@localhost:5433/appdb} \
+		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
+		DEBUG=true \
+		BACKEND_CORS_ORIGINS=$${BACKEND_CORS_ORIGINS:-http://localhost:5173} \
+		CANVAS_API_URL=$${CANVAS_API_URL:-http://localhost:3000} \
+		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
+		ADMIN_EMAIL=$${ADMIN_EMAIL:-admin@example.com} \
+		ADMIN_PASSWORD=$${ADMIN_PASSWORD:-AdminPass123!} \
+		ADMIN_NAME=$${ADMIN_NAME:-Administrator} \
+		.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload) & \
+	(cd app/frontend && npm run dev -- --host 0.0.0.0) & \
+	wait
 
 # ── Run vLLM ─────────────────────────────────
 # Starts vLLM's OpenAI-compatible server on port 8001 (8000 is

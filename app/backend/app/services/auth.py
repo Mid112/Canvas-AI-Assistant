@@ -49,6 +49,9 @@ async def login_user(db: AsyncSession, email: str, password: str) -> TokenRespon
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
 
+    if user.role == "admin":
+        return await _issue_admin_token(db, user)
+
     return TokenResponse(access_token=create_access_token(user.id, role=user.role))
 
 
@@ -75,6 +78,10 @@ async def admin_login_user(
             detail="Account is disabled"
         )
 
+    return await _issue_admin_token(db, user)
+
+
+async def _issue_admin_token(db: AsyncSession, user: User) -> TokenResponse:
     token = create_access_token(user.id, role="admin")
 
     expires_at = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
