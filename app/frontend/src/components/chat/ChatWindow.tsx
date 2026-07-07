@@ -24,19 +24,32 @@ function createMessageId(): string {
 
 interface ChatWindowProps {
   initialPrompt?: string | null;
+  initialDraft?: string | null;
+  initialConversationId?: number;
+  initialPendingMessageId?: number;
   onInitialPromptConsumed?: () => void;
+  onModifyContextConsumed?: () => void;
   onLoadingChange?: (isLoading: boolean) => void;
 }
 
 export function ChatWindow({
   initialPrompt = null,
+  initialDraft = null,
+  initialConversationId,
+  initialPendingMessageId,
   onInitialPromptConsumed,
+  onModifyContextConsumed,
   onLoadingChange,
 }: ChatWindowProps) {
   const { accessToken } = useAuth();
   const { activeCourse } = useActiveCourse();
   const [messages, setMessages] = useState<ChatMessage[]>(seedChatMessages);
-  const [conversationId, setConversationId] = useState<number | undefined>();
+  const [conversationId, setConversationId] = useState<number | undefined>(
+    initialConversationId,
+  );
+  const [activePendingMessageId, setActivePendingMessageId] = useState<
+    number | undefined
+  >(initialPendingMessageId);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
@@ -92,6 +105,10 @@ export function ChatWindow({
       };
 
       setMessages((current) => [...current, assistantMessage]);
+
+      if (response.pendingMessageId) {
+        setActivePendingMessageId(response.pendingMessageId);
+      }
     },
     [],
   );
@@ -112,11 +129,27 @@ export function ChatWindow({
       setError(null);
       setRetryMessage(userText);
 
+      const pendingMessageIdToSend = activePendingMessageId;
+
       try {
         const response = await sendAssistantMessage(accessToken, userText, {
           context: assistantContext,
           conversationId,
+          pendingMessageId: pendingMessageIdToSend,
         });
+
+        if (pendingMessageIdToSend !== undefined) {
+          setMessages((current) =>
+            current.map((entry) =>
+              entry.pendingMessageId === pendingMessageIdToSend &&
+              entry.pendingActionStatus === "pending"
+                ? { ...entry, pendingActionStatus: "superseded" }
+                : entry,
+            ),
+          );
+          setActivePendingMessageId(undefined);
+          onModifyContextConsumed?.();
+        }
 
         setConversationId(response.conversationId);
         appendAssistantMessage(response);
@@ -132,7 +165,14 @@ export function ChatWindow({
         setIsLoading(false);
       }
     },
-    [accessToken, appendAssistantMessage, assistantContext, conversationId],
+    [
+      accessToken,
+      activePendingMessageId,
+      appendAssistantMessage,
+      assistantContext,
+      conversationId,
+      onModifyContextConsumed,
+    ],
   );
 
   const resolvePendingAction = useCallback(
@@ -168,6 +208,7 @@ export function ChatWindow({
               );
 
         setConversationId(response.conversationId);
+        setActivePendingMessageId(undefined);
         setMessages((current) =>
           current.map((entry) =>
             entry.id === message.id
@@ -274,7 +315,10 @@ export function ChatWindow({
             className="shrink-0 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3"
           >
             <div className="flex items-start gap-2 text-sm text-destructive">
-              <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <AlertCircle
+                className="mt-0.5 size-4 shrink-0"
+                aria-hidden="true"
+              />
               <span>{error}</span>
             </div>
             <Button
@@ -290,9 +334,11 @@ export function ChatWindow({
         ) : null}
 
         <ChatInput
+          key={initialDraft ?? ""}
           onSend={handleSend}
           isLoading={isLoading}
           inputError={inputError}
+          initialValue={initialDraft ?? ""}
         />
       </CardContent>
     </Card>

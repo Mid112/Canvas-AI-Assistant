@@ -2,9 +2,10 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { useInstitution } from "@/contexts/useInstitution";
 import { InstructorCoursesPage } from "@/pages/Instructor/InstructorCoursesPage";
 import { fetchCourseAssignments } from "@/services/assignments";
-import { fetchCourses } from "@/services/canvas";
+import { fetchActiveCourse, fetchCourses } from "@/services/canvas";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 vi.mock("@/services/canvas", () => ({
@@ -17,6 +18,8 @@ vi.mock("@/services/canvas", () => ({
     }
   },
   fetchCourses: vi.fn(),
+  fetchActiveCourse: vi.fn(),
+  setActiveCourse: vi.fn(),
 }));
 
 vi.mock("@/services/assignments", () => ({
@@ -28,6 +31,7 @@ vi.mock("@/services/assignments", () => ({
 
 const mockUseAuth = vi.fn();
 const mockedFetchCourses = vi.mocked(fetchCourses);
+const mockedFetchActiveCourse = vi.mocked(fetchActiveCourse);
 const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
 
 vi.mock("@/contexts/AuthContext", async () => {
@@ -101,11 +105,26 @@ const canvasCourses = [
   },
 ];
 
+function InstitutionSwitchHarness() {
+  const { setSelectedInstitution } = useInstitution();
+
+  return (
+    <>
+      <button type="button" onClick={() => setSelectedInstitution("ubco")}>
+        Switch to UBCO
+      </button>
+      <InstructorCoursesPage />
+    </>
+  );
+}
+
 beforeEach(() => {
+  localStorage.clear();
   vi.clearAllMocks();
   vi.unstubAllEnvs();
   mockUseAuth.mockReturnValue(authWithCanvas);
   mockedFetchCourses.mockResolvedValue(canvasCourses);
+  mockedFetchActiveCourse.mockResolvedValue(null);
   mockedFetchCourseAssignments.mockResolvedValue([
     { id: 1, name: "Assignment 1", course_id: 101 },
   ]);
@@ -114,6 +133,22 @@ beforeEach(() => {
 describe("InstructorCoursesPage", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
+  });
+
+  it("shows only the connect gate when Canvas is not connected", () => {
+    mockUseAuth.mockReturnValue(authWithoutCanvas);
+
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    expect(
+      screen.getByRole("heading", { name: "Course Management" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Connect Canvas to continue")).toBeInTheDocument();
+    expect(screen.queryByText("Course Analytics Overview")).not.toBeInTheDocument();
+    expect(screen.queryByText("Your Courses (6)")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Courses coming soon"),
+    ).not.toBeInTheDocument();
   });
 
   it("loads courses from local Canvas Docker without VITE_CANVAS_UBC_URL", async () => {
@@ -154,19 +189,16 @@ describe("InstructorCoursesPage", () => {
     expect(screen.queryByRole("link", { name: "New Course" })).not.toBeInTheDocument();
   });
 
-  it("requires Canvas before showing courses", () => {
+  it("hides New Course on connect state when no saved connection exists", () => {
     vi.stubEnv("VITE_CANVAS_UBC_URL", CANVAS_URL);
     mockUseAuth.mockReturnValue(authWithoutCanvas);
 
     renderWithInstitution(<InstructorCoursesPage />);
 
     expect(screen.getByText("Connect Canvas to continue")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Search courses")).not.toBeInTheDocument();
     expect(screen.queryByText("Course Analytics Overview")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "New Course" })).toHaveAttribute(
-      "href",
-      `${CANVAS_URL}/courses`,
-    );
+    expect(screen.queryByLabelText("Search courses")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "New Course" })).not.toBeInTheDocument();
 
     vi.unstubAllEnvs();
   });
@@ -200,7 +232,7 @@ describe("InstructorCoursesPage", () => {
     expect(
       screen.getByText("CS 101: Introduction to Programming"),
     ).toBeInTheDocument();
-    expect(screen.queryByText("Course Analytics Overview")).not.toBeInTheDocument();
+    expect(screen.getByText("Course Analytics Overview")).toBeInTheDocument();
   });
 
   it("shows a Canvas loading state while courses load", () => {
@@ -301,5 +333,28 @@ describe("InstructorCoursesPage", () => {
     expect(
       screen.queryByText("CS 101: Introduction to Programming"),
     ).not.toBeInTheDocument();
+  });
+
+  it("shows Canvas-derived overview metrics from synced courses", async () => {
+    renderWithInstitution(<InstructorCoursesPage />);
+    await screen.findByText("Your Courses (3)");
+
+    expect(screen.getByText("Total Students")).toBeInTheDocument();
+    expect(screen.getByText("135")).toBeInTheDocument();
+  });
+
+  it("persists the selected active course locally", async () => {
+    const user = userEvent.setup();
+
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    await screen.findByText("Your Courses (3)");
+    await user.click(screen.getAllByRole("button", { name: "Set Active" })[0]!);
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain(
+        "Active course: CS 101: Introduction to Programming",
+      );
+    });
   });
 });

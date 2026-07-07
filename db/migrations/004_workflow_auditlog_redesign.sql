@@ -10,11 +10,10 @@
 -- Fresh installs use db/init/01_schema.sql directly and do not need this file.
 -- Local dev databases can also be recreated with docker compose instead.
 
+DROP TABLE IF EXISTS audit_logs CASCADE;
 ALTER TABLE IF EXISTS audit_logs_session
     DROP CONSTRAINT IF EXISTS audit_logs_session_workflow_id_fkey;
-
-DROP TABLE IF EXISTS audit_logs;
-DROP TABLE IF EXISTS workflows;
+DROP TABLE IF EXISTS workflows CASCADE;
 
 CREATE TABLE workflows (
     id                       SERIAL PRIMARY KEY,
@@ -39,31 +38,13 @@ CREATE INDEX idx_workflows_conversation_id ON workflows(conversation_id);
 CREATE INDEX idx_workflows_course_id ON workflows(course_id);
 CREATE INDEX idx_workflows_status ON workflows(status);
 
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_name = 'audit_logs_session'
-          AND column_name = 'workflow_id'
-    ) AND NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'audit_logs_session_workflow_id_fkey'
-    ) THEN
-        ALTER TABLE audit_logs_session
-            ADD CONSTRAINT audit_logs_session_workflow_id_fkey
-            FOREIGN KEY (workflow_id) REFERENCES workflows(id) ON DELETE SET NULL;
-    END IF;
-END $$;
-
 CREATE TABLE audit_logs (
     id                SERIAL PRIMARY KEY,
     user_id           INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     workflow_id       INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
     course_id         INTEGER REFERENCES courses(id) ON DELETE SET NULL,
     action            VARCHAR NOT NULL,
-    resource_type     VARCHAR NOT NULL CHECK (resource_type IN ('assignment', 'announcement')),
+    resource_type     VARCHAR NOT NULL CHECK (resource_type IN ('assignment', 'announcement', 'conversation')),
     resource_id       VARCHAR,
     operation         VARCHAR NOT NULL CHECK (operation IN ('create', 'update')),
     status            VARCHAR NOT NULL DEFAULT 'success' CHECK (status IN ('success', 'failed')),

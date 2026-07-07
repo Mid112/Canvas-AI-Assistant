@@ -121,7 +121,7 @@ describe("getCanvasConnectionUrlForInstitution", () => {
     ).toBe("http://localhost:3000");
   });
 
-  it("returns undefined when multiple connections exist but none match the institution", () => {
+  it("falls back to the first saved connection when multiple exist but none match", () => {
     expect(
       getCanvasConnectionUrlForInstitution(
         {
@@ -141,6 +141,6 @@ describe("getCanvasConnectionUrlForInstitution", () => {
         },
         "ubc",
       ),
-    ).toBeUndefined();
+    ).toBe("http://localhost:3000");
   });
 });

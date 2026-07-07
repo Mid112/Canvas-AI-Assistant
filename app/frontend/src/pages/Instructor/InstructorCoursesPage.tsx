@@ -4,11 +4,13 @@ import { useMemo, useState } from "react";
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActiveCourse } from "@/contexts/useActiveCourse";
 import {
   filterInstructorCourses,
   sortInstructorCourses,
 } from "@/pages/Instructor/InstructorCourses/courseUtils";
 import { InstructorCoursesHeader } from "@/pages/Instructor/InstructorCourses/InstructorCoursesHeader";
+import { InstructorCoursesOverview } from "@/pages/Instructor/InstructorCourses/InstructorCoursesOverview";
 import { InstructorCoursesSearch } from "@/pages/Instructor/InstructorCourses/InstructorCoursesSearch";
 import {
   InstructorCoursesEmptyState,
@@ -19,8 +21,19 @@ import type { CourseViewMode } from "@/types/course";
 
 export function InstructorCoursesPage() {
   const { user } = useAuth();
-  const { courses, error, isLoaded, isLoading, needsCanvasConnection, reloadCourses } =
-    useCanvasInstructorCourses();
+  const {
+    activeCourse,
+    isSaving,
+    selectActiveCourse,
+  } = useActiveCourse();
+  const {
+    courses,
+    error,
+    isLoaded,
+    isLoading,
+    needsCanvasConnection,
+    reloadCourses,
+  } = useCanvasInstructorCourses();
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<CourseViewMode>("grid");
 
@@ -56,6 +69,17 @@ export function InstructorCoursesPage() {
         </p>
       ) : null}
 
+      {activeCourse ? (
+        <p className="text-sm text-muted-foreground">
+          Active course:{" "}
+          <span className="font-medium text-foreground">
+            {activeCourse.displayName}
+          </span>
+        </p>
+      ) : null}
+
+      <InstructorCoursesOverview courses={courses} />
+
       {isLoading ? (
         <Card className="shadow-sm ring-1 ring-border/60">
           <CardContent className="flex items-center gap-3 p-6 text-sm text-muted-foreground">
@@ -78,6 +102,9 @@ export function InstructorCoursesPage() {
           courses={filteredCourses}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
+          activeCourseId={activeCourse?.localId ?? null}
+          onSetActiveCourse={(courseId) => void selectActiveCourse(courseId)}
+          isSettingActiveCourse={isSaving}
         />
       )}
     </div>

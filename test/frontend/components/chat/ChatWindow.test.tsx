@@ -45,26 +45,14 @@ describe("ChatWindow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseAuth.mockReturnValue({
-      accessToken: "access-token",
-      user: { name: "Dr. Jane Doe", role: "instructor" },
+      accessToken: "test-token",
+      user: null,
       isAuthenticated: true,
       isLoading: false,
       login: vi.fn(),
       register: vi.fn(),
       logout: vi.fn(),
       refreshUser: vi.fn(),
-    });
-    mockedSendAssistantMessage.mockResolvedValue({
-      content:
-        "I found students who have not submitted the assignment yet. I can help you send a reminder if you'd like.",
-      explanation:
-        "I analyzed submission data and identified students who have not submitted Assignment 3.",
-      interpretedAction: {
-        action: "Send Reminder",
-        course: "COSC 499",
-        affectedStudents: "12 students",
-      },
-      conversationId: 1,
     });
   });
 
@@ -200,7 +188,7 @@ describe("ChatWindow", () => {
     });
 
     expect(mockedConfirmAssistantAction).toHaveBeenCalledWith(
-      "access-token",
+      "test-token",
       7,
       42,
     );
@@ -221,7 +209,7 @@ describe("ChatWindow", () => {
       },
     });
     mockedCancelAssistantAction.mockResolvedValueOnce({
-      content: "Cancelled. No changes were made.",
+      content: "Cancelled — no changes were made.",
       conversationId: 7,
     });
 
@@ -236,14 +224,74 @@ describe("ChatWindow", () => {
     await user.click(await screen.findByRole("button", { name: "Cancel" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Cancelled. No changes were made.")).toBeInTheDocument();
+      expect(
+        screen.getByText("Cancelled — no changes were made."),
+      ).toBeInTheDocument();
     });
 
     expect(mockedCancelAssistantAction).toHaveBeenCalledWith(
-      "access-token",
+      "test-token",
       7,
       42,
     );
     expect(screen.getByText("This action was cancelled.")).toBeInTheDocument();
+  });
+
+  it("supersedes the previous pending card when the user sends a modification", async () => {
+    const user = userEvent.setup();
+
+    mockedSendAssistantMessage
+      .mockResolvedValueOnce({
+        content: "I can create the midterm exam after you confirm.",
+        conversationId: 7,
+        pendingMessageId: 42,
+        interpretedAction: {
+          action: "Create Assignment",
+          course: "CPSC 310",
+          affectedStudents: "Entire class",
+        },
+      })
+      .mockResolvedValueOnce({
+        content: "Updated preview for the midterm exam.",
+        conversationId: 7,
+        pendingMessageId: 43,
+        interpretedAction: {
+          action: "Create Assignment",
+          course: "CPSC 310",
+          affectedStudents: "Entire class",
+        },
+      });
+
+    renderWithInstitution(<ChatWindow />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "Create a midterm exam",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await screen.findByRole("button", { name: "Confirm" });
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "Make it open book",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("This proposal was replaced by a newer request."),
+      ).toBeInTheDocument();
+    });
+
+    expect(mockedSendAssistantMessage).toHaveBeenLastCalledWith(
+      "test-token",
+      "Make it open book",
+      expect.objectContaining({
+        pendingMessageId: 42,
+      }),
+    );
+    expect(screen.getByText("Updated preview for the midterm exam.")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Confirm" })).toHaveLength(1);
   });
 });

@@ -1,5 +1,5 @@
 import {
-  AlertCircle,
+  BookOpen,
   ClipboardList,
   LineChart,
   Users,
@@ -7,16 +7,11 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  formatAnalyticsTrend,
-  getTrendColorClass,
-  getTrendDirection,
-} from "@/lib/analytics-trends";
 import { cn } from "@/lib/utils";
-import type { CourseAnalyticsOverview } from "@/types/course";
+import type { InstructorCourse } from "@/types/course";
 
 interface InstructorCoursesOverviewProps {
-  analytics: CourseAnalyticsOverview;
+  courses: InstructorCourse[];
 }
 
 function OverviewCard({
@@ -51,52 +46,53 @@ function OverviewCard({
 }
 
 export function InstructorCoursesOverview({
-  analytics,
+  courses,
 }: InstructorCoursesOverviewProps) {
-  const activePercent = analytics.totalStudents
-    ? Math.round((analytics.activeStudents / analytics.totalStudents) * 100)
+  const totalStudents = courses.reduce(
+    (sum, course) => sum + course.studentCount,
+    0,
+  );
+  const totalAssignments = courses.reduce(
+    (sum, course) => sum + course.assignmentCount,
+    0,
+  );
+  const averageStudents = courses.length
+    ? Math.round(totalStudents / courses.length)
     : 0;
 
   return (
     <section aria-labelledby="course-analytics-heading" className="space-y-4">
-      {/* Overview cards only — full analytics live on the per-course analytics route. */}
       <h2 id="course-analytics-heading" className="text-lg font-semibold">
         Course Analytics Overview
       </h2>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <OverviewCard
-          title="Average Performance"
-          value={`${analytics.averagePerformance}%`}
-          detail={formatAnalyticsTrend(analytics.averagePerformanceTrend)}
-          icon={LineChart}
-          detailClassName={getTrendColorClass(
-            getTrendDirection(analytics.averagePerformanceTrend),
-          )}
+          title="Total Courses"
+          value={String(courses.length)}
+          detail="Synced from Canvas"
+          icon={BookOpen}
+          detailClassName="text-muted-foreground"
         />
         <OverviewCard
-          title="Active Students"
-          value={`${analytics.activeStudents}/${analytics.totalStudents}`}
-          detail={`${activePercent}%`}
+          title="Total Students"
+          value={String(totalStudents)}
+          detail="Across all courses"
           icon={Users}
           detailClassName="text-muted-foreground"
         />
         <OverviewCard
-          title="Completed Assignments"
-          value={`${analytics.completedAssignments}%`}
-          detail={formatAnalyticsTrend(analytics.completedAssignmentsTrend)}
+          title="Total Assignments"
+          value={String(totalAssignments)}
+          detail="Across all courses"
           icon={ClipboardList}
-          detailClassName={getTrendColorClass(
-            getTrendDirection(analytics.completedAssignmentsTrend),
-          )}
+          detailClassName="text-muted-foreground"
         />
         <OverviewCard
-          title="At-Risk Students"
-          value={String(analytics.atRiskStudents)}
-          detail={formatAnalyticsTrend(analytics.atRiskStudentsTrend)}
-          icon={AlertCircle}
-          detailClassName={getTrendColorClass(
-            getTrendDirection(analytics.atRiskStudentsTrend, true),
-          )}
+          title="Avg. Students / Course"
+          value={String(averageStudents)}
+          detail="From Canvas enrollment counts"
+          icon={LineChart}
+          detailClassName="text-muted-foreground"
         />
       </div>
     </section>

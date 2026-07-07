@@ -15,6 +15,7 @@ from app.schemas.canvas import (
     CourseResponse,
     SubmissionResponse,
 )
+from app.schemas.course_overview import CourseOverviewResponse
 from app.schemas.dashboard import InstructorDashboardResponse
 from app.schemas.preview import ActionPreviewResponse, AssignmentDraftRequest, AssignmentDraftResponse
 from app.schemas.student import StudentResponse
@@ -30,6 +31,7 @@ from app.services.canvas import (
     set_active_course,
     update_course_assignment,
 )
+from app.services.course_overview import get_course_overview
 from app.services.dashboard import get_instructor_dashboard
 from app.services.preview import build_action_preview
 from app.services.student import get_students
@@ -43,6 +45,16 @@ async def instructor_dashboard(
     db: AsyncSession = Depends(get_db),
 ):
     return await get_instructor_dashboard(current_user, db)
+
+
+@router.get("/courses/{course_id}/overview", response_model=CourseOverviewResponse)
+async def course_overview(
+    course_id: int,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_course_overview(course_id, current_user, canvas_url, db)
 
 
 @router.get("/courses", response_model=list[CourseResponse])
@@ -205,6 +217,7 @@ async def list_students(
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
     db: AsyncSession = Depends(get_db),
 ):
+    """List enrolled students for a course. ``course_id`` is the local DB course id."""
     return await get_students(course_id, current_user, canvas_url, db)
 
 

@@ -32,7 +32,11 @@ async def create_message_draft(db: AsyncSession, user: User, body: MessageDraftC
     content = body.body or ""
 
     if body.prompt and not body.body:
-        subject, content = await _generate_draft_content(body.prompt, body.template_name)
+        try:
+            subject, content = await _generate_draft_content(body.prompt, body.template_name)
+        except Exception:
+            subject = body.subject or f"{body.template_name or 'Course'} Announcement"
+            content = body.prompt
 
     draft = MessageDraft(
         user_id=user.id,

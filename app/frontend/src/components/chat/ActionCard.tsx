@@ -1,7 +1,8 @@
 import { ArrowRight, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
 
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { paths } from "@/routes/paths";
 import type { InterpretedAction } from "@/types/chat";
 
@@ -36,24 +37,22 @@ export function ActionCard({ action }: ActionCardProps) {
       {hasLinks ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {action.primaryLink ? (
-            <Button
-              type="button"
-              size="sm"
-              render={<Link to={action.primaryLink.href} state={{ returnTo: paths.instructor.assistant }} />}
+            <Link
+              to={action.primaryLink.href}
+              state={{ returnTo: paths.instructor.assistant }}
+              className={cn(buttonVariants({ size: "sm" }))}
             >
               {action.primaryLink.label}
               <ArrowRight className="size-3.5" aria-hidden="true" />
-            </Button>
+            </Link>
           ) : null}
           {action.secondaryLink ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              render={<Link to={action.secondaryLink.href} />}
+            <Link
+              to={action.secondaryLink.href}
+              className={cn(buttonVariants({ size: "sm", variant: "outline" }))}
             >
               {action.secondaryLink.label}
-            </Button>
+            </Link>
           ) : null}
         </div>
       ) : null}

@@ -13,7 +13,12 @@ import { NotFoundPage } from "@/pages/Error/NotFoundPage";
 import { ReviewPermissionsPage } from "@/pages/Auth/ReviewPermissionsPage";
 import { InstructorDashboardPage } from "@/pages/Instructor/InstructorDashboardPage";
 import { InstructorCoursesPage } from "@/pages/Instructor/InstructorCoursesPage";
+import { InstructorCourseLayout } from "@/pages/Instructor/InstructorCourse/InstructorCourseLayout";
+import { InstructorCourseMessagesPage } from "@/pages/Instructor/InstructorCourse/InstructorCourseMessagesPage";
+import { InstructorCourseOverviewPage } from "@/pages/Instructor/InstructorCourse/InstructorCourseOverviewPage";
 import { InstructorCourseAssignmentsPage } from "@/pages/Instructor/InstructorCourseAssignmentsPage";
+import { InstructorCourseStudentsPage } from "@/pages/Instructor/InstructorCourseStudentsPage";
+import { InstructorCourseSubmissionsPage } from "@/pages/Instructor/InstructorCourseSubmissionsPage";
 import { InstructorAssignmentCreatePage } from "@/pages/Instructor/InstructorAssignmentCreatePage";
 import { InstructorAssignmentUpdatePage } from "@/pages/Instructor/InstructorAssignmentUpdatePage";
 import { DryRunPreviewPage } from "@/pages/Instructor/DryRunPreviewPage";
@@ -82,8 +87,34 @@ export const router = createBrowserRouter([
                     element: <InstructorCoursesPage />,
                   },
                   {
-                    path: paths.instructor.courseAssignments,
-                    element: <InstructorCourseAssignmentsPage />,
+                    path: paths.instructor.course,
+                    element: <InstructorCourseLayout />,
+                    children: [
+                      {
+                        index: true,
+                        element: <InstructorCourseOverviewPage />,
+                      },
+                      {
+                        path: "assignments",
+                        element: <InstructorCourseAssignmentsPage />,
+                      },
+                      {
+                        path: "students",
+                        element: <InstructorCourseStudentsPage />,
+                      },
+                      {
+                        path: "analytics",
+                        element: <InstructorAnalyticsPage />,
+                      },
+                      {
+                        path: "messages",
+                        element: <InstructorCourseMessagesPage />,
+                      },
+                    ],
+                  },
+                  {
+                    path: paths.instructor.courseSubmissions,
+                    element: <InstructorCourseSubmissionsPage />,
                   },
                   {
                     path: paths.instructor.assignmentUpdate,
@@ -100,10 +131,6 @@ export const router = createBrowserRouter([
                   {
                     path: paths.instructor.dryRunPreview,
                     element: <DryRunPreviewPage />, 
-                  },
-                  {
-                    path: paths.instructor.courseAnalytics,
-                    element: <InstructorAnalyticsPage />,
                   },
                   {
                     path: paths.instructor.messages,

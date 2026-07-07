@@ -29,9 +29,7 @@ export function AssistantMessage({
   onCancelPendingAction,
 }: AssistantMessageProps) {
   const showPendingControls =
-    message.pendingMessageId !== undefined &&
-    onConfirmPendingAction &&
-    onCancelPendingAction;
+    message.pendingMessageId !== undefined && message.pendingActionStatus;
 
   return (
     <div className="flex gap-3">
@@ -73,8 +71,16 @@ export function AssistantMessage({
             status={message.pendingActionStatus}
             isLoading={isResolvingPendingAction}
             error={pendingActionError}
-            onConfirm={onConfirmPendingAction}
-            onCancel={onCancelPendingAction}
+            onConfirm={
+              message.pendingActionStatus === "pending"
+                ? onConfirmPendingAction!
+                : () => {}
+            }
+            onCancel={
+              message.pendingActionStatus === "pending"
+                ? onCancelPendingAction!
+                : () => {}
+            }
           />
         ) : null}
 

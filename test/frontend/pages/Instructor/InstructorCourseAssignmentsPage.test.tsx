@@ -4,7 +4,22 @@ import { Route, Routes } from "react-router-dom";
 
 import { InstructorCourseAssignmentsPage } from "@/pages/Instructor/InstructorCourseAssignmentsPage";
 import { fetchCourseAssignments } from "@/services/assignments";
+import { fetchCourses } from "@/services/canvas";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
+
+vi.mock("@/services/canvas", () => ({
+  CanvasApiError: class CanvasApiError extends Error {
+    status: number;
+
+    constructor(message: string, status = 500) {
+      super(message);
+      this.status = status;
+    }
+  },
+  fetchCourses: vi.fn(),
+  fetchActiveCourse: vi.fn(),
+  setActiveCourse: vi.fn(),
+}));
 
 vi.mock("@/services/assignments", () => ({
   AssignmentApiError: class AssignmentApiError extends Error {
@@ -15,6 +30,7 @@ vi.mock("@/services/assignments", () => ({
 
 const mockUseAuth = vi.fn();
 const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
+const mockedFetchCourses = vi.mocked(fetchCourses);
 
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
@@ -74,6 +90,16 @@ describe("InstructorCourseAssignmentsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseAuth.mockReturnValue(authWithCanvas);
+    mockedFetchCourses.mockResolvedValue([
+      {
+        canvas_id: 99,
+        local_id: 3,
+        name: "Introduction to Programming",
+        course_code: "CS 101",
+        workflow_state: "available",
+        total_students: 45,
+      },
+    ]);
     mockedFetchCourseAssignments.mockResolvedValue([
       {
         id: 10,

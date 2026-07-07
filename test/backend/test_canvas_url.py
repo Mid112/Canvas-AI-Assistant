@@ -1,0 +1,28 @@
+from app.core.canvas_url import canvas_urls_equivalent, normalize_canvas_url, resolve_server_canvas_url
+
+
+def test_normalize_canvas_url_strips_trailing_slash():
+    assert normalize_canvas_url("http://localhost:3000/") == "http://localhost:3000"
+
+
+def test_canvas_urls_equivalent_local_aliases():
+    assert canvas_urls_equivalent("http://localhost:3000", "http://canvas_lms:3000")
+    assert canvas_urls_equivalent("http://127.0.0.1:3000", "http://localhost:3000")
+
+
+def test_canvas_urls_equivalent_different_hosts():
+    assert not canvas_urls_equivalent("https://canvas.ubc.ca", "https://canvas.sfu.ca")
+
+
+def test_resolve_server_canvas_url_maps_local_aliases(monkeypatch):
+    monkeypatch.setattr(
+        "app.config.settings.CANVAS_API_URL",
+        "http://canvas_lms:3000",
+        raising=False,
+    )
+    from app.config import settings
+
+    assert (
+        resolve_server_canvas_url("http://localhost:3000", settings.CANVAS_API_URL)
+        == "http://canvas_lms:3000"
+    )

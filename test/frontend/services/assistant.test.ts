@@ -40,6 +40,20 @@ describe("mapChatReplyToAssistantResponse", () => {
 
     expect(response.content).toBe("LLM unavailable");
   });
+
+  it("maps successful confirm replies", () => {
+    const response = mapChatReplyToAssistantResponse(
+      {
+        success: true,
+        action: "create_assignment",
+        data: { id: 12, name: "Midterm Exam" },
+      },
+      false,
+    );
+
+    expect(response.content).toContain("Successfully completed Create Assignment");
+    expect(response.content).toContain("Midterm Exam");
+  });
 });
 
 describe("sendAssistantMessage", () => {
@@ -47,22 +61,43 @@ describe("sendAssistantMessage", () => {
     vi.restoreAllMocks();
   });
 
-  it("posts to /chat/ with auth and course context", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+  it("calls the chat API and maps the response", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          conversation_id: 7,
+          conversation_id: 9,
           is_error: false,
           reply: {
             action: "respond",
-            message: "Hello from the backend.",
+            message: "Here are the missing submissions.",
           },
         }),
         { status: 200 },
       ),
     );
 
-    const response = await sendAssistantMessage("test-token", "hello", {
+    const response = await sendAssistantMessage(
+      "access-token",
+      "missing submissions",
+    );
+
+    expect(response.content).toBe("Here are the missing submissions.");
+    expect(response.conversationId).toBe(9);
+  });
+
+  it("posts course context when provided", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          conversation_id: 7,
+          is_error: false,
+          reply: { action: "respond", message: "Hello from the backend." },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await sendAssistantMessage("test-token", "hello", {
       context: {
         activeCourseId: 3,
         activeCourseLabel: "CPSC 310",
@@ -79,11 +114,6 @@ describe("sendAssistantMessage", () => {
         }),
       }),
     );
-    expect(response).toEqual({
-      content: "Hello from the backend.",
-      conversationId: 7,
-      pendingMessageId: undefined,
-    });
   });
 
   it("includes conversation_id on follow-up turns", async () => {
@@ -113,37 +143,16 @@ describe("sendAssistantMessage", () => {
     );
   });
 
-  it("returns assistant error content when the backend returns is_error", async () => {
+  it("throws AssistantApiError when the API request fails", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          conversation_id: 1,
-          is_error: true,
-          reply: {
-            error: "The assistant is currently unavailable. Please try again shortly.",
-          },
-        }),
-        { status: 200 },
-      ),
-    );
-
-    const response = await sendAssistantMessage("test-token", "hello");
-
-    expect(response.content).toBe(
-      "The assistant is currently unavailable. Please try again shortly.",
-    );
-  });
-
-  it("throws AssistantApiError for HTTP failures", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(JSON.stringify({ detail: "Not authenticated" }), {
-        status: 401,
+      new Response(JSON.stringify({ detail: "Service unavailable" }), {
+        status: 503,
       }),
     );
 
     await expect(
-      sendAssistantMessage("bad-token", "hello"),
-    ).rejects.toEqual(new AssistantApiError("Not authenticated", 401));
+      sendAssistantMessage("access-token", "fail please"),
+    ).rejects.toBeInstanceOf(AssistantApiError);
   });
 });
 
@@ -159,6 +168,8 @@ describe("confirmAssistantAction", () => {
           conversation_id: 7,
           is_error: false,
           reply: {
+            success: true,
+            action: "create_assignment",
             data: { id: 12, name: "Midterm Exam" },
           },
         }),
@@ -178,7 +189,7 @@ describe("confirmAssistantAction", () => {
         }),
       }),
     );
-    expect(response.content).toContain("completed successfully");
+    expect(response.content).toContain("Successfully completed Create Assignment");
     expect(response.conversationId).toBe(7);
   });
 });

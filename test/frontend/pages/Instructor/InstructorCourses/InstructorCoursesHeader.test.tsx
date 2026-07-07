@@ -1,6 +1,6 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { InstructorCoursesHeader } from "@/pages/Instructor/InstructorCourses/InstructorCoursesHeader";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
@@ -8,10 +8,32 @@ import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 const CANVAS_URL = "https://canvas.ubc.ca";
 
 const mockUseCanvasConnectionUrl = vi.fn(() => CANVAS_URL);
+const mockUseAuth = vi.fn();
 
 vi.mock("@/hooks/useCanvasConnectionUrl", () => ({
   useCanvasConnectionUrl: () => mockUseCanvasConnectionUrl(),
 }));
+
+vi.mock("@/contexts/AuthContext", async () => {
+  const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
+    "@/contexts/AuthContext",
+  );
+
+  return {
+    ...actual,
+    useAuth: () => mockUseAuth(),
+  };
+});
+
+beforeEach(() => {
+  mockUseAuth.mockReturnValue({
+    user: {
+      id: 1,
+      has_canvas_token: true,
+      canvas_connections: [{ id: 1, canvas_url: CANVAS_URL, created_at: "" }],
+    },
+  });
+});
 
 describe("InstructorCoursesHeader", () => {
   it("renders the course management heading and institution context", () => {
@@ -30,15 +52,20 @@ describe("InstructorCoursesHeader", () => {
     ).toHaveAttribute("href", `${CANVAS_URL}/courses`);
   });
 
-  it("falls back to the configured institution Canvas URL when not connected", () => {
+  it("hides New Course when Canvas is not connected", () => {
     vi.stubEnv("VITE_CANVAS_UBC_URL", CANVAS_URL);
     mockUseCanvasConnectionUrl.mockReturnValue(undefined);
+    mockUseAuth.mockReturnValue({
+      user: {
+        id: 1,
+        has_canvas_token: false,
+        canvas_connections: [],
+      },
+    });
 
     renderWithInstitution(<InstructorCoursesHeader />);
 
-    expect(
-      screen.getByRole("link", { name: "New Course" }),
-    ).toHaveAttribute("href", `${CANVAS_URL}/courses`);
+    expect(screen.queryByRole("link", { name: "New Course" })).not.toBeInTheDocument();
 
     vi.unstubAllEnvs();
   });

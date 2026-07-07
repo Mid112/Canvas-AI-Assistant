@@ -37,7 +37,7 @@ async def _validate_recipients_in_course(
             detail="At least one recipient is required for a targeted message.",
         )
 
-    roster = await get_students(int(course.canvas_course_id), user, canvas_url, db)
+    roster = await get_students(course.id, user, canvas_url, db)
     allowed_ids = {int(student.canvas_user_id) for student in roster}
     invalid_ids = [
         recipient_id

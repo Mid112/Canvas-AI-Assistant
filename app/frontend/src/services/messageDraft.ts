@@ -42,15 +42,20 @@ function mapDraftResponse(response: MessageDraftApiResponse): MessageDraft {
 }
 
 function buildCreatePayload(options: FetchMessageDraftOptions) {
+  const recipients =
+    options.recipients ??
+    (options.emptyRecipients
+      ? []
+      : mockMessageRecipients.map((recipient) => ({ ...recipient })));
+
   return {
+    course_id: options.courseId ?? null,
     template_id: options.templateId ?? "assignment-reminder",
     template_name: options.templateName ?? "Assignment Reminder",
     prompt:
       options.prompt ??
       "Draft a friendly reminder about an upcoming assignment deadline.",
-    recipients: options.emptyRecipients
-      ? []
-      : mockMessageRecipients.map((recipient) => ({ ...recipient })),
+    recipients,
   };
 }
 

@@ -21,9 +21,11 @@ export interface MessageDraft {
 
 export interface FetchMessageDraftOptions {
   draftId?: number;
+  courseId?: number;
   templateId?: string;
   templateName?: string;
   prompt?: string;
+  recipients?: MessageRecipient[];
   emptyRecipients?: boolean;
   simulateLoadError?: boolean;
 }

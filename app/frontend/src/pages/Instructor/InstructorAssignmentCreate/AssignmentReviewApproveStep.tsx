@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,7 +38,7 @@ export function AssignmentReviewApproveStep({
   const {
     register,
     handleSubmit,
-    watch,
+    control,
     trigger,
     formState: { errors, isValid },
   } = useForm<AssignmentReviewFormSchema>({
@@ -51,7 +51,11 @@ export function AssignmentReviewApproveStep({
     mode: "onChange",
   });
 
-  const dueDateValue = watch("dueDate");
+  const dueDateValue = useWatch({
+    control,
+    name: "dueDate",
+    defaultValue: draft.dueDate,
+  });
 
   useEffect(() => {
     void trigger();

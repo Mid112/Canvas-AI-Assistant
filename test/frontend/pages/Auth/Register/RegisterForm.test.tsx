@@ -6,7 +6,8 @@ import { RegisterForm } from "@/pages/Auth/Register/RegisterForm";
 import { renderWithRouter } from "../../../utils/renderWithRouter";
 
 async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText("Full Name"), "Dr. Jane Smith");
+  await user.type(screen.getByLabelText("First Name"), "Jane");
+  await user.type(screen.getByLabelText("Last Name"), "Smith");
   await user.type(screen.getByLabelText("Email Address"), "professor@university.edu");
   await user.type(screen.getByLabelText("Password"), "secret123");
   await user.type(screen.getByLabelText("Confirm Password"), "secret123");
@@ -21,7 +22,8 @@ describe("RegisterForm", () => {
   it("renders all form fields", () => {
     renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
 
-    expect(screen.getByLabelText("Full Name")).toBeInTheDocument();
+    expect(screen.getByLabelText("First Name")).toBeInTheDocument();
+    expect(screen.getByLabelText("Last Name")).toBeInTheDocument();
     expect(screen.getByLabelText("Email Address")).toBeInTheDocument();
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
     expect(screen.getByLabelText("Confirm Password")).toBeInTheDocument();
@@ -30,7 +32,8 @@ describe("RegisterForm", () => {
   it("renders field placeholders", () => {
     renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
 
-    expect(screen.getByPlaceholderText("Dr. Jane Smith")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Jane")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Smith")).toBeInTheDocument();
     expect(
       screen.getByPlaceholderText("professor@university.edu"),
     ).toBeInTheDocument();
@@ -73,7 +76,10 @@ describe("RegisterForm", () => {
 
     const submitButton = screen.getByRole("button", { name: "Create Account" });
 
-    await user.type(screen.getByLabelText("Full Name"), "Dr. Jane Smith");
+    await user.type(screen.getByLabelText("First Name"), "Jane");
+    expect(submitButton).toBeDisabled();
+
+    await user.type(screen.getByLabelText("Last Name"), "Smith");
     expect(submitButton).toBeDisabled();
 
     await user.type(screen.getByLabelText("Email Address"), "professor@university.edu");
@@ -139,7 +145,7 @@ describe("RegisterForm", () => {
     await user.click(screen.getByRole("button", { name: "Create Account" }));
 
     expect(onSubmit).toHaveBeenCalledWith({
-      name: "Dr. Jane Smith",
+      name: "Jane Smith",
       email: "professor@university.edu",
       password: "secret123",
     });
@@ -150,17 +156,20 @@ describe("RegisterForm", () => {
 
     renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
 
-    const nameInput = screen.getByLabelText("Full Name");
+    const firstNameInput = screen.getByLabelText("First Name");
+    const lastNameInput = screen.getByLabelText("Last Name");
     const emailInput = screen.getByLabelText("Email Address");
     const passwordInput = screen.getByLabelText("Password");
     const confirmPasswordInput = screen.getByLabelText("Confirm Password");
 
-    await user.type(nameInput, "Dr. Jane Smith");
+    await user.type(firstNameInput, "Jane");
+    await user.type(lastNameInput, "Smith");
     await user.type(emailInput, "professor@university.edu");
     await user.type(passwordInput, "secret123");
     await user.type(confirmPasswordInput, "secret123");
 
-    expect(nameInput).toHaveValue("Dr. Jane Smith");
+    expect(firstNameInput).toHaveValue("Jane");
+    expect(lastNameInput).toHaveValue("Smith");
     expect(emailInput).toHaveValue("professor@university.edu");
     expect(passwordInput).toHaveValue("secret123");
     expect(confirmPasswordInput).toHaveValue("secret123");

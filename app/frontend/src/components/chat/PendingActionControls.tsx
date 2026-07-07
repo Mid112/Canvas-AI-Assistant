@@ -21,7 +21,9 @@ export function PendingActionControls({
       <p className="text-sm text-muted-foreground">
         {status === "confirmed"
           ? "This action was confirmed."
-          : "This action was cancelled."}
+          : status === "superseded"
+            ? "This proposal was replaced by a newer request."
+            : "This action was cancelled."}
       </p>
     );
   }

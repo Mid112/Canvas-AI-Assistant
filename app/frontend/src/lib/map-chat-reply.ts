@@ -4,11 +4,7 @@ import {
   instructorDryRunPreviewPath,
   paths,
 } from "@/routes/paths";
-import type {
-  AssistantContext,
-  AssistantResponse,
-  InterpretedAction,
-} from "@/types/chat";
+import type { AssistantResponse } from "@/types/chat";
 
 export class ChatReplyMappingError extends Error {
   constructor(message: string) {
@@ -31,6 +27,8 @@ function readString(value: unknown): string | undefined {
 function buildInterpretedAction(
   proposed: Record<string, unknown> | undefined,
   previewMetadata: Record<string, unknown> | undefined,
+  conversationId?: number,
+  pendingMessageId?: number,
 ): AssistantResponse["interpretedAction"] | undefined {
   if (!proposed) {
     return undefined;
@@ -46,10 +44,16 @@ function buildInterpretedAction(
     readString(previewMetadata?.course) ??
     (courseId != null ? `Course ${courseId}` : "Active course");
 
+  const audience = previewMetadata?.audience as
+    | Record<string, unknown>
+    | undefined;
   const recipientIds = proposed.recipient_canvas_user_ids;
-  const affectedStudents = Array.isArray(recipientIds)
-    ? `${recipientIds.length} students`
-    : "Course-wide";
+  const affectedStudents =
+    audience?.scope === "entire_class"
+      ? "Entire class"
+      : Array.isArray(recipientIds)
+        ? `${recipientIds.length} students`
+        : "Course-wide";
 
   const previewId =
     readString(proposed.preview_id) ?? readString(previewMetadata?.preview_id);
@@ -60,7 +64,12 @@ function buildInterpretedAction(
     affectedStudents,
   };
 
-  if (previewId) {
+  if (conversationId !== undefined && pendingMessageId !== undefined) {
+    interpretedAction.primaryLink = {
+      label: "Review preview",
+      href: instructorChatPreviewPath(conversationId, pendingMessageId),
+    };
+  } else if (previewId) {
     interpretedAction.previewId = previewId;
     interpretedAction.primaryLink = {
       label: "Preview workflow",
@@ -85,183 +94,10 @@ function buildInterpretedAction(
   return interpretedAction;
 }
 
-function formatCourseList(courses: unknown[]): string {
-  if (courses.length === 0) {
-    return "You have no connected courses.";
-  }
-
-  return courses
-    .map((course) => {
-      if (!course || typeof course !== "object") {
-        return "- Course";
-      }
-
-      const record = course as Record<string, unknown>;
-      return `- ${String(record.name ?? record.course_code ?? record.title ?? "Course")}`;
-    })
-    .join("\n");
-}
-
-function formatAssignmentList(assignments: unknown[]): string {
-  if (assignments.length === 0) {
-    return "No assignments found for this course.";
-  }
-
-  return assignments
-    .map((assignment) => {
-      if (!assignment || typeof assignment !== "object") {
-        return "- Assignment";
-      }
-
-      const record = assignment as Record<string, unknown>;
-      return `- ${String(record.name ?? record.title ?? "Assignment")}`;
-    })
-    .join("\n");
-}
-
-function formatSuccessReply(reply: Record<string, unknown>): string {
-  const action = readString(reply.action) ?? "action";
-  const data = reply.data;
-
-  if (data && typeof data === "object") {
-    const record = data as Record<string, unknown>;
-    const label = record.name ?? record.title ?? record.id;
-    if (label !== undefined) {
-      return `Successfully completed ${formatActionLabel(action)}: ${String(label)}.`;
-    }
-  }
-
-  return `Successfully completed ${formatActionLabel(action)}.`;
-}
-
-function buildLegacyInterpretedAction(
-  reply: Record<string, unknown>,
-  context: AssistantContext,
-  conversationId?: number,
-): InterpretedAction | undefined {
-  const previewMetadata = reply.preview_metadata as
-    | Record<string, unknown>
-    | undefined;
-  const proposedAction = reply.proposed_action as
-    | Record<string, unknown>
-    | undefined;
-
-  const actionName = readString(proposedAction?.action) ?? readString(previewMetadata?.action);
-  if (!actionName) {
-    return undefined;
-  }
-
-  const audience = previewMetadata?.audience as
-    | Record<string, unknown>
-    | undefined;
-  const pendingMessageId =
-    typeof reply.pending_message_id === "number"
-      ? reply.pending_message_id
-      : undefined;
-
-  return {
-    action: formatActionLabel(actionName),
-    course:
-      readString(previewMetadata?.course) ??
-      readString(previewMetadata?.course_name) ??
-      context.activeCourseLabel ??
-      "—",
-    affectedStudents:
-      audience?.scope === "entire_class" ? "Entire class" : "—",
-    primaryLink:
-      conversationId !== undefined && pendingMessageId !== undefined
-        ? {
-            label: "Review preview",
-            href: instructorChatPreviewPath(conversationId, pendingMessageId),
-          }
-        : undefined,
-  };
-}
-
-export function mapChatReply(
-  reply: Record<string, unknown>,
-  isError: boolean,
-  context: AssistantContext = {},
-  conversationId?: number,
-): AssistantResponse {
-  if (isError) {
-    throw new ChatReplyMappingError(
-      readString(reply.error) ??
-        "The assistant is temporarily unavailable. Please try again.",
-    );
-  }
-
-  if (reply.out_of_scope || reply.action === "out_of_scope") {
-    return {
-      content:
-        readString(reply.message) ??
-        "That request is outside what I can help with in Canvas.",
-      safetyBlocked: true,
-      safetyMessage: readString(reply.detail),
-    };
-  }
-
-  if (reply.clarify || reply.action === "clarify") {
-    return {
-      content:
-        readString(reply.question) ??
-        "Could you share a bit more detail so I can help?",
-    };
-  }
-
-  if (reply.intent_preview) {
-    return {
-      content:
-        readString(reply.summary) ??
-        "I prepared an action for your review. Confirm when you are ready to execute it.",
-      interpretedAction: buildLegacyInterpretedAction(
-        reply,
-        context,
-        conversationId,
-      ),
-      pendingMessageId:
-        typeof reply.pending_message_id === "number"
-          ? reply.pending_message_id
-          : undefined,
-    };
-  }
-
-  if (reply.cancelled) {
-    return {
-      content: readString(reply.message) ?? "Cancelled. No Canvas changes were made.",
-    };
-  }
-
-  if (reply.action === "respond" && readString(reply.message)) {
-    return { content: readString(reply.message)! };
-  }
-
-  if (readString(reply.message)) {
-    return { content: readString(reply.message)! };
-  }
-
-  if (Array.isArray(reply.courses)) {
-    return { content: formatCourseList(reply.courses) };
-  }
-
-  if (Array.isArray(reply.assignments)) {
-    return { content: formatAssignmentList(reply.assignments) };
-  }
-
-  if (reply.success === true) {
-    return { content: formatSuccessReply(reply) };
-  }
-
-  if (readString(reply.summary)) {
-    return { content: readString(reply.summary)! };
-  }
-
-  return { content: JSON.stringify(reply, null, 2) };
-}
-
 export function mapChatReplyToAssistantResponse(
   reply: Record<string, unknown>,
   isError: boolean,
+  conversationId?: number,
 ): AssistantResponse {
   if (isError || reply.error) {
     return {
@@ -276,24 +112,31 @@ export function mapChatReplyToAssistantResponse(
     const previewMetadata = reply.preview_metadata as
       | Record<string, unknown>
       | undefined;
+    const pendingMessageId =
+      typeof reply.pending_message_id === "number"
+        ? reply.pending_message_id
+        : undefined;
 
     return {
       content:
         readString(reply.summary) ??
         "I prepared an action for your review. Confirm when you are ready to execute it.",
       explanation:
-        "Review the proposed action below. Canvas write actions require your approval before anything is sent.",
-      interpretedAction: buildInterpretedAction(proposed, previewMetadata),
-      pendingMessageId:
-        typeof reply.pending_message_id === "number"
-          ? reply.pending_message_id
-          : undefined,
+        "Review the proposed action below. Destructive or write actions require your approval before anything is sent to Canvas.",
+      interpretedAction: buildInterpretedAction(
+        proposed,
+        previewMetadata,
+        conversationId,
+        pendingMessageId,
+      ),
+      pendingMessageId,
     };
   }
 
   if (reply.cancelled) {
     return {
-      content: readString(reply.message) ?? "Cancelled. No Canvas changes were made.",
+      content:
+        readString(reply.message) ?? "Cancelled — no changes were made.",
     };
   }
 
@@ -319,6 +162,24 @@ export function mapChatReplyToAssistantResponse(
   if (reply.action === "respond") {
     return {
       content: readString(reply.message) ?? "Here's what I found.",
+    };
+  }
+
+  if (reply.success === true) {
+    const action = readString(reply.action) ?? "action";
+    const data = reply.data;
+    if (data && typeof data === "object") {
+      const record = data as Record<string, unknown>;
+      const label = readString(record.name) ?? readString(record.title);
+      if (label) {
+        return {
+          content: `Successfully completed ${formatActionLabel(action)}: ${label}.`,
+        };
+      }
+    }
+
+    return {
+      content: `Successfully completed ${formatActionLabel(action)}.`,
     };
   }
 
@@ -350,9 +211,24 @@ export function mapChatReplyToAssistantResponse(
   }
 
   if (Array.isArray(reply.courses)) {
-    return {
-      content: `You have ${reply.courses.length} connected courses.`,
-    };
+    if (reply.courses.length === 0) {
+      return { content: "You have no connected courses." };
+    }
+
+    const list = reply.courses
+      .map((course) => {
+        if (!course || typeof course !== "object") {
+          return "- Course";
+        }
+
+        const record = course as Record<string, unknown>;
+        const label =
+          record.name ?? record.course_code ?? record.title ?? "Course";
+        return `- ${String(label)}`;
+      })
+      .join("\n");
+
+    return { content: list };
   }
 
   if (Array.isArray(reply.assignments)) {
@@ -375,8 +251,28 @@ export function mapChatReplyToAssistantResponse(
     };
   }
 
+  if (readString(reply.message)) {
+    return { content: readString(reply.message)! };
+  }
+
   return {
     content: "I processed your request.",
     explanation: JSON.stringify(reply, null, 2),
   };
+}
+
+/** @deprecated Use mapChatReplyToAssistantResponse */
+export function mapChatReply(
+  reply: Record<string, unknown>,
+  isError: boolean,
+  conversationId?: number,
+): AssistantResponse {
+  if (isError) {
+    const errorMessage =
+      readString(reply.error) ??
+      "The assistant is temporarily unavailable. Please try again.";
+    throw new ChatReplyMappingError(errorMessage);
+  }
+
+  return mapChatReplyToAssistantResponse(reply, false, conversationId);
 }

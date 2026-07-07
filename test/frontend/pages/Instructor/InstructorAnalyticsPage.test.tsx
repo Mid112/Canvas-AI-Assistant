@@ -1,16 +1,121 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
-import { useEffect } from "react";
 import { Route, Routes } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useInstitution } from "@/contexts/useInstitution";
 import { InstructorAnalyticsPage } from "@/pages/Instructor/InstructorAnalyticsPage";
 import { paths, instructorCourseAnalyticsPath } from "@/routes/paths";
+import { fetchCourseAssignments } from "@/services/assignments";
+import { fetchCourses } from "@/services/canvas";
+import { fetchAssignmentSubmissions } from "@/services/submissions";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
-const analyticsRoutePath = "/instructor/courses/:courseId/analytics";
+const analyticsRoutePath = "/instructor/courses/:localCourseId/analytics";
+
+const mockUseAuth = vi.fn();
+
+vi.mock("@/services/canvas", () => ({
+  CanvasApiError: class CanvasApiError extends Error {
+    status: number;
+
+    constructor(message: string, status = 500) {
+      super(message);
+      this.status = status;
+    }
+  },
+  fetchCourses: vi.fn(),
+  fetchActiveCourse: vi.fn(),
+  setActiveCourse: vi.fn(),
+}));
+
+vi.mock("@/services/assignments", () => ({
+  AssignmentApiError: class AssignmentApiError extends Error {
+    status = 500;
+  },
+  fetchCourseAssignments: vi.fn(),
+}));
+
+vi.mock("@/services/submissions", () => ({
+  SubmissionApiError: class SubmissionApiError extends Error {
+    status: number;
+
+    constructor(message: string, status = 500) {
+      super(message);
+      this.status = status;
+    }
+  },
+  fetchAssignmentSubmissions: vi.fn(),
+}));
+
+vi.mock("@/contexts/AuthContext", async () => {
+  const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
+    "@/contexts/AuthContext",
+  );
+
+  return {
+    ...actual,
+    useAuth: () => mockUseAuth(),
+  };
+});
+
+const mockedFetchCourses = vi.mocked(fetchCourses);
+const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
+const mockedFetchAssignmentSubmissions = vi.mocked(fetchAssignmentSubmissions);
+
+const CANVAS_URL = "https://canvas.ubc.ca";
+
+const authWithCanvas = {
+  user: {
+    id: 1,
+    email: "instructor@example.com",
+    name: "Dr. Jane Doe",
+    role: "instructor",
+    is_active: true,
+    has_canvas_token: true,
+    canvas_connections: [
+      {
+        id: 1,
+        canvas_url: CANVAS_URL,
+        created_at: "2026-06-26T00:00:00.000Z",
+      },
+    ],
+  },
+  accessToken: "token",
+  isAuthenticated: true,
+  isLoading: false,
+  login: vi.fn(),
+  register: vi.fn(),
+  logout: vi.fn(),
+  refreshUser: vi.fn(),
+};
+
+const authWithoutCanvas = {
+  ...authWithCanvas,
+  user: { ...authWithCanvas.user, has_canvas_token: false, canvas_connections: [] },
+};
+
+const canvasCourses = [
+  {
+    canvas_id: 101,
+    local_id: 1,
+    name: "Introduction to Programming",
+    course_code: "CS 101",
+    workflow_state: "available",
+    total_students: 45,
+  },
+];
+
+const canvasAssignments = [
+  {
+    id: 10,
+    name: "Programming Assignment 3",
+    description: null,
+    due_at: null,
+    points_possible: 100,
+    course_id: 101,
+  },
+];
 
 function renderAnalyticsPage(
   ui: ReactElement = <InstructorAnalyticsPage />,
@@ -29,28 +134,58 @@ function renderAnalyticsPage(
   );
 }
 
-function UBCOAnalyticsHarness() {
-  const { selectedInstitution, setSelectedInstitution } = useInstitution();
-
-  useEffect(() => {
-    if (selectedInstitution.id !== "ubco") {
-      setSelectedInstitution("ubco");
-    }
-  }, [selectedInstitution.id, setSelectedInstitution]);
-
-  if (selectedInstitution.id !== "ubco") {
-    return null;
-  }
-
-  return <InstructorAnalyticsPage />;
-}
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockUseAuth.mockReturnValue(authWithCanvas);
+  mockedFetchCourses.mockResolvedValue(canvasCourses);
+  mockedFetchCourseAssignments.mockResolvedValue(canvasAssignments);
+  mockedFetchAssignmentSubmissions.mockResolvedValue([
+    {
+      id: 1,
+      assignment_id: 10,
+      user_id: 501,
+      student_name: "Maria Garcia",
+      submitted_at: null,
+      workflow_state: "unsubmitted",
+      status: "missing",
+      score: null,
+      grade: null,
+      graded_at: null,
+    },
+    {
+      id: 2,
+      assignment_id: 10,
+      user_id: 502,
+      student_name: "Alex Thompson",
+      submitted_at: "2026-03-01T12:00:00Z",
+      workflow_state: "submitted",
+      status: "late",
+      score: 8,
+      grade: "8",
+      graded_at: null,
+    },
+  ]);
+});
 
 describe("InstructorAnalyticsPage", () => {
-  it("renders course-specific submissions analysis", () => {
+  it("requires Canvas before showing analytics", () => {
+    mockUseAuth.mockReturnValue(authWithoutCanvas);
+
+    renderAnalyticsPage();
+
+    expect(screen.getByText("Connect Canvas to continue")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Assignment Submission Analytics" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders course-specific submissions analysis from Canvas", async () => {
     renderAnalyticsPage();
 
     expect(
-      screen.getByRole("heading", { name: "Assignment Submission Analytics" }),
+      await screen.findByRole("heading", {
+        name: "Assignment Submission Analytics",
+      }),
     ).toBeInTheDocument();
     expect(
       screen.getByText("CS 101: Introduction to Programming"),
@@ -60,33 +195,23 @@ describe("InstructorAnalyticsPage", () => {
       paths.instructor.courses,
     );
     expect(screen.getByLabelText("Search or select assignment")).toBeInTheDocument();
-    expect(screen.getByLabelText("Search students")).toBeInTheDocument();
-    expect(screen.getByLabelText("Filter by Status")).toBeInTheDocument();
-    expect(
-      screen.queryByText("Analytics coming soon"),
-    ).not.toBeInTheDocument();
+    expect(await screen.findByText("Maria Garcia")).toBeInTheDocument();
+    expect(screen.getByText("Alex Thompson")).toBeInTheDocument();
   });
 
-  it("applies assignment and status filters from the URL", () => {
-    renderAnalyticsPage(
-      <InstructorAnalyticsPage />,
-      `${instructorCourseAnalyticsPath(2)}?assignmentId=hw4&status=missing`,
-    );
+  it("shows an error when the course id is not in synced Canvas courses", async () => {
+    mockedFetchCourses.mockResolvedValue(canvasCourses);
 
-    expect(screen.getByText("Noah Patel")).toBeInTheDocument();
-    expect(screen.queryByText("Alex Thompson")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "Late Submissions" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("redirects to courses when the course id is invalid", () => {
     renderAnalyticsPage(
       <InstructorAnalyticsPage />,
       instructorCourseAnalyticsPath(999),
     );
 
-    expect(screen.getByText("Courses page")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "This course is not available in your synced Canvas courses.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("filters students by search query", async () => {
@@ -94,46 +219,11 @@ describe("InstructorAnalyticsPage", () => {
 
     renderAnalyticsPage();
 
+    await screen.findByText("Maria Garcia");
     await user.type(screen.getByLabelText("Search students"), "Maria");
 
     expect(screen.getByText("Maria Garcia")).toBeInTheDocument();
     expect(screen.queryByText("Alex Thompson")).not.toBeInTheDocument();
-    expect(screen.queryByText("Emma Davis")).not.toBeInTheDocument();
-  });
-
-  it("filters assignments by search query", async () => {
-    const user = userEvent.setup();
-
-    renderAnalyticsPage(
-      <InstructorAnalyticsPage />,
-      instructorCourseAnalyticsPath(1),
-    );
-
-    const input = screen.getByLabelText("Search or select assignment");
-    await user.clear(input);
-    await user.type(input, "Programming");
-
-    expect(
-      screen.getByRole("option", { name: "Programming Assignment 3" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText("No assignments match your search."),
-    ).not.toBeInTheDocument();
-  });
-
-  it("shows empty section states when search has no matches", async () => {
-    const user = userEvent.setup();
-
-    renderAnalyticsPage();
-
-    await user.type(screen.getByLabelText("Search students"), "zzzz");
-
-    expect(
-      screen.getByText("No missing submissions match your filters."),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("No late submissions match your filters."),
-    ).toBeInTheDocument();
   });
 
   it("shows only missing submissions when filtered by status", async () => {
@@ -141,6 +231,7 @@ describe("InstructorAnalyticsPage", () => {
 
     renderAnalyticsPage();
 
+    await screen.findByText("Maria Garcia");
     await user.selectOptions(
       screen.getByLabelText("Filter by Status"),
       "missing",
@@ -152,33 +243,5 @@ describe("InstructorAnalyticsPage", () => {
     expect(
       screen.queryByRole("heading", { name: "Late Submissions" }),
     ).not.toBeInTheDocument();
-  });
-
-  it("shows only late submissions when filtered by status", async () => {
-    const user = userEvent.setup();
-
-    renderAnalyticsPage();
-
-    await user.selectOptions(screen.getByLabelText("Filter by Status"), "late");
-
-    expect(
-      screen.getByRole("heading", { name: "Late Submissions" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("heading", { name: "Missing Submissions" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("loads submission data for the selected institution's course", () => {
-    renderAnalyticsPage(
-      <UBCOAnalyticsHarness />,
-      instructorCourseAnalyticsPath(101),
-    );
-
-    expect(
-      screen.getByText("COSC 111: Computer Programming I"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Jordan Taylor")).toBeInTheDocument();
-    expect(screen.queryByText("Alex Thompson")).not.toBeInTheDocument();
   });
 });

@@ -28,7 +28,7 @@ async function loadAssignmentCounts(
         const assignments = await fetchCourseAssignments(
           course.id,
           token,
-          canvasUrl,
+          course.canvasUrl ?? canvasUrl,
         );
         results[index] = { ...course, assignmentCount: assignments.length };
       } catch {

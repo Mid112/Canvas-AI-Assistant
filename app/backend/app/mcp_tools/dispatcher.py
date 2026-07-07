@@ -201,7 +201,7 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
         case "fetch_students":
             course = await _resolve_course(db, user, action.local_course_id)
             students = await get_students(
-                int(course.canvas_course_id), user, course.canvas_url, db
+                course.id, user, course.canvas_url, db
             )
             active_students = [
                 student for student in students if student.enrollment_state == "active"

@@ -1,60 +1,45 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { institutionCourseData } from "@/data/institutionCourseData";
 import { InstructorCoursesOverview } from "@/pages/Instructor/InstructorCourses/InstructorCoursesOverview";
-import type { CourseAnalyticsOverview } from "@/types/course";
+import type { InstructorCourse } from "@/types/course";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
+const courses: InstructorCourse[] = [
+  {
+    id: 1,
+    code: "CS 101",
+    name: "Introduction to Programming",
+    progress: 0,
+    studentCount: 45,
+    assignmentCount: 3,
+    lastActivity: "Synced from Canvas",
+  },
+  {
+    id: 2,
+    code: "CS 201",
+    name: "Data Structures",
+    progress: 0,
+    studentCount: 38,
+    assignmentCount: 2,
+    lastActivity: "Synced from Canvas",
+  },
+];
+
 describe("InstructorCoursesOverview", () => {
-  it("renders analytics overview cards", () => {
-    renderWithRouter(
-      <InstructorCoursesOverview
-        analytics={institutionCourseData[0]!.analytics}
-      />,
-    );
+  it("renders Canvas-derived overview cards", () => {
+    renderWithRouter(<InstructorCoursesOverview courses={courses} />);
 
     expect(
       screen.getByRole("heading", { name: "Course Analytics Overview" }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Average Performance")).toBeInTheDocument();
-    expect(screen.getByText("78%")).toBeInTheDocument();
-    expect(screen.getByText("Active Students")).toBeInTheDocument();
-    expect(screen.getByText("142/156")).toBeInTheDocument();
-    expect(screen.getByText("Completed Assignments")).toBeInTheDocument();
-    expect(screen.getByText("At-Risk Students")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("link", { name: "View Full Report" }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("colors trend details based on metric direction", () => {
-    const analytics: CourseAnalyticsOverview = {
-      averagePerformance: 70,
-      averagePerformanceTrend: -4,
-      activeStudents: 50,
-      totalStudents: 100,
-      completedAssignments: 80,
-      completedAssignmentsTrend: 2,
-      atRiskStudents: 12,
-      atRiskStudentsTrend: 3,
-    };
-
-    renderWithRouter(<InstructorCoursesOverview analytics={analytics} />);
-
-    expect(screen.getByText("-4%")).toHaveClass("text-destructive");
-    expect(screen.getByText("+2%")).toHaveClass("text-emerald-600");
-    expect(screen.getByText("+3%")).toHaveClass("text-destructive");
-    expect(screen.getByText("50%")).toHaveClass("text-muted-foreground");
-  });
-
-  it("shows green for a decreasing at-risk trend", () => {
-    renderWithRouter(
-      <InstructorCoursesOverview
-        analytics={institutionCourseData[0]!.analytics}
-      />,
-    );
-
-    expect(screen.getByText("-2%")).toHaveClass("text-emerald-600");
+    expect(screen.getByText("Total Courses")).toBeInTheDocument();
+    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(screen.getByText("Total Students")).toBeInTheDocument();
+    expect(screen.getByText("83")).toBeInTheDocument();
+    expect(screen.getByText("Total Assignments")).toBeInTheDocument();
+    expect(screen.getByText("5")).toBeInTheDocument();
+    expect(screen.getByText("Avg. Students / Course")).toBeInTheDocument();
+    expect(screen.getByText("42")).toBeInTheDocument();
   });
 });

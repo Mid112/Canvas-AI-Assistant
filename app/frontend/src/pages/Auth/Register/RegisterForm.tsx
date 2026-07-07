@@ -23,7 +23,8 @@ export function RegisterForm({
   error = null,
   isSubmitting = false,
 }: RegisterFormProps) {
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -37,7 +38,8 @@ export function RegisterForm({
     confirmPassword !== "" && !passwordsMatch;
 
   const hasRequiredFields =
-    name.trim() !== "" &&
+    firstName.trim() !== "" &&
+    lastName.trim() !== "" &&
     isValidEmail(trimmedEmail) &&
     isValidPassword(password) &&
     confirmPassword !== "" &&
@@ -53,7 +55,7 @@ export function RegisterForm({
     }
 
     await onSubmit({
-      name: name.trim(),
+      name: [firstName.trim(), lastName.trim()].join(" "),
       email: trimmedEmail,
       password,
     });
@@ -61,18 +63,34 @@ export function RegisterForm({
 
   return (
     <form className="space-y-5" onSubmit={handleSubmit}>
-      <div className="space-y-2">
-        <label htmlFor="name" className={labelClassName}>
-          Full Name
-        </label>
-        <Input
-          id="name"
-          type="text"
-          placeholder="Dr. Jane Smith"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className={inputClassName}
-        />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <label htmlFor="first-name" className={labelClassName}>
+            First Name
+          </label>
+          <Input
+            id="first-name"
+            type="text"
+            placeholder="Jane"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            className={inputClassName}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label htmlFor="last-name" className={labelClassName}>
+            Last Name
+          </label>
+          <Input
+            id="last-name"
+            type="text"
+            placeholder="Smith"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            className={inputClassName}
+          />
+        </div>
       </div>
 
       <div className="space-y-2">

@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from app.core.canvas_url import canvas_urls_equivalent, normalize_canvas_url
 from app.core.security import decrypt_canvas_token
 from app.integrations.canvas import (
     create_announcement,
@@ -34,8 +35,11 @@ from app.schemas.canvas import (
 
 
 def require_canvas_token(user: User, canvas_url: str) -> str:
-    canvas_url = canvas_url.rstrip("/")
-    conn = next((c for c in user.canvas_connections if c.canvas_url == canvas_url), None)
+    canvas_url = normalize_canvas_url(canvas_url)
+    conn = next(
+        (c for c in user.canvas_connections if canvas_urls_equivalent(c.canvas_url, canvas_url)),
+        None,
+    )
     if not conn:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -56,18 +60,21 @@ async def get_owned_course(
     canvas_url: str,
     db: AsyncSession,
 ) -> Course:
+    normalized = normalize_canvas_url(canvas_url)
     course = await db.scalar(
         select(Course).where(
             Course.id == local_course_id,
             Course.instructor_id == user.id,
-            Course.canvas_url == canvas_url.rstrip("/"),
         )
     )
-    if not course:
+    if not course or not canvas_urls_equivalent(course.canvas_url, normalized):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found or does not belong to you.",
         )
+
+    if course.canvas_url != normalized:
+        course.canvas_url = normalized
 
     return course
 
@@ -99,10 +106,11 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
         if cid in course_map:
             course_map[cid].name = item["name"]
             course_map[cid].term = term_name
+            course_map[cid].canvas_url = normalize_canvas_url(canvas_url)
         else:
             course = Course(
                 canvas_course_id=cid,
-                canvas_url=canvas_url,
+                canvas_url=normalize_canvas_url(canvas_url),
                 name=item["name"],
                 term=term_name,
                 instructor_id=user.id,
@@ -128,17 +136,9 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
 
 
 async def get_assignments(local_course_id: int, user: User, canvas_url: str, db: AsyncSession) -> list[AssignmentResponse]:
-    course = await db.scalar(
-        select(Course).where(Course.id == local_course_id, Course.instructor_id == user.id)
-    )
-    if not course:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Course not found or does not belong to you.",
-        )
-
-    token = require_canvas_token(user, course.canvas_url)
-    data = await fetch_assignments(int(course.canvas_course_id), token, course.canvas_url)
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    token = require_canvas_token(user, canvas_url)
+    data = await fetch_assignments(int(course.canvas_course_id), token, canvas_url)
 
     if not data:
         return []
@@ -287,7 +287,7 @@ async def send_course_message(
         )
 
     await create_announcement(canvas_course_id, subject, body, token, canvas_url)
-    roster = await get_students(canvas_course_id, user, canvas_url, db)
+    roster = await get_students(local_course_id, user, canvas_url, db)
     return MessageSendResult(
         course_id=canvas_course_id,
         subject=subject,
@@ -348,53 +348,57 @@ async def get_submissions(
     )
     parsed = [_parse_submission(raw) for raw in data]
 
-    assignment = await db.scalar(
-        select(Assignment).where(
-            Assignment.canvas_assignment_id == str(assignment_id),
-            Assignment.course_id == course.id,
-        )
-    )
-    if not assignment:
-        assignment = Assignment(
-            canvas_assignment_id=str(assignment_id),
-            course_id=course.id,
-            title=f"Assignment {assignment_id}",
-        )
-        db.add(assignment)
-        await db.flush()
-
-    canvas_ids = [str(item.id) for item in parsed]
-    existing_rows = await db.scalars(
-        select(Submission).where(Submission.canvas_submission_id.in_(canvas_ids))
-    )
-    submission_map = {s.canvas_submission_id: s for s in existing_rows}
-
-    for item in parsed:
-        cid = str(item.id)
-        if cid in submission_map:
-            row = submission_map[cid]
-            row.status = item.status.value
-            row.score = item.score
-            row.grade = item.grade
-            row.graded_at = item.graded_at
-            row.submitted_at = item.submitted_at
-            row.student_name = item.student_name
-        else:
-            db.add(
-                Submission(
-                    canvas_submission_id=cid,
-                    assignment_id=assignment.id,
-                    student_canvas_id=str(item.user_id),
-                    student_name=item.student_name,
-                    status=item.status.value,
-                    score=item.score,
-                    grade=item.grade,
-                    graded_at=item.graded_at,
-                    submitted_at=item.submitted_at,
-                )
+    try:
+        assignment = await db.scalar(
+            select(Assignment).where(
+                Assignment.canvas_assignment_id == str(assignment_id),
+                Assignment.course_id == course.id,
             )
+        )
+        if not assignment:
+            assignment = Assignment(
+                canvas_assignment_id=str(assignment_id),
+                course_id=course.id,
+                title=f"Assignment {assignment_id}",
+            )
+            db.add(assignment)
+            await db.flush()
 
-    await db.commit()
+        canvas_ids = [str(item.id) for item in parsed]
+        existing_rows = await db.scalars(
+            select(Submission).where(Submission.canvas_submission_id.in_(canvas_ids))
+        )
+        submission_map = {s.canvas_submission_id: s for s in existing_rows}
+
+        for item in parsed:
+            cid = str(item.id)
+            if cid in submission_map:
+                row = submission_map[cid]
+                row.status = item.status.value
+                row.score = item.score
+                row.grade = item.grade
+                row.graded_at = item.graded_at
+                row.submitted_at = item.submitted_at
+                row.student_name = item.student_name
+            else:
+                db.add(
+                    Submission(
+                        canvas_submission_id=cid,
+                        assignment_id=assignment.id,
+                        student_canvas_id=str(item.user_id),
+                        student_name=item.student_name,
+                        status=item.status.value,
+                        score=item.score,
+                        grade=item.grade,
+                        graded_at=item.graded_at,
+                        submitted_at=item.submitted_at,
+                    )
+                )
+
+        await db.commit()
+    except Exception:
+        await db.rollback()
+
     return parsed
 
 
