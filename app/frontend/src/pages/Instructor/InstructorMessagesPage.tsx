@@ -126,7 +126,7 @@ export function InstructorMessagesPage() {
     );
   }
 
-  if (isLoadingCourses) {
+  if (isLoadingCourses && !activeCourse) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
         <Card className="shadow-sm ring-1 ring-border/60">

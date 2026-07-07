@@ -56,6 +56,7 @@ export function ChatWindow({
 }: ChatWindowProps) {
   const { accessToken } = useAuth();
   const { activeCourse, isLoading: isActiveCourseLoading } = useActiveCourse();
+  const isWaitingForActiveCourse = isActiveCourseLoading && !activeCourse;
   const [messages, setMessages] = useState<ChatMessage[]>(seedChatMessages);
   const [conversationId, setConversationId] = useState<number | undefined>(
     initialConversationId,
@@ -373,7 +374,7 @@ export function ChatWindow({
   const handleSend = useCallback(
     (text: string) => {
       const trimmed = text.trim();
-      if (isActiveCourseLoading) {
+      if (isWaitingForActiveCourse) {
         setInputError("Loading your active course. Please try again in a moment.");
         return;
       }
@@ -395,7 +396,7 @@ export function ChatWindow({
       setMessages((current) => [...current, userMessage]);
       void deliverAssistantResponse(trimmed);
     },
-    [deliverAssistantResponse, isActiveCourseLoading],
+    [deliverAssistantResponse, isWaitingForActiveCourse],
   );
 
   useEffect(() => {
@@ -478,7 +479,7 @@ export function ChatWindow({
           key={initialDraft ?? ""}
           onSend={handleSend}
           isLoading={isLoading}
-          isDisabled={isActiveCourseLoading}
+          isDisabled={isWaitingForActiveCourse}
           inputError={inputError}
           initialValue={initialDraft ?? ""}
         />

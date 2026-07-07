@@ -170,6 +170,35 @@ describe("ActiveCourseProvider", () => {
     ).toBe(false);
   });
 
+  it("keeps the saved active course when Canvas course sync fails", async () => {
+    const { CanvasApiError } = await import("@/services/canvas");
+    mockedFetchActiveCourse.mockResolvedValue({
+      local_id: 99,
+      canvas_course_id: "499",
+      canvas_url: CANVAS_URL,
+      name: "COSC 499",
+      term: null,
+    });
+    mockedFetchCourses.mockRejectedValue(
+      new CanvasApiError("Canvas unavailable", 503),
+    );
+
+    const { result } = renderHook(() => useActiveCourse(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.activeCourse).toEqual({
+        localId: 99,
+        displayName: "COSC 499",
+      });
+    });
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.availableCourses).toEqual([]);
+    expect(result.current.error).toBe("Canvas unavailable");
+  });
+
   it("uses the backend response when the provider course cache is stale", async () => {
     mockedFetchCourses.mockResolvedValue([]);
     mockedSetActiveCourse.mockResolvedValue({

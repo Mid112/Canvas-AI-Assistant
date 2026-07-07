@@ -23,8 +23,10 @@ import {
   fetchCourses,
   setActiveCourse as persistActiveCourse,
 } from "@/services/canvas";
-import type { CanvasCourse } from "@/types/canvas";
+import type { ActiveCourseResponse, CanvasCourse } from "@/types/canvas";
 import type { ActiveCourseSelection, InstructorCourse } from "@/types/course";
+
+const COURSE_SYNC_TIMEOUT_MS = 5000;
 
 function mapCanvasCourseToInstructorCourse(
   course: CanvasCourse,
@@ -54,12 +56,27 @@ function toActiveCourseSelection(
 }
 
 function toActiveCourseSelectionFromResponse(
-  course: Awaited<ReturnType<typeof persistActiveCourse>>,
+  course: ActiveCourseResponse,
 ): ActiveCourseSelection {
   return {
     localId: course.local_id,
     displayName: course.name,
   };
+}
+
+function fetchCoursesWithTimeout(
+  accessToken: string,
+  canvasUrl: string,
+): Promise<CanvasCourse[]> {
+  return Promise.race([
+    fetchCourses(accessToken, canvasUrl),
+    new Promise<never>((_, reject) => {
+      window.setTimeout(
+        () => reject(new CanvasApiError("Canvas course sync timed out.", 504)),
+        COURSE_SYNC_TIMEOUT_MS,
+      );
+    }),
+  ]);
 }
 
 export function ActiveCourseProvider({ children }: { children: ReactNode }) {
@@ -122,30 +139,38 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
 
     try {
       if (usesCanvasCourses && accessToken) {
+        const serverActive = await fetchActiveCourse(accessToken).catch(() => null);
+        if (isMountedRef.current && serverActive) {
+          setActiveCourseState(toActiveCourseSelectionFromResponse(serverActive));
+        }
+
         if (!canvasUrl) {
           if (isMountedRef.current) {
             setAvailableCourses([]);
-            setActiveCourseState(null);
+            if (!serverActive) {
+              setActiveCourseState(null);
+            }
           }
           return;
         }
 
-        const [coursesData, serverActive] = await Promise.all([
-          fetchCourses(accessToken, canvasUrl),
-          fetchActiveCourse(accessToken).catch(() => null),
-        ]);
+        const coursesData = await fetchCoursesWithTimeout(accessToken, canvasUrl);
 
         const courses = coursesData
           .map(mapCanvasCourseToInstructorCourse)
           .filter((course): course is InstructorCourse => course !== null);
+        const selectedFromList = applyActiveCourseFromList(
+          courses,
+          serverActive?.local_id ?? getStoredActiveCourseId(persistenceScope),
+        );
 
         if (isMountedRef.current) {
           setAvailableCourses(courses);
           setActiveCourseState(
-            applyActiveCourseFromList(
-              courses,
-              serverActive?.local_id ?? getStoredActiveCourseId(persistenceScope),
-            ),
+            selectedFromList ??
+              (serverActive
+                ? toActiveCourseSelectionFromResponse(serverActive)
+                : null),
           );
         }
         return;
@@ -173,7 +198,6 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
         setError(message);
         if (usesCanvasCourses) {
           setAvailableCourses([]);
-          setActiveCourseState(null);
         }
       }
     } finally {

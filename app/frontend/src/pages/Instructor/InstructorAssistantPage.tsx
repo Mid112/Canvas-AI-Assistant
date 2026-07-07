@@ -60,14 +60,7 @@ export function InstructorAssistantPage() {
         <CanvasConnectionRequired description="Connect Canvas to use the AI assistant with your courses and assignments." />
       ) : (
         <>
-      {isActiveCourseLoading ? (
-          <p
-            role="status"
-            className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-[#1e293b]"
-          >
-            Loading your active course...
-          </p>
-        ) : activeCourse ? (
+      {activeCourse ? (
           <p
             role="status"
             className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-[#1e293b]"
@@ -78,6 +71,13 @@ export function InstructorAssistantPage() {
               Course Management
             </Link>{" "}
             to set a different active course.
+          </p>
+        ) : isActiveCourseLoading ? (
+          <p
+            role="status"
+            className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-[#1e293b]"
+          >
+            Loading your active course...
           </p>
         ) : (
           <p
