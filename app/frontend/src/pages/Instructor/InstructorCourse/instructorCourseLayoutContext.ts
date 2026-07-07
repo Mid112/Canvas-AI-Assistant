@@ -10,5 +10,5 @@ export interface InstructorCourseLayoutContextValue {
   embedded: boolean;
 }
 
-export interface InstructorCourseOutletContext
-  extends InstructorCourseLayoutContextValue {}
+export type InstructorCourseOutletContext =
+  InstructorCourseLayoutContextValue;

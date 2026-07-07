@@ -66,7 +66,6 @@ describe("mapChatReply", () => {
           pending_message_id: 42,
         },
         false,
-        {},
         7,
       ),
     ).toEqual({

@@ -61,6 +61,7 @@ export function useCourseSubmissionAnalytics(
 
   useEffect(() => {
     if (!hasCanvasToken || !Number.isInteger(localCourseId) || localCourseId <= 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset when prerequisites are missing
       setIsLoading(false);
       return;
     }

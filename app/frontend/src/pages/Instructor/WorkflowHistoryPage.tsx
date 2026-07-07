@@ -101,6 +101,7 @@ export function WorkflowHistoryPage() {
   }, [accessToken]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async data load
     void loadEntries();
   }, [loadEntries]);
 

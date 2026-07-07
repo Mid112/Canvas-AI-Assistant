@@ -12,9 +12,6 @@ import type { FetchMessageDraftOptions } from "@/types/messageDraft";
 export function InstructorCourseMessagesPage() {
   const { accessToken } = useAuth();
   const layoutContext = useInstructorCourseOutletContext();
-  const [fetchOptions, setFetchOptions] = useState<FetchMessageDraftOptions | null>(
-    null,
-  );
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const localCourseId = layoutContext?.localCourseId ?? 0;
@@ -29,16 +26,44 @@ export function InstructorCourseMessagesPage() {
     [course],
   );
 
-  useEffect(() => {
+  const staticFetchOptions = useMemo<FetchMessageDraftOptions | null>(() => {
     if (!layoutContext || !accessToken) {
-      return;
+      return null;
     }
 
     if (!course?.canvasCourseId || !canvasUrl) {
-      setFetchOptions({
+      return {
         courseId: localCourseId,
         prompt: basePrompt,
-      });
+      };
+    }
+
+    return null;
+  }, [
+    accessToken,
+    basePrompt,
+    canvasUrl,
+    course?.canvasCourseId,
+    layoutContext,
+    localCourseId,
+  ]);
+
+  const [studentFetchOptions, setStudentFetchOptions] =
+    useState<FetchMessageDraftOptions | null>(null);
+
+  const fetchOptions =
+    staticFetchOptions ??
+    (studentFetchOptions?.courseId === localCourseId
+      ? studentFetchOptions
+      : null);
+
+  useEffect(() => {
+    if (
+      !layoutContext ||
+      !accessToken ||
+      !course?.canvasCourseId ||
+      !canvasUrl
+    ) {
       return;
     }
 
@@ -61,7 +86,7 @@ export function InstructorCourseMessagesPage() {
           return;
         }
 
-        setFetchOptions({
+        setStudentFetchOptions({
           courseId: localCourseId,
           prompt: basePrompt,
           recipients: students.map((student) => ({
@@ -80,7 +105,7 @@ export function InstructorCourseMessagesPage() {
             ? error.message
             : "Unable to load course students for messaging.",
         );
-        setFetchOptions({
+        setStudentFetchOptions({
           courseId: localCourseId,
           prompt: basePrompt,
           emptyRecipients: true,

@@ -4,7 +4,7 @@ import {
   instructorDryRunPreviewPath,
   paths,
 } from "@/routes/paths";
-import type { AssistantContext, AssistantResponse } from "@/types/chat";
+import type { AssistantResponse } from "@/types/chat";
 
 export class ChatReplyMappingError extends Error {
   constructor(message: string) {
@@ -97,7 +97,6 @@ function buildInterpretedAction(
 export function mapChatReplyToAssistantResponse(
   reply: Record<string, unknown>,
   isError: boolean,
-  context: AssistantContext = {},
   conversationId?: number,
 ): AssistantResponse {
   if (isError || reply.error) {
@@ -266,7 +265,6 @@ export function mapChatReplyToAssistantResponse(
 export function mapChatReply(
   reply: Record<string, unknown>,
   isError: boolean,
-  context: AssistantContext = {},
   conversationId?: number,
 ): AssistantResponse {
   if (isError) {
@@ -276,5 +274,5 @@ export function mapChatReply(
     throw new ChatReplyMappingError(errorMessage);
   }
 
-  return mapChatReplyToAssistantResponse(reply, false, context, conversationId);
+  return mapChatReplyToAssistantResponse(reply, false, conversationId);
 }

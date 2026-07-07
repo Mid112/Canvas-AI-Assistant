@@ -9,20 +9,17 @@ import { StudentActivityCard } from "@/pages/Instructor/InstructorCourse/Student
 
 export function InstructorCourseOverviewPage() {
   const layoutContext = useInstructorCourseOutletContext();
-
-  if (!layoutContext) {
-    return null;
-  }
-
-  const { localCourseId, course, canvasUrl } = layoutContext;
+  const localCourseId = layoutContext?.localCourseId ?? 0;
+  const course = layoutContext?.course ?? null;
+  const canvasUrl = layoutContext?.canvasUrl;
 
   const { overview, isLoading, loadError } = useCourseOverview(
     localCourseId,
     canvasUrl,
-    Boolean(course),
+    Boolean(layoutContext && course),
   );
 
-  if (!course) {
+  if (!layoutContext || !course) {
     return null;
   }
 
