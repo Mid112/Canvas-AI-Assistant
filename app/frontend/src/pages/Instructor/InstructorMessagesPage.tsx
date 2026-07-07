@@ -21,25 +21,25 @@ export function InstructorMessagesPage() {
 
   const basePrompt = useMemo(
     () =>
-      activeCourse
-        ? `Draft a message for students in ${activeCourse.displayName}.`
-        : "Draft a message for students in the active course.",
+      activeCourse ?
+        `Draft a message for students in ${activeCourse.displayName}.`
+      : "Draft a message for students in the active course.",
     [activeCourse],
   );
   const activeFetchOptions =
-    activeCourse && fetchOptions?.courseId === activeCourse.localId
-      ? fetchOptions
-      : null;
+    activeCourse && fetchOptions?.courseId === activeCourse.localId ?
+      fetchOptions
+    : null;
   const fallbackFetchOptions = useMemo<FetchMessageDraftOptions | null>(
     () =>
       // Seed the draft with an empty recipient list until the live roster load completes.
-      activeCourse
-        ? {
-            courseId: activeCourse.localId,
-            prompt: basePrompt,
-            emptyRecipients: true,
-          }
-        : null,
+      activeCourse ?
+        {
+          courseId: activeCourse.localId,
+          prompt: basePrompt,
+          emptyRecipients: true,
+        }
+      : null,
     [activeCourse, basePrompt],
   );
 
@@ -102,9 +102,9 @@ export function InstructorMessagesPage() {
         }
 
         setLoadError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load course students for messaging.",
+          error instanceof Error ?
+            error.message
+          : "Unable to load course students for messaging.",
         );
         // Fall back to an empty recipient list so the draft view still renders.
         setFetchOptions({
@@ -135,7 +135,10 @@ export function InstructorMessagesPage() {
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
         <Card className="shadow-sm ring-1 ring-border/60">
           <CardContent className="flex items-center gap-3 p-6 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />
+            <Loader2
+              className="size-4 animate-spin text-primary"
+              aria-hidden="true"
+            />
             Preparing message draft...
           </CardContent>
         </Card>
@@ -157,11 +160,14 @@ export function InstructorMessagesPage() {
 
   return (
     <>
-      {loadError ? (
+      {loadError ?
         <div className="px-4 pt-4 md:px-6 md:pt-6 lg:px-8 lg:pt-8">
           <Card className="shadow-sm ring-1 ring-border/60">
             <CardContent className="flex items-start gap-3 p-4 text-sm text-muted-foreground">
-              <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <AlertCircle
+                className="mt-0.5 size-4 shrink-0"
+                aria-hidden="true"
+              />
               <p>
                 {loadError} You can still compose a draft, but recipients may
                 need to be added manually.
@@ -169,7 +175,7 @@ export function InstructorMessagesPage() {
             </CardContent>
           </Card>
         </div>
-      ) : null}
+      : null}
       {/* The draft composer handles both the live recipient list and the fallback empty state. */}
       <StudentMessageDraftPage
         fetchOptions={activeFetchOptions ?? fallbackFetchOptions ?? undefined}
