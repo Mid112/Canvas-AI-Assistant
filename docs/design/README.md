@@ -20,7 +20,8 @@ Old:
 
 New:
 
-<img width="1872" height="1290" alt="image" src="https://github.com/user-attachments/assets/f29f57c6-209b-4624-ba58-cd5d21853872" />
+<img width="1824" height="1262" alt="image" src="https://github.com/user-attachments/assets/a7fcf0d8-3f51-429e-83df-1ffb3b0d3ee2" />
+
 
 
 
