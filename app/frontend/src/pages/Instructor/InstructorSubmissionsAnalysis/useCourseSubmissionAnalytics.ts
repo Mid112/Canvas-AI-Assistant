@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useInstitution } from "@/contexts/useInstitution";
@@ -50,9 +50,6 @@ export function useCourseSubmissionAnalytics(
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [needsCanvasConnection, setNeedsCanvasConnection] = useState(false);
-
-  const canvasAssignmentsRef = useRef(canvasAssignments);
-  canvasAssignmentsRef.current = canvasAssignments;
 
   const hasCanvasToken = Boolean(accessToken && user?.has_canvas_token);
 
@@ -182,8 +179,11 @@ export function useCourseSubmissionAnalytics(
     user,
   ]);
 
-  const reloadSelectedAssignment = useCallback(
-    async (assignmentId: string) => {
+  const loadSubmissionAnalysis = useCallback(
+    async (
+      assignmentId: string,
+      options?: { isCancelled?: () => boolean },
+    ) => {
       if (!hasCanvasToken || !accessToken || !course) {
         return;
       }
@@ -199,7 +199,7 @@ export function useCourseSubmissionAnalytics(
         return;
       }
 
-      const assignment = canvasAssignmentsRef.current.find(
+      const assignment = canvasAssignments.find(
         (entry) => String(entry.id) === assignmentId,
       );
       if (!assignment) {
@@ -216,6 +216,10 @@ export function useCourseSubmissionAnalytics(
           accessToken,
           selectedCanvasUrl,
         );
+        if (options?.isCancelled?.()) {
+          return;
+        }
+
         const analysis = mapApiSubmissionsToAnalysis(
           assignment,
           course,
@@ -227,6 +231,10 @@ export function useCourseSubmissionAnalytics(
           ),
         );
       } catch (error) {
+        if (options?.isCancelled?.()) {
+          return;
+        }
+
         if (error instanceof SubmissionApiError && error.status === 401) {
           logout();
           return;
@@ -243,11 +251,14 @@ export function useCourseSubmissionAnalytics(
             : "Unable to load submissions for this assignment.";
         setLoadError(message);
       } finally {
-        setIsLoadingSubmissions(false);
+        if (!options?.isCancelled?.()) {
+          setIsLoadingSubmissions(false);
+        }
       }
     },
     [
       accessToken,
+      canvasAssignments,
       course,
       hasCanvasToken,
       localCourseId,
@@ -255,6 +266,11 @@ export function useCourseSubmissionAnalytics(
       selectedInstitution.id,
       user,
     ],
+  );
+
+  const reloadSelectedAssignment = useCallback(
+    (assignmentId: string) => loadSubmissionAnalysis(assignmentId),
+    [loadSubmissionAnalysis],
   );
 
   const effectiveCanvasAssignmentId = useMemo(
@@ -276,12 +292,29 @@ export function useCourseSubmissionAnalytics(
       return;
     }
 
-    void reloadSelectedAssignment(effectiveCanvasAssignmentId);
+    let cancelled = false;
+
+    async function loadSelectedSubmissions() {
+      await Promise.resolve();
+      if (cancelled) {
+        return;
+      }
+
+      await loadSubmissionAnalysis(effectiveCanvasAssignmentId, {
+        isCancelled: () => cancelled,
+      });
+    }
+
+    void loadSelectedSubmissions();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     canvasAssignments.length,
-    course?.id,
+    course,
     effectiveCanvasAssignmentId,
-    reloadSelectedAssignment,
+    loadSubmissionAnalysis,
   ]);
 
   return {
