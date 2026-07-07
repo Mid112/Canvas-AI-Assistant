@@ -109,7 +109,7 @@ describe("InstructorCourseMessagesPage", () => {
 
     await waitFor(() => {
       expect(mockedFetchStudents).toHaveBeenCalledWith(
-        course.canvasCourseId,
+        course.id,
         "access-token",
         course.canvasUrl,
       );
