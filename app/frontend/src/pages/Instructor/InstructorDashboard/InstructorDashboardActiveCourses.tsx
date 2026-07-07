@@ -7,8 +7,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { formatInstructorCourseTitle } from "@/lib/format-course-title";
 import { cn } from "@/lib/utils";
-import { instructorCourseAssignmentsPath } from "@/routes/paths";
+import { instructorCoursePath } from "@/routes/paths";
 import type { InstructorCourse } from "@/types/course";
 
 import { dashboardColors, dashboardInteractive } from "./dashboardColors";
@@ -52,7 +53,7 @@ export function InstructorDashboardActiveCourses({
                   </div>
                   <div className="min-w-0 space-y-0.5">
                     <p className="truncate text-sm font-medium">
-                      {course.code}: {course.name}
+                      {formatInstructorCourseTitle(course)}
                     </p>
                     <p className="text-sm text-muted-foreground">
                       {course.studentCount} students · {course.assignmentCount}{" "}
@@ -61,7 +62,7 @@ export function InstructorDashboardActiveCourses({
                   </div>
                 </div>
                 <Link
-                  to={instructorCourseAssignmentsPath(course.id)}
+                  to={instructorCoursePath(course.id)}
                   className={cn(
                     "shrink-0 rounded-md px-2 py-1 text-sm font-medium transition-colors duration-200",
                     dashboardColors.blue.link,

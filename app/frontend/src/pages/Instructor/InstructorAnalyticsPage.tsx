@@ -6,6 +6,8 @@ import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRe
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
+import { formatInstructorCourseTitle } from "@/lib/format-course-title";
+import { useInstructorCourseOutletContext } from "@/hooks/useInstructorCourseOutletContext";
 import { paths } from "@/routes/paths";
 
 import { InstructorSubmissionsAnalysisFilters } from "./InstructorSubmissionsAnalysis/InstructorSubmissionsAnalysisFilters";
@@ -26,8 +28,11 @@ import {
 import { useCourseSubmissionAnalytics } from "./InstructorSubmissionsAnalysis/useCourseSubmissionAnalytics";
 
 export function InstructorAnalyticsPage() {
-  const { courseId: courseIdParam } = useParams();
-  const courseId = Number(courseIdParam);
+  const { localCourseId: localCourseIdParam } = useParams();
+  const layoutContext = useInstructorCourseOutletContext();
+  const embedded = layoutContext?.embedded ?? false;
+  const courseId =
+    layoutContext?.localCourseId ?? Number(localCourseIdParam);
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const assignmentIdParam = searchParams.get("assignmentId");
@@ -48,6 +53,12 @@ export function InstructorAnalyticsPage() {
     idIsValid ? courseId : 0,
     selectedAssignmentId,
     assignmentIdParam,
+    embedded && layoutContext?.course && layoutContext.canvasUrl
+      ? {
+          seedCourse: layoutContext.course,
+          seedCanvasUrl: layoutContext.canvasUrl,
+        }
+      : undefined,
   );
 
   const effectiveAssignmentId = resolveEffectiveAssignmentId(
@@ -118,10 +129,28 @@ export function InstructorAnalyticsPage() {
   }, [lateStudents, missingStudents, selectedAssignment]);
 
   if (!idIsValid) {
+    if (embedded) {
+      return (
+        <Card className="max-w-2xl shadow-sm ring-1 ring-border/60">
+          <CardContent className="p-6">
+            <p role="alert" className="text-sm text-destructive">
+              The course ID in this URL is not valid.
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+
     return <Navigate to={paths.instructor.courses} replace />;
   }
 
   if (!user?.has_canvas_token || needsCanvasConnection) {
+    if (embedded) {
+      return (
+        <CanvasConnectionRequired description="Connect Canvas to view assignment submission analytics for your courses." />
+      );
+    }
+
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
         <CanvasConnectionRequired description="Connect Canvas to view assignment submission analytics for your courses." />
@@ -130,58 +159,78 @@ export function InstructorAnalyticsPage() {
   }
 
   if (isLoading) {
-    return (
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-        <Card className="shadow-sm ring-1 ring-border/60">
-          <CardContent className="flex items-center gap-3 p-6 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />
-            Loading course analytics from Canvas...
-          </CardContent>
-        </Card>
-      </div>
+    const loadingCard = (
+      <Card className="shadow-sm ring-1 ring-border/60">
+        <CardContent className="flex items-center gap-3 p-6 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />
+          Loading course analytics from Canvas...
+        </CardContent>
+      </Card>
+    );
+
+    return embedded ? loadingCard : (
+      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">{loadingCard}</div>
     );
   }
 
   if (loadError) {
-    return (
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-        <Card className="max-w-2xl shadow-sm ring-1 ring-border/60">
-          <CardContent className="space-y-4 p-6">
-            <p role="alert" className="text-sm text-destructive">
-              {loadError}
-            </p>
+    const errorCard = (
+      <Card className="max-w-2xl shadow-sm ring-1 ring-border/60">
+        <CardContent className="space-y-4 p-6">
+          <p role="alert" className="text-sm text-destructive">
+            {loadError}
+          </p>
+          {embedded ? null : (
             <Button variant="outline" render={<Link to={paths.instructor.courses} />}>
               Back to courses
             </Button>
-          </CardContent>
-        </Card>
-      </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+
+    return embedded ? errorCard : (
+      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">{errorCard}</div>
     );
   }
 
   if (!course) {
+    if (embedded) {
+      return (
+        <Card className="max-w-2xl shadow-sm ring-1 ring-border/60">
+          <CardContent className="p-6">
+            <p role="alert" className="text-sm text-destructive">
+              {loadError ?? "Unable to load analytics for this course."}
+            </p>
+          </CardContent>
+        </Card>
+      );
+    }
+
     return <Navigate to={paths.instructor.courses} replace />;
   }
 
   if (assignments.length === 0) {
     return (
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+      <div className={embedded ? "space-y-6" : "flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8"}>
         <InstructorSubmissionsAnalysisHeader
           course={course}
           onExportReport={handleExportReport}
+          embedded={embedded}
         />
         <p className="text-muted-foreground">
-          No assignments found for {course.code}: {course.name}.
+          No assignments found for {formatInstructorCourseTitle(course)}.
         </p>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+    <div className={embedded ? "space-y-6" : "flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8"}>
       <InstructorSubmissionsAnalysisHeader
         course={course}
         onExportReport={handleExportReport}
+        embedded={embedded}
       />
 
       {showSubmissionsLoading ? (

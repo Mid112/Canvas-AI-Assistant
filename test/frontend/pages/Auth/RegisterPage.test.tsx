@@ -53,7 +53,8 @@ describe("RegisterPage", () => {
     expect(
       screen.getByRole("heading", { name: "Create Account" }),
     ).toBeInTheDocument();
-    expect(screen.getByLabelText("Full Name")).toBeInTheDocument();
+    expect(screen.getByLabelText("First Name")).toBeInTheDocument();
+    expect(screen.getByLabelText("Last Name")).toBeInTheDocument();
     expect(screen.getByLabelText("Email Address")).toBeInTheDocument();
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
     expect(screen.getByLabelText("Confirm Password")).toBeInTheDocument();
@@ -78,7 +79,8 @@ describe("RegisterPage", () => {
 
     renderWithRouter(<RegisterPage />);
 
-    await user.type(screen.getByLabelText("Full Name"), "Dr. Jane Smith");
+    await user.type(screen.getByLabelText("First Name"), "Jane");
+    await user.type(screen.getByLabelText("Last Name"), "Smith");
     await user.type(
       screen.getByLabelText("Email Address"),
       "professor@university.edu",
@@ -93,7 +95,7 @@ describe("RegisterPage", () => {
     await user.click(screen.getByRole("button", { name: "Create Account" }));
 
     expect(mockRegister).toHaveBeenCalledWith({
-      name: "Dr. Jane Smith",
+      name: "Jane Smith",
       email: "professor@university.edu",
       password: "secret123",
     });
@@ -121,7 +123,8 @@ describe("RegisterPage", () => {
 
     renderWithRouter(<RegisterPage />);
 
-    await user.type(screen.getByLabelText("Full Name"), "Dr. Jane Smith");
+    await user.type(screen.getByLabelText("First Name"), "Jane");
+    await user.type(screen.getByLabelText("Last Name"), "Smith");
     await user.type(
       screen.getByLabelText("Email Address"),
       "professor@university.edu",

@@ -1,5 +1,4 @@
 import {
-  BarChart3,
   BookOpen,
   ClipboardList,
   LayoutGrid,
@@ -10,11 +9,8 @@ import { Link } from "react-router-dom";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
-import { getCourseAnalyticsPath } from "@/pages/Instructor/InstructorSubmissionsAnalysis/submissionNavigation";
-import {
-  instructorCourseAssignmentsPath,
-  instructorCourseStudentsPath,
-} from "@/routes/paths";
+import { instructorCoursePath } from "@/routes/paths";
+import { formatInstructorCourseTitle } from "@/lib/format-course-title";
 import { cn } from "@/lib/utils";
 import type { InstructorCourse } from "@/types/course";
 
@@ -46,7 +42,7 @@ export function InstructorCoursesCard({
           <div className="min-w-0 flex-1 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <p className="font-semibold leading-snug">
-                {course.code}: {course.name}
+                {formatInstructorCourseTitle(course)}
               </p>
               {isActive ? (
                 <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
@@ -96,24 +92,10 @@ export function InstructorCoursesCard({
 
       <CardFooter className="grid grid-cols-2 gap-2 border-t bg-transparent pt-4">
         <Link
-          to={instructorCourseAssignmentsPath(course.id)}
-          className={cn(buttonVariants(), "w-full")}
+          to={instructorCoursePath(course.id)}
+          className={cn(buttonVariants(), "col-span-2 w-full")}
         >
-          Assignments
-        </Link>
-        <Link
-          to={instructorCourseStudentsPath(course.id)}
-          className={cn(buttonVariants({ variant: "outline" }), "w-full")}
-        >
-          <Users data-icon="inline-start" />
-          Students
-        </Link>
-        <Link
-          to={getCourseAnalyticsPath(course.id)}
-          className={cn(buttonVariants({ variant: "outline" }), "col-span-2 w-full")}
-        >
-          <BarChart3 data-icon="inline-start" />
-          Analytics
+          View Course
         </Link>
         <Button
           type="button"
@@ -152,7 +134,7 @@ export function InstructorCoursesList({
           >
             <div className="min-w-0 space-y-1">
               <p className="font-medium">
-                {course.code}: {course.name}
+                {formatInstructorCourseTitle(course)}
                 {activeCourseId === course.id ? (
                   <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                     Active
@@ -169,11 +151,10 @@ export function InstructorCoursesList({
                 {course.progress}%
               </span>
               <Link
-                to={getCourseAnalyticsPath(course.id)}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
+                to={instructorCoursePath(course.id)}
+                className={buttonVariants({ size: "sm" })}
               >
-                <BarChart3 data-icon="inline-start" />
-                Analytics
+                View Course
               </Link>
               <Button
                 size="sm"
@@ -183,19 +164,6 @@ export function InstructorCoursesList({
               >
                 {activeCourseId === course.id ? "Active" : "Set Active"}
               </Button>
-              <Link
-                to={instructorCourseStudentsPath(course.id)}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
-              >
-                <Users data-icon="inline-start" />
-                Students
-              </Link>
-              <Link
-                to={instructorCourseAssignmentsPath(course.id)}
-                className={buttonVariants({ size: "sm" })}
-              >
-                Assignments
-              </Link>
             </div>
           </li>
         ))}

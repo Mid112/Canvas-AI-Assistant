@@ -1,7 +1,6 @@
 import { AlertCircle, Download, Loader2, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import { AuditLogPagination } from "@/components/admin/AuditLogPagination";
 import { WorkflowHistoryTable } from "@/components/workflow/WorkflowHistoryTable";
 import { WorkflowStatusSummary } from "@/components/workflow/WorkflowStatusSummary";
@@ -18,6 +17,7 @@ import {
   downloadWorkflowHistoryCsv,
   fetchWorkflowHistory,
   getWorkflowHistoryStatusCounts,
+  WorkflowHistoryApiError,
 } from "@/services/workflowHistory";
 import {
   WORKFLOW_HISTORY_PAGE_SIZE,
@@ -29,7 +29,7 @@ import {
 } from "@/types/workflowHistory";
 
 export function WorkflowHistoryPage() {
-  const { accessToken, user } = useAuth();
+  const { accessToken } = useAuth();
   const [entries, setEntries] = useState<WorkflowHistoryEntry[]>([]);
   const [filters, setFilters] = useState<WorkflowHistoryFilters>(
     emptyWorkflowHistoryFilters,
@@ -88,8 +88,12 @@ export function WorkflowHistoryPage() {
     try {
       const data = await fetchWorkflowHistory(accessToken);
       setEntries(data);
-    } catch {
-      setLoadError("Unable to load workflow history. Please try again.");
+    } catch (error) {
+      const message =
+        error instanceof WorkflowHistoryApiError
+          ? error.message
+          : "Unable to load workflow history. Please try again.";
+      setLoadError(message);
       setEntries([]);
     } finally {
       setIsLoading(false);
@@ -123,14 +127,6 @@ export function WorkflowHistoryPage() {
     return `Showing ${range} of ${matching} matching workflows (${total} total)`;
   }
 
-  if (!user?.has_canvas_token) {
-    return (
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 md:p-6 lg:p-8">
-        <CanvasConnectionRequired description="Connect Canvas to view AI workflow history for your courses." />
-      </div>
-    );
-  }
-
   if (isLoading) {
     return (
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 md:p-6 lg:p-8">
@@ -138,29 +134,6 @@ export function WorkflowHistoryPage() {
           <CardContent className="flex items-center justify-center gap-3 py-16 text-sm text-muted-foreground">
             <Loader2 className="size-5 animate-spin" aria-hidden="true" />
             Loading workflow history…
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (loadError) {
-    return (
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 md:p-6 lg:p-8">
-        <Card className="border-destructive/30 shadow-sm ring-1 ring-destructive/20">
-          <CardContent className="flex flex-col items-center gap-4 py-10 text-sm text-destructive sm:flex-row sm:justify-center">
-            <div className="flex items-center gap-3">
-              <AlertCircle className="size-5 shrink-0" aria-hidden="true" />
-              <span role="alert">{loadError}</span>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => void loadEntries()}
-            >
-              Try again
-            </Button>
           </CardContent>
         </Card>
       </div>
@@ -187,6 +160,31 @@ export function WorkflowHistoryPage() {
           Export Log
         </Button>
       </header>
+
+      {loadError ? (
+        <Card className="border-destructive/30 shadow-sm ring-1 ring-destructive/20">
+          <CardContent className="flex flex-col items-start gap-3 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3 text-destructive">
+              <AlertCircle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+              <div className="space-y-1">
+                <p role="alert">{loadError}</p>
+                <p className="text-muted-foreground">
+                  If this persists after retrying, apply the latest database
+                  migrations or run <code>make db-reset</code> for local dev.
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void loadEntries()}
+            >
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

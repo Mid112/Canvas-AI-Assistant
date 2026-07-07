@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/AuthContext";
+import { useInstructorCourseOutletContext } from "@/hooks/useInstructorCourseOutletContext";
 import { useResolvedInstructorCourse } from "@/hooks/useResolvedInstructorCourse";
 import {
   DEFAULT_PAGE_SIZE,
@@ -31,6 +32,8 @@ import type { CourseStudent } from "@/types/student";
 
 export function InstructorCourseStudentsPage() {
   const { localCourseId } = useParams();
+  const layoutContext = useInstructorCourseOutletContext();
+  const embedded = layoutContext?.embedded ?? false;
   const { accessToken, user } = useAuth();
   const [students, setStudents] = useState<CourseStudent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -40,17 +43,28 @@ export function InstructorCourseStudentsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
-  const parsedLocalCourseId = Number(localCourseId);
+  const parsedLocalCourseId = layoutContext?.localCourseId ?? Number(localCourseId);
   const idIsValid =
     Number.isInteger(parsedLocalCourseId) && parsedLocalCourseId > 0;
 
+  const resolvedCourse = useResolvedInstructorCourse(
+    embedded ? 0 : parsedLocalCourseId,
+  );
   const {
     course,
     canvasUrl,
     isLoading: isResolvingCourse,
     loadError: courseError,
     needsCanvasConnection,
-  } = useResolvedInstructorCourse(parsedLocalCourseId);
+  } = embedded && layoutContext
+    ? {
+        course: layoutContext.course,
+        canvasUrl: layoutContext.canvasUrl,
+        isLoading: false,
+        loadError: layoutContext.loadError,
+        needsCanvasConnection: layoutContext.needsCanvasConnection,
+      }
+    : resolvedCourse;
 
   useEffect(() => {
     const canvasCourseId = course?.canvasCourseId;
@@ -164,16 +178,16 @@ export function InstructorCourseStudentsPage() {
     );
   }
 
-  if (!user?.has_canvas_token || needsCanvasConnection) {
+  if (!embedded && (!user?.has_canvas_token || needsCanvasConnection)) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-        <PageHeader localCourseId={parsedLocalCourseId} />
+        <PageHeader localCourseId={parsedLocalCourseId} embedded={embedded} />
         <CanvasConnectionRequired />
       </div>
     );
   }
 
-  if (isResolvingCourse || isLoading) {
+  if (!embedded && (isResolvingCourse || isLoading)) {
     return (
       <PageState
         title="Loading students"
@@ -183,7 +197,7 @@ export function InstructorCourseStudentsPage() {
     );
   }
 
-  if (courseError) {
+  if (!embedded && courseError) {
     return (
       <PageState
         title="Unable to load course"
@@ -198,7 +212,7 @@ export function InstructorCourseStudentsPage() {
     );
   }
 
-  if (!course) {
+  if (!embedded && !course) {
     return (
       <PageState
         title="Course not found"
@@ -208,6 +222,17 @@ export function InstructorCourseStudentsPage() {
             Back to courses
           </Button>
         }
+      />
+    );
+  }
+
+  if (embedded && isLoading) {
+    return (
+      <PageState
+        embedded
+        title="Loading students"
+        message="Fetching enrolled students..."
+        icon={<Loader2 className="size-5 animate-spin text-primary" aria-hidden="true" />}
       />
     );
   }
@@ -227,9 +252,9 @@ export function InstructorCourseStudentsPage() {
     );
   }
 
-  return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-      <PageHeader localCourseId={parsedLocalCourseId} />
+  const content = (
+    <>
+      <PageHeader localCourseId={parsedLocalCourseId} embedded={embedded} />
 
       <DataTableToolbar
         search={search}
@@ -288,11 +313,27 @@ export function InstructorCourseStudentsPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </>
+  );
+
+  return embedded ? (
+    <div className="space-y-6">{content}</div>
+  ) : (
+    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">{content}</div>
   );
 }
 
-function PageHeader({ localCourseId }: { localCourseId: number }) {
+function PageHeader({
+  localCourseId,
+  embedded = false,
+}: {
+  localCourseId: number;
+  embedded?: boolean;
+}) {
+  if (embedded) {
+    return <h2 className="text-lg font-semibold">Students</h2>;
+  }
+
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="space-y-1">
@@ -323,26 +364,34 @@ function PageState({
   message,
   icon,
   action,
+  embedded = false,
 }: {
   title: string;
   message: string;
   icon?: ReactNode;
   action?: ReactNode;
+  embedded?: boolean;
 }) {
-  return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-      <Card className="max-w-2xl shadow-sm ring-1 ring-border/60">
-        <CardContent className="flex flex-col items-start gap-4 p-6">
-          <div className="flex items-center gap-3">
-            {icon}
-            <div className="space-y-1">
-              <h1 className="text-xl font-semibold">{title}</h1>
-              <p className="text-sm text-muted-foreground">{message}</p>
-            </div>
+  const card = (
+    <Card className="max-w-2xl shadow-sm ring-1 ring-border/60">
+      <CardContent className="flex flex-col items-start gap-4 p-6">
+        <div className="flex items-center gap-3">
+          {icon}
+          <div className="space-y-1">
+            <h1 className="text-xl font-semibold">{title}</h1>
+            <p className="text-sm text-muted-foreground">{message}</p>
           </div>
-          {action}
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+        {action}
+      </CardContent>
+    </Card>
+  );
+
+  if (embedded) {
+    return card;
+  }
+
+  return (
+    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">{card}</div>
   );
 }

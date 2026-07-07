@@ -10,6 +10,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { ActiveCourseContext } from "@/contexts/active-course-context";
 import { useInstitution } from "@/contexts/useInstitution";
+import { formatInstructorCourseTitle } from "@/lib/format-course-title";
 import {
   getStoredActiveCourseId,
   setStoredActiveCourseId,
@@ -48,7 +49,7 @@ function toActiveCourseSelection(
 ): ActiveCourseSelection {
   return {
     localId: course.id,
-    displayName: `${course.code}: ${course.name}`,
+    displayName: formatInstructorCourseTitle(course),
   };
 }
 

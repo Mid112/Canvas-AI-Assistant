@@ -16,8 +16,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/AuthContext";
+import { useInstructorCourseOutletContext } from "@/hooks/useInstructorCourseOutletContext";
 import { useResolvedInstructorCourse } from "@/hooks/useResolvedInstructorCourse";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
+import { formatInstructorCourseTitle } from "@/lib/format-course-title";
 import {
   DEFAULT_PAGE_SIZE,
   filterBySearch,
@@ -38,6 +40,8 @@ import type { InstructorCourse } from "@/types/course";
 
 export function InstructorCourseAssignmentsPage() {
   const { localCourseId } = useParams();
+  const layoutContext = useInstructorCourseOutletContext();
+  const embedded = layoutContext?.embedded ?? false;
   const { accessToken, user } = useAuth();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -46,17 +50,28 @@ export function InstructorCourseAssignmentsPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
-  const parsedLocalCourseId = Number(localCourseId);
+  const parsedLocalCourseId = layoutContext?.localCourseId ?? Number(localCourseId);
   const idIsValid =
     Number.isInteger(parsedLocalCourseId) && parsedLocalCourseId > 0;
 
+  const resolvedCourse = useResolvedInstructorCourse(
+    embedded ? 0 : parsedLocalCourseId,
+  );
   const {
     course,
     canvasUrl,
     isLoading: isResolvingCourse,
     loadError: courseError,
     needsCanvasConnection,
-  } = useResolvedInstructorCourse(parsedLocalCourseId);
+  } = embedded && layoutContext
+    ? {
+        course: layoutContext.course,
+        canvasUrl: layoutContext.canvasUrl,
+        isLoading: false,
+        loadError: layoutContext.loadError,
+        needsCanvasConnection: layoutContext.needsCanvasConnection,
+      }
+    : resolvedCourse;
 
   useEffect(() => {
     if (
@@ -144,6 +159,7 @@ export function InstructorCourseAssignmentsPage() {
   if (!idIsValid) {
     return (
       <PageState
+        embedded={embedded}
         title="Invalid course link"
         message="The course ID in this URL is not valid."
         action={
@@ -155,18 +171,19 @@ export function InstructorCourseAssignmentsPage() {
     );
   }
 
-  if (!user?.has_canvas_token || needsCanvasConnection) {
+  if (!embedded && (!user?.has_canvas_token || needsCanvasConnection)) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-        <PageHeader localCourseId={parsedLocalCourseId} course={course} />
+        <PageHeader localCourseId={parsedLocalCourseId} course={course} embedded={embedded} />
         <CanvasConnectionRequired />
       </div>
     );
   }
 
-  if (isResolvingCourse || isLoading) {
+  if (!embedded && (isResolvingCourse || isLoading)) {
     return (
       <PageState
+        embedded={embedded}
         title="Loading assignments"
         message="Fetching assignments from Canvas..."
         icon={<Loader2 className="size-5 animate-spin text-primary" aria-hidden="true" />}
@@ -174,9 +191,10 @@ export function InstructorCourseAssignmentsPage() {
     );
   }
 
-  if (courseError) {
+  if (!embedded && courseError) {
     return (
       <PageState
+        embedded={embedded}
         title="Unable to load course"
         message={courseError}
         icon={<AlertCircle className="size-5 text-destructive" aria-hidden="true" />}
@@ -189,9 +207,10 @@ export function InstructorCourseAssignmentsPage() {
     );
   }
 
-  if (!course) {
+  if (!embedded && !course) {
     return (
       <PageState
+        embedded={embedded}
         title="Course not found"
         message="This course is not available in your synced Canvas courses."
         action={
@@ -203,24 +222,38 @@ export function InstructorCourseAssignmentsPage() {
     );
   }
 
+  if (embedded && isLoading) {
+    return (
+      <PageState
+        embedded
+        title="Loading assignments"
+        message="Fetching assignments from Canvas..."
+        icon={<Loader2 className="size-5 animate-spin text-primary" aria-hidden="true" />}
+      />
+    );
+  }
+
   if (loadError) {
     return (
       <PageState
+        embedded={embedded}
         title="Unable to load assignments"
         message={loadError}
         icon={<AlertCircle className="size-5 text-destructive" aria-hidden="true" />}
         action={
-          <Button variant="outline" render={<Link to={paths.instructor.courses} />}>
-            Back to courses
-          </Button>
+          embedded ? undefined : (
+            <Button variant="outline" render={<Link to={paths.instructor.courses} />}>
+              Back to courses
+            </Button>
+          )
         }
       />
     );
   }
 
-  return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-      <PageHeader localCourseId={parsedLocalCourseId} course={course} />
+  const content = (
+    <>
+      <PageHeader localCourseId={parsedLocalCourseId} course={course} embedded={embedded} />
 
       <DataTableToolbar
         search={search}
@@ -316,17 +349,29 @@ export function InstructorCourseAssignmentsPage() {
           </CardContent>
         </Card>
       )}
-    </div>
+    </>
+  );
+
+  return embedded ? (
+    <div className="space-y-6">{content}</div>
+  ) : (
+    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">{content}</div>
   );
 }
 
 function PageHeader({
   localCourseId,
   course,
+  embedded = false,
 }: {
   localCourseId: number;
   course?: InstructorCourse | null;
+  embedded?: boolean;
 }) {
+  if (embedded) {
+    return <h2 className="text-lg font-semibold">Assignments</h2>;
+  }
+
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="space-y-1">
@@ -335,7 +380,7 @@ function PageHeader({
         </h1>
         <p className="text-muted-foreground">
           {course
-            ? `${course.code}: ${course.name}`
+            ? formatInstructorCourseTitle(course)
             : `Manage assignments and view submissions for course #${localCourseId}.`}
         </p>
       </div>
@@ -360,26 +405,34 @@ function PageState({
   message,
   icon,
   action,
+  embedded = false,
 }: {
   title: string;
   message: string;
   icon?: ReactNode;
   action?: ReactNode;
+  embedded?: boolean;
 }) {
-  return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-      <Card className="max-w-2xl shadow-sm ring-1 ring-border/60">
-        <CardContent className="flex flex-col items-start gap-4 p-6">
-          <div className="flex items-center gap-3">
-            {icon}
-            <div className="space-y-1">
-              <h1 className="text-xl font-semibold">{title}</h1>
-              <p className="text-sm text-muted-foreground">{message}</p>
-            </div>
+  const card = (
+    <Card className="max-w-2xl shadow-sm ring-1 ring-border/60">
+      <CardContent className="flex flex-col items-start gap-4 p-6">
+        <div className="flex items-center gap-3">
+          {icon}
+          <div className="space-y-1">
+            <h1 className="text-xl font-semibold">{title}</h1>
+            <p className="text-sm text-muted-foreground">{message}</p>
           </div>
-          {action}
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+        {action}
+      </CardContent>
+    </Card>
+  );
+
+  if (embedded) {
+    return card;
+  }
+
+  return (
+    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">{card}</div>
   );
 }

@@ -10,8 +10,10 @@ export const paths = {
   instructor: {
     dashboard: "/instructor/dashboard",
     courses: "/instructor/courses",
+    course: "/instructor/courses/:localCourseId",
     courseAssignments: "/instructor/courses/:localCourseId/assignments",
     courseStudents: "/instructor/courses/:localCourseId/students",
+    courseMessages: "/instructor/courses/:localCourseId/messages",
     courseSubmissions:
       "/instructor/courses/:localCourseId/assignments/:assignmentId/submissions",
     assignmentUpdate:
@@ -44,6 +46,10 @@ export function instructorSettingsPath(tab?: "canvas" | "notifications" | "secur
   return `${paths.instructor.settings}?tab=${tab}`;
 }
 
+export function instructorCoursePath(localCourseId: number | string) {
+  return `/instructor/courses/${localCourseId}`;
+}
+
 export function instructorCourseAssignmentsPath(localCourseId: number | string) {
   return `/instructor/courses/${localCourseId}/assignments`;
 }
@@ -57,6 +63,10 @@ export function instructorCourseSubmissionsPath(
   assignmentId: number | string,
 ) {
   return `/instructor/courses/${localCourseId}/assignments/${assignmentId}/submissions`;
+}
+
+export function instructorCourseMessagesPath(localCourseId: number | string) {
+  return `/instructor/courses/${localCourseId}/messages`;
 }
 
 export function instructorCourseAnalyticsPath(courseId: number | string) {

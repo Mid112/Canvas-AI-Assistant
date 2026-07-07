@@ -37,11 +37,11 @@ describe("InstructorDashboardActiveCourses", () => {
 
     expect(screen.getAllByRole("link", { name: "View" })[0]).toHaveAttribute(
       "href",
-      "/instructor/courses/1/assignments",
+      "/instructor/courses/1",
     );
     expect(screen.getAllByRole("link", { name: "View" })[1]).toHaveAttribute(
       "href",
-      "/instructor/courses/2/assignments",
+      "/instructor/courses/2",
     );
   });
 });

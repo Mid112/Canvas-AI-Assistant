@@ -7,6 +7,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { useAuth } from "@/contexts/AuthContext";
 import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
+import { formatInstructorCourseTitle } from "@/lib/format-course-title";
 import {
   approveAssignmentDraft,
   generateAssignmentDraft,
@@ -73,7 +74,10 @@ export function InstructorAssignmentCreatePage() {
             .filter((course) => course.local_id !== null)
             .map((course) => ({
               id: String(course.local_id),
-              label: `${course.course_code}: ${course.name}`,
+              label: formatInstructorCourseTitle({
+                code: course.course_code,
+                name: course.name,
+              }),
             })),
         );
         setCourseLoadError(null);

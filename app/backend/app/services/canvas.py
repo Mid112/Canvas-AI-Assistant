@@ -348,53 +348,57 @@ async def get_submissions(
     )
     parsed = [_parse_submission(raw) for raw in data]
 
-    assignment = await db.scalar(
-        select(Assignment).where(
-            Assignment.canvas_assignment_id == str(assignment_id),
-            Assignment.course_id == course.id,
-        )
-    )
-    if not assignment:
-        assignment = Assignment(
-            canvas_assignment_id=str(assignment_id),
-            course_id=course.id,
-            title=f"Assignment {assignment_id}",
-        )
-        db.add(assignment)
-        await db.flush()
-
-    canvas_ids = [str(item.id) for item in parsed]
-    existing_rows = await db.scalars(
-        select(Submission).where(Submission.canvas_submission_id.in_(canvas_ids))
-    )
-    submission_map = {s.canvas_submission_id: s for s in existing_rows}
-
-    for item in parsed:
-        cid = str(item.id)
-        if cid in submission_map:
-            row = submission_map[cid]
-            row.status = item.status.value
-            row.score = item.score
-            row.grade = item.grade
-            row.graded_at = item.graded_at
-            row.submitted_at = item.submitted_at
-            row.student_name = item.student_name
-        else:
-            db.add(
-                Submission(
-                    canvas_submission_id=cid,
-                    assignment_id=assignment.id,
-                    student_canvas_id=str(item.user_id),
-                    student_name=item.student_name,
-                    status=item.status.value,
-                    score=item.score,
-                    grade=item.grade,
-                    graded_at=item.graded_at,
-                    submitted_at=item.submitted_at,
-                )
+    try:
+        assignment = await db.scalar(
+            select(Assignment).where(
+                Assignment.canvas_assignment_id == str(assignment_id),
+                Assignment.course_id == course.id,
             )
+        )
+        if not assignment:
+            assignment = Assignment(
+                canvas_assignment_id=str(assignment_id),
+                course_id=course.id,
+                title=f"Assignment {assignment_id}",
+            )
+            db.add(assignment)
+            await db.flush()
 
-    await db.commit()
+        canvas_ids = [str(item.id) for item in parsed]
+        existing_rows = await db.scalars(
+            select(Submission).where(Submission.canvas_submission_id.in_(canvas_ids))
+        )
+        submission_map = {s.canvas_submission_id: s for s in existing_rows}
+
+        for item in parsed:
+            cid = str(item.id)
+            if cid in submission_map:
+                row = submission_map[cid]
+                row.status = item.status.value
+                row.score = item.score
+                row.grade = item.grade
+                row.graded_at = item.graded_at
+                row.submitted_at = item.submitted_at
+                row.student_name = item.student_name
+            else:
+                db.add(
+                    Submission(
+                        canvas_submission_id=cid,
+                        assignment_id=assignment.id,
+                        student_canvas_id=str(item.user_id),
+                        student_name=item.student_name,
+                        status=item.status.value,
+                        score=item.score,
+                        grade=item.grade,
+                        graded_at=item.graded_at,
+                        submitted_at=item.submitted_at,
+                    )
+                )
+
+        await db.commit()
+    except Exception:
+        await db.rollback()
+
     return parsed
 
 

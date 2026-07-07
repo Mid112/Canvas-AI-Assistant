@@ -10,7 +10,7 @@ import {
   InstructorCoursesList,
   InstructorCoursesSection,
 } from "@/pages/Instructor/InstructorCourses/InstructorCoursesSection";
-import { instructorCourseAnalyticsPath } from "@/routes/paths";
+import { instructorCoursePath } from "@/routes/paths";
 
 const courses = institutionCourseData[0]!.courses.slice(0, 2);
 
@@ -38,17 +38,11 @@ describe("InstructorCoursesCard", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("82%")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Assignments" }),
-    ).toHaveAttribute("href", "/instructor/courses/1/assignments");
-    expect(
-      screen.getByRole("link", { name: "Students" }),
-    ).toHaveAttribute("href", "/instructor/courses/1/students");
+      screen.getByRole("link", { name: "View Course" }),
+    ).toHaveAttribute("href", instructorCoursePath(1));
     expect(
       screen.getByRole("button", { name: "Set Active" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Analytics" }),
-    ).toHaveAttribute("href", instructorCourseAnalyticsPath(1));
   });
 });
 
@@ -86,7 +80,7 @@ describe("InstructorCoursesSection", () => {
     );
 
     expect(screen.getByText("Your Courses (2)")).toBeInTheDocument();
-    expect(screen.getAllByRole("link", { name: "Assignments" })).toHaveLength(
+    expect(screen.getAllByRole("link", { name: "View Course" })).toHaveLength(
       2,
     );
   });

@@ -11,7 +11,7 @@ import { fetchCourses } from "@/services/canvas";
 import { fetchAssignmentSubmissions } from "@/services/submissions";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
-const analyticsRoutePath = "/instructor/courses/:courseId/analytics";
+const analyticsRoutePath = "/instructor/courses/:localCourseId/analytics";
 
 const mockUseAuth = vi.fn();
 
@@ -199,7 +199,7 @@ describe("InstructorAnalyticsPage", () => {
     expect(screen.getByText("Alex Thompson")).toBeInTheDocument();
   });
 
-  it("redirects to courses when the course id is invalid", async () => {
+  it("shows an error when the course id is not in synced Canvas courses", async () => {
     mockedFetchCourses.mockResolvedValue(canvasCourses);
 
     renderAnalyticsPage(
@@ -207,7 +207,11 @@ describe("InstructorAnalyticsPage", () => {
       instructorCourseAnalyticsPath(999),
     );
 
-    expect(await screen.findByText("Courses page")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "This course is not available in your synced Canvas courses.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("filters students by search query", async () => {

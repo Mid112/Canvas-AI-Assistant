@@ -34,10 +34,16 @@ interface UseCourseSubmissionAnalyticsResult {
   reloadSelectedAssignment: (assignmentId: string) => Promise<void>;
 }
 
+interface UseCourseSubmissionAnalyticsOptions {
+  seedCourse?: InstructorCourse | null;
+  seedCanvasUrl?: string;
+}
+
 export function useCourseSubmissionAnalytics(
   localCourseId: number,
   selectedAssignmentId: string,
   assignmentIdFromUrl: string | null,
+  options?: UseCourseSubmissionAnalyticsOptions,
 ): UseCourseSubmissionAnalyticsResult {
   const { accessToken, user, logout } = useAuth();
   const { selectedInstitution } = useInstitution();
@@ -55,6 +61,7 @@ export function useCourseSubmissionAnalytics(
 
   useEffect(() => {
     if (!hasCanvasToken || !Number.isInteger(localCourseId) || localCourseId <= 0) {
+      setIsLoading(false);
       return;
     }
 
@@ -70,6 +77,70 @@ export function useCourseSubmissionAnalytics(
         user,
         selectedInstitution.id,
       );
+
+      const seededCourse = options?.seedCourse ?? null;
+      const seededCanvasUrl =
+        options?.seedCanvasUrl ??
+        (seededCourse?.canvasUrl
+          ? resolveCanvasApiUrl(user, selectedInstitution.id, seededCourse.canvasUrl)
+          : undefined);
+
+      if (seededCourse && seededCanvasUrl) {
+        setIsLoading(true);
+        setLoadError(null);
+        setNeedsCanvasConnection(false);
+
+        try {
+          const assignmentList = await fetchCourseAssignments(
+            localCourseId,
+            token,
+            seededCanvasUrl,
+          );
+          if (cancelled) {
+            return;
+          }
+
+          setCourse(seededCourse);
+          setCanvasAssignments(assignmentList);
+          setAssignments(
+            assignmentList.map((assignment) =>
+              createAssignmentPlaceholder(assignment, seededCourse),
+            ),
+          );
+        } catch (error) {
+          if (cancelled) {
+            return;
+          }
+
+          if (error instanceof AssignmentApiError && error.status === 401) {
+            logout();
+            return;
+          }
+
+          if (isCanvasConnectionRequiredError(error)) {
+            setNeedsCanvasConnection(true);
+            setCourse(null);
+            setCanvasAssignments([]);
+            setAssignments([]);
+            return;
+          }
+
+          const message =
+            error instanceof AssignmentApiError
+              ? error.message
+              : "Unable to load course analytics.";
+          setLoadError(message);
+          setCourse(null);
+          setCanvasAssignments([]);
+          setAssignments([]);
+        } finally {
+          if (!cancelled) {
+            setIsLoading(false);
+          }
+        }
+
+        return;
+      }
 
       if (!fallbackCanvasUrl) {
         setNeedsCanvasConnection(true);
@@ -98,6 +169,7 @@ export function useCourseSubmissionAnalytics(
           setCourse(null);
           setCanvasAssignments([]);
           setAssignments([]);
+          setLoadError("This course is not available in your synced Canvas courses.");
           return;
         }
 
@@ -177,6 +249,8 @@ export function useCourseSubmissionAnalytics(
     logout,
     selectedInstitution.id,
     user,
+    options?.seedCourse,
+    options?.seedCanvasUrl,
   ]);
 
   const loadSubmissionAnalysis = useCallback(
