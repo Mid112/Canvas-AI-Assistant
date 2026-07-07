@@ -8,6 +8,33 @@ import * as workflowHistoryService from "@/services/workflowHistory";
 import { resetMockWorkflowHistory } from "@/services/workflowHistory";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
+vi.mock("@/contexts/AuthContext", async () => {
+  const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
+    "@/contexts/AuthContext",
+  );
+
+  return {
+    ...actual,
+    useAuth: () => ({
+      user: {
+        id: 1,
+        email: "jane.doe@example.com",
+        name: "Dr. Jane Doe",
+        role: "instructor",
+        is_active: true,
+        has_canvas_token: true,
+      },
+      accessToken: "token",
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    }),
+  };
+});
+
 describe("WorkflowHistoryPage", () => {
   const user = userEvent.setup({ pointerEventsCheck: 0 });
 

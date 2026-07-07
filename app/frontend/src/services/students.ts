@@ -37,21 +37,22 @@ async function parseError(response: Response): Promise<string> {
   return "Something went wrong. Please try again.";
 }
 
-function buildStudentsUrl(localCourseId: number, canvasUrl?: string): string {
+function buildStudentsUrl(canvasCourseId: number, canvasUrl?: string): string {
   const params = new URLSearchParams();
   if (canvasUrl) {
     params.set("canvas_url", canvasUrl);
   }
   const query = params.toString();
-  return `${API_BASE_URL}/canvas/courses/${localCourseId}/students${query ? `?${query}` : ""}`;
+  return `${API_BASE_URL}/canvas/courses/${canvasCourseId}/students${query ? `?${query}` : ""}`;
 }
 
+/** Backend students route uses the Canvas course id, not the local DB id. */
 export async function fetchCourseStudents(
-  localCourseId: number,
+  canvasCourseId: number,
   accessToken: string,
   canvasUrl?: string,
 ): Promise<CourseStudent[]> {
-  const response = await fetch(buildStudentsUrl(localCourseId, canvasUrl), {
+  const response = await fetch(buildStudentsUrl(canvasCourseId, canvasUrl), {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 

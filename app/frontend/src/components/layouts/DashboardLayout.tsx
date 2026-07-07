@@ -3,7 +3,6 @@ import { Outlet, useLocation } from "react-router-dom";
 
 import { Header } from "@/components/layouts/Header";
 import { Sidebar } from "@/components/layouts/Sidebar";
-import { ActiveCourseContextBar } from "@/components/courses/ActiveCourseContextBar";
 import { ActiveCourseProvider } from "@/contexts/ActiveCourseProvider";
 import { InstitutionProvider } from "@/contexts/InstitutionProvider";
 import {
@@ -30,6 +29,10 @@ function getPageTitle(pathname: string, role: UserRole): string {
 
   if (role === "instructor" && pathname === paths.instructor.notifications) {
     return "Notifications";
+  }
+
+  if (role === "instructor" && pathname.includes("/analytics")) {
+    return "Submission Analytics";
   }
 
   const navItems = getNavItemsForRole(role);
@@ -95,7 +98,6 @@ function DashboardShell({ role }: DashboardLayoutProps) {
           sidebarOpen={sidebarOpen}
           onToggleSidebar={toggleSidebar}
         />
-        {role === "instructor" ? <ActiveCourseContextBar /> : null}
         <main className="flex flex-1 flex-col overflow-auto">
           <Outlet />
         </main>

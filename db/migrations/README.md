@@ -10,3 +10,4 @@ If you have an **existing** local or shared database created before the `ta` rol
 | `002_submission_status_and_grading.sql` | Adds `grade`/`graded_at` to `submissions` and expands the status check constraint |
 | `003_rename_audit_logs_to_session.sql` | Renames `audit_logs` to `audit_logs_session` (table, constraints, sequence, indexes) to free up the `audit_logs` name for the new workflow/audit-log design — **must run before `004_workflow_auditlog_redesign.sql`** |
 | `004_workflow_auditlog_redesign.sql` | Drops and recreates `workflows`/`audit_logs` with the action-lifecycle schema that fixes the confirm replay bug (both tables were unused, so no data migration is needed) |
+| `005_assignment_description.sql` | Adds `description` to `assignments` for Canvas assignment upserts |

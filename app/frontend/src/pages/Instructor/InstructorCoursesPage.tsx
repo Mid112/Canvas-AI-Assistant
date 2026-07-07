@@ -5,7 +5,6 @@ import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRe
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
-import { useInstitution } from "@/contexts/useInstitution";
 import {
   filterInstructorCourses,
   sortInstructorCourses,
@@ -21,31 +20,22 @@ import { useCanvasInstructorCourses } from "@/pages/Instructor/InstructorCourses
 import type { CourseViewMode } from "@/types/course";
 
 export function InstructorCoursesPage() {
-  const { analytics } = useInstitution();
   const { user } = useAuth();
   const {
     activeCourse,
-    availableCourses,
-    error: activeCourseError,
-    isLoading: activeCourseLoading,
     isSaving,
     selectActiveCourse,
   } = useActiveCourse();
   const {
-    courses: canvasCourses,
-    error: canvasError,
+    courses,
+    error,
     isLoaded,
-    isLoading: canvasLoading,
+    isLoading,
     needsCanvasConnection,
     reloadCourses,
   } = useCanvasInstructorCourses();
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<CourseViewMode>("grid");
-
-  const usesCanvasCourses = Boolean(user?.has_canvas_token);
-  const courses = usesCanvasCourses ? canvasCourses : availableCourses;
-  const isLoading = usesCanvasCourses ? canvasLoading : activeCourseLoading;
-  const error = usesCanvasCourses ? canvasError : activeCourseError;
 
   const filteredCourses = useMemo(() => {
     const filtered = filterInstructorCourses(courses, search);
@@ -57,27 +47,6 @@ export function InstructorCoursesPage() {
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
         <InstructorCoursesHeader />
         <CanvasConnectionRequired description="Connect Canvas to view your courses, assignments, and submission analytics." />
-        <InstructorCoursesOverview analytics={analytics} />
-        {activeCourse ? (
-          <p className="text-sm text-muted-foreground">
-            Active course:{" "}
-            <span className="font-medium text-foreground">
-              {activeCourse.displayName}
-            </span>
-          </p>
-        ) : null}
-        {filteredCourses.length === 0 ? (
-          <InstructorCoursesEmptyState description="Try adjusting your search or switch institutions." />
-        ) : (
-          <InstructorCoursesSection
-            courses={filteredCourses}
-            viewMode={viewMode}
-            onViewModeChange={setViewMode}
-            activeCourseId={activeCourse?.localId ?? null}
-            onSetActiveCourse={(courseId) => void selectActiveCourse(courseId)}
-            isSettingActiveCourse={isSaving}
-          />
-        )}
       </div>
     );
   }
@@ -109,7 +78,7 @@ export function InstructorCoursesPage() {
         </p>
       ) : null}
 
-      <InstructorCoursesOverview analytics={analytics} />
+      <InstructorCoursesOverview courses={courses} />
 
       {isLoading ? (
         <Card className="shadow-sm ring-1 ring-border/60">

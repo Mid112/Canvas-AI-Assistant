@@ -16,12 +16,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/AuthContext";
+import { useResolvedInstructorCourse } from "@/hooks/useResolvedInstructorCourse";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
-import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
-import {
-  getMockAssignmentSubmissions,
-  mockAssignmentName,
-} from "@/data/mockSubmissions";
 import {
   DEFAULT_PAGE_SIZE,
   filterBySearch,
@@ -51,15 +47,13 @@ export function InstructorCourseSubmissionsPage() {
   const { accessToken, user } = useAuth();
   const [submissions, setSubmissions] = useState<ApiSubmission[]>([]);
   const [assignmentName, setAssignmentName] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] =
     useState<ApiSubmissionStatusFilter>("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [usingSampleData, setUsingSampleData] = useState(false);
-  const canvasUrl = getPrimaryCanvasConnectionUrl(user);
 
   const parsedLocalCourseId = Number(localCourseId);
   const parsedAssignmentId = Number(assignmentId);
@@ -69,21 +63,23 @@ export function InstructorCourseSubmissionsPage() {
     Number.isInteger(parsedAssignmentId) &&
     parsedAssignmentId > 0;
 
+  const {
+    course,
+    canvasUrl,
+    isLoading: isResolvingCourse,
+    loadError: courseError,
+    needsCanvasConnection,
+  } = useResolvedInstructorCourse(parsedLocalCourseId);
+
   useEffect(() => {
-    if (!idsAreValid) {
-      return;
-    }
-
-    if (!user?.has_canvas_token) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- load mock submissions when Canvas is not connected
-      setSubmissions(getMockAssignmentSubmissions(parsedAssignmentId));
-      setAssignmentName(mockAssignmentName);
-      setUsingSampleData(true);
-      setIsLoading(false);
-      return;
-    }
-
-    if (!accessToken) {
+    if (
+      !accessToken ||
+      !idsAreValid ||
+      !user?.has_canvas_token ||
+      isResolvingCourse ||
+      !course ||
+      !canvasUrl
+    ) {
       return;
     }
 
@@ -111,7 +107,6 @@ export function InstructorCourseSubmissionsPage() {
         if (!cancelled) {
           setAssignmentName(assignment.name);
           setSubmissions(data);
-          setUsingSampleData(false);
           setLoadError(null);
         }
       } catch (error) {
@@ -130,6 +125,7 @@ export function InstructorCourseSubmissionsPage() {
       }
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async data load
     setIsLoading(true);
     void loadSubmissions();
 
@@ -139,7 +135,9 @@ export function InstructorCourseSubmissionsPage() {
   }, [
     accessToken,
     canvasUrl,
+    course,
     idsAreValid,
+    isResolvingCourse,
     parsedAssignmentId,
     parsedLocalCourseId,
     user?.has_canvas_token,
@@ -193,7 +191,7 @@ export function InstructorCourseSubmissionsPage() {
     );
   }
 
-  if (!user?.has_canvas_token && submissions.length === 0 && !isLoading) {
+  if (!user?.has_canvas_token || needsCanvasConnection) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
         <PageHeader
@@ -206,12 +204,44 @@ export function InstructorCourseSubmissionsPage() {
     );
   }
 
-  if (isLoading) {
+  if (isResolvingCourse || isLoading) {
     return (
       <PageState
         title="Loading submissions"
         message="Fetching submissions from Canvas..."
         icon={<Loader2 className="size-5 animate-spin text-primary" aria-hidden="true" />}
+      />
+    );
+  }
+
+  if (courseError) {
+    return (
+      <PageState
+        title="Unable to load course"
+        message={courseError}
+        icon={<AlertCircle className="size-5 text-destructive" aria-hidden="true" />}
+        action={
+          <Button
+            variant="outline"
+            render={<Link to={instructorCourseAssignmentsPath(parsedLocalCourseId)} />}
+          >
+            Back to assignments
+          </Button>
+        }
+      />
+    );
+  }
+
+  if (!course) {
+    return (
+      <PageState
+        title="Course not found"
+        message="This course is not available in your synced Canvas courses."
+        action={
+          <Button variant="outline" render={<Link to={paths.instructor.courses} />}>
+            Back to courses
+          </Button>
+        }
       />
     );
   }
@@ -243,15 +273,6 @@ export function InstructorCourseSubmissionsPage() {
         assignmentId={parsedAssignmentId}
         assignmentName={assignmentName}
       />
-
-      {usingSampleData ? (
-        <p
-          role="status"
-          className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-950"
-        >
-          Showing sample submission data for local development.
-        </p>
-      ) : null}
 
       <DataTableToolbar
         search={search}

@@ -7,6 +7,7 @@ import httpx
 from fastapi import HTTPException, status
 
 from app.config import settings
+from app.core.canvas_url import resolve_server_canvas_url
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,7 @@ async def _fetch_all_pages(
 
 
 async def validate_token(token: str, canvas_url: str = settings.CANVAS_API_URL) -> None:
+    canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await _get_with_retry(
@@ -101,6 +103,7 @@ CanvasTokenStatus = Literal["valid", "expired", "invalid"]
 
 
 async def check_token_status(token: str, canvas_url: str = settings.CANVAS_API_URL) -> CanvasTokenStatus:
+    canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await _get_with_retry(
@@ -121,6 +124,7 @@ async def check_token_status(token: str, canvas_url: str = settings.CANVAS_API_U
 
 
 async def fetch_courses(token: str, canvas_url: str = settings.CANVAS_API_URL) -> list[dict]:
+    canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             return await _fetch_all_pages(
@@ -145,6 +149,7 @@ async def fetch_courses(token: str, canvas_url: str = settings.CANVAS_API_URL) -
 
 
 async def fetch_assignments(course_id: int, token: str, canvas_url: str = settings.CANVAS_API_URL) -> list[dict]:
+    canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             return await _fetch_all_pages(
@@ -166,6 +171,7 @@ async def fetch_assignment(
     token: str,
     canvas_url: str = settings.CANVAS_API_URL,
 ) -> dict:
+    canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await _get_with_retry(
@@ -188,6 +194,7 @@ async def create_assignment(
     token: str,
     canvas_url: str = settings.CANVAS_API_URL,
 ) -> dict:
+    canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.post(
@@ -211,6 +218,7 @@ async def update_assignment(
     token: str,
     canvas_url: str = settings.CANVAS_API_URL,
 ) -> dict:
+    canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.put(
@@ -234,6 +242,7 @@ async def create_announcement(
     token: str,
     canvas_url: str = settings.CANVAS_API_URL,
 ) -> dict:
+    canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.post(
@@ -256,6 +265,7 @@ async def fetch_submissions(
     token: str,
     canvas_url: str = settings.CANVAS_API_URL,
 ) -> list[dict]:
+    canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             return await _fetch_all_pages(
@@ -277,6 +287,7 @@ async def fetch_enrollments(
     token: str,
     canvas_url: str = settings.CANVAS_API_URL,
 ) -> list[dict]:
+    canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             return await _fetch_all_pages(

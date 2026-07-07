@@ -7,6 +7,7 @@ import {
   getCourseAssignments,
   parseSubmissionStatusFilter,
   resolveEffectiveAssignmentId,
+  resolveEffectiveCanvasAssignmentId,
 } from "@/pages/Instructor/InstructorSubmissionsAnalysis/submissionNavigation";
 import type { AssignmentSubmissionAnalysis } from "@/types/submission";
 
@@ -72,5 +73,27 @@ describe("resolveEffectiveAssignmentId", () => {
 
   it("falls back to the first assignment when neither source matches", () => {
     expect(resolveEffectiveAssignmentId(assignments, "", null)).toBe("pa3");
+  });
+});
+
+describe("resolveEffectiveCanvasAssignmentId", () => {
+  const canvasAssignments = [{ id: 10 }, { id: 20 }];
+
+  it("prefers explicit user selection", () => {
+    expect(
+      resolveEffectiveCanvasAssignmentId(canvasAssignments, "20", "10"),
+    ).toBe("20");
+  });
+
+  it("falls back to URL assignment id", () => {
+    expect(
+      resolveEffectiveCanvasAssignmentId(canvasAssignments, "", "20"),
+    ).toBe("20");
+  });
+
+  it("defaults to the first Canvas assignment", () => {
+    expect(
+      resolveEffectiveCanvasAssignmentId(canvasAssignments, "", null),
+    ).toBe("10");
   });
 });

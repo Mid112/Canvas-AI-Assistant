@@ -16,8 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/AuthContext";
-import { getMockCourseStudents } from "@/data/mockStudents";
-import { getPrimaryCanvasConnectionUrl } from "@/lib/canvas-connections";
+import { useResolvedInstructorCourse } from "@/hooks/useResolvedInstructorCourse";
 import {
   DEFAULT_PAGE_SIZE,
   filterBySearch,
@@ -34,33 +33,36 @@ export function InstructorCourseStudentsPage() {
   const { localCourseId } = useParams();
   const { accessToken, user } = useAuth();
   const [students, setStudents] = useState<CourseStudent[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const [usingSampleData, setUsingSampleData] = useState(false);
-  const canvasUrl = getPrimaryCanvasConnectionUrl(user);
 
   const parsedLocalCourseId = Number(localCourseId);
   const idIsValid =
     Number.isInteger(parsedLocalCourseId) && parsedLocalCourseId > 0;
 
+  const {
+    course,
+    canvasUrl,
+    isLoading: isResolvingCourse,
+    loadError: courseError,
+    needsCanvasConnection,
+  } = useResolvedInstructorCourse(parsedLocalCourseId);
+
   useEffect(() => {
-    if (!idIsValid) {
-      return;
-    }
-
-    if (!user?.has_canvas_token) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- load mock roster when Canvas is not connected
-      setStudents(getMockCourseStudents(parsedLocalCourseId));
-      setUsingSampleData(true);
-      setIsLoading(false);
-      return;
-    }
-
-    if (!accessToken) {
+    const canvasCourseId = course?.canvasCourseId;
+    if (
+      !accessToken ||
+      !idIsValid ||
+      !user?.has_canvas_token ||
+      isResolvingCourse ||
+      !course ||
+      !canvasUrl ||
+      canvasCourseId == null
+    ) {
       return;
     }
 
@@ -71,13 +73,12 @@ export function InstructorCourseStudentsPage() {
     async function loadStudents() {
       try {
         const data = await fetchCourseStudents(
-          parsedLocalCourseId,
+          canvasCourseId,
           token,
           selectedCanvasUrl,
         );
         if (!cancelled) {
           setStudents(data);
-          setUsingSampleData(false);
           setLoadError(null);
         }
       } catch (error) {
@@ -96,6 +97,7 @@ export function InstructorCourseStudentsPage() {
       }
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async data load
     setIsLoading(true);
     void loadStudents();
 
@@ -105,7 +107,9 @@ export function InstructorCourseStudentsPage() {
   }, [
     accessToken,
     canvasUrl,
+    course,
     idIsValid,
+    isResolvingCourse,
     parsedLocalCourseId,
     user?.has_canvas_token,
   ]);
@@ -160,7 +164,7 @@ export function InstructorCourseStudentsPage() {
     );
   }
 
-  if (!user?.has_canvas_token && students.length === 0 && !isLoading) {
+  if (!user?.has_canvas_token || needsCanvasConnection) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
         <PageHeader localCourseId={parsedLocalCourseId} />
@@ -169,12 +173,41 @@ export function InstructorCourseStudentsPage() {
     );
   }
 
-  if (isLoading) {
+  if (isResolvingCourse || isLoading) {
     return (
       <PageState
         title="Loading students"
         message="Fetching enrolled students..."
         icon={<Loader2 className="size-5 animate-spin text-primary" aria-hidden="true" />}
+      />
+    );
+  }
+
+  if (courseError) {
+    return (
+      <PageState
+        title="Unable to load course"
+        message={courseError}
+        icon={<AlertCircle className="size-5 text-destructive" aria-hidden="true" />}
+        action={
+          <Button variant="outline" render={<Link to={paths.instructor.courses} />}>
+            Back to courses
+          </Button>
+        }
+      />
+    );
+  }
+
+  if (!course) {
+    return (
+      <PageState
+        title="Course not found"
+        message="This course is not available in your synced Canvas courses."
+        action={
+          <Button variant="outline" render={<Link to={paths.instructor.courses} />}>
+            Back to courses
+          </Button>
+        }
       />
     );
   }
@@ -197,15 +230,6 @@ export function InstructorCourseStudentsPage() {
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
       <PageHeader localCourseId={parsedLocalCourseId} />
-
-      {usingSampleData ? (
-        <p
-          role="status"
-          className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-950"
-        >
-          Showing sample student data for local development.
-        </p>
-      ) : null}
 
       <DataTableToolbar
         search={search}

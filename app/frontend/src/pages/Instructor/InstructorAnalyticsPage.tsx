@@ -1,9 +1,11 @@
+import { Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { Navigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 
-import { useInstitution } from "@/contexts/useInstitution";
-import { getInstitutionSubmissionsData } from "@/data/institutionSubmissionsData";
-import type { SubmissionStatusFilter } from "@/types/submission";
+import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { useAuth } from "@/contexts/AuthContext";
 import { paths } from "@/routes/paths";
 
 import { InstructorSubmissionsAnalysisFilters } from "./InstructorSubmissionsAnalysis/InstructorSubmissionsAnalysisFilters";
@@ -13,76 +15,57 @@ import { MissingSubmissionsSection } from "./InstructorSubmissionsAnalysis/Missi
 import { SubmissionsAiSummary } from "./InstructorSubmissionsAnalysis/SubmissionsAiSummary";
 import { downloadSubmissionsReport } from "./InstructorSubmissionsAnalysis/submissionExport";
 import {
-  getCourseAssignments,
   parseSubmissionStatusFilter,
   resolveEffectiveAssignmentId,
-  usesSampleSubmissionData,
 } from "./InstructorSubmissionsAnalysis/submissionNavigation";
 import {
   filterSubmissionStudents,
   shouldShowLateSection,
   shouldShowMissingSection,
 } from "./InstructorSubmissionsAnalysis/submissionUtils";
+import { useCourseSubmissionAnalytics } from "./InstructorSubmissionsAnalysis/useCourseSubmissionAnalytics";
 
 export function InstructorAnalyticsPage() {
   const { courseId: courseIdParam } = useParams();
   const courseId = Number(courseIdParam);
-  const { courses, selectedInstitution } = useInstitution();
+  const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const assignmentIdParam = searchParams.get("assignmentId");
   const statusFilter = parseSubmissionStatusFilter(searchParams.get("status"));
-  const course = useMemo(
-    () => courses.find((entry) => entry.id === courseId),
-    [courseId, courses],
-  );
-  const allAssignments = useMemo(() => {
-    if (!course) {
-      return [];
-    }
-
-    const submissionsData = getInstitutionSubmissionsData(
-      selectedInstitution.id,
-    );
-    return getCourseAssignments(submissionsData?.assignments ?? [], course);
-  }, [course, selectedInstitution.id]);
-  const showingSampleSubmissionData = usesSampleSubmissionData(
-    allAssignments,
-    courseId,
-  );
   const [selectedAssignmentId, setSelectedAssignmentId] = useState("");
   const [search, setSearch] = useState("");
 
-  const handleStatusFilterChange = useCallback(
-    (status: SubmissionStatusFilter) => {
-      setSearchParams(
-        (previous) => {
-          const next = new URLSearchParams(previous);
+  const idIsValid = Number.isInteger(courseId) && courseId > 0;
 
-          if (status === "all") {
-            next.delete("status");
-          } else {
-            next.set("status", status);
-          }
-
-          return next;
-        },
-        { replace: true },
-      );
-    },
-    [setSearchParams],
+  const {
+    course,
+    assignments,
+    isLoading,
+    isLoadingSubmissions,
+    loadError,
+    needsCanvasConnection,
+  } = useCourseSubmissionAnalytics(
+    idIsValid ? courseId : 0,
+    selectedAssignmentId,
+    assignmentIdParam,
   );
 
   const effectiveAssignmentId = resolveEffectiveAssignmentId(
-    allAssignments,
+    assignments,
     selectedAssignmentId,
     assignmentIdParam,
   );
 
   const selectedAssignment = useMemo(() => {
-    return allAssignments.find(
+    return assignments.find(
       (assignment) => assignment.id === effectiveAssignmentId,
     );
-  }, [allAssignments, effectiveAssignmentId]);
+  }, [assignments, effectiveAssignmentId]);
+
+  const showSubmissionsLoading =
+    isLoadingSubmissions &&
+    selectedAssignment?.aiSummary.keyInsights ===
+      "Loading submission insights...";
 
   const missingStudents = useMemo(
     () =>
@@ -102,6 +85,26 @@ export function InstructorAnalyticsPage() {
     [search, selectedAssignment],
   );
 
+  const handleStatusFilterChange = useCallback(
+    (status: typeof statusFilter) => {
+      setSearchParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+
+          if (status === "all") {
+            next.delete("status");
+          } else {
+            next.set("status", status);
+          }
+
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   const handleExportReport = useCallback(() => {
     if (!selectedAssignment) {
       return;
@@ -114,11 +117,53 @@ export function InstructorAnalyticsPage() {
     );
   }, [lateStudents, missingStudents, selectedAssignment]);
 
+  if (!idIsValid) {
+    return <Navigate to={paths.instructor.courses} replace />;
+  }
+
+  if (!user?.has_canvas_token || needsCanvasConnection) {
+    return (
+      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+        <CanvasConnectionRequired description="Connect Canvas to view assignment submission analytics for your courses." />
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+        <Card className="shadow-sm ring-1 ring-border/60">
+          <CardContent className="flex items-center gap-3 p-6 text-sm text-muted-foreground">
+            <Loader2 className="size-4 animate-spin text-primary" aria-hidden="true" />
+            Loading course analytics from Canvas...
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+        <Card className="max-w-2xl shadow-sm ring-1 ring-border/60">
+          <CardContent className="space-y-4 p-6">
+            <p role="alert" className="text-sm text-destructive">
+              {loadError}
+            </p>
+            <Button variant="outline" render={<Link to={paths.instructor.courses} />}>
+              Back to courses
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (!course) {
     return <Navigate to={paths.instructor.courses} replace />;
   }
 
-  if (allAssignments.length === 0) {
+  if (assignments.length === 0) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
         <InstructorSubmissionsAnalysisHeader
@@ -126,7 +171,7 @@ export function InstructorAnalyticsPage() {
           onExportReport={handleExportReport}
         />
         <p className="text-muted-foreground">
-          No submission data available for {course.code}: {course.name}.
+          No assignments found for {course.code}: {course.name}.
         </p>
       </div>
     );
@@ -139,17 +184,17 @@ export function InstructorAnalyticsPage() {
         onExportReport={handleExportReport}
       />
 
-      {showingSampleSubmissionData ? (
+      {showSubmissionsLoading ? (
         <p
           role="status"
-          className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100"
+          className="rounded-lg border border-border/60 bg-muted/30 px-4 py-3 text-sm text-muted-foreground"
         >
-          Showing sample submission data for local development.
+          Loading submissions for the selected assignment...
         </p>
       ) : null}
 
       <InstructorSubmissionsAnalysisFilters
-        assignments={allAssignments}
+        assignments={assignments}
         selectedAssignmentId={effectiveAssignmentId}
         onAssignmentChange={setSelectedAssignmentId}
         search={search}

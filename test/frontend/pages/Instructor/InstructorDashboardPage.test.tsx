@@ -1,13 +1,15 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useInstitution } from "@/contexts/useInstitution";
 import { InstructorDashboardPage } from "@/pages/Instructor/InstructorDashboardPage";
 import { paths } from "@/routes/paths";
+import { fetchCourseAssignments } from "@/services/assignments";
+import { fetchCourses } from "@/services/canvas";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 const mockNavigate = vi.fn();
+const mockUseAuth = vi.fn();
 
 vi.mock("react-router-dom", async () => {
   const actual = await vi.importActual("react-router-dom");
@@ -17,6 +19,27 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
+vi.mock("@/services/canvas", () => ({
+  CanvasApiError: class CanvasApiError extends Error {
+    status: number;
+
+    constructor(message: string, status = 500) {
+      super(message);
+      this.status = status;
+    }
+  },
+  fetchCourses: vi.fn(),
+  fetchActiveCourse: vi.fn(),
+  setActiveCourse: vi.fn(),
+}));
+
+vi.mock("@/services/assignments", () => ({
+  AssignmentApiError: class AssignmentApiError extends Error {
+    status = 500;
+  },
+  fetchCourseAssignments: vi.fn(),
+}));
+
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
     "@/contexts/AuthContext",
@@ -24,40 +47,85 @@ vi.mock("@/contexts/AuthContext", async () => {
 
   return {
     ...actual,
-    useAuth: () => ({
-      user: {
-        id: 1,
-        email: "jane.doe@example.com",
-        name: "Dr. Jane Doe",
-        role: "instructor",
-        is_active: true,
-        has_canvas_token: true,
-      },
-      accessToken: "token",
-      isAuthenticated: true,
-      isLoading: false,
-      login: vi.fn(),
-      register: vi.fn(),
-      logout: vi.fn(),
-    }),
+    useAuth: () => mockUseAuth(),
   };
 });
 
-function InstitutionSwitchHarness() {
-  const { setSelectedInstitution } = useInstitution();
+const mockedFetchCourses = vi.mocked(fetchCourses);
+const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
 
-  return (
-    <>
-      <button type="button" onClick={() => setSelectedInstitution("ubco")}>
-        Switch to UBCO
-      </button>
-      <InstructorDashboardPage />
-    </>
-  );
-}
+const CANVAS_URL = "https://canvas.ubc.ca";
+
+const authWithCanvas = {
+  user: {
+    id: 1,
+    email: "jane.doe@example.com",
+    name: "Dr. Jane Doe",
+    role: "instructor",
+    is_active: true,
+    has_canvas_token: true,
+    canvas_connections: [
+      {
+        id: 1,
+        canvas_url: CANVAS_URL,
+        created_at: "2026-06-26T00:00:00.000Z",
+      },
+    ],
+  },
+  accessToken: "token",
+  isAuthenticated: true,
+  isLoading: false,
+  login: vi.fn(),
+  register: vi.fn(),
+  logout: vi.fn(),
+  refreshUser: vi.fn(),
+};
+
+const authWithoutCanvas = {
+  ...authWithCanvas,
+  user: { ...authWithCanvas.user, has_canvas_token: false, canvas_connections: [] },
+};
+
+const canvasCourses = [
+  {
+    canvas_id: 101,
+    local_id: 1,
+    name: "Introduction to Programming",
+    course_code: "CS 101",
+    workflow_state: "available",
+    total_students: 45,
+  },
+  {
+    canvas_id: 102,
+    local_id: 2,
+    name: "Data Structures",
+    course_code: "CS 201",
+    workflow_state: "available",
+    total_students: 38,
+  },
+];
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockUseAuth.mockReturnValue(authWithCanvas);
+  mockedFetchCourses.mockResolvedValue(canvasCourses);
+  mockedFetchCourseAssignments.mockResolvedValue([
+    { id: 1, name: "Assignment 1", course_id: 101 },
+  ]);
+});
 
 describe("InstructorDashboardPage", () => {
-  it("renders institution-specific dashboard data", () => {
+  it("requires Canvas before showing dashboard content", () => {
+    mockUseAuth.mockReturnValue(authWithoutCanvas);
+
+    renderWithInstitution(<InstructorDashboardPage />);
+
+    expect(screen.getByText("Connect Canvas to continue")).toBeInTheDocument();
+    expect(screen.queryByText("Total Students")).not.toBeInTheDocument();
+    expect(screen.queryByText("Quick AI Actions")).not.toBeInTheDocument();
+  });
+
+  it("renders Canvas-derived dashboard data", async () => {
     renderWithInstitution(<InstructorDashboardPage />);
 
     expect(
@@ -66,38 +134,16 @@ describe("InstructorDashboardPage", () => {
     expect(
       screen.getByText("Welcome back, Dr. Jane Doe. Overview for UBC."),
     ).toBeInTheDocument();
-    expect(screen.getAllByText("Active Courses").length).toBeGreaterThan(0);
+
+    await waitFor(() => {
+      expect(screen.getByText("CS 101: Introduction to Programming")).toBeInTheDocument();
+    });
+
     expect(screen.getByText("Total Students")).toBeInTheDocument();
-    expect(screen.getByText("Missing Submissions")).toBeInTheDocument();
-    expect(screen.getByText("Pending Approvals")).toBeInTheDocument();
-    expect(screen.getByText("156")).toBeInTheDocument();
-    expect(screen.getByText("Recent Activity")).toBeInTheDocument();
+    expect(screen.getByText("83")).toBeInTheDocument();
     expect(screen.getByText("Quick AI Actions")).toBeInTheDocument();
-    expect(screen.getByText("Notifications")).toBeInTheDocument();
-    expect(
-      screen.getAllByText(/CS 101: Intro to Programming/).length,
-    ).toBeGreaterThan(0);
-    expect(
-      screen.queryByText("Dashboard coming soon"),
-    ).not.toBeInTheDocument();
-  });
-
-  it("updates dashboard analytics when the institution changes", async () => {
-    const user = userEvent.setup();
-
-    renderWithInstitution(<InstitutionSwitchHarness />);
-
-    expect(screen.getByText(/Overview for UBC/)).toBeInTheDocument();
-    expect(screen.getByText("156")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Switch to UBCO" }));
-
-    expect(screen.getByText(/Overview for UBCO/)).toBeInTheDocument();
-    expect(screen.getByText("108")).toBeInTheDocument();
-    expect(
-      screen.getAllByText(/COSC 111: Computer Programming I/).length,
-    ).toBeGreaterThan(0);
-    expect(screen.queryByText("156")).not.toBeInTheDocument();
+    expect(screen.queryByText("Recent Activity")).not.toBeInTheDocument();
+    expect(screen.queryByText("Notifications")).not.toBeInTheDocument();
   });
 
   it("navigates to the assistant from the dashboard CTA", async () => {
@@ -106,9 +152,11 @@ describe("InstructorDashboardPage", () => {
 
     renderWithInstitution(<InstructorDashboardPage />);
 
-    await user.click(
-      screen.getByRole("button", { name: "Open AI Assistant" }),
-    );
+    await waitFor(() => {
+      expect(screen.getByText("Quick AI Actions")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Open AI Assistant" }));
     expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant);
   });
 });

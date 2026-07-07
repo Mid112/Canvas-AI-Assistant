@@ -118,7 +118,7 @@ describe("InstructorCoursesEmptyState", () => {
 
     expect(screen.getByText("No courses found")).toBeInTheDocument();
     expect(
-      screen.getByText("Try adjusting your search or switch institutions."),
+      screen.getByText("Try adjusting your search."),
     ).toBeInTheDocument();
   });
 });

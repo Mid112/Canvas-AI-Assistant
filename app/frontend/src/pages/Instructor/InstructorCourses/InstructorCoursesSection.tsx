@@ -276,7 +276,7 @@ export function InstructorCoursesSection({
 }
 
 export function InstructorCoursesEmptyState({
-  description = "Try adjusting your search or switch institutions.",
+  description = "Try adjusting your search.",
 }: {
   description?: string;
 }) {

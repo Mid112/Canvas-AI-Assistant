@@ -105,7 +105,7 @@ beforeEach(() => {
 });
 
 describe("ActiveCourseProvider", () => {
-  it("loads institution mock courses when Canvas is disconnected", async () => {
+  it("clears courses when Canvas is disconnected", async () => {
     mockUseAuth.mockReturnValue(authWithoutCanvas);
 
     const { result } = renderHook(() => useActiveCourse(), { wrapper });
@@ -114,9 +114,7 @@ describe("ActiveCourseProvider", () => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    expect(result.current.availableCourses).toEqual(
-      getInstitutionData("ubc")!.courses,
-    );
+    expect(result.current.availableCourses).toEqual([]);
     expect(mockedFetchCourses).not.toHaveBeenCalled();
   });
 

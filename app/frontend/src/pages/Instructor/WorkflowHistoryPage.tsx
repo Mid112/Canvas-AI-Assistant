@@ -1,6 +1,8 @@
 import { AlertCircle, Download, Loader2, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
+import { useAuth } from "@/contexts/AuthContext";
 import { AuditLogPagination } from "@/components/admin/AuditLogPagination";
 import { WorkflowHistoryTable } from "@/components/workflow/WorkflowHistoryTable";
 import { WorkflowStatusSummary } from "@/components/workflow/WorkflowStatusSummary";
@@ -27,6 +29,7 @@ import {
 } from "@/types/workflowHistory";
 
 export function WorkflowHistoryPage() {
+  const { user } = useAuth();
   const [entries, setEntries] = useState<WorkflowHistoryEntry[]>([]);
   const [filters, setFilters] = useState<WorkflowHistoryFilters>(
     emptyWorkflowHistoryFilters,
@@ -140,6 +143,14 @@ export function WorkflowHistoryPage() {
     }
 
     return `Showing ${range} of ${matching} matching workflows (${total} total)`;
+  }
+
+  if (!user?.has_canvas_token) {
+    return (
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 md:p-6 lg:p-8">
+        <CanvasConnectionRequired description="Connect Canvas to view AI workflow history for your courses." />
+      </div>
+    );
   }
 
   if (isLoading) {

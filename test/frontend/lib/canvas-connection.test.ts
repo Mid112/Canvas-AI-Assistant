@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { isCanvasConnectionRequiredError } from "@/lib/canvas-connection";
 import { CanvasApiError } from "@/services/canvas";
+import { SubmissionApiError } from "@/services/submissions";
 
 describe("isCanvasConnectionRequiredError", () => {
   it("returns true for missing Canvas token responses", () => {
@@ -19,6 +20,19 @@ describe("isCanvasConnectionRequiredError", () => {
     expect(
       isCanvasConnectionRequiredError(
         new CanvasApiError("Canvas token is corrupted — please reconnect Canvas.", 403),
+      ),
+    ).toBe(true);
+  });
+
+  it("returns true for invalid Canvas token responses", () => {
+    expect(
+      isCanvasConnectionRequiredError(
+        new CanvasApiError("Invalid Canvas API token", 422),
+      ),
+    ).toBe(true);
+    expect(
+      isCanvasConnectionRequiredError(
+        new SubmissionApiError("Invalid Canvas API token", 422),
       ),
     ).toBe(true);
   });

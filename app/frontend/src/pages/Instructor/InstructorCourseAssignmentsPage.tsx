@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/contexts/AuthContext";
-import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
+import { useResolvedInstructorCourse } from "@/hooks/useResolvedInstructorCourse";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
 import {
   DEFAULT_PAGE_SIZE,
@@ -34,24 +34,39 @@ import {
   fetchCourseAssignments,
 } from "@/services/assignments";
 import type { Assignment } from "@/types/assignment";
+import type { InstructorCourse } from "@/types/course";
 
 export function InstructorCourseAssignmentsPage() {
   const { localCourseId } = useParams();
   const { accessToken, user } = useAuth();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
-  const canvasUrl = useCanvasConnectionUrl();
 
   const parsedLocalCourseId = Number(localCourseId);
   const idIsValid =
     Number.isInteger(parsedLocalCourseId) && parsedLocalCourseId > 0;
 
+  const {
+    course,
+    canvasUrl,
+    isLoading: isResolvingCourse,
+    loadError: courseError,
+    needsCanvasConnection,
+  } = useResolvedInstructorCourse(parsedLocalCourseId);
+
   useEffect(() => {
-    if (!accessToken || !idIsValid || !user?.has_canvas_token) {
+    if (
+      !accessToken ||
+      !idIsValid ||
+      !user?.has_canvas_token ||
+      isResolvingCourse ||
+      !course ||
+      !canvasUrl
+    ) {
       return;
     }
 
@@ -93,7 +108,15 @@ export function InstructorCourseAssignmentsPage() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, canvasUrl, idIsValid, parsedLocalCourseId, user?.has_canvas_token]);
+  }, [
+    accessToken,
+    canvasUrl,
+    course,
+    idIsValid,
+    isResolvingCourse,
+    parsedLocalCourseId,
+    user?.has_canvas_token,
+  ]);
 
   const filteredAssignments = useMemo(
     () =>
@@ -132,21 +155,50 @@ export function InstructorCourseAssignmentsPage() {
     );
   }
 
-  if (!user?.has_canvas_token) {
+  if (!user?.has_canvas_token || needsCanvasConnection) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-        <PageHeader localCourseId={parsedLocalCourseId} />
+        <PageHeader localCourseId={parsedLocalCourseId} course={course} />
         <CanvasConnectionRequired />
       </div>
     );
   }
 
-  if (isLoading) {
+  if (isResolvingCourse || isLoading) {
     return (
       <PageState
         title="Loading assignments"
         message="Fetching assignments from Canvas..."
         icon={<Loader2 className="size-5 animate-spin text-primary" aria-hidden="true" />}
+      />
+    );
+  }
+
+  if (courseError) {
+    return (
+      <PageState
+        title="Unable to load course"
+        message={courseError}
+        icon={<AlertCircle className="size-5 text-destructive" aria-hidden="true" />}
+        action={
+          <Button variant="outline" render={<Link to={paths.instructor.courses} />}>
+            Back to courses
+          </Button>
+        }
+      />
+    );
+  }
+
+  if (!course) {
+    return (
+      <PageState
+        title="Course not found"
+        message="This course is not available in your synced Canvas courses."
+        action={
+          <Button variant="outline" render={<Link to={paths.instructor.courses} />}>
+            Back to courses
+          </Button>
+        }
       />
     );
   }
@@ -168,7 +220,7 @@ export function InstructorCourseAssignmentsPage() {
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-      <PageHeader localCourseId={parsedLocalCourseId} />
+      <PageHeader localCourseId={parsedLocalCourseId} course={course} />
 
       <DataTableToolbar
         search={search}
@@ -268,7 +320,13 @@ export function InstructorCourseAssignmentsPage() {
   );
 }
 
-function PageHeader({ localCourseId }: { localCourseId: number }) {
+function PageHeader({
+  localCourseId,
+  course,
+}: {
+  localCourseId: number;
+  course?: InstructorCourse | null;
+}) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="space-y-1">
@@ -276,7 +334,9 @@ function PageHeader({ localCourseId }: { localCourseId: number }) {
           Course Assignments
         </h1>
         <p className="text-muted-foreground">
-          Manage assignments and view submissions for course #{localCourseId}.
+          {course
+            ? `${course.code}: ${course.name}`
+            : `Manage assignments and view submissions for course #${localCourseId}.`}
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
