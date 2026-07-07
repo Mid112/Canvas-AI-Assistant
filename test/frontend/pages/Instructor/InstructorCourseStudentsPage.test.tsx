@@ -5,7 +5,9 @@ import { Outlet, Route, Routes } from "react-router-dom";
 import { institutionCourseData } from "@/data/institutionCourseData";
 import type { InstructorCourseOutletContext } from "@/pages/Instructor/InstructorCourse/instructorCourseLayoutContext";
 import { InstructorCourseStudentsPage } from "@/pages/Instructor/InstructorCourseStudentsPage";
+import { fetchCourseAssignments } from "@/services/assignments";
 import { fetchCourseStudents } from "@/services/students";
+import { fetchAssignmentSubmissions } from "@/services/submissions";
 import type { InstructorCourse } from "@/types/course";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
@@ -21,6 +23,22 @@ vi.mock("@/services/students", () => ({
     status = 500;
   },
   fetchCourseStudents: vi.fn(),
+}));
+
+vi.mock("@/services/assignments", () => ({
+  AssignmentApiError: class AssignmentApiError extends Error {
+    name = "AssignmentApiError";
+    status = 500;
+  },
+  fetchCourseAssignments: vi.fn(),
+}));
+
+vi.mock("@/services/submissions", () => ({
+  SubmissionApiError: class SubmissionApiError extends Error {
+    name = "SubmissionApiError";
+    status = 500;
+  },
+  fetchAssignmentSubmissions: vi.fn(),
 }));
 
 vi.mock("@/hooks/useResolvedInstructorCourse", () => ({
@@ -54,6 +72,8 @@ vi.mock("@/contexts/AuthContext", async () => {
 });
 
 const mockedFetchStudents = vi.mocked(fetchCourseStudents);
+const mockedFetchAssignments = vi.mocked(fetchCourseAssignments);
+const mockedFetchSubmissions = vi.mocked(fetchAssignmentSubmissions);
 
 function CourseStudentsRoute({
   routeCourse = course,
@@ -133,6 +153,68 @@ describe("InstructorCourseStudentsPage", () => {
         course.id,
         "access-token",
         undefined,
+      );
+    });
+  });
+
+  it("falls back to assignment submissions when the roster endpoint is empty", async () => {
+    mockedFetchStudents.mockResolvedValue([]);
+    mockedFetchAssignments.mockResolvedValue([
+      {
+        id: 10,
+        name: "MMM",
+        description: null,
+        due_at: null,
+        points_possible: null,
+        course_id: course.id,
+      },
+      {
+        id: 11,
+        name: "Project",
+        description: null,
+        due_at: null,
+        points_possible: null,
+        course_id: course.id,
+      },
+    ]);
+    mockedFetchSubmissions
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: 100,
+          assignment_id: 11,
+          user_id: 303,
+          student_name: "MN Student",
+          submitted_at: null,
+          workflow_state: "unsubmitted",
+          status: "missing",
+          score: null,
+          grade: null,
+          graded_at: null,
+        },
+      ]);
+
+    renderWithRouter(<CourseStudentsRoute />);
+
+    expect(await screen.findByText("MN Student")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(mockedFetchAssignments).toHaveBeenCalledWith(
+        course.id,
+        "access-token",
+        course.canvasUrl,
+      );
+      expect(mockedFetchSubmissions).toHaveBeenCalledWith(
+        course.id,
+        10,
+        "access-token",
+        course.canvasUrl,
+      );
+      expect(mockedFetchSubmissions).toHaveBeenCalledWith(
+        course.id,
+        11,
+        "access-token",
+        course.canvasUrl,
       );
     });
   });

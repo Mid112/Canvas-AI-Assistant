@@ -27,8 +27,58 @@ import {
   instructorCourseAssignmentsPath,
   paths,
 } from "@/routes/paths";
+import { fetchCourseAssignments } from "@/services/assignments";
 import { fetchCourseStudents, StudentApiError } from "@/services/students";
+import { fetchAssignmentSubmissions } from "@/services/submissions";
 import type { CourseStudent } from "@/types/student";
+
+async function fetchStudentsFromSubmissions(
+  localCourseId: number,
+  accessToken: string,
+  canvasUrl?: string,
+): Promise<CourseStudent[]> {
+  const assignments = await fetchCourseAssignments(
+    localCourseId,
+    accessToken,
+    canvasUrl,
+  );
+  if (assignments.length === 0) {
+    return [];
+  }
+
+  const assignmentSubmissions = await Promise.all(
+    assignments.map((assignment) =>
+      fetchAssignmentSubmissions(
+        localCourseId,
+        assignment.id,
+        accessToken,
+        canvasUrl,
+      ),
+    ),
+  );
+  const studentsByCanvasId = new Map<string, CourseStudent>();
+
+  assignmentSubmissions.flat().forEach((submission) => {
+    const canvasUserId = String(submission.user_id);
+    if (studentsByCanvasId.has(canvasUserId)) {
+      return;
+    }
+
+    studentsByCanvasId.set(canvasUserId, {
+      id: submission.user_id,
+      canvas_user_id: canvasUserId,
+      course_id: localCourseId,
+      name: submission.student_name ?? `Student ${canvasUserId}`,
+      sortable_name: null,
+      login_id: null,
+      enrollment_state: "active",
+    });
+  });
+
+  return Array.from(studentsByCanvasId.values()).sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
+}
 
 export function InstructorCourseStudentsPage() {
   const { localCourseId } = useParams();
@@ -78,6 +128,7 @@ export function InstructorCourseStudentsPage() {
     }
 
     const token = accessToken;
+    const expectedStudentCount = course.studentCount;
     // Some embedded course contexts omit canvasUrl; the backend student route
     // can still resolve the Canvas host from its default/server-side settings.
     const selectedCanvasUrl = canvasUrl;
@@ -86,11 +137,23 @@ export function InstructorCourseStudentsPage() {
 
     async function loadStudents() {
       try {
-        const data = await fetchCourseStudents(
+        let data = await fetchCourseStudents(
           resolvedLocalCourseId,
           token,
           selectedCanvasUrl,
         );
+
+        if (data.length === 0 && expectedStudentCount > 0) {
+          // Analytics can still see students through assignment submissions
+          // even when Canvas returns an empty enrollment roster. Use that same
+          // source as a display fallback instead of showing a misleading empty table.
+          data = await fetchStudentsFromSubmissions(
+            resolvedLocalCourseId,
+            token,
+            selectedCanvasUrl,
+          );
+        }
+
         if (!cancelled) {
           setStudents(data);
           setLoadError(null);
