@@ -32,6 +32,7 @@ export function InstructorMessagesPage() {
       : null;
   const fallbackFetchOptions = useMemo<FetchMessageDraftOptions | null>(
     () =>
+      // Seed the draft with an empty recipient list until the live roster load completes.
       activeCourse
         ? {
             courseId: activeCourse.localId,
@@ -61,6 +62,7 @@ export function InstructorMessagesPage() {
       setLoadError(null);
 
       try {
+        // Race the roster fetch against a timeout so the composer stays usable if Canvas stalls.
         const students = await Promise.race([
           fetchCourseStudents(localCourseId, token, selectedCanvasUrl),
           new Promise<never>((_, reject) => {
@@ -80,6 +82,7 @@ export function InstructorMessagesPage() {
           return;
         }
 
+        // Convert the roster response into the recipient shape expected by the draft page.
         setFetchOptions({
           courseId: localCourseId,
           prompt: basePrompt,
@@ -103,6 +106,7 @@ export function InstructorMessagesPage() {
             ? error.message
             : "Unable to load course students for messaging.",
         );
+        // Fall back to an empty recipient list so the draft view still renders.
         setFetchOptions({
           courseId: localCourseId,
           prompt: basePrompt,
@@ -166,6 +170,7 @@ export function InstructorMessagesPage() {
           </Card>
         </div>
       ) : null}
+      {/* The draft composer handles both the live recipient list and the fallback empty state. */}
       <StudentMessageDraftPage
         fetchOptions={activeFetchOptions ?? fallbackFetchOptions ?? undefined}
       />
