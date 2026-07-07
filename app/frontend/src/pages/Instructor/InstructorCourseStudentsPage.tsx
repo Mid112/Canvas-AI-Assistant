@@ -72,8 +72,7 @@ export function InstructorCourseStudentsPage() {
       !idIsValid ||
       !user?.has_canvas_token ||
       isResolvingCourse ||
-      !course ||
-      !canvasUrl
+      !course
     ) {
       return;
     }
