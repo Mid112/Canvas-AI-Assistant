@@ -78,6 +78,8 @@ export function InstructorCourseStudentsPage() {
     }
 
     const token = accessToken;
+    // Some embedded course contexts omit canvasUrl; the backend student route
+    // can still resolve the Canvas host from its default/server-side settings.
     const selectedCanvasUrl = canvasUrl;
     const resolvedLocalCourseId = parsedLocalCourseId;
     let cancelled = false;

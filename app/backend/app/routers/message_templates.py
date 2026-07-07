@@ -26,6 +26,7 @@ async def list_templates(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Returns templates for the active user, optionally filtered to one course.
     return await list_message_templates(db, current_user, course_id)
 
 
@@ -35,6 +36,7 @@ async def create_template(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Creates a new template owned by the authenticated user.
     return await create_message_template(db, current_user, body)
 
 
@@ -44,6 +46,7 @@ async def get_template(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Fetches one template after ownership checks.
     return await get_message_template(db, current_user, template_id)
 
 
@@ -54,6 +57,7 @@ async def update_template(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Updates the template fields that the caller is allowed to edit.
     return await update_message_template(db, current_user, template_id, body)
 
 
@@ -63,4 +67,5 @@ async def delete_template(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Deletes the template and returns no response body.
     await delete_message_template(db, current_user, template_id)

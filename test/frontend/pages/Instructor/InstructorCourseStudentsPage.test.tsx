@@ -108,6 +108,8 @@ describe("InstructorCourseStudentsPage", () => {
   });
 
   it("loads students by local course id when the course context has no Canvas URL", async () => {
+    // Regression coverage for embedded course tabs: the header can have a
+    // student count even when the outlet context omits Canvas metadata.
     const courseWithoutCanvasUrl = { ...course, canvasUrl: undefined };
     mockedFetchStudents.mockResolvedValue([
       {
