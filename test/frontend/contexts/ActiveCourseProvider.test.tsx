@@ -101,7 +101,13 @@ beforeEach(() => {
   mockUseAuth.mockReturnValue(authWithCanvas);
   mockedFetchCourses.mockResolvedValue(canvasCourses);
   mockedFetchActiveCourse.mockResolvedValue(null);
-  mockedSetActiveCourse.mockResolvedValue(undefined);
+  mockedSetActiveCourse.mockResolvedValue({
+    local_id: 1,
+    canvas_course_id: "101",
+    canvas_url: CANVAS_URL,
+    name: "Introduction to Programming",
+    term: null,
+  });
 });
 
 describe("ActiveCourseProvider", () => {
@@ -164,8 +170,15 @@ describe("ActiveCourseProvider", () => {
     ).toBe(false);
   });
 
-  it("does not PATCH active course when no Canvas courses are available", async () => {
+  it("uses the backend response when the provider course cache is stale", async () => {
     mockedFetchCourses.mockResolvedValue([]);
+    mockedSetActiveCourse.mockResolvedValue({
+      local_id: 99,
+      canvas_course_id: "499",
+      canvas_url: CANVAS_URL,
+      name: "COSC 499",
+      term: null,
+    });
 
     const { result } = renderHook(() => useActiveCourse(), { wrapper });
 
@@ -174,10 +187,14 @@ describe("ActiveCourseProvider", () => {
     });
 
     await act(async () => {
-      await result.current.selectActiveCourse(1);
+      await result.current.selectActiveCourse(99);
     });
 
-    expect(mockedSetActiveCourse).not.toHaveBeenCalled();
-    expect(result.current.error).toBe("Selected course is not available.");
+    expect(mockedSetActiveCourse).toHaveBeenCalledWith(99, "token");
+    expect(result.current.activeCourse).toEqual({
+      localId: 99,
+      displayName: "COSC 499",
+    });
+    expect(result.current.error).toBeNull();
   });
 });

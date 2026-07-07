@@ -48,11 +48,33 @@ def test_llm_error(client):
     assert "error" in body["reply"]
 
 
-def test_invalid_json(client):
+def test_plain_text_model_reply_is_returned(client):
     headers = _register(client)
 
     mock_adapter = AsyncMock()
-    mock_adapter.generate.return_value = "this is not json"
+    mock_adapter.generate.return_value = "I can help with Canvas course questions."
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "List my courses"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_error"] is False
+    assert body["reply"] == {
+        "action": "respond",
+        "message": "I can help with Canvas course questions.",
+    }
+
+
+def test_malformed_json_still_returns_safe_error(client):
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond",'
 
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
         response = client.post(
@@ -64,6 +86,7 @@ def test_invalid_json(client):
     assert response.status_code == 200
     body = response.json()
     assert body["is_error"] is True
+    assert "could not be understood" in body["reply"]["error"]
 
 
 def test_user_log(client):
@@ -87,6 +110,95 @@ def test_user_log(client):
     assert history.status_code == 200
     roles = [m["role"] for m in history.json()["messages"]]
     assert "user" in roles
+
+
+def test_chat_resolves_course_name_before_calling_model(client):
+    headers = _register(client)
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            headers=headers,
+        )
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock_courses:
+        mock_courses.return_value = [
+            {
+                "id": 499,
+                "name": "COSC 499",
+                "course_code": "COSC 499",
+                "enrollment_term_id": 1,
+                "workflow_state": "available",
+            }
+        ]
+        courses = client.get(
+            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            headers=headers,
+        )
+    assert courses.status_code == 200
+    local_course_id = courses.json()[0]["local_id"]
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "Resolved."}'
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "How many people are in COSC 499?"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    generated_user_message = mock_adapter.generate.call_args.args[1]
+    assert f"local_course_id: {local_course_id}" in generated_user_message
+    assert "do not ask the user for internal IDs" in generated_user_message
+
+
+def test_chat_reuses_conversation_course_context_on_followup(client):
+    headers = _register(client)
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            headers=headers,
+        )
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock_courses:
+        mock_courses.return_value = [
+            {
+                "id": 310,
+                "name": "COSC 310",
+                "course_code": "COSC 310",
+                "enrollment_term_id": 1,
+                "workflow_state": "available",
+            }
+        ]
+        courses = client.get(
+            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            headers=headers,
+        )
+    local_course_id = courses.json()[0]["local_id"]
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "OK."}'
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        first = client.post(
+            "/api/v1/chat/",
+            json={"message": "Summarize COSC 310", "local_course_id": local_course_id},
+            headers=headers,
+        )
+        conversation_id = first.json()["conversation_id"]
+        client.post(
+            "/api/v1/chat/",
+            json={"message": "How many students are there?", "conversation_id": conversation_id},
+            headers=headers,
+        )
+
+    followup_user_message = mock_adapter.generate.call_args_list[1].args[1]
+    assert f"local_course_id: {local_course_id}" in followup_user_message
 
 
 def test_canvas_failure_returns_chat_error(client):

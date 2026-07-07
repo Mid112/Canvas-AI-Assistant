@@ -1,6 +1,7 @@
 # app/backend/app/services/chat.py
 import asyncio
 import json
+import re
 from datetime import UTC, date, datetime
 
 import httpx
@@ -18,6 +19,7 @@ from app.models.conversation import Conversation
 from app.models.course import Course
 from app.models.message import Message
 from app.models.user import User
+from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
 from app.services.llm.llm_setting import get_llm_adapter
 
@@ -43,6 +45,10 @@ _AUDIT_RESOURCE_MAP = {
     "update_assignment": ("assignment", "update"),
     "send_message": ("announcement", "create"),
 }
+
+
+def _normalize_course_text(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
 
 
 def _json_dumps(obj) -> str:
@@ -75,6 +81,79 @@ async def get_or_create_conversation(
     db.add(conversation)
     await db.flush()
     return conversation
+
+
+async def _resolve_chat_course_context(
+    db: AsyncSession,
+    user: User,
+    message: str,
+    requested_local_course_id: int | None,
+) -> Course | None:
+    """Find the course context in deterministic app code before the LLM runs.
+
+    Local models cannot know our database IDs. Prefer an explicit local ID
+    from the client, then a course name mentioned in the prompt, then the
+    user's active-course preference.
+    """
+    if requested_local_course_id is not None:
+        return await db.scalar(
+            select(Course).where(
+                Course.id == requested_local_course_id,
+                Course.instructor_id == user.id,
+            )
+        )
+
+    courses = list(
+        await db.scalars(select(Course).where(Course.instructor_id == user.id))
+    )
+    normalized_message = _normalize_course_text(message)
+    for course in courses:
+        # Course names are synced locally, so resolve phrases like "COSC 499"
+        # before asking the model to choose a database-local course ID.
+        normalized_name = _normalize_course_text(course.name)
+        if normalized_name and normalized_name in normalized_message:
+            return course
+
+    active_course_id = await db.scalar(
+        select(UserPreference.active_course_id).where(UserPreference.user_id == user.id)
+    )
+    if active_course_id is None:
+        return None
+
+    return next(
+        (course for course in courses if course.id == active_course_id),
+        None,
+    )
+
+
+def _message_with_course_context(message: str, course: Course | None) -> str:
+    if course is None:
+        return message
+
+    return (
+        "Course context for this request:\n"
+        f"- local_course_id: {course.id}\n"
+        f"- course_name: {course.name}\n"
+        f"- canvas_course_id: {course.canvas_course_id}\n"
+        "Use this local_course_id for course-specific actions; do not ask the "
+        "user for internal IDs.\n\n"
+        f"User request: {message}"
+    )
+
+
+def _plain_text_response(raw_output: str) -> dict | None:
+    """Treat plain local-model text as a normal assistant reply.
+
+    If braces are present, assume the model attempted structured JSON and keep
+    the stricter parser/error path so malformed internals are not echoed back.
+    """
+    stripped = raw_output.strip()
+    # A local model may answer in ordinary prose. If it looks like attempted
+    # JSON, keep the strict parser so malformed structured output is logged
+    # safely instead of echoed back to the user.
+    if stripped and "{" not in stripped and "}" not in stripped:
+        return {"action": "respond", "message": stripped}
+    return None
 
 
 async def log_message(
@@ -321,9 +400,22 @@ async def handle_chat_message(
       being appended. This keeps conversation history clean so the LLM
       sees only the latest agreed plan on subsequent turns."""
 
-    conversation = await get_or_create_conversation(
-        db, user, conversation_id, local_course_id
+    course_context = await _resolve_chat_course_context(
+        db, user, message, local_course_id
     )
+    resolved_local_course_id = course_context.id if course_context else local_course_id
+    conversation = await get_or_create_conversation(
+        db, user, conversation_id, resolved_local_course_id
+    )
+    if course_context is None and conversation.course_id is not None:
+        course_context = await db.scalar(
+            select(Course).where(
+                Course.id == conversation.course_id,
+                Course.instructor_id == user.id,
+            )
+        )
+    if conversation.course_id is None and course_context is not None:
+        conversation.course_id = course_context.id
     user_msg = await log_message(db, conversation, role="user", content=message)
 
     history = await _get_recent_messages(db, conversation.id)
@@ -334,7 +426,9 @@ async def handle_chat_message(
     try:
         raw_output = await asyncio.wait_for(
             adapter.generate(
-                system_prompt, message, history=history,
+                system_prompt,
+                _message_with_course_context(message, course_context),
+                history=history,
                 timeout=LLM_TIMEOUT_SECONDS,
             ),
             timeout=LLM_TIMEOUT_SECONDS,
@@ -369,8 +463,12 @@ async def handle_chat_message(
         )
 
     try:
-        action = parse_action(raw_output)
-        result = await execute_tool(db, user, action)
+        text_reply = _plain_text_response(raw_output)
+        if text_reply is not None:
+            result = text_reply
+        else:
+            action = parse_action(raw_output)
+            result = await execute_tool(db, user, action)
     except ToolExecutionError as e:
         await log_message(db, conversation, role="assistant", content=e.log_detail)
         await db.commit()

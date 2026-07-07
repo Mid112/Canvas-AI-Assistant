@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useInstitution } from "@/contexts/useInstitution";
 import { InstructorCoursesPage } from "@/pages/Instructor/InstructorCoursesPage";
 import { fetchCourseAssignments } from "@/services/assignments";
-import { fetchActiveCourse, fetchCourses } from "@/services/canvas";
+import { fetchActiveCourse, fetchCourses, setActiveCourse } from "@/services/canvas";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 vi.mock("@/services/canvas", () => ({
@@ -32,6 +32,7 @@ vi.mock("@/services/assignments", () => ({
 const mockUseAuth = vi.fn();
 const mockedFetchCourses = vi.mocked(fetchCourses);
 const mockedFetchActiveCourse = vi.mocked(fetchActiveCourse);
+const mockedSetActiveCourse = vi.mocked(setActiveCourse);
 const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
 
 vi.mock("@/contexts/AuthContext", async () => {
@@ -125,6 +126,13 @@ beforeEach(() => {
   mockUseAuth.mockReturnValue(authWithCanvas);
   mockedFetchCourses.mockResolvedValue(canvasCourses);
   mockedFetchActiveCourse.mockResolvedValue(null);
+  mockedSetActiveCourse.mockResolvedValue({
+    local_id: 1,
+    canvas_course_id: "101",
+    canvas_url: CANVAS_URL,
+    name: "Introduction to Programming",
+    term: null,
+  });
   mockedFetchCourseAssignments.mockResolvedValue([
     { id: 1, name: "Assignment 1", course_id: 101 },
   ]);
@@ -352,6 +360,7 @@ describe("InstructorCoursesPage", () => {
     await user.click(screen.getAllByRole("button", { name: "Set Active" })[0]!);
 
     await waitFor(() => {
+      expect(mockedSetActiveCourse).toHaveBeenCalledWith(1, "token");
       expect(document.body.textContent).toContain(
         "Active course: CS 101: Introduction to Programming",
       );

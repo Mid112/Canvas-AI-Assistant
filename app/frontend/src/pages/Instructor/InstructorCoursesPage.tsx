@@ -23,6 +23,7 @@ export function InstructorCoursesPage() {
   const { user } = useAuth();
   const {
     activeCourse,
+    error: activeCourseError,
     isSaving,
     selectActiveCourse,
   } = useActiveCourse();
@@ -66,6 +67,14 @@ export function InstructorCoursesPage() {
           className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
         >
           {error}
+        </p>
+      ) : null}
+      {activeCourseError ? (
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+        >
+          {activeCourseError}
         </p>
       ) : null}
 

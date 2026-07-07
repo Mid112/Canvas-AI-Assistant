@@ -53,6 +53,15 @@ function toActiveCourseSelection(
   };
 }
 
+function toActiveCourseSelectionFromResponse(
+  course: Awaited<ReturnType<typeof persistActiveCourse>>,
+): ActiveCourseSelection {
+  return {
+    localId: course.local_id,
+    displayName: course.name,
+  };
+}
+
 export function ActiveCourseProvider({ children }: { children: ReactNode }) {
   const { accessToken, user } = useAuth();
   const { selectedInstitution } = useInstitution();
@@ -188,7 +197,9 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
   const selectActiveCourse = useCallback(
     async (localCourseId: number) => {
       const selected = availableCourses.find((course) => course.id === localCourseId);
-      if (!selected) {
+      // Canvas-backed selection can still succeed when this provider's course
+      // cache is stale; the backend validates ownership and returns the course.
+      if (!selected && (!usesCanvasCourses || !accessToken)) {
         if (isMountedRef.current) {
           setError("Selected course is not available.");
         }
@@ -201,13 +212,19 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
       }
 
       try {
+        let persistedSelection: ActiveCourseSelection | null = null;
         if (usesCanvasCourses && accessToken) {
-          await persistActiveCourse(localCourseId, accessToken);
+          const persisted = await persistActiveCourse(localCourseId, accessToken);
+          // Use the server response as a fallback display value when the click
+          // originated from another course loader, such as InstructorCoursesPage.
+          persistedSelection = toActiveCourseSelectionFromResponse(persisted);
         }
 
         setStoredActiveCourseId(persistenceScope, localCourseId);
         if (isMountedRef.current) {
-          setActiveCourseState(toActiveCourseSelection(selected));
+          setActiveCourseState(
+            selected ? toActiveCourseSelection(selected) : persistedSelection,
+          );
         }
       } catch (err) {
         const message =
