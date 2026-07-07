@@ -141,7 +141,12 @@ function DryRunPreviewContent({
   };
 
   const handleReturn = () => {
-    navigate(returnTo);
+    navigate(returnTo, {
+      state: {
+        initialConversationId: conversationId,
+        initialPendingMessageId: pendingMessageId,
+      },
+    });
   };
 
   const handleReject = async () => {

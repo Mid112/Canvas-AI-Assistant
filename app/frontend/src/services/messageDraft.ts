@@ -42,14 +42,21 @@ function mapDraftResponse(response: MessageDraftApiResponse): MessageDraft {
 
 function buildCreatePayload(options: FetchMessageDraftOptions) {
   const recipients = options.emptyRecipients ? [] : (options.recipients ?? []);
+  const prompt =
+    options.prompt ??
+    "Draft a friendly reminder about an upcoming assignment deadline.";
+  const templateName = options.templateName ?? "Assignment Reminder";
 
   return {
     course_id: options.courseId ?? null,
     template_id: options.templateId ?? "assignment-reminder",
-    template_name: options.templateName ?? "Assignment Reminder",
-    prompt:
-      options.prompt ??
-      "Draft a friendly reminder about an upcoming assignment deadline.",
+    template_name: templateName,
+    prompt,
+    subject: `${templateName}: Course Update`,
+    // Providing starter content keeps this route responsive when the
+    // backend is configured with a slow local model. The instructor can
+    // still edit the draft before sending.
+    body: prompt,
     recipients,
   };
 }

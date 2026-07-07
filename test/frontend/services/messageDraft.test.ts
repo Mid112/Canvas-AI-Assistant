@@ -43,12 +43,14 @@ describe("messageDraft service", () => {
     const draft = await fetchMessageDraft("access-token");
     const requestBody = JSON.parse(
       String(fetchSpy.mock.calls[0]?.[1]?.body),
-    ) as { recipients: unknown[] };
+    ) as { body?: string; prompt?: string; recipients: unknown[]; subject?: string };
 
     expect(draft.id).toBe("7");
     expect(draft.recipients.length).toBeGreaterThan(0);
     expect(draft.subject).toBeTruthy();
     expect(draft.templateName).toBe("Assignment Reminder");
+    expect(requestBody.subject).toBe("Assignment Reminder: Course Update");
+    expect(requestBody.body).toBe(requestBody.prompt);
     expect(requestBody.recipients).toEqual([]);
   });
 

@@ -7,6 +7,7 @@ import {
   AssistantApiError,
   cancelAssistantAction,
   confirmAssistantAction,
+  fetchConversation,
   sendAssistantMessage,
 } from "@/services/assistant";
 import { renderWithInstitution } from "../../utils/renderWithInstitution";
@@ -34,12 +35,14 @@ vi.mock("@/services/assistant", async () => {
     sendAssistantMessage: vi.fn(actual.sendAssistantMessage),
     confirmAssistantAction: vi.fn(actual.confirmAssistantAction),
     cancelAssistantAction: vi.fn(actual.cancelAssistantAction),
+    fetchConversation: vi.fn(actual.fetchConversation),
   };
 });
 
 const mockedSendAssistantMessage = vi.mocked(sendAssistantMessage);
 const mockedConfirmAssistantAction = vi.mocked(confirmAssistantAction);
 const mockedCancelAssistantAction = vi.mocked(cancelAssistantAction);
+const mockedFetchConversation = vi.mocked(fetchConversation);
 
 describe("ChatWindow", () => {
   beforeEach(() => {
@@ -293,5 +296,51 @@ describe("ChatWindow", () => {
     );
     expect(screen.getByText("Updated preview for the midterm exam.")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Confirm" })).toHaveLength(1);
+  });
+
+  it("restores conversation history when returning from a workflow preview", async () => {
+    mockedFetchConversation.mockResolvedValueOnce({
+      id: 7,
+      course_id: 3,
+      created_at: "2026-06-24T10:00:00.000Z",
+      messages: [
+        {
+          id: 11,
+          role: "user",
+          content: "Create a midterm exam",
+          created_at: "2026-06-24T10:01:00.000Z",
+        },
+        {
+          id: 42,
+          role: "assistant",
+          content: JSON.stringify({
+            intent_preview: true,
+            summary: "I prepared a midterm exam for review.",
+            proposed_action: {
+              action: "create_assignment",
+            },
+            preview_metadata: {
+              course_name: "CPSC 310",
+              audience: { label: "Entire class" },
+            },
+          }),
+          created_at: "2026-06-24T10:02:00.000Z",
+        },
+      ],
+    });
+
+    renderWithInstitution(
+      <ChatWindow initialConversationId={7} initialPendingMessageId={42} />,
+    );
+
+    expect(await screen.findByText("Create a midterm exam")).toBeInTheDocument();
+    expect(
+      screen.getByText("I prepared a midterm exam for review."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Review preview/ })).toHaveAttribute(
+      "href",
+      "/instructor/actions/preview?conversation=7&pending=42",
+    );
+    expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();
   });
 });

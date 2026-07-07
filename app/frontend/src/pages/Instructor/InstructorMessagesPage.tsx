@@ -9,6 +9,8 @@ import type { FetchMessageDraftOptions } from "@/types/messageDraft";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+const RECIPIENT_LOAD_TIMEOUT_MS = 5000;
+
 export function InstructorMessagesPage() {
   const { accessToken, user } = useAuth();
   const { activeCourse, isLoading: isLoadingCourses } = useActiveCourse();
@@ -28,14 +30,30 @@ export function InstructorMessagesPage() {
     activeCourse && fetchOptions?.courseId === activeCourse.localId
       ? fetchOptions
       : null;
+  const fallbackFetchOptions = useMemo<FetchMessageDraftOptions | null>(
+    () =>
+      activeCourse
+        ? {
+            courseId: activeCourse.localId,
+            prompt: basePrompt,
+            emptyRecipients: true,
+          }
+        : null,
+    [activeCourse, basePrompt],
+  );
 
   useEffect(() => {
-    if (!accessToken || !activeCourse || !canvasUrl) {
+    if (!activeCourse) {
+      return;
+    }
+
+    if (!accessToken || !canvasUrl) {
       return;
     }
 
     const token = accessToken;
     const localCourseId = activeCourse.localId;
+    const activeLocalCourseId = activeCourse.localId;
     const selectedCanvasUrl = canvasUrl;
     let cancelled = false;
 
@@ -43,13 +61,22 @@ export function InstructorMessagesPage() {
       setLoadError(null);
 
       try {
-        const students = await fetchCourseStudents(
-          localCourseId,
-          token,
-          selectedCanvasUrl,
-        );
+        const students = await Promise.race([
+          fetchCourseStudents(localCourseId, token, selectedCanvasUrl),
+          new Promise<never>((_, reject) => {
+            window.setTimeout(
+              () => reject(new Error("Loading students is taking too long.")),
+              RECIPIENT_LOAD_TIMEOUT_MS,
+            );
+          }),
+        ]);
 
-        if (cancelled) {
+        if (
+          cancelled ||
+          token !== accessToken ||
+          localCourseId !== activeLocalCourseId ||
+          selectedCanvasUrl !== canvasUrl
+        ) {
           return;
         }
 
@@ -63,7 +90,11 @@ export function InstructorMessagesPage() {
           })),
         });
       } catch (error) {
-        if (cancelled) {
+        if (
+          cancelled ||
+          token !== accessToken ||
+          localCourseId !== activeLocalCourseId
+        ) {
           return;
         }
 
@@ -95,7 +126,7 @@ export function InstructorMessagesPage() {
     );
   }
 
-  if (isLoadingCourses || (activeCourse && !activeFetchOptions)) {
+  if (isLoadingCourses) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
         <Card className="shadow-sm ring-1 ring-border/60">
@@ -135,7 +166,9 @@ export function InstructorMessagesPage() {
           </Card>
         </div>
       ) : null}
-      <StudentMessageDraftPage fetchOptions={activeFetchOptions ?? undefined} />
+      <StudentMessageDraftPage
+        fetchOptions={activeFetchOptions ?? fallbackFetchOptions ?? undefined}
+      />
     </>
   );
 }
