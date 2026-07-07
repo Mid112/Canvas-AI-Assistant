@@ -39,7 +39,11 @@ CREATE TABLE IF NOT EXISTS system_settings (
     updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Allow cancelled workflow status
-ALTER TABLE workflows DROP CONSTRAINT IF EXISTS workflows_status_check;
-ALTER TABLE workflows ADD CONSTRAINT workflows_status_check
-    CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled'));
+-- Note: this migration used to also replace workflows_status_check with the
+-- pre-redesign enum ('pending', 'approved', 'rejected', 'cancelled'). That
+-- constraint is obsolete — 004_workflow_auditlog_redesign.sql already
+-- establishes the correct one ('pending', 'executing', 'executed', 'failed',
+-- 'cancelled', 'superseded') by recreating the table from scratch. Reapplying
+-- the old enum here would either fail outright against any row already in
+-- 'executing'/'executed'/'superseded', or silently reinstate a constraint
+-- that breaks every subsequent confirm/cancel/execute. Removed.

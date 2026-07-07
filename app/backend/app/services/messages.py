@@ -9,6 +9,7 @@ from app.models.message_draft import MessageDraft
 from app.models.user import User
 from app.schemas.messages import MessageDraftCreate, MessageDraftUpdate
 from app.services.llm.llm_setting import get_llm_adapter
+from app.services.message_validation import validate_message_for_send
 
 
 async def _generate_draft_content(prompt: str, template_name: str | None) -> tuple[str, str]:
@@ -97,6 +98,19 @@ async def send_message_draft(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Draft recipients must include valid Canvas user IDs.",
             ) from error
+
+    # Same recipient-membership check the chat/dispatcher send_message path
+    # already enforces — without this, a draft could target Canvas user IDs
+    # that aren't actually enrolled in the course.
+    await validate_message_for_send(
+        draft.course_id,
+        user,
+        draft.subject,
+        draft.body,
+        db,
+        canvas_url=canvas_url,
+        recipient_canvas_user_ids=recipient_canvas_user_ids,
+    )
 
     from app.services.canvas import send_course_message
 

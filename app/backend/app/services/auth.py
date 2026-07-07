@@ -29,10 +29,18 @@ from app.schemas.auth import (
     RegisterRequest,
     TokenResponse,
 )
+from app.services.admin import get_admin_settings
 from app.services.sessions import issue_token_for_user, revoke_session
 
 
 async def register_user(db: AsyncSession, body: RegisterRequest) -> TokenResponse:
+    admin_settings = await get_admin_settings(db)
+    if not admin_settings.get("allow_instructor_self_registration", True):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Instructor self-registration is currently disabled.",
+        )
+
     existing = await db.scalar(select(User).where(User.email == body.email))
     if existing:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")

@@ -47,10 +47,10 @@ async def get_admin_settings(db: AsyncSession) -> dict:
     rows = await db.scalars(select(SystemSetting))
     settings = dict(DEFAULT_ADMIN_SETTINGS)
     for row in rows:
-        if isinstance(row.value, dict):
-            settings.update(row.value)
-        else:
-            settings[row.key] = row.value
+        # key is the setting name and value is that setting's own value
+        # (whatever JSON-compatible shape it is) — no wrapping needed, since
+        # JSONB stores scalars natively.
+        settings[row.key] = row.value
     return settings
 
 
@@ -58,10 +58,10 @@ async def update_admin_settings(db: AsyncSession, new_settings: dict) -> dict:
     for key, value in new_settings.items():
         existing = await db.get(SystemSetting, key)
         if existing:
-            existing.value = value if isinstance(value, dict) else {"value": value}
+            existing.value = value
             existing.updated_at = datetime.now(UTC)
         else:
-            db.add(SystemSetting(key=key, value=value if isinstance(value, dict) else {"value": value}))
+            db.add(SystemSetting(key=key, value=value))
 
     await db.commit()
     return await get_admin_settings(db)

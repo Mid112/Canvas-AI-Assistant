@@ -12,3 +12,4 @@ If you have an **existing** local or shared database created before the `ta` rol
 | `004_workflow_auditlog_redesign.sql` | Drops and recreates `workflows`/`audit_logs` with the action-lifecycle schema that fixes the confirm replay bug (both tables were unused, so no data migration is needed) |
 | `005_workflow_affected_resources.sql` | Adds `affected_resources` JSONB column to `workflows` for action history (#621, #870) |
 | `006_audit_logs_allow_conversation_resource_type.sql` | Allows `'conversation'` as an `audit_logs.resource_type`, alongside `'assignment'`/`'announcement'`, since targeted `send_message` now produces a private conversation instead of an announcement |
+| `007_unstarted_backend_features.sql` | Adds `notification_settings` to `user_preferences`, and the `password_reset_tokens`/`message_drafts`/`system_settings` tables — must run after `004_workflow_auditlog_redesign.sql` |
