@@ -1,4 +1,6 @@
 import { API_BASE_URL } from "@/config/api";
+import { fetchCourseAssignments } from "@/services/assignments";
+import { fetchAssignmentSubmissions } from "@/services/submissions";
 import type { CourseStudent } from "@/types/student";
 
 export class StudentApiError extends Error {
@@ -61,4 +63,73 @@ export async function fetchCourseStudents(
   }
 
   return response.json() as Promise<CourseStudent[]>;
+}
+
+export async function fetchStudentsFromSubmissions(
+  localCourseId: number,
+  accessToken: string,
+  canvasUrl?: string,
+): Promise<CourseStudent[]> {
+  const assignments = await fetchCourseAssignments(
+    localCourseId,
+    accessToken,
+    canvasUrl,
+  );
+  if (assignments.length === 0) {
+    return [];
+  }
+
+  const assignmentSubmissions = await Promise.all(
+    assignments.map((assignment) =>
+      fetchAssignmentSubmissions(
+        localCourseId,
+        assignment.id,
+        accessToken,
+        canvasUrl,
+      ),
+    ),
+  );
+  const studentsByCanvasId = new Map<string, CourseStudent>();
+
+  assignmentSubmissions.flat().forEach((submission) => {
+    const canvasUserId = String(submission.user_id);
+    if (studentsByCanvasId.has(canvasUserId)) {
+      return;
+    }
+
+    studentsByCanvasId.set(canvasUserId, {
+      id: submission.user_id,
+      canvas_user_id: canvasUserId,
+      course_id: localCourseId,
+      name: submission.student_name ?? `Student ${canvasUserId}`,
+      sortable_name: null,
+      login_id: null,
+      enrollment_state: "active",
+    });
+  });
+
+  return Array.from(studentsByCanvasId.values()).sort((left, right) =>
+    left.name.localeCompare(right.name),
+  );
+}
+
+export async function fetchCourseStudentsWithSubmissionFallback(
+  localCourseId: number,
+  accessToken: string,
+  canvasUrl?: string,
+  expectedStudentCount = 0,
+): Promise<CourseStudent[]> {
+  const students = await fetchCourseStudents(
+    localCourseId,
+    accessToken,
+    canvasUrl,
+  );
+
+  if (students.length > 0 || expectedStudentCount <= 0) {
+    return students;
+  }
+
+  // Canvas can expose students through submissions even when the enrollment
+  // roster endpoint returns empty, so use the analytics source as a fallback.
+  return fetchStudentsFromSubmissions(localCourseId, accessToken, canvasUrl);
 }

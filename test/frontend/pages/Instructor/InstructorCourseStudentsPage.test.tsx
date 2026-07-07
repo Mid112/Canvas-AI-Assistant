@@ -5,9 +5,7 @@ import { Outlet, Route, Routes } from "react-router-dom";
 import { institutionCourseData } from "@/data/institutionCourseData";
 import type { InstructorCourseOutletContext } from "@/pages/Instructor/InstructorCourse/instructorCourseLayoutContext";
 import { InstructorCourseStudentsPage } from "@/pages/Instructor/InstructorCourseStudentsPage";
-import { fetchCourseAssignments } from "@/services/assignments";
-import { fetchCourseStudents } from "@/services/students";
-import { fetchAssignmentSubmissions } from "@/services/submissions";
+import { fetchCourseStudentsWithSubmissionFallback } from "@/services/students";
 import type { InstructorCourse } from "@/types/course";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
@@ -22,23 +20,7 @@ vi.mock("@/services/students", () => ({
     name = "StudentApiError";
     status = 500;
   },
-  fetchCourseStudents: vi.fn(),
-}));
-
-vi.mock("@/services/assignments", () => ({
-  AssignmentApiError: class AssignmentApiError extends Error {
-    name = "AssignmentApiError";
-    status = 500;
-  },
-  fetchCourseAssignments: vi.fn(),
-}));
-
-vi.mock("@/services/submissions", () => ({
-  SubmissionApiError: class SubmissionApiError extends Error {
-    name = "SubmissionApiError";
-    status = 500;
-  },
-  fetchAssignmentSubmissions: vi.fn(),
+  fetchCourseStudentsWithSubmissionFallback: vi.fn(),
 }));
 
 vi.mock("@/hooks/useResolvedInstructorCourse", () => ({
@@ -71,9 +53,7 @@ vi.mock("@/contexts/AuthContext", async () => {
   };
 });
 
-const mockedFetchStudents = vi.mocked(fetchCourseStudents);
-const mockedFetchAssignments = vi.mocked(fetchCourseAssignments);
-const mockedFetchSubmissions = vi.mocked(fetchAssignmentSubmissions);
+const mockedFetchStudents = vi.mocked(fetchCourseStudentsWithSubmissionFallback);
 
 function CourseStudentsRoute({
   routeCourse = course,
@@ -123,6 +103,7 @@ describe("InstructorCourseStudentsPage", () => {
         course.id,
         "access-token",
         course.canvasUrl,
+        course.studentCount,
       );
     });
   });
@@ -153,68 +134,34 @@ describe("InstructorCourseStudentsPage", () => {
         course.id,
         "access-token",
         undefined,
+        course.studentCount,
       );
     });
   });
 
-  it("falls back to assignment submissions when the roster endpoint is empty", async () => {
-    mockedFetchStudents.mockResolvedValue([]);
-    mockedFetchAssignments.mockResolvedValue([
+  it("passes the expected course count so empty rosters can fall back to submissions", async () => {
+    mockedFetchStudents.mockResolvedValue([
       {
-        id: 10,
-        name: "MMM",
-        description: null,
-        due_at: null,
-        points_possible: null,
+        id: 303,
+        canvas_user_id: "303",
         course_id: course.id,
-      },
-      {
-        id: 11,
-        name: "Project",
-        description: null,
-        due_at: null,
-        points_possible: null,
-        course_id: course.id,
+        name: "MN Student",
+        sortable_name: null,
+        login_id: null,
+        enrollment_state: "active",
       },
     ]);
-    mockedFetchSubmissions
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([
-        {
-          id: 100,
-          assignment_id: 11,
-          user_id: 303,
-          student_name: "MN Student",
-          submitted_at: null,
-          workflow_state: "unsubmitted",
-          status: "missing",
-          score: null,
-          grade: null,
-          graded_at: null,
-        },
-      ]);
 
     renderWithRouter(<CourseStudentsRoute />);
 
     expect(await screen.findByText("MN Student")).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(mockedFetchAssignments).toHaveBeenCalledWith(
+      expect(mockedFetchStudents).toHaveBeenCalledWith(
         course.id,
         "access-token",
         course.canvasUrl,
-      );
-      expect(mockedFetchSubmissions).toHaveBeenCalledWith(
-        course.id,
-        10,
-        "access-token",
-        course.canvasUrl,
-      );
-      expect(mockedFetchSubmissions).toHaveBeenCalledWith(
-        course.id,
-        11,
-        "access-token",
-        course.canvasUrl,
+        course.studentCount,
       );
     });
   });

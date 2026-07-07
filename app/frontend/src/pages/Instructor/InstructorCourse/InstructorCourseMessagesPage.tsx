@@ -6,7 +6,7 @@ import { MessageDraftPage } from "@/components/messages/MessageDraftPage";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInstructorCourseOutletContext } from "@/hooks/useInstructorCourseOutletContext";
-import { fetchCourseStudents } from "@/services/students";
+import { fetchCourseStudentsWithSubmissionFallback } from "@/services/students";
 import type { FetchMessageDraftOptions } from "@/types/messageDraft";
 
 export function InstructorCourseMessagesPage() {
@@ -39,16 +39,18 @@ export function InstructorCourseMessagesPage() {
 
     const token = accessToken;
     const selectedCanvasUrl = canvasUrl;
+    const expectedStudentCount = course?.studentCount ?? 0;
     let cancelled = false;
 
     async function loadCourseRecipients() {
       setLoadError(null);
 
       try {
-        const students = await fetchCourseStudents(
+        const students = await fetchCourseStudentsWithSubmissionFallback(
           localCourseId,
           token,
           selectedCanvasUrl,
+          expectedStudentCount,
         );
 
         if (cancelled) {
@@ -87,7 +89,14 @@ export function InstructorCourseMessagesPage() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, basePrompt, canvasUrl, layoutContext, localCourseId]);
+  }, [
+    accessToken,
+    basePrompt,
+    canvasUrl,
+    course?.studentCount,
+    layoutContext,
+    localCourseId,
+  ]);
 
   if (!layoutContext) {
     return null;

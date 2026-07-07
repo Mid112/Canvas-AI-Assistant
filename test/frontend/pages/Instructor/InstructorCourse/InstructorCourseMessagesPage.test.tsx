@@ -7,7 +7,7 @@ import { mockMessageDraft } from "@/data/mockMessageDraft";
 import { InstructorCourseMessagesPage } from "@/pages/Instructor/InstructorCourse/InstructorCourseMessagesPage";
 import type { InstructorCourseOutletContext } from "@/pages/Instructor/InstructorCourse/instructorCourseLayoutContext";
 import { fetchMessageDraft } from "@/services/messageDraft";
-import { fetchCourseStudents } from "@/services/students";
+import { fetchCourseStudentsWithSubmissionFallback } from "@/services/students";
 import type { InstructorCourse } from "@/types/course";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
@@ -31,7 +31,7 @@ vi.mock("@/services/students", () => ({
     name = "StudentApiError";
     status = 500;
   },
-  fetchCourseStudents: vi.fn(),
+  fetchCourseStudentsWithSubmissionFallback: vi.fn(),
 }));
 
 vi.mock("@/contexts/AuthContext", async () => {
@@ -55,7 +55,7 @@ vi.mock("@/contexts/AuthContext", async () => {
 });
 
 const mockedFetchDraft = vi.mocked(fetchMessageDraft);
-const mockedFetchStudents = vi.mocked(fetchCourseStudents);
+const mockedFetchStudents = vi.mocked(fetchCourseStudentsWithSubmissionFallback);
 
 function CourseMessagesRoute({
   routeCourse = course,
@@ -85,9 +85,13 @@ describe("InstructorCourseMessagesPage", () => {
   it("loads course recipients and renders the message draft editor", async () => {
     mockedFetchStudents.mockResolvedValue([
       {
+        id: 1,
         canvas_user_id: "101",
+        course_id: course.id,
         name: "Alex Student",
+        sortable_name: null,
         login_id: "alex@example.edu",
+        enrollment_state: "active",
       },
     ]);
     mockedFetchDraft.mockResolvedValue({
@@ -117,6 +121,7 @@ describe("InstructorCourseMessagesPage", () => {
         course.id,
         "access-token",
         course.canvasUrl,
+        course.studentCount,
       );
       expect(mockedFetchDraft).toHaveBeenCalledWith(
         "access-token",
@@ -138,9 +143,13 @@ describe("InstructorCourseMessagesPage", () => {
     const courseWithoutCanvasId = { ...course, canvasCourseId: undefined };
     mockedFetchStudents.mockResolvedValue([
       {
+        id: 2,
         canvas_user_id: "202",
+        course_id: course.id,
         name: "Taylor Student",
+        sortable_name: null,
         login_id: "taylor@example.edu",
+        enrollment_state: "active",
       },
     ]);
     mockedFetchDraft.mockResolvedValue({
@@ -163,6 +172,7 @@ describe("InstructorCourseMessagesPage", () => {
         course.id,
         "access-token",
         course.canvasUrl,
+        course.studentCount,
       );
       expect(mockedFetchDraft).toHaveBeenCalledWith(
         "access-token",
@@ -188,9 +198,13 @@ describe("InstructorCourseMessagesPage", () => {
     };
     mockedFetchStudents.mockResolvedValue([
       {
+        id: 3,
         canvas_user_id: "303",
+        course_id: course.id,
         name: "Jordan Student",
+        sortable_name: null,
         login_id: "jordan@example.edu",
+        enrollment_state: "active",
       },
     ]);
     mockedFetchDraft.mockResolvedValue({
@@ -218,6 +232,7 @@ describe("InstructorCourseMessagesPage", () => {
         course.id,
         "access-token",
         undefined,
+        course.studentCount,
       );
       expect(mockedFetchDraft).toHaveBeenCalledWith(
         "access-token",

@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { StudentMessageDraftPage } from "@/pages/StudentMessageDraftPage";
-import { fetchCourseStudents } from "@/services/students";
+import { fetchCourseStudentsWithSubmissionFallback } from "@/services/students";
 import type { FetchMessageDraftOptions } from "@/types/messageDraft";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -13,7 +13,11 @@ const RECIPIENT_LOAD_TIMEOUT_MS = 5000;
 
 export function InstructorMessagesPage() {
   const { accessToken, user } = useAuth();
-  const { activeCourse, isLoading: isLoadingCourses } = useActiveCourse();
+  const {
+    activeCourse,
+    availableCourses,
+    isLoading: isLoadingCourses,
+  } = useActiveCourse();
   const canvasUrl = useCanvasConnectionUrl();
   const [fetchOptions, setFetchOptions] =
     useState<FetchMessageDraftOptions | null>(null);
@@ -30,6 +34,13 @@ export function InstructorMessagesPage() {
     activeCourse && fetchOptions?.courseId === activeCourse.localId ?
       fetchOptions
     : null;
+  const activeCourseDetails = useMemo(
+    () =>
+      activeCourse ?
+        availableCourses.find((course) => course.id === activeCourse.localId)
+      : null,
+    [activeCourse, availableCourses],
+  );
   const fallbackFetchOptions = useMemo<FetchMessageDraftOptions | null>(
     () =>
       // Seed the draft with an empty recipient list until the live roster load completes.
@@ -56,6 +67,7 @@ export function InstructorMessagesPage() {
     const localCourseId = activeCourse.localId;
     const activeLocalCourseId = activeCourse.localId;
     const selectedCanvasUrl = canvasUrl;
+    const expectedStudentCount = activeCourseDetails?.studentCount ?? 0;
     let cancelled = false;
 
     async function loadRecipients() {
@@ -64,7 +76,12 @@ export function InstructorMessagesPage() {
       try {
         // Race the roster fetch against a timeout so the composer stays usable if Canvas stalls.
         const students = await Promise.race([
-          fetchCourseStudents(localCourseId, token, selectedCanvasUrl),
+          fetchCourseStudentsWithSubmissionFallback(
+            localCourseId,
+            token,
+            selectedCanvasUrl,
+            expectedStudentCount,
+          ),
           new Promise<never>((_, reject) => {
             window.setTimeout(
               () => reject(new Error("Loading students is taking too long.")),
@@ -120,7 +137,13 @@ export function InstructorMessagesPage() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, activeCourse, basePrompt, canvasUrl]);
+  }, [
+    accessToken,
+    activeCourse,
+    activeCourseDetails?.studentCount,
+    basePrompt,
+    canvasUrl,
+  ]);
 
   if (!user?.has_canvas_token) {
     return (
