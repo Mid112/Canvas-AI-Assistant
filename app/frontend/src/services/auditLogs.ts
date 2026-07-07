@@ -2,6 +2,7 @@ import { formatAuditTimestamp } from "@/lib/format-audit-timestamp";
 import { formatAuditLogUserRole, mapAuditLogApiToEntry } from "@/lib/map-audit-log";
 import { apiRequest } from "@/lib/api-request";
 import type {
+  AuditLogApiRecord,
   AuditLogEntry,
   AuditLogResult,
   FetchAuditLogsResponse,
@@ -15,12 +16,13 @@ export const AUDIT_LOGS_USER_PATH = "/audit/logs";
 export async function fetchAuditLogs(
   accessToken: string,
 ): Promise<AuditLogEntry[]> {
-  const response = await apiRequest<FetchAuditLogsResponse>(
+  const response = await apiRequest<FetchAuditLogsResponse | AuditLogApiRecord[]>(
     `${AUDIT_LOGS_ADMIN_PATH}?limit=200&offset=0`,
     accessToken,
   );
 
-  return response.items.map(mapAuditLogApiToEntry);
+  const records = Array.isArray(response) ? response : response.items;
+  return records.map(mapAuditLogApiToEntry);
 }
 
 function escapeCsvField(value: string): string {

@@ -33,14 +33,14 @@ async def get_workflow_history(
     return await _workflow_history_response(limit, offset, current_user, db)
 
 
-@router.get("/workflows/history", response_model=WorkflowHistoryResponse)
+@router.get("/workflows/history", response_model=list[WorkflowHistoryItem])
 async def get_workflow_history_legacy(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await _workflow_history_response(limit, offset, current_user, db)
+    return (await _workflow_history_response(limit, offset, current_user, db)).items
 
 
 @router.post("/history/workflows/{workflow_id}/cancel", response_model=WorkflowHistoryItem)
