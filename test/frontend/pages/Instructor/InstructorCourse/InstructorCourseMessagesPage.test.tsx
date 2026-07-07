@@ -8,6 +8,7 @@ import { InstructorCourseMessagesPage } from "@/pages/Instructor/InstructorCours
 import type { InstructorCourseOutletContext } from "@/pages/Instructor/InstructorCourse/instructorCourseLayoutContext";
 import { fetchMessageDraft } from "@/services/messageDraft";
 import { fetchCourseStudents } from "@/services/students";
+import type { InstructorCourse } from "@/types/course";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 const course = {
@@ -56,11 +57,15 @@ vi.mock("@/contexts/AuthContext", async () => {
 const mockedFetchDraft = vi.mocked(fetchMessageDraft);
 const mockedFetchStudents = vi.mocked(fetchCourseStudents);
 
-function CourseMessagesRoute() {
+function CourseMessagesRoute({
+  routeCourse = course,
+}: {
+  routeCourse?: InstructorCourse;
+}) {
   const outletContext: InstructorCourseOutletContext = {
-    localCourseId: course.id,
-    course,
-    canvasUrl: course.canvasUrl,
+    localCourseId: routeCourse.id,
+    course: routeCourse,
+    canvasUrl: routeCourse.canvasUrl,
     isLoading: false,
     loadError: null,
     needsCanvasConnection: false,
@@ -122,6 +127,107 @@ describe("InstructorCourseMessagesPage", () => {
               id: "101",
               name: "Alex Student",
               email: "alex@example.edu",
+            },
+          ],
+        }),
+      );
+    });
+  });
+
+  it("loads recipients when the course has a Canvas URL but no Canvas course id", async () => {
+    const courseWithoutCanvasId = { ...course, canvasCourseId: undefined };
+    mockedFetchStudents.mockResolvedValue([
+      {
+        canvas_user_id: "202",
+        name: "Taylor Student",
+        login_id: "taylor@example.edu",
+      },
+    ]);
+    mockedFetchDraft.mockResolvedValue({
+      ...mockMessageDraft,
+      recipients: [
+        {
+          id: "202",
+          name: "Taylor Student",
+          email: "taylor@example.edu",
+        },
+      ],
+    });
+
+    renderWithRouter(<CourseMessagesRoute routeCourse={courseWithoutCanvasId} />);
+
+    expect(await screen.findByText("Taylor Student")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(mockedFetchStudents).toHaveBeenCalledWith(
+        course.id,
+        "access-token",
+        course.canvasUrl,
+      );
+      expect(mockedFetchDraft).toHaveBeenCalledWith(
+        "access-token",
+        expect.objectContaining({
+          courseId: course.id,
+          recipients: [
+            {
+              id: "202",
+              name: "Taylor Student",
+              email: "taylor@example.edu",
+            },
+          ],
+        }),
+      );
+    });
+  });
+
+  it("loads recipients by local course id when the course context has no Canvas URL", async () => {
+    const courseWithoutCanvasMetadata = {
+      ...course,
+      canvasCourseId: undefined,
+      canvasUrl: undefined,
+    };
+    mockedFetchStudents.mockResolvedValue([
+      {
+        canvas_user_id: "303",
+        name: "Jordan Student",
+        login_id: "jordan@example.edu",
+      },
+    ]);
+    mockedFetchDraft.mockResolvedValue({
+      ...mockMessageDraft,
+      recipients: [
+        {
+          id: "303",
+          name: "Jordan Student",
+          email: "jordan@example.edu",
+        },
+      ],
+    });
+
+    renderWithRouter(
+      <CourseMessagesRoute routeCourse={courseWithoutCanvasMetadata} />,
+    );
+
+    expect(
+      screen.getByText("Preparing course message draft..."),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Jordan Student")).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(mockedFetchStudents).toHaveBeenCalledWith(
+        course.id,
+        "access-token",
+        undefined,
+      );
+      expect(mockedFetchDraft).toHaveBeenCalledWith(
+        "access-token",
+        expect.objectContaining({
+          courseId: course.id,
+          recipients: [
+            {
+              id: "303",
+              name: "Jordan Student",
+              email: "jordan@example.edu",
             },
           ],
         }),

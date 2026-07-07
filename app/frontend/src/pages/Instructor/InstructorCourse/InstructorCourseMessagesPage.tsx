@@ -26,39 +26,14 @@ export function InstructorCourseMessagesPage() {
     [course],
   );
 
-  const staticFetchOptions = useMemo<FetchMessageDraftOptions | null>(() => {
-    if (!layoutContext || !accessToken) {
-      return null;
-    }
-
-    if (!course?.canvasCourseId || !canvasUrl) {
-      return {
-        courseId: localCourseId,
-        prompt: basePrompt,
-      };
-    }
-
-    return null;
-  }, [
-    accessToken,
-    basePrompt,
-    canvasUrl,
-    course?.canvasCourseId,
-    layoutContext,
-    localCourseId,
-  ]);
-
   const [studentFetchOptions, setStudentFetchOptions] =
     useState<FetchMessageDraftOptions | null>(null);
 
   const fetchOptions =
-    staticFetchOptions ??
-    (studentFetchOptions?.courseId === localCourseId
-      ? studentFetchOptions
-      : null);
+    studentFetchOptions?.courseId === localCourseId ? studentFetchOptions : null;
 
   useEffect(() => {
-    if (!layoutContext || !accessToken || !canvasUrl) {
+    if (!layoutContext || !accessToken) {
       return;
     }
 
