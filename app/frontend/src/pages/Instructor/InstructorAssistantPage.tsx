@@ -72,14 +72,7 @@ export function InstructorAssistantPage() {
             </Link>{" "}
             to set a different active course.
           </p>
-        ) : isActiveCourseLoading ? (
-          <p
-            role="status"
-            className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-[#1e293b]"
-          >
-            Loading your active course...
-          </p>
-        ) : (
+        ) : !isActiveCourseLoading ? (
           <p
             role="status"
             className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-950"
@@ -90,7 +83,7 @@ export function InstructorAssistantPage() {
             </Link>{" "}
             and choose Set Active on a course for course-specific answers.
           </p>
-        )}
+        ) : null}
 
       <InstructorAssistantSuggestedActions
         actions={suggestedActions}

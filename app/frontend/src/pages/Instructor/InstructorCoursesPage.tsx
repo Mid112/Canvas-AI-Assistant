@@ -37,11 +37,23 @@ export function InstructorCoursesPage() {
   } = useCanvasInstructorCourses();
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<CourseViewMode>("grid");
+  const [settingActiveCourseId, setSettingActiveCourseId] = useState<number | null>(
+    null,
+  );
 
   const filteredCourses = useMemo(() => {
     const filtered = filterInstructorCourses(courses, search);
     return sortInstructorCourses(filtered);
   }, [courses, search]);
+
+  const handleSetActiveCourse = async (courseId: number) => {
+    setSettingActiveCourseId(courseId);
+    try {
+      await selectActiveCourse(courseId);
+    } finally {
+      setSettingActiveCourseId(null);
+    }
+  };
 
   if (!user?.has_canvas_token || needsCanvasConnection) {
     return (
@@ -112,8 +124,8 @@ export function InstructorCoursesPage() {
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           activeCourseId={activeCourse?.localId ?? null}
-          onSetActiveCourse={(courseId) => void selectActiveCourse(courseId)}
-          isSettingActiveCourse={isSaving}
+          onSetActiveCourse={(courseId) => void handleSetActiveCourse(courseId)}
+          settingActiveCourseId={isSaving ? settingActiveCourseId : null}
         />
       )}
     </div>

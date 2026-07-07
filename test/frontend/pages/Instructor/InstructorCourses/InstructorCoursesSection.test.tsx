@@ -17,7 +17,7 @@ const courses = institutionCourseData[0]!.courses.slice(0, 2);
 const activeCourseProps = {
   activeCourseId: null as number | null,
   onSetActiveCourse: vi.fn(),
-  isSettingActiveCourse: false,
+  settingActiveCourseId: null as number | null,
 };
 
 describe("InstructorCoursesCard", () => {
@@ -44,6 +44,40 @@ describe("InstructorCoursesCard", () => {
       screen.getByRole("button", { name: "Set Active" }),
     ).toBeInTheDocument();
   });
+
+  it("shows per-course feedback while setting active", () => {
+    render(
+      <MemoryRouter>
+        <InstructorCoursesCard
+          course={courses[0]!}
+          isActive={false}
+          onSetActive={vi.fn()}
+          isSettingActive
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Setting active..." }),
+    ).toBeDisabled();
+  });
+
+  it("shows a clear active state", () => {
+    render(
+      <MemoryRouter>
+        <InstructorCoursesCard
+          course={courses[0]!}
+          isActive
+          onSetActive={vi.fn()}
+          isSettingActive={false}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Active Course" }),
+    ).toBeDisabled();
+  });
 });
 
 describe("InstructorCoursesList", () => {
@@ -63,6 +97,22 @@ describe("InstructorCoursesList", () => {
     expect(
       screen.getByText(/45 students · 8 assignments/),
     ).toBeInTheDocument();
+  });
+
+  it("shows loading feedback only for the selected list row", () => {
+    render(
+      <MemoryRouter>
+        <InstructorCoursesList
+          courses={courses}
+          activeCourseId={null}
+          onSetActiveCourse={vi.fn()}
+          settingActiveCourseId={courses[1]!.id}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: "Setting..." })).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: "Set Active" })).toHaveLength(1);
   });
 });
 

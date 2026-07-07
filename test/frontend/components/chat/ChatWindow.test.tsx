@@ -13,6 +13,7 @@ import {
 import { renderWithInstitution } from "../../utils/renderWithInstitution";
 
 const mockUseAuth = vi.fn();
+const mockUseActiveCourse = vi.hoisted(() => vi.fn());
 
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
@@ -24,6 +25,10 @@ vi.mock("@/contexts/AuthContext", async () => {
     useAuth: () => mockUseAuth(),
   };
 });
+
+vi.mock("@/contexts/useActiveCourse", () => ({
+  useActiveCourse: () => mockUseActiveCourse(),
+}));
 
 vi.mock("@/services/assistant", async () => {
   const actual = await vi.importActual<typeof import("@/services/assistant")>(
@@ -56,6 +61,15 @@ describe("ChatWindow", () => {
       register: vi.fn(),
       logout: vi.fn(),
       refreshUser: vi.fn(),
+    });
+    mockUseActiveCourse.mockReturnValue({
+      activeCourse: null,
+      availableCourses: [],
+      isLoading: false,
+      isSaving: false,
+      error: null,
+      selectActiveCourse: vi.fn(),
+      refreshActiveCourse: vi.fn(),
     });
   });
 
@@ -116,6 +130,44 @@ describe("ChatWindow", () => {
     expect(screen.getByText("Interpreted Action")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+  });
+
+  it("keeps chat usable while active course context is loading", async () => {
+    const user = userEvent.setup();
+    mockUseActiveCourse.mockReturnValue({
+      activeCourse: null,
+      availableCourses: [],
+      isLoading: true,
+      isSaving: false,
+      error: null,
+      selectActiveCourse: vi.fn(),
+      refreshActiveCourse: vi.fn(),
+    });
+    mockedSendAssistantMessage.mockResolvedValueOnce({
+      content: "I can still help while course context loads.",
+      conversationId: 1,
+    });
+
+    renderWithInstitution(<ChatWindow />);
+
+    const input = screen.getByRole("textbox", { name: "Chat message" });
+    expect(input).toBeEnabled();
+
+    await user.type(input, "Can I still chat?");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => {
+      expect(mockedSendAssistantMessage).toHaveBeenCalledWith(
+        "test-token",
+        "Can I still chat?",
+        expect.objectContaining({
+          context: {},
+        }),
+      );
+    });
+    expect(
+      await screen.findByText("I can still help while course context loads."),
+    ).toBeInTheDocument();
   });
 
   it("shows an error banner and retry button when the request fails", async () => {
