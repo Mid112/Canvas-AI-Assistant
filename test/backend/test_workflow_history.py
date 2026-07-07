@@ -102,3 +102,41 @@ def test_workflow_history_scoped_to_current_user(client):
     response = client.get("/api/v1/history/workflows", headers=headers_b)
     assert response.status_code == 200
     assert response.json()["total"] == 0
+
+
+def test_cancel_workflow_updates_status(client):
+    """HTTP-level coverage for POST /history/workflows/{id}/cancel — the
+    only test exercising this endpoint was previously removed when
+    cancel_workflow was refactored to use the atomic _claim_pending_workflow
+    claim instead of a plain status check."""
+    headers, local_course_id = _register_with_canvas(client)
+    _create_pending_workflow(client, headers, local_course_id)
+
+    history = client.get("/api/v1/history/workflows", headers=headers)
+    workflow_id = history.json()["items"][0]["id"]
+
+    response = client.post(f"/api/v1/history/workflows/{workflow_id}/cancel", headers=headers)
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+
+    history_after = client.get("/api/v1/history/workflows", headers=headers)
+    assert history_after.json()["items"][0]["status"] == "cancelled"
+
+
+def test_cancel_workflow_conflict_reports_true_current_status(client):
+    """Cancelling an already-executed workflow 409s with the real, current
+    status — not a stale value left over from a failed atomic claim."""
+    headers, local_course_id = _register_with_canvas(client)
+    _create_pending_workflow(client, headers, local_course_id)
+
+    history = client.get("/api/v1/history/workflows", headers=headers)
+    workflow_id = history.json()["items"][0]["id"]
+
+    # Cancel it once so it's no longer pending.
+    first_cancel = client.post(f"/api/v1/history/workflows/{workflow_id}/cancel", headers=headers)
+    assert first_cancel.status_code == 200
+
+    # A second cancel attempt must 409 and report the true current status.
+    second_cancel = client.post(f"/api/v1/history/workflows/{workflow_id}/cancel", headers=headers)
+    assert second_cancel.status_code == 409
+    assert "cancelled" in second_cancel.json()["detail"]

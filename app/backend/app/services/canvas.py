@@ -146,7 +146,10 @@ async def get_assignments(local_course_id: int, user: User, canvas_url: str, db:
     # Batch-fetch existing assignment rows for this course to avoid N+1 on upsert
     canvas_ids = [str(item["id"]) for item in data]
     rows = await db.scalars(
-        select(Assignment).where(Assignment.canvas_assignment_id.in_(canvas_ids))
+        select(Assignment).where(
+            Assignment.canvas_assignment_id.in_(canvas_ids),
+            Assignment.course_id == course.id,
+        )
     )
     assignment_map: dict[str, Assignment] = {a.canvas_assignment_id: a for a in rows}
 
@@ -346,7 +349,10 @@ async def get_submissions(
     parsed = [_parse_submission(raw) for raw in data]
 
     assignment = await db.scalar(
-        select(Assignment).where(Assignment.canvas_assignment_id == str(assignment_id))
+        select(Assignment).where(
+            Assignment.canvas_assignment_id == str(assignment_id),
+            Assignment.course_id == course.id,
+        )
     )
     if not assignment:
         assignment = Assignment(

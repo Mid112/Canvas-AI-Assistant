@@ -15,6 +15,7 @@ from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_act
 from app.mcp_tools.schemas import ACTION_SCHEMAS
 from app.models.audit_log import AuditLog
 from app.models.conversation import Conversation
+from app.models.course import Course
 from app.models.message import Message
 from app.models.user import User
 from app.models.workflow import Workflow
@@ -148,14 +149,25 @@ async def _sync_workflow_for_preview(
 
     Also backfills conversation.course_id from the proposed action the
     first time one is seen, since the client (e.g. the manual test
-    harness) doesn't always send local_course_id up front."""
+    harness) doesn't always send local_course_id up front. Only backfills
+    when that course actually exists and belongs to this user — both
+    conversations.course_id and workflows.course_id are real foreign keys,
+    so blindly trusting an LLM-echoed local_course_id here (e.g. one the
+    model hallucinated, or a stale/invalid id from client input) raises an
+    unhandled IntegrityError instead of the graceful "course not found"
+    message _resolve_course already produces at confirm time. Leaving it
+    unset here means that existing, tested error path still fires."""
     action_name = proposed_action.get("action")
     resources = affected_resources or []
 
     if conversation.course_id is None:
         local_course_id = proposed_action.get("local_course_id")
         if local_course_id is not None:
-            conversation.course_id = local_course_id
+            owned_course = await db.scalar(
+                select(Course.id).where(Course.id == local_course_id, Course.instructor_id == user.id)
+            )
+            if owned_course is not None:
+                conversation.course_id = local_course_id
 
     existing = None
     if pending_message_id:
@@ -420,7 +432,19 @@ async def _claim_pending_workflow(db: AsyncSession, workflow: Workflow, new_stat
         .where(Workflow.id == workflow.id, Workflow.status == "pending")
         .values(status=new_status)
     )
-    return claim.rowcount > 0
+    if claim.rowcount > 0:
+        return True
+    # SQLAlchemy's default synchronize_session='evaluate' strategy re-checks
+    # the bulk UPDATE's WHERE clause against workflow's in-memory attributes,
+    # not the DB row — on a 0-row update it can still apply .values() to the
+    # loaded object, leaving workflow.status holding the just-attempted
+    # target instead of the row's real, currently-committed value. Refresh
+    # just the status column (not attribute_names=None / the whole object)
+    # so callers building a 409 message report what's actually true, without
+    # expiring the eagerly-loaded `user` relationship some callers depend on
+    # — an async lazy-load on that would fail outside a greenlet context.
+    await db.refresh(workflow, attribute_names=["status"])
+    return False
 
 
 async def handle_confirmed_action(

@@ -70,13 +70,17 @@ CREATE INDEX idx_courses_instructor_id ON courses(instructor_id);
 -- ─────────────────────────────────────────────
 CREATE TABLE assignments (
     id                   SERIAL PRIMARY KEY,
-    canvas_assignment_id VARCHAR UNIQUE NOT NULL,
+    canvas_assignment_id VARCHAR NOT NULL,
     course_id            INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     title                VARCHAR NOT NULL,
     description          TEXT,
     due_date             TIMESTAMPTZ,
     points_possible      FLOAT,
-    created_at           TIMESTAMPTZ DEFAULT NOW()
+    created_at           TIMESTAMPTZ DEFAULT NOW(),
+    -- Unique per course, not globally — two co-instructors on the same real
+    -- Canvas course get separate local Course rows, and each needs its own
+    -- Assignment row for the same Canvas assignment ID.
+    CONSTRAINT uq_assignment_per_course UNIQUE (canvas_assignment_id, course_id)
 );
 
 CREATE INDEX idx_assignments_course_id ON assignments(course_id);
