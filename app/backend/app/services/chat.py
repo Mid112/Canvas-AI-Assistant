@@ -75,7 +75,17 @@ async def get_or_create_conversation(
             )
         )
         if conversation:
-            return conversation
+            if conversation.course_id is None and local_course_id is not None:
+                conversation.course_id = local_course_id
+                return conversation
+            if (
+                local_course_id is not None
+                and conversation.course_id is not None
+                and conversation.course_id != local_course_id
+            ):
+                conversation_id = None
+            else:
+                return conversation
 
     conversation = Conversation(user_id=user.id, course_id=local_course_id)
     db.add(conversation)

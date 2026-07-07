@@ -201,6 +201,55 @@ def test_chat_reuses_conversation_course_context_on_followup(client):
     assert f"local_course_id: {local_course_id}" in followup_user_message
 
 
+def test_chat_uses_saved_active_course_when_client_context_is_not_ready(client):
+    headers = _register(client)
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            headers=headers,
+        )
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock_courses:
+        mock_courses.return_value = [
+            {
+                "id": 499,
+                "name": "COSC 499",
+                "course_code": "COSC 499",
+                "enrollment_term_id": 1,
+                "workflow_state": "available",
+            }
+        ]
+        courses = client.get(
+            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            headers=headers,
+        )
+    local_course_id = courses.json()[0]["local_id"]
+
+    active = client.patch(
+        "/api/v1/canvas/active-course",
+        json={"local_course_id": local_course_id},
+        headers=headers,
+    )
+    assert active.status_code == 200
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "Using active course."}'
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "How many students are in the active course?"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    generated_user_message = mock_adapter.generate.call_args.args[1]
+    assert f"local_course_id: {local_course_id}" in generated_user_message
+    assert "course_name: COSC 499" in generated_user_message
+
+
 def test_canvas_failure_returns_chat_error(client):
     """Canvas API failures during read actions return a user-friendly chat error."""
     email = f"test_{uuid.uuid4()}@example.com"

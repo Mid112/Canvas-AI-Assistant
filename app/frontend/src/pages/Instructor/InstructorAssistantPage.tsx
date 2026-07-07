@@ -28,7 +28,7 @@ function getLocationState(
 export function InstructorAssistantPage() {
   const location = useLocation();
   const { user } = useAuth();
-  const { activeCourse } = useActiveCourse();
+  const { activeCourse, isLoading: isActiveCourseLoading } = useActiveCourse();
   const [locationState] = useState(() =>
     getLocationState(
       location.state as InstructorAssistantLocationState | null,
@@ -60,7 +60,14 @@ export function InstructorAssistantPage() {
         <CanvasConnectionRequired description="Connect Canvas to use the AI assistant with your courses and assignments." />
       ) : (
         <>
-      {activeCourse ? (
+      {isActiveCourseLoading ? (
+          <p
+            role="status"
+            className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-[#1e293b]"
+          >
+            Loading your active course...
+          </p>
+        ) : activeCourse ? (
           <p
             role="status"
             className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-[#1e293b]"
