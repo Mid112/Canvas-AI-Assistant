@@ -30,6 +30,20 @@ interface ChatApiResponse {
   is_error: boolean;
 }
 
+export interface ConversationMessage {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+}
+
+export interface ConversationResponse {
+  id: number;
+  course_id: number | null;
+  created_at: string;
+  messages: ConversationMessage[];
+}
+
 function toAssistantError(error: unknown): AssistantApiError {
   if (error instanceof AssistantApiError) {
     return error;
@@ -58,6 +72,20 @@ function mapAssistantResult(response: ChatApiResponse): AssistantMessageResult {
         ? response.reply.pending_message_id
         : undefined),
   };
+}
+
+export async function fetchConversation(
+  accessToken: string,
+  conversationId: number,
+): Promise<ConversationResponse> {
+  try {
+    return await apiRequest<ConversationResponse>(
+      `/chat/conversations/${conversationId}`,
+      accessToken,
+    );
+  } catch (error) {
+    throw toAssistantError(error);
+  }
 }
 
 export async function sendAssistantMessage(

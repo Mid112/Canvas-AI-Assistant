@@ -96,14 +96,22 @@ function escapeCsvField(value: string): string {
 export function buildWorkflowHistoryCsv(
   entries: WorkflowHistoryEntry[],
 ): string {
-  const headers = ["Date & Time", "Workflow", "Description", "User", "Status"];
+  const headers = [
+    "Date & Time",
+    "Action",
+    "Prompt",
+    "User",
+    "Status",
+    "Affected Resources",
+  ];
 
   const rows = entries.map((entry) => [
     formatAuditTimestamp(entry.timestamp),
     entry.workflowName,
-    entry.description,
+    entry.prompt,
     entry.userName,
     entry.status,
+    entry.affectedResourcesSummary,
   ]);
 
   return [headers, ...rows]

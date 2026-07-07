@@ -3,11 +3,13 @@ export type WorkflowStatus = "approved" | "rejected" | "pending";
 export interface WorkflowHistoryEntry {
   id: string;
   timestamp: string;
+  actionName: string;
   workflowName: string;
-  description: string;
+  prompt: string;
   userName: string;
   status: WorkflowStatus;
   affectedResources: Array<Record<string, unknown>>;
+  affectedResourcesSummary: string;
 }
 
 /**

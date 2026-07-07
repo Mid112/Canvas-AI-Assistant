@@ -20,11 +20,13 @@ describe("mapWorkflowHistoryApiToEntry", () => {
     expect(entry).toEqual({
       id: "1",
       timestamp: "2026-05-01T12:00:00.000Z",
+      actionName: "create_assignment",
       workflowName: "Create Assignment",
-      description: "create a midterm exam",
+      prompt: "create a midterm exam",
       userName: "Dr. Jane Doe",
       status: "pending",
       affectedResources: [],
+      affectedResourcesSummary: "None recorded",
     });
   });
 
@@ -46,6 +48,7 @@ describe("mapWorkflowHistoryApiToEntry", () => {
     expect(entry.timestamp).toBe("2026-05-01T12:05:00.000Z");
     expect(entry.workflowName).toBe("Send Reminder Emails");
     expect(entry.affectedResources).toHaveLength(1);
+    expect(entry.affectedResourcesSummary).toBe("course: CPSC 310");
   });
 
   it("maps cancelled and failed workflows to rejected", () => {

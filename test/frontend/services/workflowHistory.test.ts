@@ -54,9 +54,12 @@ describe("workflowHistory service", () => {
     );
     expect(entries).toHaveLength(1);
     expect(entries[0]?.workflowName).toBe("Create Assignment");
-    expect(entries[0]?.description).toBe("create a midterm exam");
+    expect(entries[0]?.prompt).toBe("create a midterm exam");
     expect(entries[0]?.status).toBe("pending");
     expect(entries[0]?.affectedResources).toHaveLength(2);
+    expect(entries[0]?.affectedResourcesSummary).toBe(
+      "course: CPSC 310; assignment: Midterm Exam",
+    );
   });
 
   it("maps executed workflows to approved status", () => {
@@ -83,7 +86,7 @@ describe("workflowHistory service", () => {
     const csv = buildWorkflowHistoryCsv(mockWorkflowHistory.slice(0, 2));
 
     expect(csv).toContain(
-      "Date & Time,Workflow,Description,User,Status",
+      "Date & Time,Action,Prompt,User,Status,Affected Resources",
     );
     expect(csv).toContain("Send Reminder Emails");
     expect(csv).toContain("Create Assignment");
@@ -93,7 +96,7 @@ describe("workflowHistory service", () => {
     const csv = buildWorkflowHistoryCsv([
       {
         ...mockWorkflowHistory[0]!,
-        description: "=SUM(A1:A10)",
+        prompt: "=SUM(A1:A10)",
       },
     ]);
 

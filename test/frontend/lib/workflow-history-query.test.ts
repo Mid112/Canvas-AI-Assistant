@@ -15,7 +15,7 @@ describe("filterWorkflowHistory", () => {
     ).toHaveLength(mockWorkflowHistory.length);
   });
 
-  it("filters by search query across name, description, and user", () => {
+  it("filters by search query across action, prompt, resources, and user", () => {
     const filtered = filterWorkflowHistory(mockWorkflowHistory, {
       ...emptyWorkflowHistoryFilters,
       search: "Reminder",
@@ -26,7 +26,8 @@ describe("filterWorkflowHistory", () => {
       filtered.every(
         (e) =>
           e.workflowName.includes("Reminder") ||
-          e.description.includes("Reminder"),
+          e.prompt.includes("Reminder") ||
+          e.affectedResourcesSummary.includes("Reminder"),
       ),
     ).toBe(true);
   });
@@ -53,7 +54,8 @@ describe("filterWorkflowHistory", () => {
       filtered.every(
         (e) =>
           e.workflowName.includes("Reminder") ||
-          e.description.includes("Reminder"),
+          e.prompt.includes("Reminder") ||
+          e.affectedResourcesSummary.includes("Reminder"),
       ),
     ).toBe(true);
   });
