@@ -1,9 +1,17 @@
 import uuid
+import asyncio
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from app.config import settings
+from app.core.security import hash_token
 from app.main import app
+from app.models.session import Session
 
 
 @pytest.fixture(scope="module")
@@ -48,6 +56,36 @@ def test_login_wrong_password(client):
         json={"email": email, "password": "wrongpass"}
     )
     assert response.status_code == 401
+
+
+def test_expired_session_rejected(client):
+    """#590 — expired DB sessions are rejected even when the JWT is still valid."""
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Test User", "email": email, "password": "secret123"},
+    )
+    token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async def _expire_session():
+        engine = create_async_engine(settings.DATABASE_URL)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+                session = await db.scalar(
+                    select(Session).where(Session.token_hash == hash_token(token))
+                )
+                assert session is not None
+                session.expires_at = datetime.now(UTC) - timedelta(minutes=5)
+                await db.commit()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_expire_session())
+
+    response = client.get("/api/v1/auth/me", headers=headers)
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Session expired or invalid"
 
 
 def test_register_duplicate_email(client):

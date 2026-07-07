@@ -2,13 +2,13 @@ import { AlertCircle, Download, Loader2, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
-import { useAuth } from "@/contexts/AuthContext";
 import { AuditLogPagination } from "@/components/admin/AuditLogPagination";
 import { WorkflowHistoryTable } from "@/components/workflow/WorkflowHistoryTable";
 import { WorkflowStatusSummary } from "@/components/workflow/WorkflowStatusSummary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   filterWorkflowHistory,
   paginateWorkflowHistory,
@@ -29,7 +29,7 @@ import {
 } from "@/types/workflowHistory";
 
 export function WorkflowHistoryPage() {
-  const { user } = useAuth();
+  const { accessToken, user } = useAuth();
   const [entries, setEntries] = useState<WorkflowHistoryEntry[]>([]);
   const [filters, setFilters] = useState<WorkflowHistoryFilters>(
     emptyWorkflowHistoryFilters,
@@ -77,50 +77,28 @@ export function WorkflowHistoryPage() {
   );
 
   const loadEntries = useCallback(async () => {
+    if (!accessToken) {
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setLoadError(null);
 
     try {
-      const data = await fetchWorkflowHistory();
+      const data = await fetchWorkflowHistory(accessToken);
       setEntries(data);
     } catch {
-      setLoadError(
-        "Unable to load workflow history. Please try again.",
-      );
+      setLoadError("Unable to load workflow history. Please try again.");
       setEntries([]);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [accessToken]);
 
   useEffect(() => {
-    let cancelled = false;
-
-    void (async () => {
-      try {
-        const data = await fetchWorkflowHistory();
-        if (!cancelled) {
-          setEntries(data);
-          setLoadError(null);
-        }
-      } catch {
-        if (!cancelled) {
-          setLoadError(
-            "Unable to load workflow history. Please try again.",
-          );
-          setEntries([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    void loadEntries();
+  }, [loadEntries]);
 
   const handleExport = () => {
     downloadWorkflowHistoryCsv(filteredEntries);
@@ -172,17 +150,14 @@ export function WorkflowHistoryPage() {
         <Card className="border-destructive/30 shadow-sm ring-1 ring-destructive/20">
           <CardContent className="flex flex-col items-center gap-4 py-10 text-sm text-destructive sm:flex-row sm:justify-center">
             <div className="flex items-center gap-3">
-              <AlertCircle
-                className="size-5 shrink-0"
-                aria-hidden="true"
-              />
+              <AlertCircle className="size-5 shrink-0" aria-hidden="true" />
               <span role="alert">{loadError}</span>
             </div>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={loadEntries}
+              onClick={() => void loadEntries()}
             >
               Try again
             </Button>

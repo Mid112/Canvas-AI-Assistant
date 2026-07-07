@@ -25,6 +25,7 @@ describe("mapChatReply", () => {
       ),
     ).toEqual({
       content: "Your request is out of scope.",
+      explanation: "Deleting all students is not supported.",
       safetyBlocked: true,
       safetyMessage: "Deleting all students is not supported.",
     });
@@ -70,6 +71,8 @@ describe("mapChatReply", () => {
       ),
     ).toEqual({
       content: "Create assignment Midterm Exam in CPSC 310.",
+      explanation:
+        "Review the proposed action below. Destructive or write actions require your approval before anything is sent to Canvas.",
       interpretedAction: {
         action: "Create Assignment",
         course: "CPSC 310",

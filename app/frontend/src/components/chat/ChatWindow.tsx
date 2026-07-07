@@ -80,95 +80,95 @@ export function ChatWindow({
     onLoadingChange?.(isLoading);
   }, [isLoading, onLoadingChange]);
 
-  const appendAssistantMessage = useCallback((response: {
-    content: string;
-    conversationId: number;
-    explanation?: string;
-    interpretedAction?: ChatMessage["interpretedAction"];
-    safetyBlocked?: boolean;
-    safetyMessage?: string;
-    pendingMessageId?: number;
-  }) => {
-    const assistantMessage: ChatMessage = {
-      id: createMessageId(),
-      role: "assistant",
-      content: response.content,
-      timestamp: new Date(),
-      conversationId: response.conversationId,
-      pendingMessageId: response.pendingMessageId,
-      pendingActionStatus: response.pendingMessageId ? "pending" : undefined,
-      explanation: response.explanation,
-      interpretedAction: response.interpretedAction,
-      safetyBlocked: response.safetyBlocked,
-      safetyMessage: response.safetyMessage,
-    };
+  const appendAssistantMessage = useCallback(
+    (response: {
+      content: string;
+      conversationId: number;
+      explanation?: string;
+      interpretedAction?: ChatMessage["interpretedAction"];
+      safetyBlocked?: boolean;
+      safetyMessage?: string;
+      pendingMessageId?: number;
+    }) => {
+      const assistantMessage: ChatMessage = {
+        id: createMessageId(),
+        role: "assistant",
+        content: response.content,
+        timestamp: new Date(),
+        conversationId: response.conversationId,
+        pendingMessageId: response.pendingMessageId,
+        pendingActionStatus: response.pendingMessageId ? "pending" : undefined,
+        explanation: response.explanation,
+        interpretedAction: response.interpretedAction,
+        safetyBlocked: response.safetyBlocked,
+        safetyMessage: response.safetyMessage,
+      };
 
-    setMessages((current) => [...current, assistantMessage]);
+      setMessages((current) => [...current, assistantMessage]);
 
-    if (response.pendingMessageId) {
-      setActivePendingMessageId(response.pendingMessageId);
-    }
-  }, []);
+      if (response.pendingMessageId) {
+        setActivePendingMessageId(response.pendingMessageId);
+      }
+    },
+    [],
+  );
 
-  const deliverAssistantResponse = useCallback(async (userText: string) => {
-    if (isDeliveringRef.current) {
-      return;
-    }
-
-    isDeliveringRef.current = true;
-    setIsLoading(true);
-    setError(null);
-    setRetryMessage(userText);
-
-    if (!accessToken) {
-      setError("You must be signed in to use the assistant.");
-      isDeliveringRef.current = false;
-      setIsLoading(false);
-      return;
-    }
-
-    const pendingMessageIdToSend = activePendingMessageId;
-
-    try {
-      const response = await sendAssistantMessage(userText, {
-        accessToken,
-        context: assistantContext,
-        conversationId,
-        pendingMessageId: pendingMessageIdToSend,
-      });
-
-      if (pendingMessageIdToSend !== undefined) {
-        setActivePendingMessageId(undefined);
-        onModifyContextConsumed?.();
+  const deliverAssistantResponse = useCallback(
+    async (userText: string) => {
+      if (isDeliveringRef.current) {
+        return;
       }
 
-      setConversationId(response.conversationId);
-      appendAssistantMessage(response);
-      setRetryMessage(null);
-    } catch (requestError) {
-      const message =
-        requestError instanceof AssistantApiError
-          ? requestError.message
-          : "Something went wrong. Please try again.";
-      setError(message);
-    } finally {
-      isDeliveringRef.current = false;
-      setIsLoading(false);
-    }
-  }, [
-    accessToken,
-    activePendingMessageId,
-    appendAssistantMessage,
-    assistantContext,
-    conversationId,
-    onModifyContextConsumed,
-  ]);
+      if (!accessToken) {
+        setError("You must be signed in to use the assistant.");
+        return;
+      }
+
+      isDeliveringRef.current = true;
+      setIsLoading(true);
+      setError(null);
+      setRetryMessage(userText);
+
+      const pendingMessageIdToSend = activePendingMessageId;
+
+      try {
+        const response = await sendAssistantMessage(accessToken, userText, {
+          context: assistantContext,
+          conversationId,
+          pendingMessageId: pendingMessageIdToSend,
+        });
+
+        if (pendingMessageIdToSend !== undefined) {
+          setActivePendingMessageId(undefined);
+          onModifyContextConsumed?.();
+        }
+
+        setConversationId(response.conversationId);
+        appendAssistantMessage(response);
+        setRetryMessage(null);
+      } catch (requestError) {
+        const message =
+          requestError instanceof AssistantApiError
+            ? requestError.message
+            : "Something went wrong. Please try again.";
+        setError(message);
+      } finally {
+        isDeliveringRef.current = false;
+        setIsLoading(false);
+      }
+    },
+    [
+      accessToken,
+      activePendingMessageId,
+      appendAssistantMessage,
+      assistantContext,
+      conversationId,
+      onModifyContextConsumed,
+    ],
+  );
 
   const resolvePendingAction = useCallback(
-    async (
-      message: ChatMessage,
-      action: "confirm" | "cancel",
-    ) => {
+    async (message: ChatMessage, action: "confirm" | "cancel") => {
       if (
         !accessToken ||
         message.pendingMessageId === undefined ||
@@ -192,13 +192,11 @@ export function ChatWindow({
                 accessToken,
                 activeConversationId,
                 message.pendingMessageId,
-                assistantContext,
               )
             : await cancelAssistantAction(
                 accessToken,
                 activeConversationId,
                 message.pendingMessageId,
-                assistantContext,
               );
 
         setConversationId(response.conversationId);
@@ -225,12 +223,7 @@ export function ChatWindow({
         setResolvingMessageId(null);
       }
     },
-    [
-      accessToken,
-      appendAssistantMessage,
-      assistantContext,
-      conversationId,
-    ],
+    [accessToken, appendAssistantMessage, conversationId],
   );
 
   const handleSend = useCallback(
@@ -314,7 +307,10 @@ export function ChatWindow({
             className="shrink-0 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3"
           >
             <div className="flex items-start gap-2 text-sm text-destructive">
-              <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <AlertCircle
+                className="mt-0.5 size-4 shrink-0"
+                aria-hidden="true"
+              />
               <span>{error}</span>
             </div>
             <Button

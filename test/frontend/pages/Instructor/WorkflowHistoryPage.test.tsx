@@ -5,8 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mockWorkflowHistory } from "@/data/mockWorkflowHistory";
 import { WorkflowHistoryPage } from "@/pages/Instructor/WorkflowHistoryPage";
 import * as workflowHistoryService from "@/services/workflowHistory";
-import { resetMockWorkflowHistory } from "@/services/workflowHistory";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
+
+const mockUseAuth = vi.fn();
 
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
@@ -15,7 +16,16 @@ vi.mock("@/contexts/AuthContext", async () => {
 
   return {
     ...actual,
-    useAuth: () => ({
+    useAuth: () => mockUseAuth(),
+  };
+});
+
+describe("WorkflowHistoryPage", () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+
+  beforeEach(() => {
+    mockUseAuth.mockReturnValue({
+      accessToken: "access-token",
       user: {
         id: 1,
         email: "jane.doe@example.com",
@@ -24,22 +34,16 @@ vi.mock("@/contexts/AuthContext", async () => {
         is_active: true,
         has_canvas_token: true,
       },
-      accessToken: "token",
       isAuthenticated: true,
       isLoading: false,
       login: vi.fn(),
       register: vi.fn(),
       logout: vi.fn(),
       refreshUser: vi.fn(),
-    }),
-  };
-});
-
-describe("WorkflowHistoryPage", () => {
-  const user = userEvent.setup({ pointerEventsCheck: 0 });
-
-  beforeEach(() => {
-    resetMockWorkflowHistory();
+    });
+    vi.spyOn(workflowHistoryService, "fetchWorkflowHistory").mockResolvedValue(
+      mockWorkflowHistory,
+    );
   });
 
   async function waitForLoaded() {

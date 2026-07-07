@@ -1,0 +1,122 @@
+"""
+End-to-end tests for the ToolExecutionError user-safe error boundary
+(app/backend/app/mcp_tools/dispatcher.py).
+
+parse_action/execute_tool raise ToolExecutionError with two distinct
+messages: a safe `user_message` meant for the chatbox, and a `log_detail`
+(often containing raw LLM output, internal IDs, or exception text) meant
+only for server-side logs. services/chat.py is supposed to return only
+user_message in the HTTP response and never leak log_detail. That boundary
+is exercised at the unit level by test_dispatcher.py/test_execute.py, but
+was never verified end-to-end over real HTTP — these tests close that gap.
+"""
+import uuid
+from unittest.mock import AsyncMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.main import app
+
+CANVAS_URL = "https://canvas.ubc.ca"
+
+
+@pytest.fixture(scope="module")
+def client():
+    with TestClient(app) as c:
+        yield c
+
+
+def _register(client) -> dict:
+    email = f"errtest_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Error Test User", "email": email, "password": "secret123"},
+    )
+    token = reg.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_malformed_llm_json_returns_safe_message_without_leaking_raw_output(client):
+    """parse_action's JSON-decode failure path: log_detail embeds the raw
+    LLM output verbatim (f"...Raw output: {raw_llm_output!r}") — that must
+    never reach the client."""
+    headers = _register(client)
+    raw_output = "SECRET_INTERNAL_TOKEN_xyz not-json-at-all{{{"
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = raw_output
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "do something"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_error"] is True
+    assert "could not be understood" in body["reply"]["error"]
+    # The raw LLM output (and any internal detail) must not leak into the
+    # response body at all.
+    assert "SECRET_INTERNAL_TOKEN_xyz" not in response.text
+    assert "Raw output" not in response.text
+
+
+def test_unknown_action_returns_safe_message_without_leaking_action_name(client):
+    """dispatcher's unknown-action path logs the literal unsupported action
+    name in log_detail — the client should only see the generic message."""
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "delete_entire_database"}'
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "do something forbidden"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_error"] is True
+    assert "isn't supported" in body["reply"]["error"]
+    assert "delete_entire_database" not in response.text
+
+
+def test_confirm_unknown_course_returns_safe_message(client):
+    """_resolve_course's ToolExecutionError ("That course could not be
+    found in your account.") must reach the client as-is, without the
+    log_detail's internal local_course_id/user_id detail."""
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        '{"action": "intent_preview", "summary": "Fetch assignments", '
+        '"proposed_action": {"action": "fetch_assignments", "local_course_id": 999999}}'
+    )
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        preview = client.post(
+            "/api/v1/chat/",
+            json={"message": "show me assignments for course 999999"},
+            headers=headers,
+        )
+    assert preview.status_code == 200
+    pending_message_id = preview.json()["reply"]["pending_message_id"]
+    conversation_id = preview.json()["conversation_id"]
+
+    confirm = client.post(
+        "/api/v1/chat/confirm",
+        json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
+        headers=headers,
+    )
+
+    assert confirm.status_code == 200
+    body = confirm.json()
+    assert body["is_error"] is True
+    assert "could not be found in your account" in body["reply"]["error"]
+    # log_detail includes "local_course_id=999999" and the requesting
+    # user_id — neither should be visible to the client.
+    assert "999999" not in confirm.text

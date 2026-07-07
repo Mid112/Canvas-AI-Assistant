@@ -17,6 +17,13 @@ vi.mock("@/contexts/AuthContext", async () => {
   };
 });
 
+vi.mock("@/services/assistant", () => ({
+  AssistantApiError: class AssistantApiError extends Error {
+    name = "AssistantApiError";
+  },
+  sendAssistantMessage: vi.fn(),
+}));
+
 beforeEach(() => {
   mockUseAuth.mockReturnValue({
     user: {

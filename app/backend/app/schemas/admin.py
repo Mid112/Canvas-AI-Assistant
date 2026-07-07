@@ -1,6 +1,21 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
+
+
+class AdminDashboardResponse(BaseModel):
+    instructor_count: int
+    admin_count: int
+    active_workflows: int
+    audit_events_last_7_days: int
+
+
+class AdminSettingsResponse(BaseModel):
+    settings: dict
+
+
+class AdminSettingsUpdate(BaseModel):
+    settings: dict = Field(default_factory=dict)
 
 
 class CreateAdminRequest(BaseModel):

@@ -23,6 +23,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
 import {
   fetchMessageDraft,
@@ -41,6 +42,7 @@ interface MessageDraftPageProps {
 }
 
 export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPageProps) {
+  const { accessToken } = useAuth();
   const [pageState, setPageState] = useState<MessageDraftPageState>("loading");
   const [draft, setDraft] = useState<MessageDraft | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -74,8 +76,11 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     setSuccessMessage(null);
 
     try {
-      // Placeholder API — loads mock draft data until backend Canvas messaging exists.
-      const loadedDraft = await fetchMessageDraft(fetchOptions);
+      if (!accessToken) {
+        throw new Error("You must be signed in to load message drafts.");
+      }
+
+      const loadedDraft = await fetchMessageDraft(accessToken, fetchOptions);
       setDraft(loadedDraft);
       reset({
         subject: loadedDraft.subject,
@@ -91,7 +96,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
       );
       setPageState("editing");
     }
-  }, [fetchOptions, reset, trigger]);
+  }, [accessToken, fetchOptions, reset, trigger]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- async draft load on mount
@@ -140,8 +145,11 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     setSendError(null);
 
     try {
-      // Placeholder API — simulates Canvas send; no real message is delivered yet.
-      await sendMessageDraft({
+      if (!accessToken) {
+        throw new Error("You must be signed in to send messages.");
+      }
+
+      await sendMessageDraft(accessToken, {
         draftId: draft.id,
         subject: subjectValue.trim(),
         body: bodyValue.trim(),

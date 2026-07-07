@@ -237,3 +237,20 @@ def test_list_students_canvas_timeout(client):
             headers=headers,
         )
     assert response.status_code == 504
+
+
+# ---------------------------------------------------------------------------
+# Issue #541 — student data formatting (include[]=user)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_fetch_enrollments_includes_user():
+    """Canvas enrollment fetch must request nested user objects for name/login_id."""
+    with patch("app.integrations.canvas._fetch_all_pages", new_callable=AsyncMock) as mock_pages:
+        mock_pages.return_value = []
+        from app.integrations.canvas import fetch_enrollments
+
+        await fetch_enrollments(123, "test-token", "https://canvas.test")
+
+    params = mock_pages.call_args.kwargs["params"]
+    assert params["include[]"] == "user"

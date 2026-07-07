@@ -191,7 +191,6 @@ describe("ChatWindow", () => {
       "test-token",
       7,
       42,
-      expect.any(Object),
     );
     expect(screen.getByText("This action was confirmed.")).toBeInTheDocument();
   });
@@ -234,7 +233,6 @@ describe("ChatWindow", () => {
       "test-token",
       7,
       42,
-      expect.any(Object),
     );
     expect(screen.getByText("This action was cancelled.")).toBeInTheDocument();
   });

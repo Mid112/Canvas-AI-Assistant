@@ -15,6 +15,7 @@ from app.integrations.canvas import (
     fetch_assignments,
     fetch_courses,
     fetch_submissions,
+    send_conversation,
     update_assignment,
 )
 from app.models.assignment import Assignment
@@ -145,7 +146,10 @@ async def get_assignments(local_course_id: int, user: User, canvas_url: str, db:
     # Batch-fetch existing assignment rows for this course to avoid N+1 on upsert
     canvas_ids = [str(item["id"]) for item in data]
     rows = await db.scalars(
-        select(Assignment).where(Assignment.canvas_assignment_id.in_(canvas_ids))
+        select(Assignment).where(
+            Assignment.canvas_assignment_id.in_(canvas_ids),
+            Assignment.course_id == course.id,
+        )
     )
     assignment_map: dict[str, Assignment] = {a.canvas_assignment_id: a for a in rows}
 
@@ -252,6 +256,7 @@ async def send_course_message(
     user: User,
     canvas_url: str,
     db: AsyncSession,
+    recipient_canvas_user_ids: list[int] | None = None,
 ) -> MessageSendResult:
     # Local import — services/student.py imports require_canvas_token from
     # this module, so importing get_students at module level here would
@@ -261,17 +266,35 @@ async def send_course_message(
 
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
-    await create_announcement(
-        int(course.canvas_course_id), subject, body, token, canvas_url
-    )
-    # Roster is fetched purely to report audience_size — an empty class is
-    # not an error for an announcement, unlike a targeted send would be.
-    roster = await get_students(int(course.canvas_course_id), user, canvas_url, db)
+    canvas_course_id = int(course.canvas_course_id)
+
+    if recipient_canvas_user_ids:
+        await send_conversation(
+            canvas_course_id,
+            recipient_canvas_user_ids,
+            subject,
+            body,
+            token,
+            canvas_url,
+        )
+        return MessageSendResult(
+            course_id=canvas_course_id,
+            subject=subject,
+            body=body,
+            audience_size=len(recipient_canvas_user_ids),
+            delivery_mode="conversation",
+            recipient_canvas_user_ids=recipient_canvas_user_ids,
+        )
+
+    await create_announcement(canvas_course_id, subject, body, token, canvas_url)
+    roster = await get_students(canvas_course_id, user, canvas_url, db)
     return MessageSendResult(
-        course_id=int(course.canvas_course_id),
+        course_id=canvas_course_id,
         subject=subject,
         body=body,
         audience_size=len(roster),
+        delivery_mode="announcement",
+        recipient_canvas_user_ids=[],
     )
 
 
@@ -313,8 +336,8 @@ async def get_submissions(
     canvas_url: str,
     db: AsyncSession,
 ) -> list[SubmissionResponse]:
-    # Parses and returns submissions from Canvas — does not persist to the submissions
-    # table yet. DB upsert is deferred to a follow-up PR.
+    from app.models.submission import Submission
+
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     data = await fetch_submissions(
@@ -323,7 +346,56 @@ async def get_submissions(
         token,
         canvas_url,
     )
-    return [_parse_submission(raw) for raw in data]
+    parsed = [_parse_submission(raw) for raw in data]
+
+    assignment = await db.scalar(
+        select(Assignment).where(
+            Assignment.canvas_assignment_id == str(assignment_id),
+            Assignment.course_id == course.id,
+        )
+    )
+    if not assignment:
+        assignment = Assignment(
+            canvas_assignment_id=str(assignment_id),
+            course_id=course.id,
+            title=f"Assignment {assignment_id}",
+        )
+        db.add(assignment)
+        await db.flush()
+
+    canvas_ids = [str(item.id) for item in parsed]
+    existing_rows = await db.scalars(
+        select(Submission).where(Submission.canvas_submission_id.in_(canvas_ids))
+    )
+    submission_map = {s.canvas_submission_id: s for s in existing_rows}
+
+    for item in parsed:
+        cid = str(item.id)
+        if cid in submission_map:
+            row = submission_map[cid]
+            row.status = item.status.value
+            row.score = item.score
+            row.grade = item.grade
+            row.graded_at = item.graded_at
+            row.submitted_at = item.submitted_at
+            row.student_name = item.student_name
+        else:
+            db.add(
+                Submission(
+                    canvas_submission_id=cid,
+                    assignment_id=assignment.id,
+                    student_canvas_id=str(item.user_id),
+                    student_name=item.student_name,
+                    status=item.status.value,
+                    score=item.score,
+                    grade=item.grade,
+                    graded_at=item.graded_at,
+                    submitted_at=item.submitted_at,
+                )
+            )
+
+    await db.commit()
+    return parsed
 
 
 async def get_active_course(user: User, db: AsyncSession) -> ActiveCourseResponse | None:

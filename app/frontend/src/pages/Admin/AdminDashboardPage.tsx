@@ -1,19 +1,60 @@
+import { useEffect, useState } from "react";
 import { FileText, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { paths } from "@/routes/paths";
+import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
-
-const metrics = [
-  { label: "Total instructors", value: "24" },
-  { label: "Active instructors", value: "21" },
-  { label: "Workflows this week", value: "18" },
-  { label: "Pending approvals", value: "3" },
-];
+import { paths } from "@/routes/paths";
+import { fetchAdminDashboard } from "@/services/adminDashboard";
 
 export function AdminDashboardPage() {
+  const { accessToken } = useAuth();
+  const [stats, setStats] = useState({
+    instructor_count: 0,
+    admin_count: 0,
+    active_workflows: 0,
+    audit_events_last_7_days: 0,
+  });
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const data = await fetchAdminDashboard(accessToken);
+        if (!cancelled) {
+          setStats(data);
+          setLoadError(null);
+        }
+      } catch {
+        if (!cancelled) {
+          setLoadError("Unable to load admin dashboard metrics.");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken]);
+
+  const metrics = [
+    { label: "Total instructors", value: String(stats.instructor_count) },
+    { label: "Administrators", value: String(stats.admin_count) },
+    { label: "Pending workflows", value: String(stats.active_workflows) },
+    {
+      label: "Audit events (7 days)",
+      value: String(stats.audit_events_last_7_days),
+    },
+  ];
+
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
       <header className="space-y-1">
@@ -24,6 +65,12 @@ export function AdminDashboardPage() {
           System-wide overview of users, workflow activity, and audit events.
         </p>
       </header>
+
+      {loadError ? (
+        <p role="alert" className="text-sm text-destructive">
+          {loadError}
+        </p>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => (
@@ -46,10 +93,7 @@ export function AdminDashboardPage() {
             <CardTitle>Quick actions</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
-            <Link
-              to={paths.admin.users}
-              className={cn(buttonVariants())}
-            >
+            <Link to={paths.admin.users} className={cn(buttonVariants())}>
               <Users data-icon="inline-start" />
               Manage users
             </Link>

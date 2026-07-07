@@ -70,13 +70,17 @@ CREATE INDEX idx_courses_instructor_id ON courses(instructor_id);
 -- ─────────────────────────────────────────────
 CREATE TABLE assignments (
     id                   SERIAL PRIMARY KEY,
-    canvas_assignment_id VARCHAR UNIQUE NOT NULL,
+    canvas_assignment_id VARCHAR NOT NULL,
     course_id            INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     title                VARCHAR NOT NULL,
     description          TEXT,
     due_date             TIMESTAMPTZ,
     points_possible      FLOAT,
-    created_at           TIMESTAMPTZ DEFAULT NOW()
+    created_at           TIMESTAMPTZ DEFAULT NOW(),
+    -- Unique per course, not globally — two co-instructors on the same real
+    -- Canvas course get separate local Course rows, and each needs its own
+    -- Assignment row for the same Canvas assignment ID.
+    CONSTRAINT uq_assignment_per_course UNIQUE (canvas_assignment_id, course_id)
 );
 
 CREATE INDEX idx_assignments_course_id ON assignments(course_id);
@@ -147,6 +151,7 @@ CREATE TABLE workflows (
     action_name              VARCHAR NOT NULL,
     user_prompt              TEXT NOT NULL,
     proposed_action          JSONB NOT NULL,
+    affected_resources       JSONB NOT NULL DEFAULT '[]'::jsonb,
     status                   VARCHAR NOT NULL DEFAULT 'pending'
                              CHECK (status IN ('pending', 'executing', 'executed', 'failed', 'cancelled', 'superseded')),
     error_detail             TEXT,
@@ -174,7 +179,7 @@ CREATE TABLE audit_logs (
     workflow_id       INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
     course_id         INTEGER REFERENCES courses(id) ON DELETE SET NULL,
     action            VARCHAR NOT NULL,
-    resource_type     VARCHAR NOT NULL CHECK (resource_type IN ('assignment', 'announcement')),
+    resource_type     VARCHAR NOT NULL CHECK (resource_type IN ('assignment', 'announcement', 'conversation')),
     resource_id       VARCHAR,
     operation         VARCHAR NOT NULL CHECK (operation IN ('create', 'update')),
     status            VARCHAR NOT NULL DEFAULT 'success' CHECK (status IN ('success', 'failed')),
@@ -241,7 +246,45 @@ CREATE INDEX idx_students_course_id ON students(course_id);
 -- User Preferences (one row per user)
 -- ─────────────────────────────────────────────
 CREATE TABLE user_preferences (
-    user_id          INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    active_course_id INTEGER REFERENCES courses(id) ON DELETE SET NULL,
-    updated_at       TIMESTAMPTZ DEFAULT NOW()
+    user_id                 INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    active_course_id        INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    notification_settings   JSONB NOT NULL DEFAULT '{}',
+    updated_at              TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Password reset tokens
+CREATE TABLE password_reset_tokens (
+    id           SERIAL PRIMARY KEY,
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash   VARCHAR NOT NULL UNIQUE,
+    expires_at   TIMESTAMPTZ NOT NULL,
+    used_at      TIMESTAMPTZ,
+    created_at   TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_password_reset_tokens_user_id ON password_reset_tokens(user_id);
+
+-- Message drafts
+CREATE TABLE message_drafts (
+    id             SERIAL PRIMARY KEY,
+    user_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    course_id      INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    subject        VARCHAR NOT NULL,
+    body           TEXT NOT NULL,
+    template_id    VARCHAR,
+    template_name  VARCHAR,
+    recipients     JSONB NOT NULL DEFAULT '[]',
+    status         VARCHAR NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'sent')),
+    sent_at        TIMESTAMPTZ,
+    created_at     TIMESTAMPTZ DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_message_drafts_user_id ON message_drafts(user_id);
+
+-- Admin system settings
+CREATE TABLE system_settings (
+    key         VARCHAR PRIMARY KEY,
+    value       JSONB NOT NULL,
+    updated_at  TIMESTAMPTZ DEFAULT NOW()
 );

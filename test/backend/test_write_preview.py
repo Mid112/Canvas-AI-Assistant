@@ -40,8 +40,23 @@ def test_send_message_preview_is_irreversible_with_note_and_audience():
     resources = {r["type"]: r for r in preview["affected_resources"]}
     assert resources["course"]["status"] == "unchanged"
     assert resources["announcement"]["status"] == "created"
-    # Canvas-free at preview time — the real enrolled count isn't known yet
     assert preview["audience"] == {"scope": "entire_class", "size": None}
+
+
+def test_send_message_preview_supports_selected_recipients():
+    preview = generate_write_preview(
+        {
+            "action": "send_message",
+            "subject": "Reminder",
+            "body": "Please submit by Friday",
+            "recipient_canvas_user_ids": [101, 102],
+        },
+        COURSE,
+    )
+    resources = {r["type"]: r for r in preview["affected_resources"]}
+    assert resources["conversation"]["status"] == "created"
+    assert preview["audience"] == {"scope": "selected_students", "size": 2}
+    assert "2 selected student" in preview["summary"]
 
 
 def test_update_grade_preview_marks_submission_modified():
