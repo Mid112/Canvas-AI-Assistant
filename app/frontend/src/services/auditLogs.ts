@@ -1,107 +1,26 @@
-import { mockAuditLogs } from "@/data/mockAuditLogs";
 import { formatAuditTimestamp } from "@/lib/format-audit-timestamp";
-import { formatAuditLogUserRole } from "@/lib/map-audit-log";
-import type { AuditLogEntry, AuditLogResult } from "@/types/auditLog";
-import type { UserRole } from "@/types/user";
+import { formatAuditLogUserRole, mapAuditLogApiToEntry } from "@/lib/map-audit-log";
+import { apiRequest } from "@/lib/api-request";
+import type {
+  AuditLogEntry,
+  AuditLogResult,
+  FetchAuditLogsResponse,
+} from "@/types/auditLog";
 
-/**
- * Mock audit log service backed by localStorage until GET /admin/audit/logs is available.
- * Swap fetchAuditLogs() to call the API and map with mapAuditLogApiToEntry.
- */
-export const AUDIT_LOGS_ADMIN_PATH = "/admin/audit/logs";
+export const AUDIT_LOGS_ADMIN_PATH = "/audit/logs";
 
 /** Per-user route (MCP). Admin UI uses AUDIT_LOGS_ADMIN_PATH. */
 export const AUDIT_LOGS_USER_PATH = "/audit/logs";
 
-const STORAGE_KEY = "canvas-workflow-admin-audit-logs";
-const MOCK_DELAY_MS = 350;
-
-function delay(ms: number = MOCK_DELAY_MS): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-function isUserRole(value: unknown): value is UserRole {
-  return value === "instructor" || value === "admin";
-}
-
-function isAuditLogResult(value: unknown): value is AuditLogResult {
-  return value === "success" || value === "failed" || value === "unknown";
-}
-
-function isStoredAuditLogEntry(value: unknown): value is AuditLogEntry {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const log = value as AuditLogEntry;
-
-  return (
-    typeof log.id === "string" &&
-    typeof log.timestamp === "string" &&
-    typeof log.userEmail === "string" &&
-    isUserRole(log.userRole) &&
-    typeof log.action === "string" &&
-    typeof log.resource === "string" &&
-    isAuditLogResult(log.result) &&
-    log.details !== null &&
-    typeof log.details === "object"
+export async function fetchAuditLogs(
+  accessToken: string,
+): Promise<AuditLogEntry[]> {
+  const response = await apiRequest<FetchAuditLogsResponse>(
+    `${AUDIT_LOGS_ADMIN_PATH}?limit=200&offset=0`,
+    accessToken,
   );
-}
 
-function readAuditLogs(): AuditLogEntry[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return [...mockAuditLogs];
-    }
-
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) {
-      return [...mockAuditLogs];
-    }
-
-    const valid = parsed.filter(isStoredAuditLogEntry);
-    if (valid.length === 0) {
-      localStorage.removeItem(STORAGE_KEY);
-      return [...mockAuditLogs];
-    }
-
-    if (valid.length !== parsed.length) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(valid));
-    }
-
-    return valid;
-  } catch {
-    return [...mockAuditLogs];
-  }
-}
-
-function getStoredAuditLogs(): AuditLogEntry[] {
-  const logs = readAuditLogs();
-
-  if (!localStorage.getItem(STORAGE_KEY)) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
-  }
-
-  return logs;
-}
-
-/** Resets audit logs to seed data — useful for tests. */
-export function resetMockAuditLogs(): void {
-  localStorage.removeItem(STORAGE_KEY);
-}
-
-export async function fetchAuditLogs(): Promise<AuditLogEntry[]> {
-  await delay();
-
-  // API: replace with server-driven fetch accepting filters/sort/page,
-  // returning { items, total } — see FetchAuditLogsResponse in auditLog.ts.
-  // The current client-side filter/sort/paginate pipeline in AuditLogsPage.tsx
-  // will be replaced by server-side query params at that point.
-
-  return getStoredAuditLogs();
+  return response.items.map(mapAuditLogApiToEntry);
 }
 
 function escapeCsvField(value: string): string {
@@ -158,3 +77,5 @@ export function downloadAuditLogsCsv(
   link.remove();
   URL.revokeObjectURL(url);
 }
+
+export type { AuditLogResult };

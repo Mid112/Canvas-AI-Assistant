@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     # LLM
     VLLM_BASE_URL: str = "http://host.docker.internal:8001/v1"
     VLLM_MODEL: str = "Qwen/Qwen3-4B"
+    OLLAMA_BASE_URL: str = "http://localhost:11434/v1"
+    OLLAMA_MODEL: str = "llama3.2"
 
     # LLM — Groq (hosted, OpenAI-compatible)
     GROQ_API_KEY: str = ""

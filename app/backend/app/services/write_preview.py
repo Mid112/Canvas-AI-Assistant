@@ -143,6 +143,23 @@ def _preview_send_message(course: Course, params: dict) -> dict:
     subject = params.get("subject", "")
     body = params.get("body", "")
     body_preview = body[:200] + ("..." if len(body) > 200 else "")
+    recipient_ids = params.get("recipient_canvas_user_ids") or []
+
+    if recipient_ids:
+        recipient_count = len(recipient_ids)
+        summary = (
+            f"Send \"{subject.strip()}\" as a private Canvas message to "
+            f"{recipient_count} selected student(s) in {course.name}."
+        )
+        audience = {"scope": "selected_students", "size": recipient_count}
+        resource_type = "conversation"
+    else:
+        summary = (
+            f"Post \"{subject.strip()}\" as a public announcement visible to "
+            f"the entire class in {course.name}."
+        )
+        audience = {"scope": "entire_class", "size": None}
+        resource_type = "announcement"
 
     return {
         "action": "send_message",
@@ -150,20 +167,14 @@ def _preview_send_message(course: Course, params: dict) -> dict:
         "metadata": {
             "subject": subject.strip(),
             "body_preview": body_preview,
+            "recipient_canvas_user_ids": recipient_ids,
         },
-        "summary": (
-            f"Post \"{subject.strip()}\" as a public announcement visible to "
-            f"the entire class in {course.name}."
-        ),
+        "summary": summary,
         "affected_resources": [
             {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
-            {"type": "announcement", "id": None, "name": subject.strip(), "status": "created"},
+            {"type": resource_type, "id": None, "name": subject.strip(), "status": "created"},
         ],
-        # Not a resource entry — an audience isn't an addressable object
-        # with a mutation status, it's a visibility scope. size is unknown
-        # at preview time (Canvas-free); populated with the real enrolled
-        # count at confirm time.
-        "audience": {"scope": "entire_class", "size": None},
+        "audience": audience,
         **_reversibility_fields("send_message"),
     }
 

@@ -7,6 +7,7 @@ import { LoadingIndicator } from "@/components/chat/LoadingIndicator";
 import { UserMessage } from "@/components/chat/UserMessage";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useAuth } from "@/contexts/AuthContext";
 import { seedChatMessages } from "@/data/mockAssistantChat";
 import {
   AssistantApiError,
@@ -29,7 +30,9 @@ export function ChatWindow({
   onInitialPromptConsumed,
   onLoadingChange,
 }: ChatWindowProps) {
+  const { accessToken } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>(seedChatMessages);
+  const [conversationId, setConversationId] = useState<number | undefined>();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
@@ -51,13 +54,22 @@ export function ChatWindow({
       return;
     }
 
+    if (!accessToken) {
+      setError("You must be signed in to use the assistant.");
+      return;
+    }
+
     isDeliveringRef.current = true;
     setIsLoading(true);
     setError(null);
     setRetryMessage(userText);
 
     try {
-      const response = await sendAssistantMessage(userText);
+      const response = await sendAssistantMessage(accessToken, userText, {
+        conversationId,
+      });
+
+      setConversationId(response.conversationId);
 
       const assistantMessage: ChatMessage = {
         id: createMessageId(),
@@ -66,6 +78,9 @@ export function ChatWindow({
         timestamp: new Date(),
         explanation: response.explanation,
         interpretedAction: response.interpretedAction,
+        safetyBlocked: response.safetyBlocked,
+        safetyMessage: response.safetyMessage,
+        pendingMessageId: response.pendingMessageId,
       };
 
       setMessages((current) => [...current, assistantMessage]);
@@ -80,7 +95,7 @@ export function ChatWindow({
       isDeliveringRef.current = false;
       setIsLoading(false);
     }
-  }, []);
+  }, [accessToken, conversationId]);
 
   const handleSend = useCallback(
     (text: string) => {

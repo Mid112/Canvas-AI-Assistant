@@ -1,61 +1,92 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { mockInstructors } from "@/data/mockInstructors";
 import {
   createInstructor,
   disableInstructor,
   enableInstructor,
   fetchInstructors,
-  resetMockInstructors,
   revokeInstructorAccess,
   updateInstructor,
 } from "@/services/instructorAccounts";
 
+vi.mock("@/config/api", () => ({
+  API_BASE_URL: "http://localhost:8000/api/v1",
+}));
+
+const instructorRecord = {
+  id: 42,
+  name: "New Instructor",
+  email: "new@university.edu",
+  role: "instructor",
+  is_active: true,
+  created_at: "2026-06-01T12:00:00.000Z",
+};
+
 describe("instructorAccounts service", () => {
   beforeEach(() => {
-    resetMockInstructors();
+    vi.restoreAllMocks();
   });
 
-  it("returns seeded instructors from the mock API", async () => {
-    const instructors = await fetchInstructors();
-    expect(instructors).toHaveLength(mockInstructors.length);
+  it("fetches instructors from the API", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify([instructorRecord]), { status: 200 }),
+    );
+
+    const instructors = await fetchInstructors("access-token");
+
+    expect(instructors).toHaveLength(1);
+    expect(instructors[0]?.firstName).toBe("New");
+    expect(instructors[0]?.lastName).toBe("Instructor");
   });
 
   it("creates, updates, enables, disables, and revokes instructors", async () => {
-    const created = await createInstructor({
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify(instructorRecord), { status: 201 }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ ...instructorRecord, name: "Updated Instructor" }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ...instructorRecord, is_active: false }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ...instructorRecord, is_active: true }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const created = await createInstructor("access-token", {
       firstName: "New",
       lastName: "Instructor",
       email: "new@university.edu",
       temporaryPassword: "temp-password",
     });
 
-    expect((await fetchInstructors()).some((item) => item.id === created.id)).toBe(
-      true,
-    );
+    expect(created.id).toBe("42");
     expect(created.lastLoginAt).toBeNull();
 
-    await updateInstructor(created.id, {
+    const updated = await updateInstructor("access-token", created.id, {
       firstName: "Updated",
       lastName: "Instructor",
       email: "updated@university.edu",
     });
+    expect(updated.firstName).toBe("Updated");
 
-    const updated = (await fetchInstructors()).find((item) => item.id === created.id);
-    expect(updated?.firstName).toBe("Updated");
+    const disabled = await disableInstructor("access-token", created.id);
+    expect(disabled.status).toBe("disabled");
 
-    await disableInstructor(created.id);
-    expect(
-      (await fetchInstructors()).find((item) => item.id === created.id)?.status,
-    ).toBe("disabled");
+    const enabled = await enableInstructor("access-token", created.id);
+    expect(enabled.status).toBe("active");
 
-    await enableInstructor(created.id);
-    expect(
-      (await fetchInstructors()).find((item) => item.id === created.id)?.status,
-    ).toBe("active");
-
-    await revokeInstructorAccess(created.id);
-    expect(
-      (await fetchInstructors()).find((item) => item.id === created.id),
-    ).toBeUndefined();
+    await revokeInstructorAccess("access-token", created.id);
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 });

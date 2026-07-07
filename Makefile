@@ -1,4 +1,4 @@
-.PHONY: install install-vllm lint lint-fix test test-llm test-vague-llm test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset run-vllm dev
+.PHONY: install install-vllm install-ollama lint lint-fix test test-llm test-ollama test-vague-llm test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset run-vllm run-ollama dev
 
 # ── Install ──────────────────────────────────
 # Creates a venv (if one doesn't exist) and installs backend deps
@@ -18,6 +18,13 @@ install-vllm:
 	~/vllm-env/bin/pip install --upgrade pip
 	~/vllm-env/bin/pip install vllm
 	~/vllm-env/bin/hf download Qwen/Qwen3-4B
+
+# ── Install Ollama ───────────────────────────
+# Installs Ollama via the official installer and pulls the default model.
+# Run once per machine. Requires curl and a network connection.
+install-ollama:
+	curl -fsSL https://ollama.com/install.sh | sh
+	ollama pull llama3.2
 
 # ── Lint ─────────────────────────────────────
 # Checks code style/quality without running tests.
@@ -54,6 +61,12 @@ test:
 # verifies the adapter's request/response handling logic in isolation.
 test-llm:
 	PYTHONPATH=./app/backend app/backend/.venv/bin/pytest test/backend/llm_test.py -v
+
+# ── Test Ollama ──────────────────────────────
+# Integration test against a running Ollama server. Requires:
+# make install-ollama && make run-ollama
+test-ollama:
+	PYTHONPATH=./app/backend app/backend/.venv/bin/pytest test/ollama/test_ollama.py -v
 
 # ── Test from scratch ─────────────────────────
 # Full reset: tears down any running stack (dev or prod), starts
@@ -108,6 +121,11 @@ run-vllm:
 		--port 8001 \
 		--max-model-len 4096
 
+# ── Run Ollama ───────────────────────────────
+# Starts the Ollama server with the default model available at
+# http://localhost:11434/v1 for OpenAI-compatible clients.
+run-ollama:
+	ollama serve
 
 test-vague-llm:
 	app/backend/.venv/bin/python app/backend/app/non_unit_test/test_vague_llm.py

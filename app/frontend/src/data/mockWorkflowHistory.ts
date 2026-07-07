@@ -12,6 +12,7 @@ export const mockWorkflowHistory: WorkflowHistoryEntry[] = [
       "Send reminder emails to students with missing Assignment 3 submissions",
     userName: "Dr. Jane Doe",
     status: "approved",
+    affectedResources: [],
   },
   {
     id: "wh-2",
@@ -21,6 +22,7 @@ export const mockWorkflowHistory: WorkflowHistoryEntry[] = [
       'Created "Array Manipulation and Sorting Algorithms" assignment',
     userName: "Dr. Jane Doe",
     status: "approved",
+    affectedResources: [],
   },
   {
     id: "wh-3",
@@ -29,6 +31,7 @@ export const mockWorkflowHistory: WorkflowHistoryEntry[] = [
     description: "Attempted to update grades for Quiz 2",
     userName: "Dr. Jane Doe",
     status: "rejected",
+    affectedResources: [],
   },
   {
     id: "wh-4",
@@ -37,6 +40,7 @@ export const mockWorkflowHistory: WorkflowHistoryEntry[] = [
     description: "Draft announcement about upcoming midterm exam",
     userName: "Dr. Jane Doe",
     status: "approved",
+    affectedResources: [],
   },
   {
     id: "wh-5",
@@ -45,6 +49,7 @@ export const mockWorkflowHistory: WorkflowHistoryEntry[] = [
     description: "Reminded students about Quiz 2 deadline",
     userName: "Dr. Jane Doe",
     status: "rejected",
+    affectedResources: [],
   },
   {
     id: "wh-6",
@@ -53,6 +58,7 @@ export const mockWorkflowHistory: WorkflowHistoryEntry[] = [
     description: 'Attempted to create assignment "Database Project"',
     userName: "Dr. Jane Doe",
     status: "pending",
+    affectedResources: [],
   },
   {
     id: "wh-7",
@@ -61,6 +67,7 @@ export const mockWorkflowHistory: WorkflowHistoryEntry[] = [
     description: "Send reminders for Assignment 2 deadline",
     userName: "Dr. Jane Doe",
     status: "approved",
+    affectedResources: [],
   },
 ];
 
