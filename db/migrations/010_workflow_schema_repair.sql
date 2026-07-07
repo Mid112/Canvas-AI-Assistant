@@ -6,17 +6,28 @@
 -- for local dev when a full schema refresh is needed.
 
 DO $$
+DECLARE
+    rel regclass;
+    has_rows boolean;
 BEGIN
-    IF to_regclass('public.workflows') IS NOT NULL
-        AND EXISTS (SELECT 1 FROM workflows LIMIT 1) THEN
-        RAISE EXCEPTION
-            '010_workflow_schema_repair.sql refuses to run while workflows contain data. Use make db-reset or migrate manually.';
+    rel := to_regclass('public.workflows');
+    IF rel IS NOT NULL THEN
+        EXECUTE format('SELECT EXISTS (SELECT 1 FROM %s LIMIT 1)', rel)
+            INTO has_rows;
+        IF has_rows THEN
+            RAISE EXCEPTION
+                '010_workflow_schema_repair.sql refuses to run while workflows contain data. Use make db-reset or migrate manually.';
+        END IF;
     END IF;
 
-    IF to_regclass('public.audit_logs') IS NOT NULL
-        AND EXISTS (SELECT 1 FROM audit_logs LIMIT 1) THEN
-        RAISE EXCEPTION
-            '010_workflow_schema_repair.sql refuses to run while audit_logs contain data. Use make db-reset or migrate manually.';
+    rel := to_regclass('public.audit_logs');
+    IF rel IS NOT NULL THEN
+        EXECUTE format('SELECT EXISTS (SELECT 1 FROM %s LIMIT 1)', rel)
+            INTO has_rows;
+        IF has_rows THEN
+            RAISE EXCEPTION
+                '010_workflow_schema_repair.sql refuses to run while audit_logs contain data. Use make db-reset or migrate manually.';
+        END IF;
     END IF;
 END $$;
 
