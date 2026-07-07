@@ -1,12 +1,15 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import {
   AssistantApiError,
+  cancelAssistantAction,
+  confirmAssistantAction,
   sendAssistantMessage,
 } from "@/services/assistant";
+import { renderWithInstitution } from "../../utils/renderWithInstitution";
 
 const mockUseAuth = vi.fn();
 
@@ -29,17 +32,21 @@ vi.mock("@/services/assistant", async () => {
   return {
     ...actual,
     sendAssistantMessage: vi.fn(actual.sendAssistantMessage),
+    confirmAssistantAction: vi.fn(actual.confirmAssistantAction),
+    cancelAssistantAction: vi.fn(actual.cancelAssistantAction),
   };
 });
 
 const mockedSendAssistantMessage = vi.mocked(sendAssistantMessage);
+const mockedConfirmAssistantAction = vi.mocked(confirmAssistantAction);
+const mockedCancelAssistantAction = vi.mocked(cancelAssistantAction);
 
 describe("ChatWindow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseAuth.mockReturnValue({
-      accessToken: "access-token",
-      user: { name: "Dr. Jane Doe", role: "instructor" },
+      accessToken: "test-token",
+      user: null,
       isAuthenticated: true,
       isLoading: false,
       login: vi.fn(),
@@ -47,22 +54,10 @@ describe("ChatWindow", () => {
       logout: vi.fn(),
       refreshUser: vi.fn(),
     });
-    mockedSendAssistantMessage.mockResolvedValue({
-      content:
-        "I found students who have not submitted the assignment yet. I can help you send a reminder if you'd like.",
-      explanation:
-        "I analyzed submission data and identified students who have not submitted Assignment 3.",
-      interpretedAction: {
-        action: "Send Reminder",
-        course: "COSC 499",
-        affectedStudents: "12 students",
-      },
-      conversationId: 1,
-    });
   });
 
   it("shows the seeded welcome message", () => {
-    render(<ChatWindow />);
+    renderWithInstitution(<ChatWindow />);
 
     expect(
       screen.getByText(/Hello! I'm your Canvas AI Assistant/),
@@ -72,7 +67,7 @@ describe("ChatWindow", () => {
   it("shows an error for empty submissions", async () => {
     const user = userEvent.setup();
 
-    render(<ChatWindow />);
+    renderWithInstitution(<ChatWindow />);
 
     await user.click(screen.getByRole("button", { name: "Send message" }));
 
@@ -81,10 +76,27 @@ describe("ChatWindow", () => {
     ).toBeInTheDocument();
   });
 
-  it("adds a user message and assistant reply after a delay", async () => {
+  it("adds a user message and assistant reply", async () => {
     const user = userEvent.setup();
 
-    render(<ChatWindow />);
+    mockedSendAssistantMessage.mockResolvedValueOnce({
+      content: "I found missing submissions.",
+      conversationId: 1,
+      pendingMessageId: 42,
+      explanation:
+        "I analyzed submission data and identified students who have not submitted Assignment 3.",
+      interpretedAction: {
+        action: "Send Reminder",
+        course: "COSC 499",
+        affectedStudents: "12 students",
+        primaryLink: {
+          label: "Review preview",
+          href: "/instructor/actions/preview?conversation=1&pending=42",
+        },
+      },
+    });
+
+    renderWithInstitution(<ChatWindow />);
 
     await user.type(
       screen.getByRole("textbox", { name: "Chat message" }),
@@ -99,9 +111,11 @@ describe("ChatWindow", () => {
     });
 
     expect(screen.getByText("Interpreted Action")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
   });
 
-  it("shows an error banner and retry button when the mock request fails", async () => {
+  it("shows an error banner and retry button when the request fails", async () => {
     const user = userEvent.setup();
 
     mockedSendAssistantMessage
@@ -112,11 +126,11 @@ describe("ChatWindow", () => {
       )
       .mockResolvedValueOnce({
         content: "Retry succeeded.",
-        explanation: "The assistant responded after a retry.",
         conversationId: 1,
+        explanation: "The assistant responded after a retry.",
       });
 
-    render(<ChatWindow />);
+    renderWithInstitution(<ChatWindow />);
 
     await user.type(
       screen.getByRole("textbox", { name: "Chat message" }),
@@ -137,5 +151,147 @@ describe("ChatWindow", () => {
 
     expect(screen.getByText("Explanation")).toBeInTheDocument();
     expect(mockedSendAssistantMessage).toHaveBeenCalledTimes(2);
+  });
+
+  it("confirms a pending action from the chat window", async () => {
+    const user = userEvent.setup();
+
+    mockedSendAssistantMessage.mockResolvedValueOnce({
+      content: "I can create the midterm exam after you confirm.",
+      conversationId: 7,
+      pendingMessageId: 42,
+      interpretedAction: {
+        action: "Create Assignment",
+        course: "CPSC 310",
+        affectedStudents: "Entire class",
+      },
+    });
+    mockedConfirmAssistantAction.mockResolvedValueOnce({
+      content: "Successfully completed Create Assignment: Midterm Exam.",
+      conversationId: 7,
+    });
+
+    renderWithInstitution(<ChatWindow />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "Create a midterm exam",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await user.click(await screen.findByRole("button", { name: "Confirm" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Successfully completed Create Assignment: Midterm Exam."),
+      ).toBeInTheDocument();
+    });
+
+    expect(mockedConfirmAssistantAction).toHaveBeenCalledWith(
+      "test-token",
+      7,
+      42,
+    );
+    expect(screen.getByText("This action was confirmed.")).toBeInTheDocument();
+  });
+
+  it("cancels a pending action from the chat window", async () => {
+    const user = userEvent.setup();
+
+    mockedSendAssistantMessage.mockResolvedValueOnce({
+      content: "I can create the midterm exam after you confirm.",
+      conversationId: 7,
+      pendingMessageId: 42,
+      interpretedAction: {
+        action: "Create Assignment",
+        course: "CPSC 310",
+        affectedStudents: "Entire class",
+      },
+    });
+    mockedCancelAssistantAction.mockResolvedValueOnce({
+      content: "Cancelled — no changes were made.",
+      conversationId: 7,
+    });
+
+    renderWithInstitution(<ChatWindow />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "Create a midterm exam",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await user.click(await screen.findByRole("button", { name: "Cancel" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Cancelled — no changes were made."),
+      ).toBeInTheDocument();
+    });
+
+    expect(mockedCancelAssistantAction).toHaveBeenCalledWith(
+      "test-token",
+      7,
+      42,
+    );
+    expect(screen.getByText("This action was cancelled.")).toBeInTheDocument();
+  });
+
+  it("supersedes the previous pending card when the user sends a modification", async () => {
+    const user = userEvent.setup();
+
+    mockedSendAssistantMessage
+      .mockResolvedValueOnce({
+        content: "I can create the midterm exam after you confirm.",
+        conversationId: 7,
+        pendingMessageId: 42,
+        interpretedAction: {
+          action: "Create Assignment",
+          course: "CPSC 310",
+          affectedStudents: "Entire class",
+        },
+      })
+      .mockResolvedValueOnce({
+        content: "Updated preview for the midterm exam.",
+        conversationId: 7,
+        pendingMessageId: 43,
+        interpretedAction: {
+          action: "Create Assignment",
+          course: "CPSC 310",
+          affectedStudents: "Entire class",
+        },
+      });
+
+    renderWithInstitution(<ChatWindow />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "Create a midterm exam",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await screen.findByRole("button", { name: "Confirm" });
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "Make it open book",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("This proposal was replaced by a newer request."),
+      ).toBeInTheDocument();
+    });
+
+    expect(mockedSendAssistantMessage).toHaveBeenLastCalledWith(
+      "test-token",
+      "Make it open book",
+      expect.objectContaining({
+        pendingMessageId: 42,
+      }),
+    );
+    expect(screen.getByText("Updated preview for the midterm exam.")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Confirm" })).toHaveLength(1);
   });
 });

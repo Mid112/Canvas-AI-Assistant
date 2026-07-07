@@ -20,14 +20,9 @@ export function CanvasConnectionRequired({
           <h2 className="text-xl font-semibold">{title}</h2>
           <p className="text-sm text-muted-foreground">{description}</p>
         </div>
-        <div className="flex flex-wrap gap-3">
-          <Button render={<Link to={instructorSettingsPath("canvas")} />}>
-            Connect Canvas
-          </Button>
-          <Button variant="outline" render={<Link to={instructorSettingsPath("canvas")} />}>
-            Open Settings
-          </Button>
-        </div>
+        <Button render={<Link to={instructorSettingsPath("canvas")} />}>
+          Connect Canvas
+        </Button>
       </CardContent>
     </Card>
   );

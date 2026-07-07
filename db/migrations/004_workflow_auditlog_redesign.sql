@@ -10,8 +10,10 @@
 -- Fresh installs use db/init/01_schema.sql directly and do not need this file.
 -- Local dev databases can also be recreated with docker compose instead.
 
-DROP TABLE IF EXISTS audit_logs;
-DROP TABLE IF EXISTS workflows;
+DROP TABLE IF EXISTS audit_logs CASCADE;
+ALTER TABLE IF EXISTS audit_logs_session
+    DROP CONSTRAINT IF EXISTS audit_logs_session_workflow_id_fkey;
+DROP TABLE IF EXISTS workflows CASCADE;
 
 CREATE TABLE workflows (
     id                       SERIAL PRIMARY KEY,
@@ -42,7 +44,7 @@ CREATE TABLE audit_logs (
     workflow_id       INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
     course_id         INTEGER REFERENCES courses(id) ON DELETE SET NULL,
     action            VARCHAR NOT NULL,
-    resource_type     VARCHAR NOT NULL CHECK (resource_type IN ('assignment', 'announcement')),
+    resource_type     VARCHAR NOT NULL CHECK (resource_type IN ('assignment', 'announcement', 'conversation')),
     resource_id       VARCHAR,
     operation         VARCHAR NOT NULL CHECK (operation IN ('create', 'update')),
     status            VARCHAR NOT NULL DEFAULT 'success' CHECK (status IN ('success', 'failed')),

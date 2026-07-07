@@ -1,8 +1,10 @@
 import { screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { InstructorAssistantPage } from "@/pages/Instructor/InstructorAssistantPage";
-import { renderWithRouter } from "@test/utils/renderWithRouter";
+import { renderWithInstitution } from "@test/utils/renderWithInstitution";
+
+const mockUseAuth = vi.fn();
 
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
@@ -11,16 +13,7 @@ vi.mock("@/contexts/AuthContext", async () => {
 
   return {
     ...actual,
-    useAuth: () => ({
-      accessToken: "access-token",
-      user: { name: "Dr. Jane Doe", role: "instructor" },
-      isAuthenticated: true,
-      isLoading: false,
-      login: vi.fn(),
-      register: vi.fn(),
-      logout: vi.fn(),
-      refreshUser: vi.fn(),
-    }),
+    useAuth: () => mockUseAuth(),
   };
 });
 
@@ -31,9 +24,36 @@ vi.mock("@/services/assistant", () => ({
   sendAssistantMessage: vi.fn(),
 }));
 
+beforeEach(() => {
+  mockUseAuth.mockReturnValue({
+    user: {
+      id: 1,
+      email: "jane.doe@example.com",
+      name: "Dr. Jane Doe",
+      role: "instructor",
+      is_active: true,
+      has_canvas_token: true,
+      canvas_connections: [
+        {
+          id: 1,
+          canvas_url: "https://canvas.ubc.ca",
+          created_at: "2026-06-26T00:00:00.000Z",
+        },
+      ],
+    },
+    accessToken: "token",
+    isAuthenticated: true,
+    isLoading: false,
+    login: vi.fn(),
+    register: vi.fn(),
+    logout: vi.fn(),
+    refreshUser: vi.fn(),
+  });
+});
+
 describe("InstructorAssistantPage", () => {
   it("renders the assistant header, suggested actions, and chat", () => {
-    renderWithRouter(<InstructorAssistantPage />);
+    renderWithInstitution(<InstructorAssistantPage />);
 
     expect(screen.getByText("AI Assistant")).toBeInTheDocument();
     expect(

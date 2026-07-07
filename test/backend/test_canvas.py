@@ -323,6 +323,48 @@ def test_list_assignments_unknown_local_course(client, auth_headers):
     mock.assert_not_called()
 
 
+def test_list_assignments_local_url_alias(client, monkeypatch):
+    """Assignments work when the stored course URL differs from the request URL (docker vs browser)."""
+    monkeypatch.setattr("app.config.settings.DEBUG", True)
+    local_canvas = "http://localhost:3000"
+    docker_canvas = "http://canvas_lms:3000"
+
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Local Canvas User", "email": email, "password": "secret123"},
+    )
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": local_canvas},
+            headers=headers,
+        )
+
+    courses = [_unique_course()]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        fetch_resp = client.get(
+            f"/api/v1/canvas/courses?canvas_url={docker_canvas}",
+            headers=headers,
+        )
+    assert fetch_resp.status_code == 200
+    local_id = fetch_resp.json()[0]["local_id"]
+    canvas_course_id = courses[0]["id"]
+
+    with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock:
+        mock.return_value = MOCK_ASSIGNMENTS
+        response = client.get(
+            f"/api/v1/canvas/courses/{local_id}/assignments?canvas_url={local_canvas}",
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    assert response.json()[0]["name"] == "Assignment 1"
+    mock.assert_awaited_once_with(canvas_course_id, "test-token", local_canvas)
+
+
 def test_get_assignment(client, auth_headers):
     local_course_id = _sync_local_course(client, auth_headers)
     with patch("app.services.canvas.fetch_assignment", new_callable=AsyncMock) as mock:

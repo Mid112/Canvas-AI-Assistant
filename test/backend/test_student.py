@@ -32,7 +32,7 @@ def client():
 
 
 def _register_with_canvas(client) -> tuple[dict, int]:
-    """Register a fresh user, connect Canvas, seed one course. Returns (headers, canvas_course_id)."""
+    """Register a fresh user, connect Canvas, seed one course. Returns (headers, local_course_id)."""
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
@@ -60,9 +60,10 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     ]
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
         mock.return_value = course_payload
-        client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+        resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
 
-    return headers, canvas_course_id
+    local_course_id = resp.json()[0]["local_id"]
+    return headers, local_course_id
 
 
 # ---------------------------------------------------------------------------
@@ -101,12 +102,12 @@ def test_list_students_course_not_found(client):
 
 
 def test_list_students_success(client):
-    headers, canvas_course_id = _register_with_canvas(client)
+    headers, local_course_id = _register_with_canvas(client)
     enrollments = [_mock_enrollment()]
     with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock:
         mock.return_value = enrollments
         response = client.get(
-            f"/api/v1/canvas/courses/{canvas_course_id}/students?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{local_course_id}/students?canvas_url={CANVAS_URL}",
             headers=headers,
         )
     assert response.status_code == 200
@@ -118,12 +119,12 @@ def test_list_students_success(client):
 
 def test_list_students_response_shape(client):
     """Response must include id, canvas_user_id, course_id, name, sortable_name, login_id."""
-    headers, canvas_course_id = _register_with_canvas(client)
+    headers, local_course_id = _register_with_canvas(client)
     enrollments = [_mock_enrollment()]
     with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock:
         mock.return_value = enrollments
         response = client.get(
-            f"/api/v1/canvas/courses/{canvas_course_id}/students?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{local_course_id}/students?canvas_url={CANVAS_URL}",
             headers=headers,
         )
     student = response.json()[0]
@@ -136,17 +137,17 @@ def test_list_students_response_shape(client):
 
 def test_list_students_upsert_is_idempotent(client):
     """Fetching the same roster twice must not duplicate DB rows (same id returned)."""
-    headers, canvas_course_id = _register_with_canvas(client)
+    headers, local_course_id = _register_with_canvas(client)
     uid = uuid.uuid4().int % 1_000_000
     enrollments = [_mock_enrollment(user_id=uid)]
     with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock:
         mock.return_value = enrollments
         r1 = client.get(
-            f"/api/v1/canvas/courses/{canvas_course_id}/students?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{local_course_id}/students?canvas_url={CANVAS_URL}",
             headers=headers,
         )
         r2 = client.get(
-            f"/api/v1/canvas/courses/{canvas_course_id}/students?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{local_course_id}/students?canvas_url={CANVAS_URL}",
             headers=headers,
         )
     assert r1.status_code == 200
@@ -155,11 +156,11 @@ def test_list_students_upsert_is_idempotent(client):
 
 
 def test_list_students_empty_roster(client):
-    headers, canvas_course_id = _register_with_canvas(client)
+    headers, local_course_id = _register_with_canvas(client)
     with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock:
         mock.return_value = []
         response = client.get(
-            f"/api/v1/canvas/courses/{canvas_course_id}/students?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{local_course_id}/students?canvas_url={CANVAS_URL}",
             headers=headers,
         )
     assert response.status_code == 200
@@ -168,12 +169,12 @@ def test_list_students_empty_roster(client):
 
 def test_list_students_cross_instructor_isolation(client):
     """Instructor B cannot fetch students for a course owned by instructor A — returns 404."""
-    headers_a, canvas_course_id = _register_with_canvas(client)
+    headers_a, local_course_id = _register_with_canvas(client)
     headers_b, _ = _register_with_canvas(client)
 
     with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock):
         response = client.get(
-            f"/api/v1/canvas/courses/{canvas_course_id}/students?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{local_course_id}/students?canvas_url={CANVAS_URL}",
             headers=headers_b,
         )
     assert response.status_code == 404
@@ -184,56 +185,56 @@ def test_list_students_cross_instructor_isolation(client):
 # ---------------------------------------------------------------------------
 
 def test_list_students_invalid_canvas_token(client):
-    headers, canvas_course_id = _register_with_canvas(client)
+    headers, local_course_id = _register_with_canvas(client)
     with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock:
         mock.side_effect = HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Invalid Canvas API token",
         )
         response = client.get(
-            f"/api/v1/canvas/courses/{canvas_course_id}/students?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{local_course_id}/students?canvas_url={CANVAS_URL}",
             headers=headers,
         )
     assert response.status_code == 422
 
 
 def test_list_students_canvas_permission_denied(client):
-    headers, canvas_course_id = _register_with_canvas(client)
+    headers, local_course_id = _register_with_canvas(client)
     with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock:
         mock.side_effect = HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Canvas token lacks permission for this resource",
         )
         response = client.get(
-            f"/api/v1/canvas/courses/{canvas_course_id}/students?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{local_course_id}/students?canvas_url={CANVAS_URL}",
             headers=headers,
         )
     assert response.status_code == 403
 
 
 def test_list_students_canvas_unavailable(client):
-    headers, canvas_course_id = _register_with_canvas(client)
+    headers, local_course_id = _register_with_canvas(client)
     with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock:
         mock.side_effect = HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Could not reach Canvas",
         )
         response = client.get(
-            f"/api/v1/canvas/courses/{canvas_course_id}/students?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{local_course_id}/students?canvas_url={CANVAS_URL}",
             headers=headers,
         )
     assert response.status_code == 502
 
 
 def test_list_students_canvas_timeout(client):
-    headers, canvas_course_id = _register_with_canvas(client)
+    headers, local_course_id = _register_with_canvas(client)
     with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock:
         mock.side_effect = HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail="Canvas API timed out",
         )
         response = client.get(
-            f"/api/v1/canvas/courses/{canvas_course_id}/students?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses/{local_course_id}/students?canvas_url={CANVAS_URL}",
             headers=headers,
         )
     assert response.status_code == 504

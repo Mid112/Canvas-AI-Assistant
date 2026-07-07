@@ -10,15 +10,26 @@ import {
   InstructorCoursesList,
   InstructorCoursesSection,
 } from "@/pages/Instructor/InstructorCourses/InstructorCoursesSection";
-import { instructorCourseAnalyticsPath } from "@/routes/paths";
+import { instructorCoursePath } from "@/routes/paths";
 
 const courses = institutionCourseData[0]!.courses.slice(0, 2);
+
+const activeCourseProps = {
+  activeCourseId: null as number | null,
+  onSetActiveCourse: vi.fn(),
+  isSettingActiveCourse: false,
+};
 
 describe("InstructorCoursesCard", () => {
   it("renders course progress and action buttons", () => {
     render(
       <MemoryRouter>
-        <InstructorCoursesCard course={courses[0]!} />
+        <InstructorCoursesCard
+          course={courses[0]!}
+          isActive={false}
+          onSetActive={vi.fn()}
+          isSettingActive={false}
+        />
       </MemoryRouter>,
     );
 
@@ -28,10 +39,10 @@ describe("InstructorCoursesCard", () => {
     expect(screen.getByText("82%")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "View Course" }),
-    ).toHaveAttribute("href", "/instructor/courses/1/assignments");
+    ).toHaveAttribute("href", instructorCoursePath(1));
     expect(
-      screen.getByRole("link", { name: "Analytics" }),
-    ).toHaveAttribute("href", instructorCourseAnalyticsPath(1));
+      screen.getByRole("button", { name: "Set Active" }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -39,7 +50,10 @@ describe("InstructorCoursesList", () => {
   it("renders courses in list format", () => {
     render(
       <MemoryRouter>
-        <InstructorCoursesList courses={courses} />
+        <InstructorCoursesList
+          courses={courses}
+          {...activeCourseProps}
+        />
       </MemoryRouter>,
     );
 
@@ -60,6 +74,7 @@ describe("InstructorCoursesSection", () => {
           courses={courses}
           viewMode="grid"
           onViewModeChange={vi.fn()}
+          {...activeCourseProps}
         />
       </MemoryRouter>,
     );
@@ -80,6 +95,7 @@ describe("InstructorCoursesSection", () => {
           courses={courses}
           viewMode="grid"
           onViewModeChange={onViewModeChange}
+          {...activeCourseProps}
         />
       </MemoryRouter>,
     );
@@ -96,7 +112,7 @@ describe("InstructorCoursesEmptyState", () => {
 
     expect(screen.getByText("No courses found")).toBeInTheDocument();
     expect(
-      screen.getByText("Try adjusting your search or switch institutions."),
+      screen.getByText("Try adjusting your search."),
     ).toBeInTheDocument();
   });
 });

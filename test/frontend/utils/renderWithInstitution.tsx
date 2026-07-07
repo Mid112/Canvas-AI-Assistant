@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import { MemoryRouter, type MemoryRouterProps } from "react-router-dom";
 
 import { AuthProvider } from "@/contexts/AuthContext";
+import { ActiveCourseProvider } from "@/contexts/ActiveCourseProvider";
 import { InstitutionProvider } from "@/contexts/InstitutionProvider";
 
 interface RenderWithInstitutionOptions extends RenderOptions {
@@ -16,7 +17,9 @@ export function renderWithInstitution(
   return render(
     <AuthProvider>
       <InstitutionProvider>
-        <MemoryRouter {...routerProps}>{ui}</MemoryRouter>
+        <ActiveCourseProvider>
+          <MemoryRouter {...routerProps}>{ui}</MemoryRouter>
+        </ActiveCourseProvider>
       </InstitutionProvider>
     </AuthProvider>,
     options,

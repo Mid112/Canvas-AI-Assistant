@@ -1,5 +1,5 @@
-import { FileText, Users } from "lucide-react";
 import { useEffect, useState } from "react";
+import { FileText, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -93,10 +93,7 @@ export function AdminDashboardPage() {
             <CardTitle>Quick actions</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3">
-            <Link
-              to={paths.admin.users}
-              className={cn(buttonVariants())}
-            >
+            <Link to={paths.admin.users} className={cn(buttonVariants())}>
               <Users data-icon="inline-start" />
               Manage users
             </Link>

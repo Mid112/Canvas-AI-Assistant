@@ -10,10 +10,16 @@ interface ChatInputProps {
   onSend: (message: string) => void;
   isLoading: boolean;
   inputError?: string | null;
+  initialValue?: string;
 }
 
-export function ChatInput({ onSend, isLoading, inputError }: ChatInputProps) {
-  const [value, setValue] = useState("");
+export function ChatInput({
+  onSend,
+  isLoading,
+  inputError,
+  initialValue = "",
+}: ChatInputProps) {
+  const [value, setValue] = useState(initialValue);
 
   const submitMessage = () => {
     const trimmed = value.trim();

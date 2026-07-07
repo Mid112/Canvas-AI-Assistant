@@ -1,8 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
 import {
   AssistantApiError,
+  confirmAssistantAction,
   sendAssistantMessage,
 } from "@/services/assistant";
 
@@ -39,9 +40,27 @@ describe("mapChatReplyToAssistantResponse", () => {
 
     expect(response.content).toBe("LLM unavailable");
   });
+
+  it("maps successful confirm replies", () => {
+    const response = mapChatReplyToAssistantResponse(
+      {
+        success: true,
+        action: "create_assignment",
+        data: { id: 12, name: "Midterm Exam" },
+      },
+      false,
+    );
+
+    expect(response.content).toContain("Successfully completed Create Assignment");
+    expect(response.content).toContain("Midterm Exam");
+  });
 });
 
 describe("sendAssistantMessage", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("calls the chat API and maps the response", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(
@@ -57,10 +76,71 @@ describe("sendAssistantMessage", () => {
       ),
     );
 
-    const response = await sendAssistantMessage("access-token", "missing submissions");
+    const response = await sendAssistantMessage(
+      "access-token",
+      "missing submissions",
+    );
 
     expect(response.content).toBe("Here are the missing submissions.");
     expect(response.conversationId).toBe(9);
+  });
+
+  it("posts course context when provided", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          conversation_id: 7,
+          is_error: false,
+          reply: { action: "respond", message: "Hello from the backend." },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await sendAssistantMessage("test-token", "hello", {
+      context: {
+        activeCourseId: 3,
+        activeCourseLabel: "CPSC 310",
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/chat/",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          message: "hello",
+          local_course_id: 3,
+        }),
+      }),
+    );
+  });
+
+  it("includes conversation_id on follow-up turns", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          conversation_id: 7,
+          is_error: false,
+          reply: { action: "respond", message: "Follow-up reply." },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await sendAssistantMessage("test-token", "follow up", {
+      conversationId: 7,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/chat/",
+      expect.objectContaining({
+        body: JSON.stringify({
+          message: "follow up",
+          conversation_id: 7,
+        }),
+      }),
+    );
   });
 
   it("throws AssistantApiError when the API request fails", async () => {
@@ -73,5 +153,43 @@ describe("sendAssistantMessage", () => {
     await expect(
       sendAssistantMessage("access-token", "fail please"),
     ).rejects.toBeInstanceOf(AssistantApiError);
+  });
+});
+
+describe("confirmAssistantAction", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("posts to /chat/confirm with conversation and pending message ids", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          conversation_id: 7,
+          is_error: false,
+          reply: {
+            success: true,
+            action: "create_assignment",
+            data: { id: 12, name: "Midterm Exam" },
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const response = await confirmAssistantAction("test-token", 7, 42);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/chat/confirm",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          conversation_id: 7,
+          pending_message_id: 42,
+        }),
+      }),
+    );
+    expect(response.content).toContain("Successfully completed Create Assignment");
+    expect(response.conversationId).toBe(7);
   });
 });

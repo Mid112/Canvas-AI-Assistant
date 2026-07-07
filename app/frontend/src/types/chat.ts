@@ -1,5 +1,11 @@
 export type ChatMessageRole = "user" | "assistant";
 
+export type PendingActionStatus =
+  | "pending"
+  | "confirmed"
+  | "cancelled"
+  | "superseded";
+
 export interface ActionLink {
   label: string;
   href: string;
@@ -19,11 +25,13 @@ export interface ChatMessage {
   role: ChatMessageRole;
   content: string;
   timestamp: Date;
+  conversationId?: number;
+  pendingMessageId?: number;
+  pendingActionStatus?: PendingActionStatus;
   explanation?: string;
   interpretedAction?: InterpretedAction;
   safetyBlocked?: boolean;
   safetyMessage?: string;
-  pendingMessageId?: number;
 }
 
 export interface AssistantContext {
@@ -33,6 +41,8 @@ export interface AssistantContext {
 
 export interface AssistantResponse {
   content: string;
+  conversationId?: number;
+  pendingMessageId?: number;
   explanation?: string;
   interpretedAction?: InterpretedAction;
   safetyBlocked?: boolean;

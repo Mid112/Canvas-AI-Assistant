@@ -1,8 +1,6 @@
 import { screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { useInstitution } from "@/contexts/useInstitution";
 import { InstructorNotificationsPage } from "@/pages/Instructor/InstructorNotificationsPage";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
@@ -28,25 +26,13 @@ vi.mock("@/contexts/AuthContext", async () => {
       login: vi.fn(),
       register: vi.fn(),
       logout: vi.fn(),
+      refreshUser: vi.fn(),
     }),
   };
 });
 
-function InstitutionSwitchHarness() {
-  const { setSelectedInstitution } = useInstitution();
-
-  return (
-    <>
-      <button type="button" onClick={() => setSelectedInstitution("ubco")}>
-        Switch to UBCO
-      </button>
-      <InstructorNotificationsPage />
-    </>
-  );
-}
-
 describe("InstructorNotificationsPage", () => {
-  it("renders institution-specific notifications", () => {
+  it("renders the notifications page with an empty state when Canvas is connected", () => {
     renderWithInstitution(<InstructorNotificationsPage />);
 
     expect(
@@ -55,28 +41,6 @@ describe("InstructorNotificationsPage", () => {
     expect(
       screen.getByText("Updates for Dr. Jane Doe at UBC."),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("12 submissions pending review"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("3")).toBeInTheDocument();
-  });
-
-  it("updates notifications when the institution changes", async () => {
-    const user = userEvent.setup();
-
-    renderWithInstitution(<InstitutionSwitchHarness />);
-
-    expect(
-      screen.getByText("12 submissions pending review"),
-    ).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Switch to UBCO" }));
-
-    expect(
-      screen.getByText("6 submissions pending review"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Updates for Dr. Jane Doe at UBCO."),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/No notifications yet/)).toBeInTheDocument();
   });
 });

@@ -1,9 +1,17 @@
 import {
+  instructorChatPreviewPath,
   instructorCourseAnalyticsPath,
   instructorDryRunPreviewPath,
   paths,
 } from "@/routes/paths";
 import type { AssistantResponse } from "@/types/chat";
+
+export class ChatReplyMappingError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ChatReplyMappingError";
+  }
+}
 
 function formatActionLabel(actionName: string): string {
   return actionName
@@ -19,6 +27,8 @@ function readString(value: unknown): string | undefined {
 function buildInterpretedAction(
   proposed: Record<string, unknown> | undefined,
   previewMetadata: Record<string, unknown> | undefined,
+  conversationId?: number,
+  pendingMessageId?: number,
 ): AssistantResponse["interpretedAction"] | undefined {
   if (!proposed) {
     return undefined;
@@ -31,12 +41,19 @@ function buildInterpretedAction(
       : undefined;
   const courseLabel =
     readString(previewMetadata?.course_name) ??
+    readString(previewMetadata?.course) ??
     (courseId != null ? `Course ${courseId}` : "Active course");
 
+  const audience = previewMetadata?.audience as
+    | Record<string, unknown>
+    | undefined;
   const recipientIds = proposed.recipient_canvas_user_ids;
-  const affectedStudents = Array.isArray(recipientIds)
-    ? `${recipientIds.length} students`
-    : "Course-wide";
+  const affectedStudents =
+    audience?.scope === "entire_class"
+      ? "Entire class"
+      : Array.isArray(recipientIds)
+        ? `${recipientIds.length} students`
+        : "Course-wide";
 
   const previewId =
     readString(proposed.preview_id) ?? readString(previewMetadata?.preview_id);
@@ -47,7 +64,12 @@ function buildInterpretedAction(
     affectedStudents,
   };
 
-  if (previewId) {
+  if (conversationId !== undefined && pendingMessageId !== undefined) {
+    interpretedAction.primaryLink = {
+      label: "Review preview",
+      href: instructorChatPreviewPath(conversationId, pendingMessageId),
+    };
+  } else if (previewId) {
     interpretedAction.previewId = previewId;
     interpretedAction.primaryLink = {
       label: "Preview workflow",
@@ -75,10 +97,13 @@ function buildInterpretedAction(
 export function mapChatReplyToAssistantResponse(
   reply: Record<string, unknown>,
   isError: boolean,
+  conversationId?: number,
 ): AssistantResponse {
   if (isError || reply.error) {
     return {
-      content: readString(reply.error) ?? "The assistant is temporarily unavailable. Please try again.",
+      content:
+        readString(reply.error) ??
+        "The assistant is temporarily unavailable. Please try again.",
     };
   }
 
@@ -87,6 +112,10 @@ export function mapChatReplyToAssistantResponse(
     const previewMetadata = reply.preview_metadata as
       | Record<string, unknown>
       | undefined;
+    const pendingMessageId =
+      typeof reply.pending_message_id === "number"
+        ? reply.pending_message_id
+        : undefined;
 
     return {
       content:
@@ -94,11 +123,24 @@ export function mapChatReplyToAssistantResponse(
         "I prepared an action for your review. Confirm when you are ready to execute it.",
       explanation:
         "Review the proposed action below. Destructive or write actions require your approval before anything is sent to Canvas.",
-      interpretedAction: buildInterpretedAction(proposed, previewMetadata),
+      interpretedAction: buildInterpretedAction(
+        proposed,
+        previewMetadata,
+        conversationId,
+        pendingMessageId,
+      ),
+      pendingMessageId,
     };
   }
 
-  if (reply.action === "clarify") {
+  if (reply.cancelled) {
+    return {
+      content:
+        readString(reply.message) ?? "Cancelled — no changes were made.",
+    };
+  }
+
+  if (reply.action === "clarify" || reply.clarify) {
     return {
       content:
         readString(reply.question) ??
@@ -112,12 +154,32 @@ export function mapChatReplyToAssistantResponse(
         readString(reply.message) ??
         "That request is outside what I can help with in Canvas.",
       explanation: readString(reply.detail),
+      safetyBlocked: true,
+      safetyMessage: readString(reply.detail),
     };
   }
 
   if (reply.action === "respond") {
     return {
       content: readString(reply.message) ?? "Here's what I found.",
+    };
+  }
+
+  if (reply.success === true) {
+    const action = readString(reply.action) ?? "action";
+    const data = reply.data;
+    if (data && typeof data === "object") {
+      const record = data as Record<string, unknown>;
+      const label = readString(record.name) ?? readString(record.title);
+      if (label) {
+        return {
+          content: `Successfully completed ${formatActionLabel(action)}: ${label}.`,
+        };
+      }
+    }
+
+    return {
+      content: `Successfully completed ${formatActionLabel(action)}.`,
     };
   }
 
@@ -149,9 +211,24 @@ export function mapChatReplyToAssistantResponse(
   }
 
   if (Array.isArray(reply.courses)) {
-    return {
-      content: `You have ${reply.courses.length} connected courses.`,
-    };
+    if (reply.courses.length === 0) {
+      return { content: "You have no connected courses." };
+    }
+
+    const list = reply.courses
+      .map((course) => {
+        if (!course || typeof course !== "object") {
+          return "- Course";
+        }
+
+        const record = course as Record<string, unknown>;
+        const label =
+          record.name ?? record.course_code ?? record.title ?? "Course";
+        return `- ${String(label)}`;
+      })
+      .join("\n");
+
+    return { content: list };
   }
 
   if (Array.isArray(reply.assignments)) {
@@ -174,8 +251,28 @@ export function mapChatReplyToAssistantResponse(
     };
   }
 
+  if (readString(reply.message)) {
+    return { content: readString(reply.message)! };
+  }
+
   return {
     content: "I processed your request.",
     explanation: JSON.stringify(reply, null, 2),
   };
+}
+
+/** @deprecated Use mapChatReplyToAssistantResponse */
+export function mapChatReply(
+  reply: Record<string, unknown>,
+  isError: boolean,
+  conversationId?: number,
+): AssistantResponse {
+  if (isError) {
+    const errorMessage =
+      readString(reply.error) ??
+      "The assistant is temporarily unavailable. Please try again.";
+    throw new ChatReplyMappingError(errorMessage);
+  }
+
+  return mapChatReplyToAssistantResponse(reply, false, conversationId);
 }

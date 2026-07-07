@@ -1,7 +1,6 @@
+import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInstitution } from "@/contexts/useInstitution";
-import { NotificationList } from "@/pages/Instructor/InstructorDashboard/NotificationList";
-import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
 import {
   Card,
   CardContent,
@@ -11,25 +10,31 @@ import {
 
 export function InstructorNotificationsPage() {
   const { user } = useAuth();
-  const { selectedInstitution, dashboard } = useInstitution();
-  const notifications = dashboard.notifications;
+  const { selectedInstitution } = useInstitution();
+
+  if (!user?.has_canvas_token) {
+    return (
+      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
+            Notifications
+          </h1>
+          <p className="text-muted-foreground">
+            Updates for {user?.name ?? "Instructor"} at{" "}
+            {selectedInstitution.shortName}.
+          </p>
+        </div>
+        <CanvasConnectionRequired description="Connect Canvas to receive course and submission notifications." />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
       <div className="space-y-1">
-        <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-            Notifications
-          </h1>
-          {notifications.length > 0 ? (
-            <span
-              className={dashboardColors.red.badge}
-              aria-label={`${notifications.length} unread`}
-            >
-              {notifications.length}
-            </span>
-          ) : null}
-        </div>
+        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
+          Notifications
+        </h1>
         <p className="text-muted-foreground">
           Updates for {user?.name ?? "Instructor"} at{" "}
           {selectedInstitution.shortName}.
@@ -41,7 +46,10 @@ export function InstructorNotificationsPage() {
           <CardTitle>Recent notifications</CardTitle>
         </CardHeader>
         <CardContent>
-          <NotificationList notifications={notifications} />
+          <p className="text-sm text-muted-foreground">
+            No notifications yet. Course and submission alerts will appear here
+            once available.
+          </p>
         </CardContent>
       </Card>
     </div>

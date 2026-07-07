@@ -17,6 +17,7 @@ import {
   downloadWorkflowHistoryCsv,
   fetchWorkflowHistory,
   getWorkflowHistoryStatusCounts,
+  WorkflowHistoryApiError,
 } from "@/services/workflowHistory";
 import {
   WORKFLOW_HISTORY_PAGE_SIZE,
@@ -30,6 +31,7 @@ import {
 export function WorkflowHistoryPage() {
   const { accessToken } = useAuth();
   const [entries, setEntries] = useState<WorkflowHistoryEntry[]>([]);
+  const [totalWorkflows, setTotalWorkflows] = useState(0);
   const [filters, setFilters] = useState<WorkflowHistoryFilters>(
     emptyWorkflowHistoryFilters,
   );
@@ -77,6 +79,7 @@ export function WorkflowHistoryPage() {
 
   const loadEntries = useCallback(async () => {
     if (!accessToken) {
+      setIsLoading(false);
       return;
     }
 
@@ -85,56 +88,32 @@ export function WorkflowHistoryPage() {
 
     try {
       const data = await fetchWorkflowHistory(accessToken);
-      setEntries(data);
-    } catch {
-      setLoadError(
-        "Unable to load workflow history. Please try again.",
-      );
+      setEntries(data.entries);
+      setTotalWorkflows(data.total);
+    } catch (error) {
+      const message =
+        error instanceof WorkflowHistoryApiError
+          ? error.message
+          : "Unable to load workflow history. Please try again.";
+      setLoadError(message);
       setEntries([]);
+      setTotalWorkflows(0);
     } finally {
       setIsLoading(false);
     }
   }, [accessToken]);
 
   useEffect(() => {
-    if (!accessToken) {
-      return;
-    }
-
-    let cancelled = false;
-
-    void (async () => {
-      try {
-        const data = await fetchWorkflowHistory(accessToken);
-        if (!cancelled) {
-          setEntries(data);
-          setLoadError(null);
-        }
-      } catch {
-        if (!cancelled) {
-          setLoadError(
-            "Unable to load workflow history. Please try again.",
-          );
-          setEntries([]);
-        }
-      } finally {
-        if (!cancelled) {
-          setIsLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [accessToken]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async data load
+    void loadEntries();
+  }, [loadEntries]);
 
   const handleExport = () => {
     downloadWorkflowHistoryCsv(filteredEntries);
   };
 
   function formatFooter(): string {
-    const total = entries.length;
+    const total = totalWorkflows || entries.length;
     const matching = filteredEntries.length;
 
     if (matching === 0) {
@@ -165,32 +144,6 @@ export function WorkflowHistoryPage() {
     );
   }
 
-  if (loadError) {
-    return (
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 md:p-6 lg:p-8">
-        <Card className="border-destructive/30 shadow-sm ring-1 ring-destructive/20">
-          <CardContent className="flex flex-col items-center gap-4 py-10 text-sm text-destructive sm:flex-row sm:justify-center">
-            <div className="flex items-center gap-3">
-              <AlertCircle
-                className="size-5 shrink-0"
-                aria-hidden="true"
-              />
-              <span role="alert">{loadError}</span>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={loadEntries}
-            >
-              Try again
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 p-4 md:p-6 lg:p-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -211,6 +164,31 @@ export function WorkflowHistoryPage() {
           Export Log
         </Button>
       </header>
+
+      {loadError ? (
+        <Card className="border-destructive/30 shadow-sm ring-1 ring-destructive/20">
+          <CardContent className="flex flex-col items-start gap-3 p-4 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3 text-destructive">
+              <AlertCircle className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+              <div className="space-y-1">
+                <p role="alert">{loadError}</p>
+                <p className="text-muted-foreground">
+                  If this persists after retrying, apply the latest database
+                  migrations or run <code>make db-reset</code> for local dev.
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void loadEntries()}
+            >
+              Try again
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

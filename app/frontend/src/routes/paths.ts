@@ -10,7 +10,12 @@ export const paths = {
   instructor: {
     dashboard: "/instructor/dashboard",
     courses: "/instructor/courses",
+    course: "/instructor/courses/:localCourseId",
     courseAssignments: "/instructor/courses/:localCourseId/assignments",
+    courseStudents: "/instructor/courses/:localCourseId/students",
+    courseMessages: "/instructor/courses/:localCourseId/messages",
+    courseSubmissions:
+      "/instructor/courses/:localCourseId/assignments/:assignmentId/submissions",
     assignmentUpdate:
       "/instructor/courses/:localCourseId/assignments/:assignmentId/edit",
     assignmentCreate: "/instructor/assignments/create",
@@ -41,16 +46,31 @@ export function instructorSettingsPath(tab?: "canvas" | "notifications" | "secur
   return `${paths.instructor.settings}?tab=${tab}`;
 }
 
+export function instructorCoursePath(localCourseId: number | string) {
+  return `/instructor/courses/${localCourseId}`;
+}
+
 export function instructorCourseAssignmentsPath(localCourseId: number | string) {
   return `/instructor/courses/${localCourseId}/assignments`;
 }
 
-export function instructorCourseAnalyticsPath(courseId: number | string) {
-  return `/instructor/courses/${courseId}/analytics`;
+export function instructorCourseStudentsPath(localCourseId: number | string) {
+  return `/instructor/courses/${localCourseId}/students`;
 }
 
-export function instructorDryRunPreviewPath(previewId: string) {
-  return `${paths.instructor.dryRunPreview}?preview=${encodeURIComponent(previewId)}`;
+export function instructorCourseSubmissionsPath(
+  localCourseId: number | string,
+  assignmentId: number | string,
+) {
+  return `/instructor/courses/${localCourseId}/assignments/${assignmentId}/submissions`;
+}
+
+export function instructorCourseMessagesPath(localCourseId: number | string) {
+  return `/instructor/courses/${localCourseId}/messages`;
+}
+
+export function instructorCourseAnalyticsPath(courseId: number | string) {
+  return `/instructor/courses/${courseId}/analytics`;
 }
 
 export function instructorAssignmentUpdatePath(
@@ -58,4 +78,20 @@ export function instructorAssignmentUpdatePath(
   assignmentId: number | string,
 ) {
   return `/instructor/courses/${localCourseId}/assignments/${assignmentId}/edit`;
+}
+
+export function instructorDryRunPreviewPath(previewId: string) {
+  const params = new URLSearchParams({ preview: previewId });
+  return `${paths.instructor.dryRunPreview}?${params.toString()}`;
+}
+
+export function instructorChatPreviewPath(
+  conversationId: number,
+  pendingMessageId: number,
+) {
+  const params = new URLSearchParams({
+    conversation: String(conversationId),
+    pending: String(pendingMessageId),
+  });
+  return `${paths.instructor.dryRunPreview}?${params.toString()}`;
 }

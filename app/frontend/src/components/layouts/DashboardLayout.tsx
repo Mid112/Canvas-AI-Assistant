@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 
 import { Header } from "@/components/layouts/Header";
 import { Sidebar } from "@/components/layouts/Sidebar";
+import { ActiveCourseProvider } from "@/contexts/ActiveCourseProvider";
 import { InstitutionProvider } from "@/contexts/InstitutionProvider";
 import {
   getStoredSidebarOpen,
@@ -30,6 +31,10 @@ function getPageTitle(pathname: string, role: UserRole): string {
     return "Notifications";
   }
 
+  if (role === "instructor" && pathname.includes("/analytics")) {
+    return "Submission Analytics";
+  }
+
   const navItems = getNavItemsForRole(role);
   const match = navItems.find((item) => pathname.startsWith(item.href));
   if (pathname === paths.instructor.assignmentCreate) {
@@ -37,6 +42,12 @@ function getPageTitle(pathname: string, role: UserRole): string {
   }
   if (pathname === paths.instructor.dryRunPreview) {
     return "Workflow Preview";
+  }
+  if (pathname.includes("/students")) {
+    return "Course Students";
+  }
+  if (pathname.includes("/submissions")) {
+    return "Assignment Submissions";
   }
   if (pathname.includes("/assignments/") && pathname.endsWith("/edit")) {
     return "Update Assignment";
@@ -96,9 +107,15 @@ function DashboardShell({ role }: DashboardLayoutProps) {
 }
 
 export function DashboardLayout({ role }: DashboardLayoutProps) {
+  const content = <DashboardShell role={role} />;
+
   return (
     <InstitutionProvider>
-      <DashboardShell role={role} />
+      {role === "instructor" ? (
+        <ActiveCourseProvider>{content}</ActiveCourseProvider>
+      ) : (
+        content
+      )}
     </InstitutionProvider>
   );
 }

@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { MemoryRouter } from "react-router-dom";
+import { describe, expect, it } from "vitest";
 
 import { ActionCard } from "@/components/chat/ActionCard";
 import { AssistantMessage } from "@/components/chat/AssistantMessage";
@@ -22,19 +22,43 @@ describe("ExplanationCard", () => {
 describe("ActionCard", () => {
   it("renders interpreted action details", () => {
     render(
-      <ActionCard
-        action={{
+      <MemoryRouter>
+        <ActionCard
+          action={{
           action: "Send Reminder",
           course: "COSC 499",
           affectedStudents: "12 students",
         }}
-      />,
+        />
+      </MemoryRouter>,
     );
 
     expect(screen.getByText("Interpreted Action")).toBeInTheDocument();
     expect(screen.getByText("Send Reminder")).toBeInTheDocument();
     expect(screen.getByText("COSC 499")).toBeInTheDocument();
     expect(screen.getByText("12 students")).toBeInTheDocument();
+  });
+
+  it("renders action links when provided", () => {
+    render(
+      <MemoryRouter>
+        <ActionCard
+          action={{
+            action: "Send Reminder",
+            course: "COSC 499",
+            affectedStudents: "12 students",
+            primaryLink: {
+              label: "Preview workflow",
+              href: "/instructor/actions/preview?preview=workflow-student-reminder",
+            },
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("link", { name: /Preview workflow/i }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -61,5 +85,24 @@ describe("AssistantMessage", () => {
     expect(screen.getByText("I found missing submissions.")).toBeInTheDocument();
     expect(screen.getByText("Explanation")).toBeInTheDocument();
     expect(screen.getByText("Interpreted Action")).toBeInTheDocument();
+  });
+
+  it("renders a safety notice when the request was blocked", () => {
+    render(
+      <AssistantMessage
+        message={{
+          id: "2",
+          role: "assistant",
+          content: "I cannot complete that request.",
+          timestamp: new Date("2026-06-24T10:05:00"),
+          safetyBlocked: true,
+          safetyMessage: "Please include the course and assignment details.",
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByText("Please include the course and assignment details."),
+    ).toBeInTheDocument();
   });
 });

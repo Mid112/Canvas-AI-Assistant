@@ -1,4 +1,4 @@
-import { API_BASE_URL } from "@/config/api";
+import { apiRequest, ApiRequestError } from "@/lib/api-request";
 import { formatAuditTimestamp } from "@/lib/format-audit-timestamp";
 import { mapWorkflowHistoryApiToEntry } from "@/lib/map-workflow-history";
 import type {
@@ -9,60 +9,57 @@ import type {
 import { isWorkflowStatus } from "@/types/workflowHistory";
 
 export const WORKFLOW_HISTORY_PATH = "/history/workflows";
+const WORKFLOW_HISTORY_PAGE_SIZE = 200;
 
-class WorkflowHistoryApiError extends Error {
-  status: number;
+export interface WorkflowHistoryResult {
+  entries: WorkflowHistoryEntry[];
+  total: number;
+}
 
+export class WorkflowHistoryApiError extends ApiRequestError {
   constructor(message: string, status: number) {
-    super(message);
+    super(message, status);
     this.name = "WorkflowHistoryApiError";
-    this.status = status;
   }
-}
-
-async function parseError(response: Response): Promise<string> {
-  try {
-    const data = (await response.json()) as { detail?: string };
-    if (typeof data.detail === "string") {
-      return data.detail;
-    }
-  } catch {
-    // Fall through to default message.
-  }
-
-  return "Unable to load workflow history. Please try again.";
-}
-
-async function request<T>(
-  path: string,
-  accessToken: string,
-  options: RequestInit = {},
-): Promise<T> {
-  const headers = new Headers(options.headers);
-  headers.set("Content-Type", "application/json");
-  headers.set("Authorization", `Bearer ${accessToken}`);
-
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
-
-  if (!response.ok) {
-    throw new WorkflowHistoryApiError(await parseError(response), response.status);
-  }
-
-  return response.json() as Promise<T>;
 }
 
 export async function fetchWorkflowHistory(
   accessToken: string,
-): Promise<WorkflowHistoryEntry[]> {
-  const data = await request<WorkflowHistoryApiResponse>(
-    WORKFLOW_HISTORY_PATH,
-    accessToken,
-  );
+): Promise<WorkflowHistoryResult> {
+  try {
+    const items = [];
+    let total = 0;
+    let offset = 0;
 
-  return data.items.map(mapWorkflowHistoryApiToEntry);
+    while (true) {
+      const data = await apiRequest<WorkflowHistoryApiResponse>(
+        `${WORKFLOW_HISTORY_PATH}?limit=${WORKFLOW_HISTORY_PAGE_SIZE}&offset=${offset}`,
+        accessToken,
+      );
+
+      total = data.total;
+      items.push(...data.items);
+
+      if (items.length >= total || data.items.length === 0) {
+        break;
+      }
+
+      offset += WORKFLOW_HISTORY_PAGE_SIZE;
+    }
+
+    return {
+      entries: items.map(mapWorkflowHistoryApiToEntry),
+      total,
+    };
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unable to load workflow history. Please try again.";
+
+    const status = error instanceof ApiRequestError ? error.status : 0;
+    throw new WorkflowHistoryApiError(message, status);
+  }
 }
 
 export function getWorkflowHistoryStatusCounts(

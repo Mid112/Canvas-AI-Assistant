@@ -1,12 +1,17 @@
-import { Bot } from "lucide-react";
+import { AlertTriangle, Bot } from "lucide-react";
 
 import { ActionCard } from "@/components/chat/ActionCard";
 import { ExplanationCard } from "@/components/chat/ExplanationCard";
+import { PendingActionControls } from "@/components/chat/PendingActionControls";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/types/chat";
 
 interface AssistantMessageProps {
   message: ChatMessage;
+  isResolvingPendingAction?: boolean;
+  pendingActionError?: string | null;
+  onConfirmPendingAction?: () => void;
+  onCancelPendingAction?: () => void;
 }
 
 function formatTimestamp(timestamp: Date): string {
@@ -16,7 +21,16 @@ function formatTimestamp(timestamp: Date): string {
   });
 }
 
-export function AssistantMessage({ message }: AssistantMessageProps) {
+export function AssistantMessage({
+  message,
+  isResolvingPendingAction = false,
+  pendingActionError = null,
+  onConfirmPendingAction,
+  onCancelPendingAction,
+}: AssistantMessageProps) {
+  const showPendingControls =
+    message.pendingMessageId !== undefined && message.pendingActionStatus;
+
   return (
     <div className="flex gap-3">
       <div
@@ -34,12 +48,40 @@ export function AssistantMessage({ message }: AssistantMessageProps) {
           {message.content}
         </div>
 
+        {message.safetyBlocked && message.safetyMessage ? (
+          <div
+            role="alert"
+            className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-950"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <p>{message.safetyMessage}</p>
+          </div>
+        ) : null}
+
         {message.explanation ? (
           <ExplanationCard explanation={message.explanation} />
         ) : null}
 
         {message.interpretedAction ? (
           <ActionCard action={message.interpretedAction} />
+        ) : null}
+
+        {showPendingControls ? (
+          <PendingActionControls
+            status={message.pendingActionStatus}
+            isLoading={isResolvingPendingAction}
+            error={pendingActionError}
+            onConfirm={
+              message.pendingActionStatus === "pending"
+                ? onConfirmPendingAction!
+                : () => {}
+            }
+            onCancel={
+              message.pendingActionStatus === "pending"
+                ? onCancelPendingAction!
+                : () => {}
+            }
+          />
         ) : null}
 
         <time

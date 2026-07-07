@@ -1,11 +1,14 @@
-import { apiRequest } from "@/lib/api-request";
+import { apiRequest, ApiRequestError } from "@/lib/api-request";
 import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
 import type { AssistantContext, AssistantResponse } from "@/types/chat";
 
 export class AssistantApiError extends Error {
-  constructor(message: string) {
+  status?: number;
+
+  constructor(message: string, status?: number) {
     super(message);
     this.name = "AssistantApiError";
+    this.status = status;
   }
 }
 
@@ -21,10 +24,56 @@ export interface AssistantMessageResult extends AssistantResponse {
   pendingMessageId?: number;
 }
 
+export type AssistantChatResult = AssistantMessageResult;
+
 interface ChatApiResponse {
   conversation_id: number;
   reply: Record<string, unknown>;
   is_error: boolean;
+}
+
+export interface ConversationMessage {
+  id: number;
+  role: string;
+  content: string;
+  created_at: string;
+}
+
+export interface ConversationResponse {
+  id: number;
+  course_id: number | null;
+  created_at: string;
+  messages: ConversationMessage[];
+}
+
+function toAssistantMessageResult(
+  response: ChatApiResponse,
+): AssistantMessageResult {
+  const mapped = mapChatReplyToAssistantResponse(
+    response.reply,
+    response.is_error,
+  );
+
+  return {
+    ...mapped,
+    conversationId: response.conversation_id,
+    pendingMessageId:
+      typeof response.reply.pending_message_id === "number"
+        ? response.reply.pending_message_id
+        : mapped.pendingMessageId,
+  };
+}
+
+function wrapRequestError(error: unknown): never {
+  if (error instanceof ApiRequestError) {
+    throw new AssistantApiError(error.message, error.status);
+  }
+
+  throw new AssistantApiError(
+    error instanceof Error
+      ? error.message
+      : "The assistant is temporarily unavailable. Please try again.",
+  );
 }
 
 export async function sendAssistantMessage(
@@ -46,23 +95,9 @@ export async function sendAssistantMessage(
       }),
     });
 
-    const mapped = mapChatReplyToAssistantResponse(response.reply, response.is_error);
-
-    return {
-      ...mapped,
-      conversationId: response.conversation_id,
-      pendingMessageId:
-        typeof response.reply.pending_message_id === "number"
-          ? response.reply.pending_message_id
-          : undefined,
-    };
+    return toAssistantMessageResult(response);
   } catch (error) {
-    const messageText =
-      error instanceof Error
-        ? error.message
-        : "The assistant is temporarily unavailable. Please try again.";
-
-    throw new AssistantApiError(messageText);
+    wrapRequestError(error);
   }
 }
 
@@ -71,20 +106,23 @@ export async function confirmAssistantAction(
   conversationId: number,
   pendingMessageId: number,
 ): Promise<AssistantMessageResult> {
-  const response = await apiRequest<ChatApiResponse>("/chat/confirm", accessToken, {
-    method: "POST",
-    body: JSON.stringify({
-      conversation_id: conversationId,
-      pending_message_id: pendingMessageId,
-    }),
-  });
+  try {
+    const response = await apiRequest<ChatApiResponse>(
+      "/chat/confirm",
+      accessToken,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          pending_message_id: pendingMessageId,
+        }),
+      },
+    );
 
-  const mapped = mapChatReplyToAssistantResponse(response.reply, response.is_error);
-
-  return {
-    ...mapped,
-    conversationId: response.conversation_id,
-  };
+    return toAssistantMessageResult(response);
+  } catch (error) {
+    wrapRequestError(error);
+  }
 }
 
 export async function cancelAssistantAction(
@@ -92,18 +130,35 @@ export async function cancelAssistantAction(
   conversationId: number,
   pendingMessageId: number,
 ): Promise<AssistantMessageResult> {
-  const response = await apiRequest<ChatApiResponse>("/chat/cancel", accessToken, {
-    method: "POST",
-    body: JSON.stringify({
-      conversation_id: conversationId,
-      pending_message_id: pendingMessageId,
-    }),
-  });
+  try {
+    const response = await apiRequest<ChatApiResponse>(
+      "/chat/cancel",
+      accessToken,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          pending_message_id: pendingMessageId,
+        }),
+      },
+    );
 
-  const mapped = mapChatReplyToAssistantResponse(response.reply, response.is_error);
+    return toAssistantMessageResult(response);
+  } catch (error) {
+    wrapRequestError(error);
+  }
+}
 
-  return {
-    ...mapped,
-    conversationId: response.conversation_id,
-  };
+export async function fetchConversation(
+  accessToken: string,
+  conversationId: number,
+): Promise<ConversationResponse> {
+  try {
+    return await apiRequest<ConversationResponse>(
+      `/chat/conversations/${conversationId}`,
+      accessToken,
+    );
+  } catch (error) {
+    wrapRequestError(error);
+  }
 }

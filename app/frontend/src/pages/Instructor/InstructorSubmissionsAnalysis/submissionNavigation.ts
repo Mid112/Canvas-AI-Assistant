@@ -61,13 +61,6 @@ export function getCourseAssignments(
     return byCode;
   }
 
-  // Dev-only: when Canvas local IDs do not match mock course IDs, show CS 101 sample
-  // data so the analytics page is usable without a Canvas sync. Remove once real
-  // Canvas submission data is wired up.
-  if (import.meta.env.DEV) {
-    return assignments.filter((assignment) => assignment.courseId === 1);
-  }
-
   return [];
 }
 
@@ -95,6 +88,25 @@ export function resolveEffectiveAssignmentId(
   }
 
   return assignments[0]?.id ?? "";
+}
+
+/** Resolve assignment id from Canvas list + UI selection (not submission analysis state). */
+export function resolveEffectiveCanvasAssignmentId(
+  canvasAssignments: { id: number }[],
+  selectedAssignmentId: string,
+  assignmentIdFromUrl: string | null,
+): string {
+  const ids = new Set(canvasAssignments.map((assignment) => String(assignment.id)));
+
+  if (selectedAssignmentId && ids.has(selectedAssignmentId)) {
+    return selectedAssignmentId;
+  }
+
+  if (assignmentIdFromUrl && ids.has(assignmentIdFromUrl)) {
+    return assignmentIdFromUrl;
+  }
+
+  return canvasAssignments[0] ? String(canvasAssignments[0].id) : "";
 }
 
 export function usesSampleSubmissionData(
