@@ -1,5 +1,5 @@
-import { API_BASE_URL } from "@/config/api";
-import { mapChatReply } from "@/lib/map-chat-reply";
+import { apiRequest, ApiRequestError } from "@/lib/api-request";
+import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
 import type { AssistantContext, AssistantResponse } from "@/types/chat";
 
 export class AssistantApiError extends Error {
@@ -12,181 +12,115 @@ export class AssistantApiError extends Error {
   }
 }
 
+export interface SendAssistantMessageOptions {
+  conversationId?: number;
+  localCourseId?: number;
+  pendingMessageId?: number;
+  context?: AssistantContext;
+}
+
+export interface AssistantMessageResult extends AssistantResponse {
+  conversationId: number;
+  pendingMessageId?: number;
+}
+
 interface ChatApiResponse {
   conversation_id: number;
   reply: Record<string, unknown>;
   is_error: boolean;
 }
 
-interface ChatRequestBody {
-  message: string;
-  local_course_id?: number;
-  conversation_id?: number;
-  pending_message_id?: number;
-}
-
-interface ConfirmActionBody {
-  conversation_id: number;
-  pending_message_id: number;
-}
-
-export interface SendAssistantMessageOptions {
-  accessToken: string;
-  context?: AssistantContext;
-  conversationId?: number;
-  pendingMessageId?: number;
-}
-
-export type AssistantChatResult = AssistantResponse & {
-  conversationId: number;
-};
-
-async function parseError(response: Response): Promise<string> {
-  if (response.status === 404) {
-    return "The requested API endpoint was not found. Make sure the backend is running.";
+function toAssistantError(error: unknown): AssistantApiError {
+  if (error instanceof AssistantApiError) {
+    return error;
   }
 
-  try {
-    const data = (await response.json()) as { detail?: string };
-    if (typeof data.detail === "string") {
-      return data.detail;
-    }
-  } catch {
-    // Fall through to default message.
+  if (error instanceof ApiRequestError) {
+    return new AssistantApiError(error.message, error.status);
   }
 
-  return "Something went wrong. Please try again.";
+  return new AssistantApiError(
+    error instanceof Error
+      ? error.message
+      : "The assistant is temporarily unavailable. Please try again.",
+  );
 }
 
-async function requestChat(
-  path: string,
-  accessToken: string,
-  body: ChatRequestBody | ConfirmActionBody,
-): Promise<ChatApiResponse> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify(body),
-  });
+function mapAssistantResult(response: ChatApiResponse): AssistantMessageResult {
+  const mapped = mapChatReplyToAssistantResponse(response.reply, response.is_error);
 
-  if (!response.ok) {
-    throw new AssistantApiError(await parseError(response), response.status);
-  }
-
-  return (await response.json()) as ChatApiResponse;
-}
-
-function toAssistantChatResult(
-  apiResponse: ChatApiResponse,
-  context: AssistantContext = {},
-): AssistantChatResult {
-  try {
-    const mapped = mapChatReply(
-      apiResponse.reply,
-      apiResponse.is_error,
-      context,
-      apiResponse.conversation_id,
-    );
-
-    return {
-      ...mapped,
-      conversationId: apiResponse.conversation_id,
-    };
-  } catch (error) {
-    if (error instanceof Error) {
-      throw new AssistantApiError(error.message);
-    }
-
-    throw new AssistantApiError(
-      "The assistant is temporarily unavailable. Please try again.",
-    );
-  }
+  return {
+    ...mapped,
+    conversationId: response.conversation_id,
+    pendingMessageId:
+      mapped.pendingMessageId ??
+      (typeof response.reply.pending_message_id === "number"
+        ? response.reply.pending_message_id
+        : undefined),
+  };
 }
 
 export async function sendAssistantMessage(
+  accessToken: string,
   message: string,
-  options: SendAssistantMessageOptions,
-): Promise<AssistantChatResult> {
-  const { accessToken, context = {}, conversationId, pendingMessageId } =
-    options;
+  options: SendAssistantMessageOptions = {},
+): Promise<AssistantMessageResult> {
+  const context = options.context ?? {};
+  const localCourseId = options.localCourseId ?? context.activeCourseId;
 
-  const body: ChatRequestBody = { message };
+  try {
+    const response = await apiRequest<ChatApiResponse>("/chat/", accessToken, {
+      method: "POST",
+      body: JSON.stringify({
+        message,
+        conversation_id: options.conversationId,
+        local_course_id: localCourseId,
+        pending_message_id: options.pendingMessageId,
+      }),
+    });
 
-  if (context.activeCourseId !== undefined) {
-    body.local_course_id = context.activeCourseId;
+    return mapAssistantResult(response);
+  } catch (error) {
+    throw toAssistantError(error);
   }
-  if (conversationId !== undefined) {
-    body.conversation_id = conversationId;
-  }
-  if (pendingMessageId !== undefined) {
-    body.pending_message_id = pendingMessageId;
-  }
-
-  const apiResponse = await requestChat("/chat/", accessToken, body);
-  return toAssistantChatResult(apiResponse, context);
 }
 
 export async function confirmAssistantAction(
   accessToken: string,
   conversationId: number,
   pendingMessageId: number,
-  context: AssistantContext = {},
-): Promise<AssistantChatResult> {
-  const apiResponse = await requestChat("/chat/confirm", accessToken, {
-    conversation_id: conversationId,
-    pending_message_id: pendingMessageId,
-  });
+): Promise<AssistantMessageResult> {
+  try {
+    const response = await apiRequest<ChatApiResponse>("/chat/confirm", accessToken, {
+      method: "POST",
+      body: JSON.stringify({
+        conversation_id: conversationId,
+        pending_message_id: pendingMessageId,
+      }),
+    });
 
-  return toAssistantChatResult(apiResponse, context);
+    return mapAssistantResult(response);
+  } catch (error) {
+    throw toAssistantError(error);
+  }
 }
 
 export async function cancelAssistantAction(
   accessToken: string,
   conversationId: number,
   pendingMessageId: number,
-  context: AssistantContext = {},
-): Promise<AssistantChatResult> {
-  const apiResponse = await requestChat("/chat/cancel", accessToken, {
-    conversation_id: conversationId,
-    pending_message_id: pendingMessageId,
-  });
+): Promise<AssistantMessageResult> {
+  try {
+    const response = await apiRequest<ChatApiResponse>("/chat/cancel", accessToken, {
+      method: "POST",
+      body: JSON.stringify({
+        conversation_id: conversationId,
+        pending_message_id: pendingMessageId,
+      }),
+    });
 
-  return toAssistantChatResult(apiResponse, context);
-}
-
-export interface ConversationMessage {
-  id: number;
-  role: string;
-  content: string;
-  created_at: string;
-}
-
-export interface ConversationResponse {
-  id: number;
-  course_id: number | null;
-  created_at: string;
-  messages: ConversationMessage[];
-}
-
-export async function fetchConversation(
-  accessToken: string,
-  conversationId: number,
-): Promise<ConversationResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/chat/conversations/${conversationId}`,
-    {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    },
-  );
-
-  if (!response.ok) {
-    throw new AssistantApiError(await parseError(response), response.status);
+    return mapAssistantResult(response);
+  } catch (error) {
+    throw toAssistantError(error);
   }
-
-  return (await response.json()) as ConversationResponse;
 }

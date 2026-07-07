@@ -220,12 +220,13 @@ def test_admin_logout_requires_auth(client):
     assert resp.status_code == 401  # HTTPBearer returns 401 in FastAPI 0.136+
 
 
-def test_admin_logout_rejects_instructor_token(client):
+def test_instructor_logout_succeeds(client):
+    """Instructors share /auth/logout with admins (#592)."""
     email = f"inst_{uuid.uuid4()}@example.com"
     reg = client.post("/api/v1/auth/register", json={"name": "I", "email": email, "password": "pass"})
     token = reg.json()["access_token"]
     resp = client.post("/api/v1/auth/logout", headers={"Authorization": f"Bearer {token}"})
-    assert resp.status_code == 403
+    assert resp.status_code == 204
 
 
 # ---------------------------------------------------------------------------

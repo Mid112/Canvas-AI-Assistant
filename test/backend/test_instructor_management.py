@@ -295,3 +295,83 @@ class TestAuditLog:
 
         log = asyncio.run(_check())
         assert log is not None
+
+    def test_update_writes_audit_log(self, client, admin_token):
+        resp = client.post(
+            BASE,
+            json={"name": "Update Audit", "email": _new_email(), "password": "Pass123!"},
+            headers=_auth(admin_token),
+        )
+        iid = resp.json()["id"]
+        client.patch(
+            f"{BASE}/{iid}",
+            json={"name": "Updated Name"},
+            headers=_auth(admin_token),
+        )
+
+        async def _check():
+            engine, Session = _make_session()
+            try:
+                async with Session() as db:
+                    return await db.scalar(
+                        select(AuditLogSession).where(
+                            AuditLogSession.action == "instructor_account_updated",
+                            AuditLogSession.details["instructor_id"].as_integer() == iid,
+                        )
+                    )
+            finally:
+                await engine.dispose()
+
+        log = asyncio.run(_check())
+        assert log is not None
+
+    def test_enable_writes_audit_log(self, client, admin_token):
+        resp = client.post(
+            BASE,
+            json={"name": "Enable Audit", "email": _new_email(), "password": "Pass123!"},
+            headers=_auth(admin_token),
+        )
+        iid = resp.json()["id"]
+        client.post(f"{BASE}/{iid}/disable", headers=_auth(admin_token))
+        client.post(f"{BASE}/{iid}/enable", headers=_auth(admin_token))
+
+        async def _check():
+            engine, Session = _make_session()
+            try:
+                async with Session() as db:
+                    return await db.scalar(
+                        select(AuditLogSession).where(
+                            AuditLogSession.action == "instructor_account_enabled",
+                            AuditLogSession.details["instructor_id"].as_integer() == iid,
+                        )
+                    )
+            finally:
+                await engine.dispose()
+
+        log = asyncio.run(_check())
+        assert log is not None
+
+    def test_revoke_writes_audit_log(self, client, admin_token):
+        resp = client.post(
+            BASE,
+            json={"name": "Revoke Audit", "email": _new_email(), "password": "Pass123!"},
+            headers=_auth(admin_token),
+        )
+        iid = resp.json()["id"]
+        client.delete(f"{BASE}/{iid}/access", headers=_auth(admin_token))
+
+        async def _check():
+            engine, Session = _make_session()
+            try:
+                async with Session() as db:
+                    return await db.scalar(
+                        select(AuditLogSession).where(
+                            AuditLogSession.action == "instructor_access_revoked",
+                            AuditLogSession.details["instructor_id"].as_integer() == iid,
+                        )
+                    )
+            finally:
+                await engine.dispose()
+
+        log = asyncio.run(_check())
+        assert log is not None

@@ -15,6 +15,7 @@ from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_act
 from app.mcp_tools.schemas import ACTION_SCHEMAS
 from app.models.audit_log import AuditLog
 from app.models.conversation import Conversation
+from app.models.course import Course
 from app.models.message import Message
 from app.models.user import User
 from app.models.workflow import Workflow
@@ -33,6 +34,10 @@ HISTORY_WINDOW = 10
 WRITE_ACTIONS = {"create_assignment", "update_assignment", "send_message"}
 
 # action_name -> (resource_type, operation) for AuditLog rows.
+# send_message's entry here is only a default: the action can produce
+# either a public announcement or a private conversation depending on
+# recipient_canvas_user_ids, and the actual outcome is resolved dynamically
+# from the write result below rather than assumed from action_name alone.
 _AUDIT_RESOURCE_MAP = {
     "create_assignment": ("assignment", "create"),
     "update_assignment": ("assignment", "update"),
@@ -129,6 +134,7 @@ async def _sync_workflow_for_preview(
     preview_message_id: int,
     user_prompt: str,
     proposed_action: dict,
+    affected_resources: list[dict] | None = None,
 ) -> None:
     """Creates or updates the Workflow row backing an intent_preview — the
     state machine handle_confirmed_action checks to guarantee an action
@@ -143,13 +149,25 @@ async def _sync_workflow_for_preview(
 
     Also backfills conversation.course_id from the proposed action the
     first time one is seen, since the client (e.g. the manual test
-    harness) doesn't always send local_course_id up front."""
+    harness) doesn't always send local_course_id up front. Only backfills
+    when that course actually exists and belongs to this user — both
+    conversations.course_id and workflows.course_id are real foreign keys,
+    so blindly trusting an LLM-echoed local_course_id here (e.g. one the
+    model hallucinated, or a stale/invalid id from client input) raises an
+    unhandled IntegrityError instead of the graceful "course not found"
+    message _resolve_course already produces at confirm time. Leaving it
+    unset here means that existing, tested error path still fires."""
     action_name = proposed_action.get("action")
+    resources = affected_resources or []
 
     if conversation.course_id is None:
         local_course_id = proposed_action.get("local_course_id")
         if local_course_id is not None:
-            conversation.course_id = local_course_id
+            owned_course = await db.scalar(
+                select(Course.id).where(Course.id == local_course_id, Course.instructor_id == user.id)
+            )
+            if owned_course is not None:
+                conversation.course_id = local_course_id
 
     existing = None
     if pending_message_id:
@@ -170,6 +188,7 @@ async def _sync_workflow_for_preview(
         existing.action_name = action_name
         existing.user_prompt = user_prompt
         existing.proposed_action = proposed_action
+        existing.affected_resources = resources
         existing.course_id = conversation.course_id
         existing.status = "pending"
         existing.error_detail = None
@@ -187,6 +206,7 @@ async def _sync_workflow_for_preview(
             action_name=action_name,
             user_prompt=user_prompt,
             proposed_action=proposed_action,
+            affected_resources=resources,
             status="pending",
         )
     )
@@ -268,13 +288,14 @@ changed — leave every other field out of proposed_action entirely, since
 anything omitted is preserved automatically.
 
 MESSAGING STUDENTS:
-send_message posts a public announcement visible to the entire class of the
-named course — there is no way to target individual students yet, so do not
-imply the message is private or that specific students were chosen. Always
-require local_course_id. Get clear subject and body content from the user
-before proposing the action rather than inventing wording yourself. The user
-can ask you to revise the draft before confirming — treat that like any
-other follow-up refinement.
+send_message can either post a public class announcement (when
+recipient_canvas_user_ids is omitted) or send a private Canvas conversation
+to specific students (when recipient_canvas_user_ids is provided). Use
+fetch_students or fetch_submissions first when you need to identify the
+correct Canvas user IDs. Always require local_course_id. Get clear subject
+and body content from the user before proposing the action rather than
+inventing wording yourself. The user can ask you to revise the draft before
+confirming — treat that like any other follow-up refinement.
 
 AVAILABLE ACTIONS (only used inside proposed_action):
 """ + tool_list
@@ -354,6 +375,12 @@ async def handle_chat_message(
         await log_message(db, conversation, role="assistant", content=e.log_detail)
         await db.commit()
         return conversation, {"error": e.user_message}, True
+    except HTTPException as e:
+        detail = e.detail if isinstance(e.detail, str) else str(e.detail)
+        error_detail = f"HTTPException {e.status_code}: {detail}"
+        await log_message(db, conversation, role="assistant", content=error_detail)
+        await db.commit()
+        return conversation, {"error": detail}, True
 
     # Log the assistant result — if this is a modify turn superseding a
     # previous intent_preview, overwrite that message in place rather than
@@ -368,6 +395,7 @@ async def handle_chat_message(
         )
 
     if result.get("intent_preview"):
+        preview_metadata = result.get("preview_metadata") or {}
         await _sync_workflow_for_preview(
             db, conversation, user,
             source_user_message_id=user_msg.id,
@@ -375,6 +403,7 @@ async def handle_chat_message(
             preview_message_id=assistant_msg.id,
             user_prompt=message,
             proposed_action=result.get("proposed_action", {}),
+            affected_resources=preview_metadata.get("affected_resources", []),
         )
 
     await db.commit()
@@ -403,7 +432,19 @@ async def _claim_pending_workflow(db: AsyncSession, workflow: Workflow, new_stat
         .where(Workflow.id == workflow.id, Workflow.status == "pending")
         .values(status=new_status)
     )
-    return claim.rowcount > 0
+    if claim.rowcount > 0:
+        return True
+    # SQLAlchemy's default synchronize_session='evaluate' strategy re-checks
+    # the bulk UPDATE's WHERE clause against workflow's in-memory attributes,
+    # not the DB row — on a 0-row update it can still apply .values() to the
+    # loaded object, leaving workflow.status holding the just-attempted
+    # target instead of the row's real, currently-committed value. Refresh
+    # just the status column (not attribute_names=None / the whole object)
+    # so callers building a 409 message report what's actually true, without
+    # expiring the eagerly-loaded `user` relationship some callers depend on
+    # — an async lazy-load on that would fail outside a greenlet context.
+    await db.refresh(workflow, attribute_names=["status"])
+    return False
 
 
 async def handle_confirmed_action(
@@ -506,6 +547,8 @@ async def handle_confirmed_action(
     workflow.status = "executed"
     workflow.executed_at = datetime.now(UTC)
     workflow.result_message_id = result_msg.id
+    if result.get("affected_resources"):
+        workflow.affected_resources = result["affected_resources"]
 
     # AuditLog is only ever about actual Canvas mutations — read actions
     # (e.g. fetch_courses) now get Workflow rows too (see
@@ -516,6 +559,21 @@ async def handle_confirmed_action(
         resource_type, operation = _AUDIT_RESOURCE_MAP.get(
             workflow.action_name, (workflow.action_name, "create")
         )
+        if workflow.action_name == "send_message":
+            # Use the resource type the write actually produced (announcement
+            # vs. conversation) instead of the static default above, since
+            # the same action can go either way depending on whether
+            # recipient_canvas_user_ids was set.
+            created_resource = next(
+                (
+                    resource
+                    for resource in result.get("affected_resources", [])
+                    if resource.get("status") == "created"
+                ),
+                None,
+            )
+            if created_resource and created_resource.get("type"):
+                resource_type = created_resource["type"]
         # result["data"] comes from CanvasWriteResult.to_dict()'s plain
         # .model_dump() (not mode="json"), so it can still contain native
         # datetime objects — JSONB needs JSON-safe values. Round-trip

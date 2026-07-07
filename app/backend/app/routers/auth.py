@@ -1,30 +1,49 @@
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.limiter import limiter
-from app.dependencies import bearer, get_admin_user, get_current_user
+from app.dependencies import bearer, get_current_user
 from app.integrations.canvas import check_token_status
+from app.models.session import Session
 from app.models.user import User
 from app.schemas.auth import (
     CanvasTokenRequest,
     CanvasTokenValidationResponse,
+    ChangePasswordRequest,
+    DeleteAccountRequest,
     LoginRequest,
+    NotificationSettingsUpdate,
+    PasswordResetConfirmRequest,
+    PasswordResetRequest,
+    ProfileUpdateRequest,
     RegisterRequest,
+    SecurityStatusResponse,
+    SessionResponse,
     TokenResponse,
     UserResponse,
-    UserUpdateRequest,
 )
 from app.services.auth import (
     admin_login_user,
-    delete_current_user,
+    change_password,
+    confirm_password_reset,
+    delete_account,
+    get_notification_settings,
+    list_user_sessions,
     login_user,
     logout_admin,
+    logout_user,
     register_user,
     remove_canvas_connection,
+    request_password_reset,
+    revoke_user_session,
     update_canvas_token,
-    update_current_user,
+    update_notification_settings,
+    update_profile,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -32,7 +51,6 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
-    # Pass full body so service can access name and role
     return await register_user(db, body)
 
 
@@ -46,7 +64,7 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
 async def admin_login(
     request: Request,
     body: LoginRequest,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     return await admin_login_user(db, body.email, body.password)
 
@@ -54,10 +72,23 @@ async def admin_login(
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
     credentials: HTTPAuthorizationCredentials = Depends(bearer),
-    current_user: User = Depends(get_admin_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await logout_admin(db, credentials.credentials, current_user)
+    if current_user.role == "admin":
+        await logout_admin(db, credentials.credentials, current_user)
+    else:
+        await logout_user(db, credentials.credentials)
+
+
+@router.post("/password-reset/request", status_code=status.HTTP_204_NO_CONTENT)
+async def password_reset_request(body: PasswordResetRequest, db: AsyncSession = Depends(get_db)):
+    await request_password_reset(db, body.email)
+
+
+@router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)
+async def password_reset_confirm(body: PasswordResetConfirmRequest, db: AsyncSession = Depends(get_db)):
+    await confirm_password_reset(db, body)
 
 
 @router.get("/me", response_model=UserResponse)
@@ -67,19 +98,77 @@ async def me(current_user: User = Depends(get_current_user)):
 
 @router.patch("/me", response_model=UserResponse)
 async def update_me(
-    body: UserUpdateRequest,
+    body: ProfileUpdateRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await update_current_user(db, current_user, body)
+    return await update_profile(db, current_user, body)
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_me(
+    body: DeleteAccountRequest | None = None,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await delete_current_user(db, current_user)
+    await delete_account(db, current_user, body.password if body else None)
+
+
+@router.post("/me/change-password", status_code=status.HTTP_204_NO_CONTENT)
+async def change_password_endpoint(
+    body: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await change_password(db, current_user, body)
+
+
+@router.get("/me/notifications")
+async def get_notifications(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_notification_settings(db, current_user)
+
+
+@router.patch("/me/notifications")
+async def update_notifications(
+    body: NotificationSettingsUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await update_notification_settings(db, current_user, body)
+
+
+@router.get("/me/sessions", response_model=list[SessionResponse])
+async def get_sessions(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await list_user_sessions(db, current_user, credentials.credentials)
+
+
+@router.delete("/me/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_session(
+    session_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await revoke_user_session(db, current_user, session_id)
+
+
+@router.get("/me/security", response_model=SecurityStatusResponse)
+async def security_status(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    count = await db.scalar(
+        select(func.count())
+        .select_from(Session)
+        .where(Session.user_id == current_user.id, Session.expires_at > datetime.now(UTC))
+    )
+    return SecurityStatusResponse(two_factor_enabled=False, active_session_count=int(count or 0))
 
 
 @router.patch("/me/canvas-token", response_model=UserResponse)

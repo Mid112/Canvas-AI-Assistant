@@ -3,22 +3,40 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from app.models.workflow import Workflow
 
-class WorkflowHistoryResponse(BaseModel):
+
+class WorkflowHistoryItem(BaseModel):
     id: int
     conversation_id: int
-    course_id: int | None
     action_name: str
     user_prompt: str
-    proposed_action: dict[str, Any]
     status: str
-    error_detail: str | None
+    proposed_action: dict[str, Any]
+    affected_resources: list[dict[str, Any]]
     created_at: datetime
-    executed_at: datetime | None
-    preview_message_id: int
-    result_message_id: int | None
+    executed_at: datetime | None = None
+    user_name: str
 
-    model_config = {"from_attributes": True}
+    @classmethod
+    def from_workflow(cls, workflow: Workflow) -> "WorkflowHistoryItem":
+        return cls(
+            id=workflow.id,
+            conversation_id=workflow.conversation_id,
+            action_name=workflow.action_name,
+            user_prompt=workflow.user_prompt,
+            status=workflow.status,
+            proposed_action=workflow.proposed_action,
+            affected_resources=workflow.affected_resources,
+            created_at=workflow.created_at,
+            executed_at=workflow.executed_at,
+            user_name=workflow.user.name,
+        )
+
+
+class WorkflowHistoryResponse(BaseModel):
+    items: list[WorkflowHistoryItem]
+    total: int
 
 
 class AuditLogResponse(BaseModel):
@@ -26,7 +44,7 @@ class AuditLogResponse(BaseModel):
     user_id: int
     user_email: str
     user_role: str
-    workflow_id: int
+    workflow_id: int | None
     course_id: int | None
     action: str
     resource_type: str

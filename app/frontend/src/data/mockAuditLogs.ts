@@ -80,16 +80,15 @@ export const mockAuditLogApiRecords: AuditLogApiRecord[] = [
     id: 1,
     user_id: 10,
     workflow_id: 128,
-    action: "Create Message Draft",
+    course_id: 3,
+    action: "send_message",
+    resource_type: "announcement",
+    resource_id: "4521",
+    operation: "create",
+    status: "success",
     timestamp: "2026-05-31T14:23:45.000Z",
     user_email: "jane.doe@university.edu",
     user_role: "instructor",
-    details: {
-      resource: "Message Draft #4521",
-      result: "success",
-      courseId: "CS-101",
-      ipAddress: "10.0.4.22",
-    },
   },
 ];
 

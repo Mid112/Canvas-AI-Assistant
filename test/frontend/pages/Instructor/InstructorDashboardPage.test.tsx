@@ -1,10 +1,12 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useInstitution } from "@/contexts/useInstitution";
+import { getInstitutionData } from "@/data/institutionCourseData";
 import { InstructorDashboardPage } from "@/pages/Instructor/InstructorDashboardPage";
 import { paths } from "@/routes/paths";
+import * as dashboardService from "@/services/dashboard";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 const mockNavigate = vi.fn();
@@ -57,8 +59,18 @@ function InstitutionSwitchHarness() {
 }
 
 describe("InstructorDashboardPage", () => {
-  it("renders institution-specific dashboard data", () => {
+  beforeEach(() => {
+    vi.spyOn(dashboardService, "fetchInstructorDashboard").mockResolvedValue(
+      getInstitutionData("ubc")!.dashboard,
+    );
+  });
+
+  it("renders institution-specific dashboard data", async () => {
     renderWithInstitution(<InstructorDashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("156")).toBeInTheDocument();
+    });
 
     expect(
       screen.getByRole("heading", { name: "Dashboard" }),
@@ -82,22 +94,21 @@ describe("InstructorDashboardPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("updates dashboard analytics when the institution changes", async () => {
+  it("updates the institution overview when the institution changes", async () => {
     const user = userEvent.setup();
 
     renderWithInstitution(<InstitutionSwitchHarness />);
 
+    await waitFor(() => {
+      expect(screen.getByText("156")).toBeInTheDocument();
+    });
+
     expect(screen.getByText(/Overview for UBC/)).toBeInTheDocument();
-    expect(screen.getByText("156")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Switch to UBCO" }));
 
     expect(screen.getByText(/Overview for UBCO/)).toBeInTheDocument();
-    expect(screen.getByText("108")).toBeInTheDocument();
-    expect(
-      screen.getAllByText(/COSC 111: Computer Programming I/).length,
-    ).toBeGreaterThan(0);
-    expect(screen.queryByText("156")).not.toBeInTheDocument();
+    expect(screen.getByText("156")).toBeInTheDocument();
   });
 
   it("navigates to the assistant from the dashboard CTA", async () => {

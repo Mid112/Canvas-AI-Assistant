@@ -3,7 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.database import get_db
-from app.dependencies import get_instructor_user
+from app.dependencies import get_current_user, get_instructor_user
 from app.models.user import User
 from app.schemas.analysis import LateSubmissionAnalysis, MissingSubmissionAnalysis
 from app.schemas.canvas import (
@@ -15,8 +15,11 @@ from app.schemas.canvas import (
     CourseResponse,
     SubmissionResponse,
 )
+from app.schemas.dashboard import InstructorDashboardResponse
+from app.schemas.preview import ActionPreviewResponse, AssignmentDraftRequest, AssignmentDraftResponse
 from app.schemas.student import StudentResponse
 from app.services.analysis import analyze_late_submissions, analyze_missing_submissions
+from app.services.assignment_draft import generate_assignment_draft
 from app.services.canvas import (
     create_course_assignment,
     get_active_course,
@@ -27,9 +30,19 @@ from app.services.canvas import (
     set_active_course,
     update_course_assignment,
 )
+from app.services.dashboard import get_instructor_dashboard
+from app.services.preview import build_action_preview
 from app.services.student import get_students
 
 router = APIRouter(prefix="/canvas", tags=["canvas"])
+
+
+@router.get("/dashboard", response_model=InstructorDashboardResponse)
+async def instructor_dashboard(
+    current_user: User = Depends(get_instructor_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_instructor_dashboard(current_user, db)
 
 
 @router.get("/courses", response_model=list[CourseResponse])
@@ -49,6 +62,35 @@ async def list_assignments(
     db: AsyncSession = Depends(get_db),
 ):
     return await get_assignments(course_id, current_user, canvas_url, db)
+
+
+@router.post("/courses/{course_id}/assignments/generate-draft", response_model=AssignmentDraftResponse)
+async def generate_assignment_draft_endpoint(
+    course_id: int,
+    body: AssignmentDraftRequest,
+    current_user: User = Depends(get_current_user),
+):
+    return await generate_assignment_draft(body)
+
+
+@router.post("/courses/{course_id}/assignments/preview", response_model=ActionPreviewResponse)
+async def preview_assignment_endpoint(
+    course_id: int,
+    body: AssignmentCreate,
+    current_user: User = Depends(get_current_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.canvas import get_owned_course
+
+    course = await get_owned_course(course_id, current_user, canvas_url, db)
+    preview = build_action_preview(
+        "create_assignment",
+        f"Create assignment '{body.name}' in {course.name}",
+        body.model_dump(mode="json"),
+        course_name=course.name,
+    )
+    return ActionPreviewResponse(**preview)
 
 
 @router.post("/courses/{course_id}/assignments", response_model=AssignmentResponse)

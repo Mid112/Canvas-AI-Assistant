@@ -1,6 +1,5 @@
 from datetime import datetime
 from typing import Literal
-from urllib.parse import urlparse
 
 from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator
 
@@ -30,18 +29,55 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
 
 
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    token: str = Field(min_length=1)
+    new_password: str = Field(min_length=8)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(min_length=8)
+
+
+class ProfileUpdateRequest(BaseModel):
+    name: str | None = None
+    email: EmailStr | None = None
+
+
+class DeleteAccountRequest(BaseModel):
+    password: str
+
+
+class NotificationSettingsUpdate(BaseModel):
+    settings: dict
+
+
+class SessionResponse(BaseModel):
+    id: int
+    created_at: datetime
+    expires_at: datetime
+    is_current: bool
+
+
+class SecurityStatusResponse(BaseModel):
+    two_factor_enabled: bool = False
+    active_session_count: int
+
+
 class CanvasTokenRequest(BaseModel):
     canvas_token: str = Field(min_length=1)
-    # lambda so it reads from settings at request time, not at import time
     canvas_url: str = Field(default_factory=lambda: settings.CANVAS_API_URL)
 
     @field_validator("canvas_url", mode="before")
     @classmethod
     def _normalize_url(cls, v: str) -> str:
-        # strip trailing slash so "https://canvas.ubc.ca/" and "https://canvas.ubc.ca" are the same key
+        from urllib.parse import urlparse
+
         v = str(v).rstrip("/")
-        # block non-https to prevent SSRF — backend would otherwise call arbitrary internal hosts
-        # allow plain http:// for local Canvas instances when DEBUG is on
         if not v.startswith("https://"):
             parsed_url = urlparse(v)
             if not (settings.DEBUG and parsed_url.scheme == "http" and parsed_url.hostname in _LOCAL_HTTP_HOSTS):
@@ -53,7 +89,6 @@ class CanvasTokenValidationResponse(BaseModel):
     status: Literal["valid", "expired", "invalid"]
 
 
-# encrypted_token is intentionally excluded — never expose it in API responses
 class CanvasConnectionResponse(BaseModel):
     id: int
     canvas_url: str
@@ -72,7 +107,6 @@ class UserResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-    # computed_field is needed so Pydantic includes this property in the serialized response
     @computed_field
     @property
     def has_canvas_token(self) -> bool:

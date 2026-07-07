@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -21,6 +22,7 @@ import {
 import type { CourseAnalyticsOverview } from "@/types/course";
 import type { InstructorDashboardData } from "@/types/dashboard";
 import { sharedDashboardQuickActions } from "@/types/dashboard";
+import { fetchInstructorDashboard } from "@/services/dashboard";
 
 const DEFAULT_INSTITUTION_ID = institutions[0]?.id ?? "ubc";
 
@@ -75,17 +77,54 @@ function withSharedQuickActions(
 }
 
 export function InstitutionProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
+  const { user, accessToken } = useAuth();
   const userId = user?.id;
   const [selectedInstitutionId, setSelectedInstitutionId] = useState(() =>
     resolveInstitutionId(userId),
   );
   const [previousUserId, setPreviousUserId] = useState(userId);
+  const [previousAccessToken, setPreviousAccessToken] = useState(accessToken);
+  const [apiDashboard, setApiDashboard] = useState<InstructorDashboardData | null>(
+    null,
+  );
 
   if (userId !== previousUserId) {
     setPreviousUserId(userId);
     setSelectedInstitutionId(resolveInstitutionId(userId));
+    setApiDashboard(null);
   }
+
+  if (accessToken !== previousAccessToken) {
+    setPreviousAccessToken(accessToken);
+    if (!accessToken) {
+      setApiDashboard(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const dashboard = await fetchInstructorDashboard(accessToken);
+        if (!cancelled) {
+          setApiDashboard(withSharedQuickActions(dashboard));
+        }
+      } catch {
+        if (!cancelled) {
+          setApiDashboard(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, userId]);
 
   const setSelectedInstitution = useCallback(
     (institutionId: string) => {
@@ -122,10 +161,10 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
       courses: institutionData?.courses ?? [],
       analytics: institutionData?.analytics ?? EMPTY_ANALYTICS,
       dashboard: withSharedQuickActions(
-        institutionData?.dashboard ?? EMPTY_DASHBOARD,
+        apiDashboard ?? institutionData?.dashboard ?? EMPTY_DASHBOARD,
       ),
     }),
-    [institutionData, selectedInstitution, setSelectedInstitution],
+    [apiDashboard, institutionData, selectedInstitution, setSelectedInstitution],
   );
 
   return (

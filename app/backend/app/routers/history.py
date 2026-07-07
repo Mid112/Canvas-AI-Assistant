@@ -1,85 +1,53 @@
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
-from app.dependencies import get_admin_user, get_current_user
-from app.models.audit_log import AuditLog
+from app.dependencies import get_current_user
 from app.models.user import User
-from app.models.workflow import Workflow
-from app.schemas.history import AuditLogResponse, WorkflowHistoryResponse
+from app.schemas.history import WorkflowHistoryItem, WorkflowHistoryResponse
+from app.services.workflow import cancel_workflow, list_workflow_history
 
 router = APIRouter(tags=["history"])
 
 
-@router.get("/workflows/history", response_model=list[WorkflowHistoryResponse])
-async def list_workflow_history(
+async def _workflow_history_response(
+    limit: int,
+    offset: int,
+    current_user: User,
+    db: AsyncSession,
+) -> WorkflowHistoryResponse:
+    items, total = await list_workflow_history(db, current_user, limit=limit, offset=offset)
+    return WorkflowHistoryResponse(
+        items=[WorkflowHistoryItem.from_workflow(i) for i in items],
+        total=total,
+    )
+
+
+@router.get("/history/workflows", response_model=WorkflowHistoryResponse)
+async def get_workflow_history(
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+):
+    return await _workflow_history_response(limit, offset, current_user, db)
+
+
+@router.get("/workflows/history", response_model=WorkflowHistoryResponse)
+async def get_workflow_history_legacy(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-):
-    result = await db.scalars(
-        select(Workflow)
-        .where(Workflow.user_id == current_user.id)
-        .order_by(Workflow.created_at.desc())
-        .offset(offset)
-        .limit(limit)
-    )
-    return list(result)
-
-
-@router.get("/audit/logs", response_model=list[AuditLogResponse])
-async def list_my_audit_logs(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
 ):
-    result = await db.scalars(
-        select(AuditLog)
-        .where(AuditLog.user_id == current_user.id)
-        .options(selectinload(AuditLog.user))
-        .order_by(AuditLog.timestamp.desc())
-        .offset(offset)
-        .limit(limit)
-    )
-    return [_audit_log_response(log) for log in result]
+    return await _workflow_history_response(limit, offset, current_user, db)
 
 
-@router.get("/admin/audit/logs", response_model=list[AuditLogResponse])
-async def list_admin_audit_logs(
-    current_user: User = Depends(get_admin_user),
+@router.post("/history/workflows/{workflow_id}/cancel", response_model=WorkflowHistoryItem)
+async def cancel_workflow_endpoint(
+    workflow_id: int,
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    limit: int = Query(default=50, ge=1, le=200),
-    offset: int = Query(default=0, ge=0),
 ):
-    result = await db.scalars(
-        select(AuditLog)
-        .options(selectinload(AuditLog.user))
-        .order_by(AuditLog.timestamp.desc())
-        .offset(offset)
-        .limit(limit)
-    )
-    return [_audit_log_response(log) for log in result]
-
-
-def _audit_log_response(log: AuditLog) -> AuditLogResponse:
-    return AuditLogResponse(
-        id=log.id,
-        user_id=log.user_id,
-        user_email=log.user.email,
-        user_role=log.user.role,
-        workflow_id=log.workflow_id,
-        course_id=log.course_id,
-        action=log.action,
-        resource_type=log.resource_type,
-        resource_id=log.resource_id,
-        operation=log.operation,
-        status=log.status,
-        before_data=log.before_data,
-        after_data=log.after_data,
-        request_payload=log.request_payload,
-        timestamp=log.timestamp,
-    )
+    workflow = await cancel_workflow(db, current_user, workflow_id)
+    return WorkflowHistoryItem.from_workflow(workflow)

@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -65,7 +66,9 @@ class MessageSendResult(BaseModel):
     course_id: int         # Canvas course ID — matches AssignmentResponse.course_id convention, not the local DB id
     subject: str
     body: str
-    audience_size: int     # enrolled-class size at post time, for display only — not used to build the request
+    audience_size: int     # enrolled-class size or targeted recipient count
+    delivery_mode: Literal["announcement", "conversation"] = "announcement"
+    recipient_canvas_user_ids: list[int] = Field(default_factory=list)
 
 
 class SubmissionResponse(BaseModel):

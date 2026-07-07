@@ -20,6 +20,10 @@ export interface MessageDraft {
 }
 
 export interface FetchMessageDraftOptions {
+  draftId?: number;
+  templateId?: string;
+  templateName?: string;
+  prompt?: string;
   emptyRecipients?: boolean;
   simulateLoadError?: boolean;
 }

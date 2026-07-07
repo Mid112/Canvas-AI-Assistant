@@ -58,6 +58,7 @@ class Workflow(Base):
     action_name: Mapped[str] = mapped_column(String, nullable=False)
     user_prompt: Mapped[str] = mapped_column(Text, nullable=False)
     proposed_action: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    affected_resources: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
 
     # pending -> executing -> executed | failed
     #         -> cancelled | superseded

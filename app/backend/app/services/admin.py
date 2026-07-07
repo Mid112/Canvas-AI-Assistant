@@ -1,12 +1,70 @@
+from datetime import UTC, datetime, timedelta
+
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password
+from app.models.audit_log import AuditLog
 from app.models.audit_log_session import AuditLogSession
 from app.models.canvas_connection import CanvasConnection
+from app.models.system_setting import SystemSetting
 from app.models.user import User
+from app.models.workflow import Workflow
 from app.schemas.admin import CreateAdminRequest, CreateInstructorRequest, UpdateInstructorRequest
+
+DEFAULT_ADMIN_SETTINGS = {
+    "organization_name": "Canvas Helper",
+    "allow_instructor_self_registration": True,
+    "session_timeout_minutes": 30,
+}
+
+
+async def get_dashboard_stats(db: AsyncSession) -> dict:
+    instructor_count = await db.scalar(
+        select(func.count()).select_from(User).where(User.role == "instructor")
+    )
+    admin_count = await db.scalar(
+        select(func.count()).select_from(User).where(User.role == "admin")
+    )
+    active_workflows = await db.scalar(
+        select(func.count()).select_from(Workflow).where(Workflow.status == "pending")
+    )
+    week_ago = datetime.now(UTC) - timedelta(days=7)
+    audit_events = await db.scalar(
+        select(func.count()).select_from(AuditLog).where(AuditLog.timestamp >= week_ago)
+    )
+
+    return {
+        "instructor_count": instructor_count or 0,
+        "admin_count": admin_count or 0,
+        "active_workflows": active_workflows or 0,
+        "audit_events_last_7_days": audit_events or 0,
+    }
+
+
+async def get_admin_settings(db: AsyncSession) -> dict:
+    rows = await db.scalars(select(SystemSetting))
+    settings = dict(DEFAULT_ADMIN_SETTINGS)
+    for row in rows:
+        # key is the setting name and value is that setting's own value
+        # (whatever JSON-compatible shape it is) — no wrapping needed, since
+        # JSONB stores scalars natively.
+        settings[row.key] = row.value
+    return settings
+
+
+async def update_admin_settings(db: AsyncSession, new_settings: dict) -> dict:
+    for key, value in new_settings.items():
+        existing = await db.get(SystemSetting, key)
+        if existing:
+            existing.value = value
+            existing.updated_at = datetime.now(UTC)
+        else:
+            db.add(SystemSetting(key=key, value=value))
+
+    await db.commit()
+    return await get_admin_settings(db)
 
 
 async def list_instructors(db: AsyncSession) -> list[User]:

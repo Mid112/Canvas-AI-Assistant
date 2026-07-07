@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AuditLogFiltersBar } from "@/components/admin/AuditLogFilters";
 import { AuditLogTable } from "@/components/admin/AuditLogTable";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 import { getUniqueAuditLogActions } from "@/lib/audit-log-actions";
 import {
   filterAuditLogs,
@@ -25,6 +26,7 @@ import {
 } from "@/types/auditLog";
 
 export function AuditLogsPage() {
+  const { accessToken } = useAuth();
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [filters, setFilters] = useState<AuditLogFilters>(emptyAuditLogFilters);
   const [sort, setSort] = useState<AuditLogSort>(defaultAuditLogSort);
@@ -63,7 +65,7 @@ export function AuditLogsPage() {
     setLoadError(null);
 
     try {
-      const data = await fetchAuditLogs();
+      const data = await fetchAuditLogs(accessToken!);
       if (loadRequestId.current === requestId) {
         setLogs(data);
       }
@@ -77,19 +79,30 @@ export function AuditLogsPage() {
         setIsLoading(false);
       }
     }
-  }, []);
+  }, [accessToken]);
 
   useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+
     let cancelled = false;
     const requestId = loadRequestId.current + 1;
     loadRequestId.current = requestId;
 
     void (async () => {
+      await Promise.resolve();
+      if (cancelled || loadRequestId.current !== requestId) {
+        return;
+      }
+
+      setIsLoading(true);
+      setLoadError(null);
+
       try {
-        const data = await fetchAuditLogs();
+        const data = await fetchAuditLogs(accessToken);
         if (!cancelled && loadRequestId.current === requestId) {
           setLogs(data);
-          setLoadError(null);
         }
       } catch {
         if (!cancelled && loadRequestId.current === requestId) {
@@ -106,7 +119,13 @@ export function AuditLogsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [accessToken]);
+
+  const signedOutError = accessToken
+    ? null
+    : "You must be signed in to view audit logs.";
+  const effectiveLoading = accessToken ? isLoading : false;
+  const effectiveError = signedOutError ?? loadError;
 
   const handleExport = () => {
     downloadAuditLogsCsv(filteredLogs);
@@ -126,7 +145,7 @@ export function AuditLogsPage() {
         <Button
           type="button"
           onClick={handleExport}
-          disabled={isLoading || filteredLogs.length === 0}
+          disabled={effectiveLoading || filteredLogs.length === 0}
         >
           <Download className="size-4" aria-hidden="true" />
           Export
@@ -159,8 +178,8 @@ export function AuditLogsPage() {
         onFiltersChange={handleFiltersChange}
         onPageChange={setPage}
         onRetry={loadLogs}
-        isLoading={isLoading}
-        errorMessage={loadError}
+        isLoading={effectiveLoading}
+        errorMessage={effectiveError}
       />
     </div>
   );

@@ -7,27 +7,29 @@ export interface WorkflowHistoryEntry {
   description: string;
   userName: string;
   status: WorkflowStatus;
+  affectedResources: Array<Record<string, unknown>>;
 }
 
 /**
- * Backend workflows row shape (+ joined audit_log fields).
- * Aligns with app/backend/app/models/workflow.py and db/init/01_schema.sql.
- *
- * workflows.status is CHECK-constrained to 'pending' | 'approved' | 'rejected'.
- * The action/details live in the related audit_logs row (via workflow_id FK).
+ * Backend workflows row shape returned by GET /history/workflows.
+ * Aligns with app/backend/app/schemas/history.py and models/workflow.py.
  */
-export interface WorkflowHistoryApiRecord {
+export interface WorkflowHistoryApiItem {
   id: number;
-  user_id: number;
   conversation_id: number;
-  intent: string;
-  status: WorkflowStatus;
+  action_name: string;
+  user_prompt: string;
+  status: string;
+  proposed_action: Record<string, unknown>;
+  affected_resources: Array<Record<string, unknown>>;
   created_at: string;
-  generated_query: Record<string, unknown> | null;
-  preview_data: Record<string, unknown> | null;
+  executed_at: string | null;
   user_name: string;
-  audit_action: string | null;
-  audit_details: Record<string, unknown> | null;
+}
+
+export interface WorkflowHistoryApiResponse {
+  items: WorkflowHistoryApiItem[];
+  total: number;
 }
 
 export interface WorkflowHistoryFilters {

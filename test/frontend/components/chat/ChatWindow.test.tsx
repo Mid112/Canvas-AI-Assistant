@@ -45,14 +45,26 @@ describe("ChatWindow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseAuth.mockReturnValue({
-      accessToken: "test-token",
-      user: null,
+      accessToken: "access-token",
+      user: { name: "Dr. Jane Doe", role: "instructor" },
       isAuthenticated: true,
       isLoading: false,
       login: vi.fn(),
       register: vi.fn(),
       logout: vi.fn(),
       refreshUser: vi.fn(),
+    });
+    mockedSendAssistantMessage.mockResolvedValue({
+      content:
+        "I found students who have not submitted the assignment yet. I can help you send a reminder if you'd like.",
+      explanation:
+        "I analyzed submission data and identified students who have not submitted Assignment 3.",
+      interpretedAction: {
+        action: "Send Reminder",
+        course: "COSC 499",
+        affectedStudents: "12 students",
+      },
+      conversationId: 1,
     });
   });
 
@@ -188,10 +200,9 @@ describe("ChatWindow", () => {
     });
 
     expect(mockedConfirmAssistantAction).toHaveBeenCalledWith(
-      "test-token",
+      "access-token",
       7,
       42,
-      expect.any(Object),
     );
     expect(screen.getByText("This action was confirmed.")).toBeInTheDocument();
   });
@@ -210,7 +221,7 @@ describe("ChatWindow", () => {
       },
     });
     mockedCancelAssistantAction.mockResolvedValueOnce({
-      content: "Cancelled — no changes were made.",
+      content: "Cancelled. No changes were made.",
       conversationId: 7,
     });
 
@@ -225,16 +236,13 @@ describe("ChatWindow", () => {
     await user.click(await screen.findByRole("button", { name: "Cancel" }));
 
     await waitFor(() => {
-      expect(
-        screen.getByText("Cancelled — no changes were made."),
-      ).toBeInTheDocument();
+      expect(screen.getByText("Cancelled. No changes were made.")).toBeInTheDocument();
     });
 
     expect(mockedCancelAssistantAction).toHaveBeenCalledWith(
-      "test-token",
+      "access-token",
       7,
       42,
-      expect.any(Object),
     );
     expect(screen.getByText("This action was cancelled.")).toBeInTheDocument();
   });

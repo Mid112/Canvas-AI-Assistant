@@ -1,16 +1,59 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { resetMockInstructors } from "@/services/instructorAccounts";
+import { mockInstructors } from "@/data/mockInstructors";
 import { InstructorManagementPage } from "@/pages/Admin/InstructorManagementPage";
+import * as instructorAccountsService from "@/services/instructorAccounts";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
+
+const mockUseAuth = vi.fn();
+
+vi.mock("@/contexts/AuthContext", async () => {
+  const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
+    "@/contexts/AuthContext",
+  );
+
+  return {
+    ...actual,
+    useAuth: () => mockUseAuth(),
+  };
+});
 
 describe("InstructorManagementPage", () => {
   const user = userEvent.setup({ pointerEventsCheck: 0 });
 
   beforeEach(() => {
-    resetMockInstructors();
+    mockUseAuth.mockReturnValue({
+      accessToken: "access-token",
+      user: { email: "admin@system.local", role: "admin" },
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    });
+    vi.spyOn(instructorAccountsService, "fetchInstructors").mockResolvedValue(
+      mockInstructors,
+    );
+    vi.spyOn(instructorAccountsService, "createInstructor").mockImplementation(
+      async (_token, payload) => ({
+        id: "instructor-new",
+        firstName: payload.firstName,
+        lastName: payload.lastName,
+        email: payload.email,
+        status: "active",
+        createdAt: new Date().toISOString(),
+        lastLoginAt: null,
+      }),
+    );
+    vi.spyOn(instructorAccountsService, "disableInstructor").mockImplementation(
+      async (_token, id) => {
+        const instructor = mockInstructors.find((item) => item.id === id)!;
+        return { ...instructor, status: "disabled" };
+      },
+    );
   });
 
   async function waitForLoaded() {
@@ -113,6 +156,21 @@ describe("InstructorManagementPage", () => {
   });
 
   it("creates an instructor through the full UI flow", async () => {
+    vi.spyOn(instructorAccountsService, "fetchInstructors")
+      .mockResolvedValueOnce(mockInstructors)
+      .mockResolvedValue([
+        ...mockInstructors,
+        {
+          id: "instructor-new",
+          firstName: "Alex",
+          lastName: "Rivera",
+          email: "alex@university.edu",
+          status: "active" as const,
+          createdAt: new Date().toISOString(),
+          lastLoginAt: null,
+        },
+      ]);
+
     renderWithRouter(<InstructorManagementPage />);
 
     await waitForLoaded();
@@ -146,6 +204,16 @@ describe("InstructorManagementPage", () => {
   });
 
   it("disables an instructor after confirmation", async () => {
+    vi.spyOn(instructorAccountsService, "fetchInstructors")
+      .mockResolvedValueOnce(mockInstructors)
+      .mockResolvedValue(
+        mockInstructors.map((instructor) =>
+          instructor.firstName === "Dr. Jane"
+            ? { ...instructor, status: "disabled" as const }
+            : instructor,
+        ),
+      );
+
     renderWithRouter(<InstructorManagementPage />);
 
     await waitForLoaded();

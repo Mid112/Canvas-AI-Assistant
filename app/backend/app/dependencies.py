@@ -15,6 +15,17 @@ from app.models.user import User
 bearer = HTTPBearer()
 
 
+async def _validate_token_session(db: AsyncSession, token: str) -> None:
+    session = await db.scalar(
+        select(Session).where(
+            Session.token_hash == hash_token(token),
+            Session.expires_at > datetime.now(UTC),
+        )
+    )
+    if not session:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired or invalid")
+
+
 def require_roles(*roles: str):
     """Build a FastAPI dependency that authenticates the bearer token and enforces
     both role membership and account status. Pass no roles to allow any
@@ -28,6 +39,8 @@ def require_roles(*roles: str):
             user_id, _ = decode_access_token(credentials.credentials)
         except JWTError:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+        await _validate_token_session(db, credentials.credentials)
 
         # selectinload eager-loads canvas_connections here so service layer can access them
         # without hitting the DB again — async SQLAlchemy can't lazy-load inside async context
@@ -82,14 +95,5 @@ async def get_admin_user(
     if user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
-    # Validate that the session hasn't been logged out (token hash must exist and not be expired)
-    session = await db.scalar(
-        select(Session).where(
-            Session.token_hash == hash_token(credentials.credentials),
-            Session.expires_at > datetime.now(UTC),
-        )
-    )
-    if not session:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired or invalid")
-
+    await _validate_token_session(db, credentials.credentials)
     return user

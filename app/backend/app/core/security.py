@@ -1,4 +1,5 @@
 import hashlib
+import secrets
 from datetime import UTC, datetime, timedelta
 
 from cryptography.fernet import Fernet
@@ -19,9 +20,18 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(subject: str | int, role: str = "instructor") -> str:
+    token, _ = create_access_token_with_expiry(subject, role=role)
+    return token
+
+
+def create_access_token_with_expiry(
+    subject: str | int,
+    role: str = "instructor",
+) -> tuple[str, datetime]:
     expire = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {"sub": str(subject), "role": role, "exp": expire}
-    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+    return token, expire
 
 
 def decode_access_token(token: str) -> tuple[str, str]:
@@ -32,6 +42,10 @@ def decode_access_token(token: str) -> tuple[str, str]:
 
 def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def generate_reset_token() -> str:
+    return secrets.token_urlsafe(32)
 
 
 def _fernet() -> Fernet:

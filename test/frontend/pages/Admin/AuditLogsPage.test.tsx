@@ -5,14 +5,36 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mockAuditLogs } from "@/data/mockAuditLogs";
 import { AuditLogsPage } from "@/pages/Admin/AuditLogsPage";
 import * as auditLogsService from "@/services/auditLogs";
-import { resetMockAuditLogs } from "@/services/auditLogs";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
+
+const mockUseAuth = vi.fn();
+
+vi.mock("@/contexts/AuthContext", async () => {
+  const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
+    "@/contexts/AuthContext",
+  );
+
+  return {
+    ...actual,
+    useAuth: () => mockUseAuth(),
+  };
+});
 
 describe("AuditLogsPage", () => {
   const user = userEvent.setup({ pointerEventsCheck: 0 });
 
   beforeEach(() => {
-    resetMockAuditLogs();
+    mockUseAuth.mockReturnValue({
+      accessToken: "access-token",
+      user: { email: "admin@system.local", role: "admin" },
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    });
+    vi.spyOn(auditLogsService, "fetchAuditLogs").mockResolvedValue(mockAuditLogs);
   });
 
   async function waitForLoaded() {
