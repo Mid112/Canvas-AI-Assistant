@@ -366,4 +366,35 @@ describe("InstructorCoursesPage", () => {
       );
     });
   });
+
+  it("shows immediate feedback while saving the active course", async () => {
+    const user = userEvent.setup();
+    let resolveSave: ((value: Awaited<ReturnType<typeof setActiveCourse>>) => void) | undefined;
+    mockedSetActiveCourse.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    await screen.findByText("Your Courses (3)");
+    await user.click(screen.getAllByRole("button", { name: "Set Active" })[0]!);
+
+    expect(
+      screen.getByRole("button", { name: "Setting active..." }),
+    ).toBeDisabled();
+
+    resolveSave?.({
+      local_id: 1,
+      canvas_course_id: "101",
+      canvas_url: CANVAS_URL,
+      name: "Introduction to Programming",
+      term: null,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Active Course" })).toBeDisabled();
+    });
+  });
 });

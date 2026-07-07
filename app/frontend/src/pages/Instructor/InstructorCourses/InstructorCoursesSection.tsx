@@ -107,15 +107,15 @@ export function InstructorCoursesCard({
           disabled={isActive || isSettingActive}
           aria-busy={isSettingActive && !isActive}
         >
-          {isActive ? (
-            <>
-              <CheckCircle2 className="size-4" aria-hidden="true" />
-              Active Course
-            </>
-          ) : isSettingActive ? (
+          {isSettingActive ? (
             <>
               <Loader2 className="size-4 animate-spin" aria-hidden="true" />
               Setting active...
+            </>
+          ) : isActive ? (
+            <>
+              <CheckCircle2 className="size-4" aria-hidden="true" />
+              Active Course
             </>
           ) : (
             "Set Active"
@@ -180,15 +180,15 @@ export function InstructorCoursesList({
                 }
                 aria-busy={settingActiveCourseId === course.id}
               >
-                {activeCourseId === course.id ? (
-                  <>
-                    <CheckCircle2 className="size-4" aria-hidden="true" />
-                    Active
-                  </>
-                ) : settingActiveCourseId === course.id ? (
+                {settingActiveCourseId === course.id ? (
                   <>
                     <Loader2 className="size-4 animate-spin" aria-hidden="true" />
                     Setting...
+                  </>
+                ) : activeCourseId === course.id ? (
+                  <>
+                    <CheckCircle2 className="size-4" aria-hidden="true" />
+                    Active
                   </>
                 ) : (
                   "Set Active"

@@ -55,6 +55,20 @@ function toActiveCourseSelection(
   };
 }
 
+function resolveOptimisticSelection(
+  course: InstructorCourse | ActiveCourseSelection | undefined,
+): ActiveCourseSelection | null {
+  if (!course) {
+    return null;
+  }
+
+  if ("localId" in course) {
+    return course;
+  }
+
+  return toActiveCourseSelection(course);
+}
+
 function toActiveCourseSelectionFromResponse(
   course: ActiveCourseResponse,
 ): ActiveCourseSelection {
@@ -219,20 +233,29 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
   }, [refreshActiveCourse]);
 
   const selectActiveCourse = useCallback(
-    async (localCourseId: number) => {
+    async (
+      localCourseId: number,
+      optimisticCourse?: InstructorCourse | ActiveCourseSelection,
+    ): Promise<boolean> => {
       const selected = availableCourses.find((course) => course.id === localCourseId);
+      const optimisticSelection =
+        selected ? toActiveCourseSelection(selected) : resolveOptimisticSelection(optimisticCourse);
       // Canvas-backed selection can still succeed when this provider's course
       // cache is stale; the backend validates ownership and returns the course.
-      if (!selected && (!usesCanvasCourses || !accessToken)) {
+      if (!optimisticSelection && !selected && (!usesCanvasCourses || !accessToken)) {
         if (isMountedRef.current) {
           setError("Selected course is not available.");
         }
-        return;
+        return false;
       }
 
+      const previousActiveCourse = activeCourse;
       if (isMountedRef.current) {
         setIsSaving(true);
         setError(null);
+        if (optimisticSelection) {
+          setActiveCourseState(optimisticSelection);
+        }
       }
 
       try {
@@ -247,9 +270,12 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
         setStoredActiveCourseId(persistenceScope, localCourseId);
         if (isMountedRef.current) {
           setActiveCourseState(
-            selected ? toActiveCourseSelection(selected) : persistedSelection,
+            selected
+              ? toActiveCourseSelection(selected)
+              : persistedSelection ?? optimisticSelection,
           );
         }
+        return true;
       } catch (err) {
         const message =
           err instanceof CanvasApiError
@@ -257,14 +283,16 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
             : "Unable to save active course.";
         if (isMountedRef.current) {
           setError(message);
+          setActiveCourseState(previousActiveCourse);
         }
+        return false;
       } finally {
         if (isMountedRef.current) {
           setIsSaving(false);
         }
       }
     },
-    [accessToken, availableCourses, persistenceScope, usesCanvasCourses],
+    [accessToken, activeCourse, availableCourses, persistenceScope, usesCanvasCourses],
   );
 
   const value = useMemo(

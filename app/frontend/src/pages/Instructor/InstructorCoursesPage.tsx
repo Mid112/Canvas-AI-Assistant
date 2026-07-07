@@ -24,7 +24,6 @@ export function InstructorCoursesPage() {
   const {
     activeCourse,
     error: activeCourseError,
-    isSaving,
     selectActiveCourse,
   } = useActiveCourse();
   const {
@@ -47,9 +46,14 @@ export function InstructorCoursesPage() {
   }, [courses, search]);
 
   const handleSetActiveCourse = async (courseId: number) => {
+    const course = courses.find((item) => item.id === courseId);
+    if (!course) {
+      return;
+    }
+
     setSettingActiveCourseId(courseId);
     try {
-      await selectActiveCourse(courseId);
+      await selectActiveCourse(courseId, course);
     } finally {
       setSettingActiveCourseId(null);
     }
@@ -125,7 +129,7 @@ export function InstructorCoursesPage() {
           onViewModeChange={setViewMode}
           activeCourseId={activeCourse?.localId ?? null}
           onSetActiveCourse={(courseId) => void handleSetActiveCourse(courseId)}
-          settingActiveCourseId={isSaving ? settingActiveCourseId : null}
+          settingActiveCourseId={settingActiveCourseId}
         />
       )}
     </div>
