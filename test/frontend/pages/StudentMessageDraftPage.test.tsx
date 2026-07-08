@@ -78,7 +78,7 @@ describe("StudentMessageDraftPage", () => {
     expect(screen.getByText("Assignment Reminder")).toBeInTheDocument();
   });
 
-  it("updates preview when subject and body are edited", async () => {
+  it("shows the edited subject and body in the send confirmation dialog", async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -86,9 +86,9 @@ describe("StudentMessageDraftPage", () => {
     await user.clear(subjectField);
     await user.type(subjectField, "Updated subject line");
 
-    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await user.click(screen.getByRole("button", { name: "Send" }));
 
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Send Message?");
     expect(screen.getByText("Updated subject line")).toBeInTheDocument();
   });
 

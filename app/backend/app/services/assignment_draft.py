@@ -1,4 +1,6 @@
+import html
 import json
+import re
 from datetime import datetime
 
 import httpx
@@ -9,12 +11,33 @@ from app.schemas.preview import AssignmentDraftRequest, AssignmentDraftResponse
 from app.services.llm.json_extraction import extract_json_object
 from app.services.llm.llm_setting import get_llm_adapter
 
+_LIST_ITEM_RE = re.compile(r"<li[^>]*>", re.IGNORECASE)
+_BLOCK_BREAK_RE = re.compile(r"</(p|div|li|h[1-6])>|<br\s*/?>", re.IGNORECASE)
+_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def _plain_text_description(value: str) -> str:
+    """Best-effort conversion of possibly-HTML model output into plain text.
+
+    The system prompt asks for plain text, but models occasionally emit HTML
+    anyway since Canvas assignment descriptions are conventionally HTML — this
+    runs unconditionally as a defensive fallback so raw markup never reaches
+    the review step's plain textarea, even when a model ignores the prompt.
+    """
+    with_list_markers = _LIST_ITEM_RE.sub("- ", value)
+    with_breaks = _BLOCK_BREAK_RE.sub("\n", with_list_markers)
+    text = html.unescape(_TAG_RE.sub("", with_breaks))
+    lines = (line.strip() for line in text.splitlines())
+    return "\n".join(line for line in lines if line).strip()
+
 
 async def generate_assignment_draft(body: AssignmentDraftRequest) -> AssignmentDraftResponse:
     system = (
         "You help instructors draft Canvas assignments. "
         "Respond with JSON only: "
-        '{"title": "...", "description": "...", "due_at": "ISO8601 or null", "points_possible": number or null}'
+        '{"title": "...", "description": "...", "due_at": "ISO8601 or null", "points_possible": number or null}. '
+        "The description must be plain text only: no HTML tags and no markdown formatting. "
+        'Separate paragraphs with a blank line and start list items with "- ".'
     )
     adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
 
@@ -53,7 +76,7 @@ async def generate_assignment_draft(body: AssignmentDraftRequest) -> AssignmentD
 
     return AssignmentDraftResponse(
         title=str(data.get("title") or "Untitled Assignment"),
-        description=str(data.get("description") or body.prompt),
+        description=_plain_text_description(str(data.get("description") or body.prompt)),
         due_at=due_at,
         points_possible=data.get("points_possible"),
     )

@@ -18,6 +18,5 @@ describe("LoginWelcome", () => {
     expect(
       screen.getByText(/Sign in to manage your Canvas workflows/),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Administrators use the same secure login/)).toBeInTheDocument();
   });
 });

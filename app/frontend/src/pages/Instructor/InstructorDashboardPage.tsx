@@ -1,6 +1,7 @@
 import { Loader2 } from "lucide-react";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
+import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInstitution } from "@/contexts/useInstitution";
@@ -58,14 +59,7 @@ export function InstructorDashboardPage() {
         institutionShortName={selectedInstitution.shortName}
       />
 
-      {error ? (
-        <p
-          role="alert"
-          className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      ) : null}
+      {error ? <ErrorAlert message={error} /> : null}
 
       {isLoading ? (
         <Card className="shadow-sm ring-1 ring-border/60">

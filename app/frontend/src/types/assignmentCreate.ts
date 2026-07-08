@@ -22,6 +22,7 @@ export interface AssignmentApprovePayload {
   name: string;
   description: string;
   dueDate: string;
+  pointsPossible: number;
 }
 
 export interface AssignmentPreviewSummary {

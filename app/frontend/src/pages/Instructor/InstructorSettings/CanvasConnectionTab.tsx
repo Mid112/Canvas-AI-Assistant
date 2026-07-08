@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -180,16 +181,16 @@ export function CanvasConnectionTab() {
   return (
     <div className="space-y-6">
       {statusMessage ? (
-        <p
-          role={statusMessage.type === "error" ? "alert" : "status"}
-          className={
-            statusMessage.type === "success"
-              ? "rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
-              : "rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
-          }
-        >
-          {statusMessage.text}
-        </p>
+        statusMessage.type === "success" ? (
+          <p
+            role="status"
+            className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
+          >
+            {statusMessage.text}
+          </p>
+        ) : (
+          <ErrorAlert message={statusMessage.text} />
+        )
       ) : null}
 
       <Card className="shadow-sm ring-1 ring-border/60">

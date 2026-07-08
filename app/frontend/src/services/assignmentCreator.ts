@@ -92,6 +92,7 @@ export function toAssignmentCreateRequest(
       name: payload.name.trim(),
       description: payload.description.trim() || null,
       due_at: payload.dueDate ? formatDueDateForApi(payload.dueDate) : null,
+      points_possible: payload.pointsPossible,
     },
   };
 }

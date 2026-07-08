@@ -1,11 +1,24 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mockInstructors } from "@/data/mockInstructors";
 import { InstructorManagementPage } from "@/pages/Admin/InstructorManagementPage";
 import * as instructorAccountsService from "@/services/instructorAccounts";
+import type { Instructor } from "@/types/instructor";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
+
+function makeInstructors(count: number): Instructor[] {
+  return Array.from({ length: count }, (_, index) => ({
+    id: `instructor-bulk-${index + 1}`,
+    firstName: "Dr. Bulk",
+    lastName: `Number${index + 1}`,
+    email: `bulk${index + 1}@university.edu`,
+    status: "active" as const,
+    createdAt: "2024-08-12T10:00:00.000Z",
+    lastLoginAt: null,
+  }));
+}
 
 const mockUseAuth = vi.fn();
 
@@ -81,7 +94,7 @@ describe("InstructorManagementPage", () => {
     expect(screen.getByText("Instructors (4)")).toBeInTheDocument();
     expect(screen.getByText("Dr. Robert Wilson")).toBeInTheDocument();
     expect(screen.getByText("Last Login")).toBeInTheDocument();
-    expect(screen.getByText("Showing 4 of 4 instructors")).toBeInTheDocument();
+    expect(screen.getByText("Showing 1–4 of 4")).toBeInTheDocument();
   });
 
   it("filters instructors by search query", async () => {
@@ -93,7 +106,7 @@ describe("InstructorManagementPage", () => {
 
     expect(screen.getByText("Dr. Robert Wilson")).toBeInTheDocument();
     expect(screen.queryByText("Dr. Jane Doe")).not.toBeInTheDocument();
-    expect(screen.getByText("Showing 1 of 4 instructors")).toBeInTheDocument();
+    expect(screen.getByText("Showing 1–1 of 1")).toBeInTheDocument();
   });
 
   it("opens the create instructor dialog", async () => {
@@ -201,6 +214,18 @@ describe("InstructorManagementPage", () => {
     expect(await screen.findByText("Alex Rivera")).toBeInTheDocument();
     expect(screen.getByText("Never")).toBeInTheDocument();
     expect(screen.getByText("Instructors (5)")).toBeInTheDocument();
+
+    const credentialsDialog = screen.getByRole("dialog", {
+      name: "Instructor account created",
+    });
+    expect(within(credentialsDialog).getByText("alex@university.edu")).toBeInTheDocument();
+    expect(within(credentialsDialog).getByText("temp-password")).toBeInTheDocument();
+
+    await user.click(within(credentialsDialog).getByRole("button", { name: "Done" }));
+
+    expect(
+      screen.queryByRole("heading", { name: "Instructor account created" }),
+    ).not.toBeInTheDocument();
   });
 
   it("disables an instructor after confirmation", async () => {
@@ -233,5 +258,83 @@ describe("InstructorManagementPage", () => {
     const row = screen.getByText("Dr. Jane Doe").closest("tr");
     expect(row).not.toBeNull();
     expect(row).toHaveTextContent("Disabled");
+  });
+
+  it("paginates large instructor lists instead of rendering every row", async () => {
+    const bulkInstructors = makeInstructors(30);
+    vi.spyOn(instructorAccountsService, "fetchInstructors").mockResolvedValue(
+      bulkInstructors,
+    );
+
+    renderWithRouter(<InstructorManagementPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Instructors (30)")).toBeInTheDocument();
+    });
+
+    // Default page size is 10, so 30 instructors span 3 pages.
+    expect(screen.getAllByRole("row")).toHaveLength(11); // header + 10 per page
+    expect(screen.getByText("Showing 1–10 of 30")).toBeInTheDocument();
+    expect(screen.getByText("Page 1 of 3")).toBeInTheDocument();
+    expect(screen.getByText("Dr. Bulk Number1")).toBeInTheDocument();
+    expect(screen.queryByText("Dr. Bulk Number11")).not.toBeInTheDocument();
+
+    const previousButton = screen.getByRole("button", { name: "Previous page" });
+    const nextButton = screen.getByRole("button", { name: "Next page" });
+    expect(previousButton).toBeDisabled();
+    expect(nextButton).not.toBeDisabled();
+
+    await user.click(nextButton);
+
+    expect(screen.getByText("Page 2 of 3")).toBeInTheDocument();
+    expect(screen.getByText("Dr. Bulk Number11")).toBeInTheDocument();
+    expect(screen.queryByText("Dr. Bulk Number1")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Previous page" })).not.toBeDisabled();
+  });
+
+  it("resets to page 1 when the search query changes", async () => {
+    const bulkInstructors = makeInstructors(30);
+    vi.spyOn(instructorAccountsService, "fetchInstructors").mockResolvedValue(
+      bulkInstructors,
+    );
+
+    renderWithRouter(<InstructorManagementPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Instructors (30)")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    expect(screen.getByText("Page 2 of 3")).toBeInTheDocument();
+
+    // "bulk" still matches all 30 instructors (same 3 pages), but changing the
+    // search query should snap the view back to page 1 rather than leaving it
+    // stranded on a page that may no longer exist for the new result set.
+    await user.type(screen.getByLabelText("Search users"), "bulk");
+
+    await waitFor(() => {
+      expect(screen.getByText("Page 1 of 3")).toBeInTheDocument();
+    });
+  });
+
+  it("changes the page size and resets to page 1", async () => {
+    const bulkInstructors = makeInstructors(30);
+    vi.spyOn(instructorAccountsService, "fetchInstructors").mockResolvedValue(
+      bulkInstructors,
+    );
+
+    renderWithRouter(<InstructorManagementPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Instructors (30)")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Next page" }));
+    expect(screen.getByText("Page 2 of 3")).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Rows per page"), "25");
+
+    expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
+    expect(screen.getByText("Showing 1–25 of 30")).toBeInTheDocument();
   });
 });

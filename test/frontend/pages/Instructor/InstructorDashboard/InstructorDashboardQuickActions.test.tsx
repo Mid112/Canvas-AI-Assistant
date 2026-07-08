@@ -53,7 +53,20 @@ describe("InstructorDashboardQuickActions", () => {
     await user.click(
       screen.getByRole("button", { name: /Draft Announcement/i }),
     );
-    expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant);
+    expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant, {
+      state: {
+        initialPrompt: "Help me draft a course announcement for my active course.",
+      },
+    });
+
+    mockNavigate.mockClear();
+    await user.click(screen.getByRole("button", { name: /Grade Analysis/i }));
+    expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant, {
+      state: {
+        initialPrompt:
+          "Give me a grade and submission performance analysis for my active course.",
+      },
+    });
 
     mockNavigate.mockClear();
     await user.click(

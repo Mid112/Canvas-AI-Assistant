@@ -19,8 +19,11 @@ function isActiveCourseSelection(value: unknown): value is ActiveCourseSelection
 
 function parseLegacyCourseId(raw: string): ActiveCourseSelection | null {
   const parsed = Number(raw);
+  // Pre-dates ActiveCourseSelection's JSON format — only the local DB id was
+  // ever stored, so there's no real course name to show. Never render that
+  // raw id as the display name; the instructor doesn't know or care about it.
   return Number.isInteger(parsed) && parsed > 0
-    ? { localId: parsed, displayName: `Course ${parsed}` }
+    ? { localId: parsed, displayName: "Selected course" }
     : null;
 }
 
@@ -58,16 +61,4 @@ export function setStoredActiveCourseSelection(
   }
 
   localStorage.setItem(storageKey(scopeId), JSON.stringify(selection));
-}
-
-export function setStoredActiveCourseId(
-  scopeId: string,
-  localCourseId: number | null,
-): void {
-  setStoredActiveCourseSelection(
-    scopeId,
-    localCourseId == null
-      ? null
-      : { localId: localCourseId, displayName: `Course ${localCourseId}` },
-  );
 }

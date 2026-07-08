@@ -25,6 +25,7 @@ describe("toAssignmentCreateRequest", () => {
       name: "  Updated Quiz  ",
       description: "  Revised description.  ",
       dueDate: "2026-12-15T23:59",
+      pointsPossible: 80,
     });
 
     expect(result.courseId).toBe(3);
@@ -32,6 +33,7 @@ describe("toAssignmentCreateRequest", () => {
       name: "Updated Quiz",
       description: "Revised description.",
       due_at: new Date("2026-12-15T23:59").toISOString(),
+      points_possible: 80,
     });
   });
 
@@ -42,6 +44,7 @@ describe("toAssignmentCreateRequest", () => {
         name: "Quiz",
         description: "Details",
         dueDate: "2026-12-15T23:59",
+        pointsPossible: 100,
       }),
     ).toThrow("A valid course is required.");
   });
@@ -52,7 +55,7 @@ describe("toAssignmentCreateRequest", () => {
       name: "Updated Quiz",
       description: "Revised description.",
       due_at: new Date("2026-12-15T23:59").toISOString(),
-      points_possible: null,
+      points_possible: 80,
       course_id: 123,
     });
 
@@ -62,6 +65,7 @@ describe("toAssignmentCreateRequest", () => {
         name: "  Updated Quiz  ",
         description: "  Revised description.  ",
         dueDate: "2026-12-15T23:59",
+        pointsPossible: 80,
       },
       {
         accessToken: "access-token",
@@ -75,6 +79,7 @@ describe("toAssignmentCreateRequest", () => {
         name: "Updated Quiz",
         description: "Revised description.",
         due_at: new Date("2026-12-15T23:59").toISOString(),
+        points_possible: 80,
       },
       "access-token",
       "https://canvas.university.edu",
@@ -161,6 +166,7 @@ describe("previewAssignmentDraft", () => {
         name: "Quiz 1",
         description: "Details",
         dueDate: "2026-12-15T23:59",
+        pointsPossible: 100,
       },
       { accessToken: "access-token", canvasUrl: "https://canvas.university.edu" },
     );

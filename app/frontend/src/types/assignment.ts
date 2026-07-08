@@ -11,6 +11,7 @@ export interface AssignmentCreatePayload {
   name: string;
   description: string | null;
   due_at: string | null;
+  points_possible: number | null;
 }
 
 export interface AssignmentUpdatePayload {

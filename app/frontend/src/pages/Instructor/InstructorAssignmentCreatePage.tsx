@@ -159,6 +159,7 @@ export function InstructorAssignmentCreatePage() {
       name: values.name,
       description: values.description,
       dueDate: values.dueDate,
+      pointsPossible: values.pointsPossible,
     };
 
     setApproveError(null);
@@ -198,6 +199,7 @@ export function InstructorAssignmentCreatePage() {
         name: pendingApproval.name,
         description: pendingApproval.description,
         dueDate: pendingApproval.dueDate,
+        pointsPossible: pendingApproval.pointsPossible,
       }, {
         accessToken,
         canvasUrl,

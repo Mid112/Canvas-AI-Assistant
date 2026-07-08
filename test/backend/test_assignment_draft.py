@@ -59,6 +59,33 @@ def test_generate_draft_success(client):
     assert data["points_possible"] == 20
 
 
+def test_generate_draft_strips_html_from_description(client):
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        '{"title": "Functions Quiz", '
+        '"description": "<p><strong>Instructions:</strong> Complete the quiz.</p>'
+        '<ul><li>Define a function</li><li>Call it with args</li></ul>", '
+        '"due_at": null, "points_possible": 20}'
+    )
+
+    with patch("app.services.assignment_draft.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/canvas/courses/1/assignments/generate-draft",
+            json={"prompt": "Create a quiz on functions"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    description = response.json()["description"]
+    assert "<" not in description
+    assert ">" not in description
+    assert "Instructions: Complete the quiz." in description
+    assert "- Define a function" in description
+    assert "- Call it with args" in description
+
+
 def test_generate_draft_unparseable_response(client):
     headers = _register(client)
 

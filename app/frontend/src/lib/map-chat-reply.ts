@@ -39,10 +39,12 @@ function buildInterpretedAction(
     typeof proposed.local_course_id === "number"
       ? proposed.local_course_id
       : undefined;
+  // Never fall back to showing courseId itself — it's the internal local DB
+  // row id, not anything the instructor recognizes as a course identifier.
   const courseLabel =
     readString(previewMetadata?.course_name) ??
     readString(previewMetadata?.course) ??
-    (courseId != null ? `Course ${courseId}` : "Active course");
+    "Active course";
 
   const audience = previewMetadata?.audience as
     | Record<string, unknown>

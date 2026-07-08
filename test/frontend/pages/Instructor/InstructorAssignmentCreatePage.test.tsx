@@ -146,6 +146,7 @@ describe("InstructorAssignmentCreatePage", () => {
           name: "Python Functions Quiz",
           description: "Complete a short quiz covering functions.",
           dueDate: "2026-12-15T23:59",
+          pointsPossible: 50,
         },
         {
           accessToken: "access-token",
@@ -170,6 +171,7 @@ describe("InstructorAssignmentCreatePage", () => {
           name: "Python Functions Quiz",
           description: "Complete a short quiz covering functions.",
           dueDate: "2026-12-15T23:59",
+          pointsPossible: 50,
         },
         {
           accessToken: "access-token",
@@ -208,6 +210,7 @@ describe("InstructorAssignmentCreatePage", () => {
           name: "Edited Quiz Title",
           description: "Complete a short quiz covering functions.",
           dueDate: "2026-12-15T23:59",
+          pointsPossible: 50,
         },
         {
           accessToken: "access-token",
@@ -225,6 +228,7 @@ describe("InstructorAssignmentCreatePage", () => {
           name: "Edited Quiz Title",
           description: "Complete a short quiz covering functions.",
           dueDate: "2026-12-15T23:59",
+          pointsPossible: 50,
         },
         {
           accessToken: "access-token",
