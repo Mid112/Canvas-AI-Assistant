@@ -8,7 +8,6 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.integrations.canvas import fetch_enrollments
 from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS, is_reversible
 from app.models.course import Course
 from app.models.user import User
@@ -24,7 +23,6 @@ from app.services.canvas import (
     get_assignments,
     get_courses,
     get_submissions,
-    require_canvas_token,
     send_course_message,
     set_active_course,
     update_course_assignment,
@@ -155,25 +153,18 @@ async def _resolve_course(
     return course
 
 
-async def _add_person_submission_summary(
-    course: Course,
-    submissions: list[SubmissionResponse],
-    user: User,
-    db: AsyncSession,
-) -> str:
-    """Resolves user_id to name for display. Names are assembled here
-    in Python from Canvas enrollment data — the LLM never sees or
-    generates student PII directly."""
-    token = require_canvas_token(user, course.canvas_url)
-    enrollments = await fetch_enrollments(
-        int(course.canvas_course_id), token, course.canvas_url
-    )
-    name_by_id = {
-        e["user_id"]: e["user"]["name"] for e in enrollments if "user" in e
-    }
+def _add_person_submission_summary(submissions: list[SubmissionResponse]) -> str:
+    """Names are assembled here for display — the LLM never sees or
+    generates student PII directly.
+
+    student_name is already populated on each submission by
+    get_submissions (services/canvas.py), which requests Canvas's
+    include[]=user. An earlier version of this function fetched course
+    enrollments separately to resolve user_id -> name, duplicating a
+    roster fetch that wasn't needed."""
     lines = []
     for s in submissions:
-        name = name_by_id.get(s.user_id, f"Student {s.user_id}")
+        name = s.student_name or f"Student {s.user_id}"
         status = "submitted" if s.workflow_state == "submitted" else "has not submitted"
         lines.append(f"{name} {status}")
     return "\n".join(lines)
@@ -233,9 +224,7 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             submissions = await get_submissions(
                 course.id, action.assignment_id, user, course.canvas_url, db
             )
-            summary = await _add_person_submission_summary(
-                course, submissions, user, db
-            )
+            summary = _add_person_submission_summary(submissions)
             return {
                 "submissions": [s.model_dump() for s in submissions],
                 "summary": summary,

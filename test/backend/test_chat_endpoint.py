@@ -530,7 +530,12 @@ def test_write_action_without_intent_preview_is_forced_into_a_preview(client):
 
 
 def test_canvas_failure_returns_chat_error(client):
-    """Canvas API failures during read actions return a user-friendly chat error."""
+    """Canvas API failures during read actions return a user-friendly chat
+    error. A raw fetch_courses response (the model skipping intent_preview)
+    now gets auto-wrapped into a real preview rather than executed
+    directly on the normal turn — see handle_chat_message — so the
+    Canvas call, and its failure, only happen once that preview is
+    confirmed."""
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
@@ -549,19 +554,32 @@ def test_canvas_failure_returns_chat_error(client):
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = '{"action": "fetch_courses"}'
 
-    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter), \
-         patch(
-             "app.mcp_tools.dispatcher.get_courses",
-             new=AsyncMock(
-                 side_effect=HTTPException(
-                     status_code=status.HTTP_502_BAD_GATEWAY,
-                     detail="Canvas server error: 503",
-                 )
-             ),
-         ):
-        response = client.post(
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        preview = client.post(
             "/api/v1/chat/",
             json={"message": "List my courses"},
+            headers=headers,
+        )
+
+    assert preview.status_code == 200
+    preview_body = preview.json()
+    assert preview_body["is_error"] is False
+    assert preview_body["reply"]["action"] == "intent_preview"
+    conversation_id = preview_body["conversation_id"]
+    pending_message_id = preview_body["reply"]["pending_message_id"]
+
+    with patch(
+        "app.mcp_tools.dispatcher.get_courses",
+        new=AsyncMock(
+            side_effect=HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Canvas server error: 503",
+            )
+        ),
+    ):
+        response = client.post(
+            "/api/v1/chat/confirm",
+            json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
             headers=headers,
         )
 

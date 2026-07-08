@@ -37,6 +37,20 @@ HISTORY_WINDOW = 10
 # history message's contribution regardless of why it got large.
 HISTORY_MESSAGE_MAX_CHARS = 2000
 
+# A normal chat turn may only ever produce one of these — every real
+# Canvas action (read or write) must be proposed via intent_preview first,
+# never executed directly. Nothing in execute_tool's dispatch enforces
+# this on its own (fetch_courses, fetch_assignments, get_active_course,
+# create_assignment, etc. are all independently reachable top-level
+# cases), and the model does not reliably follow the system prompt's
+# instruction to always preview first — observed skipping straight to a
+# raw get_active_course/fetch_assignments call with no preview shown at
+# all. handle_confirmed_action's PATH B is exempt: executing the
+# previously-proposed action directly is the entire point of confirm. A
+# raw action outside this set gets auto-wrapped into a real intent_preview
+# instead of rejected outright — see handle_chat_message.
+NORMAL_TURN_ALLOWED_ACTIONS = {"intent_preview", "clarify", "out_of_scope", "respond"}
+
 # WRITE_ACTIONS (imported from app.mcp_tools.schemas) is also the set of
 # actions that get a Workflow row (the replay-safe confirm state machine).
 # Read actions are structurally free to be wrapped in an intent_preview too
@@ -688,15 +702,17 @@ async def handle_chat_message(
             result = text_reply
         else:
             action = parse_action(raw_output)
-            if action.action in WRITE_ACTIONS:
-                # The model named a Canvas-mutating action directly instead
-                # of wrapping it in intent_preview like the system prompt
-                # asks. Not every model follows that instruction reliably
-                # (smaller local models especially) — forcing it through
-                # the same intent_preview path here, rather than trusting
-                # the LLM, is what actually guarantees nothing mutates
-                # Canvas without the user seeing and confirming a preview
-                # first, regardless of which provider generated the reply.
+            if action.action not in NORMAL_TURN_ALLOWED_ACTIONS:
+                # The model named a Canvas action directly (read or write)
+                # instead of wrapping it in intent_preview like the system
+                # prompt asks. Not every model follows that instruction
+                # reliably (smaller local models especially, and even
+                # capable ones on read actions — observed live skipping
+                # straight to a raw get_active_course/fetch_assignments
+                # call with no preview shown at all). Auto-wrapping into a
+                # real intent_preview here, rather than rejecting outright,
+                # gives the user the same confirmation step they should
+                # have gotten without losing the turn to an error message.
                 action = IntentPreviewAction(
                     summary=f"I'll {action.action.replace('_', ' ')} as described below. Please review before confirming.",
                     proposed_action=action.model_dump(),
