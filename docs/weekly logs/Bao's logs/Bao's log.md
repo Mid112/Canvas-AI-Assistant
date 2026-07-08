@@ -718,22 +718,19 @@ Total: 9 hours
 - Addressed PR-requested changes in `dependencies.py` (role-guard refactor, ~26/17 lines changed)
 - Fixed lint issues across `app/mcp/server.py`, `conftest.py`, and several test files to get the branch green
 - Merged `origin/develop` into the feature branch, pulling in the frontend's new Canvas-connection URL handling (`useCanvasConnectionUrl`, `canvas-connections.ts`, `institution-canvas.ts`) and instructor-courses page rework
+<img width="1118" height="63" alt="Screenshot 2026-07-07 223106" src="https://github.com/user-attachments/assets/4973d7f8-3f76-4f55-91e1-a322a80beb74" />
 
 ### 2: PR Reviews + Audit Log Merge Cleanup (Saturday, 4/7)
 - Fixed a lint break caused by the `AuditLog` → `AuditLogSession` rename in `services/admin.py`
 - Merged `develop` into `feature/backend-rbac-permissions` again, pulling in the new audit-log table/filter/pagination components and the workflow-history UI (`AuditLogTable`, `AuditLogFilters`, `WorkflowHistoryTable`, etc.)
 - Merged the feature branch's own remote changes back in and updated `test_admin_management.py` / `test_instructor_management.py` to reference `AuditLogSession` instead of the old `AuditLog` model
+<img width="1121" height="69" alt="Screenshot 2026-07-07 223110" src="https://github.com/user-attachments/assets/6c5aa94e-6c02-4914-9fcf-874ba8879754" />
 
 ### 3: MVP Prep — Assignment Uniqueness + Test Coverage Push (Monday, 6/7)
 - Added a DB migration (`008_assignment_unique_per_course.sql`) enforcing one assignment per Canvas assignment ID per course, with matching changes to the `Assignment` model, `services/canvas.py`, and `services/chat.py`
 - Added four new backend test files ahead of the MVP demo: `test_admin_settings.py`, `test_error_handling.py`, `test_message_send_validation.py`, `test_workflow_history.py` (~586 lines of new coverage)
+<img width="1120" height="68" alt="Screenshot 2026-07-07 223112" src="https://github.com/user-attachments/assets/0b9b87c0-d94b-4641-b986-8aa8a5a8cb1c" />
 
-### 4: MVP Day — Workflow/Dispatcher Fixes, Message UI, Duplicate-Send Bug (Tuesday, 7/7)
-- Fixed dispatcher and assignment-draft handling (`mcp_tools/dispatcher.py`, `services/assignment_draft.py`) and added an `llm/json_extraction.py` module to make LLM tool-call parsing more robust
-- Built the assignment-creation preview dialog (`AssignmentPreviewDialog.tsx`) and instructor dashboard fixes on the frontend
-- Shipped a round of MVP fixes across `dispatcher.py`, `schemas.py`, `assignment_draft.py`, `auth.py`, and `chat.py`, plus new frontend components (`InstructorCredentialsDialog`, `ErrorAlert`, `EditableRecipientList`) and a message-flow UI overhaul (`ConfirmationDialog`, `MessageDraftPage`, `MessagePreview`, `MessageToolbar`, `RecipientSummary`)
-- Found and fixed a duplicate-message-send bug in `ChatWindow.tsx`, with regression test coverage added in `ChatWindow.test.tsx`
-- Stood up the full local stack for manual MVP verification — Postgres and the Canvas sandbox in Docker, backend and frontend running natively — and worked through it end-to-end: diagnosed a Windows-specific `make e2e-up` failure (the port-freeing step depends on `lsof`, which isn't available in Git Bash on Windows), freed the ports manually, and got a working admin login by discovering the dev Postgres DB was blocking `seed_admin()` with ~224 leftover pytest-fixture admin accounts
 
 ---
 
