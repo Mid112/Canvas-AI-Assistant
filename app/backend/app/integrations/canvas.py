@@ -2,6 +2,7 @@ import asyncio
 import logging
 import re
 from typing import Literal
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import HTTPException, status
@@ -403,13 +404,17 @@ async def send_conversation(
     form_data.extend(
         ("recipients[]", str(user_id)) for user_id in recipient_canvas_user_ids
     )
+    form_body = urlencode(form_data)
 
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.post(
                 f"{canvas_url}/api/v1/conversations",
-                headers=_headers(token),
-                data=form_data,
+                headers={
+                    **_headers(token),
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+                content=form_body,
             )
             _raise_for_canvas_error(response)
             return response.json()

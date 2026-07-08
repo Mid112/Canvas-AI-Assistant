@@ -112,8 +112,10 @@ def test_send_conversation_posts_repeated_recipient_fields():
         )
 
     assert result == {"id": 123}
-    request_data = mock_post.await_args.kwargs["data"]
-    assert ("context_code", "course_42") in request_data
-    assert ("group_conversation", "false") in request_data
-    assert ("recipients[]", "101") in request_data
-    assert ("recipients[]", "102") in request_data
+    request_headers = mock_post.await_args.kwargs["headers"]
+    request_content = mock_post.await_args.kwargs["content"]
+    assert request_headers["Content-Type"] == "application/x-www-form-urlencoded"
+    assert "context_code=course_42" in request_content
+    assert "group_conversation=false" in request_content
+    assert "recipients%5B%5D=101" in request_content
+    assert "recipients%5B%5D=102" in request_content
