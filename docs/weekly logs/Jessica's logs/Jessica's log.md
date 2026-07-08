@@ -956,6 +956,101 @@ Overall, this cycle contributed to steady progress toward completing remaining p
 * Prepare completed functionality for final integration
 * Maintain consistent Clockify tracking
 
+# **Cycle 14: Friday (3/7) ~ Monday (6/7)**
+
+### **Friday (3/7)**
+<img width="1191" height="93" alt="Screenshot 2026-07-07 at 10 53 00 PM" src="https://github.com/user-attachments/assets/40b7360a-e8ca-48ed-ab3e-8b416e8be58a" />
+
+**Timesheet**  
+**Clockify Report:** 2:26:03
+
+**Current Tasks**
+- Participated in the weekly team meeting
+- Reviewed sprint progress and remaining MVP tasks
+- Discussed frontend and backend integration status
+- Planned work for the upcoming MVP demonstration
+- Coordinated task assignments and project priorities with teammates
+
+---
+
+### **Saturday (4/7)**
+<img width="1203" height="160" alt="Screenshot 2026-07-07 at 10 52 51 PM" src="https://github.com/user-attachments/assets/2a0563bd-73ee-4208-9787-c44a4f3a47d5" />
+
+**Timesheet**  
+**Clockify Report:** 3:09:07
+
+**Current Tasks**
+- Continued frontend implementation
+- Worked on backend functionality
+- Integrated frontend components with backend services
+- Tested implemented features locally
+- Fixed implementation issues discovered during development
+- Prepared completed changes for code review
+
+---
+
+### **Sunday (5/7)**
+<img width="1201" height="162" alt="Screenshot 2026-07-07 at 10 52 41 PM" src="https://github.com/user-attachments/assets/4d1665c0-0cf7-4388-b65e-1376b8901954" />
+
+**Timesheet**  
+**Clockify Report:** 0:39:00
+
+**Current Tasks**
+- Continued minor frontend refinements
+- Worked on presentation slides for the MVP demonstration
+- Reviewed application flow for the live demo
+- Verified implemented features before presentation
+
+---
+
+### **Monday (6/7)**
+<img width="1200" height="163" alt="Screenshot 2026-07-07 at 10 52 32 PM" src="https://github.com/user-attachments/assets/6fdbdf2d-de32-497d-8c29-b96131e1aced" />
+
+**Timesheet**  
+**Clockify Report:** 5:42:44
+
+**Current Tasks**
+- Participated in an extended team meeting
+- Finalized MVP demonstration preparation
+- Reviewed completed frontend and backend features
+- Discussed presentation responsibilities and demonstration flow
+- Performed final testing and bug verification
+- Resolved remaining issues before the MVP presentation
+- Reviewed project readiness and finalized sprint deliverables
+
+---
+
+## **Cycle 14 – Goal Review**
+
+### **Reflection**
+
+This cycle focused on final preparation for the MVP milestone. Development continued on both the frontend and backend while significant effort was dedicated to presentation preparation, feature verification, and team coordination. Final testing and review activities helped ensure the application was stable and ready for demonstration.
+
+### **Retrospective**
+
+The cycle began with the weekly team meeting, where the team reviewed project progress and planned the remaining work needed before the MVP presentation. Responsibilities for implementation, testing, and presentation were coordinated to ensure all deliverables were completed on schedule.
+
+Development work continued throughout the cycle, with implementation of frontend and backend functionality alongside integration and local testing. Presentation preparation also became a major focus, including refining demonstration slides, reviewing application workflows, and ensuring implemented features could be demonstrated smoothly.
+
+Monday was primarily dedicated to final project readiness. The team conducted an extended meeting to review completed functionality, discuss presentation flow, verify feature stability, and resolve any remaining issues before the MVP demonstration.
+
+Overall, this cycle emphasized final implementation, testing, presentation preparation, and team collaboration, successfully preparing the project for the MVP milestone.
+
+---
+
+## **Next Cycle Goals (Cycle 15: Tuesday 7/7 ~ Thursday 9/7)**
+
+* Deliver the MVP demonstration
+* Address feedback received during the MVP review
+* Fix bugs identified during testing and demonstration
+* Continue frontend and backend refinements
+* Review and merge outstanding pull requests
+* Improve application stability and usability
+* Update project documentation
+* Plan work for the next development milestone
+* Continue project board maintenance and sprint planning
+* Maintain consistent Clockify tracking
+
 
 
 
