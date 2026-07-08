@@ -1058,3 +1058,130 @@ the backend API contracts and the frontend components that depend on them.
 * **Goal 3:** Continue identifying and fixing API/frontend integration gaps
 * **Goal 4:** Continue active development toward MVP completion
 
+---
+<br>
+
+# Cycle 14 Report: 03/07 – 06/07 (July 3 – July 6)
+
+## Timesheet
+
+### Clockify Report
+
+* **03/07 (Friday):** Using Clockify – Logged 2.98 hours
+<img width="2422" height="262" alt="image" src="https://github.com/user-attachments/assets/c53149e0-31d6-4525-8b40-e086070034fe" />
+
+
+* **04/07 (Saturday):** Using Clockify – Logged 1.68 hours
+<img width="2428" height="226" alt="image" src="https://github.com/user-attachments/assets/4a2212da-db38-47c3-ae52-2f6dd64cd276" />
+
+
+* **05/07 (Sunday):** Using Clockify – Logged 3.56 hours
+<img width="2416" height="218" alt="image" src="https://github.com/user-attachments/assets/92968314-4daa-4e43-a707-5f0c304de8b2" />
+
+
+* **06/07 (Monday):** Using Clockify – Logged 11.31 hours total
+<img width="2424" height="340" alt="image" src="https://github.com/user-attachments/assets/a18fcbb9-60c5-4924-b4a2-8591cb7dd2b6" />
+
+
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Team meeting, team logs, and integrations (July 3)
+
+* Attended a team meeting and aligned on current project priorities.
+* Worked on team logs for the current cycle.
+* Continued integration work across the project.
+* Helped coordinate development progress and clarify what still needed to be completed for the next stage of MVP work.
+
+### #2: Backend and frontend integrations (July 4)
+
+* Worked for 1 hour, 40 minutes, and 57 seconds on backend and frontend integration tasks.
+* Focused on connecting backend functionality with frontend components.
+* Continued reducing reliance on mock/local-only data by wiring real backend behavior into the user-facing application.
+* Supported full-stack MVP progress by improving communication between frontend flows and backend endpoints.
+
+### #3: Testing integration work (July 5)
+
+* Worked for 3 hours, 33 minutes, and 36 seconds on testing integration work.
+* Tested integration points between backend endpoints and frontend components.
+* Reviewed whether connected features were behaving correctly across the stack.
+* Identified areas that needed additional fixes or validation before the feature set could be considered complete.
+
+### #4: E2E testing for feature set #1 (July 6)
+
+* Worked for 2 hours, 7 minutes, and 3 seconds on end-to-end testing for feature set #1.
+* Tested the feature flow across the application from the user-facing frontend through the backend.
+* Focused on verifying that the integrated feature set behaved correctly in a realistic workflow.
+* Helped confirm the progress of the MVP feature implementation.
+
+### #5: Full integration work (July 6)
+
+* Worked for 9 hours, 11 minutes, and 22 seconds on broader integration work.
+* Continued connecting backend endpoints, frontend components, and Canvas-related functionality.
+* Focused on making the application work more consistently as a full-stack system.
+* This work contributed heavily toward MVP completion by bringing multiple integration pieces together.
+
+---
+
+## Progress Update (since 03/07/2026)
+
+| TASK/ISSUE #                             | STATUS      |
+| ---------------------------------------- | ----------- |
+| Team meeting                             | Completed   |
+| Team logs                                | Completed   |
+| Backend-to-frontend endpoint integration | In Progress |
+| Canvas/backend/frontend integrations     | In Progress |
+| Testing integration work                 | In Progress |
+| E2E testing for feature set #1           | In Progress |
+| MVP                                      | In Progress |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle focused heavily on integration work, testing, and continued MVP
+progress. On July 3, I worked on team meeting responsibilities, team logs, and
+integration tasks. This helped keep the team aligned while also continuing
+technical progress on the project.
+
+On July 4, I worked on backend and frontend integrations for 1 hour, 40 minutes,
+and 57 seconds. This work focused on connecting backend endpoint functionality
+to frontend components and continuing the shift away from mock/local-only data.
+
+On July 5, I spent 3 hours, 33 minutes, and 36 seconds testing integration work.
+This helped verify whether the connected backend and frontend pieces were
+working as expected and helped identify areas that required further attention.
+
+On July 6, I worked on both E2E testing for feature set #1 and broader full
+integration work. The E2E testing helped validate the feature flow across the
+application, while the longer integration session focused on bringing multiple
+backend, frontend, and Canvas-related pieces together. This made July 6 the
+most active work day of the cycle and contributed significantly toward MVP
+progress.
+
+### Retrospective:
+
+This was a strong and productive cycle because the work moved beyond individual
+feature implementation and focused more on making the project function as a
+connected full-stack system. Integration and testing were the main priorities,
+which are important as the project moves closer to MVP completion.
+
+The team meeting and team logs helped support coordination, while the backend,
+frontend, and E2E testing work helped validate actual project functionality.
+The main area to continue improving is making sure all integrated features are
+tested consistently and that any remaining bugs or API/frontend mismatches are
+resolved before finalizing the MVP feature set.
+
+---
+
+## Next Cycle Goals
+
+* **Goal 1:** Continue E2E testing for integrated feature sets
+* **Goal 2:** Fix issues found during backend/frontend integration testing
+* **Goal 3:** Continue connecting remaining backend endpoints to frontend components
+* **Goal 4:** Continue active development and validation toward MVP completion
+
