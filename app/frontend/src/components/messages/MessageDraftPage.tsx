@@ -15,13 +15,6 @@ import { MessageToolbar } from "@/components/messages/MessageToolbar";
 import { RecipientSummary } from "@/components/messages/RecipientSummary";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
@@ -49,9 +42,11 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
-  const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>([]);
+  const [recipients, setRecipients] = useState<MessageRecipient[]>([]);
+  const [selectedRecipientIds, setSelectedRecipientIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   const {
     register,
@@ -84,7 +79,8 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
 
       const loadedDraft = await fetchMessageDraft(accessToken, fetchOptions);
       setDraft(loadedDraft);
-      setSelectedRecipientIds(loadedDraft.recipients.map((recipient) => recipient.id));
+      setRecipients(loadedDraft.recipients);
+      setSelectedRecipientIds(new Set(loadedDraft.recipients.map((r) => r.id)));
       reset({
         subject: loadedDraft.subject,
         body: loadedDraft.body,
@@ -114,34 +110,37 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     [subjectValue, bodyValue],
   );
 
-  const selectedRecipients = useMemo<MessageRecipient[]>(() => {
-    if (!draft) {
-      return [];
-    }
-
-    const selectedIdSet = new Set(selectedRecipientIds);
-    return draft.recipients.filter((recipient) => selectedIdSet.has(recipient.id));
-  }, [draft, selectedRecipientIds]);
+  const selectedRecipients = useMemo(
+    () => recipients.filter((recipient) => selectedRecipientIds.has(recipient.id)),
+    [recipients, selectedRecipientIds],
+  );
 
   const handleToggleRecipient = (recipientId: string) => {
-    setSelectedRecipientIds((currentIds) =>
-      currentIds.includes(recipientId)
-        ? currentIds.filter((id) => id !== recipientId)
-        : [...currentIds, recipientId],
-    );
+    setSelectedRecipientIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(recipientId)) {
+        next.delete(recipientId);
+      } else {
+        next.add(recipientId);
+      }
+      return next;
+    });
+  };
+
+  const handleRemoveRecipient = (recipientId: string) => {
+    setRecipients((prev) => prev.filter((recipient) => recipient.id !== recipientId));
+    setSelectedRecipientIds((prev) => {
+      const next = new Set(prev);
+      next.delete(recipientId);
+      return next;
+    });
   };
 
   const handleSelectAllRecipients = () => {
-    if (!draft) {
-      return;
-    }
-
-    // Treat the header control as a quick all/none toggle while keeping the
-    // individual checkboxes as the source of truth for the send payload.
-    setSelectedRecipientIds((currentIds) =>
-      currentIds.length === draft.recipients.length
-        ? []
-        : draft.recipients.map((recipient) => recipient.id),
+    setSelectedRecipientIds((prev) =>
+      prev.size === recipients.length
+        ? new Set()
+        : new Set(recipients.map((recipient) => recipient.id)),
     );
   };
 
@@ -156,12 +155,10 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
         subject: draft.subject,
         body: draft.body,
       });
-      setSelectedRecipientIds(draft.recipients.map((recipient) => recipient.id));
     }
 
     setSendError(null);
     setSuccessMessage(null);
-    setIsPreviewOpen(false);
     setIsConfirmOpen(false);
   };
 
@@ -303,9 +300,10 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
       <div className="grid gap-6 lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
         <aside className="space-y-4">
           <RecipientSummary
-            recipients={draft?.recipients ?? []}
-            selectedRecipientIds={selectedRecipientIds}
-            onToggleRecipient={handleToggleRecipient}
+            recipients={recipients}
+            selectedIds={selectedRecipientIds}
+            onToggle={handleToggleRecipient}
+            onRemove={handleRemoveRecipient}
             onSelectAll={handleSelectAllRecipients}
           />
           <MessageTemplateSummary
@@ -319,7 +317,8 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
             <CardHeader className="border-b border-border/60 pb-4">
               <CardTitle className="text-base">Review Message Draft</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Edit the generated message, preview it, then send when ready.
+                Edit the generated message, then send when ready. You&apos;ll
+                see the full message again before it goes out.
               </p>
             </CardHeader>
 
@@ -347,7 +346,6 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
                 </CardContent>
                 <CardFooter className="mt-auto flex-col gap-0 border-t bg-muted/20 px-6 py-4">
                   <MessageToolbar
-                    onPreview={() => setIsPreviewOpen(true)}
                     onCancel={handleCancel}
                     onSend={handleSendClick}
                     isSending={pageState === "sending"}
@@ -362,26 +360,15 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
         </section>
       </div>
 
-      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Message Preview</DialogTitle>
-            <DialogDescription>
-              Review exactly what will be sent. This preview is read-only.
-            </DialogDescription>
-          </DialogHeader>
-          <MessagePreview
-            recipients={selectedRecipients}
-            subject={previewValues.subject}
-            body={previewValues.body}
-          />
-        </DialogContent>
-      </Dialog>
-
       <ConfirmationDialog
         open={isConfirmOpen}
         onOpenChange={setIsConfirmOpen}
-        recipientCount={recipientCount}
+        recipients={recipients}
+        selectedRecipientIds={selectedRecipientIds}
+        onToggleRecipient={handleToggleRecipient}
+        onRemoveRecipient={handleRemoveRecipient}
+        subject={previewValues.subject}
+        body={previewValues.body}
         isSending={pageState === "sending"}
         onConfirm={() => void handleConfirmSend()}
       />

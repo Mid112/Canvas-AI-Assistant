@@ -86,7 +86,7 @@ describe("StudentMessageDraftPage", () => {
     await user.clear(subjectField);
     await user.type(subjectField, "Updated subject line");
 
-    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await user.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("Updated subject line")).toBeInTheDocument();
