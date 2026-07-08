@@ -9,12 +9,14 @@ import {
 import { emptyWorkflowHistoryFilters } from "@/types/workflowHistory";
 
 describe("filterWorkflowHistory", () => {
+  // Verifies: Returns all entries when filters are empty.
   it("returns all entries when filters are empty", () => {
     expect(
       filterWorkflowHistory(mockWorkflowHistory, emptyWorkflowHistoryFilters),
     ).toHaveLength(mockWorkflowHistory.length);
   });
 
+  // Verifies: Filters by search query across action, prompt, resources, and user.
   it("filters by search query across action, prompt, resources, and user", () => {
     const filtered = filterWorkflowHistory(mockWorkflowHistory, {
       ...emptyWorkflowHistoryFilters,
@@ -32,6 +34,7 @@ describe("filterWorkflowHistory", () => {
     ).toBe(true);
   });
 
+  // Verifies: Filters by status.
   it("filters by status", () => {
     const filtered = filterWorkflowHistory(mockWorkflowHistory, {
       ...emptyWorkflowHistoryFilters,
@@ -42,6 +45,7 @@ describe("filterWorkflowHistory", () => {
     expect(filtered.every((e) => e.status === "rejected")).toBe(true);
   });
 
+  // Verifies: Combines search and status filters.
   it("combines search and status filters", () => {
     const filtered = filterWorkflowHistory(mockWorkflowHistory, {
       search: "Reminder",
@@ -62,6 +66,7 @@ describe("filterWorkflowHistory", () => {
 });
 
 describe("sortWorkflowHistoryByDate", () => {
+  // Verifies: Sorts entries newest first.
   it("sorts entries newest first", () => {
     const sorted = sortWorkflowHistoryByDate(mockWorkflowHistory);
     for (let i = 1; i < sorted.length; i++) {
@@ -75,6 +80,7 @@ describe("sortWorkflowHistoryByDate", () => {
 });
 
 describe("paginateWorkflowHistory", () => {
+  // Verifies: Returns the first page of results.
   it("returns the first page of results", () => {
     const result = paginateWorkflowHistory(mockWorkflowHistory, 1, 3);
     expect(result.items).toHaveLength(3);
@@ -83,6 +89,7 @@ describe("paginateWorkflowHistory", () => {
     expect(result.endIndex).toBe(3);
   });
 
+  // Verifies: Returns the final partial page.
   it("returns the final partial page", () => {
     const result = paginateWorkflowHistory(mockWorkflowHistory, 3, 3);
     expect(result.items).toHaveLength(1);

@@ -23,11 +23,13 @@ def _register(client) -> dict:
     return {"Authorization": f"Bearer {response.json()['access_token']}"}
 
 
+# Verifies: Instructor dashboard unauthenticated.
 def test_instructor_dashboard_unauthenticated(client):
     response = client.get("/api/v1/canvas/dashboard")
     assert response.status_code == 401
 
 
+# Verifies: Instructor dashboard empty state.
 def test_instructor_dashboard_empty_state(client):
     headers = _register(client)
     response = client.get("/api/v1/canvas/dashboard", headers=headers)
@@ -44,6 +46,7 @@ def test_instructor_dashboard_empty_state(client):
     assert payload["recent_workflows"] == []
 
 
+# Verifies: Instructor dashboard with seeded course.
 def test_instructor_dashboard_with_seeded_course(client):
     headers = _register(client)
     canvas_url = "https://canvas.ubc.ca"

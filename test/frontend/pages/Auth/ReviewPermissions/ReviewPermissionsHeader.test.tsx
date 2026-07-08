@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ReviewPermissionsHeader } from "@/pages/Auth/ReviewPermissions/ReviewPermissionsHeader";
 
 describe("ReviewPermissionsHeader", () => {
+  // Verifies: Renders the review permissions heading.
   it("renders the review permissions heading", () => {
     render(<ReviewPermissionsHeader />);
 
@@ -12,6 +13,7 @@ describe("ReviewPermissionsHeader", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders the description text.
   it("renders the description text", () => {
     render(<ReviewPermissionsHeader />);
 

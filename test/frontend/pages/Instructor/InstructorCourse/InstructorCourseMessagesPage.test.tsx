@@ -82,6 +82,7 @@ function CourseMessagesRoute({
 }
 
 describe("InstructorCourseMessagesPage", () => {
+  // Verifies: Loads course recipients and renders the message draft editor.
   it("loads course recipients and renders the message draft editor", async () => {
     mockedFetchStudents.mockResolvedValue([
       {
@@ -139,6 +140,7 @@ describe("InstructorCourseMessagesPage", () => {
     });
   });
 
+  // Verifies: Loads recipients when the course has a Canvas URL but no Canvas course id.
   it("loads recipients when the course has a Canvas URL but no Canvas course id", async () => {
     const courseWithoutCanvasId = { ...course, canvasCourseId: undefined };
     mockedFetchStudents.mockResolvedValue([
@@ -190,6 +192,7 @@ describe("InstructorCourseMessagesPage", () => {
     });
   });
 
+  // Verifies: Loads recipients by local course id when the course context has no Canvas URL.
   it("loads recipients by local course id when the course context has no Canvas URL", async () => {
     const courseWithoutCanvasMetadata = {
       ...course,

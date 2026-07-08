@@ -5,6 +5,7 @@ from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool
 from app.mcp_tools.schemas import FetchAssignmentsAction
 
 
+# Verifies: Unknown course.
 @pytest.mark.asyncio
 async def test_unknown_course():
     db = AsyncMock()

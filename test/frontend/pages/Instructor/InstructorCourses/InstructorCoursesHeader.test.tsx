@@ -36,6 +36,7 @@ beforeEach(() => {
 });
 
 describe("InstructorCoursesHeader", () => {
+  // Verifies: Renders the course management heading and institution context.
   it("renders the course management heading and institution context", () => {
     mockUseCanvasConnectionUrl.mockReturnValue(CANVAS_URL);
 
@@ -52,6 +53,7 @@ describe("InstructorCoursesHeader", () => {
     ).toHaveAttribute("href", `${CANVAS_URL}/courses`);
   });
 
+  // Verifies: Hides New Course when Canvas is not connected.
   it("hides New Course when Canvas is not connected", () => {
     vi.stubEnv("VITE_CANVAS_UBC_URL", CANVAS_URL);
     mockUseCanvasConnectionUrl.mockReturnValue(undefined);
@@ -70,6 +72,7 @@ describe("InstructorCoursesHeader", () => {
     vi.unstubAllEnvs();
   });
 
+  // Verifies: Strips a trailing slash from the Canvas host before building the new course URL.
   it("strips a trailing slash from the Canvas host before building the new course URL", () => {
     mockUseCanvasConnectionUrl.mockReturnValue(`${CANVAS_URL}/`);
 
@@ -80,6 +83,7 @@ describe("InstructorCoursesHeader", () => {
     ).toHaveAttribute("href", `${CANVAS_URL}/courses`);
   });
 
+  // Verifies: Renders a sync button when refresh is available.
   it("renders a sync button when refresh is available", () => {
     renderWithInstitution(
       <InstructorCoursesHeader onRefreshCourses={() => undefined} />,
@@ -90,6 +94,7 @@ describe("InstructorCoursesHeader", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Calls onRefreshCourses when sync is clicked.
   it("calls onRefreshCourses when sync is clicked", async () => {
     const user = userEvent.setup();
     const onRefreshCourses = vi.fn();

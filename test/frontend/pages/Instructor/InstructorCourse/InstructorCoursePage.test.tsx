@@ -56,6 +56,7 @@ const overview: CourseOverviewData = {
 };
 
 describe("InstructorCourseHeader", () => {
+  // Verifies: Renders course title and active status.
   it("renders course title and active status", () => {
     render(
       <MemoryRouter>
@@ -77,6 +78,7 @@ describe("InstructorCourseHeader", () => {
 });
 
 describe("InstructorCourseTabs", () => {
+  // Verifies: Renders course section tabs.
   it("renders course section tabs", () => {
     render(
       <MemoryRouter initialEntries={[instructorCoursePath(course.id)]}>
@@ -104,6 +106,7 @@ describe("InstructorCourseTabs", () => {
 });
 
 describe("InstructorCourseOverviewMetrics", () => {
+  // Verifies: Renders overview metric cards.
   it("renders overview metric cards", () => {
     render(
       <InstructorCourseOverviewMetrics course={course} overview={overview} />,
@@ -116,6 +119,7 @@ describe("InstructorCourseOverviewMetrics", () => {
     expect(screen.getByText("91%")).toBeInTheDocument();
   });
 
+  // Verifies: Prefers the Canvas course student count when overview has a stale zero.
   it("prefers the Canvas course student count when overview has a stale zero", () => {
     render(
       <InstructorCourseOverviewMetrics
@@ -130,6 +134,7 @@ describe("InstructorCourseOverviewMetrics", () => {
 });
 
 describe("RecentAssignmentsCard", () => {
+  // Verifies: Renders recent assignments with status.
   it("renders recent assignments with status", () => {
     render(
       <MemoryRouter>
@@ -150,6 +155,7 @@ describe("RecentAssignmentsCard", () => {
     );
   });
 
+  // Verifies: Uses the course student total when assignment summaries have a stale zero.
   it("uses the course student total when assignment summaries have a stale zero", () => {
     render(
       <MemoryRouter>

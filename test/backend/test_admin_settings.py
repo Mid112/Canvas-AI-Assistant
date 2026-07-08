@@ -63,6 +63,7 @@ def _register(client, email: str | None = None):
     )
 
 
+# Verifies: Get settings returns defaults including bool.
 def test_get_settings_returns_defaults_including_bool(client, admin_headers):
     resp = client.get("/api/v1/admin/settings", headers=admin_headers)
     assert resp.status_code == 200
@@ -72,6 +73,7 @@ def test_get_settings_returns_defaults_including_bool(client, admin_headers):
     assert settings["session_timeout_minutes"] == 30
 
 
+# Verifies: Update bool setting round trips correctly.
 def test_update_bool_setting_round_trips_correctly(client, admin_headers):
     """The core regression test: writing False for a bool setting must
     actually be read back as False, not silently ignored."""
@@ -92,6 +94,7 @@ def test_update_bool_setting_round_trips_correctly(client, admin_headers):
     assert "value" not in settings
 
 
+# Verifies: Update string and int settings round trip.
 def test_update_string_and_int_settings_round_trip(client, admin_headers):
     patch_resp = client.patch(
         "/api/v1/admin/settings",
@@ -116,12 +119,14 @@ def test_update_string_and_int_settings_round_trip(client, admin_headers):
     )
 
 
+# Verifies: Self registration allowed by default.
 def test_self_registration_allowed_by_default(client):
     resp = _register(client)
     assert resp.status_code == 201
     assert "access_token" in resp.json()
 
 
+# Verifies: Self registration disabled rejects new instructor.
 def test_self_registration_disabled_rejects_new_instructor(client, admin_headers):
     disable_resp = client.patch(
         "/api/v1/admin/settings",
@@ -136,6 +141,7 @@ def test_self_registration_disabled_rejects_new_instructor(client, admin_headers
     assert "disabled" in resp.json()["detail"].lower()
 
 
+# Verifies: Self registration re enabled allows registration again.
 def test_self_registration_re_enabled_allows_registration_again(client, admin_headers):
     client.patch(
         "/api/v1/admin/settings",

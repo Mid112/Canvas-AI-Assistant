@@ -6,12 +6,14 @@ import { paths } from "@/routes/paths";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 describe("LoginFooter", () => {
+  // Verifies: Renders the account prompt text.
   it("renders the account prompt text", () => {
     renderWithRouter(<LoginFooter />);
 
     expect(screen.getByText(/Don't have an account\?/)).toBeInTheDocument();
   });
 
+  // Verifies: Links to the register page.
   it("links to the register page", () => {
     renderWithRouter(<LoginFooter />);
 
@@ -19,6 +21,7 @@ describe("LoginFooter", () => {
     expect(signUpLink).toHaveAttribute("href", paths.register);
   });
 
+  // Verifies: Links to the home page.
   it("links to the home page", () => {
     renderWithRouter(<LoginFooter />);
 

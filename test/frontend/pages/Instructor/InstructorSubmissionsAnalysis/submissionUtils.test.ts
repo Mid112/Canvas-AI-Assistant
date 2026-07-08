@@ -11,6 +11,7 @@ import {
 const students = institutionSubmissionsData[0]!.assignments[0]!.missingSubmissions;
 
 describe("filterSubmissionAssignments", () => {
+  // Verifies: Filters assignments by label.
   it("filters assignments by label", () => {
     const assignments = institutionSubmissionsData[0]!.assignments;
     const results = filterSubmissionAssignments(assignments, "recursion");
@@ -21,10 +22,12 @@ describe("filterSubmissionAssignments", () => {
 });
 
 describe("filterSubmissionStudents", () => {
+  // Verifies: Returns all students when search is empty.
   it("returns all students when search is empty", () => {
     expect(filterSubmissionStudents(students, "")).toHaveLength(students.length);
   });
 
+  // Verifies: Filters students by name or email.
   it("filters students by name or email", () => {
     const results = filterSubmissionStudents(students, "maria");
 
@@ -34,6 +37,7 @@ describe("filterSubmissionStudents", () => {
 });
 
 describe("shouldShowMissingSection", () => {
+  // Verifies: Shows the missing section for all and missing filters.
   it("shows the missing section for all and missing filters", () => {
     expect(shouldShowMissingSection("all")).toBe(true);
     expect(shouldShowMissingSection("missing")).toBe(true);
@@ -42,6 +46,7 @@ describe("shouldShowMissingSection", () => {
 });
 
 describe("shouldShowLateSection", () => {
+  // Verifies: Shows the late section for all and late filters.
   it("shows the late section for all and late filters", () => {
     expect(shouldShowLateSection("all")).toBe(true);
     expect(shouldShowLateSection("late")).toBe(true);

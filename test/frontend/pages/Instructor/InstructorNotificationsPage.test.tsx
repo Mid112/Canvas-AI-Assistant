@@ -32,6 +32,7 @@ vi.mock("@/contexts/AuthContext", async () => {
 });
 
 describe("InstructorNotificationsPage", () => {
+  // Verifies: Renders the notifications page with an empty state when Canvas is connected.
   it("renders the notifications page with an empty state when Canvas is connected", () => {
     renderWithInstitution(<InstructorNotificationsPage />);
 

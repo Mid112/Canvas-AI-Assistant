@@ -49,6 +49,7 @@ function renderSidebar(props: ComponentProps<typeof Sidebar>) {
 }
 
 describe("Sidebar", () => {
+  // Verifies: Renders navigation items and portal branding.
   it("renders navigation items and portal branding", () => {
     renderSidebar({
       navItems: instructorNavItems,
@@ -62,6 +63,7 @@ describe("Sidebar", () => {
     expect(screen.getByRole("button", { name: "Open profile menu" })).toBeInTheDocument();
   });
 
+  // Verifies: Calls onToggle when the close sidebar button is clicked.
   it("calls onToggle when the close sidebar button is clicked", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onToggle = vi.fn();
@@ -79,6 +81,7 @@ describe("Sidebar", () => {
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
+  // Verifies: Logs out from the profile menu.
   it("logs out from the profile menu", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onNavigate = vi.fn();

@@ -16,6 +16,7 @@ describe("dryRunPreview service", () => {
     vi.useRealTimers();
   });
 
+  // Verifies: Returns mock preview data after delay.
   it("returns mock preview data after delay", async () => {
     const promise = fetchDryRunPreview(mockStudentReminderPreview.id);
     await vi.advanceTimersByTimeAsync(600);
@@ -25,6 +26,7 @@ describe("dryRunPreview service", () => {
     expect(preview.originalRequest).toContain("Programming Assignment 3");
   });
 
+  // Verifies: Throws when preview id is empty.
   it("throws when preview id is empty", async () => {
     const promise = fetchDryRunPreview("empty");
     const assertion = expect(promise).rejects.toBeInstanceOf(DryRunPreviewError);
@@ -32,6 +34,7 @@ describe("dryRunPreview service", () => {
     await assertion;
   });
 
+  // Verifies: Confirms a workflow with a success message.
   it("confirms a workflow with a success message", async () => {
     const promise = confirmDryRunPreview(mockStudentReminderPreview.id);
     await vi.advanceTimersByTimeAsync(1200);

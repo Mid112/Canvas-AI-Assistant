@@ -35,6 +35,7 @@ describe("messageDraft service", () => {
     vi.restoreAllMocks();
   });
 
+  // Verifies: Creates and returns a draft from the API.
   it("creates and returns a draft from the API", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(JSON.stringify(draftResponse), { status: 201 }),
@@ -54,6 +55,7 @@ describe("messageDraft service", () => {
     expect(requestBody.recipients).toEqual([]);
   });
 
+  // Verifies: Returns empty recipients when requested.
   it("returns empty recipients when requested", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(
@@ -67,6 +69,7 @@ describe("messageDraft service", () => {
     expect(draft.recipients).toHaveLength(0);
   });
 
+  // Verifies: Keeps provided course recipients when the draft API returns none.
   it("keeps provided course recipients when the draft API returns none", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(
@@ -84,12 +87,14 @@ describe("messageDraft service", () => {
     expect(draft.recipients).toEqual(recipients);
   });
 
+  // Verifies: Throws when simulateLoadError is true.
   it("throws when simulateLoadError is true", async () => {
     await expect(
       fetchMessageDraft("access-token", { simulateLoadError: true }),
     ).rejects.toBeInstanceOf(MessageDraftApiError);
   });
 
+  // Verifies: Throws when sending with no recipients.
   it("throws when sending with no recipients", async () => {
     await expect(
       sendMessageDraft("access-token", {
@@ -101,6 +106,7 @@ describe("messageDraft service", () => {
     ).rejects.toThrow(/At least one recipient/i);
   });
 
+  // Verifies: Persists selected recipients before sending.
   it("persists selected recipients before sending", async () => {
     const fetchSpy = vi
       .spyOn(globalThis, "fetch")
@@ -138,6 +144,7 @@ describe("messageDraft service", () => {
     );
   });
 
+  // Verifies: Rejects sending when selected recipient details are missing.
   it("rejects sending when selected recipient details are missing", async () => {
     await expect(
       sendMessageDraft("access-token", {

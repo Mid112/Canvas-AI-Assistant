@@ -68,6 +68,7 @@ describe("GuestRoute", () => {
     );
   }
 
+  // Verifies: Shows loading state while auth is loading.
   it("shows loading state while auth is loading", () => {
     mockedUseAuth.mockReturnValue({
       user: null,
@@ -83,6 +84,7 @@ describe("GuestRoute", () => {
     expect(screen.getByText("Loading...")).toBeInTheDocument();
   });
 
+  // Verifies: Renders child routes for unauthenticated users.
   it("renders child routes for unauthenticated users", () => {
     mockedUseAuth.mockReturnValue({
       user: null,
@@ -98,6 +100,7 @@ describe("GuestRoute", () => {
     expect(screen.getByText("Login page")).toBeInTheDocument();
   });
 
+  // Verifies: Redirects authenticated users without completed onboarding to canvas info.
   it("redirects authenticated users without completed onboarding to canvas info", () => {
     mockedHasCompletedOnboarding.mockReturnValue(false);
     mockedUseAuth.mockReturnValue({
@@ -115,6 +118,7 @@ describe("GuestRoute", () => {
     expect(screen.queryByText("Login page")).not.toBeInTheDocument();
   });
 
+  // Verifies: Redirects authenticated users with completed onboarding to their dashboard.
   it("redirects authenticated users with completed onboarding to their dashboard", () => {
     mockedHasCompletedOnboarding.mockReturnValue(true);
     mockedUseAuth.mockReturnValue({
@@ -132,6 +136,7 @@ describe("GuestRoute", () => {
     expect(screen.queryByText("Canvas info")).not.toBeInTheDocument();
   });
 
+  // Verifies: Redirects admins to the admin dashboard without completed onboarding.
   it("redirects admins to the admin dashboard without completed onboarding", () => {
     mockedHasCompletedOnboarding.mockReturnValue(false);
     mockedUseAuth.mockReturnValue({

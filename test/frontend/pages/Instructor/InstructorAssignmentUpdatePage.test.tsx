@@ -97,6 +97,7 @@ describe("InstructorAssignmentUpdatePage", () => {
     });
   });
 
+  // Verifies: Loads assignment details and shows the edit form.
   it("loads assignment details and shows the edit form", async () => {
     renderPage();
 
@@ -114,6 +115,7 @@ describe("InstructorAssignmentUpdatePage", () => {
     );
   });
 
+  // Verifies: Shows preview before confirming updates.
   it("shows preview before confirming updates", async () => {
     const user = userEvent.setup();
 
@@ -132,6 +134,7 @@ describe("InstructorAssignmentUpdatePage", () => {
     expect(mockedUpdateAssignment).not.toHaveBeenCalled();
   });
 
+  // Verifies: Prompts to connect Canvas when no token is linked.
   it("prompts to connect Canvas when no token is linked", async () => {
     mockUseAuth.mockReturnValue({
       ...authWithCanvas,

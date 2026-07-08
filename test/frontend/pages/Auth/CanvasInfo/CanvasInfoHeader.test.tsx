@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { CanvasInfoHeader } from "@/pages/Auth/CanvasInfo/CanvasInfoHeader";
 
 describe("CanvasInfoHeader", () => {
+  // Verifies: Renders the connect canvas heading.
   it("renders the connect canvas heading", () => {
     render(<CanvasInfoHeader />);
 
@@ -12,6 +13,7 @@ describe("CanvasInfoHeader", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders the description text.
   it("renders the description text", () => {
     render(<CanvasInfoHeader />);
 
@@ -22,6 +24,7 @@ describe("CanvasInfoHeader", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders the graduation cap icon.
   it("renders the graduation cap icon", () => {
     const { container } = render(<CanvasInfoHeader />);
 

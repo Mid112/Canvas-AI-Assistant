@@ -6,6 +6,7 @@ import { paths } from "@/routes/paths";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 describe("LandingHeader", () => {
+  // Verifies: Renders the application name.
   it("renders the application name", () => {
     renderWithRouter(<LandingHeader />);
 
@@ -14,6 +15,7 @@ describe("LandingHeader", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders navigation links.
   it("renders navigation links", () => {
     renderWithRouter(<LandingHeader />);
 
@@ -27,6 +29,7 @@ describe("LandingHeader", () => {
     );
   });
 
+  // Verifies: Renders the graduation cap icon.
   it("renders the graduation cap icon", () => {
     const { container } = renderWithRouter(<LandingHeader />);
 

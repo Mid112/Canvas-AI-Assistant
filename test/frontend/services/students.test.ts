@@ -29,6 +29,7 @@ describe("students service", () => {
     mockedFetchSubmissions.mockReset();
   });
 
+  // Verifies: Fetches course students from the roster endpoint.
   it("fetches course students from the roster endpoint", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(
@@ -60,6 +61,7 @@ describe("students service", () => {
     expect(students).toHaveLength(1);
   });
 
+  // Verifies: Derives students from submissions when the roster is empty but the course has students.
   it("derives students from submissions when the roster is empty but the course has students", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(JSON.stringify([]), { status: 200 }),

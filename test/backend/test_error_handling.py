@@ -37,6 +37,7 @@ def _register(client) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
+# Verifies: Malformed llm json returns safe message without leaking raw output.
 def test_malformed_llm_json_returns_safe_message_without_leaking_raw_output(client):
     """parse_action's JSON-decode failure path: log_detail embeds the raw
     LLM output verbatim (f"...Raw output: {raw_llm_output!r}") — that must
@@ -64,6 +65,7 @@ def test_malformed_llm_json_returns_safe_message_without_leaking_raw_output(clie
     assert "Raw output" not in response.text
 
 
+# Verifies: Unknown action returns safe message without leaking action name.
 def test_unknown_action_returns_safe_message_without_leaking_action_name(client):
     """dispatcher's unknown-action path logs the literal unsupported action
     name in log_detail — the client should only see the generic message."""
@@ -86,6 +88,7 @@ def test_unknown_action_returns_safe_message_without_leaking_action_name(client)
     assert "delete_entire_database" not in response.text
 
 
+# Verifies: Confirm unknown course returns safe message.
 def test_confirm_unknown_course_returns_safe_message(client):
     """_resolve_course's ToolExecutionError ("That course could not be
     found in your account.") must reach the client as-is, without the

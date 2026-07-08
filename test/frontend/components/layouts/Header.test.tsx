@@ -30,6 +30,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 describe("Header", () => {
+  // Verifies: Renders the page title and account menu.
   it("renders the page title and account menu", () => {
     renderWithRouter(
       <Header
@@ -46,6 +47,7 @@ describe("Header", () => {
     expect(screen.getByRole("button", { name: "Account menu" })).toBeInTheDocument();
   });
 
+  // Verifies: Shows the open sidebar button when the sidebar is closed.
   it("shows the open sidebar button when the sidebar is closed", () => {
     renderWithRouter(
       <Header
@@ -63,6 +65,7 @@ describe("Header", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Logs out and navigates to login from the account menu.
   it("logs out and navigates to login from the account menu", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     mockNavigate.mockClear();

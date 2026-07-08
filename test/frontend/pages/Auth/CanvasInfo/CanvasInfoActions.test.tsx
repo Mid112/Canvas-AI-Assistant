@@ -6,6 +6,7 @@ import { CanvasInfoActions } from "@/pages/Auth/CanvasInfo/CanvasInfoActions";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 describe("CanvasInfoActions", () => {
+  // Verifies: Renders the proceed button.
   it("renders the proceed button", () => {
     renderWithRouter(<CanvasInfoActions onProceed={vi.fn()} />);
 
@@ -14,6 +15,7 @@ describe("CanvasInfoActions", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders terms and privacy links.
   it("renders terms and privacy links", () => {
     renderWithRouter(<CanvasInfoActions onProceed={vi.fn()} />);
 
@@ -30,6 +32,7 @@ describe("CanvasInfoActions", () => {
     );
   });
 
+  // Verifies: Calls onProceed when the button is clicked.
   it("calls onProceed when the button is clicked", async () => {
     const user = userEvent.setup();
     const onProceed = vi.fn();

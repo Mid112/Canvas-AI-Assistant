@@ -68,6 +68,7 @@ def test_course_overview_unknown_course(client):
     assert response.status_code == 404
 
 
+# Verifies: Course overview empty state.
 def test_course_overview_empty_state(client):
     headers = _register_with_canvas(client)
     local_id = _sync_local_course(client, headers)
@@ -94,6 +95,7 @@ def test_course_overview_empty_state(client):
     assert payload["is_active"] is False
 
 
+# Verifies: Course overview with assignments and submissions.
 def test_course_overview_with_assignments_and_submissions(client):
     headers = _register_with_canvas(client)
     local_id = _sync_local_course(client, headers)

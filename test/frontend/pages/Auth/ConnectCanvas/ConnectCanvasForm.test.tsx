@@ -38,6 +38,7 @@ describe("ConnectCanvasForm", () => {
     vi.useRealTimers();
   });
 
+  // Verifies: Renders the token field, add button, and actions.
   it("renders the token field, add button, and actions", () => {
     renderWithRouter(<ConnectCanvasForm {...defaultProps} />);
 
@@ -54,6 +55,7 @@ describe("ConnectCanvasForm", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Disables connect until a valid URL and token are provided.
   it("disables connect until a valid URL and token are provided", async () => {
     const user = userEvent.setup();
     renderWithRouter(<ConnectCanvasForm {...defaultProps} />);
@@ -69,6 +71,7 @@ describe("ConnectCanvasForm", () => {
     ).toBeEnabled();
   });
 
+  // Verifies: Shows expired status for invalid tokens.
   it("shows expired status for invalid tokens", async () => {
     const user = userEvent.setup();
     mockedValidateCanvasToken.mockResolvedValue("expired");
@@ -85,6 +88,7 @@ describe("ConnectCanvasForm", () => {
     ).toBeDisabled();
   });
 
+  // Verifies: Submits all non-empty trimmed connections.
   it("submits all non-empty trimmed connections", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn().mockResolvedValue(undefined);
@@ -115,6 +119,7 @@ describe("ConnectCanvasForm", () => {
     });
   });
 
+  // Verifies: Validates tokens with the canvas URL.
   it("validates tokens with the canvas URL", async () => {
     const user = userEvent.setup();
     renderWithRouter(<ConnectCanvasForm {...defaultProps} />);
@@ -128,6 +133,7 @@ describe("ConnectCanvasForm", () => {
     );
   });
 
+  // Verifies: Calls onSessionExpired when accessToken is missing during validation.
   it("calls onSessionExpired when accessToken is missing during validation", async () => {
     const user = userEvent.setup();
     const onSessionExpired = vi.fn();
@@ -150,6 +156,7 @@ describe("ConnectCanvasForm", () => {
     expect(mockedValidateCanvasToken).not.toHaveBeenCalled();
   });
 
+  // Verifies: Adds and removes institution token fields.
   it("adds and removes institution token fields", async () => {
     const user = userEvent.setup();
     renderWithRouter(<ConnectCanvasForm {...defaultProps} />);
@@ -167,6 +174,7 @@ describe("ConnectCanvasForm", () => {
     expect(screen.getAllByLabelText("Canvas URL")).toHaveLength(1);
   });
 
+  // Verifies: Calls onSkip when continuing without connecting.
   it("calls onSkip when continuing without connecting", async () => {
     const user = userEvent.setup();
     const onSkip = vi.fn().mockResolvedValue(undefined);
@@ -182,6 +190,7 @@ describe("ConnectCanvasForm", () => {
     expect(onSkip).toHaveBeenCalledTimes(1);
   });
 
+  // Verifies: Shows an error message when provided.
   it("shows an error message when provided", () => {
     renderWithRouter(
       <ConnectCanvasForm

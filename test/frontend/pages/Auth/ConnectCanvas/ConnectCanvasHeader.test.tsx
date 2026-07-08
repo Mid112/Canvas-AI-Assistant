@@ -5,6 +5,7 @@ import { ConnectCanvasHeader } from "@/pages/Auth/ConnectCanvas/ConnectCanvasHea
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 describe("ConnectCanvasHeader", () => {
+  // Verifies: Renders the connect canvas heading and description.
   it("renders the connect canvas heading and description", () => {
     renderWithRouter(<ConnectCanvasHeader />);
 

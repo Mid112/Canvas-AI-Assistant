@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ReviewPermissionsAllowedActions } from "@/pages/Auth/ReviewPermissions/ReviewPermissionsAllowedActions";
 
 describe("ReviewPermissionsAllowedActions", () => {
+  // Verifies: Renders the section heading.
   it("renders the section heading", () => {
     render(<ReviewPermissionsAllowedActions />);
 
@@ -12,6 +13,7 @@ describe("ReviewPermissionsAllowedActions", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders all allowed action items.
   it("renders all allowed action items", () => {
     render(<ReviewPermissionsAllowedActions />);
 

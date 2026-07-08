@@ -27,6 +27,7 @@ const courses: InstructorCourse[] = [
 ];
 
 describe("InstructorDashboardActiveCourses", () => {
+  // Verifies: Renders active courses with assignment links.
   it("renders active courses with assignment links", () => {
     renderWithRouter(<InstructorDashboardActiveCourses courses={courses} />);
 

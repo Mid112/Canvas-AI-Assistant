@@ -11,6 +11,7 @@ from app.models.user import User
 from app.services.canvas import send_course_message
 
 
+# Verifies: Send course message uses conversation for recipients.
 def test_send_course_message_uses_conversation_for_recipients():
     course = Course(
         id=1,
@@ -48,6 +49,7 @@ def test_send_course_message_uses_conversation_for_recipients():
     assert result.recipient_canvas_user_ids == [101, 102]
 
 
+# Verifies: Send course message uses announcement without recipients.
 def test_send_course_message_uses_announcement_without_recipients():
     course = Course(
         id=1,
@@ -82,6 +84,7 @@ def test_send_course_message_uses_announcement_without_recipients():
     assert result.audience_size == 3
 
 
+# Verifies: Canvas error includes response detail.
 def test_canvas_error_includes_response_detail():
     response = httpx.Response(
         400,
@@ -97,6 +100,7 @@ def test_canvas_error_includes_response_detail():
     assert "{'message':" not in exc_info.value.detail
 
 
+# Verifies: Send conversation posts repeated recipient fields.
 def test_send_conversation_posts_repeated_recipient_fields():
     response = httpx.Response(200, json={"id": 123})
 

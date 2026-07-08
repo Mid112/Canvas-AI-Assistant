@@ -7,6 +7,7 @@ import { paths } from "@/routes/paths";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 describe("InstructorDashboardNotifications", () => {
+  // Verifies: Renders notifications with badge count and view-all link.
   it("renders notifications with badge count and view-all link", () => {
     renderWithRouter(
       <InstructorDashboardNotifications

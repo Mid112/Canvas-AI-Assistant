@@ -4,10 +4,12 @@ import { filterAuditLogs, mockAuditLogs } from "@/data/mockAuditLogs";
 import { emptyAuditLogFilters } from "@/types/auditLog";
 
 describe("filterAuditLogs", () => {
+  // Verifies: Returns all logs when filters are empty.
   it("returns all logs when filters are empty", () => {
     expect(filterAuditLogs(mockAuditLogs, emptyAuditLogFilters)).toHaveLength(5);
   });
 
+  // Verifies: Filters by user email or role.
   it("filters by user email or role", () => {
     const filtered = filterAuditLogs(mockAuditLogs, {
       ...emptyAuditLogFilters,
@@ -18,6 +20,7 @@ describe("filterAuditLogs", () => {
     expect(filtered.every((log) => log.userRole === "instructor")).toBe(true);
   });
 
+  // Verifies: Filters by action name.
   it("filters by action name", () => {
     const filtered = filterAuditLogs(mockAuditLogs, {
       ...emptyAuditLogFilters,
@@ -28,6 +31,7 @@ describe("filterAuditLogs", () => {
     expect(filtered[0]?.action).toBe("Delete Assignment");
   });
 
+  // Verifies: Filters by date.
   it("filters by date", () => {
     const filtered = filterAuditLogs(mockAuditLogs, {
       ...emptyAuditLogFilters,
@@ -37,6 +41,7 @@ describe("filterAuditLogs", () => {
     expect(filtered).toHaveLength(5);
   });
 
+  // Verifies: Filters by free-text search across columns.
   it("filters by free-text search across columns", () => {
     const filtered = filterAuditLogs(mockAuditLogs, {
       ...emptyAuditLogFilters,

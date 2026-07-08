@@ -5,6 +5,7 @@ import { CanvasApiError } from "@/services/canvas";
 import { SubmissionApiError } from "@/services/submissions";
 
 describe("isCanvasConnectionRequiredError", () => {
+  // Verifies: Returns true for missing Canvas token responses.
   it("returns true for missing Canvas token responses", () => {
     expect(
       isCanvasConnectionRequiredError(
@@ -16,6 +17,7 @@ describe("isCanvasConnectionRequiredError", () => {
     ).toBe(true);
   });
 
+  // Verifies: Returns true for corrupted Canvas token responses.
   it("returns true for corrupted Canvas token responses", () => {
     expect(
       isCanvasConnectionRequiredError(
@@ -24,6 +26,7 @@ describe("isCanvasConnectionRequiredError", () => {
     ).toBe(true);
   });
 
+  // Verifies: Returns true for invalid Canvas token responses.
   it("returns true for invalid Canvas token responses", () => {
     expect(
       isCanvasConnectionRequiredError(
@@ -37,6 +40,7 @@ describe("isCanvasConnectionRequiredError", () => {
     ).toBe(true);
   });
 
+  // Verifies: Returns false for other API errors.
   it("returns false for other API errors", () => {
     expect(
       isCanvasConnectionRequiredError(new CanvasApiError("Canvas unavailable", 503)),
