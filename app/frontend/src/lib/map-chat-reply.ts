@@ -1,3 +1,4 @@
+import { formatDueDateForDisplay } from "@/lib/assignment-utils";
 import {
   instructorChatPreviewPath,
   instructorCourseAnalyticsPath,
@@ -232,9 +233,32 @@ export function mapChatReplyToAssistantResponse(
   }
 
   if (Array.isArray(reply.assignments)) {
-    return {
-      content: `This course has ${reply.assignments.length} assignments.`,
-    };
+    if (reply.assignments.length === 0) {
+      return { content: "This course has no assignments yet." };
+    }
+
+    const list = reply.assignments
+      .map((assignment) => {
+        if (!assignment || typeof assignment !== "object") {
+          return "- Assignment";
+        }
+
+        const record = assignment as Record<string, unknown>;
+        const name = readString(record.name) ?? "Untitled assignment";
+        const dueDate = formatDueDateForDisplay(
+          readString(record.due_at as string | undefined) ?? null,
+        );
+        const points =
+          typeof record.points_possible === "number"
+            ? `${record.points_possible} pts`
+            : undefined;
+
+        const details = [dueDate, points].filter(Boolean).join(" · ");
+        return `- ${name} (${details})`;
+      })
+      .join("\n");
+
+    return { content: list };
   }
 
   if (reply.active_course) {

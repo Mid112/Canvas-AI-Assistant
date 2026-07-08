@@ -127,6 +127,45 @@ describe("mapChatReply", () => {
     });
   });
 
+  it("maps fetch_assignments results as a bulleted list, not just a count", () => {
+    const dueDate = new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date("2030-08-16T05:59:00.000Z"));
+
+    expect(
+      mapChatReply(
+        {
+          assignments: [
+            {
+              id: 1,
+              name: "Homework 1",
+              due_at: "2030-08-16T05:59:00.000Z",
+              points_possible: 20,
+              course_id: 1,
+            },
+            {
+              id: 2,
+              name: "Homework 2",
+              due_at: null,
+              points_possible: null,
+              course_id: 1,
+            },
+          ],
+        },
+        false,
+      ),
+    ).toEqual({
+      content: `- Homework 1 (${dueDate} · 20 pts)\n- Homework 2 (No due date)`,
+    });
+  });
+
+  it("maps an empty fetch_assignments result", () => {
+    expect(mapChatReply({ assignments: [] }, false)).toEqual({
+      content: "This course has no assignments yet.",
+    });
+  });
+
   it("maps successful confirm results", () => {
     expect(
       mapChatReply(
