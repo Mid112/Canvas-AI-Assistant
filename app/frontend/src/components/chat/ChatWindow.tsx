@@ -10,16 +10,29 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { seedChatMessages } from "@/data/assistantSeedData";
+import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
 import {
   AssistantApiError,
   cancelAssistantAction,
   confirmAssistantAction,
+  fetchConversation,
   sendAssistantMessage,
 } from "@/services/assistant";
 import type { ChatMessage } from "@/types/chat";
 
 function createMessageId(): string {
   return crypto.randomUUID();
+}
+
+function parseStoredAssistantReply(content: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    return parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 interface ChatWindowProps {
@@ -62,6 +75,7 @@ export function ChatWindow({
   );
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const initialPromptHandledRef = useRef<string | null>(null);
+  const hydratedConversationRef = useRef<number | undefined>(undefined);
   const isDeliveringRef = useRef(false);
 
   const assistantContext = useMemo(
@@ -79,6 +93,132 @@ export function ChatWindow({
   useEffect(() => {
     onLoadingChange?.(isLoading);
   }, [isLoading, onLoadingChange]);
+
+  useEffect(() => {
+    if (
+      !accessToken ||
+      initialConversationId === undefined ||
+      hydratedConversationRef.current === initialConversationId
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function hydrateConversation() {
+      try {
+        const conversation = await fetchConversation(
+          accessToken!,
+          initialConversationId!,
+        );
+        if (cancelled) {
+          return;
+        }
+
+        const pendingStatuses = new Map<number, ChatMessage["pendingActionStatus"]>();
+        let latestPendingMessageId: number | undefined;
+
+        for (const storedMessage of conversation.messages) {
+          const parsed =
+            storedMessage.role === "assistant"
+              ? parseStoredAssistantReply(storedMessage.content)
+              : null;
+
+          if (parsed?.intent_preview) {
+            pendingStatuses.set(storedMessage.id, "pending");
+            latestPendingMessageId = storedMessage.id;
+          }
+
+          if (storedMessage.role === "user" && latestPendingMessageId !== undefined) {
+            if (storedMessage.content === "[cancelled action]") {
+              pendingStatuses.set(latestPendingMessageId, "cancelled");
+              latestPendingMessageId = undefined;
+            } else if (storedMessage.content === "[confirmed action]") {
+              pendingStatuses.set(latestPendingMessageId, "confirmed");
+              latestPendingMessageId = undefined;
+            }
+          }
+        }
+
+        const restoredMessages = conversation.messages.flatMap<ChatMessage>((storedMessage) => {
+          const timestamp = new Date(storedMessage.created_at);
+
+          if (storedMessage.role === "user") {
+            if (storedMessage.content.startsWith("[")) {
+              return [];
+            }
+
+            return [{
+              id: String(storedMessage.id),
+              role: "user",
+              content: storedMessage.content,
+              timestamp,
+              conversationId: conversation.id,
+            }];
+          }
+
+          const parsed = parseStoredAssistantReply(storedMessage.content);
+          if (!parsed) {
+            return [{
+              id: String(storedMessage.id),
+              role: "assistant",
+              content: storedMessage.content,
+              timestamp,
+              conversationId: conversation.id,
+            }];
+          }
+
+          const reply = parsed.intent_preview && parsed.pending_message_id === undefined
+            ? { ...parsed, pending_message_id: storedMessage.id }
+            : parsed;
+          const mapped = mapChatReplyToAssistantResponse(reply, false, conversation.id);
+
+          return [{
+            id: String(storedMessage.id),
+            role: "assistant",
+            content: mapped.content,
+            timestamp,
+            conversationId: conversation.id,
+            pendingMessageId: mapped.pendingMessageId,
+            pendingActionStatus: mapped.pendingMessageId
+              ? pendingStatuses.get(mapped.pendingMessageId) ?? "pending"
+              : undefined,
+            explanation: mapped.explanation,
+            interpretedAction: mapped.interpretedAction,
+            safetyBlocked: mapped.safetyBlocked,
+            safetyMessage: mapped.safetyMessage,
+          }];
+        });
+
+        let nextActivePendingMessageId: number | undefined;
+        for (const [messageId, status] of pendingStatuses) {
+          if (status === "pending") {
+            nextActivePendingMessageId = messageId;
+          }
+        }
+
+        setMessages(restoredMessages.length > 0 ? restoredMessages : seedChatMessages);
+        setConversationId(conversation.id);
+        setActivePendingMessageId(nextActivePendingMessageId);
+        hydratedConversationRef.current = initialConversationId;
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        // Keep the seeded assistant greeting if restoring history fails; the
+        // next send still continues in the existing conversation id.
+        setConversationId(initialConversationId);
+        setActivePendingMessageId(initialPendingMessageId);
+      }
+    }
+
+    void hydrateConversation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, initialConversationId, initialPendingMessageId]);
 
   const appendAssistantMessage = useCallback(
     (response: {
@@ -262,10 +402,18 @@ export function ChatWindow({
       return;
     }
 
+    // Deliberately not reset back to null after sending: onInitialPromptConsumed
+    // clears the prompt in the parent asynchronously, so this same effect can
+    // still re-run with the identical initialPrompt before that update lands
+    // (guaranteed to happen under React 18 StrictMode's dev-only mount ->
+    // cleanup -> remount cycle). Resetting the guard here made it forget it
+    // had already sent this exact prompt, so the remount sent it a second
+    // time. The guard only needs to remember "have I handled this string
+    // yet" — the next real render, once pendingPrompt is actually cleared,
+    // falls through via the `!initialPrompt` check above instead.
     initialPromptHandledRef.current = initialPrompt;
     handleSend(initialPrompt);
     onInitialPromptConsumed?.();
-    initialPromptHandledRef.current = null;
   }, [handleSend, initialPrompt, onInitialPromptConsumed]);
 
   const handleRetry = () => {

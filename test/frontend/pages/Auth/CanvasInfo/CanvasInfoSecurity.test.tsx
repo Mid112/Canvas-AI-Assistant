@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { CanvasInfoSecurity } from "@/pages/Auth/CanvasInfo/CanvasInfoSecurity";
 
 describe("CanvasInfoSecurity", () => {
+  // Verifies: Renders the section heading.
   it("renders the section heading", () => {
     render(<CanvasInfoSecurity />);
 
@@ -12,6 +13,7 @@ describe("CanvasInfoSecurity", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders all security features with descriptions.
   it("renders all security features with descriptions", () => {
     render(<CanvasInfoSecurity />);
 

@@ -52,6 +52,7 @@ function toAssistantMessageResult(
   const mapped = mapChatReplyToAssistantResponse(
     response.reply,
     response.is_error,
+    response.conversation_id,
   );
 
   return {

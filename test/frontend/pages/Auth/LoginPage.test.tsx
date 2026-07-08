@@ -43,6 +43,7 @@ describe("LoginPage", () => {
     mockLogin.mockReset();
   });
 
+  // Verifies: Renders all login sections.
   it("renders all login sections", () => {
     renderWithRouter(<LoginPage />);
 
@@ -60,6 +61,7 @@ describe("LoginPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Navigates to canvas info after successful sign in.
   it("navigates to canvas info after successful sign in", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
@@ -89,6 +91,7 @@ describe("LoginPage", () => {
     expect(mockNavigate).toHaveBeenCalledWith(paths.canvasInfo);
   });
 
+  // Verifies: Navigates to the admin dashboard after successful admin sign in.
   it("navigates to the admin dashboard after successful admin sign in", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
@@ -114,6 +117,7 @@ describe("LoginPage", () => {
     expect(mockNavigate).toHaveBeenCalledWith(paths.admin.dashboard);
   });
 
+  // Verifies: Shows an error when sign in fails with invalid credentials.
   it("shows an error when sign in fails with invalid credentials", async () => {
     const user = userEvent.setup();
     mockLogin.mockRejectedValue(
@@ -135,6 +139,7 @@ describe("LoginPage", () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
+  // Verifies: Shows an error when the account is disabled.
   it("shows an error when the account is disabled", async () => {
     const user = userEvent.setup();
     mockLogin.mockRejectedValue(

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { CanvasInfoWhySection } from "@/pages/Auth/CanvasInfo/CanvasInfoWhySection";
 
 describe("CanvasInfoWhySection", () => {
+  // Verifies: Renders the section heading.
   it("renders the section heading", () => {
     render(<CanvasInfoWhySection />);
 
@@ -12,6 +13,7 @@ describe("CanvasInfoWhySection", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders the introductory text.
   it("renders the introductory text", () => {
     render(<CanvasInfoWhySection />);
 
@@ -20,6 +22,7 @@ describe("CanvasInfoWhySection", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders all benefit items.
   it("renders all benefit items", () => {
     render(<CanvasInfoWhySection />);
 

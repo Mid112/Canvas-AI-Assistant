@@ -5,9 +5,7 @@ from sqlalchemy import delete, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.config import settings
 from app.core.security import (
-    create_access_token,
     encrypt_canvas_token,
     generate_reset_token,
     hash_password,
@@ -67,12 +65,20 @@ async def login_user(db: AsyncSession, email: str, password: str) -> TokenRespon
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
 
     token, _ = await issue_token_for_user(db, user)
+
+    # Admins and instructors share this one login path; audit-log admin sign-ins
+    # specifically since that account type is the higher-value target. This is
+    # the same record admin_login_user (the separate, rate-limited /admin/login
+    # endpoint) writes — the audit trail no longer depends on which endpoint an
+    # admin happens to sign in through.
+    if user.role == "admin":
+        db.add(AuditLogSession(user_id=user.id, action="admin_login", details={"email": user.email}))
+        await db.commit()
+
     return TokenResponse(access_token=token)
 
 
-async def admin_login_user(
-    db: AsyncSession, email: str, password: str
-) -> TokenResponse:
+async def admin_login_user(db: AsyncSession, email: str, password: str) -> TokenResponse:
     user = await db.scalar(select(User).where(User.email == email))
 
     if not user or not verify_password(password, user.hashed_password):
@@ -93,13 +99,9 @@ async def admin_login_user(
             detail="Account is disabled",
         )
 
-    token = create_access_token(user.id, role="admin")
-
-    expires_at = datetime.now(UTC) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    db.add(Session(user_id=user.id, token_hash=hash_token(token), expires_at=expires_at))
+    token, _ = await issue_token_for_user(db, user)
     db.add(AuditLogSession(user_id=user.id, action="admin_login", details={"email": user.email}))
     await db.commit()
-
     return TokenResponse(access_token=token)
 
 
@@ -108,11 +110,7 @@ async def logout_user(db: AsyncSession, token: str) -> None:
 
 
 async def logout_admin(db: AsyncSession, token: str, user: User) -> None:
-    session = await db.scalar(
-        select(Session).where(Session.token_hash == hash_token(token))
-    )
-    if session:
-        await db.delete(session)
+    await revoke_session(db, token)
     db.add(AuditLogSession(user_id=user.id, action="admin_logout", details={"email": user.email}))
     await db.commit()
 
@@ -122,9 +120,13 @@ async def update_profile(db: AsyncSession, user: User, body: ProfileUpdateReques
         conflict = await db.scalar(select(User).where(User.email == body.email, User.id != user.id))
         if conflict:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already in use")
-        user.email = body.email
+        user.email = str(body.email)
+
     if body.name is not None:
-        user.name = body.name
+        name = body.name.strip()
+        if not name:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Name cannot be empty")
+        user.name = name
 
     db.add(
         AuditLogSession(
@@ -134,8 +136,13 @@ async def update_profile(db: AsyncSession, user: User, body: ProfileUpdateReques
         )
     )
     await db.commit()
-    await db.refresh(user)
-    return user
+
+    return await db.scalar(
+        select(User)
+        .where(User.id == user.id)
+        .options(selectinload(User.canvas_connections))
+        .execution_options(populate_existing=True)
+    )
 
 
 async def delete_account(db: AsyncSession, user: User, password: str) -> None:
@@ -143,7 +150,9 @@ async def delete_account(db: AsyncSession, user: User, password: str) -> None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password")
 
     db.add(AuditLogSession(user_id=user.id, action="account_deleted", details={"email": user.email}))
-    await db.delete(user)
+    user.is_active = False
+    await db.execute(delete(CanvasConnection).where(CanvasConnection.user_id == user.id))
+    await db.execute(delete(Session).where(Session.user_id == user.id))
     await db.commit()
 
 
@@ -234,9 +243,7 @@ async def list_user_sessions(db: AsyncSession, user: User, current_token: str) -
 
 
 async def revoke_user_session(db: AsyncSession, user: User, session_id: int) -> None:
-    session = await db.scalar(
-        select(Session).where(Session.id == session_id, Session.user_id == user.id)
-    )
+    session = await db.scalar(select(Session).where(Session.id == session_id, Session.user_id == user.id))
     if not session:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     await db.delete(session)

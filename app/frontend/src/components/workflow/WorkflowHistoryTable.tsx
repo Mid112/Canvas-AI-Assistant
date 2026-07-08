@@ -30,7 +30,7 @@ export function WorkflowHistoryTable({ entries }: WorkflowHistoryTableProps) {
       <TableHeader>
         <TableRow>
           <TableHead className="w-44">Date & Time</TableHead>
-          <TableHead>Workflow</TableHead>
+          <TableHead>Workflow Evidence</TableHead>
           <TableHead className="w-36">User</TableHead>
           <TableHead className="w-28 text-center">Status</TableHead>
         </TableRow>
@@ -48,11 +48,27 @@ export function WorkflowHistoryTable({ entries }: WorkflowHistoryTableProps) {
               </div>
             </TableCell>
             <TableCell>
-              <div className="space-y-0.5">
-                <p className="text-sm font-medium">{entry.workflowName}</p>
-                <p className="text-sm text-muted-foreground">
-                  {entry.description}
-                </p>
+              <div className="space-y-2">
+                <div>
+                  <p className="text-xs font-medium uppercase text-muted-foreground">
+                    Action
+                  </p>
+                  <p className="text-sm font-medium">{entry.workflowName}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium uppercase text-muted-foreground">
+                    Prompt
+                  </p>
+                  <p className="text-sm text-muted-foreground">{entry.prompt}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium uppercase text-muted-foreground">
+                    Affected Resources
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {entry.affectedResourcesSummary}
+                  </p>
+                </div>
               </div>
             </TableCell>
             <TableCell className="text-sm">{entry.userName}</TableCell>

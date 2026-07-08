@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 from app.services.llm.llm_setting import get_llm_adapter
 
 
+# Verifies: Vllm adapter returns text.
 @pytest.mark.asyncio
 async def test_vllm_adapter_returns_text():
     adapter = get_llm_adapter({"provider": "vllm"})
@@ -26,6 +27,7 @@ async def test_vllm_adapter_returns_text():
     assert result == "hello"
 
 
+# Verifies: Ollama adapter returns text.
 @pytest.mark.asyncio
 async def test_ollama_adapter_returns_text():
     adapter = get_llm_adapter({"provider": "ollama"})

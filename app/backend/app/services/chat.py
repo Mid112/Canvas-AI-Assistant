@@ -1,6 +1,7 @@
 # app/backend/app/services/chat.py
 import asyncio
 import json
+import re
 from datetime import UTC, date, datetime
 
 import httpx
@@ -12,26 +13,52 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_action
-from app.mcp_tools.schemas import ACTION_SCHEMAS
+from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS, IntentPreviewAction
 from app.models.audit_log import AuditLog
 from app.models.conversation import Conversation
 from app.models.course import Course
 from app.models.message import Message
 from app.models.user import User
+from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
 from app.services.llm.llm_setting import get_llm_adapter
 
 LLM_TIMEOUT_SECONDS = 90.0
 HISTORY_WINDOW = 10
+# Failure paths (parse errors, timeouts, HTTP errors) log the full raw
+# diagnostic — for a "thinking" model that can mean the entire verbose
+# <think> block, hundreds to thousands of tokens — as the assistant message
+# content for that turn. _get_recent_messages then feeds that same content
+# back to the LLM as conversation history on the *next* turn, which both
+# wastes context on text the LLM never meant as an answer and can cascade
+# into the next request itself being rejected as too large (observed live:
+# a JSON-parse-failure turn's full raw output got included as history and
+# the following request failed with a 413 from Groq). Cap any single
+# history message's contribution regardless of why it got large.
+HISTORY_MESSAGE_MAX_CHARS = 2000
 
-# Actions that get a Workflow row (the replay-safe confirm state machine).
+# A normal chat turn may only ever produce one of these — every real
+# Canvas action (read or write) must be proposed via intent_preview first,
+# never executed directly. Nothing in execute_tool's dispatch enforces
+# this on its own (fetch_courses, fetch_assignments, get_active_course,
+# create_assignment, etc. are all independently reachable top-level
+# cases), and the model does not reliably follow the system prompt's
+# instruction to always preview first — observed skipping straight to a
+# raw get_active_course/fetch_assignments call with no preview shown at
+# all. handle_confirmed_action's PATH B is exempt: executing the
+# previously-proposed action directly is the entire point of confirm. A
+# raw action outside this set gets auto-wrapped into a real intent_preview
+# instead of rejected outright — see handle_chat_message.
+NORMAL_TURN_ALLOWED_ACTIONS = {"intent_preview", "clarify", "out_of_scope", "respond"}
+
+# WRITE_ACTIONS (imported from app.mcp_tools.schemas) is also the set of
+# actions that get a Workflow row (the replay-safe confirm state machine).
 # Read actions are structurally free to be wrapped in an intent_preview too
 # (see dispatcher.py's intent_preview case), but replaying a read is
 # harmless, so they're deliberately excluded — scoping this to writes only
 # also avoids a real collision: a modify-turn's Workflow lookup keys off
 # preview_message_id, and a stray read-preview sharing that id with an
 # unrelated pending write could otherwise corrupt it.
-WRITE_ACTIONS = {"create_assignment", "update_assignment", "send_message"}
 
 # action_name -> (resource_type, operation) for AuditLog rows.
 # send_message's entry here is only a default: the action can produce
@@ -43,6 +70,10 @@ _AUDIT_RESOURCE_MAP = {
     "update_assignment": ("assignment", "update"),
     "send_message": ("announcement", "create"),
 }
+
+
+def _normalize_course_text(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", value.lower())
 
 
 def _json_dumps(obj) -> str:
@@ -69,12 +100,175 @@ async def get_or_create_conversation(
             )
         )
         if conversation:
-            return conversation
+            if conversation.course_id is None and local_course_id is not None:
+                conversation.course_id = local_course_id
+                return conversation
+            if (
+                local_course_id is not None
+                and conversation.course_id is not None
+                and conversation.course_id != local_course_id
+            ):
+                conversation_id = None
+            else:
+                return conversation
 
     conversation = Conversation(user_id=user.id, course_id=local_course_id)
     db.add(conversation)
     await db.flush()
     return conversation
+
+
+async def _resolve_chat_course_context(
+    db: AsyncSession,
+    user: User,
+    message: str,
+    requested_local_course_id: int | None,
+    conversation_id: int | None = None,
+) -> Course | None:
+    """Find the course context in deterministic app code before the LLM runs.
+
+    Local models cannot know our database IDs. Priority order: an explicit
+    local ID from the client, then a course name mentioned in this message,
+    then the course this conversation is already anchored to (so a
+    follow-up reply to a clarify question — e.g. "all assignments" — stays
+    on the course named earlier in the same thread instead of silently
+    snapping back to the user's global active-course preference), then
+    finally that global active-course preference for a brand new thread.
+    """
+    if requested_local_course_id is not None:
+        return await db.scalar(
+            select(Course).where(
+                Course.id == requested_local_course_id,
+                Course.instructor_id == user.id,
+            )
+        )
+
+    courses = list(
+        await db.scalars(select(Course).where(Course.instructor_id == user.id))
+    )
+    normalized_message = _normalize_course_text(message)
+    # Course names are synced locally, so resolve phrases like "COSC 499"
+    # before asking the model to choose a database-local course ID. Prefer
+    # the longest matching name when more than one matches (e.g. two
+    # courses that happen to share "COSC499" as a substring of their
+    # normalized name) so the more specific course wins deterministically
+    # instead of whichever the DB happened to return first.
+    matches = [
+        course
+        for course in courses
+        if (name := _normalize_course_text(course.name)) and name in normalized_message
+    ]
+    if matches:
+        return max(matches, key=lambda c: len(_normalize_course_text(c.name)))
+
+    if conversation_id is not None:
+        existing_course_id = await db.scalar(
+            select(Conversation.course_id).where(
+                Conversation.id == conversation_id,
+                Conversation.user_id == user.id,
+            )
+        )
+        if existing_course_id is not None:
+            existing = next(
+                (course for course in courses if course.id == existing_course_id),
+                None,
+            )
+            if existing is not None:
+                return existing
+
+    active_course_id = await db.scalar(
+        select(UserPreference.active_course_id).where(UserPreference.user_id == user.id)
+    )
+    if active_course_id is None:
+        return None
+
+    return next(
+        (course for course in courses if course.id == active_course_id),
+        None,
+    )
+
+
+async def _load_stored_intent_preview(
+    db: AsyncSession, conversation_id: int, message_id: int
+) -> dict | None:
+    """Loads and parses a stored message's content, returning it only if
+    it's a well-formed intent_preview (has a dict proposed_action) —
+    None for anything else (missing row, unparseable JSON, or any other
+    shape), so callers don't need to repeat that validation."""
+    content = await db.scalar(
+        select(Message.content).where(
+            Message.id == message_id,
+            Message.conversation_id == conversation_id,
+        )
+    )
+    if not content:
+        return None
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError:
+        return None
+    if (
+        isinstance(parsed, dict)
+        and parsed.get("intent_preview")
+        and isinstance(parsed.get("proposed_action"), dict)
+    ):
+        return parsed
+    return None
+
+
+def _build_llm_message(
+    message: str,
+    course: Course | None,
+    current_proposed_action: dict | None,
+) -> str:
+    """Wraps the user's raw message with whatever structured context the
+    model needs, rather than leaving it to re-derive that context from
+    free text or conversation history — both have proven unreliable in
+    practice: a course name in the message can disagree with the actual
+    active course, and a modify turn that only restates the part being
+    changed (e.g. just the date) can lose already-answered fields
+    (description, points_possible) that the model fails to carry forward
+    from scrollback on its own."""
+    parts = []
+
+    if course is not None:
+        parts.append(
+            "Course context for this request:\n"
+            f"- local_course_id: {course.id}\n"
+            f"- course_name: {course.name}\n"
+            f"- canvas_course_id: {course.canvas_course_id}\n"
+            "Use this local_course_id for course-specific actions; do not "
+            "ask the user for internal IDs."
+        )
+
+    if current_proposed_action is not None:
+        parts.append(
+            "Current proposed plan (before this edit):\n"
+            f"{json.dumps(current_proposed_action)}\n"
+            "The user below is revising this plan, not starting a new "
+            "request. Apply their requested change to it and keep every "
+            "other field exactly as it is — do not drop description, "
+            "points_possible, or any other already-answered field just "
+            "because this message doesn't repeat it."
+        )
+
+    parts.append(f"User request: {message}")
+    return "\n\n".join(parts)
+
+
+def _plain_text_response(raw_output: str) -> dict | None:
+    """Treat plain local-model text as a normal assistant reply.
+
+    If braces are present, assume the model attempted structured JSON and keep
+    the stricter parser/error path so malformed internals are not echoed back.
+    """
+    stripped = raw_output.strip()
+    # A local model may answer in ordinary prose. If it looks like attempted
+    # JSON, keep the strict parser so malformed structured output is logged
+    # safely instead of echoed back to the user.
+    if stripped and "{" not in stripped and "}" not in stripped:
+        return {"action": "respond", "message": stripped}
+    return None
 
 
 async def log_message(
@@ -235,7 +429,48 @@ async def _get_recent_messages(
     # will append separately, and including it here causes duplication
     if messages:
         messages = messages[:-1]
-    return [{"role": m.role, "content": m.content} for m in messages]
+    return [
+        {
+            "role": m.role,
+            "content": _truncate_history_content(
+                _summarize_assistant_history_content(m.role, m.content)
+            ),
+        }
+        for m in messages
+    ]
+
+
+def _summarize_assistant_history_content(role: str, content: str) -> str:
+    """Assistant turns are stored as the full JSON result (needed for the
+    API response, Workflow linkage, and UI rendering), but replaying that
+    same raw JSON back to the LLM as "history" clutters its context with
+    field names and structure it has previously echoed into its own
+    output (e.g. inventing a field value seen in an unrelated prior
+    turn's JSON rather than the current user message). Reduce terminal,
+    already-resolved turns (clarify questions, plain replies, cancellations)
+    to just their natural-language text.
+
+    intent_preview turns are deliberately left as full JSON: a follow-up
+    "modify" turn needs the complete previous proposed_action to correctly
+    carry forward fields the user didn't ask to change. Read-action results
+    (e.g. fetch_assignments) are also left as full JSON since a later turn
+    may need to resolve a name to an ID from that data — those have none of
+    the keys below and pass through unchanged."""
+    if role != "assistant":
+        return content
+    try:
+        data = json.loads(content)
+    except (json.JSONDecodeError, TypeError):
+        return content
+    if not isinstance(data, dict) or data.get("intent_preview"):
+        return content
+    return data.get("message") or data.get("question") or data.get("error") or content
+
+
+def _truncate_history_content(content: str) -> str:
+    if len(content) <= HISTORY_MESSAGE_MAX_CHARS:
+        return content
+    return content[:HISTORY_MESSAGE_MAX_CHARS] + " …[truncated]"
 
 
 def build_system_prompt() -> str:
@@ -244,11 +479,19 @@ def build_system_prompt() -> str:
         for name, schema in ACTION_SCHEMAS.items()
         if name not in {"out_of_scope", "clarify", "intent_preview", "respond"}
     )
+    today = datetime.now(UTC).date()
+    today_line = (
+        f"Today's date is {today.isoformat()} ({today.strftime('%A')}). Resolve any\n"
+        'relative or partial date the user gives (e.g. "July 11", "next Friday",\n'
+        '"in two weeks") against this date — never against a year from your\n'
+        "training data. A resolved date must always fall on or after today.\n"
+    )
 
     return """You are a Canvas LMS assistant for instructors. You help
 with course management, assignments, student submissions, and
 communicating with students.
 
+""" + today_line + """
 SCOPE CHECK — do this first, before anything else:
 Decide whether the request is about Canvas course management or student
 communication. If the request is not about Canvas (e.g. creative
@@ -257,10 +500,28 @@ unrelated to teaching), respond ONLY with:
 {"action": "out_of_scope", "message": "<brief description of the request>"}
 
 AMBIGUITY CHECK — if the request is in scope but missing information:
-If you cannot confidently identify which course, assignment, or
-students the user means, respond ONLY with:
+Only ask about a field that is REQUIRED by that action's schema (see
+AVAILABLE ACTIONS) and that the user did not give you, directly or
+earlier in CONVERSATION HISTORY. Do not ask about optional fields, and
+do not ask about anything that isn't literally one of that action's
+fields — e.g. fetch_submissions only needs local_course_id and
+assignment_id, so never ask what format, detail level, or extra info
+the user wants to see. If every required field is known, propose the
+action immediately; do not ask a question just to double-check. Never
+invent, guess, or write a placeholder value for a required field you
+don't have. To ask, respond ONLY with:
 {"action": "clarify", "question": "<one specific question>", "partial_plan": <dict>}
-Only ask ONE question per turn. Do not ask for information you can infer.
+Put every field you already do have into partial_plan so the next turn
+doesn't lose it once the user answers. Only ask ONE question per turn.
+
+REQUIRED FIELDS — before proposing any write action (create_assignment,
+update_assignment, send_message), check every field listed as "required"
+in that action's schema below. This includes the action/task type itself
+(e.g. don't guess whether the user wants create_assignment vs
+update_assignment), and fields like title, description, and due_date.
+If any required field is missing or was not stated by the user, use the
+AMBIGUITY CHECK format to ask for it. Never invent a placeholder value
+and never silently omit a required field from proposed_action.
 
 INTENT PREVIEW — if the request is clear enough to act on:
 Before executing any action, always show the user what you are about to do:
@@ -273,29 +534,72 @@ a follow-up to a clarification question or a refinement of a previous
 plan, incorporate the user's feedback into the updated partial_plan
 before responding.
 
+COURSE CONTEXT MISMATCH:
+If the user's message names a course that does not match the injected
+course_name, always use the injected local_course_id anyway — never ask
+which course to use, and never treat this as an AMBIGUITY CHECK case.
+Add one short sentence noting the mismatch in your summary or response
+text instead.
+
 META QUESTIONS — if the user asks what you can do, asks for help,
 or needs a natural language reply that isn't a Canvas tool call, respond with:
 {"action": "respond", "message": "<your natural language answer here>"}
 Use this for greetings, capability questions, and clarifying what is in scope.
 
-UPDATING AN ASSIGNMENT:
-Do not propose update_assignment unless you already know the assignment's
-Canvas ID from this conversation (e.g. from a previous fetch_assignments or
-fetch_submissions result). If you don't have it yet, propose fetch_assignments
-first instead of guessing an ID. assignment_id must come from that data's
-"id" field, not "local_id". Only include the fields the user actually wants
-changed — leave every other field out of proposed_action entirely, since
-anything omitted is preserved automatically.
+CREATING AN ASSIGNMENT:
+title must be the user's own wording for the assignment name, copied
+verbatim — never substitute a different assignment name from earlier in
+this conversation (e.g. from a previous fetch_assignments result) even if
+it seems related. due_date is required and must be a full ISO 8601
+string, e.g. "2026-07-11T23:59:00" — resolve it using today's date above.
+If the user gives a date but no time, default the time to 23:59:00. If
+the user does not give a due date at all, do not guess or leave due_date
+null — use the AMBIGUITY CHECK above and ask for it instead. Likewise, if
+the user does not mention points, ask rather than defaulting silently —
+only omit points_possible if the user explicitly says it's ungraded or
+has no point value. Never invent a value for a field the user didn't
+give you.
+
+RESOLVING AN ASSIGNMENT BY NAME:
+fetch_submissions and update_assignment both require assignment_id — the
+assignment's Canvas ID, not its title. Never invent, guess, or write a
+placeholder value (e.g. a description like "<the ID for Assignment 1>")
+into assignment_id, and never ask the user for it either — the user does
+not know or need to know internal Canvas IDs, the same as local_course_id.
+This is the one exception to the AMBIGUITY CHECK's "ask, don't guess"
+rule: if the user refers to an assignment by name and you do not already
+have its Canvas ID from this conversation (e.g. from a previous
+fetch_assignments or fetch_submissions result), your response must be
+intent_preview proposing fetch_assignments — that is always a complete,
+valid action on its own, and is the ONLY correct way to resolve a name to
+an ID. Do not respond with clarify to ask the user for an ID; clarify is
+only for missing information the user themselves would know (e.g. which
+course, or which student). Once you do have the assignment data, its
+Canvas ID is the "id" field, not "local_id". For update_assignment
+specifically, only include the fields the user actually wants changed —
+leave every other field out of proposed_action entirely, since anything
+omitted is preserved automatically.
 
 MESSAGING STUDENTS:
 send_message can either post a public class announcement (when
 recipient_canvas_user_ids is omitted) or send a private Canvas conversation
-to specific students (when recipient_canvas_user_ids is provided). Use
-fetch_students or fetch_submissions first when you need to identify the
-correct Canvas user IDs. Always require local_course_id. Get clear subject
-and body content from the user before proposing the action rather than
-inventing wording yourself. The user can ask you to revise the draft before
-confirming — treat that like any other follow-up refinement.
+to specific students (when recipient_canvas_user_ids is provided) — these
+have very different audiences, so never guess which one the user means.
+If the user refers to specific students (e.g. "them", "the late students",
+a named student) — including a reference to a group from earlier in this
+conversation, such as a previous fetch_students/fetch_submissions result —
+you must resolve and include their exact Canvas user IDs in
+recipient_canvas_user_ids. If you do not already have those IDs from this
+conversation, propose fetch_students or fetch_submissions first instead of
+guessing; never fall back to omitting recipient_canvas_user_ids (which
+posts a public announcement to the entire class) just because you don't
+have the IDs yet — that silently sends the message to a far larger
+audience than the user asked for. Always require local_course_id. subject
+and body are both required and must be the user's actual words — if the
+user hasn't told you what the message should say, use the AMBIGUITY CHECK
+above and ask for it; do not invent wording or write a placeholder. The
+user can ask you to revise the draft before confirming — treat that like
+any other follow-up refinement.
 
 AVAILABLE ACTIONS (only used inside proposed_action):
 """ + tool_list
@@ -321,12 +625,34 @@ async def handle_chat_message(
       being appended. This keeps conversation history clean so the LLM
       sees only the latest agreed plan on subsequent turns."""
 
-    conversation = await get_or_create_conversation(
-        db, user, conversation_id, local_course_id
+    course_context = await _resolve_chat_course_context(
+        db, user, message, local_course_id, conversation_id
     )
+    resolved_local_course_id = course_context.id if course_context else local_course_id
+    conversation = await get_or_create_conversation(
+        db, user, conversation_id, resolved_local_course_id
+    )
+    if course_context is None and conversation.course_id is not None:
+        course_context = await db.scalar(
+            select(Course).where(
+                Course.id == conversation.course_id,
+                Course.instructor_id == user.id,
+            )
+        )
+    if conversation.course_id is None and course_context is not None:
+        conversation.course_id = course_context.id
     user_msg = await log_message(db, conversation, role="user", content=message)
 
     history = await _get_recent_messages(db, conversation.id)
+
+    stored_preview = None
+    current_proposed_action = None
+    if pending_message_id is not None:
+        stored_preview = await _load_stored_intent_preview(
+            db, conversation.id, pending_message_id
+        )
+        if stored_preview:
+            current_proposed_action = stored_preview.get("proposed_action")
 
     system_prompt = build_system_prompt()
     adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
@@ -334,7 +660,9 @@ async def handle_chat_message(
     try:
         raw_output = await asyncio.wait_for(
             adapter.generate(
-                system_prompt, message, history=history,
+                system_prompt,
+                _build_llm_message(message, course_context, current_proposed_action),
+                history=history,
                 timeout=LLM_TIMEOUT_SECONDS,
             ),
             timeout=LLM_TIMEOUT_SECONDS,
@@ -369,8 +697,27 @@ async def handle_chat_message(
         )
 
     try:
-        action = parse_action(raw_output)
-        result = await execute_tool(db, user, action)
+        text_reply = _plain_text_response(raw_output)
+        if text_reply is not None:
+            result = text_reply
+        else:
+            action = parse_action(raw_output)
+            if action.action not in NORMAL_TURN_ALLOWED_ACTIONS:
+                # The model named a Canvas action directly (read or write)
+                # instead of wrapping it in intent_preview like the system
+                # prompt asks. Not every model follows that instruction
+                # reliably (smaller local models especially, and even
+                # capable ones on read actions — observed live skipping
+                # straight to a raw get_active_course/fetch_assignments
+                # call with no preview shown at all). Auto-wrapping into a
+                # real intent_preview here, rather than rejecting outright,
+                # gives the user the same confirmation step they should
+                # have gotten without losing the turn to an error message.
+                action = IntentPreviewAction(
+                    summary=f"I'll {action.action.replace('_', ' ')} as described below. Please review before confirming.",
+                    proposed_action=action.model_dump(),
+                )
+            result = await execute_tool(db, user, action)
     except ToolExecutionError as e:
         await log_message(db, conversation, role="assistant", content=e.log_detail)
         await db.commit()
@@ -384,8 +731,18 @@ async def handle_chat_message(
 
     # Log the assistant result — if this is a modify turn superseding a
     # previous intent_preview, overwrite that message in place rather than
-    # appending a new row, so the LLM's next turn sees only the updated plan
+    # appending a new row, so the LLM's next turn sees only the updated plan.
+    # Before overwriting, snapshot the version being replaced (already
+    # loaded above as stored_preview, to build the modify context) onto
+    # the new result as previous_*, so the client can show a one-step diff
+    # (current vs. the immediately preceding revision only — anything
+    # older than that was already discarded the same way on the prior
+    # modify round).
     if result.get("intent_preview") and pending_message_id:
+        if stored_preview:
+            result["previous_proposed_action"] = stored_preview.get("proposed_action")
+            result["previous_summary"] = stored_preview.get("summary")
+
         assistant_msg = await update_message_content(
             db, conversation.id, pending_message_id, _json_dumps(result)
         )

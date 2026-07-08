@@ -16,6 +16,7 @@ const assignment: Assignment = {
 };
 
 describe("AssignmentUpdateForm", () => {
+  // Verifies: Renders assignment fields and read-only id.
   it("renders assignment fields and read-only id", () => {
     render(
       <AssignmentUpdateForm
@@ -35,6 +36,7 @@ describe("AssignmentUpdateForm", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Shows inline validation when title is empty.
   it("shows inline validation when title is empty", async () => {
     const user = userEvent.setup();
 

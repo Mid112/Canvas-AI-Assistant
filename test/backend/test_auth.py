@@ -20,6 +20,7 @@ def client():
         yield c
 
 
+# Verifies: Register.
 def test_register(client):
     email = f"test_{uuid.uuid4()}@example.com"
     response = client.post(
@@ -31,6 +32,7 @@ def test_register(client):
     assert response.json()["token_type"] == "bearer"
 
 
+# Verifies: Login.
 def test_login(client):
     email = f"test_{uuid.uuid4()}@example.com"
     client.post(
@@ -45,6 +47,7 @@ def test_login(client):
     assert "access_token" in response.json()
 
 
+# Verifies: Login wrong password.
 def test_login_wrong_password(client):
     email = f"test_{uuid.uuid4()}@example.com"
     client.post(
@@ -58,6 +61,7 @@ def test_login_wrong_password(client):
     assert response.status_code == 401
 
 
+# Verifies: Expired session rejected.
 def test_expired_session_rejected(client):
     """#590 — expired DB sessions are rejected even when the JWT is still valid."""
     email = f"test_{uuid.uuid4()}@example.com"
@@ -88,6 +92,7 @@ def test_expired_session_rejected(client):
     assert response.json()["detail"] == "Session expired or invalid"
 
 
+# Verifies: Register duplicate email.
 def test_register_duplicate_email(client):
     email = f"test_{uuid.uuid4()}@example.com"
     client.post(
@@ -101,6 +106,7 @@ def test_register_duplicate_email(client):
     assert response.status_code == 400
 
 
+# Verifies: Get current user.
 def test_get_current_user(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
@@ -121,6 +127,7 @@ def test_get_current_user(client):
     assert response.json()["canvas_connections"] == []
 
 
+# Verifies: Get current user invalid token.
 def test_get_current_user_invalid_token(client):
     response = client.get(
         "/api/v1/auth/me",
@@ -129,6 +136,74 @@ def test_get_current_user_invalid_token(client):
     assert response.status_code == 401
 
 
+# Verifies: Update current user.
+def test_update_current_user(client):
+    email = f"test_{uuid.uuid4()}@example.com"
+    new_email = f"updated_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Test User", "email": email, "password": "secret123"}
+    )
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+
+    response = client.patch(
+        "/api/v1/auth/me",
+        json={"name": "Updated User", "email": new_email},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Updated User"
+    assert response.json()["email"] == new_email
+
+
+# Verifies: Update current user duplicate email.
+def test_update_current_user_duplicate_email(client):
+    email_a = f"test_{uuid.uuid4()}@example.com"
+    email_b = f"test_{uuid.uuid4()}@example.com"
+    client.post(
+        "/api/v1/auth/register",
+        json={"name": "User A", "email": email_a, "password": "secret123"}
+    )
+    reg_b = client.post(
+        "/api/v1/auth/register",
+        json={"name": "User B", "email": email_b, "password": "secret123"}
+    )
+    headers_b = {"Authorization": f"Bearer {reg_b.json()['access_token']}"}
+
+    response = client.patch(
+        "/api/v1/auth/me",
+        json={"email": email_a},
+        headers=headers_b,
+    )
+
+    assert response.status_code == 400
+
+
+# Verifies: Delete current user.
+def test_delete_current_user(client):
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Delete Me", "email": email, "password": "secret123"}
+    )
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+
+    missing_password = client.delete("/api/v1/auth/me", headers=headers)
+    assert missing_password.status_code == 422
+
+    response = client.request(
+        "DELETE",
+        "/api/v1/auth/me",
+        json={"password": "secret123"},
+        headers=headers,
+    )
+
+    assert response.status_code == 204
+    assert client.get("/api/v1/auth/me", headers=headers).status_code == 401
+
+
+# Verifies: Set canvas token.
 def test_set_canvas_token(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
@@ -146,6 +221,7 @@ def test_set_canvas_token(client):
     assert client.get("/api/v1/auth/me", headers=headers).json()["has_canvas_token"] is True
 
 
+# Verifies: Validate canvas token.
 def test_validate_canvas_token(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
@@ -166,6 +242,7 @@ def test_validate_canvas_token(client):
     assert resp.json()["status"] == "valid"
 
 
+# Verifies: Validate canvas token requires auth.
 def test_validate_canvas_token_requires_auth(client):
     resp = client.post(
         "/api/v1/auth/me/canvas-token/validate",
@@ -174,6 +251,7 @@ def test_validate_canvas_token_requires_auth(client):
     assert resp.status_code == 401
 
 
+# Verifies: Set canvas token second school.
 def test_set_canvas_token_second_school(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
@@ -191,6 +269,7 @@ def test_set_canvas_token_second_school(client):
     assert urls == {"https://canvas.ubc.ca", "https://canvas.sfu.ca"}
 
 
+# Verifies: Set canvas token upsert same school.
 def test_set_canvas_token_upsert_same_school(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
@@ -205,6 +284,7 @@ def test_set_canvas_token_upsert_same_school(client):
     assert len(resp.json()["canvas_connections"]) == 1
 
 
+# Verifies: Set canvas token invalid returns 422.
 def test_set_canvas_token_invalid_returns_422(client):
     from fastapi import HTTPException
 
@@ -225,6 +305,7 @@ def test_set_canvas_token_invalid_returns_422(client):
     assert "Invalid Canvas API token" in resp.json()["detail"]
 
 
+# Verifies: Set canvas token empty string rejected.
 def test_set_canvas_token_empty_string_rejected(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
@@ -235,6 +316,7 @@ def test_set_canvas_token_empty_string_rejected(client):
     assert resp.status_code == 422
 
 
+# Verifies: Canvas url must be https.
 def test_canvas_url_must_be_https(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
@@ -245,6 +327,7 @@ def test_canvas_url_must_be_https(client):
     assert resp.status_code == 422
 
 
+# Verifies: Debug allows canvas lms http url.
 def test_debug_allows_canvas_lms_http_url(client, monkeypatch):
     monkeypatch.setattr(settings, "DEBUG", True)
     email = f"test_{uuid.uuid4()}@example.com"
@@ -262,6 +345,7 @@ def test_debug_allows_canvas_lms_http_url(client, monkeypatch):
     assert resp.status_code == 200
 
 
+# Verifies: Debug rejects untrusted http url.
 def test_debug_rejects_untrusted_http_url(client, monkeypatch):
     monkeypatch.setattr(settings, "DEBUG", True)
     email = f"test_{uuid.uuid4()}@example.com"
@@ -273,6 +357,7 @@ def test_debug_rejects_untrusted_http_url(client, monkeypatch):
     assert resp.status_code == 422
 
 
+# Verifies: Non debug rejects localhost http url.
 def test_non_debug_rejects_localhost_http_url(client, monkeypatch):
     monkeypatch.setattr(settings, "DEBUG", False)
     email = f"test_{uuid.uuid4()}@example.com"
@@ -288,6 +373,7 @@ def test_non_debug_rejects_localhost_http_url(client, monkeypatch):
     assert resp.status_code == 422
 
 
+# Verifies: Delete canvas connection.
 def test_delete_canvas_connection(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
@@ -302,6 +388,7 @@ def test_delete_canvas_connection(client):
     assert client.get("/api/v1/auth/me", headers=headers).json()["has_canvas_token"] is False
 
 
+# Verifies: Delete canvas connection not found.
 def test_delete_canvas_connection_not_found(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
@@ -311,6 +398,7 @@ def test_delete_canvas_connection_not_found(client):
     assert client.delete("/api/v1/auth/me/canvas-connections/99999", headers=headers).status_code == 404
 
 
+# Verifies: Delete canvas connection wrong user.
 def test_delete_canvas_connection_wrong_user(client):
     email_a = f"test_{uuid.uuid4()}@example.com"
     email_b = f"test_{uuid.uuid4()}@example.com"

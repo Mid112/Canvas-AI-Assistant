@@ -141,7 +141,12 @@ function DryRunPreviewContent({
   };
 
   const handleReturn = () => {
-    navigate(returnTo);
+    navigate(returnTo, {
+      state: {
+        initialConversationId: conversationId,
+        initialPendingMessageId: pendingMessageId,
+      },
+    });
   };
 
   const handleReject = async () => {
@@ -179,7 +184,15 @@ function DryRunPreviewContent({
 
     navigate(returnTo, {
       state: {
-        initialDraft: preview.originalRequest,
+        // Chat previews: leave the input empty. The backend now sends the
+        // current structured plan to the model as context on every modify
+        // turn (see _build_llm_message in chat.py), so the user only
+        // needs to describe their change, not retype the whole request —
+        // pre-filling stale original text invited exactly that mistake
+        // (e.g. appending a year fix while dropping the description and
+        // points that were answered in a later turn).
+        // Mock previews have no such backend, so keep the old behavior.
+        initialDraft: isChatPreview ? undefined : preview.originalRequest,
         initialConversationId: conversationId,
         initialPendingMessageId: pendingMessageId,
       },

@@ -21,8 +21,8 @@ describe('LandingHero', () => {
   it('renders call-to-action buttons with correct routing links', () => {
     renderWithRouter(<LandingHero />);
     
-    const getStartedLink = screen.getByRole('link', { name: /Get Started/i });
-    const learnMoreLink = screen.getByRole('link', { name: /Learn More/i });
+    const getStartedLink = screen.getByRole('button', { name: /Get Started/i });
+    const learnMoreLink = screen.getByRole('button', { name: /Learn More/i });
 
     expect(getStartedLink.getAttribute('href')).toBe(paths.register);
     expect(learnMoreLink.getAttribute('href')).toBe('#features');

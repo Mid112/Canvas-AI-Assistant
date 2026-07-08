@@ -1,9 +1,9 @@
+import { apiRequest } from "@/lib/api-request";
 import {
   buildInstructorApiName,
   mapInstructorApiToInstructor,
   type InstructorApiRecord,
 } from "@/lib/map-instructor";
-import { apiRequest } from "@/lib/api-request";
 import type {
   CreateInstructorPayload,
   Instructor,
@@ -27,14 +27,18 @@ export async function createInstructor(
   accessToken: string,
   payload: CreateInstructorPayload,
 ): Promise<Instructor> {
-  const record = await apiRequest<InstructorApiRecord>(INSTRUCTORS_PATH, accessToken, {
-    method: "POST",
-    body: JSON.stringify({
-      name: buildInstructorApiName(payload.firstName, payload.lastName),
-      email: payload.email.trim(),
-      password: payload.temporaryPassword,
-    }),
-  });
+  const record = await apiRequest<InstructorApiRecord>(
+    INSTRUCTORS_PATH,
+    accessToken,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name: buildInstructorApiName(payload.firstName, payload.lastName),
+        email: payload.email.trim(),
+        password: payload.temporaryPassword,
+      }),
+    },
+  );
 
   return mapInstructorApiToInstructor(record);
 }

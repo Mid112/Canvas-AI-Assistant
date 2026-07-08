@@ -17,15 +17,18 @@ const baseUser: User = {
 };
 
 describe("getPrimaryCanvasConnectionUrl", () => {
+  // Verifies: Returns undefined when the user is missing.
   it("returns undefined when the user is missing", () => {
     expect(getPrimaryCanvasConnectionUrl(null)).toBeUndefined();
     expect(getPrimaryCanvasConnectionUrl(undefined)).toBeUndefined();
   });
 
+  // Verifies: Returns undefined when the user has no Canvas connections.
   it("returns undefined when the user has no Canvas connections", () => {
     expect(getPrimaryCanvasConnectionUrl(baseUser)).toBeUndefined();
   });
 
+  // Verifies: Returns the first Canvas connection URL.
   it("returns the first Canvas connection URL", () => {
     expect(
       getPrimaryCanvasConnectionUrl({
@@ -52,10 +55,12 @@ describe("getCanvasConnectionUrlForInstitution", () => {
     vi.unstubAllEnvs();
   });
 
+  // Verifies: Returns undefined when the user has no connections.
   it("returns undefined when the user has no connections", () => {
     expect(getCanvasConnectionUrlForInstitution(baseUser, "ubc")).toBeUndefined();
   });
 
+  // Verifies: Returns the connection that matches the institution Canvas URL.
   it("returns the connection that matches the institution Canvas URL", () => {
     vi.stubEnv("VITE_CANVAS_UBC_URL", "https://canvas.ubc.ca");
 
@@ -81,6 +86,7 @@ describe("getCanvasConnectionUrlForInstitution", () => {
     ).toBe("https://canvas.ubc.ca");
   });
 
+  // Verifies: Falls back to the sole saved connection when institution env is unset.
   it("falls back to the sole saved connection when institution env is unset", () => {
     vi.unstubAllEnvs();
 
@@ -101,6 +107,7 @@ describe("getCanvasConnectionUrlForInstitution", () => {
     ).toBe("http://localhost:3000");
   });
 
+  // Verifies: Falls back to the sole local connection even when env points at production.
   it("falls back to the sole local connection even when env points at production", () => {
     vi.stubEnv("VITE_CANVAS_UBC_URL", "https://canvas.ubc.ca");
 
@@ -121,6 +128,7 @@ describe("getCanvasConnectionUrlForInstitution", () => {
     ).toBe("http://localhost:3000");
   });
 
+  // Verifies: Falls back to the first saved connection when multiple exist but none match.
   it("falls back to the first saved connection when multiple exist but none match", () => {
     expect(
       getCanvasConnectionUrlForInstitution(

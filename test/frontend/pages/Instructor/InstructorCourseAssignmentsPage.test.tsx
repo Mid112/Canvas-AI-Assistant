@@ -112,6 +112,7 @@ describe("InstructorCourseAssignmentsPage", () => {
     ]);
   });
 
+  // Verifies: Loads assignments and links to the edit page.
   it("loads assignments and links to the edit page", async () => {
     renderPage();
 
@@ -127,13 +128,14 @@ describe("InstructorCourseAssignmentsPage", () => {
       CANVAS_URL,
     );
 
-    const editLink = screen.getByRole("link", { name: "Edit" });
+    const editLink = screen.getByRole("button", { name: "Edit" });
     expect(editLink).toHaveAttribute(
       "href",
       "/instructor/courses/3/assignments/10/edit",
     );
   });
 
+  // Verifies: Shows connect Canvas prompt when no token is linked.
   it("shows connect Canvas prompt when no token is linked", async () => {
     mockUseAuth.mockReturnValue({
       ...authWithCanvas,

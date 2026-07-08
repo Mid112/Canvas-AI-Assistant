@@ -27,6 +27,7 @@ const courses: InstructorCourse[] = [
 ];
 
 describe("InstructorCoursesOverview", () => {
+  // Verifies: Renders Canvas-derived overview cards.
   it("renders Canvas-derived overview cards", () => {
     renderWithRouter(<InstructorCoursesOverview courses={courses} />);
 

@@ -53,7 +53,8 @@ export function InstructorCourseOverviewMetrics({
   course,
   overview,
 }: InstructorCourseOverviewMetricsProps) {
-  const studentCount = overview?.studentCount ?? course.studentCount;
+  const studentCount =
+    course.studentCount > 0 ? course.studentCount : (overview?.studentCount ?? 0);
   const assignmentCount =
     course.assignmentCount > 0
       ? course.assignmentCount

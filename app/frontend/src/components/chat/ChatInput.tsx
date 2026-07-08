@@ -9,6 +9,7 @@ import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboar
 interface ChatInputProps {
   onSend: (message: string) => void;
   isLoading: boolean;
+  isDisabled?: boolean;
   inputError?: string | null;
   initialValue?: string;
 }
@@ -16,6 +17,7 @@ interface ChatInputProps {
 export function ChatInput({
   onSend,
   isLoading,
+  isDisabled = false,
   inputError,
   initialValue = "",
 }: ChatInputProps) {
@@ -23,7 +25,7 @@ export function ChatInput({
 
   const submitMessage = () => {
     const trimmed = value.trim();
-    if (isLoading) {
+    if (isLoading || isDisabled) {
       return;
     }
 
@@ -56,7 +58,7 @@ export function ChatInput({
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Ask me anything about your Canvas courses..."
-          disabled={isLoading}
+          disabled={isLoading || isDisabled}
           aria-label="Chat message"
           aria-invalid={Boolean(inputError)}
           className="h-12 rounded-full pr-14"
@@ -64,7 +66,7 @@ export function ChatInput({
         <Button
           type="submit"
           size="icon"
-          disabled={isLoading}
+          disabled={isLoading || isDisabled}
           className={cn(
             "absolute top-1/2 right-1.5 size-9 -translate-y-1/2 rounded-full",
             dashboardColors.blue.button,

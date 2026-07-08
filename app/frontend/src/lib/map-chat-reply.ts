@@ -1,3 +1,4 @@
+import { formatDueDateForDisplay } from "@/lib/assignment-utils";
 import {
   instructorChatPreviewPath,
   instructorCourseAnalyticsPath,
@@ -39,10 +40,12 @@ function buildInterpretedAction(
     typeof proposed.local_course_id === "number"
       ? proposed.local_course_id
       : undefined;
+  // Never fall back to showing courseId itself — it's the internal local DB
+  // row id, not anything the instructor recognizes as a course identifier.
   const courseLabel =
     readString(previewMetadata?.course_name) ??
     readString(previewMetadata?.course) ??
-    (courseId != null ? `Course ${courseId}` : "Active course");
+    "Active course";
 
   const audience = previewMetadata?.audience as
     | Record<string, unknown>
@@ -232,9 +235,32 @@ export function mapChatReplyToAssistantResponse(
   }
 
   if (Array.isArray(reply.assignments)) {
-    return {
-      content: `This course has ${reply.assignments.length} assignments.`,
-    };
+    if (reply.assignments.length === 0) {
+      return { content: "This course has no assignments yet." };
+    }
+
+    const list = reply.assignments
+      .map((assignment) => {
+        if (!assignment || typeof assignment !== "object") {
+          return "- Assignment";
+        }
+
+        const record = assignment as Record<string, unknown>;
+        const name = readString(record.name) ?? "Untitled assignment";
+        const dueDate = formatDueDateForDisplay(
+          readString(record.due_at as string | undefined) ?? null,
+        );
+        const points =
+          typeof record.points_possible === "number"
+            ? `${record.points_possible} pts`
+            : undefined;
+
+        const details = [dueDate, points].filter(Boolean).join(" · ");
+        return `- ${name} (${details})`;
+      })
+      .join("\n");
+
+    return { content: list };
   }
 
   if (reply.active_course) {

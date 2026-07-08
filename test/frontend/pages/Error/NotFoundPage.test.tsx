@@ -6,6 +6,7 @@ import { paths } from "@/routes/paths";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 describe("NotFoundPage", () => {
+  // Verifies: Renders the 404 message and home link.
   it("renders the 404 message and home link", () => {
     renderWithRouter(<NotFoundPage />);
 

@@ -2,6 +2,7 @@ import asyncio
 import logging
 import re
 from typing import Literal
+from urllib.parse import urlencode
 
 import httpx
 from fastapi import HTTPException, status
@@ -16,6 +17,35 @@ def _headers(token: str) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _canvas_error_detail(response: httpx.Response) -> str:
+    try:
+        data = response.json()
+    except ValueError:
+        return response.text.strip()
+
+    if isinstance(data, dict):
+        for key in ("message", "error", "errors"):
+            value = data.get(key)
+            if isinstance(value, str):
+                return value
+            if isinstance(value, list) and value:
+                # Canvas often returns errors as [{"message": "..."}].
+                # Flatten that shape so UI banners show the actionable text,
+                # not a Python dict representation that hides the real cause.
+                messages: list[str] = []
+                for item in value:
+                    if isinstance(item, dict):
+                        nested = item.get("message") or item.get("error")
+                        messages.append(str(nested if nested is not None else item))
+                    else:
+                        messages.append(str(item))
+                return "; ".join(messages)
+            if isinstance(value, dict):
+                return "; ".join(f"{field}: {message}" for field, message in value.items())
+
+    return str(data)
+
+
 def _raise_for_canvas_error(response: httpx.Response) -> None:
     # Canvas 401 means bad/expired token — re-map to 422 so callers don't confuse it
     # with our own JWT 401 (two different auth layers)
@@ -28,7 +58,11 @@ def _raise_for_canvas_error(response: httpx.Response) -> None:
     if response.is_server_error:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Canvas server error: {response.status_code}")
     if response.is_error:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Canvas API error: {response.status_code}")
+        detail = _canvas_error_detail(response)
+        message = f"Canvas API error: {response.status_code}"
+        if detail:
+            message = f"{message} - {detail}"
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=message)
 
 
 _TIMEOUT = httpx.Timeout(10.0)
@@ -282,6 +316,28 @@ async def fetch_submissions(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
 
 
+async def fetch_user_profile(
+    user_id: int,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> dict:
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await _get_with_retry(
+                client,
+                f"{canvas_url}/api/v1/users/{user_id}/profile",
+                headers=_headers(token),
+            )
+            _raise_for_canvas_error(response)
+            return response.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
 async def fetch_enrollments(
     course_id: int,
     token: str,
@@ -318,6 +374,9 @@ async def post_announcement(
     token: str,
     canvas_url: str = settings.CANVAS_API_URL,
 ) -> dict:
+    # Keep this older announcement helper compatible with the browser-facing
+    # localhost URL and the backend/container-facing Canvas alias.
+    canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.post(
@@ -346,17 +405,33 @@ async def send_conversation(
     token: str,
     canvas_url: str = settings.CANVAS_API_URL,
 ) -> dict:
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    form_data = [
+        ("subject", subject),
+        ("body", body),
+        ("context_code", f"course_{course_id}"),
+        ("group_conversation", "false"),
+    ]
+    # Canvas expects repeated recipients[] form fields. Build that as a tuple
+    # list first so a debugger can inspect the exact logical payload before it
+    # gets encoded for transport.
+    form_data.extend(
+        ("recipients[]", str(user_id)) for user_id in recipient_canvas_user_ids
+    )
+    # httpx.AsyncClient cannot safely send tuple-list form data as a sync stream.
+    # Encoding explicitly preserves repeated recipients[] while keeping the
+    # request async-safe.
+    form_body = urlencode(form_data)
+
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.post(
                 f"{canvas_url}/api/v1/conversations",
-                headers=_headers(token),
-                data={
-                    "subject": subject,
-                    "body": body,
-                    "context_code": f"course_{course_id}",
-                    "recipients[]": [str(user_id) for user_id in recipient_canvas_user_ids],
+                headers={
+                    **_headers(token),
+                    "Content-Type": "application/x-www-form-urlencoded",
                 },
+                content=form_body,
             )
             _raise_for_canvas_error(response)
             return response.json()

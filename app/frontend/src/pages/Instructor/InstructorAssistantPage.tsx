@@ -1,15 +1,15 @@
-import { useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 import { ChatWindow } from "@/components/chat/ChatWindow";
+import { ActiveCourseContextBar } from "@/components/courses/ActiveCourseContextBar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
-import { paths } from "@/routes/paths";
 import {
   InstructorAssistantHeader,
   InstructorAssistantSuggestedActions,
 } from "@/pages/Instructor/InstructorAssistant/InstructorAssistantHeader";
-import { suggestedActions } from "@/data/assistantSeedData";
+import { buildSuggestedActions } from "@/data/assistantSeedData";
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 
 interface InstructorAssistantLocationState {
@@ -29,6 +29,10 @@ export function InstructorAssistantPage() {
   const location = useLocation();
   const { user } = useAuth();
   const { activeCourse } = useActiveCourse();
+  const suggestedActions = useMemo(
+    () => buildSuggestedActions(activeCourse?.displayName),
+    [activeCourse?.displayName],
+  );
   const [locationState] = useState(() =>
     getLocationState(
       location.state as InstructorAssistantLocationState | null,
@@ -60,30 +64,7 @@ export function InstructorAssistantPage() {
         <CanvasConnectionRequired description="Connect Canvas to use the AI assistant with your courses and assignments." />
       ) : (
         <>
-      {activeCourse ? (
-          <p
-            role="status"
-            className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm text-[#1e293b]"
-          >
-            Answering in the context of{" "}
-            <span className="font-medium">{activeCourse.displayName}</span>. Use{" "}
-            <Link to={paths.instructor.courses} className="font-medium underline">
-              Course Management
-            </Link>{" "}
-            to set a different active course.
-          </p>
-        ) : (
-          <p
-            role="status"
-            className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-950"
-          >
-            No active course selected. Open{" "}
-            <Link to={paths.instructor.courses} className="font-medium underline">
-              Course Management
-            </Link>{" "}
-            and choose Set Active on a course for course-specific answers.
-          </p>
-        )}
+      <ActiveCourseContextBar />
 
       <InstructorAssistantSuggestedActions
         actions={suggestedActions}

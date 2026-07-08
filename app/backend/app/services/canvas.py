@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 
 from cryptography.fernet import InvalidToken
@@ -15,6 +16,7 @@ from app.integrations.canvas import (
     fetch_assignments,
     fetch_courses,
     fetch_submissions,
+    fetch_user_profile,
     send_conversation,
     update_assignment,
 )
@@ -32,6 +34,8 @@ from app.schemas.canvas import (
     SubmissionResponse,
     SubmissionStatus,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def require_canvas_token(user: User, canvas_url: str) -> str:
@@ -57,16 +61,16 @@ def require_canvas_token(user: User, canvas_url: str) -> str:
 async def get_owned_course(
     local_course_id: int,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
 ) -> Course:
-    normalized = normalize_canvas_url(canvas_url)
     course = await db.scalar(
         select(Course).where(
             Course.id == local_course_id,
             Course.instructor_id == user.id,
         )
     )
+    normalized = normalize_canvas_url(canvas_url or course.canvas_url) if course else None
     if not course or not canvas_urls_equivalent(course.canvas_url, normalized):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -135,10 +139,11 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
     ]
 
 
-async def get_assignments(local_course_id: int, user: User, canvas_url: str, db: AsyncSession) -> list[AssignmentResponse]:
+async def get_assignments(local_course_id: int, user: User, canvas_url: str | None, db: AsyncSession) -> list[AssignmentResponse]:
     course = await get_owned_course(local_course_id, user, canvas_url, db)
-    token = require_canvas_token(user, canvas_url)
-    data = await fetch_assignments(int(course.canvas_course_id), token, canvas_url)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
+    data = await fetch_assignments(int(course.canvas_course_id), token, resolved_canvas_url)
 
     if not data:
         return []
@@ -269,6 +274,8 @@ async def send_course_message(
     canvas_course_id = int(course.canvas_course_id)
 
     if recipient_canvas_user_ids:
+        # A non-empty recipient list means a private Canvas Conversation.
+        # No recipient list falls through to the public course announcement path.
         await send_conversation(
             canvas_course_id,
             recipient_canvas_user_ids,
@@ -320,6 +327,8 @@ def _parse_submission(raw: dict) -> SubmissionResponse:
         assignment_id=raw["assignment_id"],
         user_id=raw["user_id"],
         student_name=user.get("name"),
+        student_email=user.get("email") or user.get("primary_email"),
+        student_login_id=user.get("login_id"),
         submitted_at=raw.get("submitted_at"),
         workflow_state=raw.get("workflow_state", "unsubmitted"),
         status=_parse_submission_status(raw),
@@ -327,6 +336,44 @@ def _parse_submission(raw: dict) -> SubmissionResponse:
         grade=raw.get("grade"),
         graded_at=raw.get("graded_at"),
     )
+
+
+async def _fill_submission_contact_fields(
+    submissions: list[SubmissionResponse],
+    token: str,
+    canvas_url: str,
+) -> None:
+    # Canvas's submissions include[]=user payload can include a display name
+    # without email/login_id. Pull /users/{id}/profile only for those sparse
+    # rows so the Students/Messages UI can show an email without adding extra
+    # requests for already-complete submissions.
+    missing_contact = [
+        submission
+        for submission in submissions
+        if submission.student_name
+        and not submission.student_email
+        and not submission.student_login_id
+    ]
+
+    for submission in missing_contact:
+        try:
+            profile = await fetch_user_profile(submission.user_id, token, canvas_url)
+        except HTTPException as error:
+            # Email is only needed for display/diagnostics; losing it should not
+            # make the submissions or analytics views fail.
+            logger.info(
+                "Could not enrich Canvas user %s profile for submissions: %s",
+                submission.user_id,
+                error.detail,
+            )
+            continue
+
+        submission.student_email = (
+            profile.get("primary_email")
+            or profile.get("email")
+            or profile.get("login_id")
+        )
+        submission.student_login_id = profile.get("login_id")
 
 
 async def get_submissions(
@@ -347,8 +394,12 @@ async def get_submissions(
         canvas_url,
     )
     parsed = [_parse_submission(raw) for raw in data]
+    await _fill_submission_contact_fields(parsed, token, canvas_url)
 
     try:
+        # The API response is authoritative even if the local analytics cache
+        # write fails below, so keep cache persistence isolated from the return
+        # value. This prevents a DB cache hiccup from breaking the live Canvas view.
         assignment = await db.scalar(
             select(Assignment).where(
                 Assignment.canvas_assignment_id == str(assignment_id),
@@ -365,8 +416,14 @@ async def get_submissions(
             await db.flush()
 
         canvas_ids = [str(item.id) for item in parsed]
+        # Canvas submission ids are unique in our schema, but scoping by the
+        # local assignment makes the intent explicit and protects this upsert if
+        # the uniqueness model changes later.
         existing_rows = await db.scalars(
-            select(Submission).where(Submission.canvas_submission_id.in_(canvas_ids))
+            select(Submission).where(
+                Submission.assignment_id == assignment.id,
+                Submission.canvas_submission_id.in_(canvas_ids),
+            )
         )
         submission_map = {s.canvas_submission_id: s for s in existing_rows}
 
@@ -396,8 +453,15 @@ async def get_submissions(
                 )
 
         await db.commit()
-    except Exception:
+    except Exception as error:
         await db.rollback()
+        logger.warning(
+            "Could not cache Canvas submissions for course %s assignment %s: %s",
+            local_course_id,
+            assignment_id,
+            error,
+            exc_info=True,
+        )
 
     return parsed
 

@@ -6,6 +6,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { InstitutionProvider } from "@/contexts/InstitutionProvider";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { getInstitutionData } from "@/data/institutionCourseData";
+import { setStoredActiveCourseSelection } from "@/lib/active-course-storage";
 import {
   fetchActiveCourse,
   fetchCourses,
@@ -101,10 +102,17 @@ beforeEach(() => {
   mockUseAuth.mockReturnValue(authWithCanvas);
   mockedFetchCourses.mockResolvedValue(canvasCourses);
   mockedFetchActiveCourse.mockResolvedValue(null);
-  mockedSetActiveCourse.mockResolvedValue(undefined);
+  mockedSetActiveCourse.mockResolvedValue({
+    local_id: 1,
+    canvas_course_id: "101",
+    canvas_url: CANVAS_URL,
+    name: "Introduction to Programming",
+    term: null,
+  });
 });
 
 describe("ActiveCourseProvider", () => {
+  // Verifies: Clears courses when Canvas is disconnected.
   it("clears courses when Canvas is disconnected", async () => {
     mockUseAuth.mockReturnValue(authWithoutCanvas);
 
@@ -118,6 +126,7 @@ describe("ActiveCourseProvider", () => {
     expect(mockedFetchCourses).not.toHaveBeenCalled();
   });
 
+  // Verifies: Loads Canvas courses when connected.
   it("loads Canvas courses when connected", async () => {
     const { result } = renderHook(() => useActiveCourse(), { wrapper });
 
@@ -129,6 +138,7 @@ describe("ActiveCourseProvider", () => {
     expect(result.current.error).toBeNull();
   });
 
+  // Verifies: Does not fall back to mock courses when Canvas returns no courses.
   it("does not fall back to mock courses when Canvas returns no courses", async () => {
     mockedFetchCourses.mockResolvedValue([]);
 
@@ -143,6 +153,7 @@ describe("ActiveCourseProvider", () => {
     expect(result.current.error).toBeNull();
   });
 
+  // Verifies: Does not fall back to mock courses when Canvas fetch fails.
   it("does not fall back to mock courses when Canvas fetch fails", async () => {
     const { CanvasApiError } = await import("@/services/canvas");
     mockedFetchCourses.mockRejectedValue(
@@ -164,8 +175,65 @@ describe("ActiveCourseProvider", () => {
     ).toBe(false);
   });
 
-  it("does not PATCH active course when no Canvas courses are available", async () => {
+  // Verifies: Keeps the saved active course when Canvas course sync fails.
+  it("keeps the saved active course when Canvas course sync fails", async () => {
+    const { CanvasApiError } = await import("@/services/canvas");
+    mockedFetchActiveCourse.mockResolvedValue({
+      local_id: 99,
+      canvas_course_id: "499",
+      canvas_url: CANVAS_URL,
+      name: "COSC 499",
+      term: null,
+    });
+    mockedFetchCourses.mockRejectedValue(
+      new CanvasApiError("Canvas unavailable", 503),
+    );
+
+    const { result } = renderHook(() => useActiveCourse(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.activeCourse).toEqual({
+        localId: 99,
+        displayName: "COSC 499",
+      });
+    });
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.availableCourses).toEqual([]);
+    expect(result.current.error).toBe("Canvas unavailable");
+  });
+
+  // Verifies: Hydrates the saved active course before Canvas finishes loading.
+  it("hydrates the saved active course before Canvas finishes loading", async () => {
+    setStoredActiveCourseSelection("1", {
+      localId: 499,
+      displayName: "COSC 499",
+    });
+    mockedFetchActiveCourse.mockReturnValue(new Promise(() => undefined));
+
+    const { result } = renderHook(() => useActiveCourse(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.activeCourse).toEqual({
+        localId: 499,
+        displayName: "COSC 499",
+      });
+    });
+    expect(result.current.isLoading).toBe(true);
+  });
+
+  // Verifies: Uses the backend response when the provider course cache is stale.
+  it("uses the backend response when the provider course cache is stale", async () => {
     mockedFetchCourses.mockResolvedValue([]);
+    mockedSetActiveCourse.mockResolvedValue({
+      local_id: 99,
+      canvas_course_id: "499",
+      canvas_url: CANVAS_URL,
+      name: "COSC 499",
+      term: null,
+    });
 
     const { result } = renderHook(() => useActiveCourse(), { wrapper });
 
@@ -174,10 +242,14 @@ describe("ActiveCourseProvider", () => {
     });
 
     await act(async () => {
-      await result.current.selectActiveCourse(1);
+      await result.current.selectActiveCourse(99);
     });
 
-    expect(mockedSetActiveCourse).not.toHaveBeenCalled();
-    expect(result.current.error).toBe("Selected course is not available.");
+    expect(mockedSetActiveCourse).toHaveBeenCalledWith(99, "token");
+    expect(result.current.activeCourse).toEqual({
+      localId: 99,
+      displayName: "COSC 499",
+    });
+    expect(result.current.error).toBeNull();
   });
 });

@@ -1,7 +1,6 @@
-import { Sparkles } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { SubmissionAiSummary } from "@/types/submission";
 
 interface SubmissionsAiSummaryProps {
@@ -13,8 +12,8 @@ export function SubmissionsAiSummary({ summary }: SubmissionsAiSummaryProps) {
     <Card className="h-fit shadow-sm ring-1 ring-border/60">
       <CardHeader className="border-b border-blue-100 bg-blue-50/60">
         <CardTitle className="flex items-center gap-2 text-base">
-          <Sparkles className="size-4 text-primary" aria-hidden="true" />
-          AI-Generated Summary
+          <ClipboardList className="size-4 text-primary" aria-hidden="true" />
+          Submission Summary
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 pt-4">
@@ -37,11 +36,6 @@ export function SubmissionsAiSummary({ summary }: SubmissionsAiSummaryProps) {
           </p>
         </div>
       </CardContent>
-      <CardFooter className="border-t bg-transparent pt-4">
-        <Button className="w-full" size="lg" disabled>
-          Regenerate Summary
-        </Button>
-      </CardFooter>
     </Card>
   );
 }

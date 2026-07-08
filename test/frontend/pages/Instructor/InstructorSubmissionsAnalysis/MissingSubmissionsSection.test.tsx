@@ -7,6 +7,7 @@ import { MissingSubmissionsSection } from "@/pages/Instructor/InstructorSubmissi
 const students = institutionSubmissionsData[0]!.assignments[0]!.missingSubmissions;
 
 describe("MissingSubmissionsSection", () => {
+  // Verifies: Renders the missing submissions table.
   it("renders the missing submissions table", () => {
     render(<MissingSubmissionsSection students={students} />);
 
@@ -21,12 +22,14 @@ describe("MissingSubmissionsSection", () => {
     expect(screen.getByText("1 week ago")).toBeInTheDocument();
   });
 
+  // Verifies: Uses singular copy for one missing submission.
   it("uses singular copy for one missing submission", () => {
     render(<MissingSubmissionsSection students={[students[0]!]} />);
 
     expect(screen.getByText("1 student has not submitted")).toBeInTheDocument();
   });
 
+  // Verifies: Renders an empty state when there are no students.
   it("renders an empty state when there are no students", () => {
     render(<MissingSubmissionsSection students={[]} />);
 

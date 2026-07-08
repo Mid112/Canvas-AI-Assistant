@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { CanvasAuthErrorReasons } from "@/pages/Error/CanvasAuthError/CanvasAuthErrorReasons";
 
 describe("CanvasAuthErrorReasons", () => {
+  // Verifies: Renders all failure reasons.
   it("renders all failure reasons", () => {
     render(<CanvasAuthErrorReasons />);
 

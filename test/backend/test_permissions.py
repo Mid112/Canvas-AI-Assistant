@@ -78,12 +78,14 @@ async def _set_role(email: str, role: str) -> None:
 # get_current_user — any authenticated, active user (#600)
 # ---------------------------------------------------------------------------
 
+# Verifies: Me returns 200 for active user.
 def test_me_returns_200_for_active_user(client):
     reg = _register(client)
     resp = client.get("/api/v1/auth/me", headers=reg["headers"])
     assert resp.status_code == 200
 
 
+# Verifies: Me rejects token issued before account was disabled.
 def test_me_rejects_token_issued_before_account_was_disabled(client):
     reg = _register(client)
     asyncio.run(_disable(reg["email"]))
@@ -93,6 +95,7 @@ def test_me_rejects_token_issued_before_account_was_disabled(client):
     assert "inactive" in resp.json()["detail"].lower()
 
 
+# Verifies: Chat endpoint rejects token for disabled account.
 def test_chat_endpoint_rejects_token_for_disabled_account(client):
     reg = _register(client)
     asyncio.run(_disable(reg["email"]))
@@ -105,6 +108,7 @@ def test_chat_endpoint_rejects_token_for_disabled_account(client):
 # get_instructor_user — role + active enforcement (#602, #603)
 # ---------------------------------------------------------------------------
 
+# Verifies: Canvas route accepts instructor token.
 def test_canvas_route_accepts_instructor_token(client):
     # A fresh instructor has no Canvas connection yet, so the *business logic* still
     # 403s (see test_list_courses_no_canvas_token) — this test only proves the RBAC
@@ -115,11 +119,13 @@ def test_canvas_route_accepts_instructor_token(client):
     assert "role" not in resp.json()["detail"].lower()
 
 
+# Verifies: Canvas route rejects unauthenticated.
 def test_canvas_route_rejects_unauthenticated(client):
     resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}")
     assert resp.status_code == 401
 
 
+# Verifies: Canvas route rejects admin token.
 def test_canvas_route_rejects_admin_token(client, admin_credentials):
     login = client.post("/api/v1/auth/admin/login", json=admin_credentials)
     admin_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
@@ -129,6 +135,7 @@ def test_canvas_route_rejects_admin_token(client, admin_credentials):
     assert "instructor" in resp.json()["detail"].lower()
 
 
+# Verifies: Canvas route rejects disabled instructor token.
 def test_canvas_route_rejects_disabled_instructor_token(client):
     reg = _register(client)
     asyncio.run(_disable(reg["email"]))
@@ -141,6 +148,7 @@ def test_canvas_route_rejects_disabled_instructor_token(client):
 # get_admin_user — role enforcement on admin-only routes (#599)
 # ---------------------------------------------------------------------------
 
+# Verifies: Admin route rejects instructor token.
 def test_admin_route_rejects_instructor_token(client):
     reg = _register(client)
     resp = client.post(
@@ -151,6 +159,7 @@ def test_admin_route_rejects_instructor_token(client):
     assert resp.status_code == 403
 
 
+# Verifies: Admin route rejects unauthenticated.
 def test_admin_route_rejects_unauthenticated(client):
     resp = client.post(
         "/api/v1/admin/users",
@@ -164,6 +173,7 @@ def test_admin_route_rejects_unauthenticated(client):
 # stale role claim (#600, #602, #599 hardening)
 # ---------------------------------------------------------------------------
 
+# Verifies: Canvas route rejects instructor demoted after token issued.
 def test_canvas_route_rejects_instructor_demoted_after_token_issued(client):
     """A token minted with role=instructor must lose Canvas access the moment
     the DB role changes, without waiting for the token to expire."""
@@ -174,6 +184,7 @@ def test_canvas_route_rejects_instructor_demoted_after_token_issued(client):
     assert resp.status_code == 403
 
 
+# Verifies: Admin route rejects admin demoted after token issued.
 def test_admin_route_rejects_admin_demoted_after_token_issued(client, admin_credentials):
     """A token minted via admin login must lose admin access immediately if the
     DB role changes, even though its session row is still valid."""

@@ -17,6 +17,7 @@ describe("auditLogs service", () => {
     vi.restoreAllMocks();
   });
 
+  // Verifies: Fetches and maps audit logs from the API.
   it("fetches and maps audit logs from the API", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(
@@ -40,6 +41,7 @@ describe("auditLogs service", () => {
     expect(logs[0]?.action).toBe("send_message");
   });
 
+  // Verifies: Builds a CSV export with headers and rows.
   it("builds a CSV export with headers and rows", () => {
     const csv = buildAuditLogsCsv(mockAuditLogs.slice(0, 2));
 
@@ -49,6 +51,7 @@ describe("auditLogs service", () => {
     expect(csv).toContain("alex.j@university.edu");
   });
 
+  // Verifies: Prefixes spreadsheet formula characters in exported values.
   it("prefixes spreadsheet formula characters in exported values", () => {
     const csv = buildAuditLogsCsv([
       {

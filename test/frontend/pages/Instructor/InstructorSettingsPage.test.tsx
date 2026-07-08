@@ -22,6 +22,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 describe("InstructorSettingsPage", () => {
+  // Verifies: Renders settings tabs and opens canvas tab from query param.
   it("renders settings tabs and opens canvas tab from query param", () => {
     renderWithRouter(
       <Routes>

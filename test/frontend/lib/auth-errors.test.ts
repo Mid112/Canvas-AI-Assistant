@@ -7,18 +7,21 @@ import {
 import { AuthApiError, GENERIC_AUTH_ERROR_MESSAGE } from "@/services/auth";
 
 describe("getLoginErrorMessage", () => {
+  // Verifies: Maps 401 errors to invalid credentials message.
   it("maps 401 errors to invalid credentials message", () => {
     expect(
       getLoginErrorMessage(new AuthApiError("Invalid credentials", 401)),
     ).toBe("Invalid email or password.");
   });
 
+  // Verifies: Maps 403 errors to disabled account message.
   it("maps 403 errors to disabled account message", () => {
     expect(
       getLoginErrorMessage(new AuthApiError("Account is disabled", 403)),
     ).toBe("Account is disabled. Please contact support.");
   });
 
+  // Verifies: Maps 422 errors to validation message.
   it("maps 422 errors to validation message", () => {
     expect(
       getLoginErrorMessage(
@@ -27,6 +30,7 @@ describe("getLoginErrorMessage", () => {
     ).toBe("Enter a valid email address.");
   });
 
+  // Verifies: Returns fallback for unknown errors.
   it("returns fallback for unknown errors", () => {
     expect(getLoginErrorMessage(new Error("network"))).toBe(
       "Unable to sign in. Please try again.",
@@ -35,6 +39,7 @@ describe("getLoginErrorMessage", () => {
 });
 
 describe("getRegisterErrorMessage", () => {
+  // Verifies: Returns a duplicate email message for 400 errors.
   it("returns a duplicate email message for 400 errors", () => {
     expect(
       getRegisterErrorMessage(
@@ -43,6 +48,7 @@ describe("getRegisterErrorMessage", () => {
     ).toBe("An account with this email already exists.");
   });
 
+  // Verifies: Maps 422 errors to field-specific validation message.
   it("maps 422 errors to field-specific validation message", () => {
     expect(
       getRegisterErrorMessage(
@@ -51,6 +57,7 @@ describe("getRegisterErrorMessage", () => {
     ).toBe("Enter a valid email address.");
   });
 
+  // Verifies: Returns a validation message for generic 422 errors.
   it("returns a validation message for generic 422 errors", () => {
     expect(
       getRegisterErrorMessage(
@@ -61,13 +68,13 @@ describe("getRegisterErrorMessage", () => {
 
   it("returns a not found message for 404 errors", () => {
     expect(getRegisterErrorMessage(new AuthApiError("Not Found", 404))).toBe(
-      "The server endpoint was not found. Make sure the backend is running.",
+      "Something went wrong on our end. Please try again in a moment.",
     );
   });
 
   it("returns a server error message for 500 errors", () => {
     expect(getRegisterErrorMessage(new AuthApiError("Server error", 500))).toBe(
-      "The server encountered an error. Make sure the database is running.",
+      "Something went wrong on our end. Please try again in a moment.",
     );
   });
 
@@ -79,7 +86,7 @@ describe("getRegisterErrorMessage", () => {
 
   it("returns a network error message when fetch fails", () => {
     expect(getRegisterErrorMessage(new TypeError("Failed to fetch"))).toBe(
-      "Cannot reach the server. Start the backend with: docker compose -f docker-compose.dev.yml up",
+      "Can't reach the server right now. Please check your connection and try again.",
     );
   });
 

@@ -31,3 +31,27 @@ export interface RegisterCredentials {
   email: string;
   password: string;
 }
+
+export interface ProfileUpdatePayload {
+  name?: string;
+  email?: string;
+}
+
+export interface ChangePasswordPayload {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export type NotificationSettings = Record<string, boolean>;
+
+export interface SessionResponse {
+  id: number;
+  created_at: string;
+  expires_at: string;
+  is_current: boolean;
+}
+
+export interface SecurityStatusResponse {
+  two_factor_enabled: boolean;
+  active_session_count: number;
+}

@@ -7,6 +7,7 @@ import { paths } from "@/routes/paths";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 describe("InstructorDashboardRecentActivity", () => {
+  // Verifies: Renders recent activity items and view-all link.
   it("renders recent activity items and view-all link", () => {
     renderWithRouter(
       <InstructorDashboardRecentActivity

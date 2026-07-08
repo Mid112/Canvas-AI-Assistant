@@ -47,6 +47,7 @@ function renderSidebarProfile() {
 }
 
 describe("SidebarProfile", () => {
+  // Verifies: Renders the profile trigger with user details.
   it("renders the profile trigger with user details", () => {
     renderSidebarProfile();
 
@@ -57,6 +58,7 @@ describe("SidebarProfile", () => {
     expect(screen.getByText("Instructor")).toBeInTheDocument();
   });
 
+  // Verifies: Shows profile, settings, institution switcher, and log out actions.
   it("shows profile, settings, institution switcher, and log out actions", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
 
@@ -74,6 +76,7 @@ describe("SidebarProfile", () => {
     expect(screen.getByText("Log out")).toBeInTheDocument();
   });
 
+  // Verifies: Logs out and navigates to login.
   it("logs out and navigates to login", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     mockNavigate.mockClear();

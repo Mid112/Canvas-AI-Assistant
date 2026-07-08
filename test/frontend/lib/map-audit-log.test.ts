@@ -7,6 +7,7 @@ import {
 } from "@/lib/map-audit-log";
 
 describe("mapAuditLogApiToEntry", () => {
+  // Verifies: Maps backend audit_logs fields to the UI model.
   it("maps backend audit_logs fields to the UI model", () => {
     const entry = mapAuditLogApiToEntry(mockAuditLogApiRecords[0]!);
 
@@ -23,6 +24,7 @@ describe("mapAuditLogApiToEntry", () => {
     expect(entry.details.operation).toBe("create");
   });
 
+  // Verifies: Defaults result to 'unknown' when status is unrecognized.
   it("defaults result to 'unknown' when status is unrecognized", () => {
     const record = {
       ...mockAuditLogApiRecords[0]!,
@@ -34,6 +36,7 @@ describe("mapAuditLogApiToEntry", () => {
     expect(entry.result).toBe("unknown");
   });
 
+  // Verifies: Uses resource type alone when resource_id is missing.
   it("uses resource type alone when resource_id is missing", () => {
     const record = {
       ...mockAuditLogApiRecords[0]!,
@@ -47,6 +50,7 @@ describe("mapAuditLogApiToEntry", () => {
 });
 
 describe("formatAuditLogUserRole", () => {
+  // Verifies: Maps backend roles to display labels.
   it("maps backend roles to display labels", () => {
     expect(formatAuditLogUserRole("instructor")).toBe("Instructor");
     expect(formatAuditLogUserRole("admin")).toBe("Administrator");

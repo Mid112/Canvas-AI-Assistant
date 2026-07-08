@@ -45,6 +45,8 @@ export interface ApiSubmission {
   assignment_id: number;
   user_id: number;
   student_name: string | null;
+  student_email: string | null;
+  student_login_id: string | null;
   submitted_at: string | null;
   workflow_state: string;
   status: ApiSubmissionStatus;
