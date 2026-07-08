@@ -4,7 +4,37 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ConfirmationDialog } from "@/components/messages/ConfirmationDialog";
 
+const recipients = [
+  { id: "1", name: "John Smith", email: "john@university.edu" },
+  { id: "2", name: "Sarah Lee", email: "sarah@university.edu" },
+  { id: "3", name: "Alex Kim", email: "alex@university.edu" },
+];
+
 describe("ConfirmationDialog", () => {
+  it("renders the full subject and body alongside the recipient count", () => {
+    render(
+      <ConfirmationDialog
+        open
+        onOpenChange={vi.fn()}
+        recipients={recipients}
+        selectedRecipientIds={new Set(["1", "2", "3"])}
+        onToggleRecipient={vi.fn()}
+        onRemoveRecipient={vi.fn()}
+        subject="Reminder: assignment due Friday"
+        body="Please submit your work before the deadline."
+        isSending={false}
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Send Message?")).toBeInTheDocument();
+    expect(screen.getByText(/3 students/i)).toBeInTheDocument();
+    expect(screen.getByText("Reminder: assignment due Friday")).toBeInTheDocument();
+    expect(
+      screen.getByText("Please submit your work before the deadline."),
+    ).toBeInTheDocument();
+  });
+
   it("calls onConfirm when Confirm Send is clicked", async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();
@@ -13,30 +43,64 @@ describe("ConfirmationDialog", () => {
       <ConfirmationDialog
         open
         onOpenChange={vi.fn()}
-        recipientCount={3}
+        recipients={recipients}
+        selectedRecipientIds={new Set(["1", "2", "3"])}
+        onToggleRecipient={vi.fn()}
+        onRemoveRecipient={vi.fn()}
+        subject="Subject"
+        body="Body"
         isSending={false}
         onConfirm={onConfirm}
       />,
     );
 
-    expect(screen.getByText("Send Message?")).toBeInTheDocument();
-    expect(screen.getByText(/3 students/i)).toBeInTheDocument();
-
     await user.click(screen.getByRole("button", { name: "Confirm Send" }));
     expect(onConfirm).toHaveBeenCalledOnce();
   });
 
-  it("disables confirm when there are no recipients", () => {
+  it("disables confirm when there are no selected recipients", () => {
     render(
       <ConfirmationDialog
         open
         onOpenChange={vi.fn()}
-        recipientCount={0}
+        recipients={recipients}
+        selectedRecipientIds={new Set()}
+        onToggleRecipient={vi.fn()}
+        onRemoveRecipient={vi.fn()}
+        subject="Subject"
+        body="Body"
         isSending={false}
         onConfirm={vi.fn()}
       />,
     );
 
     expect(screen.getByRole("button", { name: "Confirm Send" })).toBeDisabled();
+  });
+
+  it("lets the user deselect and remove a recipient from within the dialog", async () => {
+    const user = userEvent.setup();
+    const onToggleRecipient = vi.fn();
+    const onRemoveRecipient = vi.fn();
+
+    render(
+      <ConfirmationDialog
+        open
+        onOpenChange={vi.fn()}
+        recipients={recipients}
+        selectedRecipientIds={new Set(["1", "2", "3"])}
+        onToggleRecipient={onToggleRecipient}
+        onRemoveRecipient={onRemoveRecipient}
+        subject="Subject"
+        body="Body"
+        isSending={false}
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByRole("checkbox", { name: /Sarah Lee/i }));
+    expect(onToggleRecipient).toHaveBeenCalledWith("2");
+
+    await user.click(screen.getByRole("button", { name: "Remove Alex Kim" }));
+    expect(onRemoveRecipient).toHaveBeenCalledWith("3");
   });
 });

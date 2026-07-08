@@ -1,5 +1,34 @@
 import type { MessageRecipient } from "@/types/messageDraft";
 
+interface MessageContentPreviewProps {
+  subject: string;
+  body: string;
+}
+
+export function MessageContentPreview({ subject, body }: MessageContentPreviewProps) {
+  return (
+    <div className="space-y-5">
+      <div className="space-y-1">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Subject
+        </p>
+        <p className="text-sm font-medium">{subject || "—"}</p>
+      </div>
+
+      <div className="space-y-1">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Message
+        </p>
+        <div className="rounded-lg border bg-muted/20 px-4 py-3">
+          <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground">
+            {body || "—"}
+          </pre>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface MessagePreviewProps {
   recipients: MessageRecipient[];
   subject: string;
@@ -34,23 +63,7 @@ export function MessagePreview({ recipients, subject, body }: MessagePreviewProp
         )}
       </div>
 
-      <div className="space-y-1">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Subject
-        </p>
-        <p className="text-sm font-medium">{subject || "—"}</p>
-      </div>
-
-      <div className="space-y-1">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-          Message
-        </p>
-        <div className="rounded-lg border bg-muted/20 px-4 py-3">
-          <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground">
-            {body || "—"}
-          </pre>
-        </div>
-      </div>
+      <MessageContentPreview subject={subject} body={body} />
     </div>
   );
 }

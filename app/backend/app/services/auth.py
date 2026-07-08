@@ -65,6 +65,16 @@ async def login_user(db: AsyncSession, email: str, password: str) -> TokenRespon
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
 
     token, _ = await issue_token_for_user(db, user)
+
+    # Admins and instructors share this one login path; audit-log admin sign-ins
+    # specifically since that account type is the higher-value target. This is
+    # the same record admin_login_user (the separate, rate-limited /admin/login
+    # endpoint) writes — the audit trail no longer depends on which endpoint an
+    # admin happens to sign in through.
+    if user.role == "admin":
+        db.add(AuditLogSession(user_id=user.id, action="admin_login", details={"email": user.email}))
+        await db.commit()
+
     return TokenResponse(access_token=token)
 
 

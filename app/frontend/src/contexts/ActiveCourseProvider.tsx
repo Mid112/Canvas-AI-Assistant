@@ -27,7 +27,11 @@ import {
 import type { ActiveCourseResponse, CanvasCourse } from "@/types/canvas";
 import type { ActiveCourseSelection, InstructorCourse } from "@/types/course";
 
-const COURSE_SYNC_TIMEOUT_MS = 5000;
+// Must exceed the backend's own per-call Canvas timeout (10s, see
+// integrations/canvas.py's httpx.Timeout) with real margin — a shorter
+// value here means the UI can show "timed out" while the backend is
+// still legitimately within its own budget and would have succeeded.
+const COURSE_SYNC_TIMEOUT_MS = 20000;
 
 function mapCanvasCourseToInstructorCourse(
   course: CanvasCourse,
@@ -107,6 +111,11 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
   const isMountedRef = useRef(true);
 
   useEffect(() => {
+    // Reset on every (re)mount — without this, React 18 StrictMode's dev-only
+    // mount -> cleanup -> remount cycle runs the cleanup below once and never
+    // sets the ref back to true, permanently poisoning every isMountedRef
+    // check for the rest of the component's real lifetime.
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
     };

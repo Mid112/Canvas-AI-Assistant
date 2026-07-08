@@ -61,13 +61,13 @@ describe("getRegisterErrorMessage", () => {
 
   it("returns a not found message for 404 errors", () => {
     expect(getRegisterErrorMessage(new AuthApiError("Not Found", 404))).toBe(
-      "The server endpoint was not found. Make sure the backend is running.",
+      "Something went wrong on our end. Please try again in a moment.",
     );
   });
 
   it("returns a server error message for 500 errors", () => {
     expect(getRegisterErrorMessage(new AuthApiError("Server error", 500))).toBe(
-      "The server encountered an error. Make sure the database is running.",
+      "Something went wrong on our end. Please try again in a moment.",
     );
   });
 
@@ -79,7 +79,7 @@ describe("getRegisterErrorMessage", () => {
 
   it("returns a network error message when fetch fails", () => {
     expect(getRegisterErrorMessage(new TypeError("Failed to fetch"))).toBe(
-      "Cannot reach the server. Start the backend with: docker compose -f docker-compose.dev.yml up",
+      "Can't reach the server right now. Please check your connection and try again.",
     );
   });
 

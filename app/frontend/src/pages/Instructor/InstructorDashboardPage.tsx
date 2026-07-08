@@ -1,6 +1,7 @@
 import { Loader2 } from "lucide-react";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
+import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInstitution } from "@/contexts/useInstitution";
@@ -13,21 +14,24 @@ import type { DashboardMetrics } from "@/types/dashboard";
 import { sharedDashboardQuickActions } from "@/types/dashboard";
 import type { InstructorCourse } from "@/types/course";
 
-function deriveDashboardMetrics(courses: InstructorCourse[]): DashboardMetrics {
+function deriveDashboardMetrics(
+  courses: InstructorCourse[],
+  dashboardMetrics: DashboardMetrics,
+): DashboardMetrics {
   return {
     activeCourses: courses.length,
     activeCoursesTrend: 0,
     totalStudents: courses.reduce((sum, course) => sum + course.studentCount, 0),
     totalStudentsTrend: 0,
-    missingSubmissions: 0,
-    missingSubmissionsTrend: 0,
-    pendingApprovals: 0,
+    missingSubmissions: dashboardMetrics.missingSubmissions,
+    missingSubmissionsTrend: dashboardMetrics.missingSubmissionsTrend,
+    pendingApprovals: dashboardMetrics.pendingApprovals,
   };
 }
 
 export function InstructorDashboardPage() {
   const { user } = useAuth();
-  const { selectedInstitution } = useInstitution();
+  const { selectedInstitution, dashboard } = useInstitution();
   const {
     courses,
     error,
@@ -55,14 +59,7 @@ export function InstructorDashboardPage() {
         institutionShortName={selectedInstitution.shortName}
       />
 
-      {error ? (
-        <p
-          role="alert"
-          className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      ) : null}
+      {error ? <ErrorAlert message={error} /> : null}
 
       {isLoading ? (
         <Card className="shadow-sm ring-1 ring-border/60">
@@ -74,7 +71,7 @@ export function InstructorDashboardPage() {
       ) : (
         <>
           <InstructorDashboardOverview
-            metrics={deriveDashboardMetrics(courses)}
+            metrics={deriveDashboardMetrics(courses, dashboard.metrics)}
           />
 
           <div className="grid gap-6 lg:grid-cols-2">

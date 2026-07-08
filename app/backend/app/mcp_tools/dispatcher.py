@@ -1,6 +1,5 @@
 # app/backend/app/mcp_tools/dispatcher.py
 import json
-import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -10,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.canvas import fetch_enrollments
-from app.mcp_tools.schemas import ACTION_SCHEMAS, is_reversible
+from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS, is_reversible
 from app.models.course import Course
 from app.models.user import User
 from app.schemas.canvas import AssignmentCreate, AssignmentResponse, AssignmentUpdate, SubmissionResponse
@@ -31,6 +30,7 @@ from app.services.canvas import (
     update_course_assignment,
 )
 from app.services.canvas_status import CanvasWriteResult
+from app.services.llm.json_extraction import extract_json_object as _extract_json
 from app.services.message_validation import validate_message_for_send
 from app.services.student import get_students
 from app.services.write_preview import generate_write_preview
@@ -44,19 +44,6 @@ class ToolExecutionError(Exception):
         super().__init__(message)
         self.user_message = message
         self.log_detail = log_detail or message
-
-
-def _extract_json(raw_llm_output: str) -> str:
-    """Qwen3 and similar 'thinking' models wrap reasoning in <think>...</think>
-    before the actual answer. Strip that block, then pull out the first
-    {...} object found in what remains."""
-    without_thinking = re.sub(
-        r"<think>.*?</think>", "", raw_llm_output, flags=re.DOTALL
-    )
-    match = re.search(r"\{.*\}", without_thinking, re.DOTALL)
-    if match:
-        return match.group(0)
-    return without_thinking.strip()
 
 
 def parse_action(raw_llm_output: str) -> Any:
@@ -446,7 +433,6 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             # proposed_action tells generate_write_preview which write type
             # this is — it dispatches internally and returns the right metadata.
             proposed = action.proposed_action
-            write_actions = {"create_assignment", "update_assignment", "send_message", "update_grade"}
 
             # proposed_action.action must itself be a real, executable action
             # (or a read action) — not "clarify"/"intent_preview"/etc. This
@@ -494,15 +480,42 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                         "partial_plan": partial_plan,
                     }
 
-            if proposed.get("action") in write_actions:
+            if proposed.get("action") in WRITE_ACTIONS:
+                # proposed_action is a raw, unvalidated dict from the LLM's
+                # own JSON (IntentPreviewAction.proposed_action is typed as
+                # plain `dict`, not a specific write schema) — a model can
+                # write local_course_id as a numeric string ("612") instead
+                # of an int, which previously crashed as an unhandled
+                # Postgres type error ("integer = character varying") rather
+                # than a safe message. Coerce explicitly instead of trusting
+                # the LLM's JSON typing.
+                try:
+                    local_course_id = int(proposed.get("local_course_id", 0))
+                except (TypeError, ValueError):
+                    raise ToolExecutionError(
+                        "The assistant's response was missing a valid course reference. Please try again.",
+                        log_detail=f"Non-numeric local_course_id in proposed_action: {proposed!r}",
+                    )
                 # resolve the course for preview metadata (not for writing)
-                course = await _resolve_course(
-                    db, user, proposed.get("local_course_id", 0)
-                )
+                course = await _resolve_course(db, user, local_course_id)
                 preview_metadata = generate_write_preview(proposed, course)
             else:
-                # read-action previews don't need course-level metadata
+                # Read-action previews don't need the richer write-preview
+                # metadata, but still resolve a real course name when the
+                # action is course-scoped — otherwise the UI has nothing to
+                # show but a generic "Active course" placeholder.
                 preview_metadata = {"action": proposed.get("action")}
+                try:
+                    read_local_course_id = int(proposed.get("local_course_id", 0))
+                except (TypeError, ValueError):
+                    read_local_course_id = 0
+                if read_local_course_id:
+                    try:
+                        read_course = await _resolve_course(db, user, read_local_course_id)
+                    except ToolExecutionError:
+                        read_course = None
+                    if read_course is not None:
+                        preview_metadata["course"] = read_course.name
 
             return {
                 "action": "intent_preview",

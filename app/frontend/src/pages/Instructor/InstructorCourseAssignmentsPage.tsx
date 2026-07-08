@@ -381,7 +381,7 @@ function PageHeader({
         <p className="text-muted-foreground">
           {course
             ? formatInstructorCourseTitle(course)
-            : `Manage assignments and view submissions for course #${localCourseId}.`}
+            : "Manage assignments and view submissions for this course."}
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
