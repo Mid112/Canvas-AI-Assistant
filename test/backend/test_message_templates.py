@@ -21,6 +21,7 @@ def _headers(client: TestClient, name: str = "Template User") -> dict[str, str]:
     return {"Authorization": f"Bearer {reg.json()['access_token']}"}
 
 
+# Verifies: Create and list message templates.
 def test_create_and_list_message_templates(client):
     headers = _headers(client)
 
@@ -41,6 +42,7 @@ def test_create_and_list_message_templates(client):
     assert any(template["id"] == body["id"] for template in listed.json())
 
 
+# Verifies: Update message template.
 def test_update_message_template(client):
     headers = _headers(client)
     created = client.post(
@@ -60,6 +62,7 @@ def test_update_message_template(client):
     assert response.json()["content"] == "Updated body"
 
 
+# Verifies: Message template is user scoped.
 def test_message_template_is_user_scoped(client):
     owner_headers = _headers(client, name="Owner")
     other_headers = _headers(client, name="Other")
@@ -78,6 +81,7 @@ def test_message_template_is_user_scoped(client):
     assert client.delete(f"/api/v1/message-templates/{created['id']}", headers=other_headers).status_code == 404
 
 
+# Verifies: Delete message template.
 def test_delete_message_template(client):
     headers = _headers(client)
     created = client.post(
@@ -92,6 +96,7 @@ def test_delete_message_template(client):
     assert client.get(f"/api/v1/message-templates/{created['id']}", headers=headers).status_code == 404
 
 
+# Verifies: Message templates require auth.
 def test_message_templates_require_auth(client):
     response = client.get("/api/v1/message-templates/")
     assert response.status_code == 401

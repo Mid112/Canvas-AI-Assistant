@@ -6,6 +6,7 @@ import {
 } from "@/pages/Instructor/InstructorAssignmentCreate/assignmentCreateSchema";
 
 describe("assignmentDescribeSchema", () => {
+  // Verifies: Requires course and a detailed prompt.
   it("requires course and a detailed prompt", () => {
     const result = assignmentDescribeSchema.safeParse({
       courseId: "",
@@ -19,6 +20,7 @@ describe("assignmentDescribeSchema", () => {
     }
   });
 
+  // Verifies: Accepts valid describe values.
   it("accepts valid describe values", () => {
     const result = assignmentDescribeSchema.safeParse({
       courseId: "1",
@@ -30,6 +32,7 @@ describe("assignmentDescribeSchema", () => {
 });
 
 describe("assignmentReviewSchema", () => {
+  // Verifies: Rejects empty title and description.
   it("rejects empty title and description", () => {
     const result = assignmentReviewSchema.safeParse({
       name: "   ",
@@ -41,6 +44,7 @@ describe("assignmentReviewSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  // Verifies: Rejects due dates in the past.
   it("rejects due dates in the past", () => {
     const result = assignmentReviewSchema.safeParse({
       name: "Quiz",

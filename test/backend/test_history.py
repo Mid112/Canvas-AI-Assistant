@@ -83,6 +83,7 @@ async def _create_workflow_and_audit(email: str) -> tuple[int, int]:
         await engine.dispose()
 
 
+# Verifies: Workflow history is scoped to current user.
 def test_workflow_history_is_scoped_to_current_user(client):
     user_a = _register(client)
     user_b = _register(client)
@@ -97,6 +98,7 @@ def test_workflow_history_is_scoped_to_current_user(client):
     assert workflow_b not in ids
 
 
+# Verifies: User audit logs are scoped to current user.
 def test_user_audit_logs_are_scoped_to_current_user(client):
     user_a = _register(client)
     user_b = _register(client)
@@ -112,6 +114,7 @@ def test_user_audit_logs_are_scoped_to_current_user(client):
     assert all(item["user_email"] == user_a["email"] for item in resp.json())
 
 
+# Verifies: Admin audit logs requires admin.
 def test_admin_audit_logs_requires_admin(client, admin_credentials):
     instructor = _register(client)
     client.post(
@@ -123,6 +126,7 @@ def test_admin_audit_logs_requires_admin(client, admin_credentials):
     assert denied.status_code == 403
 
 
+# Verifies: Admin can list audit logs.
 def test_admin_can_list_audit_logs(client, admin_credentials):
     instructor = _register(client)
     _, audit_id = asyncio.run(_create_workflow_and_audit(instructor["email"]))

@@ -47,6 +47,7 @@ describe("mapIntentPreviewToDryRun", () => {
     },
   ];
 
+  // Verifies: Maps a stored intent preview message into dry-run preview data.
   it("maps a stored intent preview message into dry-run preview data", () => {
     expect(
       mapIntentPreviewToDryRun(7, 42, messages, "Dr. Jane Doe"),
@@ -68,6 +69,7 @@ describe("mapIntentPreviewToDryRun", () => {
     });
   });
 
+  // Verifies: Uses the latest modify request, not the original one, when the preview row was overwritten in place.
   it("uses the latest modify request, not the original one, when the preview row was overwritten in place", () => {
     // update_message_content overwrites the preview's own row on a modify
     // round instead of inserting a new one, so the message that produced
@@ -115,6 +117,7 @@ describe("mapIntentPreviewToDryRun", () => {
     });
   });
 
+  // Verifies: Stops at a confirm/cancel marker instead of reading into a later, unrelated exchange.
   it("stops at a confirm/cancel marker instead of reading into a later, unrelated exchange", () => {
     const resolvedThenNewMessages: ConversationMessage[] = [
       ...messages,
@@ -130,6 +133,7 @@ describe("mapIntentPreviewToDryRun", () => {
     });
   });
 
+  // Verifies: Computes a field-level diff against the immediately preceding revision.
   it("computes a field-level diff against the immediately preceding revision", () => {
     const messagesWithSnapshot: ConversationMessage[] = [
       messages[0],
@@ -166,11 +170,13 @@ describe("mapIntentPreviewToDryRun", () => {
     ]);
   });
 
+  // Verifies: Returns no diff when there is no previous revision to compare against.
   it("returns no diff when there is no previous revision to compare against", () => {
     const result = mapIntentPreviewToDryRun(7, 42, messages, "Dr. Jane Doe");
     expect(result.changesFromPreviousRequest).toEqual([]);
   });
 
+  // Verifies: Walks back through a clarify chain instead of showing the last short answer as the request.
   it("walks back through a clarify chain instead of showing the last short answer as the request", () => {
     // Mirrors a real conversation: an initial request, an unrelated error
     // (not a clarify), a fresh request, two rounds of clarify + short
@@ -244,6 +250,7 @@ describe("mapIntentPreviewToDryRun", () => {
     );
   });
 
+  // Verifies: Builds a structured plan from proposed_action, ordering known fields first.
   it("builds a structured plan from proposed_action, ordering known fields first", () => {
     const planMessages: ConversationMessage[] = [
       messages[0],
@@ -281,6 +288,7 @@ describe("mapIntentPreviewToDryRun", () => {
     ]);
   });
 
+  // Verifies: Renders a missing field as an em dash placeholder in the structured plan.
   it("renders a missing field as an em dash placeholder in the structured plan", () => {
     const planMessages: ConversationMessage[] = [
       messages[0],

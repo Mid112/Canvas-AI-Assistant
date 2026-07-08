@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { SubmissionStudentCell } from "@/pages/Instructor/InstructorSubmissionsAnalysis/SubmissionStudentCell";
 
 describe("SubmissionStudentCell", () => {
+  // Verifies: Renders student initials and name.
   it("renders student initials and name", () => {
     render(
       <SubmissionStudentCell

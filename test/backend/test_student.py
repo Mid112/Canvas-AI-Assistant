@@ -70,11 +70,13 @@ def _register_with_canvas(client) -> tuple[dict, int]:
 # GET /canvas/courses/{course_id}/students
 # ---------------------------------------------------------------------------
 
+# Verifies: List students unauthenticated.
 def test_list_students_unauthenticated(client):
     response = client.get("/api/v1/canvas/courses/1/students")
     assert response.status_code == 401
 
 
+# Verifies: List students no canvas token.
 def test_list_students_no_canvas_token(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
@@ -89,6 +91,7 @@ def test_list_students_no_canvas_token(client):
     assert response.status_code == 403
 
 
+# Verifies: List students course not found.
 def test_list_students_course_not_found(client):
     """Course not in instructor's DB returns 404 without ever calling Canvas."""
     headers, _ = _register_with_canvas(client)
@@ -101,6 +104,7 @@ def test_list_students_course_not_found(client):
     mock.assert_not_called()
 
 
+# Verifies: List students success.
 def test_list_students_success(client):
     headers, local_course_id = _register_with_canvas(client)
     enrollments = [_mock_enrollment()]
@@ -117,6 +121,7 @@ def test_list_students_success(client):
     assert data[0]["enrollment_state"] == "active"
 
 
+# Verifies: List students response shape.
 def test_list_students_response_shape(client):
     """Response must include id, canvas_user_id, course_id, name, sortable_name, login_id."""
     headers, local_course_id = _register_with_canvas(client)
@@ -135,6 +140,7 @@ def test_list_students_response_shape(client):
     assert student["login_id"] == "alice@example.com"
 
 
+# Verifies: List students upsert is idempotent.
 def test_list_students_upsert_is_idempotent(client):
     """Fetching the same roster twice must not duplicate DB rows (same id returned)."""
     headers, local_course_id = _register_with_canvas(client)
@@ -155,6 +161,7 @@ def test_list_students_upsert_is_idempotent(client):
     assert r1.json()[0]["id"] == r2.json()[0]["id"]
 
 
+# Verifies: List students empty roster.
 def test_list_students_empty_roster(client):
     headers, local_course_id = _register_with_canvas(client)
     with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock:
@@ -167,6 +174,7 @@ def test_list_students_empty_roster(client):
     assert response.json() == []
 
 
+# Verifies: List students cross instructor isolation.
 def test_list_students_cross_instructor_isolation(client):
     """Instructor B cannot fetch students for a course owned by instructor A — returns 404."""
     headers_a, local_course_id = _register_with_canvas(client)
@@ -184,6 +192,7 @@ def test_list_students_cross_instructor_isolation(client):
 # Issue #542 — API failure handling
 # ---------------------------------------------------------------------------
 
+# Verifies: List students invalid canvas token.
 def test_list_students_invalid_canvas_token(client):
     headers, local_course_id = _register_with_canvas(client)
     with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock:
@@ -198,6 +207,7 @@ def test_list_students_invalid_canvas_token(client):
     assert response.status_code == 422
 
 
+# Verifies: List students canvas permission denied.
 def test_list_students_canvas_permission_denied(client):
     headers, local_course_id = _register_with_canvas(client)
     with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock:
@@ -212,6 +222,7 @@ def test_list_students_canvas_permission_denied(client):
     assert response.status_code == 403
 
 
+# Verifies: List students canvas unavailable.
 def test_list_students_canvas_unavailable(client):
     headers, local_course_id = _register_with_canvas(client)
     with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock:
@@ -226,6 +237,7 @@ def test_list_students_canvas_unavailable(client):
     assert response.status_code == 502
 
 
+# Verifies: List students canvas timeout.
 def test_list_students_canvas_timeout(client):
     headers, local_course_id = _register_with_canvas(client)
     with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock:
@@ -244,6 +256,7 @@ def test_list_students_canvas_timeout(client):
 # Issue #541 — student data formatting (include[]=user)
 # ---------------------------------------------------------------------------
 
+# Verifies: Fetch enrollments includes user.
 @pytest.mark.asyncio
 async def test_fetch_enrollments_includes_user():
     """Canvas enrollment fetch must request nested user objects for name/login_id."""

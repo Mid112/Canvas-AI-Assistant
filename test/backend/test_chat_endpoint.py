@@ -24,11 +24,13 @@ def _register(client) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
+# Verifies: No auth.
 def test_no_auth(client):
     response = client.post("/api/v1/chat/", json={"message": "hello"})
     assert response.status_code == 401
 
 
+# Verifies: Llm error.
 def test_llm_error(client):
     headers = _register(client)
 
@@ -48,6 +50,7 @@ def test_llm_error(client):
     assert "error" in body["reply"]
 
 
+# Verifies: Plain text model reply is returned.
 def test_plain_text_model_reply_is_returned(client):
     headers = _register(client)
 
@@ -70,6 +73,7 @@ def test_plain_text_model_reply_is_returned(client):
     }
 
 
+# Verifies: Malformed json still returns safe error.
 def test_malformed_json_still_returns_safe_error(client):
     headers = _register(client)
 
@@ -89,6 +93,7 @@ def test_malformed_json_still_returns_safe_error(client):
     assert "could not be understood" in body["reply"]["error"]
 
 
+# Verifies: User log.
 def test_user_log(client):
     headers = _register(client)
 
@@ -112,6 +117,7 @@ def test_user_log(client):
     assert "user" in roles
 
 
+# Verifies: Chat resolves course name before calling model.
 def test_chat_resolves_course_name_before_calling_model(client):
     headers = _register(client)
 
@@ -155,6 +161,7 @@ def test_chat_resolves_course_name_before_calling_model(client):
     assert "do not ask the user for internal IDs" in generated_user_message
 
 
+# Verifies: Chat reuses conversation course context on followup.
 def test_chat_reuses_conversation_course_context_on_followup(client):
     headers = _register(client)
 

@@ -29,6 +29,7 @@ vi.mock("@/services/auth", () => ({
 }));
 
 describe("ProfilePage", () => {
+  // Verifies: Renders profile information and delete profile section.
   it("renders profile information and delete profile section", () => {
     renderWithRouter(<ProfilePage />);
 
@@ -46,6 +47,7 @@ describe("ProfilePage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Deletes profile when delete is clicked.
   it("deletes profile when delete is clicked", async () => {
     const user = userEvent.setup();
     renderWithRouter(<ProfilePage />);

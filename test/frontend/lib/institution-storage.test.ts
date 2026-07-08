@@ -12,6 +12,7 @@ describe("institution storage", () => {
     localStorage.clear();
   });
 
+  // Verifies: Stores and retrieves the selected institution id.
   it("stores and retrieves the selected institution id", () => {
     setStoredInstitutionId(42, "ubco");
 
@@ -19,6 +20,7 @@ describe("institution storage", () => {
     expect(getInstitutionStorageKey(42)).toBe("canvas-workflow-institution-42");
   });
 
+  // Verifies: Clears the stored institution id.
   it("clears the stored institution id", () => {
     setStoredInstitutionId(42, "ubc");
     clearStoredInstitutionId(42);

@@ -62,6 +62,7 @@ describe("ProtectedRoute", () => {
     );
   }
 
+  // Verifies: Shows loading state while auth is loading.
   it("shows loading state while auth is loading", () => {
     mockedUseAuth.mockReturnValue({
       user: null,
@@ -77,6 +78,7 @@ describe("ProtectedRoute", () => {
     expect(screen.getByText("Loading...")).toBeInTheDocument();
   });
 
+  // Verifies: Redirects unauthenticated users to login.
   it("redirects unauthenticated users to login", () => {
     mockedUseAuth.mockReturnValue({
       user: null,
@@ -93,6 +95,7 @@ describe("ProtectedRoute", () => {
     expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
   });
 
+  // Verifies: Renders child routes for authenticated users who completed onboarding.
   it("renders child routes for authenticated users who completed onboarding", () => {
     mockedIsOnboardingComplete.mockReturnValue(true);
     mockedUseAuth.mockReturnValue({
@@ -110,6 +113,7 @@ describe("ProtectedRoute", () => {
     expect(screen.queryByText("Login page")).not.toBeInTheDocument();
   });
 
+  // Verifies: Redirects authenticated users without completed onboarding to canvas info.
   it("redirects authenticated users without completed onboarding to canvas info", () => {
     mockedIsOnboardingComplete.mockReturnValue(false);
     mockedUseAuth.mockReturnValue({
@@ -127,6 +131,7 @@ describe("ProtectedRoute", () => {
     expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
   });
 
+  // Verifies: Allows onboarding routes before onboarding is complete.
   it("allows onboarding routes before onboarding is complete", () => {
     mockedIsOnboardingComplete.mockReturnValue(false);
     mockedUseAuth.mockReturnValue({
@@ -151,6 +156,7 @@ describe("ProtectedRoute", () => {
     expect(screen.getByText("Canvas info")).toBeInTheDocument();
   });
 
+  // Verifies: Allows admins to access protected routes without completed onboarding.
   it("allows admins to access protected routes without completed onboarding", () => {
     mockedIsOnboardingComplete.mockReturnValue(false);
     mockedUseAuth.mockReturnValue({

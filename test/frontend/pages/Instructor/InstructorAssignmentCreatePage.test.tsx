@@ -281,6 +281,7 @@ describe("InstructorAssignmentCreatePage", () => {
     expect(screen.getByText("Describe Your Assignment")).toBeInTheDocument();
   });
 
+  // Verifies: Shows an error when assignment generation fails.
   it("shows an error when assignment generation fails", async () => {
     const user = userEvent.setup();
     mockedGenerate.mockRejectedValueOnce(

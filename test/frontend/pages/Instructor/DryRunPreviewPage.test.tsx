@@ -111,6 +111,7 @@ describe("DryRunPreviewPage", () => {
     });
   });
 
+  // Verifies: Loads and displays the workflow preview.
   it("loads and displays the workflow preview", async () => {
     renderPage();
 
@@ -123,6 +124,7 @@ describe("DryRunPreviewPage", () => {
     expect(screen.getByText("Programming Assignment 3: Loops")).toBeInTheDocument();
   });
 
+  // Verifies: Shows an error state when preview loading fails.
   it("shows an error state when preview loading fails", async () => {
     mockedFetch.mockRejectedValue(new Error("Unable to load the workflow preview."));
 
@@ -133,6 +135,7 @@ describe("DryRunPreviewPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Returns to the assistant when reject is clicked.
   it("returns to the assistant when reject is clicked", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -142,6 +145,7 @@ describe("DryRunPreviewPage", () => {
     expect(await screen.findByText("AI Assistant")).toBeInTheDocument();
   });
 
+  // Verifies: Returns to the assistant with the original request prefilled when modify is clicked.
   it("returns to the assistant with the original request prefilled when modify is clicked", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -154,6 +158,7 @@ describe("DryRunPreviewPage", () => {
     );
   });
 
+  // Verifies: Keeps the success screen visible after the toast auto-dismisses.
   it("keeps the success screen visible after the toast auto-dismisses", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
@@ -177,6 +182,7 @@ describe("DryRunPreviewPage", () => {
     vi.useRealTimers();
   });
 
+  // Verifies: Shows success after approving the workflow.
   it("shows success after approving the workflow", async () => {
     const user = userEvent.setup();
     renderPage();

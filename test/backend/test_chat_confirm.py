@@ -70,6 +70,7 @@ def _propose_create_assignment(client, headers, local_course_id) -> tuple[int, i
     return body["conversation_id"], body["reply"]["pending_message_id"]
 
 
+# Verifies: Confirm replay is rejected.
 def test_confirm_replay_is_rejected(client):
     """The core regression test: confirming the same pending_message_id
     twice must not execute the Canvas write twice."""
@@ -108,6 +109,7 @@ def test_confirm_replay_is_rejected(client):
         mock_create.assert_called_once()
 
 
+# Verifies: Confirm unknown pending message id 404s.
 def test_confirm_unknown_pending_message_id_404s(client):
     headers, local_course_id = _register_with_canvas(client)
     conversation_id, _ = _propose_create_assignment(client, headers, local_course_id)
@@ -120,6 +122,7 @@ def test_confirm_unknown_pending_message_id_404s(client):
     assert response.status_code == 404
 
 
+# Verifies: Course id backfill.
 def test_course_id_backfill(client):
     """conversations.course_id should be backfilled from the proposed
     action's local_course_id once a write preview is generated, even
@@ -133,6 +136,7 @@ def test_course_id_backfill(client):
     assert history.json()["course_id"] == local_course_id
 
 
+# Verifies: Confirm canvas failure returns chat error.
 def test_confirm_canvas_failure_returns_chat_error(client):
     """Canvas failures on confirm return a user-friendly chat error, not a bare HTTP response."""
     headers, local_course_id = _register_with_canvas(client)
@@ -161,6 +165,7 @@ def test_confirm_canvas_failure_returns_chat_error(client):
     assert body["reply"]["error"] == "Canvas server error: 503"
 
 
+# Verifies: Modify snapshots previous proposed action.
 def test_modify_snapshots_previous_proposed_action(client):
     """A modify round overwrites the preview message in place (see
     update_message_content), which would otherwise make the version being
@@ -225,6 +230,7 @@ def test_modify_snapshots_previous_proposed_action(client):
     assert second_reply["previous_proposed_action"]["points_possible"] == 50
 
 
+# Verifies: Incomplete create assignment is clarified not previewed.
 def test_incomplete_create_assignment_is_clarified_not_previewed(client):
     """Regression test: a model can technically satisfy Pydantic's `str`
     type for a required field (e.g. description) by emitting "" instead
@@ -255,6 +261,7 @@ def test_incomplete_create_assignment_is_clarified_not_previewed(client):
     assert "intent_preview" not in reply
 
 
+# Verifies: Create assignment with past due date is clarified not previewed.
 def test_create_assignment_with_past_due_date_is_clarified_not_previewed(client):
     """Regression test: the model has no innate sense of "today" beyond
     the TODAY'S DATE prompt line and doesn't reliably apply it (observed
@@ -284,6 +291,7 @@ def test_create_assignment_with_past_due_date_is_clarified_not_previewed(client)
     assert "intent_preview" not in reply
 
 
+# Verifies: Clarify nested inside proposed action is rejected.
 def test_clarify_nested_inside_proposed_action_is_rejected(client):
     """Regression test: a modify turn confused about merging its edit
     with an existing plan can nest {"action": "clarify", ...} inside
@@ -312,6 +320,7 @@ def test_clarify_nested_inside_proposed_action_is_rejected(client):
     assert "could not be understood" in body["reply"]["error"]
 
 
+# Verifies: Modify turn sends current plan as structured context.
 def test_modify_turn_sends_current_plan_as_structured_context(client):
     """Regression test: a modify message that only restates the part
     being changed (e.g. just appending a year to the date) doesn't

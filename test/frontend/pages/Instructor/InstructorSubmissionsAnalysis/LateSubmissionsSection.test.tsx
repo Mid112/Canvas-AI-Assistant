@@ -7,6 +7,7 @@ import { LateSubmissionsSection } from "@/pages/Instructor/InstructorSubmissions
 const students = institutionSubmissionsData[0]!.assignments[0]!.lateSubmissions;
 
 describe("LateSubmissionsSection", () => {
+  // Verifies: Renders the late submissions table.
   it("renders the late submissions table", () => {
     render(<LateSubmissionsSection students={students} />);
 
@@ -21,12 +22,14 @@ describe("LateSubmissionsSection", () => {
     expect(screen.getByText("2 days late")).toHaveClass("text-amber-600");
   });
 
+  // Verifies: Uses singular copy for one late submission.
   it("uses singular copy for one late submission", () => {
     render(<LateSubmissionsSection students={[students[0]!]} />);
 
     expect(screen.getByText("1 student submitted late")).toBeInTheDocument();
   });
 
+  // Verifies: Renders an empty state when there are no students.
   it("renders an empty state when there are no students", () => {
     render(<LateSubmissionsSection students={[]} />);
 

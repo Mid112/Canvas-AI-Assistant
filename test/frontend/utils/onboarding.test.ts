@@ -8,11 +8,13 @@ import {
 } from "@/utils/onboarding";
 
 describe("onboarding utils", () => {
+  // Verifies: Requires onboarding for instructors only.
   it("requires onboarding for instructors only", () => {
     expect(requiresOnboarding("admin")).toBe(false);
     expect(requiresOnboarding("instructor")).toBe(true);
   });
 
+  // Verifies: Sends admins directly to the admin dashboard.
   it("sends admins directly to the admin dashboard", () => {
     expect(
       getPostAuthPath({
@@ -23,6 +25,7 @@ describe("onboarding utils", () => {
     ).toBe(paths.admin.dashboard);
   });
 
+  // Verifies: Sends instructors without completed onboarding to canvas info.
   it("sends instructors without completed onboarding to canvas info", () => {
     expect(
       getPostAuthPath({
@@ -33,6 +36,7 @@ describe("onboarding utils", () => {
     ).toBe(paths.canvasInfo);
   });
 
+  // Verifies: Treats users with saved canvas connections as onboarding complete.
   it("treats users with saved canvas connections as onboarding complete", () => {
     expect(
       isOnboardingComplete({

@@ -73,6 +73,7 @@ def _create_assignment_preview_output(local_course_id: int, title: str = "Midter
     )
 
 
+# Verifies: Cancel blocks execution and later confirm.
 def test_cancel_blocks_execution_and_later_confirm(client):
     headers, local_course_id = _register_with_canvas(client)
     body = _chat(
@@ -106,6 +107,7 @@ def test_cancel_blocks_execution_and_later_confirm(client):
         mock_create.assert_not_called()
 
 
+# Verifies: Double cancel is rejected.
 def test_double_cancel_is_rejected(client):
     headers, local_course_id = _register_with_canvas(client)
     body = _chat(
@@ -130,6 +132,7 @@ def test_double_cancel_is_rejected(client):
     assert second.status_code == 409
 
 
+# Verifies: Cancel unknown pending message id 404s.
 def test_cancel_unknown_pending_message_id_404s(client):
     headers, local_course_id = _register_with_canvas(client)
     body = _chat(
@@ -146,6 +149,7 @@ def test_cancel_unknown_pending_message_id_404s(client):
     assert response.status_code == 404
 
 
+# Verifies: Cancel read action preview succeeds.
 def test_cancel_read_action_preview_succeeds(client):
     """Every intent_preview gets a Workflow row now, read or write — the
     system prompt requires *every* action to go through preview->confirm,
@@ -178,6 +182,7 @@ def test_cancel_read_action_preview_succeeds(client):
     assert confirm.status_code == 409
 
 
+# Verifies: Confirm read action preview succeeds.
 def test_confirm_read_action_preview_succeeds(client):
     """Direct regression test for the bug found during manual
     verification: confirming a plain read-action preview (no cancel
@@ -200,6 +205,7 @@ def test_confirm_read_action_preview_succeeds(client):
     assert response.json()["reply"]["courses"] == []
 
 
+# Verifies: Cancel after modify recovers original first request.
 def test_cancel_after_modify_recovers_original_first_request(client):
     """original_request must stay pinned to the very first turn that
     started the preview chain, not the most recent "modify" revision —

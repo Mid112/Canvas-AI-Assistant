@@ -47,6 +47,7 @@ describe("RootLayout", () => {
     mockedGetStoredToken.mockReturnValue(null);
   });
 
+  // Verifies: Provides auth context to nested routes.
   it("provides auth context to nested routes", () => {
     render(
       <MemoryRouter initialEntries={["/"]}>

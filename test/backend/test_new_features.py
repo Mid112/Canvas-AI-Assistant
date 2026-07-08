@@ -25,6 +25,7 @@ def _register(client) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
+# Verifies: Logout.
 def test_logout(client):
     headers = _register(client)
     logout = client.post("/api/v1/auth/logout", headers=headers)
@@ -33,6 +34,7 @@ def test_logout(client):
     assert me.status_code == 401
 
 
+# Verifies: Profile update.
 def test_profile_update(client):
     headers = _register(client)
     resp = client.patch(
@@ -44,6 +46,7 @@ def test_profile_update(client):
     assert resp.json()["name"] == "Updated Name"
 
 
+# Verifies: Notification settings.
 def test_notification_settings(client):
     headers = _register(client)
     settings = {"workflow-approvals": True, "grade-updates": False}
@@ -56,6 +59,7 @@ def test_notification_settings(client):
     assert resp.json()["workflow-approvals"] is True
 
 
+# Verifies: Password reset flow.
 def test_password_reset_flow(client):
     email = f"reset_{uuid.uuid4()}@example.com"
     client.post(
@@ -66,6 +70,7 @@ def test_password_reset_flow(client):
     assert request.status_code == 204
 
 
+# Verifies: Security status.
 def test_security_status(client):
     headers = _register(client)
     resp = client.get("/api/v1/auth/me/security", headers=headers)
@@ -73,6 +78,7 @@ def test_security_status(client):
     assert resp.json()["active_session_count"] >= 1
 
 
+# Verifies: Message draft crud.
 def test_message_draft_crud(client):
     headers = _register(client)
     create = client.post(
@@ -92,6 +98,7 @@ def test_message_draft_crud(client):
     assert get.json()["subject"] == "Hello"
 
 
+# Verifies: Workflow history empty.
 def test_workflow_history_empty(client):
     headers = _register(client)
     resp = client.get("/api/v1/history/workflows", headers=headers)

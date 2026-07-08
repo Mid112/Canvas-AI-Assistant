@@ -44,6 +44,7 @@ describe("RegisterPage", () => {
     mockRegister.mockReset();
   });
 
+  // Verifies: Renders all register sections.
   it("renders all register sections", () => {
     renderWithRouter(<RegisterPage />);
 
@@ -64,6 +65,7 @@ describe("RegisterPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Navigates to canvas info on create account.
   it("navigates to canvas info on create account", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
@@ -115,6 +117,7 @@ describe("RegisterPage", () => {
     ).toBe(paths.canvasInfo);
   });
 
+  // Verifies: Shows an error when registration fails with a duplicate email.
   it("shows an error when registration fails with a duplicate email", async () => {
     const user = userEvent.setup();
     mockRegister.mockRejectedValue(

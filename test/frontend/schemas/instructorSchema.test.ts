@@ -6,6 +6,7 @@ import {
 } from "@/schemas/instructorSchema";
 
 describe("instructorSchema", () => {
+  // Verifies: Validates create instructor form fields.
   it("validates create instructor form fields", () => {
     const result = instructorFormSchema.safeParse({
       firstName: "Jane",
@@ -20,6 +21,7 @@ describe("instructorSchema", () => {
     }
   });
 
+  // Verifies: Rejects whitespace-only temporary passwords.
   it("rejects whitespace-only temporary passwords", () => {
     const result = instructorFormSchema.safeParse({
       firstName: "Jane",
@@ -31,6 +33,7 @@ describe("instructorSchema", () => {
     expect(result.success).toBe(false);
   });
 
+  // Verifies: Validates edit instructor form fields.
   it("validates edit instructor form fields", () => {
     const result = editInstructorFormSchema.safeParse({
       firstName: "",

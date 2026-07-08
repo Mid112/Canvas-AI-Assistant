@@ -5,6 +5,7 @@ import { ConnectCanvasTokenStatus } from "@/pages/Auth/ConnectCanvas/ConnectCanv
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 describe("ConnectCanvasTokenStatus", () => {
+  // Verifies: Renders nothing when validation is idle.
   it("renders nothing when validation is idle", () => {
     const { container } = renderWithRouter(
       <ConnectCanvasTokenStatus validation={{ status: "idle" }} />,
@@ -13,6 +14,7 @@ describe("ConnectCanvasTokenStatus", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  // Verifies: Renders validating status.
   it("renders validating status", () => {
     renderWithRouter(
       <ConnectCanvasTokenStatus validation={{ status: "validating" }} />,
@@ -21,6 +23,7 @@ describe("ConnectCanvasTokenStatus", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Checking token...");
   });
 
+  // Verifies: Renders valid status.
   it("renders valid status", () => {
     renderWithRouter(
       <ConnectCanvasTokenStatus validation={{ status: "valid" }} />,
@@ -29,6 +32,7 @@ describe("ConnectCanvasTokenStatus", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Token is valid");
   });
 
+  // Verifies: Renders expired status.
   it("renders expired status", () => {
     renderWithRouter(
       <ConnectCanvasTokenStatus validation={{ status: "expired" }} />,
@@ -37,6 +41,7 @@ describe("ConnectCanvasTokenStatus", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Token has expired");
   });
 
+  // Verifies: Renders invalid status.
   it("renders invalid status", () => {
     renderWithRouter(
       <ConnectCanvasTokenStatus validation={{ status: "invalid" }} />,

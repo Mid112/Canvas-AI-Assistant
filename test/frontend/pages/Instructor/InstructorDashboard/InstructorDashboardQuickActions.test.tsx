@@ -18,6 +18,7 @@ vi.mock("react-router-dom", async () => {
 });
 
 describe("InstructorDashboardQuickActions", () => {
+  // Verifies: Renders quick action cards.
   it("renders quick action cards", () => {
     renderWithRouter(
       <InstructorDashboardQuickActions
@@ -34,6 +35,7 @@ describe("InstructorDashboardQuickActions", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Navigates to assignment creator or assistant from quick actions.
   it("navigates to assignment creator or assistant from quick actions", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();

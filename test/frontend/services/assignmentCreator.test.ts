@@ -19,6 +19,7 @@ describe("toAssignmentCreateRequest", () => {
     vi.clearAllMocks();
   });
 
+  // Verifies: Maps reviewed form values into an API-ready create payload.
   it("maps reviewed form values into an API-ready create payload", () => {
     const result = toAssignmentCreateRequest({
       courseId: "3",
@@ -37,6 +38,7 @@ describe("toAssignmentCreateRequest", () => {
     });
   });
 
+  // Verifies: Rejects invalid course ids.
   it("rejects invalid course ids", () => {
     expect(() =>
       toAssignmentCreateRequest({
@@ -49,6 +51,7 @@ describe("toAssignmentCreateRequest", () => {
     ).toThrow("A valid course is required.");
   });
 
+  // Verifies: Creates the assignment through the Canvas assignment API.
   it("creates the assignment through the Canvas assignment API", async () => {
     mockedCreateAssignment.mockResolvedValue({
       id: 10,

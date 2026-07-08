@@ -44,6 +44,7 @@ vi.mock("react-router-dom", async () => {
 });
 
 describe("ReviewPermissionsPage", () => {
+  // Verifies: Renders the review permissions overview.
   it("renders the review permissions overview", () => {
     renderWithRouter(<ReviewPermissionsPage />);
 
@@ -68,6 +69,7 @@ describe("ReviewPermissionsPage", () => {
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
   });
 
+  // Verifies: Renders allowed and restricted action details.
   it("renders allowed and restricted action details", () => {
     renderWithRouter(<ReviewPermissionsPage />);
 
@@ -84,6 +86,7 @@ describe("ReviewPermissionsPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Marks onboarding complete and navigates to role dashboard when approved.
   it("marks onboarding complete and navigates to role dashboard when approved", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
@@ -99,6 +102,7 @@ describe("ReviewPermissionsPage", () => {
     expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.dashboard);
   });
 
+  // Verifies: Navigates back to connect canvas on cancel.
   it("navigates back to connect canvas on cancel", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();

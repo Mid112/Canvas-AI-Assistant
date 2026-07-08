@@ -7,11 +7,13 @@ import os
 VLLM_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8000")
 MODEL = os.getenv("VLLM_MODEL", "Qwen/Qwen3-4B")
 
+# Verifies: Vllm health.
 def test_vllm_health():
     """vLLM server is reachable."""
     response = httpx.get(f"{VLLM_URL}/health")
     assert response.status_code == 200
 
+# Verifies: Vllm model loaded.
 def test_vllm_model_loaded():
     """Expected model is available."""
     response = httpx.get(f"{VLLM_URL}/v1/models")
@@ -20,6 +22,7 @@ def test_vllm_model_loaded():
     model_ids = [m["id"] for m in models]
     assert MODEL in model_ids
 
+# Verifies: Vllm basic completion.
 def test_vllm_basic_completion():
     """vLLM returns a valid chat completion."""
     response = httpx.post(

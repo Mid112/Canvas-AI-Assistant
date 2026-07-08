@@ -63,6 +63,7 @@ describe("StudentMessageDraftPage", () => {
     mockedSend.mockResolvedValue();
   });
 
+  // Verifies: Loads and displays the mock message draft.
   it("loads and displays the mock message draft", async () => {
     renderPage();
 
@@ -78,6 +79,7 @@ describe("StudentMessageDraftPage", () => {
     expect(screen.getByText("Assignment Reminder")).toBeInTheDocument();
   });
 
+  // Verifies: Updates preview when subject and body are edited.
   it("updates preview when subject and body are edited", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -92,6 +94,7 @@ describe("StudentMessageDraftPage", () => {
     expect(screen.getByText("Updated subject line")).toBeInTheDocument();
   });
 
+  // Verifies: Shows confirmation dialog and sends message on confirm.
   it("shows confirmation dialog and sends message on confirm", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -118,6 +121,7 @@ describe("StudentMessageDraftPage", () => {
     );
   });
 
+  // Verifies: Shows an error notification when sending fails.
   it("shows an error notification when sending fails", async () => {
     const user = userEvent.setup();
     mockedSend.mockRejectedValueOnce(
@@ -137,6 +141,7 @@ describe("StudentMessageDraftPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Sends only the selected student.
   it("sends only the selected student", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -168,6 +173,7 @@ describe("StudentMessageDraftPage", () => {
     });
   });
 
+  // Verifies: Resets edits when cancel is clicked.
   it("resets edits when cancel is clicked", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -183,6 +189,7 @@ describe("StudentMessageDraftPage", () => {
     expect(subjectField).toHaveValue(mockMessageDraft.subject);
   });
 
+  // Verifies: Requests empty recipients when ?empty=true.
   it("requests empty recipients when ?empty=true", async () => {
     mockedFetch.mockResolvedValueOnce({
       ...mockMessageDraft,
@@ -202,6 +209,7 @@ describe("StudentMessageDraftPage", () => {
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   });
 
+  // Verifies: Shows load error with retry when ?loadError=true.
   it("shows load error with retry when ?loadError=true", async () => {
     mockedFetch.mockRejectedValueOnce(
       new Error("Unable to load message draft. Please try again."),

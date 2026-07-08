@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { CanvasAuthErrorHeader } from "@/pages/Error/CanvasAuthError/CanvasAuthErrorHeader";
 
 describe("CanvasAuthErrorHeader", () => {
+  // Verifies: Renders the error heading and description.
   it("renders the error heading and description", () => {
     render(<CanvasAuthErrorHeader />);
 

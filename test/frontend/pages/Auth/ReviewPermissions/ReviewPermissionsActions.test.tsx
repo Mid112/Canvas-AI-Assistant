@@ -6,6 +6,7 @@ import { ReviewPermissionsActions } from "@/pages/Auth/ReviewPermissions/ReviewP
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 describe("ReviewPermissionsActions", () => {
+  // Verifies: Renders cancel and approve buttons.
   it("renders cancel and approve buttons", () => {
     renderWithRouter(
       <ReviewPermissionsActions onCancel={vi.fn()} onApprove={vi.fn()} />,
@@ -17,6 +18,7 @@ describe("ReviewPermissionsActions", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Calls onCancel when cancel is clicked.
   it("calls onCancel when cancel is clicked", async () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();
@@ -30,6 +32,7 @@ describe("ReviewPermissionsActions", () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
+  // Verifies: Calls onApprove when approve is clicked.
   it("calls onApprove when approve is clicked", async () => {
     const user = userEvent.setup();
     const onApprove = vi.fn();

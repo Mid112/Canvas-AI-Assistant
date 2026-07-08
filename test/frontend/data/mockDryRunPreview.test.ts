@@ -7,12 +7,14 @@ import {
 } from "@/data/mockDryRunPreview";
 
 describe("mockDryRunPreview", () => {
+  // Verifies: Includes the default student reminder workflow.
   it("includes the default student reminder workflow", () => {
     expect(mockStudentReminderPreview.title).toBe("Workflow Preview");
     expect(mockStudentReminderPreview.actionType).toBe("Send Message");
     expect(mockStudentReminderPreview.reversibility).toBe("irreversible");
   });
 
+  // Verifies: Includes an assignment update workflow variant.
   it("includes an assignment update workflow variant", () => {
     expect(mockAssignmentUpdatePreview.actionType).toBe("Update");
     expect(mockAssignmentUpdatePreview.affectedResources.students).toEqual({
@@ -20,6 +22,7 @@ describe("mockDryRunPreview", () => {
     });
   });
 
+  // Verifies: Indexes previews by id.
   it("indexes previews by id", () => {
     expect(mockDryRunPreviews[mockStudentReminderPreview.id]).toBeDefined();
     expect(mockDryRunPreviews[mockAssignmentUpdatePreview.id]).toBeDefined();

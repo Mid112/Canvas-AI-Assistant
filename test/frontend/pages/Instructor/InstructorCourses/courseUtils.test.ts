@@ -9,10 +9,12 @@ import {
 const ubcCourses = institutionCourseData[0]!.courses;
 
 describe("filterInstructorCourses", () => {
+  // Verifies: Returns all courses when search is empty.
   it("returns all courses when search is empty", () => {
     expect(filterInstructorCourses(ubcCourses, "")).toHaveLength(ubcCourses.length);
   });
 
+  // Verifies: Filters courses by code or name.
   it("filters courses by code or name", () => {
     const results = filterInstructorCourses(ubcCourses, "database");
 
@@ -22,6 +24,7 @@ describe("filterInstructorCourses", () => {
 });
 
 describe("sortInstructorCourses", () => {
+  // Verifies: Sorts courses alphabetically by code and name.
   it("sorts courses alphabetically by code and name", () => {
     const sorted = sortInstructorCourses(ubcCourses);
 

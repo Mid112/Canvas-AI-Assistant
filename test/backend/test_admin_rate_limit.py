@@ -20,6 +20,7 @@ def client():
     app.state.limiter.reset()
 
 
+# Verifies: Admin login 6th request in a minute returns 429.
 def test_admin_login_6th_request_in_a_minute_returns_429(client):
     payload = {"email": f"nobody_{uuid.uuid4()}@example.com", "password": "wrong"}
 
