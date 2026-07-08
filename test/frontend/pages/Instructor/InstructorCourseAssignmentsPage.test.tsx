@@ -127,7 +127,7 @@ describe("InstructorCourseAssignmentsPage", () => {
       CANVAS_URL,
     );
 
-    const editLink = screen.getByRole("link", { name: "Edit" });
+    const editLink = screen.getByRole("button", { name: "Edit" });
     expect(editLink).toHaveAttribute(
       "href",
       "/instructor/courses/3/assignments/10/edit",

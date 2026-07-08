@@ -33,6 +33,9 @@ function mapDraftResponse(
   response: MessageDraftApiResponse,
   fallbackRecipients: MessageRecipient[] = [],
 ): MessageDraft {
+  // The backend may create an empty draft while the course page has already
+  // loaded recipients from Canvas/submission fallback. Preserve those local
+  // recipients so the UI does not briefly lose its selected student list.
   const recipients =
     response.recipients.length > 0 ? response.recipients : fallbackRecipients;
 
@@ -126,6 +129,9 @@ export async function sendMessageDraft(
       (recipient) => !payload.recipientIds.includes(recipient.id),
     )
   ) {
+    // Sending uses the stored draft recipients on the backend. If the UI has
+    // ids but not matching recipient objects, PATCH would persist the wrong
+    // target set and could send to stale recipients.
     throw new MessageDraftApiError(
       "Selected recipient details are out of sync. Please reload the draft and try again.",
     );

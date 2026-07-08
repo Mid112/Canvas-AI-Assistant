@@ -18,7 +18,7 @@ describe("CanvasAuthErrorActions", () => {
       screen.getByRole("button", { name: "Retry Connection" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Contact Administrator" }),
+      screen.getByRole("button", { name: "Contact Administrator" }),
     ).toHaveAttribute("href", "mailto:support@institution.edu");
     expect(
       screen.getByRole("button", { name: "Return to Login" }),

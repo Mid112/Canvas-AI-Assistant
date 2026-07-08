@@ -52,6 +52,8 @@ function Button({
     <ButtonPrimitive
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
+      // When render={<Link/>} or render={<a/>} is used, Base UI should not
+      // force native button semantics onto the rendered element.
       nativeButton={nativeButton ?? !render}
       render={render}
       {...props}

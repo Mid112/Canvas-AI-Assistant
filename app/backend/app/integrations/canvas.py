@@ -29,6 +29,9 @@ def _canvas_error_detail(response: httpx.Response) -> str:
             if isinstance(value, str):
                 return value
             if isinstance(value, list) and value:
+                # Canvas often returns errors as [{"message": "..."}].
+                # Flatten that shape so UI banners show the actionable text,
+                # not a Python dict representation that hides the real cause.
                 messages: list[str] = []
                 for item in value:
                     if isinstance(item, dict):
@@ -371,6 +374,8 @@ async def post_announcement(
     token: str,
     canvas_url: str = settings.CANVAS_API_URL,
 ) -> dict:
+    # Keep this older announcement helper compatible with the browser-facing
+    # localhost URL and the backend/container-facing Canvas alias.
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
@@ -407,11 +412,15 @@ async def send_conversation(
         ("context_code", f"course_{course_id}"),
         ("group_conversation", "false"),
     ]
-    # Canvas expects repeated recipients[] form fields. Keeping these as tuples
-    # avoids client-library ambiguity around dict values that are arrays.
+    # Canvas expects repeated recipients[] form fields. Build that as a tuple
+    # list first so a debugger can inspect the exact logical payload before it
+    # gets encoded for transport.
     form_data.extend(
         ("recipients[]", str(user_id)) for user_id in recipient_canvas_user_ids
     )
+    # httpx.AsyncClient cannot safely send tuple-list form data as a sync stream.
+    # Encoding explicitly preserves repeated recipients[] while keeping the
+    # request async-safe.
     form_body = urlencode(form_data)
 
     try:

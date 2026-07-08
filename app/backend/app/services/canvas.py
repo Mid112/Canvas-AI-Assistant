@@ -274,6 +274,8 @@ async def send_course_message(
     canvas_course_id = int(course.canvas_course_id)
 
     if recipient_canvas_user_ids:
+        # A non-empty recipient list means a private Canvas Conversation.
+        # No recipient list falls through to the public course announcement path.
         await send_conversation(
             canvas_course_id,
             recipient_canvas_user_ids,
@@ -341,6 +343,10 @@ async def _fill_submission_contact_fields(
     token: str,
     canvas_url: str,
 ) -> None:
+    # Canvas's submissions include[]=user payload can include a display name
+    # without email/login_id. Pull /users/{id}/profile only for those sparse
+    # rows so the Students/Messages UI can show an email without adding extra
+    # requests for already-complete submissions.
     missing_contact = [
         submission
         for submission in submissions
@@ -391,6 +397,9 @@ async def get_submissions(
     await _fill_submission_contact_fields(parsed, token, canvas_url)
 
     try:
+        # The API response is authoritative even if the local analytics cache
+        # write fails below, so keep cache persistence isolated from the return
+        # value. This prevents a DB cache hiccup from breaking the live Canvas view.
         assignment = await db.scalar(
             select(Assignment).where(
                 Assignment.canvas_assignment_id == str(assignment_id),
@@ -407,6 +416,9 @@ async def get_submissions(
             await db.flush()
 
         canvas_ids = [str(item.id) for item in parsed]
+        # Canvas submission ids are unique in our schema, but scoping by the
+        # local assignment makes the intent explicit and protects this upsert if
+        # the uniqueness model changes later.
         existing_rows = await db.scalars(
             select(Submission).where(
                 Submission.assignment_id == assignment.id,
