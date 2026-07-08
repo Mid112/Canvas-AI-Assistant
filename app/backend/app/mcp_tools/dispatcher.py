@@ -398,8 +398,22 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 course = await _resolve_course(db, user, local_course_id)
                 preview_metadata = generate_write_preview(proposed, course)
             else:
-                # read-action previews don't need course-level metadata
+                # Read-action previews don't need the richer write-preview
+                # metadata, but still resolve a real course name when the
+                # action is course-scoped — otherwise the UI has nothing to
+                # show but a generic "Active course" placeholder.
                 preview_metadata = {"action": proposed.get("action")}
+                try:
+                    read_local_course_id = int(proposed.get("local_course_id", 0))
+                except (TypeError, ValueError):
+                    read_local_course_id = 0
+                if read_local_course_id:
+                    try:
+                        read_course = await _resolve_course(db, user, read_local_course_id)
+                    except ToolExecutionError:
+                        read_course = None
+                    if read_course is not None:
+                        preview_metadata["course"] = read_course.name
 
             return {
                 "action": "intent_preview",

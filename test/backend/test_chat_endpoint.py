@@ -201,6 +201,74 @@ def test_chat_reuses_conversation_course_context_on_followup(client):
     assert f"local_course_id: {local_course_id}" in followup_user_message
 
 
+def test_chat_followup_stays_on_conversation_course_despite_conflicting_active_course(
+    client,
+):
+    """A conversation named a course by text in turn 1 (e.g. answering a
+    clarify question about a different course than the user's global active
+    course) must not snap back to the global active course on a turn 2 that
+    names no course at all — the conversation's own course_id should win."""
+    headers = _register(client)
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            headers=headers,
+        )
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock_courses:
+        mock_courses.return_value = [
+            {
+                "id": 310,
+                "name": "COSC 310",
+                "course_code": "COSC 310",
+                "enrollment_term_id": 1,
+                "workflow_state": "available",
+            },
+            {
+                "id": 499,
+                "name": "COSC 499",
+                "course_code": "COSC 499",
+                "enrollment_term_id": 1,
+                "workflow_state": "available",
+            },
+        ]
+        courses = client.get(
+            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            headers=headers,
+        )
+    local_ids = {c["name"]: c["local_id"] for c in courses.json()}
+
+    # Global active course is set to COSC 310 ...
+    client.patch(
+        "/api/v1/canvas/active-course",
+        json={"local_course_id": local_ids["COSC 310"]},
+        headers=headers,
+    )
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "OK."}'
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        # ... but this conversation is about COSC 499, named explicitly in turn 1.
+        first = client.post(
+            "/api/v1/chat/",
+            json={"message": "show assignments for COSC 499"},
+            headers=headers,
+        )
+        conversation_id = first.json()["conversation_id"]
+        # Turn 2 names no course at all (e.g. answering a clarify question).
+        client.post(
+            "/api/v1/chat/",
+            json={"message": "all assignments", "conversation_id": conversation_id},
+            headers=headers,
+        )
+
+    followup_user_message = mock_adapter.generate.call_args_list[1].args[1]
+    assert f"local_course_id: {local_ids['COSC 499']}" in followup_user_message
+
+
 def test_history_sent_to_llm_truncates_oversized_prior_messages(client):
     """Regression test for a real incident: a prior turn's stored assistant
     message can end up huge — a failed-parse turn logs the full raw model
@@ -240,6 +308,121 @@ def test_history_sent_to_llm_truncates_oversized_prior_messages(client):
     huge_entry = next(m for m in followup_history if m["role"] == "assistant")
     assert len(huge_entry["content"]) < len(huge_reply)
     assert huge_entry["content"].endswith("…[truncated]")
+
+
+def test_history_summarizes_clarify_reply_for_next_turn(client):
+    """Assistant turns replayed as LLM history should be reduced to their
+    natural-language gist for terminal, already-resolved turns like a
+    clarify question — feeding the full JSON shape back to the model risks
+    it echoing stray field names/structure into its next output instead of
+    just answering based on the plain-English question it asked."""
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.side_effect = [
+        '{"action": "clarify", "question": "Which course do you mean?", "partial_plan": {}}',
+        '{"action": "respond", "message": "OK."}',
+    ]
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        first = client.post(
+            "/api/v1/chat/",
+            json={"message": "show me assignments"},
+            headers=headers,
+        )
+        conversation_id = first.json()["conversation_id"]
+        client.post(
+            "/api/v1/chat/",
+            json={"message": "COSC 310", "conversation_id": conversation_id},
+            headers=headers,
+        )
+
+    followup_history = mock_adapter.generate.call_args_list[1].kwargs["history"]
+    assistant_entry = next(m for m in followup_history if m["role"] == "assistant")
+    assert assistant_entry["content"] == "Which course do you mean?"
+
+
+def test_history_keeps_intent_preview_full_for_modify_turn(client):
+    """Unlike clarify/respond turns, an intent_preview must stay full JSON
+    in history — a follow-up 'modify' turn needs the complete previous
+    proposed_action to correctly carry forward fields the user didn't ask
+    to change."""
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.side_effect = [
+        '{"action": "intent_preview", "summary": "I will fetch your courses.", "proposed_action": {"action": "fetch_courses"}}',
+        '{"action": "respond", "message": "OK."}',
+    ]
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        first = client.post(
+            "/api/v1/chat/",
+            json={"message": "show me my courses"},
+            headers=headers,
+        )
+        conversation_id = first.json()["conversation_id"]
+        client.post(
+            "/api/v1/chat/",
+            json={"message": "actually, something else", "conversation_id": conversation_id},
+            headers=headers,
+        )
+
+    followup_history = mock_adapter.generate.call_args_list[1].kwargs["history"]
+    assistant_entry = next(m for m in followup_history if m["role"] == "assistant")
+    assert "proposed_action" in assistant_entry["content"]
+    assert "fetch_courses" in assistant_entry["content"]
+
+
+def test_course_name_resolution_prefers_longest_match(client):
+    """Two courses whose normalized names overlap as substrings (one name
+    contained within another) must resolve to the more specific, longer
+    match deterministically rather than whichever the DB query happens to
+    return first."""
+    headers = _register(client)
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            headers=headers,
+        )
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock_courses:
+        mock_courses.return_value = [
+            {
+                "id": 1,
+                "name": "COSC 310",
+                "course_code": "COSC 310",
+                "enrollment_term_id": 1,
+                "workflow_state": "available",
+            },
+            {
+                "id": 2,
+                "name": "COSC 310 Advanced",
+                "course_code": "COSC 310 Advanced",
+                "enrollment_term_id": 1,
+                "workflow_state": "available",
+            },
+        ]
+        courses = client.get(
+            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            headers=headers,
+        )
+    local_ids = {c["name"]: c["local_id"] for c in courses.json()}
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "OK."}'
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        client.post(
+            "/api/v1/chat/",
+            json={"message": "Summarize COSC 310 Advanced"},
+            headers=headers,
+        )
+
+    sent_message = mock_adapter.generate.call_args_list[0].args[1]
+    assert f"local_course_id: {local_ids['COSC 310 Advanced']}" in sent_message
 
 
 def test_chat_uses_saved_active_course_when_client_context_is_not_ready(client):
