@@ -402,10 +402,18 @@ export function ChatWindow({
       return;
     }
 
+    // Deliberately not reset back to null after sending: onInitialPromptConsumed
+    // clears the prompt in the parent asynchronously, so this same effect can
+    // still re-run with the identical initialPrompt before that update lands
+    // (guaranteed to happen under React 18 StrictMode's dev-only mount ->
+    // cleanup -> remount cycle). Resetting the guard here made it forget it
+    // had already sent this exact prompt, so the remount sent it a second
+    // time. The guard only needs to remember "have I handled this string
+    // yet" — the next real render, once pendingPrompt is actually cleared,
+    // falls through via the `!initialPrompt` check above instead.
     initialPromptHandledRef.current = initialPrompt;
     handleSend(initialPrompt);
     onInitialPromptConsumed?.();
-    initialPromptHandledRef.current = null;
   }, [handleSend, initialPrompt, onInitialPromptConsumed]);
 
   const handleRetry = () => {
