@@ -860,3 +860,70 @@ The biggest lesson this cycle was that reuse has a cost that only shows up once 
 - **Goal 1:** Land the Workflow/AuditLog schema redesign into `develop` without colliding with the `audit_logs` table introduced independently by `feature/backend-authenticationAPI`, using a rename-first migration strategy.
 - **Goal 2:** Finish action classification, reversibility status, and cancellation support (`feature/llm-preview-status`) on top of the new Workflow state machine.
 - **Goal 3:** Connect the dry-run-preview frontend components (reversibility status, affected-resources card) to the real backend endpoints instead of mock data.
+
+
+
+
+
+# Cycle 14 Report: 07/03 - 07/06 (July 3 to July 6)
+
+## Timesheet
+
+### Clockify Report
+- **03/07 (Friday):** 04:49:52
+- **04/07 (Saturday):** 01:06:00
+- **05/07 (Sunday):** 03:10:46
+- **06/07 (Monday):** 03:25:50
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Land the Workflow/AuditLog schema redesign into develop
+- Merged the outstanding LLM feature branches (`feature/llm-post-request`, `feature/llm-update-assignment`, `feature/llm-student-messaging`, `feature/llm-preview-status`, `feature/llm-vague-message`) into `feature/workflow-auditlog-update` to consolidate them before the redesign landed.
+- Renamed the existing `audit_logs` table to `audit_logs_session` first, since `feature/backend-authenticationAPI` had independently added its own `audit_logs` table to `develop`. This followed the rename-first strategy planned at the end of Cycle 13 and avoided a schema collision.
+- Re-added the new `audit_logs` schema afterward, now scoped around `workflow_id`, `resource_type`, and `operation` so it can track both LLM actions and human confirmations consistently.
+- Merged `origin/develop` into the branch to reconcile with other teams' changes, then opened and merged the PR into `develop`. This closes Goal 1 from Cycle 13.
+
+### #2: Finish action classification, reversibility, and cancellation
+- Resolved inconsistencies between `chat.py`, `preview.py`, and `workflow.py` in how workflow state and audit rows were being tracked together.
+- Added a migration to allow `audit_logs.resource_type` to record `conversation` as a valid target, fixing a mislabeling bug where targeted student messages were being logged under the wrong resource type.
+- Addressed review comments on the branch: fixed a scalar-persistence bug in admin settings, made the messaging draft-send path actually validate recipients instead of bypassing that check, and made sure `allow_instructor_self_registration` is consulted during registration instead of being ignored.
+- This completes Goal 2 from Cycle 13, building cancellation and reversibility support directly on top of the new Workflow state machine.
+
+### #3: Connect the dry-run-preview frontend to the real backend
+- Replaced the mock-data wiring in `ChatWindow`, `DryRunPreviewPage`, and `ActionCard` with real calls into the chat and workflow endpoints.
+- Added `ActiveCourseProvider` and related context/storage so the active course selection persists and is available across the assistant and preview pages.
+- Added `map-chat-reply.ts` and `map-intent-preview-to-dry-run.ts` to translate raw backend replies into the shapes the preview UI expects.
+- This completes Goal 3 from Cycle 13. The assistant flow (ask, preview, confirm or cancel, return to chat) now runs against real backend data end to end.
+
+### #4: Documentation and diagram update
+- Updated the system architecture diagram
+
+## Progress Update (since 03/07/2026)
+
+| TASK/ISSUE #                                                    | STATUS    |
+| ---------------------------------------------------------------- | --------- |
+| Merge outstanding LLM feature branches into workflow-auditlog-update | Completed |
+| Rename audit_logs to audit_logs_session to avoid schema collision | Completed |
+| Land Workflow/AuditLog schema redesign into develop               | Completed |
+| Fix audit_logs resource_type mislabeling for targeted messages    | Completed |
+| Fix admin settings scalar-persistence bug                         | Completed |
+| Enforce allow_instructor_self_registration on registration        | Completed |
+| Enforce recipient validation on message draft send                | Completed |
+| Action classification, reversibility, and cancellation            | Completed |
+| Connect dry-run-preview frontend to real backend                  | Completed |
+| Active course context and selector                                | Completed |
+| Architecture diagram update                                       | Completed |
+| README image update                                               | Completed |
+
+## Cycle 14 Goal Review
+
+### Reflection:
+All three goals from Cycle 13 were completed this cycle. The schema rename had to happen before anything else, since another branch had already claimed the `audit_logs` name on `develop`. Doing the rename first, then re-adding the new schema, kept the merge clean instead of forcing a conflict-heavy rebase later. The action classification and cancellation work grew slightly once review comments surfaced real bugs in adjacent areas, like admin settings persistence and message draft validation, so fixing those became part of this cycle's scope too. Connecting the frontend to the real backend was the largest single change of the cycle and is the piece that makes the rest of the work visible and testable end to end.
+
+### Retrospective:
+The main lesson this cycle is that landing a shared schema change safely takes more coordination than writing the code itself. The renaming approach worked, but it only worked because the collision was caught early rather than discovered at merge time. Review comments were also more valuable than expected. Several of the bugs fixed this cycle, like the resource_type mislabeling and the admin settings persistence bug, were not things the original implementation flagged as risky. It is worth treating review passes as a real testing step, not just a formality before merge.
+
+## Next Cycle 15 Goals
+- **Goal 1:** Run a full end-to-end pass of the connected assistant flow against real Canvas sandbox data and fix any bugs it surfaces.
+- **Goal 2:** Verify the workflow history and audit log views render correctly for every action type, including cancelled and superseded workflows.
+- **Goal 3:** Follow up on any remaining review comments from the frontend-backend integration PR and close out loose ends before the next milestone.
