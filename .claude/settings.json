@@ -6,7 +6,8 @@
       "Bash(grep -rlE *)",
       "Bash(echo \"unmerged-check-exit:$?\")",
       "Bash(app/backend/.venv/bin/pytest test/backend/ -q)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(git ls-tree *)"
     ]
   }
 }

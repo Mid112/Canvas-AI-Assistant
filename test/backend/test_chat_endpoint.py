@@ -201,6 +201,47 @@ def test_chat_reuses_conversation_course_context_on_followup(client):
     assert f"local_course_id: {local_course_id}" in followup_user_message
 
 
+def test_history_sent_to_llm_truncates_oversized_prior_messages(client):
+    """Regression test for a real incident: a prior turn's stored assistant
+    message can end up huge — a failed-parse turn logs the full raw model
+    output verbatim, and for a 'thinking' model that can be a multi-thousand
+    -character <think> dump. _get_recent_messages then fed that whole thing
+    back to the LLM as conversation history on the next turn, and the
+    request to Groq for the *following* turn failed with a 413 (payload too
+    large). Any single history message's content must be capped regardless
+    of why it got large — this test uses a plain oversized reply (routed
+    through the same code path any huge stored message takes) rather than
+    reproducing the parse-error branch specifically."""
+    headers = _register(client)
+
+    huge_reply = "x" * 5000
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.side_effect = [
+        huge_reply,
+        '{"action": "respond", "message": "OK."}',
+    ]
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        first = client.post(
+            "/api/v1/chat/",
+            json={"message": "first message"},
+            headers=headers,
+        )
+        conversation_id = first.json()["conversation_id"]
+        client.post(
+            "/api/v1/chat/",
+            json={"message": "second message", "conversation_id": conversation_id},
+            headers=headers,
+        )
+
+    followup_history = mock_adapter.generate.call_args_list[1].kwargs["history"]
+    assert len(followup_history) == 2
+    huge_entry = next(m for m in followup_history if m["role"] == "assistant")
+    assert len(huge_entry["content"]) < len(huge_reply)
+    assert huge_entry["content"].endswith("…[truncated]")
+
+
 def test_chat_uses_saved_active_course_when_client_context_is_not_ready(client):
     headers = _register(client)
 
@@ -248,6 +289,61 @@ def test_chat_uses_saved_active_course_when_client_context_is_not_ready(client):
     generated_user_message = mock_adapter.generate.call_args.args[1]
     assert f"local_course_id: {local_course_id}" in generated_user_message
     assert "course_name: COSC 499" in generated_user_message
+
+
+def test_write_action_without_intent_preview_is_forced_into_a_preview(client):
+    """A model that skips intent_preview and names a write action directly
+    (e.g. a smaller/local model not following the system prompt) must still
+    only ever produce a preview on a normal chat turn — never an actual
+    Canvas write. Regression test for a real incident where this happened
+    live against Ollama's llama3.2."""
+    headers = _register(client)
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            headers=headers,
+        )
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock_courses:
+        mock_courses.return_value = [
+            {
+                "id": 322,
+                "name": "COSC 322",
+                "course_code": "COSC 322",
+                "enrollment_term_id": 1,
+                "workflow_state": "available",
+            }
+        ]
+        courses = client.get(
+            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            headers=headers,
+        )
+    local_course_id = courses.json()[0]["local_id"]
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        '{"action": "create_assignment", "local_course_id": %d, '
+        '"title": "Assignment 1", "description": "Peer evaluation", '
+        '"due_date": "2026-07-12T05:59:59", "points_possible": 100}' % local_course_id
+    )
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter), \
+         patch("app.mcp_tools.dispatcher.create_course_assignment", new=AsyncMock()) as mock_create:
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "create assignment 1 due date July 11 details \"Peer evaluation\""},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_error"] is False
+    assert body["reply"]["action"] == "intent_preview"
+    assert body["reply"]["proposed_action"]["action"] == "create_assignment"
+    assert "pending_message_id" in body["reply"]
+    mock_create.assert_not_called()
 
 
 def test_canvas_failure_returns_chat_error(client):

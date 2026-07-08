@@ -122,6 +122,19 @@ def test_admin_login_writes_audit_log(client, admin_credentials):
     assert logs[-1].details["email"] == admin_credentials["email"]
 
 
+def test_shared_login_endpoint_also_writes_admin_audit_log(client, admin_credentials):
+    """Admins and instructors share POST /auth/login — an admin signing in
+    through that shared endpoint (not /auth/admin/login) must still leave the
+    same audit trail, since that's the only realistic path most admins take."""
+    resp = client.post("/api/v1/auth/login", json=admin_credentials)
+    assert resp.status_code == 200
+    token = resp.json()["access_token"]
+    user_id, _ = decode_access_token(token)
+    logs = asyncio.run(_get_audit_logs(int(user_id), "admin_login"))
+    assert len(logs) >= 1
+    assert logs[-1].details["email"] == admin_credentials["email"]
+
+
 # ---------------------------------------------------------------------------
 # Admin login — failure cases
 # ---------------------------------------------------------------------------

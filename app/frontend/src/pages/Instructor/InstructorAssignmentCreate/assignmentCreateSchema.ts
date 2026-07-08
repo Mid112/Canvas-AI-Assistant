@@ -22,6 +22,9 @@ export const assignmentReviewSchema = z.object({
     .refine((value) => new Date(value).getTime() > Date.now(), {
       message: "Due date must be in the future",
     }),
+  pointsPossible: z.coerce
+    .number()
+    .positive("Points possible must be greater than 0"),
 });
 
 export type AssignmentReviewFormSchema = z.infer<typeof assignmentReviewSchema>;
