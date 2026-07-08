@@ -29,7 +29,14 @@ def _canvas_error_detail(response: httpx.Response) -> str:
             if isinstance(value, str):
                 return value
             if isinstance(value, list) and value:
-                return "; ".join(str(item) for item in value)
+                messages: list[str] = []
+                for item in value:
+                    if isinstance(item, dict):
+                        nested = item.get("message") or item.get("error")
+                        messages.append(str(nested if nested is not None else item))
+                    else:
+                        messages.append(str(item))
+                return "; ".join(messages)
             if isinstance(value, dict):
                 return "; ".join(f"{field}: {message}" for field, message in value.items())
 
@@ -364,6 +371,7 @@ async def post_announcement(
     token: str,
     canvas_url: str = settings.CANVAS_API_URL,
 ) -> dict:
+    canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.post(

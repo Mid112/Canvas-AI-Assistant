@@ -119,6 +119,18 @@ export async function sendMessageDraft(
     );
   }
 
+  if (
+    !payload.recipients ||
+    payload.recipients.length !== payload.recipientIds.length ||
+    payload.recipients.some(
+      (recipient) => !payload.recipientIds.includes(recipient.id),
+    )
+  ) {
+    throw new MessageDraftApiError(
+      "Selected recipient details are out of sync. Please reload the draft and try again.",
+    );
+  }
+
   try {
     await apiRequest<MessageDraftApiResponse>(
       `/messages/drafts/${payload.draftId}`,

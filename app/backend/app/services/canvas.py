@@ -408,7 +408,10 @@ async def get_submissions(
 
         canvas_ids = [str(item.id) for item in parsed]
         existing_rows = await db.scalars(
-            select(Submission).where(Submission.canvas_submission_id.in_(canvas_ids))
+            select(Submission).where(
+                Submission.assignment_id == assignment.id,
+                Submission.canvas_submission_id.in_(canvas_ids),
+            )
         )
         submission_map = {s.canvas_submission_id: s for s in existing_rows}
 
@@ -438,8 +441,15 @@ async def get_submissions(
                 )
 
         await db.commit()
-    except Exception:
+    except Exception as error:
         await db.rollback()
+        logger.warning(
+            "Could not cache Canvas submissions for course %s assignment %s: %s",
+            local_course_id,
+            assignment_id,
+            error,
+            exc_info=True,
+        )
 
     return parsed
 

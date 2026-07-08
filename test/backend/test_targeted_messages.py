@@ -94,6 +94,7 @@ def test_canvas_error_includes_response_detail():
     assert exc_info.value.status_code == 502
     assert "Canvas API error: 400" in exc_info.value.detail
     assert "recipient is not a valid conversation user" in exc_info.value.detail
+    assert "{'message':" not in exc_info.value.detail
 
 
 def test_send_conversation_posts_repeated_recipient_fields():

@@ -137,4 +137,15 @@ describe("messageDraft service", () => {
       "http://localhost:8000/api/v1/messages/drafts/7/send",
     );
   });
+
+  it("rejects sending when selected recipient details are missing", async () => {
+    await expect(
+      sendMessageDraft("access-token", {
+        draftId: "7",
+        subject: "Reminder",
+        body: "Please submit.",
+        recipientIds: ["student-1"],
+      }),
+    ).rejects.toThrow(/out of sync/i);
+  });
 });
