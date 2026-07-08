@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_action
-from app.mcp_tools.schemas import ACTION_SCHEMAS
+from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS, IntentPreviewAction
 from app.models.audit_log import AuditLog
 from app.models.conversation import Conversation
 from app.models.course import Course
@@ -25,15 +25,26 @@ from app.services.llm.llm_setting import get_llm_adapter
 
 LLM_TIMEOUT_SECONDS = 90.0
 HISTORY_WINDOW = 10
+# Failure paths (parse errors, timeouts, HTTP errors) log the full raw
+# diagnostic — for a "thinking" model that can mean the entire verbose
+# <think> block, hundreds to thousands of tokens — as the assistant message
+# content for that turn. _get_recent_messages then feeds that same content
+# back to the LLM as conversation history on the *next* turn, which both
+# wastes context on text the LLM never meant as an answer and can cascade
+# into the next request itself being rejected as too large (observed live:
+# a JSON-parse-failure turn's full raw output got included as history and
+# the following request failed with a 413 from Groq). Cap any single
+# history message's contribution regardless of why it got large.
+HISTORY_MESSAGE_MAX_CHARS = 2000
 
-# Actions that get a Workflow row (the replay-safe confirm state machine).
+# WRITE_ACTIONS (imported from app.mcp_tools.schemas) is also the set of
+# actions that get a Workflow row (the replay-safe confirm state machine).
 # Read actions are structurally free to be wrapped in an intent_preview too
 # (see dispatcher.py's intent_preview case), but replaying a read is
 # harmless, so they're deliberately excluded — scoping this to writes only
 # also avoids a real collision: a modify-turn's Workflow lookup keys off
 # preview_message_id, and a stray read-preview sharing that id with an
 # unrelated pending write could otherwise corrupt it.
-WRITE_ACTIONS = {"create_assignment", "update_assignment", "send_message"}
 
 # action_name -> (resource_type, operation) for AuditLog rows.
 # send_message's entry here is only a default: the action can produce
@@ -377,7 +388,16 @@ async def _get_recent_messages(
     # will append separately, and including it here causes duplication
     if messages:
         messages = messages[:-1]
-    return [{"role": m.role, "content": m.content} for m in messages]
+    return [
+        {"role": m.role, "content": _truncate_history_content(m.content)}
+        for m in messages
+    ]
+
+
+def _truncate_history_content(content: str) -> str:
+    if len(content) <= HISTORY_MESSAGE_MAX_CHARS:
+        return content
+    return content[:HISTORY_MESSAGE_MAX_CHARS] + " …[truncated]"
 
 
 def build_system_prompt() -> str:
@@ -566,6 +586,19 @@ async def handle_chat_message(
             result = text_reply
         else:
             action = parse_action(raw_output)
+            if action.action in WRITE_ACTIONS:
+                # The model named a Canvas-mutating action directly instead
+                # of wrapping it in intent_preview like the system prompt
+                # asks. Not every model follows that instruction reliably
+                # (smaller local models especially) — forcing it through
+                # the same intent_preview path here, rather than trusting
+                # the LLM, is what actually guarantees nothing mutates
+                # Canvas without the user seeing and confirming a preview
+                # first, regardless of which provider generated the reply.
+                action = IntentPreviewAction(
+                    summary=f"I'll {action.action.replace('_', ' ')} as described below. Please review before confirming.",
+                    proposed_action=action.model_dump(),
+                )
             result = await execute_tool(db, user, action)
     except ToolExecutionError as e:
         await log_message(db, conversation, role="assistant", content=e.log_detail)

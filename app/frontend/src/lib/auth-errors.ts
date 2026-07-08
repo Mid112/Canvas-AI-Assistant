@@ -27,11 +27,11 @@ export function getLoginErrorMessage(err: unknown): string {
 
 export function getRegisterErrorMessage(err: unknown): string {
   if (isNetworkError(err)) {
-    return "Cannot reach the server. Start the backend with: docker compose -f docker-compose.dev.yml up";
+    return "Can't reach the server right now. Please check your connection and try again.";
   }
 
   if (err instanceof AuthApiError && err.status >= 500) {
-    return "The server encountered an error. Make sure the database is running.";
+    return "Something went wrong on our end. Please try again in a moment.";
   }
 
   return getAuthErrorMessage(
@@ -39,7 +39,7 @@ export function getRegisterErrorMessage(err: unknown): string {
     "Unable to create account. Please try again.",
     {
       400: "An account with this email already exists.",
-      404: "The server endpoint was not found. Make sure the backend is running.",
+      404: "Something went wrong on our end. Please try again in a moment.",
     },
     { useMessageForUnmapped: true },
   );

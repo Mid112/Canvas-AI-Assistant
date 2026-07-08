@@ -31,6 +31,28 @@ describe("mapChatReply", () => {
     });
   });
 
+  it("never falls back to showing the raw local_course_id when no course name is available", () => {
+    const result = mapChatReply(
+      {
+        action: "intent_preview",
+        intent_preview: true,
+        summary: "Fetch missing submissions.",
+        proposed_action: {
+          action: "fetch_submissions",
+          local_course_id: 351,
+          assignment_id: 5,
+        },
+        // preview_metadata intentionally omits course_name/course
+        preview_metadata: {},
+        pending_message_id: 7,
+      },
+      false,
+    );
+
+    expect(result.interpretedAction?.course).toBe("Active course");
+    expect(result.interpretedAction?.course).not.toContain("351");
+  });
+
   it("maps clarify replies", () => {
     expect(
       mapChatReply(

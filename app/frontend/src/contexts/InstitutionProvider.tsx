@@ -102,7 +102,7 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    if (!accessToken) {
+    if (!accessToken || user?.role !== "instructor") {
       return;
     }
 
@@ -124,7 +124,7 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, userId]);
+  }, [accessToken, userId, user?.role]);
 
   const setSelectedInstitution = useCallback(
     (institutionId: string) => {

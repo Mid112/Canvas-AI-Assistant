@@ -157,9 +157,6 @@ function ConnectCanvasConnectionEntry({
       <div className="space-y-2">
         <label htmlFor={`canvas-token-${entry.id}`} className={labelClassName}>
           Canvas API Token
-          {index === 0 && (
-            <span className="ml-1 font-normal text-[#94a3b8]">(optional)</span>
-          )}
         </label>
         <Input
           id={`canvas-token-${entry.id}`}
