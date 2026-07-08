@@ -693,3 +693,64 @@ Total: 9 hours
 - Carry over from Cycle 12: wire up active-course context to the chat UI (note: a frontend `ActiveCourseProvider` has since landed on `frontend-fixes` — check whether this goal is already partially covered before starting new work)
 - Adopt one-branch-at-a-time merging to avoid repeating this cycle's Tuesday cleanup pattern
 
+---
+
+# Cycle 14 Report: July 3 – July 7
+
+## Timesheet
+
+### Clockify Report
+
+- 3/7 (Friday): Meeting (RBAC PR follow-up, merge conflict resolution) – 2h 04m
+- 4/7 (Saturday): PR reviews – 1h 32m
+- 6/7 (Monday): Meeting for finishing MVP – 6h 12m
+- 7/7 (Tuesday): MVP push + end-to-end verification — not yet clocked, session ongoing
+
+**Total (clocked): ~9h 48m**
+
+---
+
+## Completed Tasks
+
+### 1: Closed Out the `feature/backend-rbac-permissions` ↔ `develop` Merge Conflict (Friday, 3/7)
+- Resolved the merge-conflict carryover flagged as the top goal from Cycle 13
+- Switched the remaining Canvas endpoint over to the `get_instructor_user` dependency for consistent RBAC enforcement
+- Addressed PR-requested changes in `dependencies.py` (role-guard refactor, ~26/17 lines changed)
+- Fixed lint issues across `app/mcp/server.py`, `conftest.py`, and several test files to get the branch green
+- Merged `origin/develop` into the feature branch, pulling in the frontend's new Canvas-connection URL handling (`useCanvasConnectionUrl`, `canvas-connections.ts`, `institution-canvas.ts`) and instructor-courses page rework
+
+### 2: PR Reviews + Audit Log Merge Cleanup (Saturday, 4/7)
+- Fixed a lint break caused by the `AuditLog` → `AuditLogSession` rename in `services/admin.py`
+- Merged `develop` into `feature/backend-rbac-permissions` again, pulling in the new audit-log table/filter/pagination components and the workflow-history UI (`AuditLogTable`, `AuditLogFilters`, `WorkflowHistoryTable`, etc.)
+- Merged the feature branch's own remote changes back in and updated `test_admin_management.py` / `test_instructor_management.py` to reference `AuditLogSession` instead of the old `AuditLog` model
+
+### 3: MVP Prep — Assignment Uniqueness + Test Coverage Push (Monday, 6/7)
+- Added a DB migration (`008_assignment_unique_per_course.sql`) enforcing one assignment per Canvas assignment ID per course, with matching changes to the `Assignment` model, `services/canvas.py`, and `services/chat.py`
+- Added four new backend test files ahead of the MVP demo: `test_admin_settings.py`, `test_error_handling.py`, `test_message_send_validation.py`, `test_workflow_history.py` (~586 lines of new coverage)
+
+### 4: MVP Day — Workflow/Dispatcher Fixes, Message UI, Duplicate-Send Bug (Tuesday, 7/7)
+- Fixed dispatcher and assignment-draft handling (`mcp_tools/dispatcher.py`, `services/assignment_draft.py`) and added an `llm/json_extraction.py` module to make LLM tool-call parsing more robust
+- Built the assignment-creation preview dialog (`AssignmentPreviewDialog.tsx`) and instructor dashboard fixes on the frontend
+- Shipped a round of MVP fixes across `dispatcher.py`, `schemas.py`, `assignment_draft.py`, `auth.py`, and `chat.py`, plus new frontend components (`InstructorCredentialsDialog`, `ErrorAlert`, `EditableRecipientList`) and a message-flow UI overhaul (`ConfirmationDialog`, `MessageDraftPage`, `MessagePreview`, `MessageToolbar`, `RecipientSummary`)
+- Found and fixed a duplicate-message-send bug in `ChatWindow.tsx`, with regression test coverage added in `ChatWindow.test.tsx`
+- Stood up the full local stack for manual MVP verification — Postgres and the Canvas sandbox in Docker, backend and frontend running natively — and worked through it end-to-end: diagnosed a Windows-specific `make e2e-up` failure (the port-freeing step depends on `lsof`, which isn't available in Git Bash on Windows), freed the ports manually, and got a working admin login by discovering the dev Postgres DB was blocking `seed_admin()` with ~224 leftover pytest-fixture admin accounts
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle closed out the Cycle 13 carryover on day one (the `feature/backend-rbac-permissions`/`develop` conflict) and then pivoted entirely into MVP-crunch mode: assignment-uniqueness constraints, a big backend test push, and a full pass on the message/assignment workflow UI, capped off with an actual hands-on end-to-end verification of the running app ahead of the demo.
+- The manual e2e pass on Tuesday was valuable beyond just "it works" — it surfaced two real environment issues (the `lsof` dependency in `make e2e-up` breaking on Windows, and the dev DB's `seed_admin()` being silently blocked by pytest fixture pollution) that would otherwise have cost demo-day time.
+
+### Retrospective:
+- The `GET /canvas/courses` caching and chat-UI active-course-context goals are now two cycles deep in "carried over" — MVP feature work keeps taking priority, which is the right call this close to the demo, but they should get dedicated time once MVP crunch settles rather than rolling forward again.
+- The dev Postgres database has accumulated a large number of test-fixture users (`admin_<uuid>@test.com`, `newadmin_<uuid>@...`, etc.), which points to `pytest test/backend/` having been run against the shared dev DB (port 5433) instead of an isolated test database at some point. Worth fixing at the root — either point tests at a dedicated/ephemeral DB or add a `make db-reset` step to the test workflow — so this doesn't silently break manual QA again.
+
+## Next Cycle Goals
+- Give the dev Postgres DB a clean reset (or isolate pytest onto its own DB) so `seed_admin()` and manual QA aren't blocked by leftover test fixtures
+- Carry over (3rd cycle running): add caching to `GET /canvas/courses` with a `last_synced_at` timestamp
+- Carry over (3rd cycle running): wire up active-course context to the chat UI
+- Revisit `make e2e-up` for Windows compatibility (the `lsof`-based port-freeing step has no Windows/Git-Bash equivalent) or document the manual workaround in the README
+- Address any additional gaps surfaced by the MVP demo walkthrough
+
