@@ -1,8 +1,13 @@
-import { screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChatWindow } from "@/components/chat/ChatWindow";
+import { ActiveCourseProvider } from "@/contexts/ActiveCourseProvider";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { InstitutionProvider } from "@/contexts/InstitutionProvider";
 import {
   AssistantApiError,
   cancelAssistantAction,
@@ -348,6 +353,55 @@ describe("ChatWindow", () => {
     );
     expect(screen.getByText("Updated preview for the midterm exam.")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "Confirm" })).toHaveLength(1);
+  });
+
+  it("sends an initialPrompt exactly once under React StrictMode's dev-only double effect invocation", async () => {
+    /* Regression test for a real incident: clicking a dashboard Quick Action
+     * (which navigates to the assistant with an initialPrompt) sent the same
+     * message twice. StrictMode intentionally double-invokes effects on
+     * mount in development; the effect handling initialPrompt reset its own
+     * "already sent" guard back to null immediately after sending, so the
+     * second invocation — which still saw the same initialPrompt, since the
+     * parent's state clearing it is asynchronous — sent it again. */
+    mockedSendAssistantMessage.mockResolvedValue({
+      content: "What subject and body content would you like to use?",
+      conversationId: 1,
+    });
+
+    render(
+      <StrictMode>
+        <AuthProvider>
+          <InstitutionProvider>
+            <ActiveCourseProvider>
+              <MemoryRouter>
+                <ChatWindow initialPrompt="Help me draft a course announcement for my active course." />
+              </MemoryRouter>
+            </ActiveCourseProvider>
+          </InstitutionProvider>
+        </AuthProvider>
+      </StrictMode>,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(
+          "Help me draft a course announcement for my active course.",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("What subject and body content would you like to use?"),
+      ).toBeInTheDocument();
+    });
+
+    expect(mockedSendAssistantMessage).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getAllByText(
+        "Help me draft a course announcement for my active course.",
+      ),
+    ).toHaveLength(1);
   });
 
   it("restores conversation history when returning from a workflow preview", async () => {
