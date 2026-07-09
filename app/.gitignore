@@ -9,9 +9,12 @@
 # Python / Backend
 # ─────────────────────────────────────────────
 venv/
+.venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.coverage
+coverage/
 *.egg-info/
 
 # ─────────────────────────────────────────────
@@ -24,6 +27,7 @@ frontend/dist/
 frontend/dist-ssr/
 dist/
 dist-ssr/
+test/frontend/coverage/
 
 # ─────────────────────────────────────────────
 # Logs

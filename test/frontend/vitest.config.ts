@@ -28,9 +28,26 @@ export default defineConfig({
     },
     dedupe: ["react", "react-dom"],
   },
+  server: {
+    fs: {
+      allow: [appDir, frontendDir],
+    },
+  },
   test: {
     environment: "jsdom",
     setupFiles: ["./setup.ts"],
     include: ["**/*.{test,spec}.{ts,tsx}"],
+    coverage: {
+      provider: "v8",
+      allowExternal: true,
+      reportsDirectory: "./coverage",
+      reporter: ["text", "html", "lcov", "json-summary"],
+      include: [path.join(frontendDir, "src/**/*.{ts,tsx}")],
+      exclude: [
+        "**/*.{test,spec}.{ts,tsx}",
+        "**/*.d.ts",
+        path.join(frontendDir, "src/main.tsx"),
+      ],
+    },
   },
 });
