@@ -45,12 +45,12 @@ export function ReviewPermissionsAllowedActions() {
     >
       <div className="mb-3 flex items-center gap-2">
         <CheckCircle2
-          className="size-4 text-[#16a34a]"
+          className="size-4 text-emerald-600"
           aria-hidden="true"
         />
         <h2
           id="allowed-actions-heading"
-          className="text-sm font-semibold text-[#1e293b]"
+          className="text-sm font-semibold text-foreground"
         >
           Allowed Actions
         </h2>
@@ -59,20 +59,20 @@ export function ReviewPermissionsAllowedActions() {
         {ALLOWED_ACTIONS.map((action) => (
           <li
             key={action.title}
-            className="flex items-center gap-3 rounded-xl border border-[#bbf7d0] bg-[#f0fdf4] px-4 py-3"
+            className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3"
           >
             <action.icon
-              className="size-4 shrink-0 text-[#16a34a]"
+              className="size-4 shrink-0 text-emerald-600"
               aria-hidden="true"
             />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-[#1e293b]">
+              <p className="text-sm font-semibold text-foreground">
                 {action.title}
               </p>
-              <p className="text-sm text-[#64748b]">{action.description}</p>
+              <p className="text-sm text-muted-foreground">{action.description}</p>
             </div>
             <Check
-              className="size-4 shrink-0 text-[#16a34a]"
+              className="size-4 shrink-0 text-emerald-600"
               aria-hidden="true"
             />
           </li>

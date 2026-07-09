@@ -14,9 +14,9 @@ interface RegisterFormProps {
 }
 
 const inputClassName =
-  "h-11 rounded-lg border-[#e2e8f0] bg-white px-3.5 text-[#1e293b] shadow-none placeholder:text-[#94a3b8]";
+  "h-11 rounded-lg border-border bg-card px-3.5 text-foreground shadow-none placeholder:text-muted-foreground";
 
-const labelClassName = "text-sm font-semibold text-[#1e293b]";
+const labelClassName = "text-sm font-semibold text-foreground";
 
 export function RegisterForm({
   onSubmit,
@@ -109,7 +109,7 @@ export function RegisterForm({
       </div>
 
       {showEmailError && (
-        <p className="text-sm text-[#dc2626]" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           Enter a valid email address
         </p>
       )}
@@ -130,7 +130,7 @@ export function RegisterForm({
       </div>
 
       {showPasswordError && (
-        <p className="text-sm text-[#dc2626]" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           Password must be at least {MIN_PASSWORD_LENGTH} characters
         </p>
       )}
@@ -156,22 +156,22 @@ export function RegisterForm({
           onChange={(e) => setAcceptedTerms(e.target.checked)}
           aria-label="I agree to the Terms of Service and Privacy Policy"
           className={cn(
-            "mt-0.5 size-4 shrink-0 rounded border-[#cbd5e1] text-[#2563eb]",
-            "focus:ring-2 focus:ring-[#2563eb]/20 focus:ring-offset-0",
+            "mt-0.5 size-4 shrink-0 rounded border-input text-primary",
+            "focus:ring-2 focus:ring-primary/20 focus:ring-offset-0",
           )}
         />
-        <span className="text-sm text-[#475569]">
+        <span className="text-sm text-muted-foreground">
           I agree to the{" "}
           <Link
             to="#terms"
-            className="font-medium text-[#2563eb] hover:underline"
+            className="font-medium text-primary hover:underline"
           >
             Terms of Service
           </Link>{" "}
           and{" "}
           <Link
             to="#privacy"
-            className="font-medium text-[#2563eb] hover:underline"
+            className="font-medium text-primary hover:underline"
           >
             Privacy Policy
           </Link>
@@ -179,19 +179,19 @@ export function RegisterForm({
       </label>
 
       {showPasswordMismatchError && (
-        <p className="text-sm text-[#dc2626]" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           Passwords must match
         </p>
       )}
 
       {showTermsReminder && (
-        <p className="text-sm text-[#64748b]" role="status">
+        <p className="text-sm text-muted-foreground" role="status">
           Accept the Terms of Service and Privacy Policy to continue.
         </p>
       )}
 
       {error && (
-        <p className="text-sm text-[#dc2626]" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           {error}
         </p>
       )}
@@ -199,7 +199,7 @@ export function RegisterForm({
       <Button
         type="submit"
         disabled={!isFormComplete || isSubmitting}
-        className="h-11 w-full rounded-lg bg-[#2563eb] text-base font-semibold text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] hover:bg-[#1d4ed8] disabled:bg-[#cbd5e1] disabled:text-[#94a3b8] disabled:shadow-none disabled:hover:bg-[#cbd5e1]"
+        className="h-11 w-full text-base font-semibold"
       >
         {isSubmitting ? "Creating Account..." : "Create Account"}
       </Button>

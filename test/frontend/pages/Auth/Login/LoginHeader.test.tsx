@@ -1,22 +1,13 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { LoginHeader } from "@/pages/Auth/Login/LoginHeader";
+import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 describe("LoginHeader", () => {
-  // Verifies: Renders the application name.
-  it("renders the application name", () => {
-    render(<LoginHeader />);
+  it("renders the Canvas Workflow Assistant brand", () => {
+    renderWithRouter(<LoginHeader />);
 
-    expect(
-      screen.getByText("Canvas Workflow Assistant"),
-    ).toBeInTheDocument();
-  });
-
-  // Verifies: Renders the graduation cap icon.
-  it("renders the graduation cap icon", () => {
-    const { container } = render(<LoginHeader />);
-
-    expect(container.querySelector("svg")).toBeInTheDocument();
+    expect(screen.getByText("Canvas Workflow Assistant")).toBeInTheDocument();
   });
 });

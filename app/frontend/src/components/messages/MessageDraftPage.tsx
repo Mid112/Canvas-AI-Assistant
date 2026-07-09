@@ -325,7 +325,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
             {isLoading ? (
               <CardContent className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-center">
                 <Loader2
-                  className="size-8 animate-spin text-blue-600"
+                  className="size-8 animate-spin text-primary"
                   aria-hidden="true"
                 />
                 <p className="text-sm font-medium">Loading message draft...</p>

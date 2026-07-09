@@ -74,7 +74,7 @@ function DashboardShell({ role }: DashboardLayoutProps) {
   };
 
   return (
-    <div className="flex min-h-svh w-full bg-[#f4f7fb]">
+    <div className="flex min-h-svh w-full bg-background">
       <div
         className={cn(
           "hidden shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out lg:block",

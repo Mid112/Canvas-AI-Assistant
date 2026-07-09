@@ -5,7 +5,7 @@ export const seedChatMessages: ChatMessage[] = [
     id: "welcome",
     role: "assistant",
     content:
-      "Hello! I'm your Canvas AI Assistant. I can help you manage courses, create assignments, analyze student performance, and much more. How can I assist you today?",
+      "Hello! I'm your Canvas AI Assistant. I can help you manage courses, create assignments, analyze student performance, and much more. Every write action requires your preview and approval before it is published to Canvas. How can I assist you today?",
     timestamp: new Date("2026-06-24T10:00:00"),
   },
 ];

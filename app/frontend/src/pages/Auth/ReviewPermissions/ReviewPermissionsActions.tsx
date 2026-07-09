@@ -15,14 +15,14 @@ export function ReviewPermissionsActions({
         type="button"
         variant="outline"
         onClick={onCancel}
-        className="h-11 flex-1 rounded-lg border-[#e2e8f0] bg-white text-base font-semibold text-[#475569] hover:bg-[#f8fafc]"
+        className="h-11 flex-1 rounded-lg border-border bg-card text-base font-semibold text-muted-foreground hover:bg-muted"
       >
         Cancel
       </Button>
       <Button
         type="button"
         onClick={onApprove}
-        className="h-11 flex-1 rounded-lg bg-[#2563eb] text-base font-semibold text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] hover:bg-[#1d4ed8]"
+        className="h-11 flex-1 rounded-lg bg-primary text-base font-semibold text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90"
       >
         Approve &amp; Continue
       </Button>

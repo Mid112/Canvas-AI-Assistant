@@ -52,12 +52,12 @@ export function OnboardingProgress({ currentStep }: OnboardingProgressProps) {
                   className={cn(
                     "flex size-8 items-center justify-center rounded-full border-2",
                     isCompleted &&
-                      "border-[#16a34a] bg-[#16a34a] text-white",
+                      "border-emerald-600 bg-emerald-600 text-primary-foreground",
                     isCurrent &&
-                      "border-[#2563eb] bg-[#2563eb] text-white",
+                      "border-primary bg-primary text-primary-foreground",
                     !isCompleted &&
                       !isCurrent &&
-                      "border-[#cbd5e1] bg-white text-[#94a3b8]",
+                      "border-input bg-card text-muted-foreground",
                   )}
                   aria-current={isCurrent ? "step" : undefined}
                 >
@@ -73,9 +73,9 @@ export function OnboardingProgress({ currentStep }: OnboardingProgressProps) {
                 <span
                   className={cn(
                     "max-w-24 text-center text-xs font-medium leading-tight sm:max-w-none sm:whitespace-nowrap",
-                    isCurrent && "text-[#2563eb]",
-                    isCompleted && "text-[#16a34a]",
-                    !isCompleted && !isCurrent && "text-[#94a3b8]",
+                    isCurrent && "text-primary",
+                    isCompleted && "text-emerald-600",
+                    !isCompleted && !isCurrent && "text-muted-foreground",
                   )}
                 >
                   {step.label}
@@ -85,7 +85,7 @@ export function OnboardingProgress({ currentStep }: OnboardingProgressProps) {
                 <div
                   className={cn(
                     "mx-2 mb-6 h-0.5 flex-1 sm:mx-3",
-                    index < currentIndex ? "bg-[#16a34a]" : "bg-[#e2e8f0]",
+                    index < currentIndex ? "bg-emerald-600" : "bg-border",
                   )}
                   aria-hidden="true"
                 />

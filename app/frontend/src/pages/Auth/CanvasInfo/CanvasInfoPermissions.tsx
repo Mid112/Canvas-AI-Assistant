@@ -23,13 +23,13 @@ export function CanvasInfoPermissions() {
   return (
     <section
       aria-labelledby="requested-permissions-heading"
-      className="mb-5 rounded-xl border border-[#e2e8f0] bg-white px-5 py-4"
+      className="mb-5 rounded-xl border border-border bg-card px-5 py-4"
     >
       <div className="mb-3 flex items-center gap-2">
-        <Eye className="size-4 text-[#475569]" aria-hidden="true" />
+        <Eye className="size-4 text-muted-foreground" aria-hidden="true" />
         <h2
           id="requested-permissions-heading"
-          className="text-sm font-semibold text-[#1e293b]"
+          className="text-sm font-semibold text-foreground"
         >
           Requested Permissions
         </h2>
@@ -38,14 +38,14 @@ export function CanvasInfoPermissions() {
         {PERMISSIONS.map((permission) => (
           <li key={permission.title} className="flex items-start gap-2.5">
             <Check
-              className="mt-0.5 size-4 shrink-0 text-[#16a34a]"
+              className="mt-0.5 size-4 shrink-0 text-emerald-600"
               aria-hidden="true"
             />
             <div>
-              <p className="text-sm font-semibold text-[#1e293b]">
+              <p className="text-sm font-semibold text-foreground">
                 {permission.title}
               </p>
-              <p className="text-sm text-[#64748b]">{permission.description}</p>
+              <p className="text-sm text-muted-foreground">{permission.description}</p>
             </div>
           </li>
         ))}

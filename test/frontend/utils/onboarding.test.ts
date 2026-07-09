@@ -25,15 +25,15 @@ describe("onboarding utils", () => {
     ).toBe(paths.admin.dashboard);
   });
 
-  // Verifies: Sends instructors without completed onboarding to canvas info.
-  it("sends instructors without completed onboarding to canvas info", () => {
+  // Verifies: Sends instructors without completed onboarding to the assistant.
+  it("sends instructors without completed onboarding to the assistant", () => {
     expect(
       getPostAuthPath({
         id: 1,
         role: "instructor",
         canvas_connections: [],
       }),
-    ).toBe(paths.canvasInfo);
+    ).toBe(paths.instructor.assistant);
   });
 
   // Verifies: Treats users with saved canvas connections as onboarding complete.

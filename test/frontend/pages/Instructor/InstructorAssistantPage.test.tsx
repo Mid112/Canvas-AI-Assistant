@@ -52,7 +52,6 @@ beforeEach(() => {
 });
 
 describe("InstructorAssistantPage", () => {
-  // Verifies: Renders the assistant header, suggested actions, and chat.
   it("renders the assistant header, suggested actions, and chat", () => {
     renderWithInstitution(<InstructorAssistantPage />);
 
@@ -60,7 +59,7 @@ describe("InstructorAssistantPage", () => {
     expect(
       screen.getByText("Canvas Workflow Management Assistant"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Suggested Actions")).toBeInTheDocument();
+    expect(screen.getByText("Suggested actions")).toBeInTheDocument();
     expect(screen.getByText("Show missing submissions")).toBeInTheDocument();
     expect(
       screen.getByText(/Hello! I'm your Canvas AI Assistant/),
@@ -68,5 +67,36 @@ describe("InstructorAssistantPage", () => {
     expect(
       screen.getByRole("textbox", { name: "Chat message" }),
     ).toBeInTheDocument();
+  });
+
+  it("renders chat without a connected Canvas account", () => {
+    mockUseAuth.mockReturnValue({
+      user: {
+        id: 1,
+        email: "jane.doe@example.com",
+        name: "Dr. Jane Doe",
+        role: "instructor",
+        is_active: true,
+        has_canvas_token: false,
+        canvas_connections: [],
+      },
+      accessToken: "token",
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    });
+
+    renderWithInstitution(<InstructorAssistantPage />);
+
+    expect(
+      screen.getByText(/You can use the assistant now for general guidance/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "Chat message" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Active course context")).not.toBeInTheDocument();
   });
 });

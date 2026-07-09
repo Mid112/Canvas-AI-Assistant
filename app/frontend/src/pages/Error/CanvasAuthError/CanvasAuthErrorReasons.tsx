@@ -9,9 +9,9 @@ export function CanvasAuthErrorReasons() {
   return (
     <section
       aria-label="Possible failure reasons"
-      className="mb-6 rounded-xl bg-[#f1f5f9] px-5 py-4"
+      className="mb-6 rounded-xl bg-muted px-5 py-4"
     >
-      <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed text-[#64748b]">
+      <ul className="list-disc space-y-2 pl-5 text-sm leading-relaxed text-muted-foreground">
         {FAILURE_REASONS.map((reason) => (
           <li key={reason}>{reason}</li>
         ))}

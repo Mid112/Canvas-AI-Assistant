@@ -1,4 +1,6 @@
-import { AlertTriangle, Bot } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
+
+import { AssistantAvatar } from "@/components/brand/AssistantAvatar";
 
 import { ActionCard } from "@/components/chat/ActionCard";
 import { ExplanationCard } from "@/components/chat/ExplanationCard";
@@ -33,15 +35,7 @@ export function AssistantMessage({
 
   return (
     <div className="flex gap-3">
-      <div
-        className={cn(
-          "flex size-8 shrink-0 items-center justify-center rounded-full",
-          "bg-blue-100 text-blue-600",
-        )}
-        aria-hidden="true"
-      >
-        <Bot className="size-4" />
-      </div>
+      <AssistantAvatar size="sm" />
 
       <div className="min-w-0 max-w-[85%] space-y-2 sm:max-w-[75%]">
         <div className="rounded-2xl rounded-tl-md bg-muted/70 px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap">

@@ -57,7 +57,7 @@ describe("Sidebar", () => {
       roleLabel: "Instructor",
     });
 
-    expect(screen.getByText("Canvas AI")).toBeInTheDocument();
+    expect(screen.getAllByText("Canvas AI").length).toBeGreaterThan(0);
     expect(screen.getByText("Instructor Portal")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open profile menu" })).toBeInTheDocument();

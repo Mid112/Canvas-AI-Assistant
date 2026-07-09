@@ -94,7 +94,7 @@ export function InstructorDashboardQuickActions({
                 <Icon className="size-4" aria-hidden="true" />
               </div>
               <div className="min-w-0 space-y-0.5">
-                <p className="text-sm font-medium transition-colors group-hover:text-blue-700">
+                <p className="text-sm font-medium transition-colors group-hover:text-primary">
                   {action.title}
                 </p>
                 <p className="text-sm text-muted-foreground">

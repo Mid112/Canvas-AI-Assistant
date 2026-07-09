@@ -28,9 +28,9 @@ interface ConnectionEntry {
 }
 
 const inputClassName =
-  "h-11 rounded-lg border-[#e2e8f0] bg-white px-3.5 text-[#1e293b] shadow-none placeholder:text-[#94a3b8]";
+  "h-11 rounded-lg border-border bg-card px-3.5 text-foreground shadow-none placeholder:text-muted-foreground";
 
-const labelClassName = "text-sm font-semibold text-[#1e293b]";
+const labelClassName = "text-sm font-semibold text-foreground";
 
 function createConnectionEntry(): ConnectionEntry {
   return {
@@ -106,9 +106,9 @@ function ConnectCanvasConnectionEntry({
   }, [entry.id, validation]);
 
   return (
-    <div className="space-y-4 rounded-xl border border-[#e2e8f0] bg-[#f8fafc]/60 p-4">
+    <div className="space-y-4 rounded-xl border border-border bg-muted/60 p-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-[#1e293b]">
+        <p className="text-sm font-semibold text-foreground">
           {getInstitutionLabel(index)}
         </p>
         {canRemove && (
@@ -119,7 +119,7 @@ function ConnectCanvasConnectionEntry({
             aria-label={`Remove institution ${index + 1}`}
             disabled={isSubmitting}
             onClick={() => onRemove(entry.id)}
-            className="size-8 text-[#94a3b8] hover:text-[#64748b]"
+            className="size-8 text-muted-foreground hover:text-muted-foreground"
           >
             <X className="size-4" aria-hidden="true" />
           </Button>
@@ -147,7 +147,7 @@ function ConnectCanvasConnectionEntry({
           <p
             id={`canvas-url-error-${entry.id}`}
             role="alert"
-            className="text-sm text-[#dc2626]"
+            className="text-sm text-destructive"
           >
             {urlError}
           </p>
@@ -158,7 +158,7 @@ function ConnectCanvasConnectionEntry({
         <label htmlFor={`canvas-token-${entry.id}`} className={labelClassName}>
           Canvas API Token
           {index === 0 && (
-            <span className="ml-1 font-normal text-[#94a3b8]">(optional)</span>
+            <span className="ml-1 font-normal text-muted-foreground">(optional)</span>
           )}
         </label>
         <Input
@@ -311,7 +311,7 @@ export function ConnectCanvasForm({
           variant="outline"
           disabled={isSubmitting}
           onClick={addConnectionField}
-          className="h-10 w-full rounded-lg border-[#e2e8f0] bg-white text-sm font-medium text-[#475569] hover:bg-[#f8fafc]"
+          className="h-10 w-full rounded-lg border-border bg-card text-sm font-medium text-muted-foreground hover:bg-muted"
         >
           <Plus className="size-4" aria-hidden="true" />
           Add another institution
@@ -319,7 +319,7 @@ export function ConnectCanvasForm({
       </div>
 
       {error ? (
-        <p className="text-sm text-[#dc2626]" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           {error}
         </p>
       ) : null}
@@ -328,7 +328,7 @@ export function ConnectCanvasForm({
         <Button
           type="submit"
           disabled={!canConnect}
-          className="h-11 w-full rounded-lg bg-[#2563eb] text-base font-semibold text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] hover:bg-[#1d4ed8] disabled:bg-[#cbd5e1] disabled:text-[#94a3b8] disabled:shadow-none disabled:hover:bg-[#cbd5e1]"
+          className="h-11 w-full text-base font-semibold"
         >
           {isSubmitting ? "Connecting..." : "Connect Canvas"}
         </Button>
@@ -338,11 +338,11 @@ export function ConnectCanvasForm({
           variant="outline"
           disabled={isSubmitting}
           onClick={handleSkip}
-          className="h-11 w-full rounded-lg border-[#e2e8f0] bg-white text-base font-semibold text-[#475569] hover:bg-[#f8fafc]"
+          className="h-11 w-full rounded-lg border-border bg-card text-base font-semibold text-muted-foreground hover:bg-muted"
         >
           Continue without connecting
         </Button>
-        <p className="text-center text-xs leading-relaxed text-[#94a3b8]">
+        <p className="text-center text-xs leading-relaxed text-muted-foreground">
           Skip Canvas connection to use the query assistant only, without
           institution workflows.
         </p>

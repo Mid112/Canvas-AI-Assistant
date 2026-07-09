@@ -52,8 +52,8 @@ describe("GuestRoute", () => {
             <Route path="/login" element={<div>Login page</div>} />
           </Route>
           <Route
-            path={paths.canvasInfo}
-            element={<div>Canvas info</div>}
+            path={paths.instructor.assistant}
+            element={<div>Assistant page</div>}
           />
           <Route
             path={paths.instructor.dashboard}
@@ -100,8 +100,8 @@ describe("GuestRoute", () => {
     expect(screen.getByText("Login page")).toBeInTheDocument();
   });
 
-  // Verifies: Redirects authenticated users without completed onboarding to canvas info.
-  it("redirects authenticated users without completed onboarding to canvas info", () => {
+  // Verifies: Redirects authenticated users without completed onboarding to the assistant.
+  it("redirects authenticated users without completed onboarding to the assistant", () => {
     mockedHasCompletedOnboarding.mockReturnValue(false);
     mockedUseAuth.mockReturnValue({
       user: instructorUser,
@@ -114,7 +114,7 @@ describe("GuestRoute", () => {
 
     renderGuestRoute();
 
-    expect(screen.getByText("Canvas info")).toBeInTheDocument();
+    expect(screen.getByText("Assistant page")).toBeInTheDocument();
     expect(screen.queryByText("Login page")).not.toBeInTheDocument();
   });
 
@@ -133,7 +133,7 @@ describe("GuestRoute", () => {
     renderGuestRoute();
 
     expect(screen.getByText("Instructor dashboard")).toBeInTheDocument();
-    expect(screen.queryByText("Canvas info")).not.toBeInTheDocument();
+    expect(screen.queryByText("Assistant page")).not.toBeInTheDocument();
   });
 
   // Verifies: Redirects admins to the admin dashboard without completed onboarding.
@@ -151,6 +151,6 @@ describe("GuestRoute", () => {
     renderGuestRoute();
 
     expect(screen.getByText("Admin dashboard")).toBeInTheDocument();
-    expect(screen.queryByText("Canvas info")).not.toBeInTheDocument();
+    expect(screen.queryByText("Assistant page")).not.toBeInTheDocument();
   });
 });

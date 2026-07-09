@@ -33,9 +33,9 @@ export function AffectedResourcesCard({ resources }: AffectedResourcesCardProps)
       <CardContent className="space-y-5 pt-0">
         <div className="grid gap-3 sm:grid-cols-3">
           {resources.course ? (
-            <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-center">
-              <p className="text-2xl font-bold text-blue-700">1</p>
-              <p className="text-sm font-medium text-blue-800">Course</p>
+            <div className="rounded-lg border border-primary/20 bg-primary/10 px-4 py-3 text-center">
+              <p className="text-2xl font-bold text-primary">1</p>
+              <p className="text-sm font-medium text-primary">Course</p>
             </div>
           ) : null}
           {resources.assignment ? (
@@ -59,7 +59,7 @@ export function AffectedResourcesCard({ resources }: AffectedResourcesCardProps)
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Course
             </p>
-            <p className="text-sm font-semibold text-[#1e293b]">{resources.course.name}</p>
+            <p className="text-sm font-semibold text-foreground">{resources.course.name}</p>
             <p className="text-xs text-muted-foreground">Course ID: {resources.course.id}</p>
           </div>
         ) : null}
@@ -69,7 +69,7 @@ export function AffectedResourcesCard({ resources }: AffectedResourcesCardProps)
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Assignment
             </p>
-            <p className="text-sm font-semibold text-[#1e293b]">
+            <p className="text-sm font-semibold text-foreground">
               {resources.assignment.name}
             </p>
             <p className="text-xs text-muted-foreground">
@@ -86,7 +86,7 @@ export function AffectedResourcesCard({ resources }: AffectedResourcesCardProps)
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Sections
             </p>
-            <p className="text-sm font-semibold text-[#1e293b]">
+            <p className="text-sm font-semibold text-foreground">
               {sectionCount} Section{sectionCount === 1 ? "" : "s"}
             </p>
           </div>
@@ -103,11 +103,11 @@ export function AffectedResourcesCard({ resources }: AffectedResourcesCardProps)
                   key={student.id}
                   className="flex items-center gap-3 rounded-lg border bg-muted/20 px-3 py-2"
                 >
-                  <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[#2563eb] text-xs font-semibold text-white">
+                  <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-white">
                     {getInitials(student.name)}
                   </div>
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-[#1e293b]">
+                    <p className="truncate text-sm font-medium text-foreground">
                       {student.name}
                     </p>
                     <p className="truncate text-xs text-muted-foreground">{student.email}</p>
@@ -123,7 +123,7 @@ export function AffectedResourcesCard({ resources }: AffectedResourcesCardProps)
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Students
             </p>
-            <p className="text-sm font-semibold text-[#1e293b]">
+            <p className="text-sm font-semibold text-foreground">
               {resources.students.count} Student{resources.students.count === 1 ? "" : "s"}
             </p>
           </div>

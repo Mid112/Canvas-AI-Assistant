@@ -44,7 +44,7 @@ export function EditableRecipientList({
               type="checkbox"
               checked={isSelected}
               onChange={() => onToggle(recipient.id)}
-              className="size-4 shrink-0 rounded border-border/60 text-blue-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"
+              className="size-4 shrink-0 rounded border-border/60 text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
             />
             <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer">
               <p

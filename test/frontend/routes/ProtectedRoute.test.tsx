@@ -55,6 +55,10 @@ describe("ProtectedRoute", () => {
           <Route element={<ProtectedRoute />}>
             <Route path="/protected" element={<div>Protected content</div>} />
             <Route path={paths.canvasInfo} element={<div>Canvas info</div>} />
+            <Route
+              path={paths.instructor.assistant}
+              element={<div>Assistant page</div>}
+            />
           </Route>
           <Route path={paths.login} element={<div>Login page</div>} />
         </Routes>
@@ -113,8 +117,8 @@ describe("ProtectedRoute", () => {
     expect(screen.queryByText("Login page")).not.toBeInTheDocument();
   });
 
-  // Verifies: Redirects authenticated users without completed onboarding to canvas info.
-  it("redirects authenticated users without completed onboarding to canvas info", () => {
+  // Verifies: Redirects authenticated users without completed onboarding away from non-instructor routes.
+  it("redirects authenticated users without completed onboarding to the assistant", () => {
     mockedIsOnboardingComplete.mockReturnValue(false);
     mockedUseAuth.mockReturnValue({
       user: instructorUser,
@@ -127,8 +131,36 @@ describe("ProtectedRoute", () => {
 
     renderProtectedRoute();
 
-    expect(screen.getByText("Canvas info")).toBeInTheDocument();
+    expect(screen.getByText("Assistant page")).toBeInTheDocument();
     expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
+  });
+
+  // Verifies: Allows instructor app routes before onboarding is complete.
+  it("allows instructor app routes before onboarding is complete", () => {
+    mockedIsOnboardingComplete.mockReturnValue(false);
+    mockedUseAuth.mockReturnValue({
+      user: instructorUser,
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter initialEntries={[paths.instructor.assistant]}>
+        <Routes>
+          <Route element={<ProtectedRoute />}>
+            <Route
+              path={paths.instructor.assistant}
+              element={<div>Assistant page</div>}
+            />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Assistant page")).toBeInTheDocument();
   });
 
   // Verifies: Allows onboarding routes before onboarding is complete.

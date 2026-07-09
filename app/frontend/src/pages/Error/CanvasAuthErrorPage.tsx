@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 
+import { AuthPageShell } from "@/components/layouts/AuthPageShell";
 import {
   CanvasAuthErrorActions,
   CanvasAuthErrorFooter,
@@ -19,18 +20,14 @@ export function CanvasAuthErrorPage() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-[#e8eef4]">
-      <div className="flex min-h-svh items-center justify-center p-4 py-8 md:p-8">
-        <div className="w-full max-w-md rounded-2xl bg-white px-8 py-10 shadow-[0_8px_30px_rgba(0,0,0,0.08)]">
-          <CanvasAuthErrorHeader />
-          <CanvasAuthErrorReasons />
-          <CanvasAuthErrorActions
-            onRetry={() => navigate(paths.canvasInfo)}
-            onReturnToLogin={handleReturnToLogin}
-          />
-          <CanvasAuthErrorFooter />
-        </div>
-      </div>
-    </div>
+    <AuthPageShell>
+      <CanvasAuthErrorHeader />
+      <CanvasAuthErrorReasons />
+      <CanvasAuthErrorActions
+        onRetry={() => navigate(paths.canvasInfo)}
+        onReturnToLogin={handleReturnToLogin}
+      />
+      <CanvasAuthErrorFooter />
+    </AuthPageShell>
   );
 }

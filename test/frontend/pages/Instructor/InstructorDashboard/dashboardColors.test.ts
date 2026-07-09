@@ -16,8 +16,8 @@ describe("formatMissingSubmissionsTrend", () => {
 describe("getMissingSubmissionsTrendClass", () => {
   // Verifies: Uses red for rising missing submissions and green for improvements.
   it("uses red for rising missing submissions and green for improvements", () => {
-    expect(getMissingSubmissionsTrendClass(5)).toBe("text-red-500");
-    expect(getMissingSubmissionsTrendClass(-5)).toBe("text-emerald-600");
+    expect(getMissingSubmissionsTrendClass(5)).toBe("text-destructive");
+    expect(getMissingSubmissionsTrendClass(-5)).toBe("text-emerald-700");
     expect(getMissingSubmissionsTrendClass(0)).toBe("text-muted-foreground");
   });
 });
