@@ -146,24 +146,21 @@ jobs:
           path: artifacts/backend
         continue-on-error: true
       - name: Build coverage comment
-        id: body
         run: |
           FRONTEND_JSON="artifacts/frontend/coverage-summary.json"
           BACKEND_JSON="artifacts/backend/coverage.json"
           FRONTEND_PASSED="${{ needs.frontend-coverage.result == 'success' }}"
           BACKEND_PASSED="${{ needs.backend-coverage.result == 'success' }}"
-          BODY="$(node .github/scripts/format-coverage-comment.mjs "$FRONTEND_JSON" "$BACKEND_JSON" "$FRONTEND_PASSED" "$BACKEND_PASSED")"
-          {
-            echo "content<<EOF"
-            echo "$BODY"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          node .github/scripts/format-coverage-comment.mjs \
+            "$FRONTEND_JSON" "$BACKEND_JSON" "$FRONTEND_PASSED" "$BACKEND_PASSED" \
+            > comment-body.md
       - name: Post PR comment
         uses: actions/github-script@v7
         with:
           script: |
+            const fs = require("fs");
             const marker = "<!-- coverage-report -->";
-            const body = `${marker}\n${{ steps.body.outputs.content }}`;
+            const body = `${marker}\n${fs.readFileSync("comment-body.md", "utf8")}`;
             const { owner, repo } = context.repo;
             const issue_number = context.payload.pull_request.number;
             const { data: comments } = await github.rest.issues.listComments({
