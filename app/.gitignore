@@ -28,6 +28,7 @@ frontend/dist-ssr/
 dist/
 dist-ssr/
 test/frontend/coverage/
+test/backend/coverage/
 
 # ─────────────────────────────────────────────
 # Logs

@@ -1,0 +1,189 @@
+name: Coverage Report
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: coverage-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on:
+      - self-hosted
+      - macOS
+      - ARM64
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'app/backend/**'
+              - 'test/backend/**'
+            frontend:
+              - 'app/frontend/**'
+              - 'test/frontend/**'
+
+  frontend-coverage:
+    runs-on:
+      - self-hosted
+      - macOS
+      - ARM64
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    defaults:
+      run:
+        working-directory: ./app/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+          cache: "npm"
+          cache-dependency-path: app/frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run frontend coverage
+        id: coverage
+        run: npm run test:coverage
+      - name: Upload frontend coverage summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage-summary
+          path: test/frontend/coverage/coverage-summary.json
+          if-no-files-found: ignore
+
+  backend-coverage:
+    runs-on:
+      - self-hosted
+      - macOS
+      - ARM64
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start PostgreSQL
+        run: |
+          NETWORK="coverage-net-${{ github.run_id }}"
+          CONTAINER="coverage-postgres-${{ github.run_id }}"
+          docker rm -f "$CONTAINER" 2>/dev/null || true
+          docker network rm "$NETWORK" 2>/dev/null || true
+          docker network create "$NETWORK"
+          docker run -d \
+            --name "$CONTAINER" \
+            --network "$NETWORK" \
+            -e POSTGRES_USER=testuser \
+            -e POSTGRES_PASSWORD=testpass \
+            -e POSTGRES_DB=testdb \
+            postgres:16-alpine
+          for i in $(seq 1 30); do
+            if docker exec "$CONTAINER" pg_isready -U testuser -d testdb >/dev/null 2>&1; then
+              echo "PostgreSQL is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "PostgreSQL failed to start"
+          docker logs "$CONTAINER"
+          exit 1
+      - name: Run backend coverage
+        run: |
+          mkdir -p test/backend/coverage
+          docker run --rm \
+            --network "coverage-net-${{ github.run_id }}" \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            -e DATABASE_URL=postgresql+asyncpg://testuser:testpass@coverage-postgres-${{ github.run_id }}:5432/testdb \
+            -e ENVIRONMENT=test \
+            -e SECRET_KEY=ci-test-secret \
+            -e CANVAS_TOKEN_ENCRYPTION_KEY=cS_xtOdvX6UctctAErcx3JJC1e3YBBM-Kwh9WLY3ocI= \
+            -e PYTHONPATH=./app/backend \
+            python:3.12-slim-bookworm \
+            bash -c "cd app/backend && pip install --quiet -r requirements.txt && PYTHONPATH=. pytest ../../test/backend/ --cov=. --cov-report=json:../../test/backend/coverage/coverage.json -q"
+      - name: Upload backend coverage summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-summary
+          path: test/backend/coverage/coverage.json
+          if-no-files-found: ignore
+      - name: Stop PostgreSQL
+        if: always()
+        run: |
+          docker rm -f "coverage-postgres-${{ github.run_id }}" 2>/dev/null || true
+          docker network rm "coverage-net-${{ github.run_id }}" 2>/dev/null || true
+
+  coverage-comment:
+    runs-on:
+      - self-hosted
+      - macOS
+      - ARM64
+    needs: [changes, frontend-coverage, backend-coverage]
+    if: always() && !cancelled()
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download frontend coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-coverage-summary
+          path: artifacts/frontend
+        continue-on-error: true
+      - name: Download backend coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-coverage-summary
+          path: artifacts/backend
+        continue-on-error: true
+      - name: Build coverage comment
+        id: body
+        run: |
+          FRONTEND_JSON="artifacts/frontend/coverage-summary.json"
+          BACKEND_JSON="artifacts/backend/coverage.json"
+          FRONTEND_PASSED="${{ needs.frontend-coverage.result == 'success' }}"
+          BACKEND_PASSED="${{ needs.backend-coverage.result == 'success' }}"
+          BODY="$(node .github/scripts/format-coverage-comment.mjs "$FRONTEND_JSON" "$BACKEND_JSON" "$FRONTEND_PASSED" "$BACKEND_PASSED")"
+          {
+            echo "content<<EOF"
+            echo "$BODY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+      - name: Post PR comment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marker = "<!-- coverage-report -->";
+            const body = `${marker}\n${{ steps.body.outputs.content }}`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number,
+            });
+            const existing = comments.find((comment) => comment.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existing.id,
+                body,
+              });
+              return;
+            }
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number,
+              body,
+            });

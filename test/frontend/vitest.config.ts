@@ -48,6 +48,12 @@ export default defineConfig({
         "**/*.d.ts",
         path.join(frontendDir, "src/main.tsx"),
       ],
+      thresholds: {
+        lines: 80,
+        statements: 80,
+        branches: 75,
+        functions: 75,
+      },
     },
   },
 });
