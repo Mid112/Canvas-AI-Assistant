@@ -86,6 +86,36 @@ def test_generate_draft_strips_html_from_description(client):
     assert "- Call it with args" in description
 
 
+def test_generate_draft_accepts_literal_newlines_in_description(client):
+    """Groq/instruct models often emit multi-line description strings with
+    raw newlines inside the JSON quotes — invalid JSON that previously
+    surfaced as "Could not generate assignment draft"."""
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        '{"title": "Quiz on Python Functions and Parameters", \n'
+        ' "description": "This quiz tests your understanding.\n\n'
+        "- What is the purpose of def?\n"
+        '- How do you call a function?", \n'
+        ' "due_at": null, \n'
+        ' "points_possible": 20}'
+    )
+
+    with patch("app.services.assignment_draft.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/canvas/courses/1/assignments/generate-draft",
+            json={"prompt": "Create a quiz on Python functions and parameters"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["title"] == "Quiz on Python Functions and Parameters"
+    assert "What is the purpose of def?" in data["description"]
+    assert data["points_possible"] == 20
+
+
 def test_generate_draft_unparseable_response(client):
     headers = _register(client)
 
