@@ -760,3 +760,4 @@ performReactRefresh@http://localhost:5173/@react-refresh:217:33
 4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorCourse/InstructorCourseMessagesPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
 4:19:00 PM [vite] (client) [console.error] [vite] TypeError: Importing a module script failed.
 4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorCourse/InstructorCourseLayout.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:34 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAssistantPage.tsx, /src/components/chat/ChatWindow.tsx
