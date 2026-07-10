@@ -770,11 +770,13 @@ Total: 9 hours
 - Touched the LLM safety/parsing layer (`json_extraction.py`, `openai_compatible.py`, `assignment_draft.py`, `dispatcher.py`) in `services/llm` to harden assignment-draft parsing
 - `MVP fixes`: added new `ErrorAlert` and `EditableRecipientList` components, an `InstructorCredentialsDialog`, and reworked `MessageDraftPage`/`MessagePreview`/`MessageToolbar`/`RecipientSummary` for the message-composer flow; backend side picked up matching changes to `chat.py`, `auth.py`, and the LLM parsing layer
 - `fix duplicate send`: added a guard in `ChatWindow.tsx` against double-submitting a chat message, with new test coverage in `ChatWindow.test.tsx`
+<img width="1120" height="63" alt="Screenshot 2026-07-10 102240" src="https://github.com/user-attachments/assets/9258161a-4c51-408a-b2d5-df9a157e8ac9" />
 
 ### 2: Requirements Meeting Prep — Porting Fixes into the MVP Integration Branch (Wednesday, 8/7)
 - `Port MVP backend safety/parsing layer + assignment-creation/admin UI`: carried Tuesday's backend safety-layer and admin-UI changes (`InstructorCredentialsDialog`, `InstructorTable`, `ErrorAlert`, `ActiveCourseProvider`, `InstitutionProvider`, `active-course-storage.ts`) onto `integration/mvp-merge`, plus new `error-classification.ts` and `map-chat-reply.ts` helpers, ahead of the requirements meeting
 - `Reconcile message-composer UI: MVP's editable recipients + FBI's send contract`: merged two divergent message-composer implementations — the MVP branch's editable-recipient-list feature and `feature/frontend-backend-int`'s send contract — into one `MessageDraftPage` (net simplification despite heavy churn across `ConfirmationDialog`, `MessagePreview`, `MessageToolbar`, `RecipientSummary`), updating `ConfirmationDialog.test.tsx` and `RecipientSummary.test.tsx` to match
 - `add fixes`: reworked `chat.py` (+168 lines) and simplified `InstructorAssistantPage`, backed by a new 183-line `test_chat_endpoint.py`
+<img width="1121" height="63" alt="Screenshot 2026-07-10 102247" src="https://github.com/user-attachments/assets/8bf747cd-0aac-47a4-85d2-fef020437eae" />
 
 ### 3: Instructor Dashboard — Removing Stale Data + Published/Unpublished Course Status (Thursday, 9/7)
 - Worked evening of 9/7 (5:15–7:36 PM); pushed the following morning since the branch wasn't in a clean state to commit until then
@@ -782,6 +784,7 @@ Total: 9 hours
 - Added course published/unpublished status end-to-end: `types/course.ts`, `types/canvas.ts`, `mapCanvasCourse.ts`, `InstructorCoursesSection.tsx`
 - Simplified `useResolvedInstructorCourse.ts` and `useCanvasInstructorCourses.ts` (~100+ lines removed from each) and added a new `disambiguate-course-labels.ts` util, all with matching new test files (`ActiveCourseSelector.test.tsx`, `ActiveCourseProvider.test.tsx`, `disambiguate-course-labels.test.ts`)
 - `Add additional fixes` + `Fix updated course overview following filtered bar, remove duplicate content on active course in chat UI`: follow-up fixes to `ChatWindow.tsx`, `InstitutionProvider.tsx` (new `institution-context.ts`), `ActiveCourseContextBar.tsx`, and `InstructorCoursesSearch.tsx`/`InstructorCoursesPage.tsx`, removing content that was rendering twice between the active-course context bar and the chat UI
+<img width="1119" height="67" alt="Screenshot 2026-07-10 102255" src="https://github.com/user-attachments/assets/ac0de971-f970-4539-8c94-d470f42c34af" />
 
 ---
 
