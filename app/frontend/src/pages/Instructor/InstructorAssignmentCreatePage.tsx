@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
+import { useInstitution } from "@/contexts/useInstitution";
 import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
 import { disambiguateCourseLabels } from "@/lib/disambiguate-course-labels";
@@ -57,7 +58,9 @@ export function InstructorAssignmentCreatePage() {
     isLoading: isLoadingCourses,
     error: courseLoadError,
     needsCanvasConnection,
+    refreshActiveCourse,
   } = useActiveCourse();
+  const { refreshDashboard } = useInstitution();
 
   const publishedCourses = useMemo(
     () => availableCourses.filter((course) => course.isPublished),
@@ -175,6 +178,11 @@ export function InstructorAssignmentCreatePage() {
       });
       setApprovedValues(pendingApproval);
       setIsPreviewOpen(false);
+      // This wizard commits straight to Canvas rather than going through the
+      // Workflow used elsewhere — ActiveCourseProvider/InstitutionProvider
+      // won't know a new assignment exists until explicitly told to refetch.
+      void refreshActiveCourse();
+      void refreshDashboard();
     } catch (error) {
       setApproveError(
         error instanceof Error

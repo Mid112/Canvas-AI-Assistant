@@ -61,9 +61,14 @@ const course: InstructorCourse = {
 };
 
 const mockUseActiveCourse = vi.fn();
+const mockUseInstitution = vi.fn();
 
 vi.mock("@/contexts/useActiveCourse", () => ({
   useActiveCourse: () => mockUseActiveCourse(),
+}));
+
+vi.mock("@/contexts/useInstitution", () => ({
+  useInstitution: () => mockUseInstitution(),
 }));
 
 const mockedGenerate = vi.mocked(generateAssignmentDraft);
@@ -106,6 +111,10 @@ describe("InstructorAssignmentCreatePage", () => {
       isLoading: false,
       error: null,
       needsCanvasConnection: false,
+      refreshActiveCourse: vi.fn(),
+    });
+    mockUseInstitution.mockReturnValue({
+      refreshDashboard: vi.fn(),
     });
   });
 

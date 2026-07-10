@@ -126,6 +126,19 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
     };
   }, [accessToken, userId, user?.role]);
 
+  const refreshDashboard = useCallback(async () => {
+    if (!accessToken || user?.role !== "instructor") {
+      return;
+    }
+
+    try {
+      const dashboard = await fetchInstructorDashboard(accessToken);
+      setApiDashboard(withSharedQuickActions(dashboard));
+    } catch {
+      setApiDashboard(null);
+    }
+  }, [accessToken, user?.role]);
+
   const setSelectedInstitution = useCallback(
     (institutionId: string) => {
       if (!institutions.some((institution) => institution.id === institutionId)) {
@@ -163,8 +176,15 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
       dashboard: withSharedQuickActions(
         apiDashboard ?? institutionData?.dashboard ?? EMPTY_DASHBOARD,
       ),
+      refreshDashboard,
     }),
-    [apiDashboard, institutionData, selectedInstitution, setSelectedInstitution],
+    [
+      apiDashboard,
+      institutionData,
+      refreshDashboard,
+      selectedInstitution,
+      setSelectedInstitution,
+    ],
   );
 
   return (

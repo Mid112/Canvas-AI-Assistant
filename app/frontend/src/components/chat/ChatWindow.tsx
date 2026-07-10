@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
+import { useInstitution } from "@/contexts/useInstitution";
 import { seedChatMessages } from "@/data/assistantSeedData";
 import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
 import {
@@ -55,7 +56,8 @@ export function ChatWindow({
   onLoadingChange,
 }: ChatWindowProps) {
   const { accessToken } = useAuth();
-  const { activeCourse } = useActiveCourse();
+  const { activeCourse, refreshActiveCourse } = useActiveCourse();
+  const { refreshDashboard } = useInstitution();
   const [messages, setMessages] = useState<ChatMessage[]>(seedChatMessages);
   const [conversationId, setConversationId] = useState<number | undefined>(
     initialConversationId,
@@ -361,6 +363,16 @@ export function ChatWindow({
           ),
         );
         appendAssistantMessage(response);
+
+        if (action === "confirm") {
+          // The confirmed action just committed a write to Canvas/the local
+          // DB — ActiveCourseProvider and InstitutionProvider are both
+          // mounted once for the whole session, so nothing else will ask
+          // them to re-fetch. Without this, course/assignment counts and
+          // dashboard metrics stay stale until a full page reload.
+          void refreshActiveCourse();
+          void refreshDashboard();
+        }
       } catch (requestError) {
         const errorMessage =
           requestError instanceof AssistantApiError
@@ -371,7 +383,13 @@ export function ChatWindow({
         setResolvingMessageId(null);
       }
     },
-    [accessToken, appendAssistantMessage, conversationId],
+    [
+      accessToken,
+      appendAssistantMessage,
+      conversationId,
+      refreshActiveCourse,
+      refreshDashboard,
+    ],
   );
 
   const handleSend = useCallback(
