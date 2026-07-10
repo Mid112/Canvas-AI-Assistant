@@ -74,22 +74,21 @@ function DashboardShell({ role }: DashboardLayoutProps) {
   };
 
   return (
-    <div className="flex min-h-svh w-full bg-background">
+    <div className="flex h-svh w-full overflow-hidden bg-background">
       <div
         className={cn(
-          "hidden shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out lg:block",
+          "hidden h-svh shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out lg:block",
           sidebarOpen ? "w-64" : "w-0",
         )}
       >
         <Sidebar
           navItems={navItems}
-          role={role}
           roleLabel={roleLabel}
           showToggle
           onToggle={toggleSidebar}
         />
       </div>
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Header
           title={title}
           role={role}
@@ -98,7 +97,7 @@ function DashboardShell({ role }: DashboardLayoutProps) {
           sidebarOpen={sidebarOpen}
           onToggleSidebar={toggleSidebar}
         />
-        <main className="flex flex-1 flex-col overflow-auto">
+        <main className="flex min-h-0 flex-1 flex-col overflow-auto">
           <Outlet />
         </main>
       </div>

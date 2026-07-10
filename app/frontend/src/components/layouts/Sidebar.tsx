@@ -2,16 +2,13 @@ import { Link, NavLink } from "react-router-dom";
 import { GraduationCap, PanelLeftClose } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { SidebarProfile } from "@/components/layouts/SidebarProfile";
 import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 import type { NavItem } from "@/types/navigation";
 import { paths } from "@/routes/paths";
-import type { UserRole } from "@/types/user";
 
 interface SidebarProps {
   navItems: NavItem[];
-  role: UserRole;
   roleLabel: string;
   onNavigate?: () => void;
   onToggle?: () => void;
@@ -21,7 +18,6 @@ interface SidebarProps {
 
 export function Sidebar({
   navItems,
-  role,
   roleLabel,
   onNavigate,
   onToggle,
@@ -31,7 +27,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "flex h-full w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
+        "flex h-full max-h-svh w-64 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
         className,
       )}
     >
@@ -66,7 +62,7 @@ export function Sidebar({
           </Button>
         ) : null}
       </div>
-      <nav className="flex flex-1 flex-col gap-1 p-3">
+      <nav className="flex shrink-0 flex-col gap-1 overflow-hidden p-3">
         {navItems.map((item) => (
           <NavLink
             key={item.href}
@@ -86,7 +82,6 @@ export function Sidebar({
           </NavLink>
         ))}
       </nav>
-      <SidebarProfile role={role} roleLabel={roleLabel} onNavigate={onNavigate} />
     </aside>
   );
 }
