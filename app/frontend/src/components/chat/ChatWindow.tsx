@@ -14,7 +14,9 @@ import {
   AssistantApiError,
   cancelAssistantAction,
   confirmAssistantAction,
+  mapConversationToChatMessages,
   sendAssistantMessage,
+  type ConversationResponse,
 } from "@/services/assistant";
 import type { ChatMessage } from "@/types/chat";
 
@@ -27,8 +29,10 @@ interface ChatWindowProps {
   initialDraft?: string | null;
   initialConversationId?: number;
   initialPendingMessageId?: number;
+  loadedConversation?: ConversationResponse | null;
   onInitialPromptConsumed?: () => void;
   onModifyContextConsumed?: () => void;
+  onConversationChange?: (conversationId: number) => void;
   onLoadingChange?: (isLoading: boolean) => void;
 }
 
@@ -37,8 +41,10 @@ export function ChatWindow({
   initialDraft = null,
   initialConversationId,
   initialPendingMessageId,
+  loadedConversation = null,
   onInitialPromptConsumed,
   onModifyContextConsumed,
+  onConversationChange,
   onLoadingChange,
 }: ChatWindowProps) {
   const { accessToken } = useAuth();
@@ -79,6 +85,25 @@ export function ChatWindow({
   useEffect(() => {
     onLoadingChange?.(isLoading);
   }, [isLoading, onLoadingChange]);
+
+  useEffect(() => {
+    if (!loadedConversation) {
+      return;
+    }
+
+    const loadedMessages = mapConversationToChatMessages(loadedConversation);
+    setMessages(loadedMessages.length ? loadedMessages : seedChatMessages);
+    setConversationId(loadedConversation.id);
+    setActivePendingMessageId(
+      loadedMessages.find(
+        (message) => message.pendingActionStatus === "pending",
+      )?.pendingMessageId,
+    );
+    setError(null);
+    setInputError(null);
+    setRetryMessage(null);
+    setPendingActionError(null);
+  }, [loadedConversation]);
 
   const appendAssistantMessage = useCallback(
     (response: {
@@ -152,6 +177,7 @@ export function ChatWindow({
         }
 
         setConversationId(response.conversationId);
+        onConversationChange?.(response.conversationId);
         appendAssistantMessage(response);
         setRetryMessage(null);
       } catch (requestError) {
@@ -171,6 +197,7 @@ export function ChatWindow({
       appendAssistantMessage,
       assistantContext,
       conversationId,
+      onConversationChange,
       onModifyContextConsumed,
     ],
   );
@@ -208,6 +235,7 @@ export function ChatWindow({
               );
 
         setConversationId(response.conversationId);
+        onConversationChange?.(response.conversationId);
         setActivePendingMessageId(undefined);
         setMessages((current) =>
           current.map((entry) =>
@@ -231,7 +259,7 @@ export function ChatWindow({
         setResolvingMessageId(null);
       }
     },
-    [accessToken, appendAssistantMessage, conversationId],
+    [accessToken, appendAssistantMessage, conversationId, onConversationChange],
   );
 
   const handleSend = useCallback(

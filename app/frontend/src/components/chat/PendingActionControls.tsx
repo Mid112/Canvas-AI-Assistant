@@ -23,7 +23,9 @@ export function PendingActionControls({
           ? "This action was confirmed."
           : status === "superseded"
             ? "This proposal was replaced by a newer request."
-            : "This action was cancelled."}
+            : status === "failed"
+              ? "This action failed."
+              : "This action was cancelled."}
       </p>
     );
   }

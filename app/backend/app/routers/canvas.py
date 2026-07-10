@@ -70,7 +70,7 @@ async def list_courses(
 async def list_assignments(
     course_id: int,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await get_assignments(course_id, current_user, canvas_url, db)

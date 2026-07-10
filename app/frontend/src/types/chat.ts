@@ -4,7 +4,8 @@ export type PendingActionStatus =
   | "pending"
   | "confirmed"
   | "cancelled"
-  | "superseded";
+  | "superseded"
+  | "failed";
 
 export interface ActionLink {
   label: string;

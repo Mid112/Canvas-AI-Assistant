@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from app.models.conversation import Conversation
+
 
 class ConfirmActionRequest(BaseModel):
     conversation_id: int
@@ -36,6 +38,7 @@ class MessageResponse(BaseModel):
     role: str
     content: str
     created_at: datetime
+    pending_action_status: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -47,3 +50,59 @@ class ConversationResponse(BaseModel):
     messages: list[MessageResponse] = []
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def from_conversation(cls, conversation: Conversation) -> "ConversationResponse":
+        statuses_by_message_id = {
+            workflow.preview_message_id: workflow.status
+            for workflow in conversation.workflows
+        }
+
+        return cls(
+            id=conversation.id,
+            course_id=conversation.course_id,
+            created_at=conversation.created_at,
+            messages=[
+                MessageResponse(
+                    id=message.id,
+                    role=message.role,
+                    content=message.content,
+                    created_at=message.created_at,
+                    pending_action_status=statuses_by_message_id.get(message.id),
+                )
+                for message in conversation.messages
+            ],
+        )
+
+
+class ConversationSummary(BaseModel):
+    id: int
+    course_id: int | None
+    created_at: datetime
+    updated_at: datetime
+    message_count: int
+    preview: str | None = None
+    pending_action_count: int = 0
+
+    @classmethod
+    def from_conversation(cls, conversation: Conversation) -> "ConversationSummary":
+        messages = list(conversation.messages)
+        last_message = messages[-1] if messages else None
+        pending_actions = [
+            workflow for workflow in conversation.workflows if workflow.status == "pending"
+        ]
+
+        return cls(
+            id=conversation.id,
+            course_id=conversation.course_id,
+            created_at=conversation.created_at,
+            updated_at=last_message.created_at if last_message else conversation.created_at,
+            message_count=len(messages),
+            preview=last_message.content[:160] if last_message else None,
+            pending_action_count=len(pending_actions),
+        )
+
+
+class ConversationListResponse(BaseModel):
+    items: list[ConversationSummary]
+    total: int

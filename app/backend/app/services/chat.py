@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime
 
 import httpx
 from fastapi import HTTPException
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -697,5 +697,37 @@ async def get_conversation_with_messages(
             Conversation.id == conversation_id,
             Conversation.user_id == user.id,
         )
-        .options(selectinload(Conversation.messages))
+        .options(selectinload(Conversation.messages), selectinload(Conversation.workflows))
     )
+
+
+async def list_conversations(
+    db: AsyncSession,
+    user: User,
+    limit: int,
+    offset: int,
+) -> tuple[list[Conversation], int]:
+    total = await db.scalar(
+        select(func.count()).select_from(Conversation).where(Conversation.user_id == user.id)
+    )
+    latest_message = (
+        select(
+            Message.conversation_id,
+            func.max(Message.created_at).label("updated_at"),
+        )
+        .group_by(Message.conversation_id)
+        .subquery()
+    )
+    rows = await db.scalars(
+        select(Conversation)
+        .outerjoin(latest_message, latest_message.c.conversation_id == Conversation.id)
+        .where(Conversation.user_id == user.id)
+        .options(selectinload(Conversation.messages), selectinload(Conversation.workflows))
+        .order_by(
+            desc(func.coalesce(latest_message.c.updated_at, Conversation.created_at)),
+            desc(Conversation.id),
+        )
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(rows), total or 0

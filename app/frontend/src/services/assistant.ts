@@ -1,6 +1,11 @@
 import { apiRequest, ApiRequestError } from "@/lib/api-request";
 import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
-import type { AssistantContext, AssistantResponse } from "@/types/chat";
+import type {
+  AssistantContext,
+  AssistantResponse,
+  ChatMessage,
+  PendingActionStatus,
+} from "@/types/chat";
 
 export class AssistantApiError extends Error {
   status?: number;
@@ -37,6 +42,7 @@ export interface ConversationMessage {
   role: string;
   content: string;
   created_at: string;
+  pending_action_status?: string | null;
 }
 
 export interface ConversationResponse {
@@ -44,6 +50,26 @@ export interface ConversationResponse {
   course_id: number | null;
   created_at: string;
   messages: ConversationMessage[];
+}
+
+export interface ConversationSummary {
+  id: number;
+  course_id: number | null;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+  preview: string | null;
+  pending_action_count: number;
+}
+
+export interface ConversationListResponse {
+  items: ConversationSummary[];
+  total: number;
+}
+
+export interface ListConversationsOptions {
+  limit?: number;
+  offset?: number;
 }
 
 function toAssistantMessageResult(
@@ -74,6 +100,79 @@ function wrapRequestError(error: unknown): never {
       ? error.message
       : "The assistant is temporarily unavailable. Please try again.",
   );
+}
+
+function parseStoredAssistantContent(content: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(content) as unknown;
+    return parsed && typeof parsed === "object"
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function mapWorkflowStatus(
+  status: string | null | undefined,
+): PendingActionStatus | undefined {
+  switch (status) {
+    case "pending":
+      return "pending";
+    case "executed":
+    case "executing":
+      return "confirmed";
+    case "cancelled":
+      return "cancelled";
+    case "superseded":
+      return "superseded";
+    case "failed":
+      return "failed";
+    default:
+      return undefined;
+  }
+}
+
+export function mapConversationToChatMessages(
+  conversation: ConversationResponse,
+): ChatMessage[] {
+  return conversation.messages.map((message) => {
+    const timestamp = new Date(message.created_at);
+
+    if (message.role === "assistant") {
+      const parsed = parseStoredAssistantContent(message.content);
+      const mapped = parsed
+        ? mapChatReplyToAssistantResponse(parsed, false, conversation.id)
+        : { content: message.content };
+      const pendingActionStatus = mapWorkflowStatus(
+        message.pending_action_status,
+      );
+      const pendingMessageId =
+        pendingActionStatus || parsed?.intent_preview ? message.id : undefined;
+
+      return {
+        id: `stored-${message.id}`,
+        role: "assistant",
+        content: mapped.content,
+        timestamp,
+        conversationId: conversation.id,
+        pendingMessageId,
+        pendingActionStatus,
+        explanation: mapped.explanation,
+        interpretedAction: mapped.interpretedAction,
+        safetyBlocked: mapped.safetyBlocked,
+        safetyMessage: mapped.safetyMessage,
+      };
+    }
+
+    return {
+      id: `stored-${message.id}`,
+      role: "user",
+      content: message.content,
+      timestamp,
+      conversationId: conversation.id,
+    };
+  });
 }
 
 export async function sendAssistantMessage(
@@ -144,6 +243,32 @@ export async function cancelAssistantAction(
     );
 
     return toAssistantMessageResult(response);
+  } catch (error) {
+    wrapRequestError(error);
+  }
+}
+
+export async function listAssistantConversations(
+  accessToken: string,
+  options: ListConversationsOptions = {},
+): Promise<ConversationListResponse> {
+  const params = new URLSearchParams();
+
+  if (options.limit !== undefined) {
+    params.set("limit", String(options.limit));
+  }
+
+  if (options.offset !== undefined) {
+    params.set("offset", String(options.offset));
+  }
+
+  const query = params.toString();
+
+  try {
+    return await apiRequest<ConversationListResponse>(
+      `/chat/conversations${query ? `?${query}` : ""}`,
+      accessToken,
+    );
   } catch (error) {
     wrapRequestError(error);
   }
