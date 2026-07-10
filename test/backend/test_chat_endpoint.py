@@ -145,7 +145,7 @@ def test_list_conversations(client):
     assert body["total"] >= 1
     assert body["items"][0]["id"] == conversation_id
     assert body["items"][0]["message_count"] == 2
-    assert body["items"][0]["preview"] is not None
+    assert body["items"][0]["preview"] == "Hello from history."
 
 
 def test_conversation_history_is_scoped_to_current_user(client):

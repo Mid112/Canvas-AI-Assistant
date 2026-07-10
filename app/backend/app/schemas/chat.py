@@ -1,9 +1,99 @@
 # app/backend/app/schemas/chat.py
+import json
 from datetime import datetime
 
 from pydantic import BaseModel
 
 from app.models.conversation import Conversation
+from app.models.message import Message
+
+
+CONVERSATION_PREVIEW_MAX_CHARS = 160
+
+
+def _truncate_preview(value: str) -> str:
+    normalized = " ".join(value.split())
+    if len(normalized) <= CONVERSATION_PREVIEW_MAX_CHARS:
+        return normalized
+    return f"{normalized[: CONVERSATION_PREVIEW_MAX_CHARS - 1].rstrip()}…"
+
+
+def _read_named_items(items: list[object], fallback_label: str) -> str:
+    if not items:
+        return f"No {fallback_label} found"
+
+    names: list[str] = []
+    for item in items[:3]:
+        if isinstance(item, dict):
+            name = item.get("name") or item.get("title") or item.get("course_code")
+            if isinstance(name, str) and name.strip():
+                names.append(name.strip())
+
+    if not names:
+        return f"{len(items)} {fallback_label} found"
+
+    suffix = "" if len(items) <= len(names) else f" + {len(items) - len(names)} more"
+    return f"{fallback_label.capitalize()}: {', '.join(names)}{suffix}"
+
+
+def _humanize_action(action: str) -> str:
+    return action.replace("_", " ").strip().capitalize()
+
+
+def _parse_readable_preview(content: str) -> str | None:
+    stripped = content.strip()
+    if not stripped:
+        return None
+
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        return _truncate_preview(stripped)
+
+    if isinstance(parsed, str):
+        return _truncate_preview(parsed)
+
+    if isinstance(parsed, list):
+        return _truncate_preview(f"{len(parsed)} results")
+
+    if not isinstance(parsed, dict):
+        return None
+
+    for key in ("summary", "message", "question", "error", "detail"):
+        value = parsed.get(key)
+        if isinstance(value, str) and value.strip():
+            return _truncate_preview(value)
+
+    for key, label in (
+        ("courses", "courses"),
+        ("assignments", "assignments"),
+        ("students", "students"),
+        ("submissions", "submissions"),
+    ):
+        value = parsed.get(key)
+        if isinstance(value, list):
+            return _truncate_preview(_read_named_items(value, label))
+
+    action = parsed.get("action")
+    if isinstance(action, str) and action.strip():
+        return _truncate_preview(_humanize_action(action))
+
+    if parsed.get("intent_preview"):
+        return "Action preview"
+
+    return None
+
+
+def _conversation_preview(messages: list[Message]) -> str | None:
+    for message in reversed(messages):
+        if message.role == "user" and message.content.strip().startswith("["):
+            continue
+
+        preview = _parse_readable_preview(message.content)
+        if preview:
+            return preview
+
+    return None
 
 
 class ConfirmActionRequest(BaseModel):
@@ -98,7 +188,7 @@ class ConversationSummary(BaseModel):
             created_at=conversation.created_at,
             updated_at=last_message.created_at if last_message else conversation.created_at,
             message_count=len(messages),
-            preview=last_message.content[:160] if last_message else None,
+            preview=_conversation_preview(messages),
             pending_action_count=len(pending_actions),
         )
 
