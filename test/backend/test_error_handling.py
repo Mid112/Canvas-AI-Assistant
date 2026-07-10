@@ -143,45 +143,40 @@ def test_confirm_unknown_course_returns_safe_message(client):
     once a course_name resolves, so a bad/unowned id can no longer be
     fabricated by mocking the model's output alone. This reproduces
     _resolve_course's "not found" path the same way a stale/deleted
-    course reference would in production: the preview goes through
-    normally against a real, owned course, and _resolve_course is made to
-    fail specifically at confirm time."""
+    course reference would in production: the model names a real, owned
+    course, and _resolve_course is made to fail specifically during
+    execution. fetch_assignments is a read action, so it executes
+    directly on the normal turn now (see READ_ACTIONS in
+    handle_chat_message) — there is no separate preview/confirm step to
+    fail at."""
     headers, local_course_id = _register_with_canvas(client)
 
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = (
-        '{"action": "intent_preview", "summary": "Fetch assignments", "course_name": "CPSC 310", '
-        '"proposed_action": {"action": "fetch_assignments"}}'
+        '{"action": "fetch_assignments", "course_name": "CPSC 310"}'
     )
-    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
-        preview = client.post(
+    with (
+        patch("app.services.chat.get_llm_adapter", return_value=mock_adapter),
+        patch(
+            "app.mcp_tools.dispatcher._resolve_course",
+            new=AsyncMock(
+                side_effect=ToolExecutionError(
+                    "That course could not be found in your account.",
+                    log_detail=f"local_course_id={local_course_id} not found or not owned by user_id=<redacted>",
+                )
+            ),
+        ),
+    ):
+        response = client.post(
             "/api/v1/chat/",
             json={"message": "show me assignments"},
             headers=headers,
         )
-    assert preview.status_code == 200
-    pending_message_id = preview.json()["reply"]["pending_message_id"]
-    conversation_id = preview.json()["conversation_id"]
 
-    with patch(
-        "app.mcp_tools.dispatcher._resolve_course",
-        new=AsyncMock(
-            side_effect=ToolExecutionError(
-                "That course could not be found in your account.",
-                log_detail=f"local_course_id={local_course_id} not found or not owned by user_id=<redacted>",
-            )
-        ),
-    ):
-        confirm = client.post(
-            "/api/v1/chat/confirm",
-            json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
-            headers=headers,
-        )
-
-    assert confirm.status_code == 200
-    body = confirm.json()
+    assert response.status_code == 200
+    body = response.json()
     assert body["is_error"] is True
     assert "could not be found in your account" in body["reply"]["error"]
     # log_detail includes the internal local_course_id — it should not be
     # visible to the client.
-    assert str(local_course_id) not in confirm.text
+    assert str(local_course_id) not in response.text

@@ -15,13 +15,23 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.core.canvas_url import canvas_urls_equivalent
 from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_action
-from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS, IntentPreviewAction
+from app.mcp_tools.dispatcher import _resolve_course as resolve_course
+from app.mcp_tools.schemas import (
+    ACTION_SCHEMAS,
+    READ_ACTIONS,
+    WRITE_ACTIONS,
+    FetchAssignmentsAction,
+    FetchSubmissionsAction,
+    IntentPreviewAction,
+)
+from app.models.assignment import Assignment
 from app.models.audit_log import AuditLog
 from app.models.canvas_connection import CanvasConnection
 from app.models.canvas_course_name import CanvasCourseName
 from app.models.conversation import Conversation
 from app.models.course import Course
 from app.models.message import Message
+from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
 from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
@@ -45,18 +55,22 @@ HISTORY_WINDOW = 10
 # history message's contribution regardless of why it got large.
 HISTORY_MESSAGE_MAX_CHARS = 2000
 
-# A normal chat turn may only ever produce one of these — every real
-# Canvas action (read or write) must be proposed via intent_preview first,
-# never executed directly. Nothing in execute_tool's dispatch enforces
-# this on its own (fetch_courses, fetch_assignments, get_active_course,
-# create_assignment, etc. are all independently reachable top-level
-# cases), and the model does not reliably follow the system prompt's
-# instruction to always preview first — observed skipping straight to a
-# raw get_active_course/fetch_assignments call with no preview shown at
-# all. handle_confirmed_action's PATH B is exempt: executing the
-# previously-proposed action directly is the entire point of confirm. A
-# raw action outside this set gets auto-wrapped into a real intent_preview
-# instead of rejected outright — see handle_chat_message.
+# A normal chat turn may only ever *propose* one of these without going
+# through intent_preview/confirm — every write action (create_assignment,
+# update_assignment, send_message) must still be proposed via
+# intent_preview first, never executed directly. Read actions
+# (READ_ACTIONS, from app.mcp_tools.schemas) are a separate, deliberately
+# ungated category handled earlier in handle_chat_message's dispatch: they
+# execute immediately since they can never mutate Canvas state, so there's
+# nothing for intent_preview to protect. Nothing in execute_tool's dispatch
+# enforces the write gate on its own (create_assignment etc. are
+# independently reachable top-level cases), and the model does not
+# reliably follow the system prompt's instruction to always preview a
+# write first — observed skipping straight to a raw create_assignment call
+# with no preview shown at all. handle_confirmed_action's PATH B is exempt:
+# executing the previously-proposed action directly is the entire point of
+# confirm. A raw write action outside this set gets auto-wrapped into a
+# real intent_preview instead of rejected outright — see handle_chat_message.
 NORMAL_TURN_ALLOWED_ACTIONS = {"intent_preview", "clarify", "out_of_scope", "respond"}
 
 # WRITE_ACTIONS (imported from app.mcp_tools.schemas) is also the set of
@@ -300,6 +314,190 @@ def _inject_course_into_envelope(parsed_envelope: dict, local_course_id: int | N
     return parsed_envelope
 
 
+async def _run_tracked_read(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    triggering_message_id: int,
+    action_name: str,
+    parameters: dict,
+    coro,
+) -> dict:
+    """Runs a single read-action coroutine and records its
+    pending/executing/executed/failed lifecycle in tool_call_logs — the
+    per-call bookkeeping intent_preview/Workflow used to provide implicitly
+    (a user confirming a preview was also confirming "yes, make this
+    Canvas call"), which reads no longer get now that they execute
+    immediately (see handle_chat_message). Created directly in "executing"
+    status: unlike workflows' pending state, there's no async gap here
+    waiting on a human click between creating the row and starting the call.
+
+    On failure, marks the row "failed" with the exception text and
+    re-raises unchanged — the caller's existing ToolExecutionError/
+    HTTPException handling in handle_chat_message is what actually turns
+    this into a user-facing error; this function only adds the log row."""
+    call_log = ToolCallLog(
+        conversation_id=conversation.id,
+        user_id=user.id,
+        course_id=parameters.get("local_course_id"),
+        triggering_message_id=triggering_message_id,
+        action_name=action_name,
+        parameters=parameters,
+        status="executing",
+    )
+    db.add(call_log)
+    await db.flush()
+    try:
+        result = await coro
+    except Exception as e:
+        call_log.status = "failed"
+        call_log.error_detail = str(e)
+        await db.flush()
+        raise
+    call_log.status = "executed"
+    call_log.completed_at = datetime.now(UTC)
+    await db.flush()
+    return result
+
+
+_ASSIGNMENT_RESOLVER_SYSTEM_PROMPT = """You resolve which assignment a user
+is referring to, given the real list of assignments in their course and how
+they described the one they mean.
+
+Respond with exactly one JSON object and nothing else:
+{"assignment_id": <id>}
+
+Use the "id" value from the matching assignment in ASSIGNMENTS — never a
+value that isn't in that list. If the reference is "latest"/"most recent"/
+"newest", pick the assignment with the latest due_at (if none have a
+due_at, there is no reliable way to tell — treat it as no confident match).
+If the reference is "earliest"/"first"/"oldest", pick the earliest due_at
+the same way. If the reference names or closely matches one assignment's
+name, pick that one. If you cannot confidently pick exactly one, respond
+with {"assignment_id": null} instead of guessing."""
+
+ASSIGNMENT_RESOLVER_TIMEOUT_SECONDS = 30.0
+
+
+async def _resolve_assignment_reference(
+    assignments: list[dict], reference: str | None, user_message: str
+) -> int | None:
+    """Resolves a natural-language assignment reference (e.g. "the latest
+    assignment") to a real Canvas assignment ID, via a small dedicated LLM
+    call — not a recursive re-entry into handle_chat_message's full
+    pipeline. Mirrors how course_name is resolved: the model is never
+    trusted to invent a numeric ID, only to point at one from a real list
+    the app gives it.
+
+    Returns None (never raises) on any failure — timeout, HTTP error,
+    unparseable JSON, or a confident "I can't tell" from the model itself
+    — so the caller can fall back to asking the user directly instead of
+    surfacing this as an error. Nothing has failed in the sense of a lost
+    write; this is a read that just needs one more piece of information."""
+    if len(assignments) == 1:
+        return assignments[0]["id"]
+
+    listing = "\n".join(
+        f"- id={a['id']}, name={a['name']!r}, due_at={a['due_at']}, points_possible={a['points_possible']}"
+        for a in assignments
+    )
+    prompt = (
+        f"ASSIGNMENTS:\n{listing}\n\n"
+        f"User's reference to an assignment: {reference or '(not given)'}\n"
+        f"User's full message: {user_message}"
+    )
+    adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
+    try:
+        raw = await asyncio.wait_for(
+            adapter.generate(
+                _ASSIGNMENT_RESOLVER_SYSTEM_PROMPT, prompt, history=[],
+                timeout=ASSIGNMENT_RESOLVER_TIMEOUT_SECONDS,
+            ),
+            timeout=ASSIGNMENT_RESOLVER_TIMEOUT_SECONDS,
+        )
+        parsed = json.loads(extract_json_object(raw))
+    except (TimeoutError, httpx.HTTPStatusError, json.JSONDecodeError):
+        return None
+    candidate = parsed.get("assignment_id") if isinstance(parsed, dict) else None
+    valid_ids = {a["id"] for a in assignments}
+    return candidate if candidate in valid_ids else None
+
+
+async def _run_fetch_submissions_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    action: FetchSubmissionsAction,
+    user_message: str,
+) -> dict:
+    """fetch_submissions needs a real Canvas assignment_id, which the model
+    is never allowed to invent (see COURSE RESOLUTION/assignment sections
+    in build_system_prompt). When it isn't already known, this resolves it
+    server-side — chaining an internal fetch_assignments call and
+    _resolve_assignment_reference — all inside the single request handling
+    the user's one message, instead of making the user ask a second time
+    once the assignment list is in history.
+
+    print() lines are a deliberate, simple placeholder for step-by-step
+    transparency while a multi-call chain is in flight (stdout/server logs
+    only, never returned to the client) — not one per tracked read action,
+    just markers for this specific multi-step chain."""
+    course = await resolve_course(db, user, action.local_course_id)
+    assignment_id = action.assignment_id
+
+    if assignment_id is not None:
+        # Only trust a bare assignment_id the model hands back if it
+        # verifies against this course's locally synced assignments (from
+        # any prior get_assignments call) — it could be hallucinated,
+        # stale, or belong to a different course. If it doesn't verify,
+        # fall through to the full resolution chain below exactly as if no
+        # assignment_id had been given at all.
+        verified = await db.scalar(
+            select(Assignment.id).where(
+                Assignment.course_id == course.id,
+                Assignment.canvas_assignment_id == str(assignment_id),
+            )
+        )
+        if verified is None:
+            assignment_id = None
+
+    if assignment_id is None:
+        print(f"Gathering {course.name} data")
+        print(f"Collecting {course.name} assignments")
+        fetch_action = FetchAssignmentsAction(local_course_id=course.id)
+        assignments_result = await _run_tracked_read(
+            db, user, conversation, user_msg.id, "fetch_assignments",
+            fetch_action.model_dump(), execute_tool(db, user, fetch_action),
+        )
+        assignments = assignments_result["assignments"]
+        if not assignments:
+            return {
+                "action": "clarify",
+                "clarify": True,
+                "question": f"{course.name} has no assignments yet — is there something else I can help with?",
+                "partial_plan": {"local_course_id": course.id},
+            }
+        assignment_id = await _resolve_assignment_reference(
+            assignments, action.assignment_reference, user_message
+        )
+        if assignment_id is None:
+            names = ", ".join(a["name"] for a in assignments)
+            return {
+                "action": "clarify",
+                "clarify": True,
+                "question": f"Which assignment in {course.name} did you mean? Options: {names}.",
+                "partial_plan": {"local_course_id": course.id},
+            }
+
+    print(f"Combing through {course.name} submissions")
+    submit_action = FetchSubmissionsAction(local_course_id=course.id, assignment_id=assignment_id)
+    return await _run_tracked_read(
+        db, user, conversation, user_msg.id, "fetch_submissions",
+        submit_action.model_dump(), execute_tool(db, user, submit_action),
+    )
+
+
 async def _load_stored_intent_preview(
     db: AsyncSession, conversation_id: int, message_id: int
 ) -> dict | None:
@@ -449,14 +647,13 @@ async def _sync_workflow_for_preview(
 ) -> None:
     """Creates or updates the Workflow row backing an intent_preview — the
     state machine handle_confirmed_action checks to guarantee an action
-    executes at most once. Covers every action, not just WRITE_ACTIONS:
-    the system prompt requires *every* action, read or write, to go
-    through intent_preview -> confirm, so scoping this to writes only
-    would 404 every read-action confirm (e.g. "what courses do I have?")
-    — a real regression caught during manual verification, not a
-    deliberate design choice. AuditLog writing in handle_confirmed_action
-    stays gated to WRITE_ACTIONS separately, since audit rows are only
-    ever about actual Canvas mutations.
+    executes at most once. Only ever called for `result.get("intent_preview")`
+    turns, which read actions no longer produce (READ_ACTIONS execute
+    immediately in handle_chat_message — see _run_tracked_read/
+    _run_fetch_submissions_chain and their own tool_call_logs tracking) —
+    in practice this is reached by write actions only now. AuditLog writing
+    in handle_confirmed_action stays gated to WRITE_ACTIONS separately,
+    since audit rows are only ever about actual Canvas mutations.
 
     Also backfills conversation.course_id from the proposed action the
     first time one is seen, since the client (e.g. the manual test
@@ -640,10 +837,19 @@ If any required field is missing or was not stated by the user, use the
 AMBIGUITY CHECK format to ask for it. Never invent a placeholder value
 and never silently omit a required field from proposed_action.
 
-INTENT PREVIEW — if the request is clear enough to act on:
-Before executing any action, always show the user what you are about to do:
+INTENT PREVIEW — before executing a WRITE action:
+create_assignment, update_assignment, and send_message change real Canvas
+data, so the user must see and confirm exactly what will happen first:
 {"action": "intent_preview", "summary": "<plain English description>", "proposed_action": <dict>}
 The user will confirm, modify, or cancel from here.
+
+READ ACTIONS — execute immediately, no preview:
+fetch_courses, fetch_assignments, fetch_students, fetch_submissions, and
+get_active_course never change any data, so propose them directly and
+plainly — do NOT wrap them in intent_preview:
+{"action": "fetch_assignments", "course_name": "<course>"}
+They run right away and their result is shown to the user in this same
+response, not a separate confirm step.
 
 CONVERSATION HISTORY:
 Previous messages in this conversation are provided below. If this is
@@ -694,26 +900,34 @@ only omit points_possible if the user explicitly says it's ungraded or
 has no point value. Never invent a value for a field the user didn't
 give you.
 
-RESOLVING AN ASSIGNMENT BY NAME:
-fetch_submissions and update_assignment both require assignment_id — the
-assignment's Canvas ID, not its title. Never invent, guess, or write a
-placeholder value (e.g. a description like "<the ID for Assignment 1>")
-into assignment_id, and never ask the user for it either — the user does
-not know or need to know internal Canvas IDs, the same as with courses
-(see COURSE RESOLUTION above). This is the one exception to the
-AMBIGUITY CHECK's "ask, don't guess"
-rule: if the user refers to an assignment by name and you do not already
-have its Canvas ID from this conversation (e.g. from a previous
-fetch_assignments or fetch_submissions result), your response must be
-intent_preview proposing fetch_assignments — that is always a complete,
-valid action on its own, and is the ONLY correct way to resolve a name to
-an ID. Do not respond with clarify to ask the user for an ID; clarify is
-only for missing information the user themselves would know (e.g. which
-course, or which student). Once you do have the assignment data, its
-Canvas ID is the "id" field, not "local_id". For update_assignment
-specifically, only include the fields the user actually wants changed —
-leave every other field out of proposed_action entirely, since anything
-omitted is preserved automatically.
+RESOLVING AN ASSIGNMENT FOR fetch_submissions:
+fetch_submissions needs an assignment, but you do not need to know its
+Canvas ID yourself. If you already have it from earlier in this
+conversation (the "id" field from a previous fetch_assignments or
+fetch_submissions result), pass it directly as assignment_id. Otherwise
+leave assignment_id unset and instead set assignment_reference to the
+user's own words for which assignment they mean — e.g. "the latest
+assignment", "Assignment 2", "the final project" — and propose
+fetch_submissions directly (not fetch_assignments, and not
+intent_preview). The app resolves assignment_reference to a real ID for
+you, the same way course_name is resolved to a course — never invent or
+guess a numeric assignment_id yourself.
+
+RESOLVING AN ASSIGNMENT FOR update_assignment:
+update_assignment is a write action, so unlike fetch_submissions it needs
+an exact Canvas assignment_id before you can propose it — the preview must
+show precisely what will change, and this action has no
+assignment_reference field. If you do not already have the ID from this
+conversation's history, propose fetch_assignments first — that's a
+complete, valid read action on its own (see READ ACTIONS above), executed
+immediately; once its result is in history, a follow-up message naming
+the assignment can resolve it. Do not respond with clarify to ask the user
+for an ID — clarify is only for information the user themselves would know
+(e.g. which course, or which student). Once you do have the assignment
+data, its Canvas ID is the "id" field, not "local_id". Only include the
+fields the user actually wants changed — leave every other field out of
+proposed_action entirely, since anything omitted is preserved
+automatically.
 
 MESSAGING STUDENTS:
 send_message can either post a public class announcement (when
@@ -759,7 +973,21 @@ async def handle_chat_message(
       same as normal, but if the result is an intent_preview, the old
       preview message is overwritten in place rather than a new row
       being appended. This keeps conversation history clean so the LLM
-      sees only the latest agreed plan on subsequent turns.
+      sees only the latest agreed plan on subsequent turns. Modify turns
+      only ever apply to write actions now — a read never produces a
+      pending preview to revise.
+
+    Action execution: write actions (create_assignment, update_assignment,
+    send_message) are still gated behind intent_preview -> confirm exactly
+    as before. Read actions (READ_ACTIONS) execute immediately within this
+    same call — no preview, no confirm click — since they can never mutate
+    Canvas state; each tracked read call is logged in tool_call_logs
+    (see _run_tracked_read). fetch_submissions additionally resolves a
+    missing/unverified assignment_id server-side before executing, chaining
+    an internal fetch_assignments call and a small dedicated LLM call when
+    needed (see _run_fetch_submissions_chain) — still all within this one
+    request, so a question like "show me submissions for the latest
+    assignment" never needs a second user turn.
 
     Course resolution: local_course_id here is only ever an explicit
     client-supplied value (the "set active course" button). Every other
@@ -898,14 +1126,44 @@ async def handle_chat_message(
             result = text_reply
         else:
             action = parse_action(raw_output)
-            if action.action not in NORMAL_TURN_ALLOWED_ACTIONS:
-                # The model named a Canvas action directly (read or write)
-                # instead of wrapping it in intent_preview like the system
-                # prompt asks. Not every model follows that instruction
-                # reliably (smaller local models especially, and even
-                # capable ones on read actions — observed live skipping
-                # straight to a raw get_active_course/fetch_assignments
-                # call with no preview shown at all). Auto-wrapping into a
+            if (
+                action.action == "intent_preview"
+                and action.proposed_action.get("action") in READ_ACTIONS
+            ):
+                # Defensive: the model wrapped a read in intent_preview
+                # despite the system prompt (INTENT PREVIEW section) saying
+                # that step is for write actions only. Unwrap and treat it
+                # as a direct read instead of showing a pointless "confirm
+                # this read" preview.
+                action = parse_action(json.dumps(action.proposed_action))
+
+            if action.action == "fetch_submissions":
+                # Needs a real Canvas assignment_id, which the model is
+                # never allowed to invent — resolve it server-side (chains
+                # an internal fetch_assignments call when needed) rather
+                # than executing directly.
+                result = await _run_fetch_submissions_chain(
+                    db, user, conversation, user_msg, action, message
+                )
+            elif action.action in READ_ACTIONS:
+                # Every other read executes immediately — no preview, no
+                # confirm click, nothing to review before a call that can
+                # never mutate Canvas state. get_active_course is a local
+                # UserPreference read with no Canvas call and nothing that
+                # can meaningfully fail, so it's the one read left
+                # untracked (see _run_tracked_read's docstring).
+                if action.action == "get_active_course":
+                    result = await execute_tool(db, user, action)
+                else:
+                    result = await _run_tracked_read(
+                        db, user, conversation, user_msg.id, action.action,
+                        action.model_dump(), execute_tool(db, user, action),
+                    )
+            elif action.action not in NORMAL_TURN_ALLOWED_ACTIONS:
+                # The model named a write action directly instead of
+                # wrapping it in intent_preview like the system prompt
+                # asks. Not every model follows that instruction reliably
+                # (smaller local models especially). Auto-wrapping into a
                 # real intent_preview here, rather than rejecting outright,
                 # gives the user the same confirmation step they should
                 # have gotten without losing the turn to an error message.
@@ -913,7 +1171,9 @@ async def handle_chat_message(
                     summary=f"I'll {action.action.replace('_', ' ')} as described below. Please review before confirming.",
                     proposed_action=action.model_dump(),
                 )
-            result = await execute_tool(db, user, action)
+                result = await execute_tool(db, user, action)
+            else:
+                result = await execute_tool(db, user, action)
     except ToolExecutionError as e:
         await log_message(db, conversation, role="assistant", content=e.log_detail)
         await db.commit()

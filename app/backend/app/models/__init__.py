@@ -14,6 +14,7 @@ from app.models.session import Session
 from app.models.student import Student
 from app.models.submission import Submission
 from app.models.system_setting import SystemSetting
+from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
 from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
@@ -34,6 +35,7 @@ __all__ = [
     "Student",
     "Submission",
     "SystemSetting",
+    "ToolCallLog",
     "User",
     "UserPreference",
     "Workflow",

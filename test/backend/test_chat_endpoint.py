@@ -385,19 +385,53 @@ def test_history_keeps_intent_preview_full_for_modify_turn(client):
     """Unlike clarify/respond turns, an intent_preview must stay full JSON
     in history — a follow-up 'modify' turn needs the complete previous
     proposed_action to correctly carry forward fields the user didn't ask
-    to change."""
+    to change. Uses create_assignment (a write) since reads no longer
+    produce an intent_preview at all — they execute directly (see
+    READ_ACTIONS in handle_chat_message)."""
     headers = _register(client)
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            headers=headers,
+        )
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock_courses:
+        mock_courses.return_value = [
+            {
+                "id": 322,
+                "name": "COSC 322",
+                "course_code": "COSC 322",
+                "enrollment_term_id": 1,
+                "workflow_state": "available",
+            }
+        ]
+        courses = client.get(
+            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            headers=headers,
+        )
+        local_course_id = courses.json()[0]["local_id"]
+        client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_course_id},
+            headers=headers,
+        )
 
     mock_adapter = AsyncMock()
     mock_adapter.generate.side_effect = [
-        '{"action": "intent_preview", "summary": "I will fetch your courses.", "proposed_action": {"action": "fetch_courses"}}',
+        '{"action": "intent_preview", "summary": "I will create Assignment 1.", '
+        '"proposed_action": {"action": "create_assignment", '
+        f'"local_course_id": {local_course_id}, "title": "Assignment 1", '
+        '"description": "Peer evaluation", "due_date": "2026-07-12T05:59:59", '
+        '"points_possible": 100}}',
         '{"action": "respond", "message": "OK."}',
     ]
 
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
         first = client.post(
             "/api/v1/chat/",
-            json={"message": "show me my courses"},
+            json={"message": "create assignment 1"},
             headers=headers,
         )
         conversation_id = first.json()["conversation_id"]
@@ -410,7 +444,7 @@ def test_history_keeps_intent_preview_full_for_modify_turn(client):
     followup_history = mock_adapter.generate.call_args_list[1].kwargs["history"]
     assistant_entry = next(m for m in followup_history if m["role"] == "assistant")
     assert "proposed_action" in assistant_entry["content"]
-    assert "fetch_courses" in assistant_entry["content"]
+    assert "create_assignment" in assistant_entry["content"]
 
 
 def test_course_name_resolution_is_exact_not_fuzzy(client):
@@ -459,21 +493,28 @@ def test_course_name_resolution_is_exact_not_fuzzy(client):
 
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = (
-        '{"action": "intent_preview", "summary": "Fetch assignments", '
-        '"course_name": "COSC 310 Advanced", '
-        '"proposed_action": {"action": "fetch_assignments"}}'
+        '{"action": "fetch_assignments", "course_name": "COSC 310 Advanced"}'
     )
 
-    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+    with (
+        patch("app.services.chat.get_llm_adapter", return_value=mock_adapter),
+        patch(
+            "app.mcp_tools.dispatcher.get_assignments", new=AsyncMock(return_value=[])
+        ) as mock_fetch_assignments,
+    ):
         response = client.post(
             "/api/v1/chat/",
             json={"message": "Summarize COSC 310 Advanced"},
             headers=headers,
         )
 
+    # fetch_assignments is a read action now — it executes directly, no
+    # intent_preview/confirm step, so the resolved local_course_id is only
+    # observable via what actually got passed to the Canvas-facing call.
     assert response.status_code == 200
-    proposed = response.json()["reply"]["proposed_action"]
-    assert proposed["local_course_id"] == local_ids["COSC 310 Advanced"]
+    assert response.json()["reply"]["assignments"] == []
+    mock_fetch_assignments.assert_awaited_once()
+    assert mock_fetch_assignments.await_args.args[0] == local_ids["COSC 310 Advanced"]
 
 
 def test_chat_uses_saved_active_course_when_client_context_is_not_ready(client):
@@ -586,12 +627,10 @@ def test_write_action_without_intent_preview_is_forced_into_a_preview(client):
 
 
 def test_canvas_failure_returns_chat_error(client):
-    """Canvas API failures during read actions return a user-friendly chat
-    error. A raw fetch_courses response (the model skipping intent_preview)
-    now gets auto-wrapped into a real preview rather than executed
-    directly on the normal turn — see handle_chat_message — so the
-    Canvas call, and its failure, only happen once that preview is
-    confirmed."""
+    """Canvas API failures during a read action surface immediately as a
+    user-friendly chat error. fetch_courses is a read action — it executes
+    directly on the normal turn now (see READ_ACTIONS in
+    handle_chat_message), no preview/confirm step to fail at separately."""
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
@@ -610,32 +649,21 @@ def test_canvas_failure_returns_chat_error(client):
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = '{"action": "fetch_courses"}'
 
-    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
-        preview = client.post(
-            "/api/v1/chat/",
-            json={"message": "List my courses"},
-            headers=headers,
-        )
-
-    assert preview.status_code == 200
-    preview_body = preview.json()
-    assert preview_body["is_error"] is False
-    assert preview_body["reply"]["action"] == "intent_preview"
-    conversation_id = preview_body["conversation_id"]
-    pending_message_id = preview_body["reply"]["pending_message_id"]
-
-    with patch(
-        "app.mcp_tools.dispatcher.get_courses",
-        new=AsyncMock(
-            side_effect=HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Canvas server error: 503",
-            )
+    with (
+        patch("app.services.chat.get_llm_adapter", return_value=mock_adapter),
+        patch(
+            "app.mcp_tools.dispatcher.get_courses",
+            new=AsyncMock(
+                side_effect=HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Canvas server error: 503",
+                )
+            ),
         ),
     ):
         response = client.post(
-            "/api/v1/chat/confirm",
-            json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
+            "/api/v1/chat/",
+            json={"message": "List my courses"},
             headers=headers,
         )
 

@@ -29,7 +29,20 @@ class FetchAssignmentsAction(BaseModel):
 class FetchSubmissionsAction(BaseModel):
     action: Literal["fetch_submissions"] = "fetch_submissions"
     local_course_id: int
-    assignment_id: int
+    # Both optional: the LLM should supply assignment_id directly only when
+    # it already has a real Canvas assignment ID from earlier in this
+    # conversation (e.g. a previous fetch_assignments/fetch_submissions
+    # result). Otherwise it should leave this unset and describe which
+    # assignment it means in assignment_reference instead — the app
+    # resolves that server-side (see _run_fetch_submissions_chain in
+    # services/chat.py), the same way course_name is resolved to
+    # local_course_id, so the model never has to guess or invent a
+    # numeric ID.
+    assignment_id: int | None = None
+    # The user's own words for which assignment they mean, e.g. "the latest
+    # assignment", "Assignment 2", "the final project" — copied from the
+    # user's message, not invented. Ignored once assignment_id is set.
+    assignment_reference: str | None = None
 
 
 class FetchStudentsAction(BaseModel):
@@ -198,3 +211,13 @@ def is_reversible(action: str) -> bool:
 # excluded: it only writes a local UserPreference row, has no Canvas
 # footprint, and always executes immediately regardless of provider.
 WRITE_ACTIONS = frozenset({"create_assignment", "update_assignment", "send_message", "update_grade"})
+
+# Every read-only Canvas action, derived from ACTION_CLASSIFICATION rather
+# than hand-listed a second time. services/chat.py's handle_chat_message
+# uses this to execute reads immediately on a normal turn instead of
+# gating them behind intent_preview/confirm like every write action still
+# is — a read can never mutate Canvas state, so there's nothing for the
+# user to review before it runs.
+READ_ACTIONS = frozenset(
+    name for name, kind in ACTION_CLASSIFICATION.items() if kind == "read_only"
+)
