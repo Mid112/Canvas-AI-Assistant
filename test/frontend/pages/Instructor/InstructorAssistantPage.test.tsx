@@ -131,6 +131,9 @@ describe("InstructorAssistantPage", () => {
     }));
 
     expect(await screen.findByText("Previous question")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Hello! I'm your Canvas AI Assistant/),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /New Chat/i }));
 

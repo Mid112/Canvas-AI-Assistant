@@ -1,4 +1,4 @@
-import { AlertCircle } from "lucide-react";
+import { AlertCircle, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AssistantMessage } from "@/components/chat/AssistantMessage";
@@ -25,6 +25,17 @@ function createMessageId(): string {
   return crypto.randomUUID();
 }
 
+function withWelcomeMessage(restoredMessages: ChatMessage[]): ChatMessage[] {
+  if (restoredMessages.length === 0) {
+    return seedChatMessages;
+  }
+
+  return [
+    ...seedChatMessages,
+    ...restoredMessages.filter((message) => message.id !== "welcome"),
+  ];
+}
+
 interface ChatWindowProps {
   initialPrompt?: string | null;
   initialDraft?: string | null;
@@ -35,6 +46,7 @@ interface ChatWindowProps {
   onModifyContextConsumed?: () => void;
   onConversationChange?: (conversationId: number) => void;
   onLoadingChange?: (isLoading: boolean) => void;
+  onStartNewChat?: () => void;
 }
 
 export function ChatWindow({
@@ -47,6 +59,7 @@ export function ChatWindow({
   onModifyContextConsumed,
   onConversationChange,
   onLoadingChange,
+  onStartNewChat,
 }: ChatWindowProps) {
   const { accessToken } = useAuth();
   const { activeCourse } = useActiveCourse();
@@ -94,7 +107,7 @@ export function ChatWindow({
     }
 
     const loadedMessages = mapConversationToChatMessages(loadedConversation);
-    setMessages(loadedMessages.length ? loadedMessages : seedChatMessages);
+    setMessages(withWelcomeMessage(loadedMessages));
     setConversationId(loadedConversation.id);
     setActivePendingMessageId(
       loadedMessages.find(
@@ -131,7 +144,7 @@ export function ChatWindow({
         }
 
         const restoredMessages = mapConversationToChatMessages(conversation);
-        setMessages(restoredMessages.length > 0 ? restoredMessages : seedChatMessages);
+        setMessages(withWelcomeMessage(restoredMessages));
         setConversationId(conversation.id);
         setActivePendingMessageId(
           restoredMessages.find(
@@ -368,6 +381,21 @@ export function ChatWindow({
   return (
     <Card className="flex min-h-[32rem] flex-1 flex-col overflow-hidden shadow-sm ring-1 ring-border/60">
       <CardContent className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:p-6">
+        {onStartNewChat ? (
+          <div className="flex shrink-0 justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onStartNewChat}
+              disabled={isLoading}
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              New Chat
+            </Button>
+          </div>
+        ) : null}
+
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
           {messages.map((message) =>
             message.role === "assistant" ? (

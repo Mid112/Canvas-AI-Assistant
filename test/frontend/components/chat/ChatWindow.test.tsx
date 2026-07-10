@@ -450,6 +450,9 @@ describe("ChatWindow", () => {
       <ChatWindow initialConversationId={7} initialPendingMessageId={42} />,
     );
 
+    expect(
+      await screen.findByText(/Hello! I'm your Canvas AI Assistant/),
+    ).toBeInTheDocument();
     expect(await screen.findByText("Create a midterm exam")).toBeInTheDocument();
     expect(
       screen.getByText("I prepared a midterm exam for review."),

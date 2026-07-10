@@ -1,4 +1,4 @@
-import { History, Loader2, Plus, RefreshCw } from "lucide-react";
+import { History, Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
@@ -205,6 +205,7 @@ export function InstructorAssistantPage() {
           }}
           onConversationChange={handleConversationChange}
           onLoadingChange={setIsLoading}
+          onStartNewChat={handleStartNewChat}
         />
 
         <section
@@ -221,33 +222,21 @@ export function InstructorAssistantPage() {
                 Conversation History
               </h2>
             </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleStartNewChat}
-                disabled={isLoading}
-              >
-                <Plus className="size-4" aria-hidden="true" />
-                New Chat
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                onClick={() => void loadConversationList()}
-                disabled={isHistoryLoading}
-                aria-label="Refresh conversation history"
-                title="Refresh conversation history"
-              >
-                {isHistoryLoading ? (
-                  <Loader2 className="size-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="size-4" />
-                )}
-              </Button>
-            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => void loadConversationList()}
+              disabled={isHistoryLoading}
+              aria-label="Refresh conversation history"
+              title="Refresh conversation history"
+            >
+              {isHistoryLoading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RefreshCw className="size-4" />
+              )}
+            </Button>
           </div>
 
           {historyError ? (
