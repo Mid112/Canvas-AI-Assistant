@@ -53,7 +53,7 @@ export function SidebarProfile({
   };
 
   return (
-    <div className={cn("border-t border-sidebar-border p-3", className)}>
+    <div className={cn("shrink-0 border-t border-sidebar-border p-3", className)}>
       <DropdownMenu>
         <DropdownMenuTrigger
           className="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left transition-colors hover:bg-sidebar-accent/60"
