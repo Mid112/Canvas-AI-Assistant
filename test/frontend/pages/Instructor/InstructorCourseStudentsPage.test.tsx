@@ -80,6 +80,7 @@ function CourseStudentsRoute({
 }
 
 describe("InstructorCourseStudentsPage", () => {
+  // Verifies: Loads students when the course context has a Canvas URL.
   it("loads students when the course context has a Canvas URL", async () => {
     mockedFetchStudents.mockResolvedValue([
       {
@@ -108,6 +109,7 @@ describe("InstructorCourseStudentsPage", () => {
     });
   });
 
+  // Verifies: Loads students by local course id when the course context has no Canvas URL.
   it("loads students by local course id when the course context has no Canvas URL", async () => {
     // Regression coverage for embedded course tabs: the header can have a
     // student count even when the outlet context omits Canvas metadata.
@@ -139,6 +141,7 @@ describe("InstructorCourseStudentsPage", () => {
     });
   });
 
+  // Verifies: Passes the expected course count so empty rosters can fall back to submissions.
   it("passes the expected course count so empty rosters can fall back to submissions", async () => {
     mockedFetchStudents.mockResolvedValue([
       {

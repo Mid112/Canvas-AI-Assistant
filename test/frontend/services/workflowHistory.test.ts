@@ -18,6 +18,7 @@ describe("workflowHistory service", () => {
     vi.restoreAllMocks();
   });
 
+  // Verifies: Fetches and maps workflow history from the API.
   it("fetches and maps workflow history from the API", async () => {
     const apiResponse: WorkflowHistoryApiResponse = {
       total: 1,
@@ -68,6 +69,7 @@ describe("workflowHistory service", () => {
     expect(result.entries[0]?.affectedResources).toHaveLength(2);
   });
 
+  // Verifies: Fetches additional workflow history pages when total exceeds one page.
   it("fetches additional workflow history pages when total exceeds one page", async () => {
     const firstPage: WorkflowHistoryApiResponse = {
       total: 2,
@@ -119,6 +121,7 @@ describe("workflowHistory service", () => {
     expect(result.total).toBe(2);
   });
 
+  // Verifies: Maps executed workflows to approved status.
   it("maps executed workflows to approved status", () => {
     const entry = mapWorkflowHistoryApiToEntry({
       id: 2,
@@ -139,6 +142,7 @@ describe("workflowHistory service", () => {
     expect(entry.timestamp).toBe("2026-05-01T12:05:00.000Z");
   });
 
+  // Verifies: Builds a CSV export with headers and rows.
   it("builds a CSV export with headers and rows", () => {
     const csv = buildWorkflowHistoryCsv(mockWorkflowHistory.slice(0, 2));
 
@@ -149,6 +153,7 @@ describe("workflowHistory service", () => {
     expect(csv).toContain("Create Assignment");
   });
 
+  // Verifies: Prefixes spreadsheet formula characters in exported values.
   it("prefixes spreadsheet formula characters in exported values", () => {
     const csv = buildWorkflowHistoryCsv([
       {

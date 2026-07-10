@@ -16,6 +16,7 @@ const assignment: Assignment = {
 };
 
 describe("AssignmentUpdatePreview", () => {
+  // Verifies: Shows original and updated values side by side.
   it("shows original and updated values side by side", () => {
     const proposedValues = {
       ...assignmentToFormValues(assignment),
@@ -39,6 +40,7 @@ describe("AssignmentUpdatePreview", () => {
     ).toBeEnabled();
   });
 
+  // Verifies: Returns to edit mode when cancel is clicked.
   it("returns to edit mode when cancel is clicked", async () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();

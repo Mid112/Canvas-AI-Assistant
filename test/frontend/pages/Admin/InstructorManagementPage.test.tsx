@@ -82,6 +82,7 @@ describe("InstructorManagementPage", () => {
     });
   }
 
+  // Verifies: Renders the instructor management table.
   it("renders the instructor management table", async () => {
     renderWithRouter(<InstructorManagementPage />);
 
@@ -122,6 +123,7 @@ describe("InstructorManagementPage", () => {
     expect(screen.getByLabelText("Temporary Password")).toBeInTheDocument();
   });
 
+  // Verifies: Opens the edit instructor dialog from the action menu.
   it("opens the edit instructor dialog from the action menu", async () => {
     renderWithRouter(<InstructorManagementPage />);
 
@@ -136,6 +138,7 @@ describe("InstructorManagementPage", () => {
     expect(screen.getByLabelText("First Name")).toHaveValue("Dr. Jane");
   });
 
+  // Verifies: Shows a confirmation dialog before disabling an instructor.
   it("shows a confirmation dialog before disabling an instructor", async () => {
     renderWithRouter(<InstructorManagementPage />);
 
@@ -152,6 +155,7 @@ describe("InstructorManagementPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Shows a confirmation dialog before revoking access.
   it("shows a confirmation dialog before revoking access", async () => {
     renderWithRouter(<InstructorManagementPage />);
 
@@ -168,6 +172,7 @@ describe("InstructorManagementPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Creates an instructor through the full UI flow.
   it("creates an instructor through the full UI flow", async () => {
     vi.spyOn(instructorAccountsService, "fetchInstructors")
       .mockResolvedValueOnce(mockInstructors)

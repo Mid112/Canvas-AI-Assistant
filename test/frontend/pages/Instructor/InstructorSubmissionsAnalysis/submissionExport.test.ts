@@ -6,6 +6,7 @@ import { buildSubmissionsExportCsv } from "@/pages/Instructor/InstructorSubmissi
 const assignment = institutionSubmissionsData[0]!.assignments[0]!;
 
 describe("buildSubmissionsExportCsv", () => {
+  // Verifies: Builds a csv report for missing and late students.
   it("builds a csv report for missing and late students", () => {
     const csv = buildSubmissionsExportCsv(
       assignment,
@@ -19,6 +20,7 @@ describe("buildSubmissionsExportCsv", () => {
     expect(csv).toContain("late,Emma Davis,emma.davis@student.ubc.ca");
   });
 
+  // Verifies: Prefixes spreadsheet formula characters in exported values.
   it("prefixes spreadsheet formula characters in exported values", () => {
     const csv = buildSubmissionsExportCsv(
       assignment,

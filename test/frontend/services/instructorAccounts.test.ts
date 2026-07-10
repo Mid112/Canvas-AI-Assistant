@@ -27,6 +27,7 @@ describe("instructorAccounts service", () => {
     vi.restoreAllMocks();
   });
 
+  // Verifies: Fetches instructors from the API.
   it("fetches instructors from the API", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(JSON.stringify([instructorRecord]), { status: 200 }),
@@ -39,6 +40,7 @@ describe("instructorAccounts service", () => {
     expect(instructors[0]?.lastName).toBe("Instructor");
   });
 
+  // Verifies: Creates, updates, enables, disables, and revokes instructors.
   it("creates, updates, enables, disables, and revokes instructors", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

@@ -1,12 +1,13 @@
 # app/backend/app/mcp_tools/dispatcher.py
 import json
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException
+from dateutil import parser as date_parser
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.integrations.canvas import fetch_enrollments
 from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS, is_reversible
 from app.models.course import Course
 from app.models.user import User
@@ -22,7 +23,6 @@ from app.services.canvas import (
     get_assignments,
     get_courses,
     get_submissions,
-    require_canvas_token,
     send_course_message,
     set_active_course,
     update_course_assignment,
@@ -83,6 +83,60 @@ def parse_action(raw_llm_output: str) -> Any:
         )
 
 
+# Friendly clarifying questions for create_assignment's fields, keyed in
+# the order they're checked. points_possible is Optional in
+# CreateAssignmentAction (str | None, to keep update_assignment's partial
+# updates and the data model flexible), but for a *new* assignment every
+# field should be an explicit user decision before a preview is shown.
+_CREATE_ASSIGNMENT_FIELD_QUESTIONS = {
+    "title": "What should this assignment be called?",
+    "description": "What should the assignment description say?",
+    "due_date": "When is this assignment due?",
+    "points_possible": "How many points is this assignment worth?",
+}
+
+
+def _create_assignment_missing_field(proposed: dict) -> str | None:
+    """Returns the name of the first required create_assignment field
+    that's missing or effectively empty, or None if the proposal is
+    complete.
+
+    This can't be left to schema validation alone: proposed_action is a
+    loosely typed dict at preview time (see the 'intent_preview' case
+    below), not validated against CreateAssignmentAction until confirm —
+    so a model can satisfy Pydantic's `str` type by emitting "" instead
+    of actually asking the user, which slips past AMBIGUITY CHECK and
+    REQUIRED FIELDS in the system prompt entirely undetected (observed in
+    practice with the instruct model). Checking here is a server-side
+    guarantee that doesn't depend on the model reliably following that
+    prompt instruction."""
+    for field in ("title", "description", "due_date"):
+        value = proposed.get(field)
+        if not isinstance(value, str) or not value.strip():
+            return field
+    if proposed.get("points_possible") is None:
+        return "points_possible"
+    return None
+
+
+def _create_assignment_due_date_in_past(due_date: str) -> bool:
+    """True if due_date parses to a date that has already passed.
+
+    Mirrors assignment_validation._check_due_date's future-date rule,
+    checked here too so a stale year is caught before a doomed preview is
+    shown, not just at confirm time (the TODAY'S DATE line in the system
+    prompt tells the model what today is, but it doesn't reliably do the
+    "nearest future occurrence" arithmetic itself — observed defaulting
+    to the current year even when that puts the date in the past)."""
+    try:
+        due_dt = date_parser.parse(due_date)
+    except (date_parser.ParserError, ValueError, OverflowError, TypeError):
+        return False
+    if due_dt.tzinfo is None:
+        due_dt = due_dt.replace(tzinfo=UTC)
+    return due_dt <= datetime.now(UTC)
+
+
 async def _resolve_course(
     db: AsyncSession, user: User, local_course_id: int
 ) -> Course:
@@ -103,25 +157,18 @@ async def _resolve_course(
         )
 
 
-async def _add_person_submission_summary(
-    course: Course,
-    submissions: list[SubmissionResponse],
-    user: User,
-    db: AsyncSession,
-) -> str:
-    """Resolves user_id to name for display. Names are assembled here
-    in Python from Canvas enrollment data — the LLM never sees or
-    generates student PII directly."""
-    token = require_canvas_token(user, course.canvas_url)
-    enrollments = await fetch_enrollments(
-        int(course.canvas_course_id), token, course.canvas_url
-    )
-    name_by_id = {
-        e["user_id"]: e["user"]["name"] for e in enrollments if "user" in e
-    }
+def _add_person_submission_summary(submissions: list[SubmissionResponse]) -> str:
+    """Names are assembled here for display — the LLM never sees or
+    generates student PII directly.
+
+    student_name is already populated on each submission by
+    get_submissions (services/canvas.py), which requests Canvas's
+    include[]=user. An earlier version of this function fetched course
+    enrollments separately to resolve user_id -> name, duplicating a
+    roster fetch that wasn't needed."""
     lines = []
     for s in submissions:
-        name = name_by_id.get(s.user_id, f"Student {s.user_id}")
+        name = s.student_name or f"Student {s.user_id}"
         status = "submitted" if s.workflow_state == "submitted" else "has not submitted"
         lines.append(f"{name} {status}")
     return "\n".join(lines)
@@ -181,9 +228,7 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             submissions = await get_submissions(
                 course.id, action.assignment_id, user, course.canvas_url, db
             )
-            summary = await _add_person_submission_summary(
-                course, submissions, user, db
-            )
+            summary = _add_person_submission_summary(submissions)
             return {
                 "submissions": [s.model_dump() for s in submissions],
                 "summary": summary,
@@ -381,6 +426,52 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             # proposed_action tells generate_write_preview which write type
             # this is — it dispatches internally and returns the right metadata.
             proposed = action.proposed_action
+
+            # proposed_action.action must itself be a real, executable action
+            # (or a read action) — not "clarify"/"intent_preview"/etc. This
+            # has been observed in practice: a modify turn confused about
+            # merging its edit with an existing plan can nest {"action":
+            # "clarify", ...} inside proposed_action, which the frontend
+            # then renders as a bogus confirmable "Clarify" action card
+            # instead of a real clarifying question.
+            nested_action_name = proposed.get("action")
+            if nested_action_name not in ACTION_SCHEMAS or nested_action_name in {
+                "out_of_scope", "clarify", "intent_preview", "respond",
+            }:
+                raise ToolExecutionError(
+                    "The assistant's response could not be understood. Please try rephrasing.",
+                    log_detail=f"intent_preview wrapped a non-action proposed_action.action "
+                    f"{nested_action_name!r}. proposed_action: {proposed!r}",
+                )
+
+            if proposed.get("action") == "create_assignment":
+                missing_field = _create_assignment_missing_field(proposed)
+                if missing_field:
+                    partial_plan = {
+                        key: value
+                        for key, value in proposed.items()
+                        if key not in ("action", missing_field)
+                    }
+                    return {
+                        "action": "clarify",
+                        "clarify": True,
+                        "question": _CREATE_ASSIGNMENT_FIELD_QUESTIONS[missing_field],
+                        "partial_plan": partial_plan,
+                    }
+
+                if _create_assignment_due_date_in_past(proposed["due_date"]):
+                    partial_plan = {
+                        key: value for key, value in proposed.items() if key not in ("action", "due_date")
+                    }
+                    return {
+                        "action": "clarify",
+                        "clarify": True,
+                        "question": (
+                            f"The due date you gave ({proposed['due_date']}) has already "
+                            "passed — what date would you like instead?"
+                        ),
+                        "partial_plan": partial_plan,
+                    }
 
             if proposed.get("action") in WRITE_ACTIONS:
                 # proposed_action is a raw, unvalidated dict from the LLM's

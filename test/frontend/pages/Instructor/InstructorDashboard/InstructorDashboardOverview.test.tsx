@@ -8,6 +8,7 @@ import type { DashboardMetrics } from "@/types/dashboard";
 const ubcDashboard = getInstitutionData("ubc")!.dashboard;
 
 describe("InstructorDashboardOverview", () => {
+  // Verifies: Renders dashboard metric cards.
   it("renders dashboard metric cards", () => {
     render(<InstructorDashboardOverview metrics={ubcDashboard.metrics} />);
 
@@ -21,6 +22,7 @@ describe("InstructorDashboardOverview", () => {
     expect(screen.getByText("7")).toBeInTheDocument();
   });
 
+  // Verifies: Colors positive trends green and rising missing submissions red.
   it("colors positive trends green and rising missing submissions red", () => {
     const metrics: DashboardMetrics = {
       activeCourses: 4,
@@ -39,6 +41,7 @@ describe("InstructorDashboardOverview", () => {
     expect(screen.getByText("5%")).toHaveClass("text-red-500");
   });
 
+  // Verifies: Shows green when missing submissions trend improves.
   it("shows green when missing submissions trend improves", () => {
     const metrics: DashboardMetrics = {
       ...ubcDashboard.metrics,

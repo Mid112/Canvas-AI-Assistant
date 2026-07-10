@@ -116,11 +116,13 @@ def _analyze(client, headers, course_id, enrollments, submissions):
 # ---------------------------------------------------------------------------
 
 
+# Verifies: Missing submissions unauthenticated.
 def test_missing_submissions_unauthenticated(client):
     response = client.get("/api/v1/canvas/courses/1/assignments/10/missing-submissions")
     assert response.status_code == 401
 
 
+# Verifies: Missing submissions no canvas token.
 def test_missing_submissions_no_canvas_token(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
@@ -135,6 +137,7 @@ def test_missing_submissions_no_canvas_token(client):
     assert response.status_code == 403
 
 
+# Verifies: Missing submissions course not found.
 def test_missing_submissions_course_not_found(client, auth_headers):
     """Unknown local course returns 404 without ever calling Canvas."""
     with (
@@ -155,6 +158,7 @@ def test_missing_submissions_course_not_found(client, auth_headers):
 # ---------------------------------------------------------------------------
 
 
+# Verifies: Compare enrolled to submissions.
 def test_compare_enrolled_to_submissions(client, auth_headers, synced_course_id):
     """Two enrolled students, one submitted — the other is reported missing."""
     enrollments = [_enrollment(1, "Alice Smith"), _enrollment(2, "Bob Jones")]
@@ -168,6 +172,7 @@ def test_compare_enrolled_to_submissions(client, auth_headers, synced_course_id)
     assert [s["canvas_user_id"] for s in data["missing_students"]] == ["2"]
 
 
+# Verifies: Student without submission record is missing.
 def test_student_without_submission_record_is_missing(client, auth_headers, synced_course_id):
     """An enrolled student with no submission record at all counts as missing."""
     enrollments = [_enrollment(1, "Alice Smith"), _enrollment(2, "Bob Jones")]
@@ -178,6 +183,7 @@ def test_student_without_submission_record_is_missing(client, auth_headers, sync
     assert data["missing_students"][0]["canvas_user_id"] == "2"
 
 
+# Verifies: Submission from unenrolled user is ignored.
 def test_submission_from_unenrolled_user_is_ignored(client, auth_headers, synced_course_id):
     """A submission from a dropped student must not inflate the stats."""
     enrollments = [_enrollment(1, "Alice Smith")]
@@ -189,6 +195,7 @@ def test_submission_from_unenrolled_user_is_ignored(client, auth_headers, synced
     assert data["summary"]["missing_count"] == 0
 
 
+# Verifies: Duplicate enrollments counted once.
 def test_duplicate_enrollments_counted_once(client, auth_headers, synced_course_id):
     """A student enrolled in two sections appears once in the analysis."""
     enrollments = [_enrollment(1, "Alice Smith"), _enrollment(1, "Alice Smith")]
@@ -203,6 +210,7 @@ def test_duplicate_enrollments_counted_once(client, auth_headers, synced_course_
 # ---------------------------------------------------------------------------
 
 
+# Verifies: Missing student fields.
 def test_missing_student_fields(client, auth_headers, synced_course_id):
     enrollments = [_enrollment(1, "Alice Smith")]
     response = _analyze(client, auth_headers, synced_course_id, enrollments, [_submission(1)])
@@ -213,6 +221,7 @@ def test_missing_student_fields(client, auth_headers, synced_course_id):
     assert student["login_id"] == "user1@example.com"
 
 
+# Verifies: Missing students sorted by sortable name.
 def test_missing_students_sorted_by_sortable_name(client, auth_headers, synced_course_id):
     enrollments = [
         _enrollment(1, "Charlie Young"),
@@ -224,6 +233,7 @@ def test_missing_students_sorted_by_sortable_name(client, auth_headers, synced_c
     assert names == ["Bob Adams", "Alice Brown", "Charlie Young"]
 
 
+# Verifies: Excused student not in missing list.
 def test_excused_student_not_in_missing_list(client, auth_headers, synced_course_id):
     enrollments = [_enrollment(1, "Alice Smith"), _enrollment(2, "Bob Jones")]
     submissions = [_submission(1, excused=True), _submission(2)]
@@ -234,6 +244,7 @@ def test_excused_student_not_in_missing_list(client, auth_headers, synced_course
     assert [s["canvas_user_id"] for s in data["missing_students"]] == ["2"]
 
 
+# Verifies: Canvas missing flag counts as missing.
 def test_canvas_missing_flag_counts_as_missing(client, auth_headers, synced_course_id):
     """A submission Canvas itself flags as missing lands in the missing list."""
     enrollments = [_enrollment(1, "Alice Smith")]
@@ -249,6 +260,7 @@ def test_canvas_missing_flag_counts_as_missing(client, auth_headers, synced_cour
 # ---------------------------------------------------------------------------
 
 
+# Verifies: Summary statistics.
 def test_summary_statistics(client, auth_headers, synced_course_id):
     """4 enrolled: graded, late, excused, unsubmitted → rate 50%, counts per status."""
     enrollments = [_enrollment(i, f"Student {i}") for i in (1, 2, 3, 4)]
@@ -275,6 +287,7 @@ def test_summary_statistics(client, auth_headers, synced_course_id):
     }
 
 
+# Verifies: Status counts sum to total enrolled.
 def test_status_counts_sum_to_total_enrolled(client, auth_headers, synced_course_id):
     enrollments = [_enrollment(i, f"Student {i}") for i in range(1, 6)]
     submissions = [_submitted(1), _submission(2, missing=True), _submission(3, excused=True)]
@@ -283,6 +296,7 @@ def test_status_counts_sum_to_total_enrolled(client, auth_headers, synced_course
     assert sum(summary["status_counts"].values()) == summary["total_enrolled"]
 
 
+# Verifies: Submission rate rounded.
 def test_submission_rate_rounded(client, auth_headers, synced_course_id):
     """1 of 3 submitted → 33.3, not a long float."""
     enrollments = [_enrollment(i, f"Student {i}") for i in (1, 2, 3)]
@@ -291,6 +305,7 @@ def test_submission_rate_rounded(client, auth_headers, synced_course_id):
     assert response.json()["summary"]["submission_rate"] == 33.3
 
 
+# Verifies: Empty roster.
 def test_empty_roster(client, auth_headers, synced_course_id):
     """No enrolled students → all zeros and rate 0.0 (no division by zero)."""
     response = _analyze(client, auth_headers, synced_course_id, [], [])
@@ -302,6 +317,7 @@ def test_empty_roster(client, auth_headers, synced_course_id):
     assert summary["submission_rate"] == 0.0
 
 
+# Verifies: Everyone submitted.
 def test_everyone_submitted(client, auth_headers, synced_course_id):
     enrollments = [_enrollment(1, "Alice Smith"), _enrollment(2, "Bob Jones")]
     submissions = [_submitted(1), _submitted(2)]
@@ -317,6 +333,7 @@ def test_everyone_submitted(client, auth_headers, synced_course_id):
 # ---------------------------------------------------------------------------
 
 
+# Verifies: Response structure.
 def test_response_structure(client, auth_headers, synced_course_id):
     """Top-level shape: course/assignment context, timestamp, summary, missing list."""
     enrollments = [_enrollment(1, "Alice Smith")]
@@ -343,6 +360,7 @@ def test_response_structure(client, auth_headers, synced_course_id):
     (status.HTTP_502_BAD_GATEWAY, "Could not reach Canvas"),
     (status.HTTP_504_GATEWAY_TIMEOUT, "Canvas API timed out"),
 ])
+# Verifies: Missing submissions canvas errors.
 def test_missing_submissions_canvas_errors(client, auth_headers, synced_course_id, status_code, detail):
     with (
         patch("app.services.analysis.fetch_enrollments", new_callable=AsyncMock) as mock_enrollments,

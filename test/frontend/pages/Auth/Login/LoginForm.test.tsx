@@ -6,6 +6,7 @@ import { LoginForm } from "@/pages/Auth/Login/LoginForm";
 import { renderWithRouter } from "../../../utils/renderWithRouter";
 
 describe("LoginForm", () => {
+  // Verifies: Renders email and password fields.
   it("renders email and password fields", () => {
     renderWithRouter(<LoginForm onSubmit={vi.fn()} />);
 
@@ -13,6 +14,7 @@ describe("LoginForm", () => {
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
   });
 
+  // Verifies: Renders field placeholders.
   it("renders field placeholders", () => {
     renderWithRouter(<LoginForm onSubmit={vi.fn()} />);
 
@@ -24,6 +26,7 @@ describe("LoginForm", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders remember me checkbox and forgot password link.
   it("renders remember me checkbox and forgot password link", () => {
     renderWithRouter(<LoginForm onSubmit={vi.fn()} />);
 
@@ -34,12 +37,14 @@ describe("LoginForm", () => {
     ).toHaveAttribute("href", "/reset-password");
   });
 
+  // Verifies: Renders the sign in submit button disabled by default.
   it("renders the sign in submit button disabled by default", () => {
     renderWithRouter(<LoginForm onSubmit={vi.fn()} />);
 
     expect(screen.getByRole("button", { name: "Sign In" })).toBeDisabled();
   });
 
+  // Verifies: Enables submit when email and password are filled.
   it("enables submit when email and password are filled", async () => {
     const user = userEvent.setup();
 
@@ -57,6 +62,7 @@ describe("LoginForm", () => {
     expect(submitButton).toBeEnabled();
   });
 
+  // Verifies: Calls onSubmit with credentials when the form is submitted.
   it("calls onSubmit with credentials when the form is submitted", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
@@ -76,6 +82,7 @@ describe("LoginForm", () => {
     });
   });
 
+  // Verifies: Allows typing into email and password fields.
   it("allows typing into email and password fields", async () => {
     const user = userEvent.setup();
 
@@ -91,6 +98,7 @@ describe("LoginForm", () => {
     expect(passwordInput).toHaveValue("secret123");
   });
 
+  // Verifies: Shows an error message when provided.
   it("shows an error message when provided", () => {
     renderWithRouter(
       <LoginForm onSubmit={vi.fn()} error="Invalid email or password." />,
@@ -101,6 +109,7 @@ describe("LoginForm", () => {
     );
   });
 
+  // Verifies: Shows an email validation error for invalid addresses.
   it("shows an email validation error for invalid addresses", async () => {
     const user = userEvent.setup();
 

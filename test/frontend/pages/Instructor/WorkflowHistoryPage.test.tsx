@@ -59,6 +59,7 @@ describe("WorkflowHistoryPage", () => {
   }
 
   // #484 — Create history page
+  // Verifies: Renders the workflow history page with heading and description.
   it("renders the workflow history page with heading and description", async () => {
     renderWithRouter(<WorkflowHistoryPage />);
 
@@ -73,6 +74,7 @@ describe("WorkflowHistoryPage", () => {
   });
 
   // #485 — Display previous actions
+  // Verifies: Displays previous workflow actions in a table.
   it("displays previous workflow actions in a table", async () => {
     renderWithRouter(<WorkflowHistoryPage />);
 
@@ -85,6 +87,7 @@ describe("WorkflowHistoryPage", () => {
   });
 
   // #486 — Display timestamps
+  // Verifies: Shows timestamps for each workflow entry.
   it("shows timestamps for each workflow entry", async () => {
     renderWithRouter(<WorkflowHistoryPage />);
 
@@ -97,6 +100,7 @@ describe("WorkflowHistoryPage", () => {
   });
 
   // #487 — Add search/filter support
+  // Verifies: Filters workflow history by search query.
   it("filters workflow history by search query", async () => {
     renderWithRouter(<WorkflowHistoryPage />);
 
@@ -113,6 +117,7 @@ describe("WorkflowHistoryPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  // Verifies: Filters workflow history by status.
   it("filters workflow history by status", async () => {
     renderWithRouter(<WorkflowHistoryPage />);
 
@@ -127,6 +132,7 @@ describe("WorkflowHistoryPage", () => {
   });
 
   // #488 — Display execution status
+  // Verifies: Shows status badges (Approved, Rejected, Pending) for entries.
   it("shows status badges (Approved, Rejected, Pending) for entries", async () => {
     renderWithRouter(<WorkflowHistoryPage />);
 
@@ -137,6 +143,7 @@ describe("WorkflowHistoryPage", () => {
     expect(screen.getAllByText("Pending").length).toBeGreaterThan(0);
   });
 
+  // Verifies: Displays status summary cards with counts at the bottom.
   it("displays status summary cards with counts at the bottom", async () => {
     renderWithRouter(<WorkflowHistoryPage />);
 
@@ -158,6 +165,7 @@ describe("WorkflowHistoryPage", () => {
   });
 
   // #489 — Display previous requests (workflow descriptions / details)
+  // Verifies: Shows workflow descriptions for each entry.
   it("shows workflow descriptions for each entry", async () => {
     renderWithRouter(<WorkflowHistoryPage />);
 
@@ -174,6 +182,7 @@ describe("WorkflowHistoryPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Exports workflow history as CSV.
   it("exports workflow history as CSV", async () => {
     const downloadSpy = vi
       .spyOn(workflowHistoryService, "downloadWorkflowHistoryCsv")
@@ -193,6 +202,7 @@ describe("WorkflowHistoryPage", () => {
     downloadSpy.mockRestore();
   });
 
+  // Verifies: Shows a load error with retry.
   it("shows a load error with retry", async () => {
     vi.spyOn(
       workflowHistoryService,
@@ -218,6 +228,7 @@ describe("WorkflowHistoryPage", () => {
     });
   });
 
+  // Verifies: Shows empty state when no workflows match.
   it("shows empty state when no workflows match", async () => {
     renderWithRouter(<WorkflowHistoryPage />);
 
@@ -236,6 +247,7 @@ describe("WorkflowHistoryPage", () => {
     ).toBeDisabled();
   });
 
+  // Verifies: Shows user names in the table.
   it("shows user names in the table", async () => {
     renderWithRouter(<WorkflowHistoryPage />);
 
@@ -246,6 +258,7 @@ describe("WorkflowHistoryPage", () => {
     ).toBeGreaterThan(0);
   });
 
+  // Verifies: Paginates when more entries than page size.
   it("paginates when more entries than page size", async () => {
     const manyEntries = Array.from({ length: 12 }, (_, index) => ({
       ...mockWorkflowHistory[0]!,
@@ -269,6 +282,7 @@ describe("WorkflowHistoryPage", () => {
     expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
   });
 
+  // Verifies: Clears active filters.
   it("clears active filters", async () => {
     renderWithRouter(<WorkflowHistoryPage />);
 
@@ -290,6 +304,7 @@ describe("WorkflowHistoryPage", () => {
     expect(screen.getAllByText("Send Reminder Emails").length).toBeGreaterThan(0);
   });
 
+  // Verifies: Exports all filtered entries across pages.
   it("exports all filtered entries across pages", async () => {
     const manyEntries = Array.from({ length: 12 }, (_, index) => ({
       ...mockWorkflowHistory[0]!,

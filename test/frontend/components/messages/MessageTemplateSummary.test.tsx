@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { MessageTemplateSummary } from "@/components/messages/MessageTemplateSummary";
 
 describe("MessageTemplateSummary", () => {
+  // Verifies: Highlights the selected template.
   it("highlights the selected template", () => {
     render(
       <MessageTemplateSummary

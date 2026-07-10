@@ -174,6 +174,7 @@ beforeEach(() => {
 });
 
 describe("InstructorAnalyticsPage", () => {
+  // Verifies: Requires Canvas before showing analytics.
   it("requires Canvas before showing analytics", () => {
     mockUseAuth.mockReturnValue(authWithoutCanvas);
 
@@ -185,6 +186,7 @@ describe("InstructorAnalyticsPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  // Verifies: Renders course-specific submissions analysis from Canvas.
   it("renders course-specific submissions analysis from Canvas", async () => {
     renderAnalyticsPage();
 
@@ -205,6 +207,7 @@ describe("InstructorAnalyticsPage", () => {
     expect(screen.getByText("Alex Thompson")).toBeInTheDocument();
   });
 
+  // Verifies: Shows an error when the course id is not in synced Canvas courses.
   it("shows an error when the course id is not in synced Canvas courses", async () => {
     mockedFetchCourses.mockResolvedValue(canvasCourses);
 
@@ -220,6 +223,7 @@ describe("InstructorAnalyticsPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Filters students by search query.
   it("filters students by search query", async () => {
     const user = userEvent.setup();
 
@@ -232,6 +236,7 @@ describe("InstructorAnalyticsPage", () => {
     expect(screen.queryByText("Alex Thompson")).not.toBeInTheDocument();
   });
 
+  // Verifies: Shows only missing submissions when filtered by status.
   it("shows only missing submissions when filtered by status", async () => {
     const user = userEvent.setup();
 

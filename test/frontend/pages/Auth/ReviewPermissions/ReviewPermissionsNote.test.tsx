@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ReviewPermissionsNote } from "@/pages/Auth/ReviewPermissions/ReviewPermissionsNote";
 
 describe("ReviewPermissionsNote", () => {
+  // Verifies: Renders the permissions note.
   it("renders the permissions note", () => {
     render(<ReviewPermissionsNote />);
 

@@ -6,6 +6,7 @@ import { paths } from "@/routes/paths";
 import { renderWithRouter } from "../../../utils/renderWithRouter";
 
 describe("ResetPasswordFooter", () => {
+  // Verifies: Renders the powered by branding.
   it("renders the powered by branding", () => {
     renderWithRouter(<ResetPasswordFooter />);
 
@@ -13,6 +14,7 @@ describe("ResetPasswordFooter", () => {
     expect(screen.getByText("Canvas LMS")).toBeInTheDocument();
   });
 
+  // Verifies: Links to the login page.
   it("links to the login page", () => {
     renderWithRouter(<ResetPasswordFooter />);
 

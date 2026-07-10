@@ -12,6 +12,7 @@ describe("useDebouncedValue", () => {
     vi.useRealTimers();
   });
 
+  // Verifies: Returns the initial value immediately.
   it("returns the initial value immediately", () => {
     const { result } = renderHook(
       ({ value, delay }) => useDebouncedValue(value, delay),
@@ -23,6 +24,7 @@ describe("useDebouncedValue", () => {
     expect(result.current).toBe("initial");
   });
 
+  // Verifies: Updates the value after the delay.
   it("updates the value after the delay", () => {
     const { result, rerender } = renderHook(
       ({ value, delay }) => useDebouncedValue(value, delay),
@@ -42,6 +44,7 @@ describe("useDebouncedValue", () => {
     expect(result.current).toBe("second");
   });
 
+  // Verifies: Resets the timer when the value changes again.
   it("resets the timer when the value changes again", () => {
     const { result, rerender } = renderHook(
       ({ value, delay }) => useDebouncedValue(value, delay),
@@ -71,6 +74,7 @@ describe("useDebouncedValue", () => {
     expect(result.current).toBe("third");
   });
 
+  // Verifies: Uses the latest delay when it changes.
   it("uses the latest delay when it changes", () => {
     const { result, rerender } = renderHook(
       ({ value, delay }) => useDebouncedValue(value, delay),

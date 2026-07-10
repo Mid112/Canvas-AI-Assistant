@@ -9,12 +9,14 @@ OLLAMA_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
 
 
+# Verifies: Ollama server reachable.
 def test_ollama_server_reachable():
     """Ollama server is reachable."""
     response = httpx.get(OLLAMA_URL.replace("/v1", "/"), timeout=10.0)
     assert response.status_code == 200
 
 
+# Verifies: Ollama model available.
 def test_ollama_model_available():
     """Expected model is available."""
     response = httpx.get(f"{OLLAMA_URL}/models", timeout=10.0)
@@ -24,6 +26,7 @@ def test_ollama_model_available():
     assert MODEL in model_ids
 
 
+# Verifies: Ollama basic completion.
 def test_ollama_basic_completion():
     """Ollama returns a valid chat completion."""
     response = httpx.post(

@@ -12,6 +12,7 @@ const draft = {
 };
 
 describe("AssignmentReviewApproveStep", () => {
+  // Verifies: Renders title, description, and due date fields.
   it("renders title, description, and due date fields", () => {
     render(
       <AssignmentReviewApproveStep
@@ -106,6 +107,7 @@ describe("AssignmentReviewApproveStep", () => {
     expect(onApprove).not.toHaveBeenCalled();
   });
 
+  // Verifies: Disables approve when the form is invalid.
   it("disables approve when the form is invalid", async () => {
     const user = userEvent.setup();
 

@@ -127,11 +127,13 @@ def _analyze(client, headers, course_id, enrollments, submissions):
 # ---------------------------------------------------------------------------
 
 
+# Verifies: Late submissions unauthenticated.
 def test_late_submissions_unauthenticated(client):
     response = client.get("/api/v1/canvas/courses/1/assignments/10/late-submissions")
     assert response.status_code == 401
 
 
+# Verifies: Late submissions no canvas token.
 def test_late_submissions_no_canvas_token(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
@@ -146,6 +148,7 @@ def test_late_submissions_no_canvas_token(client):
     assert response.status_code == 403
 
 
+# Verifies: Late submissions course not found.
 def test_late_submissions_course_not_found(client, auth_headers):
     """Unknown local course returns 404 without ever calling Canvas."""
     with (
@@ -166,6 +169,7 @@ def test_late_submissions_course_not_found(client, auth_headers):
 # ---------------------------------------------------------------------------
 
 
+# Verifies: Detect late submission.
 def test_detect_late_submission(client, auth_headers, synced_course_id):
     """One on-time, one late — only the late one is detected."""
     enrollments = [_enrollment(1, "Alice Smith"), _enrollment(2, "Bob Jones")]
@@ -177,6 +181,7 @@ def test_detect_late_submission(client, auth_headers, synced_course_id):
     assert [s["canvas_user_id"] for s in data["late_students"]] == ["2"]
 
 
+# Verifies: Graded late submission still counts as late.
 def test_graded_late_submission_still_counts_as_late(client, auth_headers, synced_course_id):
     """A late submission that was since graded (parsed status 'graded') must still be
     detected — detection relies on the Canvas late flag, not the parsed status."""
@@ -189,6 +194,7 @@ def test_graded_late_submission_still_counts_as_late(client, auth_headers, synce
     assert data["late_students"][0]["score"] == 80.0
 
 
+# Verifies: Missing and unsubmitted are not late.
 def test_missing_and_unsubmitted_are_not_late(client, auth_headers, synced_course_id):
     """Students who never submitted are missing, not late."""
     enrollments = [_enrollment(1, "Alice Smith"), _enrollment(2, "Bob Jones")]
@@ -200,6 +206,7 @@ def test_missing_and_unsubmitted_are_not_late(client, auth_headers, synced_cours
     assert data["late_students"] == []
 
 
+# Verifies: Excused late submission not counted.
 def test_excused_late_submission_not_counted(client, auth_headers, synced_course_id):
     """An excused submission is never late, even if Canvas kept the late flag."""
     enrollments = [_enrollment(1, "Alice Smith")]
@@ -210,6 +217,7 @@ def test_excused_late_submission_not_counted(client, auth_headers, synced_course
     assert data["late_students"] == []
 
 
+# Verifies: Late submission from unenrolled user ignored.
 def test_late_submission_from_unenrolled_user_ignored(client, auth_headers, synced_course_id):
     """A late submission from a dropped student must not appear in the analysis."""
     enrollments = [_enrollment(1, "Alice Smith")]
@@ -220,6 +228,7 @@ def test_late_submission_from_unenrolled_user_ignored(client, auth_headers, sync
     assert data["summary"]["late_count"] == 0
 
 
+# Verifies: Duplicate enrollments counted once.
 def test_duplicate_enrollments_counted_once(client, auth_headers, synced_course_id):
     """A student enrolled in two sections is analyzed once."""
     enrollments = [_enrollment(1, "Alice Smith"), _enrollment(1, "Alice Smith")]
@@ -235,6 +244,7 @@ def test_duplicate_enrollments_counted_once(client, auth_headers, synced_course_
 # ---------------------------------------------------------------------------
 
 
+# Verifies: Late student fields.
 def test_late_student_fields(client, auth_headers, synced_course_id):
     enrollments = [_enrollment(1, "Alice Smith")]
     submissions = [_late(1, seconds_late=2 * DAY, score=70.0, grade="C", workflow_state="graded")]
@@ -252,6 +262,7 @@ def test_late_student_fields(client, auth_headers, synced_course_id):
     assert student["grade"] == "C"
 
 
+# Verifies: Late students sorted most late first.
 def test_late_students_sorted_most_late_first(client, auth_headers, synced_course_id):
     enrollments = [_enrollment(1, "Alice Smith"), _enrollment(2, "Bob Jones"), _enrollment(3, "Cara Diaz")]
     submissions = [_late(1, seconds_late=DAY), _late(2, seconds_late=3 * DAY), _late(3, seconds_late=2 * DAY)]
@@ -260,6 +271,7 @@ def test_late_students_sorted_most_late_first(client, auth_headers, synced_cours
     assert ids == ["2", "3", "1"]
 
 
+# Verifies: Days late rounded.
 def test_days_late_rounded(client, auth_headers, synced_course_id):
     """36 hours late → 1.5 days."""
     enrollments = [_enrollment(1, "Alice Smith")]
@@ -273,6 +285,7 @@ def test_days_late_rounded(client, auth_headers, synced_course_id):
 # ---------------------------------------------------------------------------
 
 
+# Verifies: Summary statistics.
 def test_summary_statistics(client, auth_headers, synced_course_id):
     """5 enrolled: 2 on time, 2 late (1 and 3 days), 1 never submitted."""
     enrollments = [_enrollment(i, f"Student {i}") for i in (1, 2, 3, 4, 5)]
@@ -294,6 +307,7 @@ def test_summary_statistics(client, auth_headers, synced_course_id):
     assert summary["max_days_late"] == 3.0
 
 
+# Verifies: Late rate rounded.
 def test_late_rate_rounded(client, auth_headers, synced_course_id):
     """1 late of 3 submitted → 33.3."""
     enrollments = [_enrollment(i, f"Student {i}") for i in (1, 2, 3)]
@@ -302,6 +316,7 @@ def test_late_rate_rounded(client, auth_headers, synced_course_id):
     assert response.json()["summary"]["late_rate"] == 33.3
 
 
+# Verifies: Nobody late.
 def test_nobody_late(client, auth_headers, synced_course_id):
     enrollments = [_enrollment(1, "Alice Smith"), _enrollment(2, "Bob Jones")]
     submissions = [_on_time(1), _on_time(2)]
@@ -313,6 +328,7 @@ def test_nobody_late(client, auth_headers, synced_course_id):
     assert summary["max_days_late"] == 0.0
 
 
+# Verifies: Empty roster.
 def test_empty_roster(client, auth_headers, synced_course_id):
     """No enrolled students → all zeros (no division by zero)."""
     response = _analyze(client, auth_headers, synced_course_id, [], [])
@@ -324,6 +340,7 @@ def test_empty_roster(client, auth_headers, synced_course_id):
     assert summary["late_rate"] == 0.0
 
 
+# Verifies: Missing seconds late defaults to zero.
 def test_missing_seconds_late_defaults_to_zero(client, auth_headers, synced_course_id):
     """Canvas omitting seconds_late must not crash the analysis."""
     enrollments = [_enrollment(1, "Alice Smith")]
@@ -339,6 +356,7 @@ def test_missing_seconds_late_defaults_to_zero(client, auth_headers, synced_cour
 # ---------------------------------------------------------------------------
 
 
+# Verifies: Response structure.
 def test_response_structure(client, auth_headers, synced_course_id):
     """Top-level shape: course/assignment context, timestamp, summary, late list."""
     enrollments = [_enrollment(1, "Alice Smith")]
@@ -365,6 +383,7 @@ def test_response_structure(client, auth_headers, synced_course_id):
     (status.HTTP_502_BAD_GATEWAY, "Could not reach Canvas"),
     (status.HTTP_504_GATEWAY_TIMEOUT, "Canvas API timed out"),
 ])
+# Verifies: Late submissions canvas errors.
 def test_late_submissions_canvas_errors(client, auth_headers, synced_course_id, status_code, detail):
     with (
         patch("app.services.analysis.fetch_enrollments", new_callable=AsyncMock) as mock_enrollments,

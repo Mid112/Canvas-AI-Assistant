@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { ChatWindow } from "@/components/chat/ChatWindow";
 import { ActiveCourseContextBar } from "@/components/courses/ActiveCourseContextBar";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActiveCourse } from "@/contexts/useActiveCourse";
 import {
   InstructorAssistantHeader,
   InstructorAssistantSuggestedActions,
 } from "@/pages/Instructor/InstructorAssistant/InstructorAssistantHeader";
-import { suggestedActions } from "@/data/assistantSeedData";
+import { buildSuggestedActions } from "@/data/assistantSeedData";
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 
 interface InstructorAssistantLocationState {
@@ -27,6 +28,11 @@ function getLocationState(
 export function InstructorAssistantPage() {
   const location = useLocation();
   const { user } = useAuth();
+  const { activeCourse } = useActiveCourse();
+  const suggestedActions = useMemo(
+    () => buildSuggestedActions(activeCourse?.displayName),
+    [activeCourse?.displayName],
+  );
   const [locationState] = useState(() =>
     getLocationState(
       location.state as InstructorAssistantLocationState | null,

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { MessagePreview } from "@/components/messages/MessagePreview";
 
 describe("MessagePreview", () => {
+  // Verifies: Renders recipients, subject, and formatted body.
   it("renders recipients, subject, and formatted body", () => {
     render(
       <MessagePreview
@@ -18,6 +19,7 @@ describe("MessagePreview", () => {
     expect(screen.getByText(/Please submit your work/i)).toBeInTheDocument();
   });
 
+  // Verifies: Shows empty recipient message.
   it("shows empty recipient message", () => {
     render(
       <MessagePreview recipients={[]} subject="Test" body="Body text" />,

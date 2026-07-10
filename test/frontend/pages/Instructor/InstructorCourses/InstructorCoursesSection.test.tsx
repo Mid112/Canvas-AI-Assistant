@@ -21,6 +21,7 @@ const activeCourseProps = {
 };
 
 describe("InstructorCoursesCard", () => {
+  // Verifies: Renders course progress and action buttons.
   it("renders course progress and action buttons", () => {
     render(
       <MemoryRouter>
@@ -45,6 +46,7 @@ describe("InstructorCoursesCard", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Shows per-course feedback while setting active.
   it("shows per-course feedback while setting active", () => {
     render(
       <MemoryRouter>
@@ -62,6 +64,7 @@ describe("InstructorCoursesCard", () => {
     ).toBeDisabled();
   });
 
+  // Verifies: Shows a clear active state.
   it("shows a clear active state", () => {
     render(
       <MemoryRouter>
@@ -97,6 +100,7 @@ describe("InstructorCoursesCard", () => {
 });
 
 describe("InstructorCoursesList", () => {
+  // Verifies: Renders courses in list format.
   it("renders courses in list format", () => {
     render(
       <MemoryRouter>
@@ -115,6 +119,7 @@ describe("InstructorCoursesList", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Shows loading feedback only for the selected list row.
   it("shows loading feedback only for the selected list row", () => {
     render(
       <MemoryRouter>
@@ -157,6 +162,7 @@ describe("InstructorCoursesList", () => {
 });
 
 describe("InstructorCoursesSection", () => {
+  // Verifies: Renders grid view by default.
   it("renders grid view by default", () => {
     render(
       <MemoryRouter>
@@ -175,6 +181,7 @@ describe("InstructorCoursesSection", () => {
     );
   });
 
+  // Verifies: Switches to list view when requested.
   it("switches to list view when requested", async () => {
     const user = userEvent.setup();
     const onViewModeChange = vi.fn();
@@ -197,6 +204,7 @@ describe("InstructorCoursesSection", () => {
 });
 
 describe("InstructorCoursesEmptyState", () => {
+  // Verifies: Renders the empty state message.
   it("renders the empty state message", () => {
     render(<InstructorCoursesEmptyState />);
 

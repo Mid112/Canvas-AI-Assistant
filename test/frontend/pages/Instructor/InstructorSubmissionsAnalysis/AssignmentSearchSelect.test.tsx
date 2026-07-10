@@ -12,6 +12,7 @@ const assignments = getCourseAssignments(
 );
 
 describe("AssignmentSearchSelect", () => {
+  // Verifies: Renders a combined search and select control.
   it("renders a combined search and select control", () => {
     render(
       <AssignmentSearchSelect
@@ -26,6 +27,7 @@ describe("AssignmentSearchSelect", () => {
     ).toHaveValue("Programming Assignment 3");
   });
 
+  // Verifies: Filters assignments and selects one from the dropdown.
   it("filters assignments and selects one from the dropdown", async () => {
     const user = userEvent.setup();
     const onAssignmentChange = vi.fn();
@@ -58,6 +60,7 @@ describe("AssignmentSearchSelect", () => {
     expect(input).toHaveValue("Homework 4: Recursion");
   });
 
+  // Verifies: Supports keyboard navigation to select an assignment.
   it("supports keyboard navigation to select an assignment", async () => {
     const user = userEvent.setup();
     const onAssignmentChange = vi.fn();

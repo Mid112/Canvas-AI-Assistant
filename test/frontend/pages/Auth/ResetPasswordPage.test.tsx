@@ -7,6 +7,7 @@ import { paths } from "@/routes/paths";
 import { renderWithRouter } from "../../utils/renderWithRouter";
 
 describe("ResetPasswordPage", () => {
+  // Verifies: Renders all reset password sections.
   it("renders all reset password sections", () => {
     renderWithRouter(<ResetPasswordPage />);
 
@@ -28,6 +29,7 @@ describe("ResetPasswordPage", () => {
     expect(screen.getByText("Canvas LMS")).toBeInTheDocument();
   });
 
+  // Verifies: Shows a success message after submitting a valid email.
   it("shows a success message after submitting a valid email", async () => {
     const user = userEvent.setup();
 

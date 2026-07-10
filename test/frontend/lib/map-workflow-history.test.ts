@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { mapWorkflowHistoryApiToEntry } from "@/lib/map-workflow-history";
 
 describe("mapWorkflowHistoryApiToEntry", () => {
+  // Verifies: Maps pending workflows using created_at.
   it("maps pending workflows using created_at", () => {
     const entry = mapWorkflowHistoryApiToEntry({
       id: 1,
@@ -30,6 +31,7 @@ describe("mapWorkflowHistoryApiToEntry", () => {
     });
   });
 
+  // Verifies: Maps executed workflows to approved and prefers executed_at.
   it("maps executed workflows to approved and prefers executed_at", () => {
     const entry = mapWorkflowHistoryApiToEntry({
       id: 2,
@@ -51,6 +53,7 @@ describe("mapWorkflowHistoryApiToEntry", () => {
     expect(entry.affectedResourcesSummary).toBe("course: CPSC 310");
   });
 
+  // Verifies: Maps cancelled and failed workflows to rejected.
   it("maps cancelled and failed workflows to rejected", () => {
     const cancelled = mapWorkflowHistoryApiToEntry({
       id: 3,

@@ -6,12 +6,14 @@ import { ResetPasswordForm } from "@/pages/Auth/ResetPassword/ResetPasswordForm"
 import { renderWithRouter } from "../../../utils/renderWithRouter";
 
 describe("ResetPasswordForm", () => {
+  // Verifies: Renders the email field.
   it("renders the email field", () => {
     renderWithRouter(<ResetPasswordForm onSubmit={vi.fn()} />);
 
     expect(screen.getByLabelText("Email Address")).toBeInTheDocument();
   });
 
+  // Verifies: Renders the email placeholder.
   it("renders the email placeholder", () => {
     renderWithRouter(<ResetPasswordForm onSubmit={vi.fn()} />);
 
@@ -20,6 +22,7 @@ describe("ResetPasswordForm", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders the send reset link submit button disabled by default.
   it("renders the send reset link submit button disabled by default", () => {
     renderWithRouter(<ResetPasswordForm onSubmit={vi.fn()} />);
 
@@ -28,6 +31,7 @@ describe("ResetPasswordForm", () => {
     ).toBeDisabled();
   });
 
+  // Verifies: Shows an email validation error for invalid addresses.
   it("shows an email validation error for invalid addresses", async () => {
     const user = userEvent.setup();
 
@@ -40,6 +44,7 @@ describe("ResetPasswordForm", () => {
     );
   });
 
+  // Verifies: Calls onSubmit and shows success message for valid email.
   it("calls onSubmit and shows success message for valid email", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
@@ -58,6 +63,7 @@ describe("ResetPasswordForm", () => {
     );
   });
 
+  // Verifies: Allows typing into the email field.
   it("allows typing into the email field", async () => {
     const user = userEvent.setup();
 

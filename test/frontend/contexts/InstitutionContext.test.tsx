@@ -14,6 +14,7 @@ function wrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe("InstitutionContext", () => {
+  // Verifies: Defaults to the first institution and exposes its courses.
   it("defaults to the first institution and exposes its courses", () => {
     const { result } = renderHook(() => useInstitution(), { wrapper });
 
@@ -23,6 +24,7 @@ describe("InstitutionContext", () => {
     expect(result.current.dashboard.metrics.totalStudents).toBe(156);
   });
 
+  // Verifies: Switches courses and analytics when the institution changes.
   it("switches courses and analytics when the institution changes", () => {
     const { result } = renderHook(() => useInstitution(), { wrapper });
 

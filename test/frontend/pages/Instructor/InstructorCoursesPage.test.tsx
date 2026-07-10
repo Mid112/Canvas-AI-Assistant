@@ -143,6 +143,7 @@ describe("InstructorCoursesPage", () => {
     vi.unstubAllEnvs();
   });
 
+  // Verifies: Shows only the connect gate when Canvas is not connected.
   it("shows only the connect gate when Canvas is not connected", () => {
     mockUseAuth.mockReturnValue(authWithoutCanvas);
 
@@ -159,6 +160,7 @@ describe("InstructorCoursesPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  // Verifies: Loads courses from local Canvas Docker without VITE_CANVAS_UBC_URL.
   it("loads courses from local Canvas Docker without VITE_CANVAS_UBC_URL", async () => {
     mockUseAuth.mockReturnValue({
       ...authWithCanvas,
@@ -188,6 +190,7 @@ describe("InstructorCoursesPage", () => {
     );
   });
 
+  // Verifies: Hides New Course on connect state when env is unset and no saved connection.
   it("hides New Course on connect state when env is unset and no saved connection", () => {
     mockUseAuth.mockReturnValue(authWithoutCanvas);
 
@@ -197,6 +200,7 @@ describe("InstructorCoursesPage", () => {
     expect(screen.queryByRole("link", { name: "New Course" })).not.toBeInTheDocument();
   });
 
+  // Verifies: Hides New Course on connect state when no saved connection exists.
   it("hides New Course on connect state when no saved connection exists", () => {
     vi.stubEnv("VITE_CANVAS_UBC_URL", CANVAS_URL);
     mockUseAuth.mockReturnValue(authWithoutCanvas);
@@ -211,6 +215,7 @@ describe("InstructorCoursesPage", () => {
     vi.unstubAllEnvs();
   });
 
+  // Verifies: Shows connect Canvas when no token exists for the saved connection URL.
   it("shows connect Canvas when no token exists for the saved connection URL", async () => {
     const { CanvasApiError } = await import("@/services/canvas");
     mockedFetchCourses.mockRejectedValue(
@@ -229,6 +234,7 @@ describe("InstructorCoursesPage", () => {
     expect(screen.queryByLabelText("Search courses")).not.toBeInTheDocument();
   });
 
+  // Verifies: Loads Canvas courses with the saved connection URL.
   it("loads Canvas courses with the saved connection URL", async () => {
     renderWithInstitution(<InstructorCoursesPage />);
 
@@ -243,6 +249,7 @@ describe("InstructorCoursesPage", () => {
     expect(screen.getByText("Course Analytics Overview")).toBeInTheDocument();
   });
 
+  // Verifies: Shows a Canvas loading state while courses load.
   it("shows a Canvas loading state while courses load", () => {
     mockedFetchCourses.mockReturnValue(
       new Promise<typeof canvasCourses>(() => undefined),
@@ -255,6 +262,7 @@ describe("InstructorCoursesPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Filters courses by search query.
   it("filters courses by search query", async () => {
     const user = userEvent.setup();
 
@@ -371,6 +379,7 @@ describe("InstructorCoursesPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Switches to list view when requested.
   it("switches to list view when requested", async () => {
     const user = userEvent.setup();
 
@@ -384,6 +393,7 @@ describe("InstructorCoursesPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Reloads courses when sync from Canvas is clicked.
   it("reloads courses when sync from Canvas is clicked", async () => {
     const user = userEvent.setup();
 
@@ -399,6 +409,7 @@ describe("InstructorCoursesPage", () => {
     });
   });
 
+  // Verifies: Shows a Canvas empty state when Canvas returns no courses.
   it("shows a Canvas empty state when Canvas returns no courses", async () => {
     mockedFetchCourses.mockResolvedValue([]);
 
@@ -411,6 +422,7 @@ describe("InstructorCoursesPage", () => {
     });
   });
 
+  // Verifies: Shows a Canvas error without mock courses.
   it("shows a Canvas error without mock courses", async () => {
     const { CanvasApiError } = await import("@/services/canvas");
     mockedFetchCourses.mockRejectedValue(
@@ -428,6 +440,7 @@ describe("InstructorCoursesPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  // Verifies: Shows Canvas-derived overview metrics from synced courses.
   it("shows Canvas-derived overview metrics from synced courses", async () => {
     renderWithInstitution(<InstructorCoursesPage />);
     await screen.findByText("Your Courses (3)");
@@ -436,6 +449,7 @@ describe("InstructorCoursesPage", () => {
     expect(screen.getByText("135")).toBeInTheDocument();
   });
 
+  // Verifies: Persists the selected active course locally.
   it("persists the selected active course locally", async () => {
     const user = userEvent.setup();
 
@@ -452,6 +466,7 @@ describe("InstructorCoursesPage", () => {
     });
   });
 
+  // Verifies: Shows immediate feedback while saving the active course.
   it("shows immediate feedback while saving the active course", async () => {
     const user = userEvent.setup();
     let resolveSave: ((value: Awaited<ReturnType<typeof setActiveCourse>>) => void) | undefined;

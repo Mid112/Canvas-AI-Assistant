@@ -9,6 +9,7 @@ import {
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 describe("CanvasAuthErrorActions", () => {
+  // Verifies: Renders retry, contact, and return actions.
   it("renders retry, contact, and return actions", () => {
     renderWithRouter(
       <CanvasAuthErrorActions onRetry={vi.fn()} onReturnToLogin={vi.fn()} />,
@@ -25,6 +26,7 @@ describe("CanvasAuthErrorActions", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Calls onRetry when retry is clicked.
   it("calls onRetry when retry is clicked", async () => {
     const user = userEvent.setup();
     const onRetry = vi.fn();
@@ -38,6 +40,7 @@ describe("CanvasAuthErrorActions", () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
+  // Verifies: Calls onReturnToLogin when return is clicked.
   it("calls onReturnToLogin when return is clicked", async () => {
     const user = userEvent.setup();
     const onReturnToLogin = vi.fn();
@@ -56,6 +59,7 @@ describe("CanvasAuthErrorActions", () => {
 });
 
 describe("CanvasAuthErrorFooter", () => {
+  // Verifies: Renders the support footer text.
   it("renders the support footer text", () => {
     renderWithRouter(<CanvasAuthErrorFooter />);
 

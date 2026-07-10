@@ -7,6 +7,7 @@ describe("registerUser validation errors", () => {
     vi.unstubAllGlobals();
   });
 
+  // Verifies: Returns a generic message for unrecognized pydantic field errors.
   it("returns a generic message for unrecognized pydantic field errors", async () => {
     vi.stubGlobal(
       "fetch",
@@ -39,6 +40,7 @@ describe("registerUser validation errors", () => {
     );
   });
 
+  // Verifies: Maps email validation errors to a user-friendly message.
   it("maps email validation errors to a user-friendly message", async () => {
     vi.stubGlobal(
       "fetch",

@@ -19,6 +19,7 @@ async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("RegisterForm", () => {
+  // Verifies: Renders all form fields.
   it("renders all form fields", () => {
     renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
 
@@ -29,6 +30,7 @@ describe("RegisterForm", () => {
     expect(screen.getByLabelText("Confirm Password")).toBeInTheDocument();
   });
 
+  // Verifies: Renders field placeholders.
   it("renders field placeholders", () => {
     renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
 
@@ -45,6 +47,7 @@ describe("RegisterForm", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders terms checkbox and policy links.
   it("renders terms checkbox and policy links", () => {
     renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
 
@@ -61,6 +64,7 @@ describe("RegisterForm", () => {
     ).toHaveAttribute("href", "/#privacy");
   });
 
+  // Verifies: Renders the create account submit button disabled by default.
   it("renders the create account submit button disabled by default", () => {
     renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
 
@@ -69,6 +73,7 @@ describe("RegisterForm", () => {
     ).toBeDisabled();
   });
 
+  // Verifies: Keeps the submit button disabled until all fields and terms are complete.
   it("keeps the submit button disabled until all fields and terms are complete", async () => {
     const user = userEvent.setup();
 
@@ -95,6 +100,7 @@ describe("RegisterForm", () => {
     expect(submitButton).toBeEnabled();
   });
 
+  // Verifies: Shows a password mismatch error when passwords do not match.
   it("shows a password mismatch error when passwords do not match", async () => {
     const user = userEvent.setup();
 
@@ -109,6 +115,7 @@ describe("RegisterForm", () => {
     ).toBeDisabled();
   });
 
+  // Verifies: Does not show password mismatch error before confirm password is entered.
   it("does not show password mismatch error before confirm password is entered", async () => {
     const user = userEvent.setup();
 
@@ -119,6 +126,7 @@ describe("RegisterForm", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  // Verifies: Clears password mismatch error when passwords match.
   it("clears password mismatch error when passwords match", async () => {
     const user = userEvent.setup();
 
@@ -135,6 +143,7 @@ describe("RegisterForm", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  // Verifies: Calls onSubmit with credentials when the form is submitted.
   it("calls onSubmit with credentials when the form is submitted", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
@@ -151,6 +160,7 @@ describe("RegisterForm", () => {
     });
   });
 
+  // Verifies: Allows typing into form fields.
   it("allows typing into form fields", async () => {
     const user = userEvent.setup();
 
@@ -175,6 +185,7 @@ describe("RegisterForm", () => {
     expect(confirmPasswordInput).toHaveValue("secret123");
   });
 
+  // Verifies: Shows an email validation error for invalid addresses.
   it("shows an email validation error for invalid addresses", async () => {
     const user = userEvent.setup();
 
@@ -190,6 +201,7 @@ describe("RegisterForm", () => {
     ).toBeDisabled();
   });
 
+  // Verifies: Shows a password length error for short passwords.
   it("shows a password length error for short passwords", async () => {
     const user = userEvent.setup();
 
@@ -205,6 +217,7 @@ describe("RegisterForm", () => {
     ).toBeDisabled();
   });
 
+  // Verifies: Shows an API error message when provided.
   it("shows an API error message when provided", () => {
     renderWithRouter(
       <RegisterForm

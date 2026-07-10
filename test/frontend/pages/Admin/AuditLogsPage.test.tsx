@@ -47,6 +47,7 @@ describe("AuditLogsPage", () => {
     return within(screen.getByRole("table"));
   }
 
+  // Verifies: Renders the audit logs table.
   it("renders the audit logs table", async () => {
     renderWithRouter(<AuditLogsPage />);
 
@@ -62,6 +63,7 @@ describe("AuditLogsPage", () => {
     expect(screen.getByText("Showing 1–5 of 5 audit logs")).toBeInTheDocument();
   });
 
+  // Verifies: Filters audit logs by user.
   it("filters audit logs by user", async () => {
     renderWithRouter(<AuditLogsPage />);
 
@@ -76,6 +78,7 @@ describe("AuditLogsPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Filters audit logs by typing in the action combobox.
   it("filters audit logs by typing in the action combobox", async () => {
     renderWithRouter(<AuditLogsPage />);
 
@@ -89,6 +92,7 @@ describe("AuditLogsPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Filters audit logs by selecting an action from the dropdown.
   it("filters audit logs by selecting an action from the dropdown", async () => {
     renderWithRouter(<AuditLogsPage />);
 
@@ -104,6 +108,7 @@ describe("AuditLogsPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Filters audit logs by search query.
   it("filters audit logs by search query", async () => {
     renderWithRouter(<AuditLogsPage />);
 
@@ -118,6 +123,7 @@ describe("AuditLogsPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Expands a row to show additional details.
   it("expands a row to show additional details", async () => {
     renderWithRouter(<AuditLogsPage />);
 
@@ -133,6 +139,7 @@ describe("AuditLogsPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Exports filtered audit logs as CSV.
   it("exports filtered audit logs as CSV", async () => {
     const downloadSpy = vi
       .spyOn(auditLogsService, "downloadAuditLogsCsv")
@@ -154,6 +161,7 @@ describe("AuditLogsPage", () => {
     downloadSpy.mockRestore();
   });
 
+  // Verifies: Disables export when no logs match filters.
   it("disables export when no logs match filters", async () => {
     renderWithRouter(<AuditLogsPage />);
 
@@ -166,6 +174,7 @@ describe("AuditLogsPage", () => {
     expect(screen.getByText("No audit logs found.")).toBeInTheDocument();
   });
 
+  // Verifies: Filters audit logs by selecting a user from the dropdown.
   it("filters audit logs by selecting a user from the dropdown", async () => {
     renderWithRouter(<AuditLogsPage />);
 
@@ -181,6 +190,7 @@ describe("AuditLogsPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Resets to default timestamp sort from another column.
   it("resets to default timestamp sort from another column", async () => {
     renderWithRouter(<AuditLogsPage />);
 
@@ -203,6 +213,7 @@ describe("AuditLogsPage", () => {
     expect(emailsAfterDefault[0]).toBe("jane.doe@university.edu");
   }, 10000);
 
+  // Verifies: Sorts audit logs by user alphabetically.
   it("sorts audit logs by user alphabetically", async () => {
     renderWithRouter(<AuditLogsPage />);
 
@@ -219,6 +230,7 @@ describe("AuditLogsPage", () => {
     expect(emails[0]).toBe("admin@system.local");
   });
 
+  // Verifies: Filters audit logs by result.
   it("filters audit logs by result", async () => {
     renderWithRouter(<AuditLogsPage />);
 
@@ -234,6 +246,7 @@ describe("AuditLogsPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Shows action and result badges in each row.
   it("shows action and result badges in each row", async () => {
     renderWithRouter(<AuditLogsPage />);
 
@@ -247,6 +260,7 @@ describe("AuditLogsPage", () => {
     expect(scoped.getByText("Success")).toBeInTheDocument();
   });
 
+  // Verifies: Shows the page description and audit log count badge.
   it("shows the page description and audit log count badge", async () => {
     renderWithRouter(<AuditLogsPage />);
 
@@ -260,6 +274,7 @@ describe("AuditLogsPage", () => {
     expect(screen.getByText("Audit logs (5)")).toBeInTheDocument();
   });
 
+  // Verifies: Shows a load error with retry.
   it("shows a load error with retry", async () => {
     vi.spyOn(auditLogsService, "fetchAuditLogs").mockRejectedValueOnce(
       new Error("Network error"),
@@ -282,6 +297,7 @@ describe("AuditLogsPage", () => {
     });
   });
 
+  // Verifies: Clears active filters.
   it("clears active filters", async () => {
     renderWithRouter(<AuditLogsPage />);
 
@@ -297,6 +313,7 @@ describe("AuditLogsPage", () => {
     expect(screen.queryByRole("button", { name: "Clear filters" })).not.toBeInTheDocument();
   });
 
+  // Verifies: Paginates audit logs.
   it("paginates audit logs", async () => {
     const manyLogs = Array.from({ length: 11 }, (_, index) => ({
       ...mockAuditLogs[0]!,
@@ -323,6 +340,7 @@ describe("AuditLogsPage", () => {
     expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
   });
 
+  // Verifies: Exports all filtered logs across pages.
   it("exports all filtered logs across pages", async () => {
     const manyLogs = Array.from({ length: 11 }, (_, index) => ({
       ...mockAuditLogs[0]!,

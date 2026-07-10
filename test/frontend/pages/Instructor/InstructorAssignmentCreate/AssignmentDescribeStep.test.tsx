@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AssignmentDescribeStep } from "@/pages/Instructor/InstructorAssignmentCreate/AssignmentDescribeStep";
 
 describe("AssignmentDescribeStep", () => {
+  // Verifies: Disables generate until course and prompt are valid.
   it("disables generate until course and prompt are valid", async () => {
     const user = userEvent.setup();
 
@@ -31,6 +32,7 @@ describe("AssignmentDescribeStep", () => {
     ).toBeEnabled();
   });
 
+  // Verifies: Fills prompt from suggested prompts.
   it("fills prompt from suggested prompts", async () => {
     const user = userEvent.setup();
 

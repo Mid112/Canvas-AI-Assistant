@@ -117,6 +117,7 @@ beforeEach(() => {
 });
 
 describe("InstructorDashboardPage", () => {
+  // Verifies: Requires Canvas before showing dashboard content.
   it("requires Canvas before showing dashboard content", () => {
     mockUseAuth.mockReturnValue(authWithoutCanvas);
 
@@ -127,6 +128,7 @@ describe("InstructorDashboardPage", () => {
     expect(screen.queryByText("Quick AI Actions")).not.toBeInTheDocument();
   });
 
+  // Verifies: Renders Canvas-derived dashboard data.
   it("renders Canvas-derived dashboard data", async () => {
     renderWithInstitution(<InstructorDashboardPage />);
 
@@ -148,6 +150,7 @@ describe("InstructorDashboardPage", () => {
     expect(screen.queryByText("Notifications")).not.toBeInTheDocument();
   });
 
+  // Verifies: Navigates to the assistant from the dashboard CTA.
   it("navigates to the assistant from the dashboard CTA", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();

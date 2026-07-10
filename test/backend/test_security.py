@@ -18,6 +18,7 @@ from app.core.security import create_access_token, decode_access_token, hash_tok
 # create_access_token
 # ---------------------------------------------------------------------------
 
+# Verifies: Create access token embeds role.
 def test_create_access_token_embeds_role():
     token = create_access_token(42, role="admin")
     user_id, role = decode_access_token(token)
@@ -25,18 +26,21 @@ def test_create_access_token_embeds_role():
     assert role == "admin"
 
 
+# Verifies: Create access token default role is instructor.
 def test_create_access_token_default_role_is_instructor():
     token = create_access_token(1)
     _, role = decode_access_token(token)
     assert role == "instructor"
 
 
+# Verifies: Create access token encodes user id as string.
 def test_create_access_token_encodes_user_id_as_string():
     token = create_access_token(999, role="ta")
     user_id, _ = decode_access_token(token)
     assert user_id == "999"
 
 
+# Verifies: Create access token sets expiry.
 def test_create_access_token_sets_expiry():
     before = datetime.now(UTC)
     token = create_access_token(1, role="instructor")
@@ -51,6 +55,7 @@ def test_create_access_token_sets_expiry():
 # decode_access_token — backward compatibility
 # ---------------------------------------------------------------------------
 
+# Verifies: Decode access token old token without role defaults to instructor.
 def test_decode_access_token_old_token_without_role_defaults_to_instructor():
     """Tokens minted before the role claim was added must still decode cleanly."""
     old_token = jwt.encode(
@@ -63,12 +68,14 @@ def test_decode_access_token_old_token_without_role_defaults_to_instructor():
     assert role == "instructor"
 
 
+# Verifies: Decode access token returns string user id.
 def test_decode_access_token_returns_string_user_id():
     token = create_access_token(123, role="admin")
     user_id, _ = decode_access_token(token)
     assert isinstance(user_id, str)
 
 
+# Verifies: Decode access token returns string role.
 def test_decode_access_token_returns_string_role():
     token = create_access_token(1, role="ta")
     _, role = decode_access_token(token)
@@ -79,20 +86,24 @@ def test_decode_access_token_returns_string_role():
 # hash_token
 # ---------------------------------------------------------------------------
 
+# Verifies: Hash token is deterministic.
 def test_hash_token_is_deterministic():
     t = "some.jwt.token"
     assert hash_token(t) == hash_token(t)
 
 
+# Verifies: Hash token different inputs produce different hashes.
 def test_hash_token_different_inputs_produce_different_hashes():
     assert hash_token("token_a") != hash_token("token_b")
 
 
+# Verifies: Hash token produces 64 char hex digest.
 def test_hash_token_produces_64_char_hex_digest():
     # SHA-256 hex digest is always exactly 64 characters
     assert len(hash_token("any_token")) == 64
 
 
+# Verifies: Hash token is hex string.
 def test_hash_token_is_hex_string():
     digest = hash_token("test")
     int(digest, 16)  # raises ValueError if not valid hex

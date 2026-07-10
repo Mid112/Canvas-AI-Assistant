@@ -78,6 +78,7 @@ describe("ChatWindow", () => {
     });
   });
 
+  // Verifies: Shows the seeded welcome message.
   it("shows the seeded welcome message", () => {
     renderWithInstitution(<ChatWindow />);
 
@@ -86,6 +87,7 @@ describe("ChatWindow", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Shows an error for empty submissions.
   it("shows an error for empty submissions", async () => {
     const user = userEvent.setup();
 
@@ -98,6 +100,7 @@ describe("ChatWindow", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Adds a user message and assistant reply.
   it("adds a user message and assistant reply", async () => {
     const user = userEvent.setup();
 
@@ -137,6 +140,7 @@ describe("ChatWindow", () => {
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
   });
 
+  // Verifies: Keeps chat usable while active course context is loading.
   it("keeps chat usable while active course context is loading", async () => {
     const user = userEvent.setup();
     mockUseActiveCourse.mockReturnValue({
@@ -175,6 +179,7 @@ describe("ChatWindow", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Shows an error banner and retry button when the request fails.
   it("shows an error banner and retry button when the request fails", async () => {
     const user = userEvent.setup();
 
@@ -213,6 +218,7 @@ describe("ChatWindow", () => {
     expect(mockedSendAssistantMessage).toHaveBeenCalledTimes(2);
   });
 
+  // Verifies: Confirms a pending action from the chat window.
   it("confirms a pending action from the chat window", async () => {
     const user = userEvent.setup();
 
@@ -255,6 +261,7 @@ describe("ChatWindow", () => {
     expect(screen.getByText("This action was confirmed.")).toBeInTheDocument();
   });
 
+  // Verifies: Cancels a pending action from the chat window.
   it("cancels a pending action from the chat window", async () => {
     const user = userEvent.setup();
 
@@ -297,6 +304,7 @@ describe("ChatWindow", () => {
     expect(screen.getByText("This action was cancelled.")).toBeInTheDocument();
   });
 
+  // Verifies: Supersedes the previous pending card when the user sends a modification.
   it("supersedes the previous pending card when the user sends a modification", async () => {
     const user = userEvent.setup();
 

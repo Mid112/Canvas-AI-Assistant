@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { CanvasInfoPermissions } from "@/pages/Auth/CanvasInfo/CanvasInfoPermissions";
 
 describe("CanvasInfoPermissions", () => {
+  // Verifies: Renders the section heading.
   it("renders the section heading", () => {
     render(<CanvasInfoPermissions />);
 
@@ -12,6 +13,7 @@ describe("CanvasInfoPermissions", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders all permission items with descriptions.
   it("renders all permission items with descriptions", () => {
     render(<CanvasInfoPermissions />);
 

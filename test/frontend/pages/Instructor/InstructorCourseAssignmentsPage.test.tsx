@@ -114,6 +114,7 @@ describe("InstructorCourseAssignmentsPage", () => {
     ]);
   });
 
+  // Verifies: Loads assignments and links to the edit page.
   it("loads assignments and links to the edit page", async () => {
     // Not asserting the "Loading assignments" state synchronously here: the
     // shared course list (ActiveCourseProvider) resolving before this page's
@@ -139,6 +140,7 @@ describe("InstructorCourseAssignmentsPage", () => {
     );
   });
 
+  // Verifies: Shows connect Canvas prompt when no token is linked.
   it("shows connect Canvas prompt when no token is linked", async () => {
     mockUseAuth.mockReturnValue({
       ...authWithCanvas,

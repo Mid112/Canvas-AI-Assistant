@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { LoginHeader } from "@/pages/Auth/Login/LoginHeader";
 
 describe("LoginHeader", () => {
+  // Verifies: Renders the application name.
   it("renders the application name", () => {
     render(<LoginHeader />);
 
@@ -12,6 +13,7 @@ describe("LoginHeader", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders the graduation cap icon.
   it("renders the graduation cap icon", () => {
     const { container } = render(<LoginHeader />);
 

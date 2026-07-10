@@ -24,11 +24,13 @@ def _register(client) -> dict:
     return {"Authorization": f"Bearer {token}"}
 
 
+# Verifies: No auth.
 def test_no_auth(client):
     response = client.post("/api/v1/chat/", json={"message": "hello"})
     assert response.status_code == 401
 
 
+# Verifies: Llm error.
 def test_llm_error(client):
     headers = _register(client)
 
@@ -48,6 +50,7 @@ def test_llm_error(client):
     assert "error" in body["reply"]
 
 
+# Verifies: Plain text model reply is returned.
 def test_plain_text_model_reply_is_returned(client):
     headers = _register(client)
 
@@ -70,6 +73,7 @@ def test_plain_text_model_reply_is_returned(client):
     }
 
 
+# Verifies: Malformed json still returns safe error.
 def test_malformed_json_still_returns_safe_error(client):
     headers = _register(client)
 
@@ -89,6 +93,7 @@ def test_malformed_json_still_returns_safe_error(client):
     assert "could not be understood" in body["reply"]["error"]
 
 
+# Verifies: User log.
 def test_user_log(client):
     headers = _register(client)
 
@@ -112,6 +117,7 @@ def test_user_log(client):
     assert "user" in roles
 
 
+# Verifies: Chat resolves course name before calling model.
 def test_chat_resolves_course_name_before_calling_model(client):
     headers = _register(client)
 
@@ -155,6 +161,7 @@ def test_chat_resolves_course_name_before_calling_model(client):
     assert "do not ask the user for internal IDs" in generated_user_message
 
 
+# Verifies: Chat reuses conversation course context on followup.
 def test_chat_reuses_conversation_course_context_on_followup(client):
     headers = _register(client)
 
@@ -530,7 +537,12 @@ def test_write_action_without_intent_preview_is_forced_into_a_preview(client):
 
 
 def test_canvas_failure_returns_chat_error(client):
-    """Canvas API failures during read actions return a user-friendly chat error."""
+    """Canvas API failures during read actions return a user-friendly chat
+    error. A raw fetch_courses response (the model skipping intent_preview)
+    now gets auto-wrapped into a real preview rather than executed
+    directly on the normal turn — see handle_chat_message — so the
+    Canvas call, and its failure, only happen once that preview is
+    confirmed."""
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
@@ -549,19 +561,32 @@ def test_canvas_failure_returns_chat_error(client):
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = '{"action": "fetch_courses"}'
 
-    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter), \
-         patch(
-             "app.mcp_tools.dispatcher.get_courses",
-             new=AsyncMock(
-                 side_effect=HTTPException(
-                     status_code=status.HTTP_502_BAD_GATEWAY,
-                     detail="Canvas server error: 503",
-                 )
-             ),
-         ):
-        response = client.post(
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        preview = client.post(
             "/api/v1/chat/",
             json={"message": "List my courses"},
+            headers=headers,
+        )
+
+    assert preview.status_code == 200
+    preview_body = preview.json()
+    assert preview_body["is_error"] is False
+    assert preview_body["reply"]["action"] == "intent_preview"
+    conversation_id = preview_body["conversation_id"]
+    pending_message_id = preview_body["reply"]["pending_message_id"]
+
+    with patch(
+        "app.mcp_tools.dispatcher.get_courses",
+        new=AsyncMock(
+            side_effect=HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Canvas server error: 503",
+            )
+        ),
+    ):
+        response = client.post(
+            "/api/v1/chat/confirm",
+            json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
             headers=headers,
         )
 
