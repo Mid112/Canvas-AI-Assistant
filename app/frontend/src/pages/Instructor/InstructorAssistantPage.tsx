@@ -1,4 +1,4 @@
-import { History, Loader2, RefreshCw } from "lucide-react";
+import { History, Loader2, Plus, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
@@ -89,6 +89,7 @@ export function InstructorAssistantPage() {
   const [pendingMessageId, setPendingMessageId] = useState<number | undefined>(
     () => locationState.initialPendingMessageId,
   );
+  const [chatSessionKey, setChatSessionKey] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selectedConversation, setSelectedConversation] =
@@ -129,6 +130,16 @@ export function InstructorAssistantPage() {
 
   const handleSuggestedAction = (prompt: string) => {
     setPendingPrompt(prompt);
+  };
+
+  const handleStartNewChat = () => {
+    setSelectedConversation(null);
+    setPendingDraft(null);
+    setPendingPrompt(null);
+    setPendingConversationId(undefined);
+    setPendingMessageId(undefined);
+    setHistoryError(null);
+    setChatSessionKey((current) => current + 1);
   };
 
   const handleLoadConversation = async (conversationId: number) => {
@@ -180,6 +191,7 @@ export function InstructorAssistantPage() {
 
       <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <ChatWindow
+          key={chatSessionKey}
           initialPrompt={pendingPrompt}
           initialDraft={pendingDraft}
           initialConversationId={pendingConversationId}
@@ -209,21 +221,33 @@ export function InstructorAssistantPage() {
                 Conversation History
               </h2>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => void loadConversationList()}
-              disabled={isHistoryLoading}
-              aria-label="Refresh conversation history"
-              title="Refresh conversation history"
-            >
-              {isHistoryLoading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <RefreshCw className="size-4" />
-              )}
-            </Button>
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleStartNewChat}
+                disabled={isLoading}
+              >
+                <Plus className="size-4" aria-hidden="true" />
+                New Chat
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => void loadConversationList()}
+                disabled={isHistoryLoading}
+                aria-label="Refresh conversation history"
+                title="Refresh conversation history"
+              >
+                {isHistoryLoading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-4" />
+                )}
+              </Button>
+            </div>
           </div>
 
           {historyError ? (

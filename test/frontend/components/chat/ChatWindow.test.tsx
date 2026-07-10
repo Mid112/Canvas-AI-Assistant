@@ -135,6 +135,9 @@ describe("ChatWindow", () => {
       expect(screen.getByText("Explanation")).toBeInTheDocument();
     });
 
+    expect(
+      screen.getByText(/Hello! I'm your Canvas AI Assistant/),
+    ).toBeInTheDocument();
     expect(screen.getByText("Interpreted Action")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
