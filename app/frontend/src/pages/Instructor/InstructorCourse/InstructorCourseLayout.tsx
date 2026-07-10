@@ -12,6 +12,7 @@ import { InstructorCourseHeader } from "@/pages/Instructor/InstructorCourse/Inst
 import { InstructorCourseTabs } from "@/pages/Instructor/InstructorCourse/InstructorCourseTabs";
 import type { InstructorCourseOutletContext } from "@/pages/Instructor/InstructorCourse/instructorCourseLayoutContext";
 import { paths } from "@/routes/paths";
+import { pageShell } from "@/lib/page-shell";
 
 export function InstructorCourseLayout() {
   const { localCourseId } = useParams();
@@ -60,7 +61,7 @@ export function InstructorCourseLayout() {
 
   if (!user?.has_canvas_token || courseResolution.needsCanvasConnection) {
     return (
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+      <div className={pageShell}>
         <CanvasConnectionRequired description="Connect Canvas to view this course." />
       </div>
     );
@@ -113,7 +114,7 @@ export function InstructorCourseLayout() {
   };
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+    <div className={pageShell}>
       <InstructorCourseHeader
         localCourseId={parsedLocalCourseId}
         course={courseWithCounts}
@@ -136,7 +137,7 @@ function PageState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+    <div className={pageShell}>
       <Card className="max-w-2xl shadow-sm ring-1 ring-border/60">
         <CardContent className="flex flex-col items-start gap-4 p-6">
           <div className="flex items-center gap-3">

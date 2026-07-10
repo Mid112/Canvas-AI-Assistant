@@ -26,6 +26,7 @@ import {
   shouldShowMissingSection,
 } from "./InstructorSubmissionsAnalysis/submissionUtils";
 import { useCourseSubmissionAnalytics } from "./InstructorSubmissionsAnalysis/useCourseSubmissionAnalytics";
+import { pageEmbedded, pageShell } from "@/lib/page-shell";
 
 export function InstructorAnalyticsPage() {
   const { localCourseId: localCourseIdParam } = useParams();
@@ -152,7 +153,7 @@ export function InstructorAnalyticsPage() {
     }
 
     return (
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+      <div className={pageShell}>
         <CanvasConnectionRequired description="Connect Canvas to view assignment submission analytics for your courses." />
       </div>
     );
@@ -169,7 +170,7 @@ export function InstructorAnalyticsPage() {
     );
 
     return embedded ? loadingCard : (
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">{loadingCard}</div>
+      <div className={pageShell}>{loadingCard}</div>
     );
   }
 
@@ -190,7 +191,7 @@ export function InstructorAnalyticsPage() {
     );
 
     return embedded ? errorCard : (
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">{errorCard}</div>
+      <div className={pageShell}>{errorCard}</div>
     );
   }
 
@@ -212,7 +213,7 @@ export function InstructorAnalyticsPage() {
 
   if (assignments.length === 0) {
     return (
-      <div className={embedded ? "space-y-6" : "flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8"}>
+      <div className={embedded ? pageEmbedded : pageShell}>
         <InstructorSubmissionsAnalysisHeader
           course={course}
           onExportReport={handleExportReport}
@@ -226,7 +227,7 @@ export function InstructorAnalyticsPage() {
   }
 
   return (
-    <div className={embedded ? "space-y-6" : "flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8"}>
+    <div className={embedded ? pageEmbedded : pageShell}>
       <InstructorSubmissionsAnalysisHeader
         course={course}
         onExportReport={handleExportReport}

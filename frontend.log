@@ -515,3 +515,248 @@ performReactRefresh@http://localhost:5173/@react-refresh:217:33
 4:09:20 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAssistantPage.tsx, /src/components/chat/ChatWindow.tsx
 4:09:20 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorDashboard/InstructorDashboardQuickActions.tsx
 4:09:20 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorDashboard/InstructorDashboardQuickActions.tsx
+4:15:57 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAssistantPage.tsx, /src/components/chat/ChatWindow.tsx
+4:15:58 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAssistantPage.tsx
+4:15:58 PM [vite] (client) hmr update /src/index.css, /src/components/chat/ChatWindow.tsx
+4:16:03 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAssistant/InstructorAssistantHeader.tsx
+4:17:11 PM [vite] (client) hmr update /src/index.css, /src/components/chat/ChatWindow.tsx
+4:17:11 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAssistantPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/components/courses/ActiveCourseContextBar.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/StudentMessageDraftPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Admin/AdminDashboardPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Admin/AuditLogsPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Admin/AdminSettingsPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Admin/InstructorManagementPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Profile/ProfilePage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/DryRunPreviewPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorMessagesPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorNotificationsPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAssignmentCreatePage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorSettingsPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/WorkflowHistoryPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorDashboardPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCourseSubmissionsPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAssignmentUpdatePage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCourseStudentsPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAnalyticsPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAssistantPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCourseAssignmentsPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCoursesPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCourse/InstructorCourseMessagesPage.tsx
+4:18:29 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCourse/InstructorCourseLayout.tsx
+4:18:29 PM [vite] (client) [console.error] Error handled by React Router default ErrorBoundary: InstructorMessagesPage@http://localhost:5173/src/pages/Instructor/InstructorMessagesPage.tsx:186:23
+react_stack_bottom_frame@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:12868:21
+renderWithHooks@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:4213:37
+updateFunctionComponent@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:5569:31
+runWithFiberInDEV@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:851:131
+performUnitOfWork@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8429:109
+workLoopSync@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8325:54
+renderRootSync@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8309:18
+performWorkOnRoot@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:7957:195
+performSyncWorkOnRoot@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:9067:21
+flushSyncWorkAcrossRoots_impl@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8984:323
+flushSyncWork$1@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8122:110
+scheduleRefresh@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:328:20
+@http://localhost:5173/@react-refresh:228:32
+forEach@[native code]
+performReactRefresh@http://localhost:5173/@react-refresh:217:33
+@http://localhost:5173/@react-refresh:604:22
+@http://localhost:5173/@react-refresh:602:39
+4:18:29 PM [vite] (client) [console.error] Error handled by React Router default ErrorBoundary: InstructorMessagesPage@http://localhost:5173/src/pages/Instructor/InstructorMessagesPage.tsx:186:23
+react_stack_bottom_frame@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:12868:21
+renderWithHooks@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:4213:37
+updateFunctionComponent@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:5569:31
+runWithFiberInDEV@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:851:131
+performUnitOfWork@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8429:109
+workLoopSync@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8325:54
+renderRootSync@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8309:18
+performWorkOnRoot@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:7957:195
+performSyncWorkOnRoot@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:9067:21
+flushSyncWorkAcrossRoots_impl@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8984:323
+flushSyncWork$1@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8122:110
+scheduleRefresh@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:328:20
+@http://localhost:5173/@react-refresh:228:32
+forEach@[native code]
+performReactRefresh@http://localhost:5173/@react-refresh:217:33
+@http://localhost:5173/@react-refresh:604:22
+@http://localhost:5173/@react-refresh:602:39
+4:18:29 PM [vite] (client) [console.error] Error handled by React Router default ErrorBoundary: InstructorMessagesPage@http://localhost:5173/src/pages/Instructor/InstructorMessagesPage.tsx:186:23
+react_stack_bottom_frame@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:12868:21
+renderWithHooks@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:4213:37
+updateFunctionComponent@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:5569:31
+runWithFiberInDEV@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:851:131
+performUnitOfWork@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8429:109
+workLoopSync@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8325:54
+renderRootSync@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8309:18
+performWorkOnRoot@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:7994:41
+performSyncWorkOnRoot@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:9067:21
+flushSyncWorkAcrossRoots_impl@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8984:323
+flushSyncWork$1@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8122:110
+scheduleRefresh@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:328:20
+@http://localhost:5173/@react-refresh:228:32
+forEach@[native code]
+performReactRefresh@http://localhost:5173/@react-refresh:217:33
+@http://localhost:5173/@react-refresh:604:22
+@http://localhost:5173/@react-refresh:602:39
+4:18:29 PM [vite] (client) [console.error] Error handled by React Router default ErrorBoundary: InstructorMessagesPage@http://localhost:5173/src/pages/Instructor/InstructorMessagesPage.tsx:186:23
+react_stack_bottom_frame@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:12868:21
+renderWithHooks@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:4213:37
+updateFunctionComponent@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:5569:31
+runWithFiberInDEV@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:851:131
+performUnitOfWork@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8429:109
+workLoopSync@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8325:54
+renderRootSync@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8309:18
+performWorkOnRoot@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:7994:41
+performSyncWorkOnRoot@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:9067:21
+flushSyncWorkAcrossRoots_impl@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8984:323
+flushSyncWork$1@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8122:110
+scheduleRefresh@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:328:20
+@http://localhost:5173/@react-refresh:228:32
+forEach@[native code]
+performReactRefresh@http://localhost:5173/@react-refresh:217:33
+@http://localhost:5173/@react-refresh:604:22
+@http://localhost:5173/@react-refresh:602:39
+4:18:29 PM [vite] (client) [console.error] InstructorMessagesPage@http://localhost:5173/src/pages/Instructor/InstructorMessagesPage.tsx:186:23
+react_stack_bottom_frame@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:12868:21
+renderWithHooks@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:4213:37
+updateFunctionComponent@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:5569:31
+runWithFiberInDEV@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:851:131
+performUnitOfWork@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8429:109
+workLoopSync@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8325:54
+renderRootSync@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8309:18
+performWorkOnRoot@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:7994:41
+performSyncWorkOnRoot@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:9067:21
+flushSyncWorkAcrossRoots_impl@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8984:323
+flushSyncWork$1@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8122:110
+scheduleRefresh@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:328:20
+@http://localhost:5173/@react-refresh:228:32
+forEach@[native code]
+performReactRefresh@http://localhost:5173/@react-refresh:217:33
+@http://localhost:5173/@react-refresh:604:22
+@http://localhost:5173/@react-refresh:602:39
+
+The above error occurred in the <InstructorMessagesPage> component.
+
+React will try to recreate this component tree from scratch using the error boundary you provided, RenderErrorBoundary.
+
+4:18:29 PM [vite] (client) [console.error] React Router caught the following error during render InstructorMessagesPage@http://localhost:5173/src/pages/Instructor/InstructorMessagesPage.tsx:186:23
+react_stack_bottom_frame@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:12868:21
+renderWithHooks@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:4213:37
+updateFunctionComponent@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:5569:31
+runWithFiberInDEV@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:851:131
+performUnitOfWork@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8429:109
+workLoopSync@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8325:54
+renderRootSync@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8309:18
+performWorkOnRoot@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:7994:41
+performSyncWorkOnRoot@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:9067:21
+flushSyncWorkAcrossRoots_impl@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8984:323
+flushSyncWork$1@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:8122:110
+scheduleRefresh@http://localhost:5173/node_modules/.vite/deps/react-dom_client.js:328:20
+@http://localhost:5173/@react-refresh:228:32
+forEach@[native code]
+performReactRefresh@http://localhost:5173/@react-refresh:217:33
+@http://localhost:5173/@react-refresh:604:22
+@http://localhost:5173/@react-refresh:602:39
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/StudentMessageDraftPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Admin/AdminDashboardPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Admin/AuditLogsPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Admin/AdminSettingsPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Admin/InstructorManagementPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Profile/ProfilePage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/DryRunPreviewPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorMessagesPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorNotificationsPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAssignmentCreatePage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorSettingsPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/WorkflowHistoryPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorDashboardPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCourseSubmissionsPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAssignmentUpdatePage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCourseStudentsPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAnalyticsPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAssistantPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCourseAssignmentsPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCoursesPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCourse/InstructorCourseMessagesPage.tsx
+4:18:37 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCourse/InstructorCourseLayout.tsx
+4:18:44 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/DryRunPreviewPage.tsx
+4:18:44 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/DryRunPreviewPage.tsx
+4:18:44 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/DryRunPreviewPage.tsx
+4:18:50 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCourse/InstructorCourseOverviewPage.tsx
+4:18:51 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCourse/InstructorCourseOverviewPage.tsx
+4:18:55 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCourseStudentsPage.tsx
+4:18:55 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAnalyticsPage.tsx
+4:18:55 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCourseAssignmentsPage.tsx
+4:18:59 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAssistantPage.tsx
+4:18:59 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorSettingsPage.tsx
+4:18:59 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCoursesPage.tsx
+4:18:59 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/DryRunPreviewPage.tsx
+4:18:59 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorMessagesPage.tsx
+4:18:59 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/WorkflowHistoryPage.tsx
+4:18:59 PM [vite] (client) hmr update /src/index.css, /src/components/courses/ActiveCourseContextBar.tsx
+4:18:59 PM [vite] (client) hmr update /src/index.css, /src/pages/Admin/AdminDashboardPage.tsx, /src/pages/Admin/AuditLogsPage.tsx, /src/pages/Admin/AdminSettingsPage.tsx, /src/pages/Admin/InstructorManagementPage.tsx, /src/pages/Profile/ProfilePage.tsx, /src/pages/Instructor/InstructorMessagesPage.tsx, /src/pages/Instructor/InstructorNotificationsPage.tsx, /src/pages/Instructor/InstructorAssignmentCreatePage.tsx, /src/pages/Instructor/WorkflowHistoryPage.tsx, /src/pages/Instructor/InstructorDashboardPage.tsx and 8 more
+4:19:00 PM [vite] (client) Pre-transform error: Failed to load url /src/lib/page-shell.ts (resolved id: /Users/jessicagoel/capstone-team-16-3/app/frontend/src/lib/page-shell.ts) in /Users/jessicagoel/capstone-team-16-3/app/frontend/src/pages/Admin/AdminDashboardPage.tsx. Does the file exist?
+4:19:00 PM [vite] (client) Pre-transform error: Failed to load url /src/lib/page-shell.ts (resolved id: /Users/jessicagoel/capstone-team-16-3/app/frontend/src/lib/page-shell.ts) in /Users/jessicagoel/capstone-team-16-3/app/frontend/src/pages/Admin/AdminDashboardPage.tsx. Does the file exist?
+4:19:00 PM [vite] (client) Pre-transform error: Failed to load url /src/lib/page-shell.ts (resolved id: /Users/jessicagoel/capstone-team-16-3/app/frontend/src/lib/page-shell.ts) in /Users/jessicagoel/capstone-team-16-3/app/frontend/src/pages/Admin/AdminDashboardPage.tsx. Does the file exist?
+4:19:00 PM [vite] (client) Pre-transform error: Failed to load url /src/lib/page-shell.ts (resolved id: /Users/jessicagoel/capstone-team-16-3/app/frontend/src/lib/page-shell.ts) in /Users/jessicagoel/capstone-team-16-3/app/frontend/src/pages/Admin/AdminDashboardPage.tsx. Does the file exist?
+4:19:00 PM [vite] (client) Pre-transform error: Failed to load url /src/lib/page-shell.ts (resolved id: /Users/jessicagoel/capstone-team-16-3/app/frontend/src/lib/page-shell.ts) in /Users/jessicagoel/capstone-team-16-3/app/frontend/src/pages/Admin/AdminDashboardPage.tsx. Does the file exist?
+4:19:00 PM [vite] (client) Pre-transform error: Failed to load url /src/lib/page-shell.ts (resolved id: /Users/jessicagoel/capstone-team-16-3/app/frontend/src/lib/page-shell.ts) in /Users/jessicagoel/capstone-team-16-3/app/frontend/src/pages/Admin/AdminDashboardPage.tsx. Does the file exist?
+4:19:00 PM [vite] (client) Pre-transform error: Failed to load url /src/lib/page-shell.ts (resolved id: /Users/jessicagoel/capstone-team-16-3/app/frontend/src/lib/page-shell.ts) in /Users/jessicagoel/capstone-team-16-3/app/frontend/src/pages/Admin/AdminDashboardPage.tsx. Does the file exist?
+4:19:00 PM [vite] (client) Pre-transform error: Failed to load url /src/lib/page-shell.ts (resolved id: /Users/jessicagoel/capstone-team-16-3/app/frontend/src/lib/page-shell.ts) in /Users/jessicagoel/capstone-team-16-3/app/frontend/src/pages/Admin/AdminDashboardPage.tsx. Does the file exist?
+4:19:00 PM [vite] (client) Pre-transform error: Failed to load url /src/lib/page-shell.ts (resolved id: /Users/jessicagoel/capstone-team-16-3/app/frontend/src/lib/page-shell.ts) in /Users/jessicagoel/capstone-team-16-3/app/frontend/src/pages/Admin/AdminDashboardPage.tsx. Does the file exist?
+4:19:00 PM [vite] (client) Pre-transform error: Failed to load url /src/lib/page-shell.ts (resolved id: /Users/jessicagoel/capstone-team-16-3/app/frontend/src/lib/page-shell.ts) in /Users/jessicagoel/capstone-team-16-3/app/frontend/src/pages/Admin/AdminDashboardPage.tsx. Does the file exist?
+4:19:00 PM [vite] (client) Pre-transform error: Failed to load url /src/lib/page-shell.ts (resolved id: /Users/jessicagoel/capstone-team-16-3/app/frontend/src/lib/page-shell.ts) in /Users/jessicagoel/capstone-team-16-3/app/frontend/src/pages/Admin/AdminDashboardPage.tsx. Does the file exist?
+4:19:00 PM [vite] (client) Pre-transform error: Failed to load url /src/lib/page-shell.ts (resolved id: /Users/jessicagoel/capstone-team-16-3/app/frontend/src/lib/page-shell.ts) in /Users/jessicagoel/capstone-team-16-3/app/frontend/src/pages/Admin/AdminDashboardPage.tsx. Does the file exist?
+4:19:00 PM [vite] (client) Pre-transform error: Failed to load url /src/lib/page-shell.ts (resolved id: /Users/jessicagoel/capstone-team-16-3/app/frontend/src/lib/page-shell.ts) in /Users/jessicagoel/capstone-team-16-3/app/frontend/src/pages/Admin/AdminDashboardPage.tsx. Does the file exist?
+4:19:00 PM [vite] (client) Pre-transform error: Failed to load url /src/lib/page-shell.ts (resolved id: /Users/jessicagoel/capstone-team-16-3/app/frontend/src/lib/page-shell.ts) in /Users/jessicagoel/capstone-team-16-3/app/frontend/src/pages/Admin/AdminDashboardPage.tsx. Does the file exist?
+4:19:00 PM [vite] (client) Pre-transform error: Failed to load url /src/lib/page-shell.ts (resolved id: /Users/jessicagoel/capstone-team-16-3/app/frontend/src/lib/page-shell.ts) in /Users/jessicagoel/capstone-team-16-3/app/frontend/src/pages/Admin/AdminDashboardPage.tsx. Does the file exist?
+4:19:00 PM [vite] (client) Pre-transform error: Failed to load url /src/lib/page-shell.ts (resolved id: /Users/jessicagoel/capstone-team-16-3/app/frontend/src/lib/page-shell.ts) in /Users/jessicagoel/capstone-team-16-3/app/frontend/src/pages/Admin/AdminDashboardPage.tsx. Does the file exist?
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorAssignmentCreatePage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorDashboardPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Admin/AuditLogsPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Admin/AdminSettingsPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Profile/ProfilePage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorCourse/InstructorCourseOverviewPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorCourseAssignmentsPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorCourse/InstructorCourseLayout.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Admin/AdminDashboardPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorNotificationsPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorCourseStudentsPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorAssignmentUpdatePage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorAnalyticsPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorCourseSubmissionsPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Admin/InstructorManagementPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorCourse/InstructorCourseMessagesPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorCourse/InstructorCourseOverviewPage.tsx
+4:19:00 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAssistant/InstructorAssistantHeader.tsx
+4:19:00 PM [vite] (client) hmr update /src/index.css, /src/pages/Instructor/InstructorAssistantPage.tsx, /src/components/chat/ChatWindow.tsx
+4:19:00 PM [vite] (client) [console.error] [vite] TypeError: Importing a module script failed.
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Admin/AdminDashboardPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] TypeError: Importing a module script failed.
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorNotificationsPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] TypeError: Importing a module script failed.
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorAssignmentCreatePage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] TypeError: Importing a module script failed.
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Admin/AuditLogsPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] TypeError: Importing a module script failed.
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Admin/AdminSettingsPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] TypeError: Importing a module script failed.
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Admin/InstructorManagementPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] TypeError: Importing a module script failed.
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Profile/ProfilePage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] TypeError: Importing a module script failed.
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorDashboardPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] TypeError: Importing a module script failed.
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorCourseSubmissionsPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] TypeError: Importing a module script failed.
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorAssignmentUpdatePage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] TypeError: Importing a module script failed.
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorCourseStudentsPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] TypeError: Importing a module script failed.
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorAnalyticsPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] TypeError: Importing a module script failed.
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorCourseAssignmentsPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] TypeError: Importing a module script failed.
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorCourse/InstructorCourseMessagesPage.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)
+4:19:00 PM [vite] (client) [console.error] [vite] TypeError: Importing a module script failed.
+4:19:00 PM [vite] (client) [console.error] [vite] Failed to reload /src/pages/Instructor/InstructorCourse/InstructorCourseLayout.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above)

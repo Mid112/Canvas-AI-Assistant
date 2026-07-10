@@ -33,6 +33,7 @@ import {
   SubmissionApiError,
 } from "@/services/submissions";
 import type { ApiSubmission, ApiSubmissionStatusFilter } from "@/types/submission";
+import { pageShell } from "@/lib/page-shell";
 
 function formatSubmittedAt(value: string | null): string {
   if (!value) {
@@ -193,7 +194,7 @@ export function InstructorCourseSubmissionsPage() {
 
   if (!user?.has_canvas_token || needsCanvasConnection) {
     return (
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+      <div className={pageShell}>
         <PageHeader
           localCourseId={parsedLocalCourseId}
           assignmentId={parsedAssignmentId}
@@ -267,7 +268,7 @@ export function InstructorCourseSubmissionsPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+    <div className={pageShell}>
       <PageHeader
         localCourseId={parsedLocalCourseId}
         assignmentId={parsedAssignmentId}
@@ -386,7 +387,7 @@ function PageState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+    <div className={pageShell}>
       <Card className="max-w-2xl shadow-sm ring-1 ring-border/60">
         <CardContent className="flex flex-col items-start gap-4 p-6">
           <div className="flex items-center gap-3">

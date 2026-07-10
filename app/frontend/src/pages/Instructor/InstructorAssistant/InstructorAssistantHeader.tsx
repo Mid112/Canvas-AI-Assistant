@@ -1,7 +1,6 @@
 import {
   BarChart3,
   ClipboardList,
-  FileText,
   MessageSquare,
 } from "lucide-react";
 
@@ -35,7 +34,6 @@ export function InstructorAssistantHeader({
 
 const actionIcons = {
   "missing-submissions": ClipboardList,
-  "summarize-quiz": FileText,
   "late-assignments": ClipboardList,
   "course-performance": BarChart3,
   "draft-student-message": MessageSquare,

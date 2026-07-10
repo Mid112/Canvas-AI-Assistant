@@ -24,18 +24,13 @@ export function buildSuggestedActions(courseLabel?: string): SuggestedAction[] {
   const forCourse = courseLabel ? ` for ${courseLabel}` : "";
   const inCourse = courseLabel ? ` in ${courseLabel}` : "";
 
+  // Keep exactly four actions so the 2×2 suggested-actions grid stays balanced.
   return [
     {
       id: "missing-submissions",
       title: "Show missing submissions",
       description: "View all missing assignments across courses",
       prompt: `Show missing submissions${forCourse}`,
-    },
-    {
-      id: "summarize-quiz",
-      title: "Summarize quiz results",
-      description: "Get a performance summary for a recent quiz",
-      prompt: `Summarize the most recent quiz results${forCourse}`,
     },
     {
       id: "late-assignments",

@@ -32,6 +32,7 @@ import {
   StudentApiError,
 } from "@/services/students";
 import type { CourseStudent } from "@/types/student";
+import { pageEmbedded, pageShell } from "@/lib/page-shell";
 
 export function InstructorCourseStudentsPage() {
   const { localCourseId } = useParams();
@@ -185,7 +186,7 @@ export function InstructorCourseStudentsPage() {
 
   if (!embedded && (!user?.has_canvas_token || needsCanvasConnection)) {
     return (
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+      <div className={pageShell}>
         <PageHeader localCourseId={parsedLocalCourseId} embedded={embedded} />
         <CanvasConnectionRequired />
       </div>
@@ -322,9 +323,9 @@ export function InstructorCourseStudentsPage() {
   );
 
   return embedded ? (
-    <div className="space-y-6">{content}</div>
+    <div className={pageEmbedded}>{content}</div>
   ) : (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">{content}</div>
+    <div className={pageShell}>{content}</div>
   );
 }
 
@@ -397,6 +398,6 @@ function PageState({
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">{card}</div>
+    <div className={pageShell}>{card}</div>
   );
 }

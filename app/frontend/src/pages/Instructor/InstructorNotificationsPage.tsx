@@ -7,6 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { pageShell } from "@/lib/page-shell";
 
 export function InstructorNotificationsPage() {
   const { user } = useAuth();
@@ -14,7 +15,7 @@ export function InstructorNotificationsPage() {
 
   if (!user?.has_canvas_token) {
     return (
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+      <div className={pageShell}>
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
             Notifications
@@ -30,7 +31,7 @@ export function InstructorNotificationsPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+    <div className={pageShell}>
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
           Notifications
