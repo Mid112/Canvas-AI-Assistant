@@ -927,3 +927,84 @@ The main lesson this cycle is that landing a shared schema change safely takes m
 - **Goal 1:** Run a full end-to-end pass of the connected assistant flow against real Canvas sandbox data and fix any bugs it surfaces.
 - **Goal 2:** Verify the workflow history and audit log views render correctly for every action type, including cancelled and superseded workflows.
 - **Goal 3:** Follow up on any remaining review comments from the frontend-backend integration PR and close out loose ends before the next milestone.
+
+
+
+
+# Cycle 15 Report: 07/07 – 07/09 (July 7 – July 9)
+
+## Timesheet
+
+### Clockify Report
+- **07/07 (Tuesday):** Using Clockify – Logged 03:23:45 hours
+- **08/07 (Wednesday):** Using Clockify – Logged 06:52:03 hours
+- **09/07 (Thursday):** Using Clockify – Logged 10:53:52 hours
+
+---
+<img width="1229" height="541" alt="Screenshot 2026-07-10 at 10 50 56 AM" src="https://github.com/user-attachments/assets/1496960f-fb92-4594-b14d-87e80e78d01f" />
+
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Full end-to-end bug-fixing pass on the connected assistant flow (feature/frontend-backend-int)
+- Fixed a preview-rendering issue on the chat page where a proposed action wasn't being surfaced correctly to the user.
+- Fixed `map-chat-reply.ts` so a "show me assignments" read-action result actually renders as an assignment list in the chat window instead of falling through to a generic fallback message; added regression tests covering the mapping.
+- Fixed a past-date resolution bug, a preview-panel diff rendering issue, and a missing assignment-detail clarification gap surfaced during manual e2e testing; added backend coverage (`test_chat_confirm.py`, `test_dispatcher.py`) and frontend coverage (`PreviewPanel.test.tsx`, `map-intent-preview-to-dry-run.test.ts`) for each.
+- Fixed a dependency-chain gap in `dispatcher.py`/`schemas.py` around resolving an assignment by name so it correctly threads through to the actions that need it.
+- Resolved a large batch of merge conflicts against `develop` while reconciling with the rest of the team's concurrent frontend work, then closed out remaining review comments before merging PR #1030 (`feature/frontend-backend-int` → `develop`).
+
+
+### #2: Reintroduce a thinking model and redesign course resolution (feature/llm-thinking)
+- Branched off `develop`. Reintroduced a higher-token-limit reasoning model (`qwen/qwen3.6-27b`) after live traces showed the plain instruct model hallucinating course IDs and getting stuck in clarify loops.
+- Removed `_resolve_chat_course_context`'s deterministic substring text-matching entirely. Course resolution is now name-only and model-driven: the LLM names a course from an injected candidate list, and the app resolves that name server-side against a small, connection-scoped, write-once `canvas_course_names` index — the model never sees or produces a numeric course ID.
+- Redesigned conversation routing so that switching a course mid-conversation forks or reuses a different conversation instead of mutating the current one's course in place, keeping each conversation's history scoped to a single course.
+- Decoupled Canvas course-list syncing from the chat request path entirely: a 60-second periodic background sweep plus a post-write trigger keep the course-name index fresh, so a chat turn is now a pure local-DB read and a broken Canvas connection can never fail an unrelated chat message.
+
+
+### #3: Remove intent-preview gating for read actions and chain assignment resolution (feature/llm-read-bugfix)
+- Branched off `feature/llm-thinking`. Removed the intent-preview/confirm requirement for read-only actions (`fetch_courses`, `fetch_assignments`, `fetch_students`, `fetch_submissions`, `get_active_course`) so they execute and return results directly in one turn, instead of costing the user an extra confirm click for something that can never mutate data.
+- Taught `fetch_submissions` to resolve a natural-language assignment reference (e.g. "the latest assignment") server-side, chaining an internal `fetch_assignments` call and a small dedicated resolver LLM call within the same request — closing the gap where resolving an assignment by name used to need a second user turn.
+- Added a new `tool_call_logs` table tracking the pending/executing/executed/failed lifecycle of every tracked read call, and a local fast-path verification step that checks a model-supplied `assignment_id` against the synced `assignments` table before trusting it.
+
+
+---
+
+## Progress Update (since 07/07/2026)
+
+| TASK/ISSUE #                                                              | STATUS      |
+| --------------------------------------------------------------------------- | ----------- |
+| Fix chat page preview-rendering issue                                     | Completed   |
+| Fix "show me assignments" not rendering in chat replies                    | Completed   |
+| Fix past-date resolution, preview-panel diff, assignment-detail inquiry gap | Completed   |
+| Fix assignment-by-name dependency-chain gap in dispatcher/schemas          | Completed   |
+| Resolve merge conflicts and close review comments on PR #1030             | Completed   |
+| Merge feature/frontend-backend-int into develop                            | Completed   |
+| Reintroduce thinking model with higher token limit                         | Completed   |
+| Remove deterministic course-name substring matching                        | Completed   |
+| Name-only, model-driven course resolution via canvas_course_names          | Completed   |
+| Find-or-fork conversation routing on course switch                         | Completed   |
+| Decouple Canvas course sync from chat request path (periodic + post-write) | Completed   |
+| Remove intent-preview gating for read actions                              | Completed   |
+| Chained natural-language assignment resolution for fetch_submissions       | Completed   |
+| tool_call_logs tracking table                                              | Completed   |
+| Fix MissingGreenlet crash in background course-sync sweep                  | Completed   |
+| Get feature/llm-thinking and feature/llm-read-bugfix reviewed and merged   | Not Started |
+
+---
+
+## Cycle 15 Goal Review
+
+### Reflection:
+All three goals from Cycle 14 were completed. The full e2e pass against the connected flow surfaced a real cluster of bugs — preview rendering, the assignments list not showing up, a past-date bug, and an assignment-detail clarification gap — all of which got fixed and covered with new tests before PR #1030 merged into `develop`. Beyond the planned goals, two more substantial pieces of work came out of continued live testing after that merge: the course-resolution redesign (Goal 1/2 material for a future cycle, done early) and the read-action gating removal. Both were prompted by concrete failures observed while manually tracing chat requests — a course-ID hallucination, a stuck clarify loop, and an unnecessary extra click on every read-only question — rather than being scoped in advance, which is why they weren't part of the original Cycle 15 plan but ended up being the bulk of this cycle's work.
+
+### Retrospective:
+The biggest lesson this cycle was that manual, live tracing of the assistant flow found bugs that the automated test suite alone did not — the course-hallucination and clarify-loop issues only became obvious when watching an actual multi-turn conversation play out, not from any failing unit test. That's a strong argument for keeping the "run it for real against the Canvas sandbox" step in every cycle, not just as a one-time verification pass. The other lesson came from debugging the `make reload` crash: a shared DB session across a loop of independent operations is a real hazard in SQLAlchemy's async mode — one failure's rollback silently expired objects needed by every later iteration, which only reproduced because the dev database had accumulated enough real (but fake-token) test users to exercise the failure path repeatedly. Isolating each independent operation into its own session is worth doing by default in any loop like this going forward, not just after hitting the bug.
+
+## Next Cycle 16 Goals
+- **Goal 1:** Get `feature/llm-thinking` and `feature/llm-read-bugfix` reviewed and merged into `develop`.
+- **Goal 2:** Run a full live e2e verification of the new course-resolution and direct-read-execution flows against the Canvas sandbox (multi-course switching, ambiguous course/assignment names, the fetch_submissions chain) rather than relying solely on the automated/mocked test suite.
+- **Goal 3:** Decide whether to extend natural-language assignment resolution to `update_assignment`, and follow up on the dev-database test-data buildup causing repeated Canvas-sync-sweep warning noise.
+
+
+
+
