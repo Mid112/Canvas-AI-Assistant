@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -217,17 +217,48 @@ describe("RegisterForm", () => {
     ).toBeDisabled();
   });
 
-  // Verifies: Shows an API error message when provided.
-  it("shows an API error message when provided", () => {
-    renderWithRouter(
-      <RegisterForm
-        onSubmit={vi.fn()}
-        error="An account with this email already exists."
-      />,
+  // Verifies: Shows a terms reminder when required fields are complete but terms are unchecked.
+  it("shows a terms reminder when required fields are complete but terms are unchecked", async () => {
+    const user = userEvent.setup();
+
+    renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
+
+    await user.type(screen.getByLabelText("First Name"), "Jane");
+    await user.type(screen.getByLabelText("Last Name"), "Smith");
+    await user.type(screen.getByLabelText("Email Address"), "professor@university.edu");
+    await user.type(screen.getByLabelText("Password"), "secret123");
+    await user.type(screen.getByLabelText("Confirm Password"), "secret123");
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Accept the Terms of Service and Privacy Policy to continue.",
+    );
+  });
+
+  // Verifies: Does not submit when the form is incomplete.
+  it("does not submit when the form is incomplete", () => {
+    const onSubmit = vi.fn();
+
+    renderWithRouter(<RegisterForm onSubmit={onSubmit} />);
+
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Create Account" }).closest("form")!,
     );
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "An account with this email already exists.",
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  // Verifies: Does not submit while a submission is already in progress.
+  it("does not submit while a submission is already in progress", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+
+    renderWithRouter(<RegisterForm onSubmit={onSubmit} isSubmitting />);
+
+    await fillValidForm(user);
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Creating Account..." }).closest("form")!,
     );
+
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 });

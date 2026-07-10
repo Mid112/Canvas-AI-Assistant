@@ -23,9 +23,9 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">84.21% </span>
+                <span class="strong">83.33% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>64/76</span>
+                <span class='fraction'>60/72</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">84.21% </span>
+                <span class="strong">83.33% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>64/76</span>
+                <span class='fraction'>60/72</span>
             </div>
         
             
@@ -149,13 +149,10 @@
 <a name='L84'></a><a href='#L84'>84</a>
 <a name='L85'></a><a href='#L85'>85</a>
 <a name='L86'></a><a href='#L86'>86</a>
-<a name='L87'></a><a href='#L87'>87</a>
-<a name='L88'></a><a href='#L88'>88</a>
-<a name='L89'></a><a href='#L89'>89</a>
-<a name='L90'></a><a href='#L90'>90</a>
-<a name='L91'></a><a href='#L91'>91</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L87'></a><a href='#L87'>87</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -180,9 +177,6 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-yes">11x</span>
-<span class="cline-any cline-yes">11x</span>
-<span class="cline-any cline-yes">11x</span>
 <span class="cline-any cline-yes">11x</span>
 <span class="cline-any cline-yes">11x</span>
 <span class="cline-any cline-yes">11x</span>
@@ -237,8 +231,6 @@
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
 <span class="cline-any cline-yes">3x</span>
-<span class="cline-any cline-yes">11x</span>
-<span class="cline-any cline-yes">11x</span>
 <span class="cline-any cline-yes">11x</span>
 <span class="cline-any cline-yes">11x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -246,6 +238,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 &nbsp;
+import { OnboardingPageShell } from "@/components/layouts/OnboardingPageShell";
 import { useAuth } from "@/contexts/AuthContext";
 import { markOnboardingComplete } from "@/lib/onboarding-storage";
 import { ConnectCanvasForm } from "@/pages/Auth/ConnectCanvas/ConnectCanvasForm";
@@ -271,66 +264,61 @@ export function ConnectCanvasPage() {
   };
 &nbsp;
   return (
-    &lt;div className="fixed inset-0 z-50 overflow-y-auto bg-[#e8eef4]"&gt;
-      &lt;div className="flex min-h-svh flex-col items-center justify-center p-4 py-8 md:p-8"&gt;
-        &lt;OnboardingProgress currentStep="connectCanvas" /&gt;
-        &lt;div className="w-full max-w-md rounded-2xl bg-white px-8 py-10 shadow-[0_8px_30px_rgba(0,0,0,0.08)]"&gt;
-          &lt;ConnectCanvasHeader /&gt;
-          &lt;div className="mb-6"&gt;
-            &lt;ConnectCanvasHelp /&gt;
-          &lt;/div&gt;
-          &lt;ConnectCanvasForm
-            accessToken={accessToken}
-            error={error}
-            isSubmitting={isSubmitting}
-            onSessionExpired={logout}
-            onSkip={finishWithoutCanvas}
-            onSubmit={async ({ connections }) =&gt; {
-              setError(null);
-              setIsSubmitting(true);
-&nbsp;
-              try {
-                if (!accessToken) <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
-<span class="cstat-no" title="statement not covered" >                  logout();</span>
-<span class="cstat-no" title="statement not covered" >                  return;</span>
-<span class="cstat-no" title="statement not covered" >                }</span>
-&nbsp;
-                await updateCanvasConnections(connections, accessToken);
-&nbsp;
-                if (user) {
-                  markOnboardingComplete(user.id);
-                }
-&nbsp;
-                // Move forward as soon as the token save succeeds; if the follow-up
-                // auth refresh has a transient failure, Canvas is still connected.
-                navigate(paths.reviewPermissions);
-                await refreshUser().catch(() =&gt; undefined);
-              } catch (err) {
-                if (err instanceof CanvasApiError &amp;&amp; err.status === 401) {
-                  logout();
-                  return;
-<span class="branch-0 cbranch-no" title="branch not covered" >                }</span>
-&nbsp;
-                if (err instanceof CanvasApiError &amp;&amp; err.status === 404) <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
-<span class="cstat-no" title="statement not covered" >                  setError(</span>
-<span class="cstat-no" title="statement not covered" >                    "Canvas connection is not available yet. The backend endpoint has not been implemented.",</span>
-<span class="cstat-no" title="statement not covered" >                  );</span>
-<span class="cstat-no" title="statement not covered" >                  return;</span>
-<span class="cstat-no" title="statement not covered" >                }</span>
-&nbsp;
-<span class="cstat-no" title="statement not covered" >                setError(</span>
-<span class="cstat-no" title="statement not covered" >                  err instanceof CanvasApiError &amp;&amp; err.<span class="branch-0 cbranch-no" title="branch not covered" >message</span></span>
-<span class="cstat-no" title="statement not covered" >                    ? err.<span class="branch-0 cbranch-no" title="branch not covered" >message</span></span>
-<span class="cstat-no" title="statement not covered" >                    : "Unable to connect Canvas. Please check your token and try again.",</span>
-                );
-              } finally {
-                setIsSubmitting(false);
-              }
-            }}
-          /&gt;
-        &lt;/div&gt;
+    &lt;OnboardingPageShell progress={&lt;OnboardingProgress currentStep="connectCanvas" /&gt;}&gt;
+      &lt;ConnectCanvasHeader /&gt;
+      &lt;div className="mb-6"&gt;
+        &lt;ConnectCanvasHelp /&gt;
       &lt;/div&gt;
-    &lt;/div&gt;
+      &lt;ConnectCanvasForm
+        accessToken={accessToken}
+        error={error}
+        isSubmitting={isSubmitting}
+        onSessionExpired={logout}
+        onSkip={finishWithoutCanvas}
+        onSubmit={async ({ connections }) =&gt; {
+          setError(null);
+          setIsSubmitting(true);
+&nbsp;
+          try {
+            if (!accessToken) <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
+<span class="cstat-no" title="statement not covered" >              logout();</span>
+<span class="cstat-no" title="statement not covered" >              return;</span>
+<span class="cstat-no" title="statement not covered" >            }</span>
+&nbsp;
+            await updateCanvasConnections(connections, accessToken);
+&nbsp;
+            if (user) {
+              markOnboardingComplete(user.id);
+            }
+&nbsp;
+            // Move forward as soon as the token save succeeds; if the follow-up
+            // auth refresh has a transient failure, Canvas is still connected.
+            navigate(paths.reviewPermissions);
+            await refreshUser().catch(() =&gt; undefined);
+          } catch (err) {
+            if (err instanceof CanvasApiError &amp;&amp; err.status === 401) {
+              logout();
+              return;
+<span class="branch-0 cbranch-no" title="branch not covered" >            }</span>
+&nbsp;
+            if (err instanceof CanvasApiError &amp;&amp; err.status === 404) <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
+<span class="cstat-no" title="statement not covered" >              setError(</span>
+<span class="cstat-no" title="statement not covered" >                "Canvas connection is not available yet. The backend endpoint has not been implemented.",</span>
+<span class="cstat-no" title="statement not covered" >              );</span>
+<span class="cstat-no" title="statement not covered" >              return;</span>
+<span class="cstat-no" title="statement not covered" >            }</span>
+&nbsp;
+<span class="cstat-no" title="statement not covered" >            setError(</span>
+<span class="cstat-no" title="statement not covered" >              err instanceof CanvasApiError &amp;&amp; err.<span class="branch-0 cbranch-no" title="branch not covered" >message</span></span>
+<span class="cstat-no" title="statement not covered" >                ? err.<span class="branch-0 cbranch-no" title="branch not covered" >message</span></span>
+<span class="cstat-no" title="statement not covered" >                : "Unable to connect Canvas. Please check your token and try again.",</span>
+            );
+          } finally {
+            setIsSubmitting(false);
+          }
+        }}
+      /&gt;
+    &lt;/OnboardingPageShell&gt;
   );
 }
 &nbsp;</pre></td></tr></table></pre>
@@ -340,7 +328,7 @@ export function ConnectCanvasPage() {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-07-09T02:21:14.397Z
+                at 2026-07-10T07:31:40.858Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

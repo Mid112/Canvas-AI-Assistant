@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { paths } from "@/routes/paths";
 import {
+  canAccessWithoutOnboarding,
   getPostAuthPath,
   isOnboardingComplete,
   requiresOnboarding,
@@ -50,5 +51,18 @@ describe("onboarding utils", () => {
         ],
       }),
     ).toBe(true);
+  });
+
+  // Verifies: Only allows onboarding routes before completion.
+  it("only allows onboarding routes before completion", () => {
+    expect(canAccessWithoutOnboarding(paths.canvasInfo, "instructor")).toBe(true);
+    expect(canAccessWithoutOnboarding(paths.connectCanvas, "instructor")).toBe(true);
+    expect(canAccessWithoutOnboarding(paths.instructor.dashboard, "instructor")).toBe(
+      false,
+    );
+    expect(canAccessWithoutOnboarding(paths.instructor.assistant, "instructor")).toBe(
+      false,
+    );
+    expect(canAccessWithoutOnboarding(paths.admin.dashboard, "admin")).toBe(true);
   });
 });

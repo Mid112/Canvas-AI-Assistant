@@ -1,3 +1,5 @@
+import type { ComponentProps } from "react";
+import type React from "react";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,6 +30,26 @@ vi.mock("@/services/assignments", () => ({
   },
   fetchCourseAssignments: vi.fn(),
 }));
+
+const instructorCoursesSectionMock = vi.hoisted(() => vi.fn());
+const instructorCoursesSectionState = vi.hoisted(() => ({
+  ActualSection: null as React.ComponentType<Record<string, unknown>> | null,
+}));
+
+vi.mock("@/pages/Instructor/InstructorCourses/InstructorCoursesSection", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/pages/Instructor/InstructorCourses/InstructorCoursesSection")
+  >("@/pages/Instructor/InstructorCourses/InstructorCoursesSection");
+
+  instructorCoursesSectionState.ActualSection = actual.InstructorCoursesSection;
+
+  return {
+    ...actual,
+    InstructorCoursesSection: (
+      props: ComponentProps<typeof actual.InstructorCoursesSection>,
+    ) => instructorCoursesSectionMock(props),
+  };
+});
 
 const mockUseAuth = vi.fn();
 const mockedFetchCourses = vi.mocked(fetchCourses);
@@ -123,6 +145,10 @@ beforeEach(() => {
   localStorage.clear();
   vi.clearAllMocks();
   vi.unstubAllEnvs();
+  const ActualSection = instructorCoursesSectionState.ActualSection!;
+  instructorCoursesSectionMock.mockImplementation((props) => (
+    <ActualSection {...props} />
+  ));
   mockUseAuth.mockReturnValue(authWithCanvas);
   mockedFetchCourses.mockResolvedValue(canvasCourses);
   mockedFetchActiveCourse.mockResolvedValue(null);
@@ -412,5 +438,24 @@ describe("InstructorCoursesPage", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Active Course" })).toBeDisabled();
     });
+  });
+
+  // Verifies: Ignores setting active when the course no longer exists.
+  it("ignores setting active when the course no longer exists", async () => {
+    const user = userEvent.setup();
+
+    instructorCoursesSectionMock.mockImplementation(({ onSetActiveCourse }) => (
+      <button type="button" onClick={() => onSetActiveCourse(999)}>
+        Trigger missing course
+      </button>
+    ));
+
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Trigger missing course" }),
+    );
+
+    expect(mockedSetActiveCourse).not.toHaveBeenCalled();
   });
 });

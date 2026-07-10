@@ -4,6 +4,7 @@ import {
   getCanvasConnectionUrlForInstitution,
   getConnectedInstitutions,
   getPrimaryCanvasConnectionUrl,
+  isInstitutionConnected,
 } from "@/lib/canvas-connections";
 import type { User } from "@/types/user";
 
@@ -151,6 +152,14 @@ describe("getCanvasConnectionUrlForInstitution", () => {
         "ubc",
       ),
     ).toBe("http://localhost:3000");
+  });
+});
+
+describe("isInstitutionConnected", () => {
+  // Verifies: Returns false when the user has no Canvas connections.
+  it("returns false when the user has no Canvas connections", () => {
+    expect(isInstitutionConnected(baseUser, "ubc")).toBe(false);
+    expect(isInstitutionConnected(null, "ubc")).toBe(false);
   });
 });
 

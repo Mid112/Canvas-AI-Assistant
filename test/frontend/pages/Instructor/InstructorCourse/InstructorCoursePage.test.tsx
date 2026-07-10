@@ -1,6 +1,6 @@
 import { MemoryRouter } from "react-router-dom";
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import { institutionCourseData } from "@/data/institutionCourseData";
 import { formatInstructorCourseTitle } from "@/lib/format-course-title";
@@ -13,15 +13,10 @@ import type { CourseOverviewData } from "@/types/courseOverview";
 
 const course = institutionCourseData[0]!.courses[0]!;
 
+const mockUseActiveCourse = vi.fn();
+
 vi.mock("@/contexts/useActiveCourse", () => ({
-  useActiveCourse: () => ({
-    activeCourse: {
-      localId: course.id,
-      displayName: formatInstructorCourseTitle(course),
-    },
-    isSaving: false,
-    selectActiveCourse: vi.fn(),
-  }),
+  useActiveCourse: () => mockUseActiveCourse(),
 }));
 
 const overview: CourseOverviewData = {
@@ -56,6 +51,17 @@ const overview: CourseOverviewData = {
 };
 
 describe("InstructorCourseHeader", () => {
+  beforeEach(() => {
+    mockUseActiveCourse.mockReturnValue({
+      activeCourse: {
+        localId: course.id,
+        displayName: formatInstructorCourseTitle(course),
+      },
+      isSaving: false,
+      selectActiveCourse: vi.fn(),
+    });
+  });
+
   // Verifies: Renders course title and active status.
   it("renders course title and active status", () => {
     render(
@@ -74,6 +80,27 @@ describe("InstructorCourseHeader", () => {
     expect(
       screen.getByRole("link", { name: /Back to Courses/i }),
     ).toHaveAttribute("href", "/instructor/courses");
+  });
+
+  // Verifies: Omits the active badge when the course is not the active course.
+  it("omits the active badge when the course is not the active course", () => {
+    mockUseActiveCourse.mockReturnValue({
+      activeCourse: {
+        localId: 999,
+        displayName: "Another course",
+      },
+      isSaving: false,
+      selectActiveCourse: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <InstructorCourseHeader localCourseId={course.id} course={course} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/45 Students · 8 Assignments/)).toBeInTheDocument();
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
   });
 });
 

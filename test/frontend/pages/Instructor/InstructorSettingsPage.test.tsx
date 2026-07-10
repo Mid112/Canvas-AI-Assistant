@@ -37,6 +37,6 @@ describe("InstructorSettingsPage", () => {
 
     expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Canvas Connection" })).toBeInTheDocument();
-    expect(screen.getByText(/No Canvas connection yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/No Canvas connections yet/i)).toBeInTheDocument();
   });
 });

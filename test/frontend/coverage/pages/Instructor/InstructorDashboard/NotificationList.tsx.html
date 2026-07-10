@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">72.3% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>47/65</span>
+                <span class='fraction'>65/65</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">66.66% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>2/3</span>
+                <span class='fraction'>3/3</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">72.3% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>47/65</span>
+                <span class='fraction'>65/65</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line medium'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -188,32 +188,32 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-yes">1x</span>
@@ -281,29 +281,29 @@ export function NotificationList({
   notifications,
   className,
 }: NotificationListProps) {
-  if (notifications.length === 0) <span class="branch-0 cbranch-no" title="branch not covered" >{</span>
-<span class="cstat-no" title="statement not covered" >    return (</span>
-<span class="cstat-no" title="statement not covered" >      &lt;div</span>
-<span class="cstat-no" title="statement not covered" >        className={cn(</span>
-<span class="cstat-no" title="statement not covered" >          "flex flex-col items-center justify-center gap-2 py-12 text-center",</span>
-<span class="cstat-no" title="statement not covered" >          className,</span>
-<span class="cstat-no" title="statement not covered" >        )}</span>
+  if (notifications.length === 0) {
+    return (
+      &lt;div
+        className={cn(
+          "flex flex-col items-center justify-center gap-2 py-12 text-center",
+          className,
+        )}
       &gt;
-<span class="cstat-no" title="statement not covered" >        &lt;div</span>
-<span class="cstat-no" title="statement not covered" >          className={cn(</span>
-<span class="cstat-no" title="statement not covered" >            "flex size-10 items-center justify-center",</span>
-<span class="cstat-no" title="statement not covered" >            dashboardColors.blue.iconCircle,</span>
-<span class="cstat-no" title="statement not covered" >          )}</span>
+        &lt;div
+          className={cn(
+            "flex size-10 items-center justify-center",
+            dashboardColors.blue.iconCircle,
+          )}
         &gt;
-<span class="cstat-no" title="statement not covered" >          &lt;Bell className="size-4" aria-hidden="true" /&gt;</span>
-<span class="cstat-no" title="statement not covered" >        &lt;/div&gt;</span>
-<span class="cstat-no" title="statement not covered" >        &lt;p className="text-sm font-medium"&gt;No notifications yet&lt;/p&gt;</span>
-<span class="cstat-no" title="statement not covered" >        &lt;p className="text-sm text-muted-foreground"&gt;</span>
+          &lt;Bell className="size-4" aria-hidden="true" /&gt;
+        &lt;/div&gt;
+        &lt;p className="text-sm font-medium"&gt;No notifications yet&lt;/p&gt;
+        &lt;p className="text-sm text-muted-foreground"&gt;
           Updates about submissions, workflows, and enrollments will appear here.
-<span class="cstat-no" title="statement not covered" >        &lt;/p&gt;</span>
-<span class="cstat-no" title="statement not covered" >      &lt;/div&gt;</span>
+        &lt;/p&gt;
+      &lt;/div&gt;
     );
-<span class="cstat-no" title="statement not covered" >  }</span>
+  }
 &nbsp;
   return (
     &lt;ul className={cn("space-y-4", className)}&gt;
@@ -340,7 +340,7 @@ export function NotificationList({
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-07-09T02:21:14.397Z
+                at 2026-07-10T07:31:40.858Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

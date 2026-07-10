@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 
 const appDir = path.resolve(__dirname, "../../app");
 const frontendDir = path.resolve(appDir, "frontend");
+const frontendSrc = path.resolve(frontendDir, "src");
 const frontendNodeModules = path.resolve(frontendDir, "node_modules");
 
 export default defineConfig({
@@ -32,5 +33,17 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./setup.ts"],
     include: ["**/*.{test,spec}.{ts,tsx}"],
+    coverage: {
+      provider: "v8",
+      reportsDirectory: "./coverage",
+      allowExternal: true,
+      include: [`${frontendSrc}/**/*.{ts,tsx}`],
+      exclude: [
+        `${frontendSrc}/main.tsx`,
+        `${frontendSrc}/vite-env.d.ts`,
+        "**/*.d.ts",
+      ],
+      all: true,
+    },
   },
 });

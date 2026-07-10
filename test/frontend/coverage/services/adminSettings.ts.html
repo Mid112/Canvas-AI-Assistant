@@ -23,30 +23,30 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">8% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>2/25</span>
+                <span class='fraction'>25/25</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">100% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/0</span>
+                <span class='fraction'>2/2</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">0% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/2</span>
+                <span class='fraction'>2/2</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">8% </span>
+                <span class="strong">100% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>2/25</span>
+                <span class='fraction'>25/25</span>
             </div>
         
             
@@ -61,7 +61,7 @@
             </div>
         </template>
     </div>
-    <div class='status-line low'></div>
+    <div class='status-line high'></div>
     <pre><table class="coverage">
 <tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
 <a name='L2'></a><a href='#L2'>2</a>
@@ -119,32 +119,32 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { apiRequest } from "@/lib/api-request";
 &nbsp;
 export const ADMIN_SETTINGS_PATH = "/admin/settings";
@@ -160,32 +160,32 @@ export interface AdminSettingsResponse {
   settings: AdminSettings;
 }
 &nbsp;
-<span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >export async function fetchAdminSettings(</span></span>
-<span class="cstat-no" title="statement not covered" >  accessToken: string,</span>
-<span class="cstat-no" title="statement not covered" >): Promise&lt;AdminSettings&gt; {</span>
-<span class="cstat-no" title="statement not covered" >  const response = await apiRequest&lt;AdminSettingsResponse&gt;(</span>
-<span class="cstat-no" title="statement not covered" >    ADMIN_SETTINGS_PATH,</span>
-<span class="cstat-no" title="statement not covered" >    accessToken,</span>
-<span class="cstat-no" title="statement not covered" >  );</span>
+export async function fetchAdminSettings(
+  accessToken: string,
+): Promise&lt;AdminSettings&gt; {
+  const response = await apiRequest&lt;AdminSettingsResponse&gt;(
+    ADMIN_SETTINGS_PATH,
+    accessToken,
+  );
 &nbsp;
-<span class="cstat-no" title="statement not covered" >  return response.settings;</span>
-<span class="cstat-no" title="statement not covered" >}</span>
+  return response.settings;
+}
 &nbsp;
-<span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >export async function updateAdminSettings(</span></span>
-<span class="cstat-no" title="statement not covered" >  accessToken: string,</span>
-<span class="cstat-no" title="statement not covered" >  settings: Partial&lt;AdminSettings&gt;,</span>
-<span class="cstat-no" title="statement not covered" >): Promise&lt;AdminSettings&gt; {</span>
-<span class="cstat-no" title="statement not covered" >  const response = await apiRequest&lt;AdminSettingsResponse&gt;(</span>
-<span class="cstat-no" title="statement not covered" >    ADMIN_SETTINGS_PATH,</span>
-<span class="cstat-no" title="statement not covered" >    accessToken,</span>
-<span class="cstat-no" title="statement not covered" >    {</span>
-<span class="cstat-no" title="statement not covered" >      method: "PATCH",</span>
-<span class="cstat-no" title="statement not covered" >      body: JSON.stringify({ settings }),</span>
-<span class="cstat-no" title="statement not covered" >    },</span>
-<span class="cstat-no" title="statement not covered" >  );</span>
+export async function updateAdminSettings(
+  accessToken: string,
+  settings: Partial&lt;AdminSettings&gt;,
+): Promise&lt;AdminSettings&gt; {
+  const response = await apiRequest&lt;AdminSettingsResponse&gt;(
+    ADMIN_SETTINGS_PATH,
+    accessToken,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ settings }),
+    },
+  );
 &nbsp;
-<span class="cstat-no" title="statement not covered" >  return response.settings;</span>
-<span class="cstat-no" title="statement not covered" >}</span>
+  return response.settings;
+}
 &nbsp;</pre></td></tr></table></pre>
 
                 <div class='push'></div><!-- for sticky footer -->
@@ -193,7 +193,7 @@ export interface AdminSettingsResponse {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-07-09T02:21:14.397Z
+                at 2026-07-10T07:31:40.858Z
             </div>
         <script src="../prettify.js"></script>
         <script>

@@ -76,4 +76,26 @@ describe("InstructorDashboardQuickActions", () => {
     );
     expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant);
   });
+
+  // Verifies: Opens the assistant for unknown quick action ids.
+  it("opens the assistant for unknown quick action ids", async () => {
+    const user = userEvent.setup();
+    mockNavigate.mockClear();
+
+    renderWithRouter(
+      <InstructorDashboardQuickActions
+        actions={[
+          {
+            id: "custom-action",
+            title: "Custom Action",
+            description: "Fallback to assistant",
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Custom Action/i }));
+
+    expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant);
+  });
 });

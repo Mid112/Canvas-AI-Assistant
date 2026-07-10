@@ -98,6 +98,25 @@ describe("Header", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Hides sidebar and header account controls when toggle is unavailable.
+  it("hides sidebar and header account controls when toggle is unavailable", () => {
+    renderWithRouter(
+      <Header
+        title="Dashboard"
+        role="instructor"
+        roleLabel="Instructor"
+        navItems={instructorNavItems}
+      />,
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Open sidebar" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Account menu" }),
+    ).not.toBeInTheDocument();
+  });
+
   // Verifies: Logs out from the header account menu when the sidebar is collapsed.
   it("logs out from the header account menu when the sidebar is collapsed", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });

@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
 import {
   AssistantApiError,
+  cancelAssistantAction,
   confirmAssistantAction,
+  fetchConversation,
   sendAssistantMessage,
 } from "@/services/assistant";
 
@@ -199,5 +201,78 @@ describe("confirmAssistantAction", () => {
     );
     expect(response.content).toContain("Successfully completed Create Assignment");
     expect(response.conversationId).toBe(7);
+  });
+});
+
+describe("cancelAssistantAction", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("posts to /chat/cancel with conversation and pending message ids", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          conversation_id: 7,
+          is_error: false,
+          reply: {
+            success: false,
+            message: "Action cancelled.",
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const response = await cancelAssistantAction("test-token", 7, 42);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/chat/cancel",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          conversation_id: 7,
+          pending_message_id: 42,
+        }),
+      }),
+    );
+    expect(response.conversationId).toBe(7);
+  });
+});
+
+describe("fetchConversation", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("fetches a conversation by id", async () => {
+    const conversation = {
+      id: 7,
+      course_id: 3,
+      created_at: "2026-06-26T00:00:00.000Z",
+      messages: [
+        {
+          id: 1,
+          role: "user",
+          content: "Hello",
+          created_at: "2026-06-26T00:00:00.000Z",
+        },
+      ],
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify(conversation), { status: 200 }),
+    );
+
+    await expect(fetchConversation("access-token", 7)).resolves.toEqual(
+      conversation,
+    );
+  });
+
+  it("wraps non-api errors in AssistantApiError", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("offline"));
+
+    await expect(fetchConversation("access-token", 7)).rejects.toEqual(
+      new AssistantApiError("offline"),
+    );
   });
 });

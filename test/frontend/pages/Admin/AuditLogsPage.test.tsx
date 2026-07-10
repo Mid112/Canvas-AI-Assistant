@@ -297,6 +297,20 @@ describe("AuditLogsPage", () => {
     });
   });
 
+  // Verifies: Filters audit logs by date.
+  it("filters audit logs by date", async () => {
+    renderWithRouter(<AuditLogsPage />);
+
+    await waitForLoaded();
+
+    await user.type(screen.getByLabelText("Filter by date"), "2026-05-31");
+
+    expect(tableScope().getByText("jane.doe@university.edu")).toBeInTheDocument();
+    expect(
+      screen.getByText("Showing 1–5 of 5 audit logs"),
+    ).toBeInTheDocument();
+  });
+
   // Verifies: Clears active filters.
   it("clears active filters", async () => {
     renderWithRouter(<AuditLogsPage />);

@@ -78,6 +78,23 @@ describe("Sidebar", () => {
     expect(screen.queryAllByText("Instructor")).toHaveLength(1);
   });
 
+  // Verifies: Highlights the active navigation item.
+  it("highlights the active navigation item", () => {
+    render(
+      <MemoryRouter initialEntries={["/instructor/dashboard"]}>
+        <Sidebar
+          navItems={instructorNavItems}
+          role="instructor"
+          roleLabel="Instructor"
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveClass(
+      "bg-sidebar-primary",
+    );
+  });
+
   // Verifies: Calls onToggle when the close sidebar button is clicked.
   it("calls onToggle when the close sidebar button is clicked", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });

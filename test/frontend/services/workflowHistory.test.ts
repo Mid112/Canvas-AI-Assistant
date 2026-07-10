@@ -4,6 +4,7 @@ import { mockWorkflowHistory } from "@/data/mockWorkflowHistory";
 import { mapWorkflowHistoryApiToEntry } from "@/lib/map-workflow-history";
 import {
   buildWorkflowHistoryCsv,
+  downloadWorkflowHistoryCsv,
   fetchWorkflowHistory,
   WORKFLOW_HISTORY_PATH,
 } from "@/services/workflowHistory";
@@ -163,5 +164,32 @@ describe("workflowHistory service", () => {
     ]);
 
     expect(csv).toContain("'=SUM(A1:A10)");
+  });
+
+  it("downloads workflow history as csv", () => {
+    const click = vi.fn();
+    const createObjectURL = vi.fn().mockReturnValue("blob:history");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL,
+      revokeObjectURL,
+    });
+    const link = {
+      href: "",
+      download: "",
+      click,
+      remove: vi.fn(),
+    } as unknown as HTMLAnchorElement;
+    vi.spyOn(document, "createElement").mockReturnValue(link);
+    vi.spyOn(document.body, "appendChild").mockImplementation(() => link);
+
+    downloadWorkflowHistoryCsv(mockWorkflowHistory.slice(0, 1), "history.csv");
+
+    expect(link.download).toBe("history.csv");
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(link.remove).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:history");
+    vi.unstubAllGlobals();
   });
 });
