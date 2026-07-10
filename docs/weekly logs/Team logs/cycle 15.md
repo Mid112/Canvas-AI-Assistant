@@ -162,6 +162,9 @@ Time was tracked using Clockify for **Cycle 15 (Jul 7, 2026 – Jul 9, 2026)**.
 
 ## Project Status Summary
 
+<img width="2120" height="1342" alt="image" src="https://github.com/user-attachments/assets/984186a5-2493-4ed3-ba4d-3243ae4dae01" />
+
+
 ### Current State
 
 This cycle moved the project from MVP feature completion into Testing Event 1 validation. The main MVP Demo feature work was already completed in the previous cycle, so this cycle focused on checking stability, reviewing testing coverage, and preparing the app for evaluation.
