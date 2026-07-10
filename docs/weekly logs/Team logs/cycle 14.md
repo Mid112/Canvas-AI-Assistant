@@ -170,7 +170,7 @@ The following Ready items are being treated as the next cycle’s active work an
 
 ## Burn-up Chart / Velocity
 
-Add burn-up chart screenshot here.
+<img width="1968" height="1244" alt="image" src="https://github.com/user-attachments/assets/70871b98-7960-4464-84fc-ae4108503ddc" />
 
 ### Burn-up Summary
 
