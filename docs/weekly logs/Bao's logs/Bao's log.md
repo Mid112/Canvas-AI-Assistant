@@ -695,7 +695,7 @@ Total: 9 hours
 
 ---
 
-# Cycle 14 Report: July 3 – July 7
+# Cycle 14 Report: July 3 – July 6
 
 ## Timesheet
 
@@ -704,7 +704,6 @@ Total: 9 hours
 - 3/7 (Friday): Meeting (RBAC PR follow-up, merge conflict resolution) – 2h 04m
 - 4/7 (Saturday): PR reviews – 1h 32m
 - 6/7 (Monday): Meeting for finishing MVP – 6h 12m
-- 7/7 (Tuesday): MVP push + end-to-end verification — not yet clocked, session ongoing
 
 **Total (clocked): ~9h 48m**
 
@@ -718,19 +717,15 @@ Total: 9 hours
 - Addressed PR-requested changes in `dependencies.py` (role-guard refactor, ~26/17 lines changed)
 - Fixed lint issues across `app/mcp/server.py`, `conftest.py`, and several test files to get the branch green
 - Merged `origin/develop` into the feature branch, pulling in the frontend's new Canvas-connection URL handling (`useCanvasConnectionUrl`, `canvas-connections.ts`, `institution-canvas.ts`) and instructor-courses page rework
-<img width="1118" height="63" alt="Screenshot 2026-07-07 223106" src="https://github.com/user-attachments/assets/4973d7f8-3f76-4f55-91e1-a322a80beb74" />
 
 ### 2: PR Reviews + Audit Log Merge Cleanup (Saturday, 4/7)
 - Fixed a lint break caused by the `AuditLog` → `AuditLogSession` rename in `services/admin.py`
 - Merged `develop` into `feature/backend-rbac-permissions` again, pulling in the new audit-log table/filter/pagination components and the workflow-history UI (`AuditLogTable`, `AuditLogFilters`, `WorkflowHistoryTable`, etc.)
 - Merged the feature branch's own remote changes back in and updated `test_admin_management.py` / `test_instructor_management.py` to reference `AuditLogSession` instead of the old `AuditLog` model
-<img width="1121" height="69" alt="Screenshot 2026-07-07 223110" src="https://github.com/user-attachments/assets/6c5aa94e-6c02-4914-9fcf-874ba8879754" />
 
 ### 3: MVP Prep — Assignment Uniqueness + Test Coverage Push (Monday, 6/7)
 - Added a DB migration (`008_assignment_unique_per_course.sql`) enforcing one assignment per Canvas assignment ID per course, with matching changes to the `Assignment` model, `services/canvas.py`, and `services/chat.py`
 - Added four new backend test files ahead of the MVP demo: `test_admin_settings.py`, `test_error_handling.py`, `test_message_send_validation.py`, `test_workflow_history.py` (~586 lines of new coverage)
-<img width="1120" height="68" alt="Screenshot 2026-07-07 223112" src="https://github.com/user-attachments/assets/0b9b87c0-d94b-4641-b986-8aa8a5a8cb1c" />
-
 
 ---
 
@@ -750,4 +745,64 @@ Total: 9 hours
 - Carry over (3rd cycle running): wire up active-course context to the chat UI
 - Revisit `make e2e-up` for Windows compatibility (the `lsof`-based port-freeing step has no Windows/Git-Bash equivalent) or document the manual workaround in the README
 - Address any additional gaps surfaced by the MVP demo walkthrough
+
+
+---
+
+# Cycle 15 Report: July 7 – July 9
+
+## Timesheet
+
+### Clockify Report
+
+- 7/7 (Tuesday): MVP meeting – 3h 15m 45s
+- 8/7 (Wednesday): Requirements meeting + Preparation – 5h 15m 25s
+- 9/7 (Thursday): Adding missing features / sync data in instructor dashboard – 2h 21m 12s
+
+**Total (clocked): ~10h 52m**
+
+---
+
+## Completed Tasks
+
+### 1: MVP Meeting Follow-Up — Assignment Workflow + Duplicate-Send Fix (Tuesday, 7/7)
+- `add fixes for workflow`: reworked `assignmentCreator.ts` (~158 lines restructured), added a new `AssignmentPreviewDialog` component, and extended `InstructorAssignmentCreatePage`/`InstructorDashboardPage` off the back of the MVP meeting's assignment-workflow feedback
+- Touched the LLM safety/parsing layer (`json_extraction.py`, `openai_compatible.py`, `assignment_draft.py`, `dispatcher.py`) in `services/llm` to harden assignment-draft parsing
+- `MVP fixes`: added new `ErrorAlert` and `EditableRecipientList` components, an `InstructorCredentialsDialog`, and reworked `MessageDraftPage`/`MessagePreview`/`MessageToolbar`/`RecipientSummary` for the message-composer flow; backend side picked up matching changes to `chat.py`, `auth.py`, and the LLM parsing layer
+- `fix duplicate send`: added a guard in `ChatWindow.tsx` against double-submitting a chat message, with new test coverage in `ChatWindow.test.tsx`
+<img width="1120" height="63" alt="Screenshot 2026-07-10 102240" src="https://github.com/user-attachments/assets/9258161a-4c51-408a-b2d5-df9a157e8ac9" />
+
+### 2: Requirements Meeting Prep — Porting Fixes into the MVP Integration Branch (Wednesday, 8/7)
+- `Port MVP backend safety/parsing layer + assignment-creation/admin UI`: carried Tuesday's backend safety-layer and admin-UI changes (`InstructorCredentialsDialog`, `InstructorTable`, `ErrorAlert`, `ActiveCourseProvider`, `InstitutionProvider`, `active-course-storage.ts`) onto `integration/mvp-merge`, plus new `error-classification.ts` and `map-chat-reply.ts` helpers, ahead of the requirements meeting
+- `Reconcile message-composer UI: MVP's editable recipients + FBI's send contract`: merged two divergent message-composer implementations — the MVP branch's editable-recipient-list feature and `feature/frontend-backend-int`'s send contract — into one `MessageDraftPage` (net simplification despite heavy churn across `ConfirmationDialog`, `MessagePreview`, `MessageToolbar`, `RecipientSummary`), updating `ConfirmationDialog.test.tsx` and `RecipientSummary.test.tsx` to match
+- `add fixes`: reworked `chat.py` (+168 lines) and simplified `InstructorAssistantPage`, backed by a new 183-line `test_chat_endpoint.py`
+<img width="1121" height="63" alt="Screenshot 2026-07-10 102247" src="https://github.com/user-attachments/assets/8bf747cd-0aac-47a4-85d2-fef020437eae" />
+
+### 3: Instructor Dashboard — Removing Stale Data + Published/Unpublished Course Status (Thursday, 9/7)
+- Worked evening of 9/7 (5:15–7:36 PM); pushed the following morning since the branch wasn't in a clean state to commit until then
+- `Update removing stale data, add published/unpublished status for courses`: `get_instructor_dashboard` and `get_course_overview` now refresh each course's assignment/student mirror from Canvas (concurrently, one DB session per course via `asyncio.gather`) before reading aggregate stats, so a roster or assignment change on Canvas no longer shows stale counts on the dashboard
+- Added course published/unpublished status end-to-end: `types/course.ts`, `types/canvas.ts`, `mapCanvasCourse.ts`, `InstructorCoursesSection.tsx`
+- Simplified `useResolvedInstructorCourse.ts` and `useCanvasInstructorCourses.ts` (~100+ lines removed from each) and added a new `disambiguate-course-labels.ts` util, all with matching new test files (`ActiveCourseSelector.test.tsx`, `ActiveCourseProvider.test.tsx`, `disambiguate-course-labels.test.ts`)
+- `Add additional fixes` + `Fix updated course overview following filtered bar, remove duplicate content on active course in chat UI`: follow-up fixes to `ChatWindow.tsx`, `InstitutionProvider.tsx` (new `institution-context.ts`), `ActiveCourseContextBar.tsx`, and `InstructorCoursesSearch.tsx`/`InstructorCoursesPage.tsx`, removing content that was rendering twice between the active-course context bar and the chat UI
+<img width="1119" height="67" alt="Screenshot 2026-07-10 102255" src="https://github.com/user-attachments/assets/ac0de971-f970-4539-8c94-d470f42c34af" />
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- Tuesday and Wednesday were dominated by reconciling MVP-branch work with `feature/frontend-backend-int` ahead of the requirements meeting — most of the churn in the message-composer and admin-UI components was integration work (two teams' versions of the same screen), not new features.
+- Thursday's dashboard work made real progress on the Cycle 13/14 carryover goal of wiring up active-course context to the chat UI (`ActiveCourseProvider`/`ActiveCourseContextBar`/`InstitutionProvider` all got touched, and the duplicate active-course content in the chat UI was removed) — this should no longer be treated as a from-scratch carryover next cycle, just cleanup/verification.
+- The `GET /canvas/courses` caching goal was addressed differently than planned: instead of a `last_synced_at`-based cache, the dashboard/course-overview services now do a live concurrent refresh from Canvas on every load. This solves the staleness problem the caching goal was meant to solve, but is the opposite of caching (more Canvas calls, not fewer) — worth deciding deliberately whether to layer caching on top of this or leave it as live-refresh.
+
+### Retrospective:
+- The Thursday evening session wasn't committed until Friday morning — worth pushing work in smaller increments during a session rather than batching it all until the branch is in a demoable state, so Clockify time and git history stay aligned for reporting.
+- Two `fix duplicate send` commits landed with identical diffs (`d89463c`/`f84e394`) from cherry-picking the same fix across branches — harmless here, but a reminder to check `git log --all` for an existing equivalent commit before re-applying a fix on a second branch.
+- The dev Postgres DB reset / isolated test-DB goal from Cycle 14 did not get picked up this cycle — still outstanding.
+
+## Next Cycle Goals
+- Decide whether to add a `last_synced_at` cache on top of the new live-refresh dashboard/course-overview logic, or intentionally leave it as live-refresh
+- Verify the active-course-context-in-chat-UI work from Thursday holds up under the demo walkthrough (no more duplicate content, correct course selected) — treat as verification, not new build
+- Give the dev Postgres DB a clean reset (or isolate pytest onto its own DB) so `seed_admin()` and manual QA aren't blocked by leftover test fixtures (carried over from Cycle 14)
+- Revisit `make e2e-up` for Windows compatibility
 
