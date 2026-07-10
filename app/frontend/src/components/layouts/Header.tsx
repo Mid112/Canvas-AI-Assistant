@@ -81,7 +81,7 @@ export function Header({
           >
             <Menu className="size-4" />
           </SheetTrigger>
-          <SheetContent side="left" className="h-full w-72 p-0">
+          <SheetContent side="left" className="w-72 p-0">
             <SheetHeader className="sr-only">
               <SheetTitle>Navigation</SheetTitle>
             </SheetHeader>

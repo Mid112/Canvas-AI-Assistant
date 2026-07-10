@@ -31,11 +31,11 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "flex h-full w-64 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
+        "flex h-full w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
         className,
       )}
     >
-      <div className="flex h-16 shrink-0 items-center gap-2 border-b border-sidebar-border px-3">
+      <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-3">
         <Link
           to={paths.home}
           onClick={onNavigate}
@@ -66,7 +66,7 @@ export function Sidebar({
           </Button>
         ) : null}
       </div>
-      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-3">
+      <nav className="flex flex-1 flex-col gap-1 p-3">
         {navItems.map((item) => (
           <NavLink
             key={item.href}
@@ -86,7 +86,7 @@ export function Sidebar({
           </NavLink>
         ))}
       </nav>
-      <SidebarProfile role={role} onNavigate={onNavigate} />
+      <SidebarProfile role={role} roleLabel={roleLabel} onNavigate={onNavigate} />
     </aside>
   );
 }
