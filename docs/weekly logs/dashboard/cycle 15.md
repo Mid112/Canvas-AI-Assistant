@@ -143,6 +143,13 @@ Time was tracked using Clockify for **Cycle 15 (Jul 7, 2026 – Jul 9, 2026)**.
 | Rhythm | trivedirhythm | 06:35:43 |
 | **Total** |  | **59:21:35** |
 
+<img width="2424" height="1476" alt="image" src="https://github.com/user-attachments/assets/01c13259-8fc3-430a-8a4b-cd3521e2fe95" />
+<img width="2464" height="1476" alt="image" src="https://github.com/user-attachments/assets/b3e4bd8a-9ba2-48a0-9460-ec7f3f3efa81" />
+<img width="2440" height="1484" alt="image" src="https://github.com/user-attachments/assets/e0451516-fa65-4ca1-8536-f7345ba9eb23" />
+<img width="2426" height="1468" alt="image" src="https://github.com/user-attachments/assets/247db2da-1a44-405b-82d1-71336373ef99" />
+<img width="2434" height="1472" alt="image" src="https://github.com/user-attachments/assets/dae67e1e-11c5-43a3-b16f-b7fefb0c2786" />
+
+
 > Note: This total uses the five individual Clockify summary screenshots. If the final grouped Clockify report excludes a member or uses a different filter, update this table to match the grouped report.
 
 ### Daily Clockify Breakdown
@@ -164,6 +171,11 @@ Time was tracked using Clockify for **Cycle 15 (Jul 7, 2026 – Jul 9, 2026)**.
 | Rhythm | 03:40:18 | 00:00:00 | 02:55:25 | 06:35:43 |
 | Yerdana | 03:23:45 | 06:52:03 | 10:53:42 | 21:09:30 |
 | **Total** | **22:28:54** | **15:26:54** | **21:25:47** | **59:21:35** |
+
+
+
+
+
 
 ---
 
