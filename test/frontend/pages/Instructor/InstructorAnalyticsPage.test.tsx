@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InstructorAnalyticsPage } from "@/pages/Instructor/InstructorAnalyticsPage";
 import { paths, instructorCourseAnalyticsPath } from "@/routes/paths";
 import { fetchCourseAssignments } from "@/services/assignments";
-import { fetchCourses } from "@/services/canvas";
+import { fetchActiveCourse, fetchCourses } from "@/services/canvas";
 import { fetchAssignmentSubmissions } from "@/services/submissions";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
@@ -60,6 +60,7 @@ vi.mock("@/contexts/AuthContext", async () => {
 });
 
 const mockedFetchCourses = vi.mocked(fetchCourses);
+const mockedFetchActiveCourse = vi.mocked(fetchActiveCourse);
 const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
 const mockedFetchAssignmentSubmissions = vi.mocked(fetchAssignmentSubmissions);
 
@@ -137,6 +138,7 @@ function renderAnalyticsPage(
 beforeEach(() => {
   vi.clearAllMocks();
   mockUseAuth.mockReturnValue(authWithCanvas);
+  mockedFetchActiveCourse.mockResolvedValue(null);
   mockedFetchCourses.mockResolvedValue(canvasCourses);
   mockedFetchCourseAssignments.mockResolvedValue(canvasAssignments);
   mockedFetchAssignmentSubmissions.mockResolvedValue([

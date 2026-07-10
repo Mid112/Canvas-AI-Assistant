@@ -17,6 +17,7 @@ from app.schemas.course_overview import (
     RecentAssignmentSummary,
     StudentActivityItem,
 )
+from app.services.canvas import get_assignments
 from app.services.student import get_students
 
 _SUBMITTED_STATUSES = ("submitted", "graded", "late")
@@ -64,6 +65,11 @@ async def get_course_overview(
     db: AsyncSession,
 ) -> CourseOverviewResponse:
     roster = await get_students(local_course_id, user, canvas_url, db)
+    # Refresh the local assignment mirror from Canvas before reading it below —
+    # get_assignments() upserts by canvas_assignment_id, so this must run before
+    # the select() so a newly added/removed Canvas assignment is reflected in
+    # the count and recent-assignments list rather than a stale prior sync.
+    await get_assignments(local_course_id, user, canvas_url, db)
 
     course = await db.scalar(
         select(Course)

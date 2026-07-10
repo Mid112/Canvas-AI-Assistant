@@ -13,6 +13,12 @@ export interface InstructorCourse {
   studentCount: number;
   assignmentCount: number;
   lastActivity: string;
+  /** false when Canvas's workflow_state is "unpublished" (a draft course). */
+  isPublished: boolean;
+  /** Canvas term name, e.g. "Fall 2026" — used only to disambiguate two
+   * courses that would otherwise display an identical label (see
+   * lib/disambiguate-course-labels.ts). Never shown on its own. */
+  term: string | null;
 }
 
 export interface CourseAnalyticsOverview {

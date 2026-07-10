@@ -1,8 +1,10 @@
+import asyncio
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.database import AsyncSessionLocal
 from app.models.course import Course
 from app.models.submission import Submission
 from app.models.user import User
@@ -12,13 +14,46 @@ from app.schemas.dashboard import (
     InstructorDashboardResponse,
     RecentWorkflowSummary,
 )
-from app.services.canvas import get_active_course
+from app.services.canvas import get_active_course, get_assignments
+from app.services.student import get_students
+
+
+async def _refresh_course_mirror(course_id: int, canvas_url: str, user: User) -> None:
+    """Refreshes one course's assignment/student mirror on its own DB
+    session. A single AsyncSession cannot safely run concurrent operations,
+    so this opens (and commits/closes) an independent session per course —
+    get_assignments/get_students each commit internally, so by the time
+    asyncio.gather below returns, the caller's own session will see all of
+    these commits on its next query (standard READ COMMITTED visibility)."""
+    async with AsyncSessionLocal() as session:
+        await get_assignments(course_id, user, canvas_url, session)
+        await get_students(course_id, user, canvas_url, session)
 
 
 async def get_instructor_dashboard(
     user: User,
     db: AsyncSession,
 ) -> InstructorDashboardResponse:
+    # Refresh each course's assignment/student mirror from Canvas before
+    # reading the aggregate stats below — otherwise a course whose roster or
+    # assignment list changed on Canvas since the last sync would silently
+    # show stale counts here. Bounded to 2 Canvas calls per course; submission
+    # counts are intentionally left sourced from the local mirror (refreshing
+    # those live would mean one Canvas call per assignment per course).
+    # Runs one refresh per course concurrently (each on its own DB session —
+    # see _refresh_course_mirror) rather than serially, since an instructor
+    # with many courses would otherwise pay each course's Canvas round-trip
+    # one after another.
+    own_courses = list(
+        await db.scalars(select(Course).where(Course.instructor_id == user.id))
+    )
+    await asyncio.gather(
+        *(
+            _refresh_course_mirror(own_course.id, own_course.canvas_url, user)
+            for own_course in own_courses
+        )
+    )
+
     courses = list(
         await db.scalars(
             select(Course)

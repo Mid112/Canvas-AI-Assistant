@@ -51,6 +51,11 @@ export function InstructorCoursesCard({
                   Active
                 </span>
               ) : null}
+              {!course.isPublished ? (
+                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  Unpublished
+                </span>
+              ) : null}
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
@@ -104,8 +109,13 @@ export function InstructorCoursesCard({
           variant={isActive ? "secondary" : "outline"}
           className="col-span-2 w-full"
           onClick={onSetActive}
-          disabled={isActive || isSettingActive}
+          disabled={isActive || isSettingActive || !course.isPublished}
           aria-busy={isSettingActive && !isActive}
+          title={
+            !course.isPublished
+              ? "Unpublished courses can't be set as the active course"
+              : undefined
+          }
         >
           {isSettingActive ? (
             <>
@@ -155,6 +165,11 @@ export function InstructorCoursesList({
                     Active
                   </span>
                 ) : null}
+                {!course.isPublished ? (
+                  <span className="ml-2 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700">
+                    Unpublished
+                  </span>
+                ) : null}
               </p>
               <p className="text-sm text-muted-foreground">
                 {course.studentCount} students · {course.assignmentCount}{" "}
@@ -176,9 +191,16 @@ export function InstructorCoursesList({
                 variant={activeCourseId === course.id ? "secondary" : "outline"}
                 onClick={() => onSetActiveCourse(course.id)}
                 disabled={
-                  activeCourseId === course.id || settingActiveCourseId !== null
+                  activeCourseId === course.id ||
+                  settingActiveCourseId !== null ||
+                  !course.isPublished
                 }
                 aria-busy={settingActiveCourseId === course.id}
+                title={
+                  !course.isPublished
+                    ? "Unpublished courses can't be set as the active course"
+                    : undefined
+                }
               >
                 {settingActiveCourseId === course.id ? (
                   <>

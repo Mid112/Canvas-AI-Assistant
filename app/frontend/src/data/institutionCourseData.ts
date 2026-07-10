@@ -36,6 +36,8 @@ export const institutionCourseData: InstitutionCourseData[] = [
         studentCount: 45,
         assignmentCount: 8,
         lastActivity: "2 hours ago",
+        isPublished: true,
+        term: null,
       },
       {
         id: 2,
@@ -45,6 +47,8 @@ export const institutionCourseData: InstitutionCourseData[] = [
         studentCount: 38,
         assignmentCount: 6,
         lastActivity: "5 hours ago",
+        isPublished: true,
+        term: null,
       },
       {
         id: 3,
@@ -54,6 +58,8 @@ export const institutionCourseData: InstitutionCourseData[] = [
         studentCount: 42,
         assignmentCount: 5,
         lastActivity: "1 day ago",
+        isPublished: true,
+        term: null,
       },
       {
         id: 4,
@@ -63,6 +69,8 @@ export const institutionCourseData: InstitutionCourseData[] = [
         studentCount: 31,
         assignmentCount: 4,
         lastActivity: "6 hours ago",
+        isPublished: true,
+        term: null,
       },
       {
         id: 5,
@@ -72,6 +80,8 @@ export const institutionCourseData: InstitutionCourseData[] = [
         studentCount: 52,
         assignmentCount: 10,
         lastActivity: "30 minutes ago",
+        isPublished: true,
+        term: null,
       },
       {
         id: 6,
@@ -81,6 +91,8 @@ export const institutionCourseData: InstitutionCourseData[] = [
         studentCount: 40,
         assignmentCount: 7,
         lastActivity: "3 days ago",
+        isPublished: true,
+        term: null,
       },
     ],
     dashboard: {
@@ -197,6 +209,8 @@ export const institutionCourseData: InstitutionCourseData[] = [
         studentCount: 58,
         assignmentCount: 7,
         lastActivity: "1 hour ago",
+        isPublished: true,
+        term: null,
       },
       {
         id: 102,
@@ -206,6 +220,8 @@ export const institutionCourseData: InstitutionCourseData[] = [
         studentCount: 34,
         assignmentCount: 5,
         lastActivity: "4 hours ago",
+        isPublished: true,
+        term: null,
       },
       {
         id: 103,
@@ -215,6 +231,8 @@ export const institutionCourseData: InstitutionCourseData[] = [
         studentCount: 28,
         assignmentCount: 6,
         lastActivity: "2 days ago",
+        isPublished: true,
+        term: null,
       },
     ],
     dashboard: {

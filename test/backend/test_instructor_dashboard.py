@@ -69,7 +69,13 @@ def test_instructor_dashboard_with_seeded_course(client):
         mock_fetch.return_value = course_payload
         client.get(f"/api/v1/canvas/courses?canvas_url={canvas_url}", headers=headers)
 
-    response = client.get("/api/v1/canvas/dashboard", headers=headers)
+    with (
+        patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock_assignments,
+        patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock_enrollments,
+    ):
+        mock_assignments.return_value = []
+        mock_enrollments.return_value = []
+        response = client.get("/api/v1/canvas/dashboard", headers=headers)
     assert response.status_code == 200
     payload = response.json()
     assert payload["course_count"] == 1

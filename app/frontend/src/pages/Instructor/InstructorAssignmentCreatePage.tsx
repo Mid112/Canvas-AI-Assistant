@@ -1,19 +1,19 @@
 import { CheckCircle2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
-import { formatInstructorCourseTitle } from "@/lib/format-course-title";
+import { disambiguateCourseLabels } from "@/lib/disambiguate-course-labels";
 import {
   approveAssignmentDraft,
   generateAssignmentDraft,
   previewAssignmentDraft,
 } from "@/services/assignmentCreator";
-import { CanvasApiError, fetchCourses } from "@/services/canvas";
 import type {
   AssignmentCreateCourseOption,
   AssignmentCreateStep,
@@ -50,69 +50,38 @@ export function InstructorAssignmentCreatePage() {
   const [preview, setPreview] = useState<AssignmentPreviewSummary | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
-  const [courseOptions, setCourseOptions] = useState<AssignmentCreateCourseOption[]>([]);
-  const [isLoadingCourses, setIsLoadingCourses] = useState(false);
-  const [courseLoadError, setCourseLoadError] = useState<string | null>(null);
+
+  const canvasUrl = useCanvasConnectionUrl();
+  const {
+    availableCourses,
+    isLoading: isLoadingCourses,
+    error: courseLoadError,
+    needsCanvasConnection,
+  } = useActiveCourse();
+
+  const publishedCourses = useMemo(
+    () => availableCourses.filter((course) => course.isPublished),
+    [availableCourses],
+  );
+  const labelById = useMemo(
+    () => disambiguateCourseLabels(publishedCourses),
+    [publishedCourses],
+  );
+  const courseOptions: AssignmentCreateCourseOption[] = useMemo(
+    () =>
+      publishedCourses.map((course) => ({
+        id: String(course.id),
+        label: labelById.get(course.id) ?? course.name,
+      })),
+    [labelById, publishedCourses],
+  );
 
   const courseLabel =
     courseOptions.find((course) => course.id === describeValues.courseId)
       ?.label ?? "your course";
-  const canvasUrl = useCanvasConnectionUrl();
-
-  useEffect(() => {
-    if (!accessToken || !user?.has_canvas_token) {
-      return;
-    }
-
-    const token = accessToken;
-    const selectedCanvasUrl = canvasUrl;
-    let cancelled = false;
-
-    async function loadCourses() {
-      setIsLoadingCourses(true);
-
-      try {
-        const courses = await fetchCourses(token, selectedCanvasUrl);
-        if (cancelled) {
-          return;
-        }
-
-        setCourseOptions(
-          courses
-            .filter((course) => course.local_id !== null)
-            .map((course) => ({
-              id: String(course.local_id),
-              label: formatInstructorCourseTitle({
-                code: course.course_code,
-                name: course.name,
-              }),
-            })),
-        );
-        setCourseLoadError(null);
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-
-        setCourseOptions([]);
-        setCourseLoadError(
-          error instanceof CanvasApiError
-            ? error.message
-            : "Unable to load courses from Canvas.",
-        );
-      } finally {
-        if (!cancelled) {
-          setIsLoadingCourses(false);
-        }
-      }
-    }
-
-    void loadCourses();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [accessToken, canvasUrl, user?.has_canvas_token]);
+  const effectiveCourseLoadError = needsCanvasConnection
+    ? "Connect your Canvas account to load courses."
+    : courseLoadError;
 
   const handleGenerate = async (values: AssignmentDescribeValues) => {
     if (!accessToken) {
@@ -310,7 +279,7 @@ export function InstructorAssignmentCreatePage() {
           isGenerating={isGenerating}
           generateError={generateError}
           courseOptions={courseOptions}
-          courseLoadError={courseLoadError}
+          courseLoadError={effectiveCourseLoadError}
           isLoadingCourses={isLoadingCourses}
           onGenerate={handleGenerate}
         />

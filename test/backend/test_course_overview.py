@@ -72,8 +72,12 @@ def test_course_overview_empty_state(client):
     headers = _register_with_canvas(client)
     local_id = _sync_local_course(client, headers)
 
-    with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock:
-        mock.return_value = []
+    with (
+        patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock_enrollments,
+        patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock_assignments,
+    ):
+        mock_enrollments.return_value = []
+        mock_assignments.return_value = []
         response = client.get(
             f"/api/v1/canvas/courses/{local_id}/overview?canvas_url={CANVAS_URL}",
             headers=headers,
@@ -139,8 +143,12 @@ def test_course_overview_with_assignments_and_submissions(client):
         },
     ]
 
-    with patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock:
-        mock.return_value = enrollments
+    with (
+        patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock_enrollments,
+        patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock_assignments,
+    ):
+        mock_enrollments.return_value = enrollments
+        mock_assignments.return_value = assignments
         response = client.get(
             f"/api/v1/canvas/courses/{local_id}/overview?canvas_url={CANVAS_URL}",
             headers=headers,

@@ -83,6 +83,7 @@ const canvasCourses = [
     course_code: "CS 101",
     workflow_state: "available",
     total_students: 45,
+    term_name: null,
   },
 ];
 
@@ -244,5 +245,66 @@ describe("ActiveCourseProvider", () => {
       displayName: "COSC 499",
     });
     expect(result.current.error).toBeNull();
+  });
+
+  it("sets isLoaded once the first fetch completes and keeps it true on refresh", async () => {
+    const { result } = renderHook(() => useActiveCourse(), { wrapper });
+
+    expect(result.current.isLoaded).toBe(false);
+
+    await waitFor(() => {
+      expect(result.current.isLoaded).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.refreshActiveCourse();
+    });
+
+    expect(result.current.isLoaded).toBe(true);
+  });
+
+  it("leaves needsCanvasConnection false when the user has never connected Canvas at all", async () => {
+    // That case is checked directly via user.has_canvas_token by every
+    // consuming page (see InstructorCoursesPage.tsx) — needsCanvasConnection
+    // here is specifically for "connected, but this institution's Canvas URL
+    // couldn't be resolved" or "reconnect required" (see the tests below).
+    mockUseAuth.mockReturnValue(authWithoutCanvas);
+
+    const { result } = renderHook(() => useActiveCourse(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.needsCanvasConnection).toBe(false);
+  });
+
+  it("flags needsCanvasConnection when the course fetch fails with a reconnect error", async () => {
+    const { CanvasApiError } = await import("@/services/canvas");
+    mockedFetchCourses.mockRejectedValue(
+      new CanvasApiError("Invalid Canvas API token", 422),
+    );
+
+    const { result } = renderHook(() => useActiveCourse(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.needsCanvasConnection).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("logs out when the course fetch fails with a 401", async () => {
+    const { CanvasApiError } = await import("@/services/canvas");
+    mockedFetchCourses.mockRejectedValue(new CanvasApiError("Unauthorized", 401));
+
+    const { result } = renderHook(() => useActiveCourse(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(authWithCanvas.logout).toHaveBeenCalled();
   });
 });
