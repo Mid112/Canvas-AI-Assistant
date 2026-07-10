@@ -1,5 +1,6 @@
 import { getInstitutionCanvasUrl } from "@/lib/institution-canvas";
 import { canvasUrlsEquivalent } from "@/lib/canvas-url";
+import type { Institution } from "@/types/institution";
 import type { User } from "@/types/user";
 
 export function getPrimaryCanvasConnectionUrl(
@@ -59,4 +60,36 @@ export function getCanvasConnectionUrlForInstitution(
   institutionId: string,
 ): string | undefined {
   return resolveCanvasApiUrl(user, institutionId);
+}
+
+export function isInstitutionConnected(
+  user: Pick<User, "canvas_connections"> | null | undefined,
+  institutionId: string,
+): boolean {
+  const connections = user?.canvas_connections ?? [];
+  if (connections.length === 0) {
+    return false;
+  }
+
+  const institutionUrl = getInstitutionCanvasUrl(institutionId);
+  if (!institutionUrl) {
+    return false;
+  }
+
+  return connections.some((connection) =>
+    canvasUrlsEquivalent(connection.canvas_url, institutionUrl),
+  );
+}
+
+export function getConnectedInstitutions(
+  user: Pick<User, "canvas_connections"> | null | undefined,
+  allInstitutions: Institution[],
+): Institution[] {
+  if (!user?.canvas_connections?.length) {
+    return [];
+  }
+
+  return allInstitutions.filter((institution) =>
+    isInstitutionConnected(user, institution.id),
+  );
 }
