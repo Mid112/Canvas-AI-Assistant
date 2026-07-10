@@ -1,14 +1,17 @@
 import { Link, NavLink } from "react-router-dom";
 import { GraduationCap, PanelLeftClose } from "lucide-react";
 
+import { AccountMenu } from "@/components/layouts/AccountMenu";
 import { Button } from "@/components/ui/button";
 import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 import type { NavItem } from "@/types/navigation";
 import { paths } from "@/routes/paths";
+import type { UserRole } from "@/types/user";
 
 interface SidebarProps {
   navItems: NavItem[];
+  role: UserRole;
   roleLabel: string;
   onNavigate?: () => void;
   onToggle?: () => void;
@@ -18,6 +21,7 @@ interface SidebarProps {
 
 export function Sidebar({
   navItems,
+  role,
   roleLabel,
   onNavigate,
   onToggle,
@@ -62,7 +66,7 @@ export function Sidebar({
           </Button>
         ) : null}
       </div>
-      <nav className="flex shrink-0 flex-col gap-1 overflow-hidden p-3">
+      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-3">
         {navItems.map((item) => (
           <NavLink
             key={item.href}
@@ -82,6 +86,17 @@ export function Sidebar({
           </NavLink>
         ))}
       </nav>
+      <div className="mt-auto w-full shrink-0 border-t border-sidebar-border p-3">
+        <AccountMenu
+          role={role}
+          roleLabel={roleLabel}
+          onNavigate={onNavigate}
+          trigger="profile"
+          align="start"
+          side="top"
+          className="w-full"
+        />
+      </div>
     </aside>
   );
 }

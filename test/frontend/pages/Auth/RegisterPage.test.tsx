@@ -65,8 +65,8 @@ describe("RegisterPage", () => {
     ).toBeInTheDocument();
   });
 
-  // Verifies: Navigates to the assistant on create account.
-  it("navigates to the assistant on create account", async () => {
+  // Verifies: Navigates to onboarding on create account.
+  it("navigates to onboarding on create account", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
     mockRegister.mockResolvedValue({
@@ -114,7 +114,7 @@ describe("RegisterPage", () => {
         role: "instructor",
         canvas_connections: [],
       }),
-    ).toBe(paths.instructor.assistant);
+    ).toBe(paths.canvasInfo);
   });
 
   // Verifies: Shows an error when registration fails with a duplicate email.

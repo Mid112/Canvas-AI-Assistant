@@ -23,28 +23,61 @@ vi.mock("@/contexts/AuthContext", () => ({
     logout: mockLogout,
     login: vi.fn(),
     register: vi.fn(),
-    user: null,
+    user: {
+      id: 1,
+      email: "jane.doe@ubc.ca",
+      name: "Dr. Jane Doe",
+      role: "instructor" as const,
+      is_active: true,
+      has_canvas_token: false,
+      canvas_connections: [],
+    },
     isAuthenticated: true,
     isLoading: false,
   }),
 }));
 
+function getAccountMenuContainer() {
+  return screen.getByRole("button", { name: "Account menu" }).parentElement;
+}
+
 describe("Header", () => {
-  // Verifies: Renders the page title and account menu.
-  it("renders the page title and account menu", () => {
+  // Verifies: Hides the header account menu on desktop when the sidebar is open.
+  it("hides the header account menu on desktop when the sidebar is open", () => {
     renderWithRouter(
       <Header
         title="Dashboard"
         role="instructor"
         roleLabel="Instructor"
         navItems={instructorNavItems}
+        sidebarOpen
+        onToggleSidebar={vi.fn()}
       />,
     );
 
     expect(
       screen.getByRole("heading", { name: "Dashboard" }),
     ).toBeInTheDocument();
+    expect(getAccountMenuContainer()).toHaveClass("lg:hidden");
+  });
+
+  // Verifies: Shows the account menu in the header when the sidebar is collapsed.
+  it("shows the account menu in the header when the sidebar is collapsed", () => {
+    renderWithRouter(
+      <Header
+        title="Dashboard"
+        role="instructor"
+        roleLabel="Instructor"
+        navItems={instructorNavItems}
+        sidebarOpen={false}
+        onToggleSidebar={vi.fn()}
+      />,
+    );
+
     expect(screen.getByRole("button", { name: "Account menu" })).toBeInTheDocument();
+    expect(getAccountMenuContainer()).not.toHaveClass("lg:hidden");
+    expect(screen.queryByText("Dr. Jane Doe")).not.toBeInTheDocument();
+    expect(screen.queryByText("Instructor")).not.toBeInTheDocument();
   });
 
   // Verifies: Shows the open sidebar button when the sidebar is closed.
@@ -65,8 +98,8 @@ describe("Header", () => {
     ).toBeInTheDocument();
   });
 
-  // Verifies: Logs out and navigates to login from the account menu.
-  it("logs out and navigates to login from the account menu", async () => {
+  // Verifies: Logs out from the header account menu when the sidebar is collapsed.
+  it("logs out from the header account menu when the sidebar is collapsed", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     mockNavigate.mockClear();
     mockLogout.mockClear();
@@ -77,10 +110,13 @@ describe("Header", () => {
         role="instructor"
         roleLabel="Instructor"
         navItems={instructorNavItems}
+        sidebarOpen={false}
+        onToggleSidebar={vi.fn()}
       />,
     );
 
     await user.click(screen.getByRole("button", { name: "Account menu" }));
+    expect(screen.queryByText("Instructor")).not.toBeInTheDocument();
     await user.click(await screen.findByText("Log out"));
 
     expect(mockLogout).toHaveBeenCalledTimes(1);

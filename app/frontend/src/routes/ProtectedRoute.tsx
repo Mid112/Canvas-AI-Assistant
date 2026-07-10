@@ -1,13 +1,12 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { paths } from "@/routes/paths";
-import { getAssistantPath } from "@/utils/navigation";
 import {
   canAccessWithoutOnboarding,
   isOnboardingComplete,
   requiresOnboarding,
 } from "@/utils/onboarding";
+import { paths } from "@/routes/paths";
 
 export function ProtectedRoute() {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -31,7 +30,7 @@ export function ProtectedRoute() {
     !isOnboardingComplete(user) &&
     !canAccessWithoutOnboarding(location.pathname, user.role)
   ) {
-    return <Navigate to={getAssistantPath(user.role)} replace />;
+    return <Navigate to={paths.canvasInfo} replace />;
   }
 
   return <Outlet />;

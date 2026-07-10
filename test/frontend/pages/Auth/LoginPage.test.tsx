@@ -61,8 +61,8 @@ describe("LoginPage", () => {
     ).toBeInTheDocument();
   });
 
-  // Verifies: Navigates to the assistant after successful sign in.
-  it("navigates to the assistant after successful sign in", async () => {
+  // Verifies: Navigates to onboarding after successful sign in.
+  it("navigates to onboarding after successful sign in", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
     mockLogin.mockResolvedValue({
@@ -88,7 +88,7 @@ describe("LoginPage", () => {
       email: "professor@university.edu",
       password: "secret123",
     });
-    expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant);
+    expect(mockNavigate).toHaveBeenCalledWith(paths.canvasInfo);
   });
 
   // Verifies: Navigates to the admin dashboard after successful admin sign in.

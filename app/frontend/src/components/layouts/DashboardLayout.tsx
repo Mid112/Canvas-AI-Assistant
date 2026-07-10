@@ -83,6 +83,7 @@ function DashboardShell({ role }: DashboardLayoutProps) {
       >
         <Sidebar
           navItems={navItems}
+          role={role}
           roleLabel={roleLabel}
           showToggle
           onToggle={toggleSidebar}

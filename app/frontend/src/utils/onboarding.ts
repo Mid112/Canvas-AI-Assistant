@@ -1,7 +1,7 @@
 import { hasCompletedOnboarding } from "@/lib/onboarding-storage";
 import { paths } from "@/routes/paths";
 import type { User, UserRole } from "@/types/user";
-import { getAssistantPath, getDashboardPath } from "@/utils/navigation";
+import { getDashboardPath } from "@/utils/navigation";
 
 export const ONBOARDING_PATHS = [
   paths.canvasInfo,
@@ -32,7 +32,7 @@ export function canAccessWithoutOnboarding(
     return true;
   }
 
-  return isOnboardingPath(pathname) || pathname.startsWith("/instructor");
+  return isOnboardingPath(pathname);
 }
 
 export function getPostAuthPath(user: Pick<User, "id" | "role" | "canvas_connections">): string {
@@ -40,5 +40,5 @@ export function getPostAuthPath(user: Pick<User, "id" | "role" | "canvas_connect
     return getDashboardPath(user.role);
   }
 
-  return getAssistantPath(user.role);
+  return paths.canvasInfo;
 }

@@ -1,17 +1,8 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { Menu, PanelLeft, User } from "lucide-react";
+import { Menu, PanelLeft } from "lucide-react";
 
+import { AccountMenu } from "@/components/layouts/AccountMenu";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Sheet,
   SheetContent,
@@ -20,12 +11,9 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Sidebar } from "@/components/layouts/Sidebar";
-import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import type { NavItem } from "@/types/navigation";
 import type { UserRole } from "@/types/user";
-import { getProfilePath } from "@/utils/navigation";
-import { paths } from "@/routes/paths";
 
 interface HeaderProps {
   title: string;
@@ -45,17 +33,10 @@ export function Header({
   onToggleSidebar,
 }: HeaderProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const navigate = useNavigate();
-  const { logout } = useAuth();
-
-  const handleLogout = () => {
-    logout();
-    navigate(paths.login);
-  };
 
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-6">
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         {onToggleSidebar ? (
           <Button
             type="button"
@@ -87,40 +68,27 @@ export function Header({
             </SheetHeader>
             <Sidebar
               navItems={navItems}
+              role={role}
               roleLabel={roleLabel}
               onNavigate={() => setMobileOpen(false)}
               className="w-full border-0"
             />
           </SheetContent>
         </Sheet>
-        <h1 className="text-lg font-semibold tracking-tight md:text-xl">
+        <h1 className="truncate text-lg font-semibold tracking-tight md:text-xl">
           {title}
         </h1>
       </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <Button variant="outline" size="icon" aria-label="Account menu" />
-          }
-        >
-          <User className="size-4" />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>{roleLabel}</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate(getProfilePath(role))}>
-              Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => navigate(paths.home)}>
-              Home
-            </DropdownMenuItem>
-            <DropdownMenuItem variant="destructive" onClick={handleLogout}>
-              Log out
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {onToggleSidebar ? (
+        <div className={cn("shrink-0", sidebarOpen && "lg:hidden")}>
+          <AccountMenu
+            role={role}
+            trigger="icon"
+            align="end"
+            side="bottom"
+          />
+        </div>
+      ) : null}
     </header>
   );
 }
