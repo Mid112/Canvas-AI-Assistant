@@ -7,7 +7,12 @@ import { InstructorCoursesSearch } from "@/pages/Instructor/InstructorCourses/In
 describe("InstructorCoursesSearch", () => {
   it("renders the search input", () => {
     render(
-      <InstructorCoursesSearch search="" onSearchChange={vi.fn()} />,
+      <InstructorCoursesSearch
+        search=""
+        onSearchChange={vi.fn()}
+        publishFilter="all"
+        onPublishFilterChange={vi.fn()}
+      />,
     );
 
     expect(screen.getByLabelText("Search courses")).toBeInTheDocument();
@@ -18,11 +23,52 @@ describe("InstructorCoursesSearch", () => {
     const onSearchChange = vi.fn();
 
     render(
-      <InstructorCoursesSearch search="" onSearchChange={onSearchChange} />,
+      <InstructorCoursesSearch
+        search=""
+        onSearchChange={onSearchChange}
+        publishFilter="all"
+        onPublishFilterChange={vi.fn()}
+      />,
     );
 
     await user.type(screen.getByLabelText("Search courses"), "cs");
 
     expect(onSearchChange).toHaveBeenCalled();
+  });
+
+  it("renders the publish-status filter defaulted to all courses", () => {
+    render(
+      <InstructorCoursesSearch
+        search=""
+        onSearchChange={vi.fn()}
+        publishFilter="all"
+        onPublishFilterChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByLabelText("Filter by publish status"),
+    ).toHaveValue("all");
+  });
+
+  it("calls onPublishFilterChange when a different option is selected", async () => {
+    const user = userEvent.setup();
+    const onPublishFilterChange = vi.fn();
+
+    render(
+      <InstructorCoursesSearch
+        search=""
+        onSearchChange={vi.fn()}
+        publishFilter="all"
+        onPublishFilterChange={onPublishFilterChange}
+      />,
+    );
+
+    await user.selectOptions(
+      screen.getByLabelText("Filter by publish status"),
+      "published",
+    );
+
+    expect(onPublishFilterChange).toHaveBeenCalledWith("published");
   });
 });

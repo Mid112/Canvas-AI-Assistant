@@ -41,6 +41,9 @@ export interface InstitutionCourseData {
 
 export type CourseViewMode = "grid" | "list";
 
+/** Course Management's publish-status filter — "all" shows every course. */
+export type CoursePublishFilter = "all" | "published" | "unpublished";
+
 /** Frontend-only active course selection persisted in local storage. */
 export interface ActiveCourseSelection {
   localId: number;
