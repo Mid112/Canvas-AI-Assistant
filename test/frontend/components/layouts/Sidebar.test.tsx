@@ -38,6 +38,21 @@ vi.mock("@/contexts/AuthContext", () => ({
   }),
 }));
 
+vi.mock("@/contexts/useInstitution", () => ({
+  useInstitution: () => ({
+    institutions: [],
+    selectedInstitution: {
+      id: "ubc",
+      name: "University of British Columbia",
+      shortName: "UBC",
+    },
+    setSelectedInstitution: vi.fn(),
+    courses: [],
+    analytics: {},
+    dashboard: {},
+  }),
+}));
+
 function renderSidebar(props: ComponentProps<typeof Sidebar>) {
   return render(
     <MemoryRouter>
@@ -63,8 +78,8 @@ describe("Sidebar", () => {
     expect(screen.getByText("Instructor")).toBeInTheDocument();
   });
 
-  // Verifies: Keeps the instructor role on the profile trigger but not in the dropdown.
-  it("keeps the instructor role on the profile trigger but not in the dropdown", async () => {
+  // Verifies: Keeps the instructor role on the profile trigger.
+  it("keeps the instructor role on the profile trigger", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
 
     renderSidebar({
@@ -75,7 +90,8 @@ describe("Sidebar", () => {
 
     await user.click(screen.getByRole("button", { name: "Account menu" }));
 
-    expect(screen.queryAllByText("Instructor")).toHaveLength(1);
+    expect(screen.getAllByText("Instructor").length).toBeGreaterThanOrEqual(1);
+    expect(await screen.findByText("Connect institution")).toBeInTheDocument();
   });
 
   // Verifies: Highlights the active navigation item.

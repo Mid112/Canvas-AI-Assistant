@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { ChatWindow } from "@/components/chat/ChatWindow";
@@ -7,12 +7,21 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ActiveCourseContextBar } from "@/components/courses/ActiveCourseContextBar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
+import { buildSuggestedActions } from "@/data/assistantSeedData";
+import {
+  createDefaultLlmProviderSettings,
+  getLlmProviderOption,
+} from "@/data/llmProviders";
+import {
+  getStoredLlmProviderSettings,
+  setStoredLlmProviderSettings,
+} from "@/lib/llm-provider-storage";
 import {
   InstructorAssistantHeader,
   InstructorAssistantSuggestedActions,
 } from "@/pages/Instructor/InstructorAssistant/InstructorAssistantHeader";
-import { buildSuggestedActions } from "@/data/assistantSeedData";
 import { instructorSettingsPath } from "@/routes/paths";
+import type { LlmProviderId, LlmProviderSettings } from "@/types/llmProvider";
 
 interface InstructorAssistantLocationState {
   initialPrompt?: string;
@@ -54,10 +63,49 @@ export function InstructorAssistantPage() {
     () => locationState.initialPendingMessageId,
   );
   const [isLoading, setIsLoading] = useState(false);
+  const [llmSettings, setLlmSettings] = useState<LlmProviderSettings>(() =>
+    user
+      ? getStoredLlmProviderSettings(user.id)
+      : createDefaultLlmProviderSettings(),
+  );
+
+  const handleModelProviderChange = useCallback(
+    (providerId: LlmProviderId) => {
+      const option = getLlmProviderOption(providerId);
+      const next: LlmProviderSettings = {
+        provider: providerId,
+        model: option.defaultModel,
+        baseUrl:
+          providerId === "openai_compatible_custom" ? llmSettings.baseUrl : "",
+      };
+      setLlmSettings(next);
+      if (user) {
+        setStoredLlmProviderSettings(user.id, next);
+      }
+    },
+    [llmSettings.baseUrl, user],
+  );
 
   const handleSuggestedAction = (prompt: string) => {
     setPendingPrompt(prompt);
   };
+
+  const previousCourseIdRef = useRef<number | null | undefined>(undefined);
+  useEffect(() => {
+    const nextCourseId = activeCourse?.localId ?? null;
+    const previousCourseId = previousCourseIdRef.current;
+    previousCourseIdRef.current = nextCourseId;
+    if (previousCourseId === undefined || previousCourseId === nextCourseId) {
+      return;
+    }
+    if (previousCourseId === null && nextCourseId !== null) {
+      return;
+    }
+    setPendingPrompt(null);
+    setPendingDraft(null);
+    setPendingConversationId(undefined);
+    setPendingMessageId(undefined);
+  }, [activeCourse?.localId]);
 
   return (
     <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
@@ -91,6 +139,7 @@ export function InstructorAssistantPage() {
       />
 
       <ChatWindow
+        key={activeCourse?.localId ?? "no-course"}
         initialPrompt={pendingPrompt}
         initialDraft={pendingDraft}
         initialConversationId={pendingConversationId}
@@ -102,6 +151,8 @@ export function InstructorAssistantPage() {
           setPendingMessageId(undefined);
         }}
         onLoadingChange={setIsLoading}
+        modelSettings={llmSettings}
+        onModelProviderChange={handleModelProviderChange}
       />
     </div>
   );

@@ -64,6 +64,29 @@ describe("InstructorCoursesCard", () => {
     ).toBeDisabled();
   });
 
+  it("shows publish status badges", () => {
+    const unpublished: (typeof courses)[number] = {
+      ...courses[0]!,
+      id: 99,
+      code: "CS 099",
+      name: "Draft Seminar",
+      workflowState: "unpublished",
+    };
+
+    render(
+      <MemoryRouter>
+        <InstructorCoursesCard
+          course={unpublished}
+          isActive={false}
+          onSetActive={vi.fn()}
+          isSettingActive={false}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Unpublished")).toBeInTheDocument();
+  });
+
   // Verifies: Shows a clear active state.
   it("shows a clear active state", () => {
     render(

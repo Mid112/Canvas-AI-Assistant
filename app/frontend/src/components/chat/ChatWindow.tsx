@@ -19,6 +19,7 @@ import {
   sendAssistantMessage,
 } from "@/services/assistant";
 import type { ChatMessage } from "@/types/chat";
+import type { LlmProviderId, LlmProviderSettings } from "@/types/llmProvider";
 
 function createMessageId(): string {
   return crypto.randomUUID();
@@ -43,6 +44,8 @@ interface ChatWindowProps {
   onInitialPromptConsumed?: () => void;
   onModifyContextConsumed?: () => void;
   onLoadingChange?: (isLoading: boolean) => void;
+  modelSettings?: LlmProviderSettings | null;
+  onModelProviderChange?: (providerId: LlmProviderId) => void;
 }
 
 export function ChatWindow({
@@ -53,9 +56,12 @@ export function ChatWindow({
   onInitialPromptConsumed,
   onModifyContextConsumed,
   onLoadingChange,
+  modelSettings = null,
+  onModelProviderChange,
 }: ChatWindowProps) {
   const { accessToken } = useAuth();
-  const { activeCourse } = useActiveCourse();
+  const { activeCourse, refreshActiveCourse, notifyCoursesChanged } =
+    useActiveCourse();
   const [messages, setMessages] = useState<ChatMessage[]>(seedChatMessages);
   const [conversationId, setConversationId] = useState<number | undefined>(
     initialConversationId,
@@ -73,10 +79,13 @@ export function ChatWindow({
   const [pendingActionError, setPendingActionError] = useState<string | null>(
     null,
   );
+  const [editDraft, setEditDraft] = useState("");
+  const [editDraftKey, setEditDraftKey] = useState(0);
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const initialPromptHandledRef = useRef<string | null>(null);
   const hydratedConversationRef = useRef<number | undefined>(undefined);
   const isDeliveringRef = useRef(false);
+  const previousCourseIdRef = useRef<number | null | undefined>(undefined);
 
   const assistantContext = useMemo(
     () => ({
@@ -93,6 +102,39 @@ export function ChatWindow({
   useEffect(() => {
     onLoadingChange?.(isLoading);
   }, [isLoading, onLoadingChange]);
+
+  // Reset the chat thread when the active course changes so the UI does not
+  // keep showing another course's history while the backend forks a new
+  // conversation on the next send.
+  useEffect(() => {
+    const nextCourseId = activeCourse?.localId ?? null;
+    const previousCourseId = previousCourseIdRef.current;
+    previousCourseIdRef.current = nextCourseId;
+
+    // First observation (including null → first course load) should not wipe
+    // an in-progress hydrate or modify-return flow.
+    if (previousCourseId === undefined) {
+      return;
+    }
+    if (previousCourseId === nextCourseId) {
+      return;
+    }
+    if (previousCourseId === null && nextCourseId !== null) {
+      return;
+    }
+
+    setMessages(seedChatMessages);
+    setConversationId(undefined);
+    setActivePendingMessageId(undefined);
+    setError(null);
+    setInputError(null);
+    setRetryMessage(null);
+    setPendingActionError(null);
+    setEditDraft("");
+    setEditDraftKey((key) => key + 1);
+    hydratedConversationRef.current = undefined;
+    initialPromptHandledRef.current = null;
+  }, [activeCourse?.localId]);
 
   useEffect(() => {
     if (
@@ -361,6 +403,10 @@ export function ChatWindow({
           ),
         );
         appendAssistantMessage(response);
+        if (action === "confirm") {
+          void refreshActiveCourse();
+          notifyCoursesChanged();
+        }
       } catch (requestError) {
         const errorMessage =
           requestError instanceof AssistantApiError
@@ -371,8 +417,20 @@ export function ChatWindow({
         setResolvingMessageId(null);
       }
     },
-    [accessToken, appendAssistantMessage, conversationId],
+    [
+      accessToken,
+      appendAssistantMessage,
+      conversationId,
+      notifyCoursesChanged,
+      refreshActiveCourse,
+    ],
   );
+
+  const handleModifyPendingAction = useCallback(() => {
+    setEditDraft("Please change the proposed action: ");
+    setEditDraftKey((key) => key + 1);
+    setInputError(null);
+  }, []);
 
   const handleSend = useCallback(
     (text: string) => {
@@ -447,6 +505,12 @@ export function ChatWindow({
                     ? () => void resolvePendingAction(message, "cancel")
                     : undefined
                 }
+                onModifyPendingAction={
+                  message.pendingMessageId &&
+                  message.pendingActionStatus === "pending"
+                    ? handleModifyPendingAction
+                    : undefined
+                }
               />
             ) : (
               <UserMessage key={message.id} message={message} />
@@ -482,11 +546,13 @@ export function ChatWindow({
         ) : null}
 
         <ChatInput
-          key={initialDraft ?? ""}
+          key={`${initialDraft ?? ""}-${editDraftKey}`}
           onSend={handleSend}
           isLoading={isLoading}
           inputError={inputError}
-          initialValue={initialDraft ?? ""}
+          initialValue={editDraft || initialDraft || ""}
+          modelSettings={modelSettings}
+          onModelProviderChange={onModelProviderChange}
         />
       </CardContent>
     </Card>

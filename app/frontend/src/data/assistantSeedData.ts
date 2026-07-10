@@ -49,5 +49,11 @@ export function buildSuggestedActions(courseLabel?: string): SuggestedAction[] {
       description: "See overall course analytics",
       prompt: `View course performance${forCourse}`,
     },
+    {
+      id: "draft-student-message",
+      title: "Draft a student message",
+      description: "Write a message or announcement with AI",
+      prompt: `Draft a message to students${inCourse} about an upcoming deadline. Propose a send_message action I can review and edit before sending.`,
+    },
   ];
 }

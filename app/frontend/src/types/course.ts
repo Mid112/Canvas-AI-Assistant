@@ -1,5 +1,10 @@
 import type { InstructorDashboardData } from "@/types/dashboard";
 
+/** Canvas course publish state from workflow_state. */
+export type CourseWorkflowState = "available" | "unpublished" | "completed";
+
+export type CoursePublishFilter = "all" | "published" | "unpublished";
+
 export interface InstructorCourse {
   /** Local DB id — used in routes like /instructor/courses/:localCourseId/assignments. */
   id: number;
@@ -13,6 +18,8 @@ export interface InstructorCourse {
   studentCount: number;
   assignmentCount: number;
   lastActivity: string;
+  /** Canvas workflow_state: available (published), unpublished, or completed. */
+  workflowState?: CourseWorkflowState | string;
 }
 
 export interface CourseAnalyticsOverview {

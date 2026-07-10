@@ -14,6 +14,7 @@ interface AssistantMessageProps {
   pendingActionError?: string | null;
   onConfirmPendingAction?: () => void;
   onCancelPendingAction?: () => void;
+  onModifyPendingAction?: () => void;
 }
 
 function formatTimestamp(timestamp: Date): string {
@@ -29,6 +30,7 @@ export function AssistantMessage({
   pendingActionError = null,
   onConfirmPendingAction,
   onCancelPendingAction,
+  onModifyPendingAction,
 }: AssistantMessageProps) {
   const showPendingControls =
     message.pendingMessageId !== undefined && message.pendingActionStatus;
@@ -74,6 +76,11 @@ export function AssistantMessage({
               message.pendingActionStatus === "pending"
                 ? onCancelPendingAction!
                 : () => {}
+            }
+            onModify={
+              message.pendingActionStatus === "pending"
+                ? onModifyPendingAction
+                : undefined
             }
           />
         ) : null}

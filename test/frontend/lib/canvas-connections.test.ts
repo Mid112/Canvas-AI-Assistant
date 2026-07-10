@@ -198,11 +198,11 @@ describe("getConnectedInstitutions", () => {
         },
         catalog,
       ),
-    ).toEqual([catalog[0]]);
+    ).toEqual([{ ...catalog[0], canvasUrl: "https://canvas.ubc.ca" }]);
   });
 
-  // Verifies: Ignores connections that cannot be mapped without institution env URLs.
-  it("ignores connections that cannot be mapped without institution env URLs", () => {
+  // Verifies: Maps unmatched Canvas connections to selectable institutions.
+  it("maps unmatched Canvas connections to selectable institutions", () => {
     vi.unstubAllEnvs();
 
     expect(
@@ -219,6 +219,13 @@ describe("getConnectedInstitutions", () => {
         },
         catalog,
       ),
-    ).toEqual([]);
+    ).toEqual([
+      {
+        id: "connection-1",
+        name: "http://localhost:3000",
+        shortName: "localhost",
+        canvasUrl: "http://localhost:3000",
+      },
+    ]);
   });
 });

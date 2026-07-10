@@ -7,6 +7,7 @@ interface PendingActionControlsProps {
   error?: string | null;
   onConfirm: () => void;
   onCancel: () => void;
+  onModify?: () => void;
 }
 
 export function PendingActionControls({
@@ -15,6 +16,7 @@ export function PendingActionControls({
   error,
   onConfirm,
   onCancel,
+  onModify,
 }: PendingActionControlsProps) {
   if (status !== "pending") {
     return (
@@ -31,6 +33,9 @@ export function PendingActionControls({
   return (
     <div className="space-y-2 rounded-lg border border-border/70 bg-background px-3 py-3">
       <p className="text-sm font-medium">Approve this proposed action?</p>
+      <p className="text-xs text-muted-foreground">
+        Confirm to send as-is, or edit the request in chat before confirming.
+      </p>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -45,6 +50,17 @@ export function PendingActionControls({
         >
           {isLoading ? "Confirming..." : "Confirm"}
         </Button>
+        {onModify ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            onClick={onModify}
+            disabled={isLoading}
+          >
+            Edit before sending
+          </Button>
+        ) : null}
         <Button
           type="button"
           size="sm"

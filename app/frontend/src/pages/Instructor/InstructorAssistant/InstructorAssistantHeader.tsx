@@ -2,6 +2,7 @@ import {
   BarChart3,
   ClipboardList,
   FileText,
+  MessageSquare,
 } from "lucide-react";
 
 import { AssistantAvatar } from "@/components/brand/AssistantAvatar";
@@ -37,6 +38,7 @@ const actionIcons = {
   "summarize-quiz": FileText,
   "late-assignments": ClipboardList,
   "course-performance": BarChart3,
+  "draft-student-message": MessageSquare,
 } as const;
 
 interface InstructorAssistantSuggestedActionsProps {

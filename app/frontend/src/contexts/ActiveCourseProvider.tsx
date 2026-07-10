@@ -18,13 +18,14 @@ import {
 } from "@/lib/active-course-storage";
 import { resolveCanvasApiUrl } from "@/lib/canvas-connections";
 import { isCanvasConnectionRequiredError } from "@/lib/canvas-connection";
+import { mapCanvasCourseToInstructorCourse } from "@/pages/Instructor/InstructorCourses/mapCanvasCourse";
 import {
   CanvasApiError,
   fetchActiveCourse,
   fetchCourses,
   setActiveCourse as persistActiveCourse,
 } from "@/services/canvas";
-import type { ActiveCourseResponse, CanvasCourse } from "@/types/canvas";
+import type { ActiveCourseResponse } from "@/types/canvas";
 import type { ActiveCourseSelection, InstructorCourse } from "@/types/course";
 
 // Must exceed the backend's own per-call Canvas timeout (10s, see
@@ -32,24 +33,6 @@ import type { ActiveCourseSelection, InstructorCourse } from "@/types/course";
 // value here means the UI can show "timed out" while the backend is
 // still legitimately within its own budget and would have succeeded.
 const COURSE_SYNC_TIMEOUT_MS = 20000;
-
-function mapCanvasCourseToInstructorCourse(
-  course: CanvasCourse,
-): InstructorCourse | null {
-  if (course.local_id == null) {
-    return null;
-  }
-
-  return {
-    id: course.local_id,
-    code: course.course_code,
-    name: course.name,
-    progress: 0,
-    studentCount: course.total_students ?? 0,
-    assignmentCount: 0,
-    lastActivity: "Synced from Canvas",
-  };
-}
 
 function toActiveCourseSelection(
   course: InstructorCourse,
@@ -105,6 +88,7 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
     null,
   );
   const [availableCourses, setAvailableCourses] = useState<InstructorCourse[]>([]);
+  const [coursesRevision, setCoursesRevision] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -124,7 +108,11 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
   const usesCanvasCourses = Boolean(
     accessToken && user?.has_canvas_token && user.role === "instructor",
   );
-  const canvasUrl = resolveCanvasApiUrl(user, selectedInstitution.id);
+  const canvasUrl = resolveCanvasApiUrl(
+    user,
+    selectedInstitution.id,
+    selectedInstitution.canvasUrl,
+  );
   const persistenceScope = user
     ? String(user.id)
     : `institution-${selectedInstitution.id}`;
@@ -185,7 +173,7 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
         const coursesData = await fetchCoursesWithTimeout(accessToken, canvasUrl);
 
         const courses = coursesData
-          .map(mapCanvasCourseToInstructorCourse)
+          .map((course) => mapCanvasCourseToInstructorCourse(course, canvasUrl))
           .filter((course): course is InstructorCourse => course !== null);
         const selectedFromList = applyActiveCourseFromList(
           courses,
@@ -245,6 +233,10 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate active course on mount and auth changes
     void refreshActiveCourse();
   }, [refreshActiveCourse]);
+
+  const notifyCoursesChanged = useCallback(() => {
+    setCoursesRevision((count) => count + 1);
+  }, []);
 
   const selectActiveCourse = useCallback(
     async (
@@ -314,18 +306,22 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
     () => ({
       activeCourse,
       availableCourses,
+      coursesRevision,
       isLoading,
       isSaving,
       error,
       selectActiveCourse,
       refreshActiveCourse,
+      notifyCoursesChanged,
     }),
     [
       activeCourse,
       availableCourses,
+      coursesRevision,
       error,
       isLoading,
       isSaving,
+      notifyCoursesChanged,
       refreshActiveCourse,
       selectActiveCourse,
     ],

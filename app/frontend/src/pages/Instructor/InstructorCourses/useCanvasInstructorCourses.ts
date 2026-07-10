@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { isCanvasConnectionRequiredError } from "@/lib/canvas-connection";
 import { fetchCourseAssignments } from "@/services/assignments";
@@ -50,9 +51,11 @@ async function loadAssignmentCounts(
 /**
  * Loads instructor courses from Canvas for the selected institution.
  * Assignment counts are fetched in the background with limited concurrency.
+ * Reloads when the active-course provider signals Canvas data changed.
  */
 export function useCanvasInstructorCourses() {
   const { accessToken, user, logout } = useAuth();
+  const { coursesRevision } = useActiveCourse();
   const canvasUrl = useCanvasConnectionUrl();
   const [courses, setCourses] = useState<InstructorCourse[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -143,7 +146,7 @@ export function useCanvasInstructorCourses() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, canvasUrl, hasCanvasToken, logout, reloadToken]);
+  }, [accessToken, canvasUrl, coursesRevision, hasCanvasToken, logout, reloadToken]);
 
   return {
     courses,

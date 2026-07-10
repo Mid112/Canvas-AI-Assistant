@@ -5,17 +5,18 @@ import { describe, expect, it, vi } from "vitest";
 import { PendingActionControls } from "@/components/chat/PendingActionControls";
 
 describe("PendingActionControls", () => {
-  // Verifies: Shows confirm and cancel actions for pending proposals.
-  it("shows confirm and cancel actions for pending proposals", async () => {
+  it("shows confirm, edit, and cancel actions for pending proposals", async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();
     const onCancel = vi.fn();
+    const onModify = vi.fn();
 
     render(
       <PendingActionControls
         error="Unable to confirm action."
         onConfirm={onConfirm}
         onCancel={onCancel}
+        onModify={onModify}
       />,
     );
 
@@ -27,9 +28,11 @@ describe("PendingActionControls", () => {
     );
 
     await user.click(screen.getByRole("button", { name: "Confirm" }));
+    await user.click(screen.getByRole("button", { name: "Edit before sending" }));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(onConfirm).toHaveBeenCalledTimes(1);
+    expect(onModify).toHaveBeenCalledTimes(1);
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 

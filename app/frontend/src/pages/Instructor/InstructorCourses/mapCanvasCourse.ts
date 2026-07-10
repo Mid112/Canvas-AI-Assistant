@@ -24,5 +24,6 @@ export function mapCanvasCourseToInstructorCourse(
     assignmentCount,
     // Placeholder until we have real activity/progress aggregation from Canvas.
     lastActivity: "Synced from Canvas",
+    workflowState: course.workflow_state,
   };
 }

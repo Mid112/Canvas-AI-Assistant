@@ -55,17 +55,19 @@ function buildCreatePayload(options: FetchMessageDraftOptions) {
     options.prompt ??
     "Draft a friendly reminder about an upcoming assignment deadline.";
   const templateName = options.templateName ?? "Assignment Reminder";
+  const subject =
+    options.subject?.trim() || `${templateName}: Course Update`;
+  const body = options.body?.trim() || prompt;
 
   return {
     course_id: options.courseId ?? null,
     template_id: options.templateId ?? "assignment-reminder",
     template_name: templateName,
-    prompt,
-    subject: `${templateName}: Course Update`,
-    // Providing starter content keeps this route responsive when the
-    // backend is configured with a slow local model. The instructor can
-    // still edit the draft before sending.
-    body: prompt,
+    // When subject/body are already provided by the AI assistant, skip
+    // re-prompting the draft LLM by omitting `prompt`.
+    prompt: options.subject?.trim() && options.body?.trim() ? undefined : prompt,
+    subject,
+    body,
     recipients,
   };
 }

@@ -11,6 +11,7 @@ import { Link } from "react-router-dom";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { CoursePublishBadge } from "@/pages/Instructor/InstructorCourses/CoursePublishBadge";
 import { instructorCoursePath } from "@/routes/paths";
 import { formatInstructorCourseTitle } from "@/lib/format-course-title";
 import { cn } from "@/lib/utils";
@@ -29,11 +30,14 @@ export function InstructorCoursesCard({
   onSetActive,
   isSettingActive,
 }: InstructorCoursesCardProps) {
+  const isUnpublished = course.workflowState === "unpublished";
+
   return (
     <Card
       className={cn(
         "shadow-sm ring-1 ring-border/60",
         isActive && "ring-2 ring-primary",
+        isUnpublished && !isActive && "opacity-95",
       )}
     >
       <CardHeader className="space-y-3 border-b border-border/60 pb-4">
@@ -46,6 +50,7 @@ export function InstructorCoursesCard({
               <p className="font-semibold leading-snug">
                 {formatInstructorCourseTitle(course)}
               </p>
+              <CoursePublishBadge course={course} />
               {isActive ? (
                 <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                   Active
@@ -148,10 +153,11 @@ export function InstructorCoursesList({
             className="flex flex-wrap items-center justify-between gap-4 px-4 py-4"
           >
             <div className="min-w-0 space-y-1">
-              <p className="font-medium">
-                {formatInstructorCourseTitle(course)}
+              <p className="flex flex-wrap items-center gap-2 font-medium">
+                <span>{formatInstructorCourseTitle(course)}</span>
+                <CoursePublishBadge course={course} />
                 {activeCourseId === course.id ? (
-                  <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                     Active
                   </span>
                 ) : null}

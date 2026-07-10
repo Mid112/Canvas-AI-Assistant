@@ -38,7 +38,9 @@ export const paths = {
   },
 } as const;
 
-export function instructorSettingsPath(tab?: "canvas" | "notifications" | "security") {
+export function instructorSettingsPath(
+  tab?: "canvas" | "notifications" | "security" | "ai-models",
+) {
   if (!tab) {
     return paths.instructor.settings;
   }
@@ -83,6 +85,28 @@ export function instructorAssignmentUpdatePath(
 export function instructorDryRunPreviewPath(previewId: string) {
   const params = new URLSearchParams({ preview: previewId });
   return `${paths.instructor.dryRunPreview}?${params.toString()}`;
+}
+
+export function instructorMessagesPath(options?: {
+  tab?: "inbox" | "compose";
+}) {
+  if (!options?.tab) {
+    return paths.instructor.messages;
+  }
+
+  const params = new URLSearchParams({ tab: options.tab });
+  return `${paths.instructor.messages}?${params.toString()}`;
+}
+
+/** Location state used when opening the message draft from the AI assistant. */
+export interface AiMessageDraftLocationState {
+  aiMessageDraft?: {
+    subject?: string;
+    body?: string;
+    prompt?: string;
+    courseId?: number;
+    recipientIds?: string[];
+  };
 }
 
 export function instructorChatPreviewPath(

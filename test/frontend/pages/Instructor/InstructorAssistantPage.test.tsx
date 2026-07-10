@@ -25,6 +25,7 @@ vi.mock("@/services/assistant", () => ({
 }));
 
 beforeEach(() => {
+  localStorage.clear();
   mockUseAuth.mockReturnValue({
     user: {
       id: 1,
@@ -59,6 +60,9 @@ describe("InstructorAssistantPage", () => {
     expect(
       screen.getByText("Canvas Workflow Management Assistant"),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/Provider:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Model:/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Switch AI model" })).toBeInTheDocument();
     expect(screen.getByText("Suggested actions")).toBeInTheDocument();
     expect(screen.getByText("Show missing submissions")).toBeInTheDocument();
     expect(

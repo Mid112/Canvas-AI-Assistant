@@ -70,11 +70,13 @@ describe("ChatWindow", () => {
     mockUseActiveCourse.mockReturnValue({
       activeCourse: null,
       availableCourses: [],
+      coursesRevision: 0,
       isLoading: false,
       isSaving: false,
       error: null,
       selectActiveCourse: vi.fn(),
       refreshActiveCourse: vi.fn(),
+      notifyCoursesChanged: vi.fn(),
     });
   });
 
@@ -146,11 +148,13 @@ describe("ChatWindow", () => {
     mockUseActiveCourse.mockReturnValue({
       activeCourse: null,
       availableCourses: [],
+      coursesRevision: 0,
       isLoading: true,
       isSaving: false,
       error: null,
       selectActiveCourse: vi.fn(),
       refreshActiveCourse: vi.fn(),
+      notifyCoursesChanged: vi.fn(),
     });
     mockedSendAssistantMessage.mockResolvedValueOnce({
       content: "I can still help while course context loads.",

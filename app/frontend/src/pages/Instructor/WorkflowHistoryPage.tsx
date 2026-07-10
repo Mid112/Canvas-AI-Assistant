@@ -14,9 +14,11 @@ import {
   sortWorkflowHistoryByDate,
 } from "@/lib/workflow-history-query";
 import {
+  cancelWorkflow,
   downloadWorkflowHistoryCsv,
   fetchWorkflowHistory,
   getWorkflowHistoryStatusCounts,
+  undoWorkflow,
   WorkflowHistoryApiError,
 } from "@/services/workflowHistory";
 import {
@@ -38,6 +40,8 @@ export function WorkflowHistoryPage() {
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actingWorkflowId, setActingWorkflowId] = useState<string | null>(null);
 
   const filteredEntries = useMemo(
     () =>
@@ -110,6 +114,52 @@ export function WorkflowHistoryPage() {
 
   const handleExport = () => {
     downloadWorkflowHistoryCsv(filteredEntries);
+  };
+
+  const handleCancelPending = async (entry: WorkflowHistoryEntry) => {
+    if (!accessToken) {
+      return;
+    }
+    setActingWorkflowId(entry.id);
+    setActionError(null);
+    try {
+      const updated = await cancelWorkflow(accessToken, entry.id);
+      setEntries((current) =>
+        current.map((item) => (item.id === entry.id ? updated : item)),
+      );
+    } catch (error) {
+      const message =
+        error instanceof WorkflowHistoryApiError
+          ? error.message
+          : "Unable to cancel this workflow.";
+      setActionError(message);
+      throw error;
+    } finally {
+      setActingWorkflowId(null);
+    }
+  };
+
+  const handleUndoApproved = async (entry: WorkflowHistoryEntry) => {
+    if (!accessToken) {
+      return;
+    }
+    setActingWorkflowId(entry.id);
+    setActionError(null);
+    try {
+      const updated = await undoWorkflow(accessToken, entry);
+      setEntries((current) =>
+        current.map((item) => (item.id === entry.id ? updated : item)),
+      );
+    } catch (error) {
+      const message =
+        error instanceof WorkflowHistoryApiError
+          ? error.message
+          : "Unable to undo this workflow.";
+      setActionError(message);
+      throw error;
+    } finally {
+      setActingWorkflowId(null);
+    }
   };
 
   function formatFooter(): string {
@@ -243,7 +293,13 @@ export function WorkflowHistoryPage() {
 
       <Card className="shadow-sm ring-1 ring-border/60">
         <CardContent className="p-0">
-          <WorkflowHistoryTable entries={pagination.items} />
+          <WorkflowHistoryTable
+            entries={pagination.items}
+            onCancelPending={handleCancelPending}
+            onUndoApproved={handleUndoApproved}
+            actionError={actionError}
+            actingWorkflowId={actingWorkflowId}
+          />
         </CardContent>
         <CardFooter className="flex items-center justify-between border-t py-3 text-xs text-muted-foreground">
           <span>{formatFooter()}</span>

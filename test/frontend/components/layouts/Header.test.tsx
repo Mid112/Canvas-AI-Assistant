@@ -37,6 +37,21 @@ vi.mock("@/contexts/AuthContext", () => ({
   }),
 }));
 
+vi.mock("@/contexts/useInstitution", () => ({
+  useInstitution: () => ({
+    institutions: [],
+    selectedInstitution: {
+      id: "ubc",
+      name: "University of British Columbia",
+      shortName: "UBC",
+    },
+    setSelectedInstitution: vi.fn(),
+    courses: [],
+    analytics: {},
+    dashboard: {},
+  }),
+}));
+
 function getAccountMenuContainer() {
   return screen.getByRole("button", { name: "Account menu" }).parentElement;
 }

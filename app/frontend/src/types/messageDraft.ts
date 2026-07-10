@@ -25,6 +25,9 @@ export interface FetchMessageDraftOptions {
   templateId?: string;
   templateName?: string;
   prompt?: string;
+  /** Prefill from an AI assistant send_message proposal. */
+  subject?: string;
+  body?: string;
   recipients?: MessageRecipient[];
   emptyRecipients?: boolean;
   simulateLoadError?: boolean;

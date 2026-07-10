@@ -17,7 +17,7 @@ import {
   InstructorCoursesSection,
 } from "@/pages/Instructor/InstructorCourses/InstructorCoursesSection";
 import { useCanvasInstructorCourses } from "@/pages/Instructor/InstructorCourses/useCanvasInstructorCourses";
-import type { CourseViewMode } from "@/types/course";
+import type { CoursePublishFilter, CourseViewMode } from "@/types/course";
 
 export function InstructorCoursesPage() {
   const { user } = useAuth();
@@ -35,15 +35,16 @@ export function InstructorCoursesPage() {
     reloadCourses,
   } = useCanvasInstructorCourses();
   const [search, setSearch] = useState("");
+  const [publishFilter, setPublishFilter] = useState<CoursePublishFilter>("all");
   const [viewMode, setViewMode] = useState<CourseViewMode>("grid");
   const [settingActiveCourseId, setSettingActiveCourseId] = useState<number | null>(
     null,
   );
 
   const filteredCourses = useMemo(() => {
-    const filtered = filterInstructorCourses(courses, search);
+    const filtered = filterInstructorCourses(courses, search, publishFilter);
     return sortInstructorCourses(filtered);
-  }, [courses, search]);
+  }, [courses, publishFilter, search]);
 
   const handleSetActiveCourse = async (courseId: number) => {
     const course = courses.find((item) => item.id === courseId);
@@ -75,7 +76,12 @@ export function InstructorCoursesPage() {
         isRefreshing={isLoading}
       />
 
-      <InstructorCoursesSearch search={search} onSearchChange={setSearch} />
+      <InstructorCoursesSearch
+        search={search}
+        onSearchChange={setSearch}
+        publishFilter={publishFilter}
+        onPublishFilterChange={setPublishFilter}
+      />
 
       {error ? (
         <p
@@ -121,7 +127,13 @@ export function InstructorCoursesPage() {
           are available in your Canvas account.
         </p>
       ) : filteredCourses.length === 0 ? (
-        <InstructorCoursesEmptyState description="No Canvas courses matched this search." />
+        <InstructorCoursesEmptyState
+          description={
+            publishFilter === "all"
+              ? "No Canvas courses matched this search."
+              : "No courses matched this search and publish filter."
+          }
+        />
       ) : (
         <InstructorCoursesSection
           courses={filteredCourses}

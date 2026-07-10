@@ -175,14 +175,18 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
 
   const setSelectedInstitution = useCallback(
     (institutionId: string) => {
-      if (!institutions.some((institution) => institution.id === institutionId)) {
-        return;
-      }
+      const isKnownCatalog = institutions.some(
+        (institution) => institution.id === institutionId,
+      );
+      const isConnected = connectedInstitutions.some(
+        (institution) => institution.id === institutionId,
+      );
 
-      if (
-        connectedInstitutions.length > 0 &&
-        !connectedInstitutions.some((institution) => institution.id === institutionId)
-      ) {
+      if (connectedInstitutions.length > 0) {
+        if (!isConnected) {
+          return;
+        }
+      } else if (!isKnownCatalog) {
         return;
       }
 
@@ -195,12 +199,19 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
     [connectedInstitutions, user],
   );
 
-  const selectedInstitution = useMemo(
-    () =>
+  const selectedInstitution = useMemo(() => {
+    const fromConnected = connectedInstitutions.find(
+      (institution) => institution.id === selectedInstitutionId,
+    );
+    if (fromConnected) {
+      return fromConnected;
+    }
+
+    return (
       institutions.find((institution) => institution.id === selectedInstitutionId) ??
-      institutions[0]!,
-    [selectedInstitutionId],
-  );
+      institutions[0]!
+    );
+  }, [connectedInstitutions, selectedInstitutionId]);
 
   const institutionData = useMemo(
     () => getInstitutionData(selectedInstitution.id),

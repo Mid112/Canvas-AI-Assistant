@@ -31,7 +31,7 @@ const actionIcons = {
 // review: these two actions used to be indistinguishable from that button.
 const quickActionPrompts: Record<string, string> = {
   "draft-announcement":
-    "Help me draft a course announcement for my active course.",
+    "Draft a student message or course announcement for my active course. Propose a send_message action I can review and edit before sending.",
   "grade-analysis":
     "Give me a grade and submission performance analysis for my active course.",
 };

@@ -1,20 +1,31 @@
 import { useNavigate } from "react-router-dom";
-import { ChevronDown, ChevronUp, Home, LogOut, User } from "lucide-react";
+import {
+  Building2,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Home,
+  LogOut,
+  Settings2,
+  User,
+} from "lucide-react";
 
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { useInstitution } from "@/contexts/useInstitution";
 import { getInitials } from "@/lib/user-display";
 import { cn } from "@/lib/utils";
 import { getProfilePath } from "@/utils/navigation";
-import { paths } from "@/routes/paths";
+import { instructorSettingsPath, paths } from "@/routes/paths";
 import type { UserRole } from "@/types/user";
 
 interface AccountMenuProps {
@@ -40,10 +51,14 @@ export function AccountMenu({
 }: AccountMenuProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { selectedInstitution, institutions, setSelectedInstitution } =
+    useInstitution();
 
   const displayName = user?.name ?? "User";
   const initials = getInitials(displayName);
   const ChevronIcon = chevronDirection === "down" ? ChevronDown : ChevronUp;
+  const showInstitution = role === "instructor";
+  const subtitle = roleLabel;
 
   const handleNavigate = (path: string) => {
     onNavigate?.();
@@ -70,12 +85,16 @@ export function AccountMenu({
             {initials}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{displayName}</p>
-            {roleLabel ? (
-              <p className="truncate text-xs text-muted-foreground">{roleLabel}</p>
+            <p className="truncate text-sm font-medium text-sidebar-foreground">
+              {displayName}
+            </p>
+            {subtitle ? (
+              <p className="truncate text-xs text-sidebar-foreground/70">
+                {subtitle}
+              </p>
             ) : null}
           </div>
-          <ChevronIcon className="size-4 shrink-0 text-muted-foreground" />
+          <ChevronIcon className="size-4 shrink-0 text-sidebar-foreground/70" />
         </DropdownMenuTrigger>
       ) : (
         <DropdownMenuTrigger
@@ -86,7 +105,59 @@ export function AccountMenu({
           <User className="size-4" />
         </DropdownMenuTrigger>
       )}
-      <DropdownMenuContent align={align} side={side} className="w-48">
+      <DropdownMenuContent align={align} side={side} className="min-w-56">
+        {showInstitution ? (
+          <>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel>Institution</DropdownMenuLabel>
+              {institutions.length > 0 ? (
+                institutions.map((institution) => {
+                  const isActive = institution.id === selectedInstitution.id;
+                  return (
+                    <DropdownMenuItem
+                      key={institution.id}
+                      onClick={() => setSelectedInstitution(institution.id)}
+                      className="flex items-start justify-between gap-3"
+                    >
+                      <div className="min-w-0 space-y-0.5">
+                        <p className="text-sm font-medium">
+                          {institution.shortName}
+                        </p>
+                        <p className="truncate text-xs text-muted-foreground">
+                          {institution.canvasUrl ?? institution.name}
+                        </p>
+                      </div>
+                      {isActive ? (
+                        <Check
+                          className="mt-0.5 size-4 shrink-0 text-primary"
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                    </DropdownMenuItem>
+                  );
+                })
+              ) : (
+                <DropdownMenuItem
+                  onClick={() => handleNavigate(instructorSettingsPath("canvas"))}
+                  className="gap-2"
+                >
+                  <Building2 className="size-4" aria-hidden="true" />
+                  Connect institution
+                </DropdownMenuItem>
+              )}
+              {institutions.length > 0 ? (
+                <DropdownMenuItem
+                  onClick={() => handleNavigate(instructorSettingsPath("canvas"))}
+                  className="gap-2"
+                >
+                  <Settings2 className="size-4" aria-hidden="true" />
+                  Manage connections
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         <DropdownMenuGroup>
           <DropdownMenuItem onClick={() => handleNavigate(getProfilePath(role))}>
             <User />

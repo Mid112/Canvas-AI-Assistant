@@ -7,6 +7,7 @@ import { PreviewPanel } from "@/components/preview/PreviewPanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { defaultDryRunPreviewId } from "@/data/mockDryRunPreview";
 import { paths } from "@/routes/paths";
 import {
@@ -62,6 +63,7 @@ function DryRunPreviewContent({
 }: DryRunPreviewContentProps) {
   const navigate = useNavigate();
   const { accessToken, user } = useAuth();
+  const { refreshActiveCourse, notifyCoursesChanged } = useActiveCourse();
   const [preview, setPreview] = useState<DryRunPreviewData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -225,6 +227,8 @@ function DryRunPreviewContent({
       }
 
       setShowSuccessToast(true);
+      void refreshActiveCourse();
+      notifyCoursesChanged();
     } catch (error) {
       const message =
         error instanceof DryRunPreviewError || error instanceof AssistantApiError
