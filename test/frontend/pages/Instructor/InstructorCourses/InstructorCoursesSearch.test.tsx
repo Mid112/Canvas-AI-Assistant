@@ -17,6 +17,7 @@ describe("InstructorCoursesSearch", () => {
     );
 
     expect(screen.getByLabelText("Search courses")).toBeInTheDocument();
+    expect(screen.getByLabelText("Filter by publish status")).toBeInTheDocument();
   });
 
   // Verifies: Calls onSearchChange when typing.

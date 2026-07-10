@@ -362,6 +362,7 @@ describe("InstructorCoursesPage", () => {
     expect(within(totalCoursesCard!).getByText("3")).toBeInTheDocument();
   });
 
+  // Verifies: Shows the empty state when no courses match the search.
   it("shows the empty state when no courses match the search", async () => {
     const user = userEvent.setup();
 
