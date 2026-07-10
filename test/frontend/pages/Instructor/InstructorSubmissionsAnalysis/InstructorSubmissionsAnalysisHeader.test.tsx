@@ -9,6 +9,7 @@ import { renderWithRouter } from "@test/utils/renderWithRouter";
 const course = institutionCourseData[0]!.courses[0]!;
 
 describe("InstructorSubmissionsAnalysisHeader", () => {
+  // Verifies: Renders the page title, course context, and actions.
   it("renders the page title, course context, and actions", () => {
     renderWithRouter(
       <InstructorSubmissionsAnalysisHeader

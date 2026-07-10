@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { InstructorCoursesSearch } from "@/pages/Instructor/InstructorCourses/InstructorCoursesSearch";
 
 describe("InstructorCoursesSearch", () => {
+  // Verifies: Renders the search input.
   it("renders the search input", () => {
     render(
       <InstructorCoursesSearch search="" onSearchChange={vi.fn()} />,
@@ -13,6 +14,7 @@ describe("InstructorCoursesSearch", () => {
     expect(screen.getByLabelText("Search courses")).toBeInTheDocument();
   });
 
+  // Verifies: Calls onSearchChange when typing.
   it("calls onSearchChange when typing", async () => {
     const user = userEvent.setup();
     const onSearchChange = vi.fn();

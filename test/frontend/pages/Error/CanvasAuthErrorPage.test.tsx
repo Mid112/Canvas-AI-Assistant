@@ -29,6 +29,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 }));
 
 describe("CanvasAuthErrorPage", () => {
+  // Verifies: Renders the canvas authentication error overview.
   it("renders the canvas authentication error overview", () => {
     renderWithRouter(<CanvasAuthErrorPage />);
 
@@ -47,7 +48,7 @@ describe("CanvasAuthErrorPage", () => {
       screen.getByRole("button", { name: "Retry Connection" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Contact Administrator" }),
+      screen.getByRole("button", { name: "Contact Administrator" }),
     ).toHaveAttribute("href", "mailto:support@institution.edu");
     expect(
       screen.getByRole("button", { name: "Return to Login" }),
@@ -57,6 +58,7 @@ describe("CanvasAuthErrorPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders all failure reasons.
   it("renders all failure reasons", () => {
     renderWithRouter(<CanvasAuthErrorPage />);
 
@@ -69,6 +71,7 @@ describe("CanvasAuthErrorPage", () => {
     expect(screen.getByText("Network connectivity issues")).toBeInTheDocument();
   });
 
+  // Verifies: Navigates to canvas info on retry.
   it("navigates to canvas info on retry", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
@@ -80,6 +83,7 @@ describe("CanvasAuthErrorPage", () => {
     expect(mockNavigate).toHaveBeenCalledWith(paths.canvasInfo);
   });
 
+  // Verifies: Logs out and navigates to login on return.
   it("logs out and navigates to login on return", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();

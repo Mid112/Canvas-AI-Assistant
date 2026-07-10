@@ -75,6 +75,7 @@ describe("ConnectCanvasPage", () => {
     vi.useRealTimers();
   });
 
+  // Verifies: Renders the connect canvas flow.
   it("renders the connect canvas flow", () => {
     renderWithRouter(<ConnectCanvasPage />);
 
@@ -86,6 +87,7 @@ describe("ConnectCanvasPage", () => {
     expect(screen.getByLabelText(/Canvas API Token/i)).toBeInTheDocument();
   });
 
+  // Verifies: Navigates to review permissions after a successful connection.
   it("navigates to review permissions after a successful connection", async () => {
     const user = userEvent.setup();
     mockedUpdateCanvasConnections.mockResolvedValue({
@@ -114,6 +116,7 @@ describe("ConnectCanvasPage", () => {
     expect(mockRefreshUser).toHaveBeenCalledTimes(1);
   });
 
+  // Verifies: Still navigates when the post-connect auth refresh fails.
   it("still navigates when the post-connect auth refresh fails", async () => {
     const user = userEvent.setup();
     mockedUpdateCanvasConnections.mockResolvedValue({
@@ -142,6 +145,7 @@ describe("ConnectCanvasPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  // Verifies: Logs out when the session expires during connect.
   it("logs out when the session expires during connect", async () => {
     const user = userEvent.setup();
     const { CanvasApiError } = await import("@/services/canvas");
@@ -161,6 +165,7 @@ describe("ConnectCanvasPage", () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
+  // Verifies: Skips canvas connection and opens the query assistant.
   it("skips canvas connection and opens the query assistant", async () => {
     const user = userEvent.setup();
 

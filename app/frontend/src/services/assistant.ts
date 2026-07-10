@@ -78,6 +78,7 @@ function toAssistantMessageResult(
   const mapped = mapChatReplyToAssistantResponse(
     response.reply,
     response.is_error,
+    response.conversation_id,
   );
 
   return {
@@ -136,21 +137,25 @@ function mapWorkflowStatus(
 export function mapConversationToChatMessages(
   conversation: ConversationResponse,
 ): ChatMessage[] {
-  return conversation.messages.map((message) => {
+  return conversation.messages.flatMap((message): ChatMessage[] => {
     const timestamp = new Date(message.created_at);
 
     if (message.role === "assistant") {
       const parsed = parseStoredAssistantContent(message.content);
-      const mapped = parsed
-        ? mapChatReplyToAssistantResponse(parsed, false, conversation.id)
+      const reply =
+        parsed?.intent_preview && parsed.pending_message_id === undefined
+          ? { ...parsed, pending_message_id: message.id }
+          : parsed;
+      const mapped = reply
+        ? mapChatReplyToAssistantResponse(reply, false, conversation.id)
         : { content: message.content };
       const pendingActionStatus = mapWorkflowStatus(
         message.pending_action_status,
       );
       const pendingMessageId =
-        pendingActionStatus || parsed?.intent_preview ? message.id : undefined;
+        pendingActionStatus || reply?.intent_preview ? message.id : undefined;
 
-      return {
+      return [{
         id: `stored-${message.id}`,
         role: "assistant",
         content: mapped.content,
@@ -162,16 +167,20 @@ export function mapConversationToChatMessages(
         interpretedAction: mapped.interpretedAction,
         safetyBlocked: mapped.safetyBlocked,
         safetyMessage: mapped.safetyMessage,
-      };
+      }];
     }
 
-    return {
+    if (message.content.startsWith("[")) {
+      return [];
+    }
+
+    return [{
       id: `stored-${message.id}`,
       role: "user",
       content: message.content,
       timestamp,
       conversationId: conversation.id,
-    };
+    }];
   });
 }
 

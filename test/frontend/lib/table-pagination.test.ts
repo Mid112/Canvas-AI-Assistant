@@ -12,6 +12,7 @@ describe("table-pagination", () => {
     name: `Item ${index + 1}`,
   }));
 
+  // Verifies: Paginates items.
   it("paginates items", () => {
     const result = paginateItems(items, 2, 10);
 
@@ -22,6 +23,7 @@ describe("table-pagination", () => {
     expect(result.items[0]?.id).toBe(11);
   });
 
+  // Verifies: Filters items by search text.
   it("filters items by search text", () => {
     const filtered = filterBySearch(items, "item 2", (item) => item.name);
 
@@ -31,6 +33,7 @@ describe("table-pagination", () => {
     );
   });
 
+  // Verifies: Uses default page size constant.
   it("uses default page size constant", () => {
     expect(DEFAULT_PAGE_SIZE).toBe(10);
   });

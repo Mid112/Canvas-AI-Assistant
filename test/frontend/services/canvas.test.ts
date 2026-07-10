@@ -12,6 +12,7 @@ describe("canvas service", () => {
     vi.restoreAllMocks();
   });
 
+  // Verifies: Sends a PATCH request with a single canvas token.
   it("sends a PATCH request with a single canvas token", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
@@ -39,6 +40,7 @@ describe("canvas service", () => {
     expect(result.has_canvas_token).toBe(true);
   });
 
+  // Verifies: Sends one PATCH request per token when saving multiple tokens.
   it("sends one PATCH request per token when saving multiple tokens", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
@@ -64,6 +66,7 @@ describe("canvas service", () => {
     });
   });
 
+  // Verifies: Throws CanvasApiError when the request fails.
   it("throws CanvasApiError when the request fails", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: false,
@@ -78,6 +81,7 @@ describe("canvas service", () => {
     });
   });
 
+  // Verifies: Validates a canvas token through the backend proxy.
   it("validates a canvas token through the backend proxy", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
@@ -101,6 +105,7 @@ describe("canvas service", () => {
     expect(result).toBe("valid");
   });
 
+  // Verifies: Returns expired when the backend reports an expired token.
   it("returns expired when the backend reports an expired token", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
@@ -113,6 +118,7 @@ describe("canvas service", () => {
     expect(result).toBe("expired");
   });
 
+  // Verifies: Returns invalid when the backend cannot validate the token.
   it("returns invalid when the backend cannot validate the token", async () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Network error"));
 

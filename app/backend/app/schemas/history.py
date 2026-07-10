@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -11,8 +12,8 @@ class WorkflowHistoryItem(BaseModel):
     action_name: str
     user_prompt: str
     status: str
-    proposed_action: dict
-    affected_resources: list[dict]
+    proposed_action: dict[str, Any]
+    affected_resources: list[dict[str, Any]]
     created_at: datetime
     executed_at: datetime | None = None
     user_name: str
@@ -36,3 +37,21 @@ class WorkflowHistoryItem(BaseModel):
 class WorkflowHistoryResponse(BaseModel):
     items: list[WorkflowHistoryItem]
     total: int
+
+
+class AuditLogResponse(BaseModel):
+    id: int
+    user_id: int
+    user_email: str
+    user_role: str
+    workflow_id: int | None
+    course_id: int | None
+    action: str
+    resource_type: str
+    resource_id: str | None
+    operation: str
+    status: str
+    before_data: dict[str, Any] | None
+    after_data: dict[str, Any] | None
+    request_payload: dict[str, Any] | None
+    timestamp: datetime

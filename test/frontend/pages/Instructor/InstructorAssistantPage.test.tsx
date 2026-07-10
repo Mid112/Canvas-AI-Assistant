@@ -52,6 +52,7 @@ beforeEach(() => {
 });
 
 describe("InstructorAssistantPage", () => {
+  // Verifies: Renders the assistant header, suggested actions, and chat.
   it("renders the assistant header, suggested actions, and chat", () => {
     renderWithInstitution(<InstructorAssistantPage />);
 

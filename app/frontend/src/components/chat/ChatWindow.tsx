@@ -14,6 +14,7 @@ import {
   AssistantApiError,
   cancelAssistantAction,
   confirmAssistantAction,
+  fetchConversation,
   mapConversationToChatMessages,
   sendAssistantMessage,
   type ConversationResponse,
@@ -68,6 +69,7 @@ export function ChatWindow({
   );
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const initialPromptHandledRef = useRef<string | null>(null);
+  const hydratedConversationRef = useRef<number | undefined>(undefined);
   const isDeliveringRef = useRef(false);
 
   const assistantContext = useMemo(
@@ -103,7 +105,58 @@ export function ChatWindow({
     setInputError(null);
     setRetryMessage(null);
     setPendingActionError(null);
+    hydratedConversationRef.current = loadedConversation.id;
   }, [loadedConversation]);
+
+  useEffect(() => {
+    if (
+      !accessToken ||
+      loadedConversation ||
+      initialConversationId === undefined ||
+      hydratedConversationRef.current === initialConversationId
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function hydrateConversation() {
+      try {
+        const conversation = await fetchConversation(
+          accessToken!,
+          initialConversationId!,
+        );
+        if (cancelled) {
+          return;
+        }
+
+        const restoredMessages = mapConversationToChatMessages(conversation);
+        setMessages(restoredMessages.length > 0 ? restoredMessages : seedChatMessages);
+        setConversationId(conversation.id);
+        setActivePendingMessageId(
+          restoredMessages.find(
+            (message) => message.pendingActionStatus === "pending",
+          )?.pendingMessageId,
+        );
+        hydratedConversationRef.current = initialConversationId;
+      } catch {
+        if (cancelled) {
+          return;
+        }
+
+        // Keep the seeded assistant greeting if restoring history fails; the
+        // next send still continues in the existing conversation id.
+        setConversationId(initialConversationId);
+        setActivePendingMessageId(initialPendingMessageId);
+      }
+    }
+
+    void hydrateConversation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, initialConversationId, initialPendingMessageId, loadedConversation]);
 
   const appendAssistantMessage = useCallback(
     (response: {
@@ -290,10 +343,18 @@ export function ChatWindow({
       return;
     }
 
+    // Deliberately not reset back to null after sending: onInitialPromptConsumed
+    // clears the prompt in the parent asynchronously, so this same effect can
+    // still re-run with the identical initialPrompt before that update lands
+    // (guaranteed to happen under React 18 StrictMode's dev-only mount ->
+    // cleanup -> remount cycle). Resetting the guard here made it forget it
+    // had already sent this exact prompt, so the remount sent it a second
+    // time. The guard only needs to remember "have I handled this string
+    // yet" — the next real render, once pendingPrompt is actually cleared,
+    // falls through via the `!initialPrompt` check above instead.
     initialPromptHandledRef.current = initialPrompt;
     handleSend(initialPrompt);
     onInitialPromptConsumed?.();
-    initialPromptHandledRef.current = null;
   }, [handleSend, initialPrompt, onInitialPromptConsumed]);
 
   const handleRetry = () => {

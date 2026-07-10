@@ -12,7 +12,6 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config import settings
@@ -106,6 +105,7 @@ def _student(canvas_user_id: str, course_id: int) -> StudentResponse:
     )
 
 
+# Verifies: Send rejects recipient not enrolled.
 def test_send_rejects_recipient_not_enrolled(client):
     headers, local_course_id = _register_with_canvas(client)
     draft_id = _create_draft(client, headers, local_course_id, recipient_ids=["999"])
@@ -130,6 +130,7 @@ def test_send_rejects_recipient_not_enrolled(client):
     assert _draft_status(draft_id) == "draft"
 
 
+# Verifies: Send succeeds when recipient enrolled.
 def test_send_succeeds_when_recipient_enrolled(client):
     headers, local_course_id = _register_with_canvas(client)
     draft_id = _create_draft(client, headers, local_course_id, recipient_ids=["42"])
@@ -155,6 +156,41 @@ def test_send_succeeds_when_recipient_enrolled(client):
     assert _draft_status(draft_id) == "sent"
 
 
+# Verifies: Send accepts submission backed recipient when roster is empty.
+def test_send_accepts_submission_backed_recipient_when_roster_is_empty(client):
+    headers, local_course_id = _register_with_canvas(client)
+    draft_id = _create_draft(client, headers, local_course_id, recipient_ids=["42"])
+
+    with (
+        patch(
+            "app.services.message_validation.get_students",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            "app.services.message_validation.fetch_assignments",
+            new_callable=AsyncMock,
+            return_value=[{"id": 77}],
+        ),
+        patch(
+            "app.services.message_validation.fetch_submissions",
+            new_callable=AsyncMock,
+            return_value=[{"user_id": 42}],
+        ),
+        patch("app.services.canvas.send_conversation", new_callable=AsyncMock) as mock_send,
+    ):
+        resp = client.post(
+            f"/api/v1/messages/drafts/{draft_id}/send?canvas_url={CANVAS_URL}",
+            headers=headers,
+        )
+
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["delivery_mode"] == "conversation"
+    mock_send.assert_awaited_once()
+    assert _draft_status(draft_id) == "sent"
+
+
+# Verifies: Send without recipients skips enrollment check.
 def test_send_without_recipients_skips_enrollment_check(client):
     """No targeted recipients means a class-wide announcement — the
     enrollment check must not run at all in this branch."""
@@ -182,6 +218,7 @@ def test_send_without_recipients_skips_enrollment_check(client):
     assert _draft_status(draft_id) == "sent"
 
 
+# Verifies: Send rejects recipient when second of two not enrolled.
 def test_send_rejects_recipient_when_second_of_two_not_enrolled(client):
     """Partial enrollment: one valid recipient plus one invalid one must
     still block the whole send, not silently drop the invalid one."""

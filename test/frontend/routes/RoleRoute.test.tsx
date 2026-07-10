@@ -58,6 +58,7 @@ describe("RoleRoute", () => {
     );
   }
 
+  // Verifies: Renders child routes when the user role matches.
   it("renders child routes when the user role matches", () => {
     mockedUseAuth.mockReturnValue({
       user: adminUser,
@@ -73,6 +74,7 @@ describe("RoleRoute", () => {
     expect(screen.getByText("Protected role content")).toBeInTheDocument();
   });
 
+  // Verifies: Redirects users to their own dashboard when the role does not match.
   it("redirects users to their own dashboard when the role does not match", () => {
     mockedUseAuth.mockReturnValue({
       user: instructorUser,
@@ -89,6 +91,7 @@ describe("RoleRoute", () => {
     expect(screen.queryByText("Protected role content")).not.toBeInTheDocument();
   });
 
+  // Verifies: Blocks instructors from admin audit logs route.
   it("blocks instructors from admin audit logs route", () => {
     mockedUseAuth.mockReturnValue({
       user: instructorUser,

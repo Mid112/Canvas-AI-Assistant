@@ -48,6 +48,8 @@ export function PreviewPanel({
         summary={preview.summary}
         aiExplanation={preview.aiExplanation}
         aiExplanationNote={preview.aiExplanationNote}
+        changesFromPreviousRequest={preview.changesFromPreviousRequest}
+        proposedPlan={preview.proposedPlan}
       />
 
       <ActionTypeSection

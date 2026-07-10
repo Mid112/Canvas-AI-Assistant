@@ -15,6 +15,7 @@ vi.mock("@/config/api", () => ({
 }));
 
 describe("mapChatReplyToAssistantResponse", () => {
+  // Verifies: Maps intent previews to assistant content and interpreted actions.
   it("maps intent previews to assistant content and interpreted actions", () => {
     const response = mapChatReplyToAssistantResponse(
       {
@@ -35,6 +36,7 @@ describe("mapChatReplyToAssistantResponse", () => {
     expect(response.interpretedAction?.course).toBe("COSC 499");
   });
 
+  // Verifies: Maps API errors to user-facing content.
   it("maps API errors to user-facing content", () => {
     const response = mapChatReplyToAssistantResponse(
       { error: "LLM unavailable" },
@@ -44,6 +46,7 @@ describe("mapChatReplyToAssistantResponse", () => {
     expect(response.content).toBe("LLM unavailable");
   });
 
+  // Verifies: Maps successful confirm replies.
   it("maps successful confirm replies", () => {
     const response = mapChatReplyToAssistantResponse(
       {
@@ -64,6 +67,7 @@ describe("sendAssistantMessage", () => {
     vi.restoreAllMocks();
   });
 
+  // Verifies: Calls the chat API and maps the response.
   it("calls the chat API and maps the response", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(
@@ -88,6 +92,7 @@ describe("sendAssistantMessage", () => {
     expect(response.conversationId).toBe(9);
   });
 
+  // Verifies: Posts course context when provided.
   it("posts course context when provided", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(
@@ -119,6 +124,7 @@ describe("sendAssistantMessage", () => {
     );
   });
 
+  // Verifies: Includes conversation_id on follow-up turns.
   it("includes conversation_id on follow-up turns", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(
@@ -146,6 +152,7 @@ describe("sendAssistantMessage", () => {
     );
   });
 
+  // Verifies: Throws AssistantApiError when the API request fails.
   it("throws AssistantApiError when the API request fails", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(JSON.stringify({ detail: "Service unavailable" }), {
@@ -252,6 +259,7 @@ describe("confirmAssistantAction", () => {
     vi.restoreAllMocks();
   });
 
+  // Verifies: Posts to /chat/confirm with conversation and pending message ids.
   it("posts to /chat/confirm with conversation and pending message ids", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(

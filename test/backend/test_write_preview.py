@@ -4,6 +4,7 @@ from app.services.write_preview import generate_write_preview
 COURSE = Course(id=1, canvas_course_id="1", canvas_url="http://localhost:3000", name="cosc 501", instructor_id=1)
 
 
+# Verifies: Create assignment preview reversible and resources.
 def test_create_assignment_preview_reversible_and_resources():
     preview = generate_write_preview(
         {"action": "create_assignment", "title": "Midterm", "due_date": "2030-01-01T00:00:00", "points_possible": 100},
@@ -17,6 +18,7 @@ def test_create_assignment_preview_reversible_and_resources():
     ]
 
 
+# Verifies: Update assignment preview resources reflect changed fields.
 def test_update_assignment_preview_resources_reflect_changed_fields():
     preview = generate_write_preview(
         {"action": "update_assignment", "assignment_id": 42, "points_possible": 50},
@@ -30,6 +32,7 @@ def test_update_assignment_preview_resources_reflect_changed_fields():
     assert resources["assignment"]["changed_fields"] == ["points_possible"]
 
 
+# Verifies: Send message preview is irreversible with note and audience.
 def test_send_message_preview_is_irreversible_with_note_and_audience():
     preview = generate_write_preview(
         {"action": "send_message", "subject": "Reminder", "body": "Please submit by Friday"},
@@ -43,6 +46,7 @@ def test_send_message_preview_is_irreversible_with_note_and_audience():
     assert preview["audience"] == {"scope": "entire_class", "size": None}
 
 
+# Verifies: Send message preview supports selected recipients.
 def test_send_message_preview_supports_selected_recipients():
     preview = generate_write_preview(
         {
@@ -59,6 +63,7 @@ def test_send_message_preview_supports_selected_recipients():
     assert "2 selected student" in preview["summary"]
 
 
+# Verifies: Update grade preview marks submission modified.
 def test_update_grade_preview_marks_submission_modified():
     preview = generate_write_preview(
         {"action": "update_grade", "assignment_id": 1, "student_id": 2, "new_grade": "A"},
@@ -70,6 +75,7 @@ def test_update_grade_preview_marks_submission_modified():
     assert resources["submission"]["changed_fields"] == ["grade"]
 
 
+# Verifies: Unrecognized action falls back safely.
 def test_unrecognized_action_falls_back_safely():
     """generate_write_preview's fallback (_preview_generic) is only ever
     reached in practice for a read action if something upstream mis-routes

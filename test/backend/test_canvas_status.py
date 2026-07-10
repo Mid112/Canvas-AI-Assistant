@@ -1,6 +1,7 @@
 from app.services.canvas_status import CanvasWriteResult
 
 
+# Verifies: Reversible result has no reversibility note.
 def test_reversible_result_has_no_reversibility_note():
     result = CanvasWriteResult(
         action="create_assignment",
@@ -14,6 +15,7 @@ def test_reversible_result_has_no_reversibility_note():
     assert body["affected_resources"] == [{"type": "assignment", "id": 1, "status": "created"}]
 
 
+# Verifies: Irreversible result includes reversibility note.
 def test_irreversible_result_includes_reversibility_note():
     result = CanvasWriteResult(
         action="send_message",
@@ -26,11 +28,13 @@ def test_irreversible_result_includes_reversibility_note():
     assert body["reversibility_note"] == "This action was not reversible."
 
 
+# Verifies: Affected resources always a list even when empty.
 def test_affected_resources_always_a_list_even_when_empty():
     result = CanvasWriteResult(action="update_grade", data={}, reversible=True, affected_resources=[])
     assert result.to_dict()["affected_resources"] == []
 
 
+# Verifies: Success defaults true and data model dump still used.
 def test_success_defaults_true_and_data_model_dump_still_used():
     """model_dump() handling for Pydantic .data objects is unchanged by
     the new fields — success still defaults True, data still model_dumps."""

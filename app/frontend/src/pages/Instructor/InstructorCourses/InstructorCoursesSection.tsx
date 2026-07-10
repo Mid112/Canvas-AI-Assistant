@@ -1,8 +1,10 @@
 import {
   BookOpen,
+  CheckCircle2,
   ClipboardList,
   LayoutGrid,
   List,
+  Loader2,
   Users,
 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -103,8 +105,21 @@ export function InstructorCoursesCard({
           className="col-span-2 w-full"
           onClick={onSetActive}
           disabled={isActive || isSettingActive}
+          aria-busy={isSettingActive && !isActive}
         >
-          {isActive ? "Active Course" : "Set Active"}
+          {isSettingActive ? (
+            <>
+              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              Setting active...
+            </>
+          ) : isActive ? (
+            <>
+              <CheckCircle2 className="size-4" aria-hidden="true" />
+              Active Course
+            </>
+          ) : (
+            "Set Active"
+          )}
         </Button>
       </CardFooter>
     </Card>
@@ -115,14 +130,14 @@ interface InstructorCoursesListProps {
   courses: InstructorCourse[];
   activeCourseId: number | null;
   onSetActiveCourse: (courseId: number) => void;
-  isSettingActiveCourse: boolean;
+  settingActiveCourseId: number | null;
 }
 
 export function InstructorCoursesList({
   courses,
   activeCourseId,
   onSetActiveCourse,
-  isSettingActiveCourse,
+  settingActiveCourseId,
 }: InstructorCoursesListProps) {
   return (
     <div className="overflow-hidden rounded-xl border bg-card">
@@ -158,11 +173,26 @@ export function InstructorCoursesList({
               </Link>
               <Button
                 size="sm"
-                variant="outline"
+                variant={activeCourseId === course.id ? "secondary" : "outline"}
                 onClick={() => onSetActiveCourse(course.id)}
-                disabled={activeCourseId === course.id || isSettingActiveCourse}
+                disabled={
+                  activeCourseId === course.id || settingActiveCourseId !== null
+                }
+                aria-busy={settingActiveCourseId === course.id}
               >
-                {activeCourseId === course.id ? "Active" : "Set Active"}
+                {settingActiveCourseId === course.id ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                    Setting...
+                  </>
+                ) : activeCourseId === course.id ? (
+                  <>
+                    <CheckCircle2 className="size-4" aria-hidden="true" />
+                    Active
+                  </>
+                ) : (
+                  "Set Active"
+                )}
               </Button>
             </div>
           </li>
@@ -178,7 +208,7 @@ interface InstructorCoursesSectionProps {
   onViewModeChange: (mode: "grid" | "list") => void;
   activeCourseId: number | null;
   onSetActiveCourse: (courseId: number) => void;
-  isSettingActiveCourse: boolean;
+  settingActiveCourseId: number | null;
 }
 
 export function InstructorCoursesSection({
@@ -187,7 +217,7 @@ export function InstructorCoursesSection({
   onViewModeChange,
   activeCourseId,
   onSetActiveCourse,
-  isSettingActiveCourse,
+  settingActiveCourseId,
 }: InstructorCoursesSectionProps) {
   return (
     <section aria-labelledby="your-courses-heading" className="space-y-4">
@@ -227,7 +257,7 @@ export function InstructorCoursesSection({
               course={course}
               isActive={activeCourseId === course.id}
               onSetActive={() => onSetActiveCourse(course.id)}
-              isSettingActive={isSettingActiveCourse}
+              isSettingActive={settingActiveCourseId === course.id}
             />
           ))}
         </div>
@@ -236,7 +266,7 @@ export function InstructorCoursesSection({
           courses={courses}
           activeCourseId={activeCourseId}
           onSetActiveCourse={onSetActiveCourse}
-          isSettingActiveCourse={isSettingActiveCourse}
+          settingActiveCourseId={settingActiveCourseId}
         />
       )}
     </section>

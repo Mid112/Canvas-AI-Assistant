@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { LoginWelcome } from "@/pages/Auth/Login/LoginWelcome";
 
 describe("LoginWelcome", () => {
+  // Verifies: Renders the welcome heading.
   it("renders the welcome heading", () => {
     render(<LoginWelcome />);
 
@@ -12,6 +13,7 @@ describe("LoginWelcome", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders the sign-in subtitle.
   it("renders the sign-in subtitle", () => {
     render(<LoginWelcome />);
 

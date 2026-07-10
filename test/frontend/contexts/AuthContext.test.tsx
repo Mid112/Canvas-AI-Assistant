@@ -64,12 +64,14 @@ describe("AuthContext", () => {
     mockedGetStoredToken.mockReturnValue(null);
   });
 
+  // Verifies: Throws when useAuth is used outside AuthProvider.
   it("throws when useAuth is used outside AuthProvider", () => {
     expect(() => {
       renderHook(() => useAuth());
     }).toThrow("useAuth must be used within an AuthProvider");
   });
 
+  // Verifies: Starts unauthenticated when no token is stored.
   it("starts unauthenticated when no token is stored", async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -82,6 +84,7 @@ describe("AuthContext", () => {
     expect(result.current.accessToken).toBeNull();
   });
 
+  // Verifies: Loads the current user when a stored token exists.
   it("loads the current user when a stored token exists", async () => {
     mockedGetStoredToken.mockReturnValue("stored-token");
     mockedFetchCurrentUser.mockResolvedValue(mockUserResponse);
@@ -108,6 +111,7 @@ describe("AuthContext", () => {
     });
   });
 
+  // Verifies: Clears an invalid stored token on mount.
   it("clears an invalid stored token on mount", async () => {
     mockedGetStoredToken.mockReturnValue("invalid-token");
     mockedFetchCurrentUser.mockRejectedValue(new Error("Unauthorized"));
@@ -124,6 +128,7 @@ describe("AuthContext", () => {
     expect(result.current.accessToken).toBeNull();
   });
 
+  // Verifies: Clears auth state when /auth/me returns an unsupported role.
   it("clears auth state when /auth/me returns an unsupported role", async () => {
     mockedGetStoredToken.mockReturnValue("stored-token");
     mockedFetchCurrentUser.mockResolvedValue({
@@ -143,6 +148,7 @@ describe("AuthContext", () => {
     expect(result.current.accessToken).toBeNull();
   });
 
+  // Verifies: Logs in and stores the token.
   it("logs in and stores the token", async () => {
     mockedLoginUser.mockResolvedValue({
       access_token: "new-token",
@@ -178,6 +184,7 @@ describe("AuthContext", () => {
     expect(result.current.user?.email).toBe("user@university.edu");
   });
 
+  // Verifies: Refreshes the current user after login.
   it("refreshes the current user after login", async () => {
     mockedLoginUser.mockResolvedValue({
       access_token: "new-token",
@@ -232,6 +239,7 @@ describe("AuthContext", () => {
     ]);
   });
 
+  // Verifies: Returns null from refreshUser when there is no access token.
   it("returns null from refreshUser when there is no access token", async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -250,6 +258,7 @@ describe("AuthContext", () => {
     expect(mockedFetchCurrentUser).not.toHaveBeenCalled();
   });
 
+  // Verifies: Registers and stores the token.
   it("registers and stores the token", async () => {
     mockedRegisterUser.mockResolvedValue({
       access_token: "register-token",
@@ -286,6 +295,7 @@ describe("AuthContext", () => {
     expect(result.current.user?.email).toBe("new@university.edu");
   });
 
+  // Verifies: Logs out and clears auth state.
   it("logs out and clears auth state", async () => {
     mockedGetStoredToken.mockReturnValue("stored-token");
     mockedFetchCurrentUser.mockResolvedValue(mockUserResponse);

@@ -7,6 +7,7 @@ import { AssistantMessage } from "@/components/chat/AssistantMessage";
 import { ExplanationCard } from "@/components/chat/ExplanationCard";
 
 describe("ExplanationCard", () => {
+  // Verifies: Renders the explanation text.
   it("renders the explanation text", () => {
     render(
       <ExplanationCard explanation="I analyzed submission data and identified students who have not submitted Assignment 3." />,
@@ -20,6 +21,7 @@ describe("ExplanationCard", () => {
 });
 
 describe("ActionCard", () => {
+  // Verifies: Renders interpreted action details.
   it("renders interpreted action details", () => {
     render(
       <MemoryRouter>
@@ -39,6 +41,7 @@ describe("ActionCard", () => {
     expect(screen.getByText("12 students")).toBeInTheDocument();
   });
 
+  // Verifies: Renders action links when provided.
   it("renders action links when provided", () => {
     render(
       <MemoryRouter>
@@ -63,6 +66,7 @@ describe("ActionCard", () => {
 });
 
 describe("AssistantMessage", () => {
+  // Verifies: Renders explanation and action cards when provided.
   it("renders explanation and action cards when provided", () => {
     render(
       <AssistantMessage
@@ -87,6 +91,7 @@ describe("AssistantMessage", () => {
     expect(screen.getByText("Interpreted Action")).toBeInTheDocument();
   });
 
+  // Verifies: Renders a safety notice when the request was blocked.
   it("renders a safety notice when the request was blocked", () => {
     render(
       <AssistantMessage

@@ -25,6 +25,17 @@ const actionIcons = {
   "grade-analysis": Bot,
 } as const;
 
+// Prompts that take the instructor straight into a real assistant turn for
+// that specific task, rather than dropping them on the same blank chat as
+// the generic "Open AI Assistant" button — see the AI assistant persona
+// review: these two actions used to be indistinguishable from that button.
+const quickActionPrompts: Record<string, string> = {
+  "draft-announcement":
+    "Help me draft a course announcement for my active course.",
+  "grade-analysis":
+    "Give me a grade and submission performance analysis for my active course.",
+};
+
 export function InstructorDashboardQuickActions({
   actions,
 }: InstructorDashboardQuickActionsProps) {
@@ -39,6 +50,13 @@ export function InstructorDashboardQuickActions({
       navigate(paths.instructor.assignmentCreate);
       return;
     }
+
+    const initialPrompt = quickActionPrompts[actionId];
+    if (initialPrompt) {
+      navigate(paths.instructor.assistant, { state: { initialPrompt } });
+      return;
+    }
+
     openAssistant();
   };
 

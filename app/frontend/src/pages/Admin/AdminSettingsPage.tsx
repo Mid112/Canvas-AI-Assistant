@@ -10,6 +10,9 @@ import {
   updateAdminSettings,
   type AdminSettings,
 } from "@/services/adminSettings";
+import { createAdmin } from "@/services/adminUsers";
+
+const emptyAdminForm = { name: "", email: "", password: "" };
 
 export function AdminSettingsPage() {
   const { accessToken } = useAuth();
@@ -18,6 +21,42 @@ export function AdminSettingsPage() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const [newAdmin, setNewAdmin] = useState(emptyAdminForm);
+  const [isCreatingAdmin, setIsCreatingAdmin] = useState(false);
+  const [createAdminError, setCreateAdminError] = useState<string | null>(null);
+  const [createAdminSuccess, setCreateAdminSuccess] = useState<string | null>(null);
+
+  const canCreateAdmin =
+    newAdmin.name.trim() !== "" &&
+    newAdmin.email.trim() !== "" &&
+    newAdmin.password.length >= 8;
+
+  async function handleCreateAdmin() {
+    if (!accessToken || !canCreateAdmin) {
+      return;
+    }
+
+    setIsCreatingAdmin(true);
+    setCreateAdminError(null);
+    setCreateAdminSuccess(null);
+
+    try {
+      const created = await createAdmin(accessToken, {
+        name: newAdmin.name.trim(),
+        email: newAdmin.email.trim(),
+        password: newAdmin.password,
+      });
+      setNewAdmin(emptyAdminForm);
+      setCreateAdminSuccess(`${created.email} can now sign in as an administrator.`);
+    } catch (error) {
+      setCreateAdminError(
+        error instanceof Error ? error.message : "Unable to create admin account.",
+      );
+    } finally {
+      setIsCreatingAdmin(false);
+    }
+  }
 
   useEffect(() => {
     if (!accessToken) {
@@ -172,6 +211,71 @@ export function AdminSettingsPage() {
           ) : null}
           {successMessage ? (
             <p className="text-sm text-emerald-600">{successMessage}</p>
+          ) : null}
+        </CardFooter>
+      </Card>
+
+      <Card className="max-w-2xl shadow-sm ring-1 ring-border/60">
+        <CardHeader>
+          <CardTitle>Administrators</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Create another administrator account. Do this now for anyone who
+            should have admin access if you're ever unable to sign in —
+            there's no other way to recover admin access from within the
+            product.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="new-admin-name">Name</Label>
+            <Input
+              id="new-admin-name"
+              value={newAdmin.name}
+              onChange={(event) =>
+                setNewAdmin((current) => ({ ...current, name: event.target.value }))
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-admin-email">Email</Label>
+            <Input
+              id="new-admin-email"
+              type="email"
+              value={newAdmin.email}
+              onChange={(event) =>
+                setNewAdmin((current) => ({ ...current, email: event.target.value }))
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-admin-password">Temporary password</Label>
+            <Input
+              id="new-admin-password"
+              type="password"
+              autoComplete="new-password"
+              value={newAdmin.password}
+              onChange={(event) =>
+                setNewAdmin((current) => ({ ...current, password: event.target.value }))
+              }
+            />
+            <p className="text-xs text-muted-foreground">At least 8 characters.</p>
+          </div>
+        </CardContent>
+        <CardFooter className="flex flex-col items-start gap-2">
+          <Button
+            type="button"
+            onClick={() => void handleCreateAdmin()}
+            disabled={!canCreateAdmin || isCreatingAdmin}
+          >
+            {isCreatingAdmin ? "Creating..." : "Create admin account"}
+          </Button>
+          {createAdminError ? (
+            <p role="alert" className="text-sm text-destructive">
+              {createAdminError}
+            </p>
+          ) : null}
+          {createAdminSuccess ? (
+            <p className="text-sm text-emerald-600">{createAdminSuccess}</p>
           ) : null}
         </CardFooter>
       </Card>

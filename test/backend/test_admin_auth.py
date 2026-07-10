@@ -91,6 +91,7 @@ async def _get_user_by_email(email: str):
 # Admin login — happy path
 # ---------------------------------------------------------------------------
 
+# Verifies: Admin login returns 200 and token.
 def test_admin_login_returns_200_and_token(client, admin_credentials):
     resp = client.post("/api/v1/auth/admin/login", json=admin_credentials)
     assert resp.status_code == 200
@@ -98,6 +99,7 @@ def test_admin_login_returns_200_and_token(client, admin_credentials):
     assert resp.json()["token_type"] == "bearer"
 
 
+# Verifies: Admin login token contains admin role.
 def test_admin_login_token_contains_admin_role(client, admin_credentials):
     resp = client.post("/api/v1/auth/admin/login", json=admin_credentials)
     token = resp.json()["access_token"]
@@ -105,6 +107,7 @@ def test_admin_login_token_contains_admin_role(client, admin_credentials):
     assert role == "admin"
 
 
+# Verifies: Admin login creates session record in db.
 def test_admin_login_creates_session_record_in_db(client, admin_credentials):
     resp = client.post("/api/v1/auth/admin/login", json=admin_credentials)
     token = resp.json()["access_token"]
@@ -113,8 +116,22 @@ def test_admin_login_creates_session_record_in_db(client, admin_credentials):
     assert session.expires_at is not None
 
 
+# Verifies: Admin login writes audit log.
 def test_admin_login_writes_audit_log(client, admin_credentials):
     resp = client.post("/api/v1/auth/admin/login", json=admin_credentials)
+    token = resp.json()["access_token"]
+    user_id, _ = decode_access_token(token)
+    logs = asyncio.run(_get_audit_logs(int(user_id), "admin_login"))
+    assert len(logs) >= 1
+    assert logs[-1].details["email"] == admin_credentials["email"]
+
+
+def test_shared_login_endpoint_also_writes_admin_audit_log(client, admin_credentials):
+    """Admins and instructors share POST /auth/login — an admin signing in
+    through that shared endpoint (not /auth/admin/login) must still leave the
+    same audit trail, since that's the only realistic path most admins take."""
+    resp = client.post("/api/v1/auth/login", json=admin_credentials)
+    assert resp.status_code == 200
     token = resp.json()["access_token"]
     user_id, _ = decode_access_token(token)
     logs = asyncio.run(_get_audit_logs(int(user_id), "admin_login"))
@@ -126,6 +143,7 @@ def test_admin_login_writes_audit_log(client, admin_credentials):
 # Admin login — failure cases
 # ---------------------------------------------------------------------------
 
+# Verifies: Admin login wrong password returns 401.
 def test_admin_login_wrong_password_returns_401(client, admin_credentials):
     resp = client.post(
         "/api/v1/auth/admin/login",
@@ -134,6 +152,7 @@ def test_admin_login_wrong_password_returns_401(client, admin_credentials):
     assert resp.status_code == 401
 
 
+# Verifies: Admin login unknown email returns 401.
 def test_admin_login_unknown_email_returns_401(client):
     resp = client.post(
         "/api/v1/auth/admin/login",
@@ -142,6 +161,7 @@ def test_admin_login_unknown_email_returns_401(client):
     assert resp.status_code == 401
 
 
+# Verifies: Admin login with instructor account returns 403.
 def test_admin_login_with_instructor_account_returns_403(client):
     email = f"instructor_{uuid.uuid4()}@example.com"
     client.post("/api/v1/auth/register", json={"name": "Inst", "email": email, "password": "pass"})
@@ -150,6 +170,7 @@ def test_admin_login_with_instructor_account_returns_403(client):
     assert "Admin access required" in resp.json()["detail"]
 
 
+# Verifies: Admin login disabled account returns 403.
 def test_admin_login_disabled_account_returns_403(client):
     email = f"disabled_admin_{uuid.uuid4()}@example.com"
 
@@ -177,6 +198,7 @@ def test_admin_login_disabled_account_returns_403(client):
 # Admin logout
 # ---------------------------------------------------------------------------
 
+# Verifies: Admin logout returns 204.
 def test_admin_logout_returns_204(client, admin_credentials):
     # Fresh token so we don't invalidate the shared module-level one
     token = client.post("/api/v1/auth/admin/login", json=admin_credentials).json()["access_token"]
@@ -184,6 +206,7 @@ def test_admin_logout_returns_204(client, admin_credentials):
     assert resp.status_code == 204
 
 
+# Verifies: Admin logout invalidates session.
 def test_admin_logout_invalidates_session(client, admin_credentials):
     token = client.post("/api/v1/auth/admin/login", json=admin_credentials).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -195,6 +218,7 @@ def test_admin_logout_invalidates_session(client, admin_credentials):
     assert resp.status_code == 401
 
 
+# Verifies: Admin logout removes session from db.
 def test_admin_logout_removes_session_from_db(client, admin_credentials):
     token = client.post("/api/v1/auth/admin/login", json=admin_credentials).json()["access_token"]
     assert asyncio.run(_get_session_by_token(token)) is not None
@@ -204,6 +228,7 @@ def test_admin_logout_removes_session_from_db(client, admin_credentials):
     assert asyncio.run(_get_session_by_token(token)) is None
 
 
+# Verifies: Admin logout writes audit log.
 def test_admin_logout_writes_audit_log(client, admin_credentials):
     token = client.post("/api/v1/auth/admin/login", json=admin_credentials).json()["access_token"]
     user_id, _ = decode_access_token(token)
@@ -215,11 +240,13 @@ def test_admin_logout_writes_audit_log(client, admin_credentials):
     assert len(after_logs) == before_count + 1
 
 
+# Verifies: Admin logout requires auth.
 def test_admin_logout_requires_auth(client):
     resp = client.post("/api/v1/auth/logout")
     assert resp.status_code == 401  # HTTPBearer returns 401 in FastAPI 0.136+
 
 
+# Verifies: Instructor logout succeeds.
 def test_instructor_logout_succeeds(client):
     """Instructors share /auth/logout with admins (#592)."""
     email = f"inst_{uuid.uuid4()}@example.com"
@@ -233,6 +260,7 @@ def test_instructor_logout_succeeds(client):
 # Session validation via get_admin_user
 # ---------------------------------------------------------------------------
 
+# Verifies: Admin endpoint accepts valid admin token.
 def test_admin_endpoint_accepts_valid_admin_token(client, admin_headers):
     # POST /admin/users is guarded by get_admin_user — use it as a probe
     resp = client.post(
@@ -244,6 +272,7 @@ def test_admin_endpoint_accepts_valid_admin_token(client, admin_headers):
     assert resp.status_code in (201, 400)
 
 
+# Verifies: Admin endpoint rejects invalid token.
 def test_admin_endpoint_rejects_invalid_token(client):
     resp = client.post(
         "/api/v1/admin/users",
@@ -253,6 +282,7 @@ def test_admin_endpoint_rejects_invalid_token(client):
     assert resp.status_code == 401
 
 
+# Verifies: Admin endpoint rejects instructor token.
 def test_admin_endpoint_rejects_instructor_token(client):
     email = f"inst_{uuid.uuid4()}@example.com"
     token = client.post(
@@ -267,6 +297,7 @@ def test_admin_endpoint_rejects_instructor_token(client):
     assert resp.status_code == 403
 
 
+# Verifies: Admin endpoint rejects demoted admin.
 def test_admin_endpoint_rejects_demoted_admin(client):
     # A JWT's "admin" role claim and a live session are not enough on their own —
     # get_admin_user must also re-check the user's current role in the DB, so a

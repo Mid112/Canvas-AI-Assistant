@@ -66,6 +66,7 @@ def _create_pending_workflow(client, headers, local_course_id) -> None:
     assert response.status_code == 200
 
 
+# Verifies: Workflow history returns created workflow.
 def test_workflow_history_returns_created_workflow(client):
     headers, local_course_id = _register_with_canvas(client)
     _create_pending_workflow(client, headers, local_course_id)
@@ -93,6 +94,7 @@ def test_workflow_history_returns_created_workflow(client):
     assert "assignment" in resource_types
 
 
+# Verifies: Workflow history scoped to current user.
 def test_workflow_history_scoped_to_current_user(client):
     headers_a, local_course_id_a = _register_with_canvas(client)
     _create_pending_workflow(client, headers_a, local_course_id_a)
@@ -104,6 +106,7 @@ def test_workflow_history_scoped_to_current_user(client):
     assert response.json()["total"] == 0
 
 
+# Verifies: Cancel workflow updates status.
 def test_cancel_workflow_updates_status(client):
     """HTTP-level coverage for POST /history/workflows/{id}/cancel — the
     only test exercising this endpoint was previously removed when
@@ -123,6 +126,7 @@ def test_cancel_workflow_updates_status(client):
     assert history_after.json()["items"][0]["status"] == "cancelled"
 
 
+# Verifies: Cancel workflow conflict reports true current status.
 def test_cancel_workflow_conflict_reports_true_current_status(client):
     """Cancelling an already-executed workflow 409s with the real, current
     status — not a stale value left over from a failed atomic claim."""

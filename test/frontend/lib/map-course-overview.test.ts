@@ -6,6 +6,7 @@ import {
 } from "@/lib/map-course-overview";
 
 describe("mapCourseOverviewApiToData", () => {
+  // Verifies: Maps snake_case overview fields to frontend shape.
   it("maps snake_case overview fields to frontend shape", () => {
     const response: CourseOverviewApiResponse = {
       local_id: 1,

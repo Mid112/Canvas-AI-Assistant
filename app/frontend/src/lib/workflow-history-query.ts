@@ -18,9 +18,11 @@ export function filterWorkflowHistory(
 
     if (filters.search) {
       const haystack = [
+        entry.actionName,
         entry.workflowName,
-        entry.description,
+        entry.prompt,
         entry.userName,
+        entry.affectedResourcesSummary,
       ].join(" ");
 
       if (!matchesQuery(haystack, filters.search)) {

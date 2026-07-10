@@ -1,6 +1,7 @@
 import { AlertCircle, Loader2 } from "lucide-react";
 
 import { InstructorRow } from "@/components/admin/InstructorRow";
+import { TablePagination } from "@/components/common/TablePagination";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import {
   Table,
@@ -13,7 +14,15 @@ import type { Instructor } from "@/types/instructor";
 
 interface InstructorTableProps {
   instructors: Instructor[];
+  /** Count of instructors matching the current search, across all pages. */
+  matchedCount: number;
+  /** Count of all instructor accounts, ignoring the current search. */
   totalCount: number;
+  page?: number;
+  totalPages?: number;
+  pageSize?: number;
+  onPageChange?: (page: number) => void;
+  onPageSizeChange?: (pageSize: number) => void;
   isLoading?: boolean;
   errorMessage?: string | null;
   onEdit: (instructor: Instructor) => void;
@@ -24,7 +33,13 @@ interface InstructorTableProps {
 
 export function InstructorTable({
   instructors,
+  matchedCount,
   totalCount,
+  page = 1,
+  totalPages = 1,
+  pageSize = matchedCount,
+  onPageChange,
+  onPageSizeChange,
   isLoading = false,
   errorMessage = null,
   onEdit,
@@ -54,7 +69,7 @@ export function InstructorTable({
     );
   }
 
-  if (instructors.length === 0) {
+  if (matchedCount === 0) {
     return (
       <Card className="shadow-sm ring-1 ring-border/60">
         <CardContent className="py-10 text-center text-sm text-muted-foreground">
@@ -97,9 +112,20 @@ export function InstructorTable({
           </Table>
         </div>
       </CardContent>
-      <CardFooter className="justify-center border-t py-3 text-xs text-muted-foreground">
-        Showing {instructors.length} of {totalCount} instructors
-      </CardFooter>
+      {onPageChange ? (
+        <TablePagination
+          page={page}
+          totalPages={totalPages}
+          totalItems={matchedCount}
+          pageSize={pageSize}
+          onPageChange={onPageChange}
+          onPageSizeChange={onPageSizeChange}
+        />
+      ) : (
+        <CardFooter className="justify-center border-t py-3 text-xs text-muted-foreground">
+          Showing {matchedCount} of {totalCount} instructors
+        </CardFooter>
+      )}
     </Card>
   );
 }

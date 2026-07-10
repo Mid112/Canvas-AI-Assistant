@@ -62,11 +62,13 @@ def _register_with_canvas(client) -> tuple[dict, int]:
 # GET /canvas/courses/{course_id}/assignments
 # ---------------------------------------------------------------------------
 
+# Verifies: List assignments unauthenticated.
 def test_list_assignments_unauthenticated(client):
     response = client.get("/api/v1/canvas/courses/1/assignments")
     assert response.status_code == 401
 
 
+# Verifies: List assignments no canvas token.
 def test_list_assignments_no_canvas_token(client):
     """A user with no Canvas token has no courses in DB — course lookup returns 404."""
     email = f"test_{uuid.uuid4()}@example.com"
@@ -82,6 +84,7 @@ def test_list_assignments_no_canvas_token(client):
     assert response.status_code == 404
 
 
+# Verifies: List assignments course not found.
 def test_list_assignments_course_not_found(client):
     """Local course ID not in instructor's DB returns 404 without calling Canvas."""
     headers, _ = _register_with_canvas(client)
@@ -94,6 +97,7 @@ def test_list_assignments_course_not_found(client):
     mock.assert_not_called()
 
 
+# Verifies: List assignments success.
 def test_list_assignments_success(client):
     headers, local_course_id = _register_with_canvas(client)
     assignments = [_mock_assignment()]
@@ -110,6 +114,7 @@ def test_list_assignments_success(client):
     assert data[0]["points_possible"] == 100.0
 
 
+# Verifies: List assignments response shape.
 def test_list_assignments_response_shape(client):
     """Response must include id (Canvas), local_id, name, description, due_at, points_possible."""
     headers, local_course_id = _register_with_canvas(client)
@@ -128,6 +133,7 @@ def test_list_assignments_response_shape(client):
     assert item["due_at"] is not None
 
 
+# Verifies: List assignments upsert is idempotent.
 def test_list_assignments_upsert_is_idempotent(client):
     """Fetching the same assignments twice must not duplicate DB rows (same local_id)."""
     headers, local_course_id = _register_with_canvas(client)
@@ -142,6 +148,7 @@ def test_list_assignments_upsert_is_idempotent(client):
     assert r1.json()[0]["local_id"] == r2.json()[0]["local_id"]
 
 
+# Verifies: List assignments empty.
 def test_list_assignments_empty(client):
     headers, local_course_id = _register_with_canvas(client)
     with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock:
@@ -154,6 +161,7 @@ def test_list_assignments_empty(client):
     assert response.json() == []
 
 
+# Verifies: List assignments cross instructor isolation.
 def test_list_assignments_cross_instructor_isolation(client):
     """Instructor B cannot fetch assignments for a course owned by instructor A."""
     headers_a, local_course_id = _register_with_canvas(client)
@@ -171,6 +179,7 @@ def test_list_assignments_cross_instructor_isolation(client):
 # Issue #544 — API failure handling
 # ---------------------------------------------------------------------------
 
+# Verifies: List assignments invalid canvas token.
 def test_list_assignments_invalid_canvas_token(client):
     headers, local_course_id = _register_with_canvas(client)
     with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock:
@@ -182,6 +191,7 @@ def test_list_assignments_invalid_canvas_token(client):
     assert response.status_code == 422
 
 
+# Verifies: List assignments canvas permission denied.
 def test_list_assignments_canvas_permission_denied(client):
     headers, local_course_id = _register_with_canvas(client)
     with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock:
@@ -193,6 +203,7 @@ def test_list_assignments_canvas_permission_denied(client):
     assert response.status_code == 403
 
 
+# Verifies: List assignments canvas unavailable.
 def test_list_assignments_canvas_unavailable(client):
     headers, local_course_id = _register_with_canvas(client)
     with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock:
@@ -204,6 +215,7 @@ def test_list_assignments_canvas_unavailable(client):
     assert response.status_code == 502
 
 
+# Verifies: List assignments canvas timeout.
 def test_list_assignments_canvas_timeout(client):
     headers, local_course_id = _register_with_canvas(client)
     with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock:

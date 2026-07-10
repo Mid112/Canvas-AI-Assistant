@@ -23,7 +23,7 @@ export function InstructorCoursesPage() {
   const { user } = useAuth();
   const {
     activeCourse,
-    isSaving,
+    error: activeCourseError,
     selectActiveCourse,
   } = useActiveCourse();
   const {
@@ -36,11 +36,28 @@ export function InstructorCoursesPage() {
   } = useCanvasInstructorCourses();
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<CourseViewMode>("grid");
+  const [settingActiveCourseId, setSettingActiveCourseId] = useState<number | null>(
+    null,
+  );
 
   const filteredCourses = useMemo(() => {
     const filtered = filterInstructorCourses(courses, search);
     return sortInstructorCourses(filtered);
   }, [courses, search]);
+
+  const handleSetActiveCourse = async (courseId: number) => {
+    const course = courses.find((item) => item.id === courseId);
+    if (!course) {
+      return;
+    }
+
+    setSettingActiveCourseId(courseId);
+    try {
+      await selectActiveCourse(courseId, course);
+    } finally {
+      setSettingActiveCourseId(null);
+    }
+  };
 
   if (!user?.has_canvas_token || needsCanvasConnection) {
     return (
@@ -66,6 +83,14 @@ export function InstructorCoursesPage() {
           className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
         >
           {error}
+        </p>
+      ) : null}
+      {activeCourseError ? (
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+        >
+          {activeCourseError}
         </p>
       ) : null}
 
@@ -103,8 +128,8 @@ export function InstructorCoursesPage() {
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           activeCourseId={activeCourse?.localId ?? null}
-          onSetActiveCourse={(courseId) => void selectActiveCourse(courseId)}
-          isSettingActiveCourse={isSaving}
+          onSetActiveCourse={(courseId) => void handleSetActiveCourse(courseId)}
+          settingActiveCourseId={settingActiveCourseId}
         />
       )}
     </div>

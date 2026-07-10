@@ -78,6 +78,8 @@ class SubmissionResponse(BaseModel):
     assignment_id: int
     user_id: int
     student_name: str | None = None
+    student_email: str | None = None
+    student_login_id: str | None = None
     submitted_at: datetime | None = None
     # Raw Canvas state — kept for debugging. API consumers should use `status` instead.
     workflow_state: str

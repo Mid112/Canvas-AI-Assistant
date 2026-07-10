@@ -13,10 +13,12 @@ import {
 } from "@/types/auditLog";
 
 describe("filterAuditLogs", () => {
+  // Verifies: Returns all logs when filters are empty.
   it("returns all logs when filters are empty", () => {
     expect(filterAuditLogs(mockAuditLogs, emptyAuditLogFilters)).toHaveLength(5);
   });
 
+  // Verifies: Filters by user email or role.
   it("filters by user email or role", () => {
     const filtered = filterAuditLogs(mockAuditLogs, {
       ...emptyAuditLogFilters,
@@ -27,6 +29,7 @@ describe("filterAuditLogs", () => {
     expect(filtered.every((log) => log.userRole === "instructor")).toBe(true);
   });
 
+  // Verifies: Filters by action name.
   it("filters by action name", () => {
     const filtered = filterAuditLogs(mockAuditLogs, {
       ...emptyAuditLogFilters,
@@ -37,6 +40,7 @@ describe("filterAuditLogs", () => {
     expect(filtered[0]?.action).toBe("Delete Assignment");
   });
 
+  // Verifies: Filters by result.
   it("filters by result", () => {
     const filtered = filterAuditLogs(mockAuditLogs, {
       ...emptyAuditLogFilters,
@@ -47,6 +51,7 @@ describe("filterAuditLogs", () => {
     expect(filtered[0]?.result).toBe("failed");
   });
 
+  // Verifies: Filters by date using local time (matching displayed date).
   it("filters by date using local time (matching displayed date)", () => {
     const filtered = filterAuditLogs(mockAuditLogs, {
       ...emptyAuditLogFilters,
@@ -56,6 +61,7 @@ describe("filterAuditLogs", () => {
     expect(filtered).toHaveLength(5);
   });
 
+  // Verifies: Matches date filter against local time, not UTC.
   it("matches date filter against local time, not UTC", () => {
     const lateUtcLog: AuditLogEntry = {
       ...mockAuditLogs[0]!,
@@ -77,6 +83,7 @@ describe("filterAuditLogs", () => {
 });
 
 describe("sortAuditLogs", () => {
+  // Verifies: Sorts timestamps newest first by default.
   it("sorts timestamps newest first by default", () => {
     const sorted = sortAuditLogs(mockAuditLogs, defaultAuditLogSort);
 
@@ -84,6 +91,7 @@ describe("sortAuditLogs", () => {
     expect(sorted.at(-1)?.id).toBe("audit-5");
   });
 
+  // Verifies: Sorts users alphabetically.
   it("sorts users alphabetically", () => {
     const sorted = sortAuditLogs(mockAuditLogs, {
       field: "user",
@@ -100,6 +108,7 @@ describe("paginateAuditLogs", () => {
     id: `audit-${index}`,
   })) as AuditLogEntry[];
 
+  // Verifies: Returns the first page of results.
   it("returns the first page of results", () => {
     const page = paginateAuditLogs(manyLogs, 1, 10);
 
@@ -110,6 +119,7 @@ describe("paginateAuditLogs", () => {
     expect(page.endIndex).toBe(10);
   });
 
+  // Verifies: Returns the final partial page.
   it("returns the final partial page", () => {
     const page = paginateAuditLogs(manyLogs, 3, 10);
 

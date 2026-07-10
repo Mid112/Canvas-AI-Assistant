@@ -63,6 +63,7 @@ describe("StudentMessageDraftPage", () => {
     mockedSend.mockResolvedValue();
   });
 
+  // Verifies: Loads and displays the mock message draft.
   it("loads and displays the mock message draft", async () => {
     renderPage();
 
@@ -78,6 +79,7 @@ describe("StudentMessageDraftPage", () => {
     expect(screen.getByText("Assignment Reminder")).toBeInTheDocument();
   });
 
+  // Verifies: Updates preview when subject and body are edited.
   it("updates preview when subject and body are edited", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -86,12 +88,13 @@ describe("StudentMessageDraftPage", () => {
     await user.clear(subjectField);
     await user.type(subjectField, "Updated subject line");
 
-    await user.click(screen.getByRole("button", { name: "Preview" }));
+    await user.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
     expect(screen.getByText("Updated subject line")).toBeInTheDocument();
   });
 
+  // Verifies: Shows confirmation dialog and sends message on confirm.
   it("shows confirmation dialog and sends message on confirm", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -108,6 +111,7 @@ describe("StudentMessageDraftPage", () => {
         subject: mockMessageDraft.subject,
         body: mockMessageDraft.body,
         recipientIds: mockMessageDraft.recipients.map((recipient) => recipient.id),
+        recipients: mockMessageDraft.recipients,
       });
     });
 
@@ -117,6 +121,7 @@ describe("StudentMessageDraftPage", () => {
     );
   });
 
+  // Verifies: Shows an error notification when sending fails.
   it("shows an error notification when sending fails", async () => {
     const user = userEvent.setup();
     mockedSend.mockRejectedValueOnce(
@@ -136,6 +141,39 @@ describe("StudentMessageDraftPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Sends only the selected student.
+  it("sends only the selected student", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByLabelText("Subject");
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
+    await user.click(screen.getByRole("checkbox", { name: /John Smith/i }));
+
+    expect(screen.getByText("1 student selected")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("1 student");
+    await user.click(screen.getByRole("button", { name: "Confirm Send" }));
+
+    await waitFor(() => {
+      expect(mockedSend).toHaveBeenCalledWith("access-token", {
+        draftId: mockMessageDraft.id,
+        subject: mockMessageDraft.subject,
+        body: mockMessageDraft.body,
+        recipientIds: ["student-3"],
+        recipients: [
+          {
+            id: "student-3",
+            name: "John Smith",
+            email: "john.smith@university.edu",
+          },
+        ],
+      });
+    });
+  });
+
+  // Verifies: Resets edits when cancel is clicked.
   it("resets edits when cancel is clicked", async () => {
     const user = userEvent.setup();
     renderPage();
@@ -151,6 +189,7 @@ describe("StudentMessageDraftPage", () => {
     expect(subjectField).toHaveValue(mockMessageDraft.subject);
   });
 
+  // Verifies: Requests empty recipients when ?empty=true.
   it("requests empty recipients when ?empty=true", async () => {
     mockedFetch.mockResolvedValueOnce({
       ...mockMessageDraft,
@@ -170,6 +209,7 @@ describe("StudentMessageDraftPage", () => {
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   });
 
+  // Verifies: Shows load error with retry when ?loadError=true.
   it("shows load error with retry when ?loadError=true", async () => {
     mockedFetch.mockRejectedValueOnce(
       new Error("Unable to load message draft. Please try again."),

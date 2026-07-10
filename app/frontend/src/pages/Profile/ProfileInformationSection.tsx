@@ -5,10 +5,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  getStoredProfileDraft,
-  saveProfileDraft,
-} from "@/lib/profile-storage";
+import { updateCurrentUser } from "@/services/auth";
 import type { User } from "@/types/user";
 import { getRoleLabel } from "@/utils/navigation";
 
@@ -30,21 +27,33 @@ function splitName(fullName: string): { firstName: string; lastName: string } {
 }
 
 function ProfileInformationForm({ user }: { user: User }) {
-  const storedDraft = getStoredProfileDraft(user.id);
-  const initialName = splitName(storedDraft?.name ?? user.name);
+  const { accessToken, refreshUser } = useAuth();
+  const initialName = splitName(user.name);
   const [firstName, setFirstName] = useState(initialName.firstName);
   const [lastName, setLastName] = useState(initialName.lastName);
-  const [department, setDepartment] = useState(storedDraft?.department ?? "");
-  const [title, setTitle] = useState(storedDraft?.title ?? "");
+  const [email, setEmail] = useState(user.email);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
     const fullName = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
+    const trimmedEmail = email.trim();
 
     if (!fullName) {
       setErrorMessage("First name is required.");
+      setSavedMessage(null);
+      return;
+    }
+
+    if (!accessToken) {
+      setErrorMessage("You need to sign in again before updating your profile.");
+      setSavedMessage(null);
+      return;
+    }
+
+    if (!trimmedEmail) {
+      setErrorMessage("Email address is required.");
       setSavedMessage(null);
       return;
     }
@@ -54,14 +63,18 @@ function ProfileInformationForm({ user }: { user: User }) {
     setSavedMessage(null);
 
     try {
-      saveProfileDraft(user.id, {
+      await updateCurrentUser(accessToken, {
         name: fullName,
-        department: department.trim(),
-        title: title.trim(),
+        email: trimmedEmail,
       });
+      await refreshUser();
       setSavedMessage("Profile information saved.");
-    } catch {
-      setErrorMessage("Unable to save profile information. Please try again.");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to save profile information. Please try again.",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -72,7 +85,7 @@ function ProfileInformationForm({ user }: { user: User }) {
       <CardHeader>
         <CardTitle>Profile Information</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Update your personal details and professional information.
+          Update the account details stored with your profile.
         </p>
       </CardHeader>
       <CardContent className="space-y-5">
@@ -102,28 +115,12 @@ function ProfileInformationForm({ user }: { user: User }) {
 
         <div className="space-y-2">
           <Label htmlFor="profile-email">Email Address</Label>
-          <Input id="profile-email" type="email" value={user.email} readOnly />
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="profile-department">Department</Label>
-            <Input
-              id="profile-department"
-              value={department}
-              onChange={(event) => setDepartment(event.target.value)}
-              placeholder="Computer Science"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="profile-title">Title</Label>
-            <Input
-              id="profile-title"
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              placeholder="Professor"
-            />
-          </div>
+          <Input
+            id="profile-email"
+            type="email"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+          />
         </div>
 
         {savedMessage ? (
@@ -153,5 +150,10 @@ export function ProfileInformationSection() {
     return null;
   }
 
-  return <ProfileInformationForm key={user.id} user={user} />;
+  return (
+    <ProfileInformationForm
+      key={`${user.id}-${user.name}-${user.email}`}
+      user={user}
+    />
+  );
 }

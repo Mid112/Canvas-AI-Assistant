@@ -3,13 +3,16 @@ import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
-import { deleteProfileLocally } from "@/lib/profile-storage";
 import { paths } from "@/routes/paths";
+import { deleteCurrentUser } from "@/services/auth";
 
 export function ProfileDeleteSection() {
-  const { user, logout } = useAuth();
+  const { accessToken, user, logout } = useAuth();
   const navigate = useNavigate();
+  const [password, setPassword] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -18,18 +21,32 @@ export function ProfileDeleteSection() {
   }
 
   const handleDelete = async () => {
+    if (!accessToken) {
+      setErrorMessage("You need to sign in again before deleting your account.");
+      return;
+    }
+
+    if (!password) {
+      setErrorMessage("Enter your password to delete your account.");
+      return;
+    }
+
     setIsDeleting(true);
     setErrorMessage(null);
 
     try {
-      deleteProfileLocally(user.id);
+      await deleteCurrentUser(accessToken, password);
       logout();
       navigate(paths.home, {
         replace: true,
-        state: { message: "Your profile has been removed. Sign up from the home page to create a new account." },
+        state: { message: "Your account has been deleted." },
       });
-    } catch {
-      setErrorMessage("Unable to delete your profile. Please try again.");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to delete your account. Please try again.",
+      );
     } finally {
       setIsDeleting(false);
     }
@@ -40,11 +57,21 @@ export function ProfileDeleteSection() {
       <CardHeader>
         <CardTitle className="text-destructive">Delete Profile</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Remove your saved profile details from this device and sign out. You
-          will be redirected to the home page to sign up again.
+          Permanently deactivate this account, remove saved Canvas connections,
+          and sign out of active sessions.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="delete-account-password">Confirm Password</Label>
+          <Input
+            id="delete-account-password"
+            type="password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="current-password"
+          />
+        </div>
         {errorMessage ? (
           <p role="alert" className="text-sm text-destructive">
             {errorMessage}

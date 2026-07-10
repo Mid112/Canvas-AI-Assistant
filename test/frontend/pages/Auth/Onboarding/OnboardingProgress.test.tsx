@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { OnboardingProgress } from "@/pages/Auth/Onboarding/OnboardingProgress";
 
 describe("OnboardingProgress", () => {
+  // Verifies: Renders all onboarding step labels.
   it("renders all onboarding step labels", () => {
     render(<OnboardingProgress currentStep="connectCanvas" />);
 
@@ -13,6 +14,7 @@ describe("OnboardingProgress", () => {
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
   });
 
+  // Verifies: Marks connect canvas account as the current step.
   it("marks connect canvas account as the current step", () => {
     render(<OnboardingProgress currentStep="connectCanvas" />);
 
@@ -20,6 +22,7 @@ describe("OnboardingProgress", () => {
     expect(nav.querySelector('[aria-current="step"]')).toBeInTheDocument();
   });
 
+  // Verifies: Marks canvas info as completed when on connect canvas step.
   it("marks canvas info as completed when on connect canvas step", () => {
     const { container } = render(
       <OnboardingProgress currentStep="connectCanvas" />,
@@ -31,6 +34,7 @@ describe("OnboardingProgress", () => {
     expect(completedSteps.length).toBeGreaterThanOrEqual(1);
   });
 
+  // Verifies: Marks dashboard as upcoming when on review permissions step.
   it("marks dashboard as upcoming when on review permissions step", () => {
     render(<OnboardingProgress currentStep="reviewPermissions" />);
 

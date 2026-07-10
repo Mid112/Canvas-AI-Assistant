@@ -5,6 +5,7 @@ import { ConnectCanvasHelp } from "@/pages/Auth/ConnectCanvas/ConnectCanvasHelp"
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 describe("ConnectCanvasHelp", () => {
+  // Verifies: Renders instructions for finding a Canvas token.
   it("renders instructions for finding a Canvas token", () => {
     renderWithRouter(<ConnectCanvasHelp />);
 

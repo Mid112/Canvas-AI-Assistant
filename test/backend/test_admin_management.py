@@ -103,6 +103,7 @@ async def _run_seeder():
 # POST /admin/users — happy path
 # ---------------------------------------------------------------------------
 
+# Verifies: Create admin returns 201.
 def test_create_admin_returns_201(client, admin_headers):
     resp = client.post(
         "/api/v1/admin/users",
@@ -112,6 +113,7 @@ def test_create_admin_returns_201(client, admin_headers):
     assert resp.status_code == 201
 
 
+# Verifies: Create admin response shape.
 def test_create_admin_response_shape(client, admin_headers):
     resp = client.post(
         "/api/v1/admin/users",
@@ -127,6 +129,7 @@ def test_create_admin_response_shape(client, admin_headers):
     assert "hashed_password" not in body
 
 
+# Verifies: Create admin user exists in db.
 def test_create_admin_user_exists_in_db(client, admin_headers):
     email = f"newadmin_{uuid.uuid4()}@example.com"
     client.post(
@@ -139,6 +142,7 @@ def test_create_admin_user_exists_in_db(client, admin_headers):
     assert user.role == "admin"
 
 
+# Verifies: Create admin writes audit log.
 def test_create_admin_writes_audit_log(client, admin_headers, admin_token):
     creator_id = int(decode_access_token(admin_token)[0])
     before_count = len(asyncio.run(_get_audit_logs(creator_id, "admin_created")))
@@ -153,6 +157,7 @@ def test_create_admin_writes_audit_log(client, admin_headers, admin_token):
     assert len(after_logs) == before_count + 1
 
 
+# Verifies: Create admin new account can login.
 def test_create_admin_new_account_can_login(client, admin_headers):
     email = f"newadmin_{uuid.uuid4()}@example.com"
     password = "loginable_pass"
@@ -170,6 +175,7 @@ def test_create_admin_new_account_can_login(client, admin_headers):
 # POST /admin/users — failure cases
 # ---------------------------------------------------------------------------
 
+# Verifies: Create admin requires auth.
 def test_create_admin_requires_auth(client):
     resp = client.post(
         "/api/v1/admin/users",
@@ -178,6 +184,7 @@ def test_create_admin_requires_auth(client):
     assert resp.status_code == 401
 
 
+# Verifies: Create admin rejects instructor token.
 def test_create_admin_rejects_instructor_token(client):
     email = f"inst_{uuid.uuid4()}@example.com"
     token = client.post(
@@ -192,6 +199,7 @@ def test_create_admin_rejects_instructor_token(client):
     assert resp.status_code == 403
 
 
+# Verifies: Create admin duplicate email returns 400.
 def test_create_admin_duplicate_email_returns_400(client, admin_headers):
     email = f"dup_{uuid.uuid4()}@example.com"
     client.post(
@@ -211,6 +219,7 @@ def test_create_admin_duplicate_email_returns_400(client, admin_headers):
 # seed_admin — unit tests (no HTTP client needed)
 # ---------------------------------------------------------------------------
 
+# Verifies: Seeder skips when email not set.
 def test_seeder_skips_when_email_not_set():
     admin_count_before = asyncio.run(_count_admins())
     with patch.object(settings, "ADMIN_EMAIL", None), \
@@ -219,6 +228,7 @@ def test_seeder_skips_when_email_not_set():
     assert asyncio.run(_count_admins()) == admin_count_before
 
 
+# Verifies: Seeder skips when password not set.
 def test_seeder_skips_when_password_not_set():
     admin_count_before = asyncio.run(_count_admins())
     with patch.object(settings, "ADMIN_EMAIL", f"seed_{uuid.uuid4()}@example.com"), \
@@ -227,6 +237,7 @@ def test_seeder_skips_when_password_not_set():
     assert asyncio.run(_count_admins()) == admin_count_before
 
 
+# Verifies: Seeder creates admin when no admin exists.
 def test_seeder_creates_admin_when_no_admin_exists():
     # Use a unique email so the seeder sees no existing admin with this identity.
     # However, the seeder checks for ANY admin, so we need a clean slate scenario.
@@ -258,6 +269,7 @@ def test_seeder_creates_admin_when_no_admin_exists():
     assert len(logs) == 1
 
 
+# Verifies: Seeder is idempotent.
 def test_seeder_is_idempotent(client, admin_credentials):
     """Running the seeder a second time must not create a duplicate admin."""
     admin_count_before = asyncio.run(_count_admins())

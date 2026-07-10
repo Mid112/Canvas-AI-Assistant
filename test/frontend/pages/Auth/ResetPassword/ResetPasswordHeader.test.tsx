@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ResetPasswordHeader } from "@/pages/Auth/ResetPassword/ResetPasswordHeader";
 
 describe("ResetPasswordHeader", () => {
+  // Verifies: Renders the reset password heading.
   it("renders the reset password heading", () => {
     render(<ResetPasswordHeader />);
 
@@ -12,6 +13,7 @@ describe("ResetPasswordHeader", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders the description text.
   it("renders the description text", () => {
     render(<ResetPasswordHeader />);
 
@@ -22,6 +24,7 @@ describe("ResetPasswordHeader", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Renders the graduation cap icon.
   it("renders the graduation cap icon", () => {
     const { container } = render(<ResetPasswordHeader />);
 

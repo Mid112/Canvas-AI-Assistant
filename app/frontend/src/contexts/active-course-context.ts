@@ -8,7 +8,10 @@ export interface ActiveCourseContextValue {
   isLoading: boolean;
   isSaving: boolean;
   error: string | null;
-  selectActiveCourse: (localCourseId: number) => Promise<void>;
+  selectActiveCourse: (
+    localCourseId: number,
+    optimisticCourse?: InstructorCourse | ActiveCourseSelection,
+  ) => Promise<boolean>;
   refreshActiveCourse: () => Promise<void>;
 }
 

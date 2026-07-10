@@ -17,7 +17,7 @@ from app.schemas.course_overview import (
     RecentAssignmentSummary,
     StudentActivityItem,
 )
-from app.services.canvas import get_owned_course
+from app.services.student import get_students
 
 _SUBMITTED_STATUSES = ("submitted", "graded", "late")
 
@@ -63,7 +63,7 @@ async def get_course_overview(
     canvas_url: str,
     db: AsyncSession,
 ) -> CourseOverviewResponse:
-    await get_owned_course(local_course_id, user, canvas_url, db)
+    roster = await get_students(local_course_id, user, canvas_url, db)
 
     course = await db.scalar(
         select(Course)
@@ -76,7 +76,7 @@ async def get_course_overview(
     if not course:
         raise ValueError("Course not found")
 
-    student_count = len(course.students)
+    student_count = len(roster)
     assignments = list(course.assignments)
     assignment_count = len(assignments)
     assignment_ids = [assignment.id for assignment in assignments]

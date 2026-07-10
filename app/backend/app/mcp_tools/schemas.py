@@ -186,3 +186,15 @@ def is_reversible(action: str) -> bool:
     "can this be undone" messaging, so an unknown action should never be
     silently treated as reversible."""
     return ACTION_CLASSIFICATION.get(action) in ("read_only", "modifying")
+
+
+# Canvas-mutating actions that must never execute except via the
+# intent_preview -> confirm flow. This is the single source of truth for
+# that gate: dispatcher.py's intent_preview case uses it to decide which
+# proposed actions need write-preview metadata, and services/chat.py's
+# handle_chat_message uses it to refuse to execute one of these directly
+# on a normal (unconfirmed) turn — even if the LLM skipped intent_preview
+# and named the write action outright. set_active_course is deliberately
+# excluded: it only writes a local UserPreference row, has no Canvas
+# footprint, and always executes immediately regardless of provider.
+WRITE_ACTIONS = frozenset({"create_assignment", "update_assignment", "send_message", "update_grade"})

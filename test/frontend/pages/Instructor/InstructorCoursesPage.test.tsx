@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useInstitution } from "@/contexts/useInstitution";
 import { InstructorCoursesPage } from "@/pages/Instructor/InstructorCoursesPage";
 import { fetchCourseAssignments } from "@/services/assignments";
-import { fetchActiveCourse, fetchCourses } from "@/services/canvas";
+import { fetchActiveCourse, fetchCourses, setActiveCourse } from "@/services/canvas";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 vi.mock("@/services/canvas", () => ({
@@ -32,6 +32,7 @@ vi.mock("@/services/assignments", () => ({
 const mockUseAuth = vi.fn();
 const mockedFetchCourses = vi.mocked(fetchCourses);
 const mockedFetchActiveCourse = vi.mocked(fetchActiveCourse);
+const mockedSetActiveCourse = vi.mocked(setActiveCourse);
 const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
 
 vi.mock("@/contexts/AuthContext", async () => {
@@ -125,6 +126,13 @@ beforeEach(() => {
   mockUseAuth.mockReturnValue(authWithCanvas);
   mockedFetchCourses.mockResolvedValue(canvasCourses);
   mockedFetchActiveCourse.mockResolvedValue(null);
+  mockedSetActiveCourse.mockResolvedValue({
+    local_id: 1,
+    canvas_course_id: "101",
+    canvas_url: CANVAS_URL,
+    name: "Introduction to Programming",
+    term: null,
+  });
   mockedFetchCourseAssignments.mockResolvedValue([
     { id: 1, name: "Assignment 1", course_id: 101 },
   ]);
@@ -135,6 +143,7 @@ describe("InstructorCoursesPage", () => {
     vi.unstubAllEnvs();
   });
 
+  // Verifies: Shows only the connect gate when Canvas is not connected.
   it("shows only the connect gate when Canvas is not connected", () => {
     mockUseAuth.mockReturnValue(authWithoutCanvas);
 
@@ -151,6 +160,7 @@ describe("InstructorCoursesPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  // Verifies: Loads courses from local Canvas Docker without VITE_CANVAS_UBC_URL.
   it("loads courses from local Canvas Docker without VITE_CANVAS_UBC_URL", async () => {
     mockUseAuth.mockReturnValue({
       ...authWithCanvas,
@@ -180,6 +190,7 @@ describe("InstructorCoursesPage", () => {
     );
   });
 
+  // Verifies: Hides New Course on connect state when env is unset and no saved connection.
   it("hides New Course on connect state when env is unset and no saved connection", () => {
     mockUseAuth.mockReturnValue(authWithoutCanvas);
 
@@ -189,6 +200,7 @@ describe("InstructorCoursesPage", () => {
     expect(screen.queryByRole("link", { name: "New Course" })).not.toBeInTheDocument();
   });
 
+  // Verifies: Hides New Course on connect state when no saved connection exists.
   it("hides New Course on connect state when no saved connection exists", () => {
     vi.stubEnv("VITE_CANVAS_UBC_URL", CANVAS_URL);
     mockUseAuth.mockReturnValue(authWithoutCanvas);
@@ -203,6 +215,7 @@ describe("InstructorCoursesPage", () => {
     vi.unstubAllEnvs();
   });
 
+  // Verifies: Shows connect Canvas when no token exists for the saved connection URL.
   it("shows connect Canvas when no token exists for the saved connection URL", async () => {
     const { CanvasApiError } = await import("@/services/canvas");
     mockedFetchCourses.mockRejectedValue(
@@ -221,6 +234,7 @@ describe("InstructorCoursesPage", () => {
     expect(screen.queryByLabelText("Search courses")).not.toBeInTheDocument();
   });
 
+  // Verifies: Loads Canvas courses with the saved connection URL.
   it("loads Canvas courses with the saved connection URL", async () => {
     renderWithInstitution(<InstructorCoursesPage />);
 
@@ -235,6 +249,7 @@ describe("InstructorCoursesPage", () => {
     expect(screen.getByText("Course Analytics Overview")).toBeInTheDocument();
   });
 
+  // Verifies: Shows a Canvas loading state while courses load.
   it("shows a Canvas loading state while courses load", () => {
     mockedFetchCourses.mockReturnValue(
       new Promise<typeof canvasCourses>(() => undefined),
@@ -247,6 +262,7 @@ describe("InstructorCoursesPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Filters courses by search query.
   it("filters courses by search query", async () => {
     const user = userEvent.setup();
 
@@ -261,6 +277,7 @@ describe("InstructorCoursesPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Shows the empty state when no courses match the search.
   it("shows the empty state when no courses match the search", async () => {
     const user = userEvent.setup();
 
@@ -278,6 +295,7 @@ describe("InstructorCoursesPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Switches to list view when requested.
   it("switches to list view when requested", async () => {
     const user = userEvent.setup();
 
@@ -291,6 +309,7 @@ describe("InstructorCoursesPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Reloads courses when sync from Canvas is clicked.
   it("reloads courses when sync from Canvas is clicked", async () => {
     const user = userEvent.setup();
 
@@ -306,6 +325,7 @@ describe("InstructorCoursesPage", () => {
     });
   });
 
+  // Verifies: Shows a Canvas empty state when Canvas returns no courses.
   it("shows a Canvas empty state when Canvas returns no courses", async () => {
     mockedFetchCourses.mockResolvedValue([]);
 
@@ -318,6 +338,7 @@ describe("InstructorCoursesPage", () => {
     });
   });
 
+  // Verifies: Shows a Canvas error without mock courses.
   it("shows a Canvas error without mock courses", async () => {
     const { CanvasApiError } = await import("@/services/canvas");
     mockedFetchCourses.mockRejectedValue(
@@ -327,7 +348,7 @@ describe("InstructorCoursesPage", () => {
     renderWithInstitution(<InstructorCoursesPage />);
 
     await waitFor(() => {
-      expect(screen.getByText("Canvas unavailable")).toBeInTheDocument();
+      expect(screen.getAllByText("Canvas unavailable").length).toBeGreaterThan(0);
     });
 
     expect(
@@ -335,6 +356,7 @@ describe("InstructorCoursesPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  // Verifies: Shows Canvas-derived overview metrics from synced courses.
   it("shows Canvas-derived overview metrics from synced courses", async () => {
     renderWithInstitution(<InstructorCoursesPage />);
     await screen.findByText("Your Courses (3)");
@@ -343,6 +365,7 @@ describe("InstructorCoursesPage", () => {
     expect(screen.getByText("135")).toBeInTheDocument();
   });
 
+  // Verifies: Persists the selected active course locally.
   it("persists the selected active course locally", async () => {
     const user = userEvent.setup();
 
@@ -352,9 +375,42 @@ describe("InstructorCoursesPage", () => {
     await user.click(screen.getAllByRole("button", { name: "Set Active" })[0]!);
 
     await waitFor(() => {
+      expect(mockedSetActiveCourse).toHaveBeenCalledWith(1, "token");
       expect(document.body.textContent).toContain(
         "Active course: CS 101: Introduction to Programming",
       );
+    });
+  });
+
+  // Verifies: Shows immediate feedback while saving the active course.
+  it("shows immediate feedback while saving the active course", async () => {
+    const user = userEvent.setup();
+    let resolveSave: ((value: Awaited<ReturnType<typeof setActiveCourse>>) => void) | undefined;
+    mockedSetActiveCourse.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSave = resolve;
+      }),
+    );
+
+    renderWithInstitution(<InstructorCoursesPage />);
+
+    await screen.findByText("Your Courses (3)");
+    await user.click(screen.getAllByRole("button", { name: "Set Active" })[0]!);
+
+    expect(
+      screen.getByRole("button", { name: "Setting active..." }),
+    ).toBeDisabled();
+
+    resolveSave?.({
+      local_id: 1,
+      canvas_course_id: "101",
+      canvas_url: CANVAS_URL,
+      name: "Introduction to Programming",
+      term: null,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Active Course" })).toBeDisabled();
     });
   });
 });

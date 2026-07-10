@@ -17,10 +17,11 @@ const courses = institutionCourseData[0]!.courses.slice(0, 2);
 const activeCourseProps = {
   activeCourseId: null as number | null,
   onSetActiveCourse: vi.fn(),
-  isSettingActiveCourse: false,
+  settingActiveCourseId: null as number | null,
 };
 
 describe("InstructorCoursesCard", () => {
+  // Verifies: Renders course progress and action buttons.
   it("renders course progress and action buttons", () => {
     render(
       <MemoryRouter>
@@ -44,9 +45,46 @@ describe("InstructorCoursesCard", () => {
       screen.getByRole("button", { name: "Set Active" }),
     ).toBeInTheDocument();
   });
+
+  // Verifies: Shows per-course feedback while setting active.
+  it("shows per-course feedback while setting active", () => {
+    render(
+      <MemoryRouter>
+        <InstructorCoursesCard
+          course={courses[0]!}
+          isActive={false}
+          onSetActive={vi.fn()}
+          isSettingActive
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Setting active..." }),
+    ).toBeDisabled();
+  });
+
+  // Verifies: Shows a clear active state.
+  it("shows a clear active state", () => {
+    render(
+      <MemoryRouter>
+        <InstructorCoursesCard
+          course={courses[0]!}
+          isActive
+          onSetActive={vi.fn()}
+          isSettingActive={false}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Active Course" }),
+    ).toBeDisabled();
+  });
 });
 
 describe("InstructorCoursesList", () => {
+  // Verifies: Renders courses in list format.
   it("renders courses in list format", () => {
     render(
       <MemoryRouter>
@@ -64,9 +102,27 @@ describe("InstructorCoursesList", () => {
       screen.getByText(/45 students · 8 assignments/),
     ).toBeInTheDocument();
   });
+
+  // Verifies: Shows loading feedback only for the selected list row.
+  it("shows loading feedback only for the selected list row", () => {
+    render(
+      <MemoryRouter>
+        <InstructorCoursesList
+          courses={courses}
+          activeCourseId={null}
+          onSetActiveCourse={vi.fn()}
+          settingActiveCourseId={courses[1]!.id}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("button", { name: "Setting..." })).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: "Set Active" })).toHaveLength(1);
+  });
 });
 
 describe("InstructorCoursesSection", () => {
+  // Verifies: Renders grid view by default.
   it("renders grid view by default", () => {
     render(
       <MemoryRouter>
@@ -85,6 +141,7 @@ describe("InstructorCoursesSection", () => {
     );
   });
 
+  // Verifies: Switches to list view when requested.
   it("switches to list view when requested", async () => {
     const user = userEvent.setup();
     const onViewModeChange = vi.fn();
@@ -107,6 +164,7 @@ describe("InstructorCoursesSection", () => {
 });
 
 describe("InstructorCoursesEmptyState", () => {
+  // Verifies: Renders the empty state message.
   it("renders the empty state message", () => {
     render(<InstructorCoursesEmptyState />);
 

@@ -35,6 +35,7 @@ export interface SendMessageDraftPayload {
   subject: string;
   body: string;
   recipientIds: string[];
+  recipients?: MessageRecipient[];
 }
 
 export type MessageDraftPageState =

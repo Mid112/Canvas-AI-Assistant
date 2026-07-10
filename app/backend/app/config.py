@@ -22,6 +22,17 @@ class Settings(BaseSettings):
     # value so our validator can split a plain comma-separated string instead.
     BACKEND_CORS_ORIGINS: Annotated[list[str], NoDecode] = []
 
+    @field_validator("DEBUG", mode="before")
+    @classmethod
+    def _normalize_debug(cls, v: bool | str) -> bool | str:
+        if isinstance(v, str):
+            normalized = v.strip().lower()
+            if normalized in {"debug", "development", "dev"}:
+                return True
+            if normalized in {"release", "production", "prod"}:
+                return False
+        return v
+
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     @classmethod
     def _split_origins(cls, v: "str | list[str]") -> list[str]:
@@ -57,6 +68,13 @@ class Settings(BaseSettings):
 
     # LLM — Groq (hosted, OpenAI-compatible)
     GROQ_API_KEY: str = ""
+    # meta-llama/llama-4-scout-17b-16e-instruct: a plain instruct model (no
+    # <think> reasoning phase), switched to after qwen/qwen3.6-27b's
+    # reasoning traces were blowing through free-tier rate limits and
+    # occasionally getting truncated mid-response. qwen/qwen3.6-27b is
+    # still fully supported, pass {"model": "qwen/qwen3.6-27b"} to
+    # get_llm_adapter() to use it.
+    GROQ_MODEL: str = "meta-llama/llama-4-scout-17b-16e-instruct"
 
     @field_validator("CANVAS_TOKEN_ENCRYPTION_KEY", mode="before")
     @classmethod

@@ -1,4 +1,3 @@
-import { mockMessageRecipients } from "@/data/mockMessageDraft";
 import { apiRequest } from "@/lib/api-request";
 import type {
   FetchMessageDraftOptions,
@@ -30,10 +29,19 @@ interface MessageDraftApiResponse {
   updated_at: string;
 }
 
-function mapDraftResponse(response: MessageDraftApiResponse): MessageDraft {
+function mapDraftResponse(
+  response: MessageDraftApiResponse,
+  fallbackRecipients: MessageRecipient[] = [],
+): MessageDraft {
+  // The backend may create an empty draft while the course page has already
+  // loaded recipients from Canvas/submission fallback. Preserve those local
+  // recipients so the UI does not briefly lose its selected student list.
+  const recipients =
+    response.recipients.length > 0 ? response.recipients : fallbackRecipients;
+
   return {
     id: String(response.id),
-    recipients: response.recipients,
+    recipients,
     subject: response.subject,
     body: response.body,
     templateName: response.template_name ?? undefined,
@@ -42,19 +50,22 @@ function mapDraftResponse(response: MessageDraftApiResponse): MessageDraft {
 }
 
 function buildCreatePayload(options: FetchMessageDraftOptions) {
-  const recipients =
-    options.recipients ??
-    (options.emptyRecipients
-      ? []
-      : mockMessageRecipients.map((recipient) => ({ ...recipient })));
+  const recipients = options.emptyRecipients ? [] : (options.recipients ?? []);
+  const prompt =
+    options.prompt ??
+    "Draft a friendly reminder about an upcoming assignment deadline.";
+  const templateName = options.templateName ?? "Assignment Reminder";
 
   return {
     course_id: options.courseId ?? null,
     template_id: options.templateId ?? "assignment-reminder",
-    template_name: options.templateName ?? "Assignment Reminder",
-    prompt:
-      options.prompt ??
-      "Draft a friendly reminder about an upcoming assignment deadline.",
+    template_name: templateName,
+    prompt,
+    subject: `${templateName}: Course Update`,
+    // Providing starter content keeps this route responsive when the
+    // backend is configured with a slow local model. The instructor can
+    // still edit the draft before sending.
+    body: prompt,
     recipients,
   };
 }
@@ -87,7 +98,10 @@ export async function fetchMessageDraft(
       },
     );
 
-    return mapDraftResponse(created);
+    return mapDraftResponse(
+      created,
+      options.emptyRecipients ? [] : (options.recipients ?? []),
+    );
   } catch (error) {
     const message =
       error instanceof Error
@@ -108,6 +122,21 @@ export async function sendMessageDraft(
     );
   }
 
+  if (
+    !payload.recipients ||
+    payload.recipients.length !== payload.recipientIds.length ||
+    payload.recipients.some(
+      (recipient) => !payload.recipientIds.includes(recipient.id),
+    )
+  ) {
+    // Sending uses the stored draft recipients on the backend. If the UI has
+    // ids but not matching recipient objects, PATCH would persist the wrong
+    // target set and could send to stale recipients.
+    throw new MessageDraftApiError(
+      "Selected recipient details are out of sync. Please reload the draft and try again.",
+    );
+  }
+
   try {
     await apiRequest<MessageDraftApiResponse>(
       `/messages/drafts/${payload.draftId}`,
@@ -117,6 +146,10 @@ export async function sendMessageDraft(
         body: JSON.stringify({
           subject: payload.subject,
           body: payload.body,
+          // The backend sends whatever recipients are stored on the draft.
+          // Persist the UI selection first so sending one student does not
+          // accidentally send to the originally loaded full roster.
+          recipients: payload.recipients,
         }),
       },
     );

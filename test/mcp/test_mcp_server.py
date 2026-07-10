@@ -64,6 +64,7 @@ async def call_tool(tool_name: str, arguments: dict) -> dict:
 #  INFRASTRUCTURE TESTS
 # ══════════════════════════════════════════════════════════════════════════
 
+# Verifies: Mcp server health.
 def test_mcp_server_health():
     """MCP server health endpoint returns ok."""
     response = httpx.get(f"{MCP_URL}/health")
@@ -73,12 +74,14 @@ def test_mcp_server_health():
     assert data["service"] == "canvas-mcp"
 
 
+# Verifies: Mcp server lists tools.
 def test_mcp_server_lists_tools():
     """MCP server exposes at least one tool."""
     tools = asyncio.run(list_tools_async())
     assert len(tools) > 0
 
 
+# Verifies: Mcp server exposes all expected tools.
 def test_mcp_server_exposes_all_expected_tools():
     """All required Canvas tools are registered."""
     tools = asyncio.run(list_tools_async())
@@ -87,6 +90,7 @@ def test_mcp_server_exposes_all_expected_tools():
     assert not missing, f"Missing tools: {missing}"
 
 
+# Verifies: No workflow tools registered.
 def test_no_workflow_tools_registered():
     """Workflow tools must not be on the MCP server — audit is read-only."""
     tools = asyncio.run(list_tools_async())
@@ -96,6 +100,7 @@ def test_no_workflow_tools_registered():
     assert not present, f"Workflow write tools should not be on MCP server: {present}"
 
 
+# Verifies: All tools have descriptions.
 def test_all_tools_have_descriptions():
     """Every registered tool has a non-empty description."""
     tools = asyncio.run(list_tools_async())
@@ -108,6 +113,7 @@ def test_all_tools_have_descriptions():
 #  TOOL SCHEMA TESTS
 # ══════════════════════════════════════════════════════════════════════════
 
+# Verifies: Fetch assignments requires course id.
 def test_fetch_assignments_requires_course_id():
     """fetch_assignments declares course_id as a required parameter."""
     tools = asyncio.run(list_tools_async())
@@ -116,6 +122,7 @@ def test_fetch_assignments_requires_course_id():
     assert "course_id" in tool.inputSchema.get("required", [])
 
 
+# Verifies: Fetch submissions requires course and assignment id.
 def test_fetch_submissions_requires_course_and_assignment_id():
     """fetch_submissions declares both course_id and assignment_id as required."""
     tools = asyncio.run(list_tools_async())
@@ -126,6 +133,7 @@ def test_fetch_submissions_requires_course_and_assignment_id():
     assert "assignment_id" in props and "assignment_id" in required
 
 
+# Verifies: Create assignment has required params.
 def test_create_assignment_has_required_params():
     """create_assignment declares name, course_id, and points_possible."""
     tools = asyncio.run(list_tools_async())
@@ -136,6 +144,7 @@ def test_create_assignment_has_required_params():
     assert "points_possible" in props
 
 
+# Verifies: Send message has required params.
 def test_send_message_has_required_params():
     """send_message_to_students declares course_id, subject, body, recipient_ids."""
     tools = asyncio.run(list_tools_async())
@@ -147,6 +156,7 @@ def test_send_message_has_required_params():
     assert "course_id" in props
 
 
+# Verifies: Get audit logs requires user id.
 def test_get_audit_logs_requires_user_id():
     """get_audit_logs declares user_id as a required parameter."""
     tools = asyncio.run(list_tools_async())
@@ -160,18 +170,21 @@ def test_get_audit_logs_requires_user_id():
 #  RESPONSE STRUCTURE TESTS (run without live Canvas)
 # ══════════════════════════════════════════════════════════════════════════
 
+# Verifies: Fetch courses returns courses key.
 def test_fetch_courses_returns_courses_key():
     """fetch_courses always returns a dict with a courses key."""
     result = asyncio.run(call_tool("fetch_courses", {}))
     assert "courses" in result or "error" in result
 
 
+# Verifies: Fetch assignments returns assignments key.
 def test_fetch_assignments_returns_assignments_key():
     """fetch_assignments always returns a dict with an assignments key."""
     result = asyncio.run(call_tool("fetch_assignments", {"course_id": 999999}))
     assert "assignments" in result or "error" in result
 
 
+# Verifies: Fetch submissions returns submissions key.
 def test_fetch_submissions_returns_submissions_key():
     """fetch_submissions always returns a dict with a submissions key."""
     result = asyncio.run(
@@ -180,6 +193,7 @@ def test_fetch_submissions_returns_submissions_key():
     assert "submissions" in result or "error" in result
 
 
+# Verifies: Fetch missing submissions returns counts.
 def test_fetch_missing_submissions_returns_counts():
     """fetch_missing_submissions always returns missing_count and late_count."""
     result = asyncio.run(
@@ -192,6 +206,7 @@ def test_fetch_missing_submissions_returns_counts():
     assert ("missing_count" in result and "late_count" in result) or "error" in result
 
 
+# Verifies: Get audit logs returns logs key.
 def test_get_audit_logs_returns_logs_key():
     """get_audit_logs returns a dict with a logs key regardless of backend state."""
     result = asyncio.run(call_tool("get_audit_logs", {"user_id": 1}))
@@ -202,6 +217,7 @@ def test_get_audit_logs_returns_logs_key():
 #  CANVAS INTEGRATION TESTS (require sandbox Canvas)
 # ══════════════════════════════════════════════════════════════════════════
 
+# Verifies: Fetch courses returns list.
 @pytest.mark.skipif(not CANVAS_AVAILABLE, reason="Canvas sandbox not configured")
 def test_fetch_courses_returns_list():
     """fetch_courses returns a non-empty list from Canvas sandbox."""
@@ -210,6 +226,7 @@ def test_fetch_courses_returns_list():
     assert isinstance(result["courses"], list)
 
 
+# Verifies: Courses have required fields.
 @pytest.mark.skipif(not CANVAS_AVAILABLE, reason="Canvas sandbox not configured")
 def test_courses_have_required_fields():
     """Each course has id, name, and workflow_state."""
@@ -223,6 +240,7 @@ def test_courses_have_required_fields():
         assert "workflow_state" in course
 
 
+# Verifies: Fetch assignments from real course.
 @pytest.mark.skipif(not CANVAS_AVAILABLE, reason="Canvas sandbox not configured")
 def test_fetch_assignments_from_real_course():
     """fetch_assignments returns assignments for a real course."""
@@ -235,6 +253,7 @@ def test_fetch_assignments_from_real_course():
     assert isinstance(result["assignments"], list)
 
 
+# Verifies: Fetch missing submissions from real assignment.
 @pytest.mark.skipif(not CANVAS_AVAILABLE, reason="Canvas sandbox not configured")
 def test_fetch_missing_submissions_from_real_assignment():
     """fetch_missing_submissions returns correct structure for a real assignment."""

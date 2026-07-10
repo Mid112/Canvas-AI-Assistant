@@ -17,6 +17,7 @@ vi.mock("react-router-dom", async () => {
 });
 
 describe("CanvasInfoPage", () => {
+  // Verifies: Renders the canvas info overview.
   it("renders the canvas info overview", () => {
     renderWithRouter(<CanvasInfoPage />);
 
@@ -38,6 +39,7 @@ describe("CanvasInfoPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Shows canvas info as the current onboarding step.
   it("shows canvas info as the current onboarding step", () => {
     renderWithRouter(<CanvasInfoPage />);
 
@@ -47,6 +49,7 @@ describe("CanvasInfoPage", () => {
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
   });
 
+  // Verifies: Renders permission and security details.
   it("renders permission and security details", () => {
     renderWithRouter(<CanvasInfoPage />);
 
@@ -56,6 +59,7 @@ describe("CanvasInfoPage", () => {
     expect(screen.getByText("Revocable Access")).toBeInTheDocument();
   });
 
+  // Verifies: Navigates to connect canvas when proceed is clicked.
   it("navigates to connect canvas when proceed is clicked", async () => {
     const user = userEvent.setup();
     renderWithRouter(<CanvasInfoPage />);

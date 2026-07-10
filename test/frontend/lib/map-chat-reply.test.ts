@@ -6,12 +6,14 @@ import {
 } from "@/lib/map-chat-reply";
 
 describe("mapChatReply", () => {
+  // Verifies: Throws for backend error replies.
   it("throws for backend error replies", () => {
     expect(() =>
       mapChatReply({ error: "The assistant took too long to respond." }, true),
     ).toThrow(ChatReplyMappingError);
   });
 
+  // Verifies: Maps out_of_scope replies.
   it("maps out_of_scope replies", () => {
     expect(
       mapChatReply(
@@ -31,6 +33,28 @@ describe("mapChatReply", () => {
     });
   });
 
+  it("never falls back to showing the raw local_course_id when no course name is available", () => {
+    const result = mapChatReply(
+      {
+        action: "intent_preview",
+        intent_preview: true,
+        summary: "Fetch missing submissions.",
+        proposed_action: {
+          action: "fetch_submissions",
+          local_course_id: 351,
+          assignment_id: 5,
+        },
+        // preview_metadata intentionally omits course_name/course
+        preview_metadata: {},
+        pending_message_id: 7,
+      },
+      false,
+    );
+
+    expect(result.interpretedAction?.course).toBe("Active course");
+    expect(result.interpretedAction?.course).not.toContain("351");
+  });
+
   it("maps clarify replies", () => {
     expect(
       mapChatReply(
@@ -47,6 +71,7 @@ describe("mapChatReply", () => {
     });
   });
 
+  // Verifies: Maps intent_preview replies.
   it("maps intent_preview replies", () => {
     expect(
       mapChatReply(
@@ -85,6 +110,7 @@ describe("mapChatReply", () => {
     });
   });
 
+  // Verifies: Maps cancelled replies.
   it("maps cancelled replies", () => {
     expect(
       mapChatReply(
@@ -100,6 +126,7 @@ describe("mapChatReply", () => {
     });
   });
 
+  // Verifies: Maps respond replies.
   it("maps respond replies", () => {
     expect(
       mapChatReply(
@@ -111,6 +138,7 @@ describe("mapChatReply", () => {
     });
   });
 
+  // Verifies: Maps fetch_courses results.
   it("maps fetch_courses results", () => {
     expect(
       mapChatReply(
@@ -127,6 +155,48 @@ describe("mapChatReply", () => {
     });
   });
 
+  // Verifies: Maps fetch_assignments results as a bulleted list, not just a count.
+  it("maps fetch_assignments results as a bulleted list, not just a count", () => {
+    const dueDate = new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date("2030-08-16T05:59:00.000Z"));
+
+    expect(
+      mapChatReply(
+        {
+          assignments: [
+            {
+              id: 1,
+              name: "Homework 1",
+              due_at: "2030-08-16T05:59:00.000Z",
+              points_possible: 20,
+              course_id: 1,
+            },
+            {
+              id: 2,
+              name: "Homework 2",
+              due_at: null,
+              points_possible: null,
+              course_id: 1,
+            },
+          ],
+        },
+        false,
+      ),
+    ).toEqual({
+      content: `- Homework 1 (${dueDate} · 20 pts)\n- Homework 2 (No due date)`,
+    });
+  });
+
+  // Verifies: Maps an empty fetch_assignments result.
+  it("maps an empty fetch_assignments result", () => {
+    expect(mapChatReply({ assignments: [] }, false)).toEqual({
+      content: "This course has no assignments yet.",
+    });
+  });
+
+  // Verifies: Maps successful confirm results.
   it("maps successful confirm results", () => {
     expect(
       mapChatReply(

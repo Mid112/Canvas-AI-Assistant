@@ -12,6 +12,7 @@ const assignments = getCourseAssignments(
 );
 
 describe("InstructorSubmissionsAnalysisFilters", () => {
+  // Verifies: Renders assignment, student search, and status controls.
   it("renders assignment, student search, and status controls", () => {
     render(
       <InstructorSubmissionsAnalysisFilters
@@ -32,6 +33,7 @@ describe("InstructorSubmissionsAnalysisFilters", () => {
     expect(screen.getByLabelText("Filter by Status")).toBeInTheDocument();
   });
 
+  // Verifies: Calls change handlers when filters are updated.
   it("calls change handlers when filters are updated", async () => {
     const user = userEvent.setup();
     const onSearchChange = vi.fn();

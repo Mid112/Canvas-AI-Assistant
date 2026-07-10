@@ -18,6 +18,7 @@ const assignment: Assignment = {
 };
 
 describe("assignment-utils", () => {
+  // Verifies: Maps assignment data to form values.
   it("maps assignment data to form values", () => {
     const values = assignmentToFormValues(assignment);
 
@@ -26,6 +27,7 @@ describe("assignment-utils", () => {
     expect(values.dueDate).toMatch(/^2026-/);
   });
 
+  // Verifies: Detects changed fields for preview.
   it("detects changed fields for preview", () => {
     const updated = {
       ...assignmentToFormValues(assignment),
@@ -41,6 +43,7 @@ describe("assignment-utils", () => {
     expect(hasAssignmentChanges(assignment, updated)).toBe(true);
   });
 
+  // Verifies: Formats due dates for display.
   it("formats due dates for display", () => {
     expect(formatDueDateForDisplay(null)).toBe("No due date");
     expect(formatDueDateForDisplay("invalid-date")).toBe("invalid-date");

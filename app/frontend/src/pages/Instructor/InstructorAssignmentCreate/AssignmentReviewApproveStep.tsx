@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
+import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,7 @@ import type { GeneratedAssignmentDraft } from "@/types/assignmentCreate";
 
 import {
   assignmentReviewSchema,
+  type AssignmentReviewFormInput,
   type AssignmentReviewFormSchema,
 } from "./assignmentCreateSchema";
 
@@ -41,12 +43,13 @@ export function AssignmentReviewApproveStep({
     control,
     trigger,
     formState: { errors, isValid },
-  } = useForm<AssignmentReviewFormSchema>({
+  } = useForm<AssignmentReviewFormInput, unknown, AssignmentReviewFormSchema>({
     resolver: zodResolver(assignmentReviewSchema),
     defaultValues: {
       name: draft.name,
       description: draft.description,
       dueDate: draft.dueDate,
+      pointsPossible: draft.pointsPossible,
     },
     mode: "onChange",
   });
@@ -75,7 +78,8 @@ export function AssignmentReviewApproveStep({
           <div className="rounded-xl border bg-muted/20 p-4">
             <p className="text-sm font-medium">Generated draft</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {draft.pointsPossible} points possible
+              Edit any field below, including the points value, before
+              approving.
             </p>
           </div>
 
@@ -143,14 +147,31 @@ export function AssignmentReviewApproveStep({
             ) : null}
           </div>
 
-          {approveError ? (
-            <p
-              role="alert"
-              className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
-            >
-              {approveError}
-            </p>
-          ) : null}
+          <div className="space-y-2">
+            <Label htmlFor="review-points-possible">Points possible</Label>
+            <Input
+              id="review-points-possible"
+              type="number"
+              min="0"
+              step="1"
+              aria-invalid={Boolean(errors.pointsPossible)}
+              aria-describedby={
+                errors.pointsPossible ? "review-points-possible-error" : undefined
+              }
+              {...register("pointsPossible")}
+            />
+            {errors.pointsPossible ? (
+              <p
+                id="review-points-possible-error"
+                role="alert"
+                className="text-sm text-destructive"
+              >
+                {errors.pointsPossible.message}
+              </p>
+            ) : null}
+          </div>
+
+          {approveError ? <ErrorAlert message={approveError} /> : null}
         </CardContent>
         <CardFooter className="flex flex-col gap-3 border-t bg-transparent sm:flex-row sm:justify-between">
           <Button type="button" variant="outline" onClick={onBack} disabled={isApproving}>

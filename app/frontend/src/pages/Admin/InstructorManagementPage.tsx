@@ -5,11 +5,16 @@ import { AdminToast } from "@/components/admin/AdminToast";
 import { ConfirmationDialog } from "@/components/admin/ConfirmationDialog";
 import { CreateInstructorDialog } from "@/components/admin/CreateInstructorDialog";
 import { EditInstructorDialog } from "@/components/admin/EditInstructorDialog";
+import {
+  InstructorCredentialsDialog,
+  type CreatedInstructorCredentials,
+} from "@/components/admin/InstructorCredentialsDialog";
 import { InstructorSearch } from "@/components/admin/InstructorSearch";
 import { InstructorTable } from "@/components/admin/InstructorTable";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { filterInstructors } from "@/data/mockInstructors";
+import { DEFAULT_PAGE_SIZE, paginateItems } from "@/lib/table-pagination";
 import type { EditInstructorFormValues, InstructorFormValues } from "@/schemas/instructorSchema";
 import {
   createInstructor,
@@ -39,12 +44,16 @@ export function InstructorManagementPage() {
   const { accessToken } = useAuth();
   const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createdCredentials, setCreatedCredentials] =
+    useState<CreatedInstructorCredentials | null>(null);
   const [editingInstructor, setEditingInstructor] = useState<Instructor | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
   const loadRequestId = useRef(0);
@@ -53,6 +62,21 @@ export function InstructorManagementPage() {
     () => filterInstructors(instructors, searchQuery),
     [instructors, searchQuery],
   );
+
+  const paginated = useMemo(
+    () => paginateItems(filteredInstructors, page, pageSize),
+    [filteredInstructors, page, pageSize],
+  );
+
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value);
+    setPage(1);
+  };
+
+  const handlePageSizeChange = (value: number) => {
+    setPageSize(value);
+    setPage(1);
+  };
 
   const refreshInstructors = useCallback(async (options?: { showLoading?: boolean }) => {
     const requestId = loadRequestId.current + 1;
@@ -144,6 +168,11 @@ export function InstructorManagementPage() {
       await createInstructor(accessToken, values);
       await refreshInstructors();
       setIsCreateOpen(false);
+      setCreatedCredentials({
+        fullName: `${values.firstName} ${values.lastName}`,
+        email: values.email,
+        temporaryPassword: values.temporaryPassword,
+      });
       showToast("Instructor account created successfully.");
     } catch (error) {
       setFormError(
@@ -269,12 +298,18 @@ export function InstructorManagementPage() {
         <div className="inline-flex w-fit items-center rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary">
           Instructors ({instructors.length})
         </div>
-        <InstructorSearch value={searchQuery} onChange={setSearchQuery} />
+        <InstructorSearch value={searchQuery} onChange={handleSearchChange} />
       </div>
 
       <InstructorTable
-        instructors={filteredInstructors}
+        instructors={paginated.items}
         totalCount={instructors.length}
+        page={paginated.page}
+        totalPages={paginated.totalPages}
+        pageSize={paginated.pageSize}
+        matchedCount={paginated.totalItems}
+        onPageChange={setPage}
+        onPageSizeChange={handlePageSizeChange}
         isLoading={effectiveLoading}
         errorMessage={effectiveError}
         onEdit={(instructor) => {
@@ -303,6 +338,16 @@ export function InstructorManagementPage() {
         serverError={formError}
         isSubmitting={isSubmitting}
         onSubmit={(values) => void handleCreate(values)}
+      />
+
+      <InstructorCredentialsDialog
+        open={createdCredentials !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCreatedCredentials(null);
+          }
+        }}
+        credentials={createdCredentials}
       />
 
       <EditInstructorDialog
