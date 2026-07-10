@@ -18,7 +18,13 @@ def client():
 
 
 def _register_with_canvas(client) -> tuple[dict, int]:
-    """Register a fresh instructor, connect Canvas, seed one course. Returns (headers, local_course_id)."""
+    """Register a fresh instructor, connect Canvas, seed one course, and
+    set it active — the active-course PATCH also seeds canvas_course_names
+    (see set_active_course's sync_courses_if_stale call), which is what
+    lets a chat turn with no explicit local_course_id and no course_name
+    in the mocked LLM reply still resolve a course via the
+    UserPreference.active_course_id fallback in get_or_create_conversation.
+    Returns (headers, local_course_id)."""
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
@@ -44,8 +50,14 @@ def _register_with_canvas(client) -> tuple[dict, int]:
             "workflow_state": "available",
         }]
         resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+        local_course_id = resp.json()[0]["local_id"]
+        active_resp = client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_course_id},
+            headers=headers,
+        )
+        assert active_resp.status_code == 200, active_resp.text
 
-    local_course_id = resp.json()[0]["local_id"]
     return headers, local_course_id
 
 

@@ -4,9 +4,11 @@ from datetime import UTC, datetime
 from cryptography.fernet import InvalidToken
 from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
+from app.config import settings
 from app.core.canvas_url import canvas_urls_equivalent, normalize_canvas_url
 from app.core.security import decrypt_canvas_token
 from app.integrations.canvas import (
@@ -21,6 +23,8 @@ from app.integrations.canvas import (
     update_assignment,
 )
 from app.models.assignment import Assignment
+from app.models.canvas_connection import CanvasConnection
+from app.models.canvas_course_name import CanvasCourseName
 from app.models.course import Course
 from app.models.user import User
 from app.models.user_preference import UserPreference
@@ -466,6 +470,79 @@ async def get_submissions(
     return parsed
 
 
+async def sync_courses_if_stale(user: User, connection: CanvasConnection, db: AsyncSession) -> None:
+    """Refreshes this connection's course list from Canvas, gated by
+    CANVAS_COURSE_SYNC_COOLDOWN_SECONDS so a real Canvas round-trip only
+    happens once per window. Callers: the periodic sweep
+    (run_course_sync_sweep, below — ticks every
+    CANVAS_COURSE_SYNC_COOLDOWN_SECONDS on its own, see app.main's
+    lifespan), set_active_course (the button), and handle_confirmed_action
+    (right after a successful write). Deliberately NOT called from the
+    chat message path itself — services/chat.py only ever reads
+    canvas_course_names, never fetches it live, so a slow/broken Canvas
+    connection can never fail a chat turn that doesn't even need fresh
+    course data.
+
+    Also upserts canvas_course_names — the small, connection-scoped,
+    write-once canvas_course_id -> name index services/chat.py uses to
+    resolve a course by name without ever exposing a numeric ID to the
+    LLM. Rows there are inserted once and never overwritten
+    (ON CONFLICT DO NOTHING) — see CanvasCourseName's docstring for why.
+
+    get_courses() itself is unmodified; this wrapper only adds the
+    cooldown gate and the name-index upsert around it."""
+    now = datetime.now(UTC)
+    if (
+        connection.courses_synced_at is not None
+        and (now - connection.courses_synced_at).total_seconds() < settings.CANVAS_COURSE_SYNC_COOLDOWN_SECONDS
+    ):
+        return
+
+    courses = await get_courses(user, connection.canvas_url, db)
+    if courses:
+        await db.execute(
+            pg_insert(CanvasCourseName)
+            .values(
+                [
+                    {
+                        "canvas_connection_id": connection.id,
+                        "canvas_course_id": str(course.canvas_id),
+                        "local_course_id": course.local_id,
+                        "name": course.name,
+                    }
+                    for course in courses
+                ]
+            )
+            .on_conflict_do_nothing(index_elements=["canvas_connection_id", "canvas_course_id"])
+        )
+
+    connection.courses_synced_at = now
+    await db.commit()
+
+
+async def run_course_sync_sweep(db: AsyncSession) -> None:
+    """One pass over every Canvas connection on the server, refreshing
+    canvas_course_names for each (still cooldown-gated per-connection by
+    sync_courses_if_stale, so this is cheap to call often). One
+    connection's failure — a bad/expired token, a Canvas outage — is
+    logged and skipped, never allowed to abort the sweep for everyone
+    else. Called on a timer by app.main's lifespan; also safe to call
+    directly (e.g. from a test or a manual trigger)."""
+    users = list(
+        await db.scalars(select(User).options(selectinload(User.canvas_connections)))
+    )
+    for user in users:
+        for connection in user.canvas_connections:
+            try:
+                await sync_courses_if_stale(user, connection, db)
+            except Exception:
+                logger.warning(
+                    "course sync sweep failed for canvas_connection_id=%s user_id=%s",
+                    connection.id, user.id, exc_info=True,
+                )
+                await db.rollback()
+
+
 async def get_active_course(user: User, db: AsyncSession) -> ActiveCourseResponse | None:
     # joinedload fetches preference + course in a single JOIN query
     pref = await db.scalar(
@@ -490,6 +567,18 @@ async def set_active_course(user: User, local_course_id: int, db: AsyncSession) 
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found or does not belong to you.",
         )
+
+    # Keep the chat pipeline's name index (canvas_course_names) fresh for
+    # the just-activated course too, not just on chat messages — queried
+    # directly rather than via user.canvas_connections to avoid depending
+    # on that relationship being eager-loaded in this session context.
+    connections = await db.scalars(select(CanvasConnection).where(CanvasConnection.user_id == user.id))
+    connection = next(
+        (c for c in connections if canvas_urls_equivalent(c.canvas_url, course.canvas_url)),
+        None,
+    )
+    if connection is not None:
+        await sync_courses_if_stale(user, connection, db)
 
     # Upsert: update if a preference row already exists, otherwise insert a new one
     pref = await db.scalar(select(UserPreference).where(UserPreference.user_id == user.id))

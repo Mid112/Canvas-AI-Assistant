@@ -1,6 +1,7 @@
 # app/backend/app/services/chat.py
 import asyncio
 import json
+import logging
 import re
 from datetime import UTC, date, datetime
 
@@ -12,16 +13,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
+from app.core.canvas_url import canvas_urls_equivalent
 from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_action
 from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS, IntentPreviewAction
 from app.models.audit_log import AuditLog
+from app.models.canvas_connection import CanvasConnection
+from app.models.canvas_course_name import CanvasCourseName
 from app.models.conversation import Conversation
 from app.models.course import Course
 from app.models.message import Message
 from app.models.user import User
 from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
+from app.services.canvas import sync_courses_if_stale
+from app.services.llm.json_extraction import extract_json_object
 from app.services.llm.llm_setting import get_llm_adapter
+
+logger = logging.getLogger(__name__)
 
 LLM_TIMEOUT_SECONDS = 90.0
 HISTORY_WINDOW = 10
@@ -92,6 +100,25 @@ async def get_or_create_conversation(
     conversation_id: int | None,
     local_course_id: int | None,
 ) -> Conversation:
+    """local_course_id here is only ever the client-supplied explicit value
+    (pathway a — the "set active course" button; see ChatRequest.local_course_id)
+    — never something guessed from message text. A conversation's course,
+    once set, is never mutated in place: switching away from it routes to
+    a different conversation (reused if one already exists for the target
+    course, forked otherwise) via _find_or_fork_conversation_for_course.
+    conversation_id=None (a deliberate "new chat" request) always creates
+    fresh regardless of local_course_id — the find-or-reuse rule only
+    applies when routing away from a conversation that already had a
+    course.
+
+    When local_course_id is omitted and a conversation has no course yet
+    (brand new, or an existing conversation that was never resolved), this
+    falls back to the user's persisted UserPreference.active_course_id —
+    still pathway (a) (the button), just read from storage instead of
+    requiring the client to resend it on every request (e.g. the client's
+    own active-course context hasn't loaded yet). Never used to override a
+    conversation that already has a course — only to seed one that has
+    none, exactly like the explicit-local_course_id case above."""
     if conversation_id is not None:
         conversation = await db.scalar(
             select(Conversation).where(
@@ -100,92 +127,177 @@ async def get_or_create_conversation(
             )
         )
         if conversation:
-            if conversation.course_id is None and local_course_id is not None:
-                conversation.course_id = local_course_id
+            if conversation.course_id is None:
+                seed_course_id = local_course_id
+                if seed_course_id is None:
+                    seed_course_id = await db.scalar(
+                        select(UserPreference.active_course_id).where(UserPreference.user_id == user.id)
+                    )
+                if seed_course_id is not None:
+                    course = await db.scalar(
+                        select(Course).where(Course.id == seed_course_id, Course.instructor_id == user.id)
+                    )
+                    if course is not None:
+                        conversation.course_id = course.id
+                        conversation.course_name = await _stable_course_name(db, course.id, course.name)
                 return conversation
             if (
                 local_course_id is not None
                 and conversation.course_id is not None
                 and conversation.course_id != local_course_id
             ):
-                conversation_id = None
-            else:
+                course = await db.scalar(
+                    select(Course).where(Course.id == local_course_id, Course.instructor_id == user.id)
+                )
+                if course is not None:
+                    return await _find_or_fork_conversation_for_course(db, user, course.id, course.name)
                 return conversation
+            return conversation
 
-    conversation = Conversation(user_id=user.id, course_id=local_course_id)
+    seed_course_id = local_course_id
+    if seed_course_id is None:
+        seed_course_id = await db.scalar(
+            select(UserPreference.active_course_id).where(UserPreference.user_id == user.id)
+        )
+    course_name = None
+    if seed_course_id is not None:
+        course_name = await db.scalar(
+            select(Course.name).where(Course.id == seed_course_id, Course.instructor_id == user.id)
+        )
+        if course_name is None:
+            seed_course_id = None
+        else:
+            course_name = await _stable_course_name(db, seed_course_id, course_name)
+    conversation = Conversation(user_id=user.id, course_id=seed_course_id, course_name=course_name)
     db.add(conversation)
     await db.flush()
     return conversation
 
 
-async def _resolve_chat_course_context(
-    db: AsyncSession,
-    user: User,
-    message: str,
-    requested_local_course_id: int | None,
-    conversation_id: int | None = None,
-) -> Course | None:
-    """Find the course context in deterministic app code before the LLM runs.
-
-    Local models cannot know our database IDs. Priority order: an explicit
-    local ID from the client, then a course name mentioned in this message,
-    then the course this conversation is already anchored to (so a
-    follow-up reply to a clarify question — e.g. "all assignments" — stays
-    on the course named earlier in the same thread instead of silently
-    snapping back to the user's global active-course preference), then
-    finally that global active-course preference for a brand new thread.
-    """
-    if requested_local_course_id is not None:
-        return await db.scalar(
-            select(Course).where(
-                Course.id == requested_local_course_id,
-                Course.instructor_id == user.id,
-            )
-        )
-
-    courses = list(
-        await db.scalars(select(Course).where(Course.instructor_id == user.id))
+async def _stable_course_name(db: AsyncSession, local_course_id: int, fallback: str) -> str:
+    """Prefers canvas_course_names' write-once name over Course.name
+    (overwritten in place on every Canvas sync) for anything that becomes
+    a Conversation.course_name snapshot — same rename-stability rationale
+    as CanvasCourseName's docstring: a course renamed on Canvas
+    mid-conversation must not change what that conversation has already
+    been calling it. Falls back to the given Course.name only when this
+    course has never been synced into canvas_course_names yet (e.g. its
+    connection's first sync hasn't run)."""
+    stable_name = await db.scalar(
+        select(CanvasCourseName.name).where(CanvasCourseName.local_course_id == local_course_id)
     )
-    normalized_message = _normalize_course_text(message)
-    # Course names are synced locally, so resolve phrases like "COSC 499"
-    # before asking the model to choose a database-local course ID. Prefer
-    # the longest matching name when more than one matches (e.g. two
-    # courses that happen to share "COSC499" as a substring of their
-    # normalized name) so the more specific course wins deterministically
-    # instead of whichever the DB happened to return first.
-    matches = [
-        course
-        for course in courses
-        if (name := _normalize_course_text(course.name)) and name in normalized_message
-    ]
-    if matches:
-        return max(matches, key=lambda c: len(_normalize_course_text(c.name)))
+    return stable_name if stable_name is not None else fallback
 
-    if conversation_id is not None:
-        existing_course_id = await db.scalar(
-            select(Conversation.course_id).where(
-                Conversation.id == conversation_id,
-                Conversation.user_id == user.id,
-            )
+
+async def _get_course_names_for_user(db: AsyncSession, user: User) -> list[CanvasCourseName]:
+    """The full canvas_course_names index across every Canvas connection
+    this user has — the only source of course names the LLM is ever shown
+    (see _build_llm_message) and the only thing course_name is matched
+    against (see _match_course_name). Never queries `courses` directly for
+    this purpose: canvas_course_names is connection-scoped (so two
+    institutions with colliding numeric canvas_course_ids never collide)
+    and write-once (so a mid-conversation Canvas rename can't retroactively
+    change what a conversation has been calling a course)."""
+    return list(
+        await db.scalars(
+            select(CanvasCourseName)
+            .join(CanvasConnection, CanvasCourseName.canvas_connection_id == CanvasConnection.id)
+            .where(CanvasConnection.user_id == user.id)
         )
-        if existing_course_id is not None:
-            existing = next(
-                (course for course in courses if course.id == existing_course_id),
-                None,
-            )
-            if existing is not None:
-                return existing
-
-    active_course_id = await db.scalar(
-        select(UserPreference.active_course_id).where(UserPreference.user_id == user.id)
     )
-    if active_course_id is None:
+
+
+def _match_course_name(course_names: list[CanvasCourseName], course_name: str | None) -> CanvasCourseName | None:
+    """Exact (normalized) match only — not substring-in-message like the
+    deterministic resolver this replaced. The model is given the literal
+    course name strings in YOUR COURSES and told to copy one verbatim, so
+    an exact match is both correct and safe; zero or multiple matches
+    (the model should have avoided both via the COURSE RESOLUTION prompt
+    rules) are treated as "couldn't resolve" and left to the caller's
+    sticky-course fallback — same belt-and-suspenders philosophy as
+    dispatcher.py's _create_assignment_missing_field."""
+    if not course_name:
         return None
+    normalized_target = _normalize_course_text(course_name)
+    matches = [cn for cn in course_names if _normalize_course_text(cn.name) == normalized_target]
+    return matches[0] if len(matches) == 1 else None
 
-    return next(
-        (course for course in courses if course.id == active_course_id),
-        None,
+
+async def _find_or_fork_conversation_for_course(
+    db: AsyncSession, user: User, local_course_id: int, course_name: str
+) -> Conversation:
+    """Reuse the most recent conversation already anchored to this course,
+    or start a new one. Only called when actively switching a conversation
+    away from a course it already had (button click or the model naming a
+    different course mid-conversation) — never for a conversation's first
+    course resolution (course_id None -> some value), which just sets
+    course_id on the same conversation instead.
+
+    course_name is only ever used as a fallback: _stable_course_name
+    always prefers whatever canvas_course_names already has for this
+    course, so a caller passing a freshly-synced (and possibly renamed)
+    Course.name here can't undermine that stability guarantee."""
+    existing = await db.scalar(
+        select(Conversation)
+        .where(Conversation.user_id == user.id, Conversation.course_id == local_course_id)
+        .order_by(Conversation.id.desc())
+        .limit(1)
     )
+    if existing:
+        return existing
+    stable_name = await _stable_course_name(db, local_course_id, course_name)
+    conversation = Conversation(user_id=user.id, course_id=local_course_id, course_name=stable_name)
+    db.add(conversation)
+    await db.flush()
+    return conversation
+
+
+def _inject_course_into_envelope(parsed_envelope: dict, local_course_id: int | None) -> dict:
+    """Injects the resolved local_course_id directly into the model's raw
+    parsed JSON — into proposed_action if it already wrapped its answer in
+    intent_preview, or into the envelope itself if it named a raw action
+    (NORMAL_TURN_ALLOWED_ACTIONS auto-wrapping turns that same dict into
+    proposed_action right after parse_action succeeds, so either shape
+    ends up with the id in the right place).
+
+    This has to happen *before* parse_action's strict schema validation,
+    not after: the model is never allowed to supply local_course_id
+    itself (see COURSE RESOLUTION in build_system_prompt), so a
+    course-scoped action's schema — which still declares local_course_id
+    as required, unchanged — would otherwise fail validation on a
+    required field it was never given. Checked dynamically via
+    ACTION_SCHEMAS.model_fields rather than a hardcoded action-name set,
+    the same self-maintaining approach build_system_prompt's tool list
+    already uses.
+
+    If the action needs a course and none could be resolved this turn,
+    replaces the whole envelope with a clarify response instead of
+    letting a missing local_course_id crash Pydantic validation
+    downstream (same belt-and-suspenders philosophy as dispatcher.py's
+    _create_assignment_missing_field). Returns the (possibly replaced)
+    envelope; the caller re-serializes it in place of the raw LLM output."""
+    if (
+        parsed_envelope.get("action") == "intent_preview"
+        and isinstance(parsed_envelope.get("proposed_action"), dict)
+    ):
+        target = parsed_envelope["proposed_action"]
+    else:
+        target = parsed_envelope
+
+    schema_cls = ACTION_SCHEMAS.get(target.get("action"))
+    if schema_cls is None or "local_course_id" not in schema_cls.model_fields:
+        return parsed_envelope
+
+    if local_course_id is None:
+        partial_plan = {key: value for key, value in target.items() if key != "action"}
+        return {
+            "action": "clarify",
+            "question": "Which course is this about?",
+            "partial_plan": partial_plan,
+        }
+
+    target["local_course_id"] = local_course_id
+    return parsed_envelope
 
 
 async def _load_stored_intent_preview(
@@ -218,7 +330,8 @@ async def _load_stored_intent_preview(
 
 def _build_llm_message(
     message: str,
-    course: Course | None,
+    course_names: list[CanvasCourseName],
+    current_course_name: str | None,
     current_proposed_action: dict | None,
 ) -> str:
     """Wraps the user's raw message with whatever structured context the
@@ -228,17 +341,21 @@ def _build_llm_message(
     active course, and a modify turn that only restates the part being
     changed (e.g. just the date) can lose already-answered fields
     (description, points_possible) that the model fails to carry forward
-    from scrollback on its own."""
+    from scrollback on its own.
+
+    Course context is name-only, by design — never a numeric ID. The
+    model resolves which course (if any) this message is about itself,
+    from this list, and reports it back via the top-level course_name
+    field (see build_system_prompt's COURSE RESOLUTION section); the app
+    resolves that name to a real ID afterward (handle_chat_message)."""
     parts = []
 
-    if course is not None:
+    if course_names:
+        names = "\n".join(f"- {cn.name}" for cn in course_names)
         parts.append(
-            "Course context for this request:\n"
-            f"- local_course_id: {course.id}\n"
-            f"- course_name: {course.name}\n"
-            f"- canvas_course_id: {course.canvas_course_id}\n"
-            "Use this local_course_id for course-specific actions; do not "
-            "ask the user for internal IDs."
+            "YOUR COURSES:\n"
+            f"{names}\n\n"
+            f"CURRENT COURSE FOR THIS CONVERSATION: {current_course_name or 'none set yet'}"
         )
 
     if current_proposed_action is not None:
@@ -504,9 +621,9 @@ Only ask about a field that is REQUIRED by that action's schema (see
 AVAILABLE ACTIONS) and that the user did not give you, directly or
 earlier in CONVERSATION HISTORY. Do not ask about optional fields, and
 do not ask about anything that isn't literally one of that action's
-fields — e.g. fetch_submissions only needs local_course_id and
-assignment_id, so never ask what format, detail level, or extra info
-the user wants to see. If every required field is known, propose the
+fields — e.g. fetch_submissions only needs a course and an assignment,
+so never ask what format, detail level, or extra info the user wants to
+see. If every required field is known, propose the
 action immediately; do not ask a question just to double-check. Never
 invent, guess, or write a placeholder value for a required field you
 don't have. To ask, respond ONLY with:
@@ -534,12 +651,29 @@ a follow-up to a clarification question or a refinement of a previous
 plan, incorporate the user's feedback into the updated partial_plan
 before responding.
 
-COURSE CONTEXT MISMATCH:
-If the user's message names a course that does not match the injected
-course_name, always use the injected local_course_id anyway — never ask
-which course to use, and never treat this as an AMBIGUITY CHECK case.
-Add one short sentence noting the mismatch in your summary or response
-text instead.
+COURSE RESOLUTION:
+Every response must include a top-level "course_name" field naming
+exactly one course from YOUR COURSES (see the list injected with each
+message) — copy the name exactly as given, character for character.
+Never invent a course name, never output a course ID (local or Canvas),
+and never ask the user for one — they only know their courses by name,
+never by an internal ID.
+- If the message clearly names one of YOUR COURSES, even a partial name
+  (e.g. "Intro to Programming" for "COSC 111 - Introduction to
+  Programming with Java"), set course_name to that course's exact full
+  name and use it as the subject of this and future turns.
+- If a partial name could match more than one course in YOUR COURSES
+  (e.g. "Intro to Programming" when both COSC 111 and COSC 121 exist),
+  do not guess — use the AMBIGUITY CHECK format to ask which one,
+  listing the full names of the candidates.
+- If the message doesn't name a course, reuse CURRENT COURSE FOR THIS
+  CONVERSATION (also injected with each message) as course_name — do not
+  ask again just because this message didn't repeat the name.
+- If there is no CURRENT COURSE and the message doesn't name one either,
+  and the action you're proposing needs a course, ask which course using
+  the AMBIGUITY CHECK format.
+- out_of_scope and general "respond" answers that aren't about a
+  specific course may omit course_name entirely.
 
 META QUESTIONS — if the user asks what you can do, asks for help,
 or needs a natural language reply that isn't a Canvas tool call, respond with:
@@ -565,8 +699,9 @@ fetch_submissions and update_assignment both require assignment_id — the
 assignment's Canvas ID, not its title. Never invent, guess, or write a
 placeholder value (e.g. a description like "<the ID for Assignment 1>")
 into assignment_id, and never ask the user for it either — the user does
-not know or need to know internal Canvas IDs, the same as local_course_id.
-This is the one exception to the AMBIGUITY CHECK's "ask, don't guess"
+not know or need to know internal Canvas IDs, the same as with courses
+(see COURSE RESOLUTION above). This is the one exception to the
+AMBIGUITY CHECK's "ask, don't guess"
 rule: if the user refers to an assignment by name and you do not already
 have its Canvas ID from this conversation (e.g. from a previous
 fetch_assignments or fetch_submissions result), your response must be
@@ -594,8 +729,9 @@ conversation, propose fetch_students or fetch_submissions first instead of
 guessing; never fall back to omitting recipient_canvas_user_ids (which
 posts a public announcement to the entire class) just because you don't
 have the IDs yet — that silently sends the message to a far larger
-audience than the user asked for. Always require local_course_id. subject
-and body are both required and must be the user's actual words — if the
+audience than the user asked for. This action is course-scoped like any
+other (see COURSE RESOLUTION above). subject and body are both required
+and must be the user's actual words — if the
 user hasn't told you what the message should say, use the AMBIGUITY CHECK
 above and ask for it; do not invent wording or write a placeholder. The
 user can ask you to revise the draft before confirming — treat that like
@@ -623,27 +759,30 @@ async def handle_chat_message(
       same as normal, but if the result is an intent_preview, the old
       preview message is overwritten in place rather than a new row
       being appended. This keeps conversation history clean so the LLM
-      sees only the latest agreed plan on subsequent turns."""
+      sees only the latest agreed plan on subsequent turns.
 
-    course_context = await _resolve_chat_course_context(
-        db, user, message, local_course_id, conversation_id
-    )
-    resolved_local_course_id = course_context.id if course_context else local_course_id
-    conversation = await get_or_create_conversation(
-        db, user, conversation_id, resolved_local_course_id
-    )
-    if course_context is None and conversation.course_id is not None:
-        course_context = await db.scalar(
-            select(Course).where(
-                Course.id == conversation.course_id,
-                Course.instructor_id == user.id,
-            )
-        )
-    if conversation.course_id is None and course_context is not None:
-        conversation.course_id = course_context.id
+    Course resolution: local_course_id here is only ever an explicit
+    client-supplied value (the "set active course" button). Every other
+    way a course enters this turn — the user naming one in the message,
+    or answering a clarify question — is resolved by the LLM itself
+    (COURSE RESOLUTION in build_system_prompt) against real course names,
+    never a numeric ID; the app matches that name back to a real course
+    only after the LLM call returns (see below).
+
+    Course data (canvas_course_names) is never fetched from Canvas live,
+    in-band, as part of handling a message — this turn only ever reads
+    it. Keeping it fresh is a decoupled background concern: a periodic
+    sweep (see app.main's lifespan) and a refresh right after a
+    successful write (handle_confirmed_action) — both live in
+    app.services.canvas. A chat turn is a pure local-DB read for course
+    names, so a slow/broken Canvas connection can never fail a chat
+    request that doesn't even need fresh course data."""
+
+    conversation = await get_or_create_conversation(db, user, conversation_id, local_course_id)
     user_msg = await log_message(db, conversation, role="user", content=message)
 
     history = await _get_recent_messages(db, conversation.id)
+    course_names = await _get_course_names_for_user(db, user)
 
     stored_preview = None
     current_proposed_action = None
@@ -661,7 +800,7 @@ async def handle_chat_message(
         raw_output = await asyncio.wait_for(
             adapter.generate(
                 system_prompt,
-                _build_llm_message(message, course_context, current_proposed_action),
+                _build_llm_message(message, course_names, conversation.course_name, current_proposed_action),
                 history=history,
                 timeout=LLM_TIMEOUT_SECONDS,
             ),
@@ -695,6 +834,63 @@ async def handle_chat_message(
             {"error": "The assistant is currently unavailable. Please try again shortly."},
             True,
         )
+
+    # Course resolution: pull the model's own course_name call-out out of
+    # the raw response (same <think>-stripping + brace-scanning helper
+    # dispatcher.py's parse_action uses, so this works uniformly whether
+    # the model answered with clarify/intent_preview/a raw action, or
+    # plain prose with no JSON at all — in which case there's nothing to
+    # extract and course_name_from_llm stays None). This never touches an
+    # ID: it matches the model's name against canvas_course_names and
+    # only reads the local_course_id that lookup already carries.
+    try:
+        parsed_envelope = json.loads(extract_json_object(raw_output))
+    except json.JSONDecodeError:
+        parsed_envelope = None
+    course_name_from_llm = parsed_envelope.get("course_name") if isinstance(parsed_envelope, dict) else None
+
+    resolved_local_course_id = conversation.course_id
+    matched = _match_course_name(course_names, course_name_from_llm)
+    if matched is not None:
+        matched_local_course_id = matched.local_course_id
+        if matched_local_course_id is None:
+            # Defensive fallback — shouldn't happen, sync_courses_if_stale
+            # always populates this from the Course row it upserts in the
+            # same transaction, but don't let a null here silently break
+            # course resolution.
+            matched_local_course_id = await db.scalar(
+                select(Course.id).where(
+                    Course.canvas_course_id == matched.canvas_course_id,
+                    Course.instructor_id == user.id,
+                )
+            )
+        if matched_local_course_id is not None:
+            if conversation.course_id is None:
+                # This conversation's first course resolution — same
+                # conversation, no fork, user_msg already belongs to it.
+                conversation.course_id = matched_local_course_id
+                conversation.course_name = matched.name
+            elif matched_local_course_id != conversation.course_id:
+                # Switching away from a course this conversation already
+                # had — route to a different conversation (reused or
+                # forked) instead of mutating this one, and re-parent
+                # this turn's user message onto it.
+                target = await _find_or_fork_conversation_for_course(
+                    db, user, matched_local_course_id, matched.name
+                )
+                user_msg.conversation_id = target.id
+                conversation = target
+            resolved_local_course_id = matched_local_course_id
+
+    # Inject the resolved course id (or downgrade to a clarify envelope)
+    # directly into the parsed JSON, before parse_action's strict schema
+    # validation ever sees it — see _inject_course_into_envelope. Only
+    # when parsing succeeded as a dict; a plain-text/malformed reply has
+    # nothing to inject into and falls through to the existing
+    # _plain_text_response/parse_action handling on the original raw_output.
+    if isinstance(parsed_envelope, dict):
+        parsed_envelope = _inject_course_into_envelope(parsed_envelope, resolved_local_course_id)
+        raw_output = json.dumps(parsed_envelope)
 
     try:
         text_reply = _plain_text_response(raw_output)
@@ -954,6 +1150,31 @@ async def handle_confirmed_action(
         )
 
     await db.commit()
+
+    # Opportunistic course-name refresh: a write just happened, so this is
+    # a natural moment to also refresh canvas_course_names for the
+    # connection it touched (the other trigger is the periodic sweep in
+    # app.main's lifespan — chat turns themselves never call Canvas for
+    # this, see handle_chat_message). Best-effort and after the write's
+    # own commit above, so a Canvas hiccup here can never roll back or
+    # fail the write that already succeeded.
+    if workflow.action_name in WRITE_ACTIONS and workflow.course_id is not None:
+        course = await db.scalar(select(Course).where(Course.id == workflow.course_id))
+        if course is not None:
+            connection = next(
+                (c for c in user.canvas_connections if canvas_urls_equivalent(c.canvas_url, course.canvas_url)),
+                None,
+            )
+            if connection is not None:
+                try:
+                    await sync_courses_if_stale(user, connection, db)
+                except Exception:
+                    logger.warning(
+                        "post-write sync_courses_if_stale failed for canvas_connection_id=%s user_id=%s",
+                        connection.id, user.id, exc_info=True,
+                    )
+                    await db.rollback()
+
     return conversation, result, False
 
 

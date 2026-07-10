@@ -22,11 +22,15 @@ CREATE TABLE users (
 -- Canvas Connections (one row per user per Canvas instance)
 -- ─────────────────────────────────────────────
 CREATE TABLE canvas_connections (
-    id               SERIAL PRIMARY KEY,
-    user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    canvas_url       VARCHAR NOT NULL,
-    encrypted_token  TEXT NOT NULL,
-    created_at       TIMESTAMPTZ DEFAULT NOW(),
+    id                  SERIAL PRIMARY KEY,
+    user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    canvas_url          VARCHAR NOT NULL,
+    encrypted_token     TEXT NOT NULL,
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    -- Last time services/canvas.py's sync_courses_if_stale actually hit
+    -- Canvas for this connection's course list, not just checked the
+    -- cooldown. Null until the first sync ever runs.
+    courses_synced_at   TIMESTAMPTZ,
     CONSTRAINT uq_user_canvas_url UNIQUE (user_id, canvas_url)
 );
 
@@ -64,6 +68,32 @@ CREATE TABLE courses (
 );
 
 CREATE INDEX idx_courses_instructor_id ON courses(instructor_id);
+
+-- ─────────────────────────────────────────────
+-- Canvas Course Names
+-- A small, connection-scoped, write-once canvas_course_id -> name index
+-- used only by the chat/LLM course-resolution pathway (services/chat.py).
+-- Separate from `courses` because it's keyed by canvas_connection_id (so
+-- two institutions with colliding numeric canvas_course_ids never
+-- collide) and rows are never overwritten once inserted (so a rename on
+-- Canvas mid-conversation doesn't retroactively change what an
+-- in-progress conversation has been calling a course).
+-- ─────────────────────────────────────────────
+CREATE TABLE canvas_course_names (
+    id                      SERIAL PRIMARY KEY,
+    canvas_connection_id    INTEGER NOT NULL REFERENCES canvas_connections(id) ON DELETE CASCADE,
+    canvas_course_id        VARCHAR NOT NULL,
+    -- Populated from the Course row the same Canvas fetch upserts
+    -- (services/canvas.py get_courses) -- lets the chat resolver go
+    -- straight from a matched name to something dispatcher.py can
+    -- execute against, no extra query.
+    local_course_id         INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    name                    VARCHAR NOT NULL,
+    created_at              TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_connection_canvas_course UNIQUE (canvas_connection_id, canvas_course_id)
+);
+
+CREATE INDEX idx_canvas_course_names_connection_id ON canvas_course_names(canvas_connection_id);
 
 -- ─────────────────────────────────────────────
 -- Assignments
@@ -108,10 +138,16 @@ CREATE INDEX idx_submissions_student_canvas_id ON submissions(student_canvas_id)
 -- Conversations
 -- ─────────────────────────────────────────────
 CREATE TABLE conversations (
-    id         SERIAL PRIMARY KEY,
-    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    course_id  INTEGER REFERENCES courses(id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    -- Set once (at creation or on this conversation's first course
+    -- resolution) and never mutated after -- a subject switch routes to a
+    -- different conversation row instead (see services/chat.py
+    -- _find_or_fork_conversation_for_course).
+    course_id   INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    -- Denormalized snapshot of course.name at the time course_id was set.
+    course_name VARCHAR,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_conversations_user_id ON conversations(user_id);

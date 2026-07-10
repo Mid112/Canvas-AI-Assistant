@@ -3,6 +3,7 @@ from app.models.assignment import Assignment
 from app.models.audit_log import AuditLog
 from app.models.audit_log_session import AuditLogSession
 from app.models.canvas_connection import CanvasConnection
+from app.models.canvas_course_name import CanvasCourseName
 from app.models.conversation import Conversation
 from app.models.course import Course
 from app.models.message import Message
@@ -22,6 +23,7 @@ __all__ = [
     "AuditLog",
     "AuditLogSession",
     "CanvasConnection",
+    "CanvasCourseName",
     "Conversation",
     "Course",
     "Message",

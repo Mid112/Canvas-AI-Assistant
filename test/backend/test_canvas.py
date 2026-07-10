@@ -776,21 +776,25 @@ def test_set_and_get_active_course(client):
     headers = _register_with_canvas(client)
 
     courses = [_unique_course()]
+    # set_active_course now also calls sync_courses_if_stale (keeps
+    # canvas_course_names fresh for the chat pipeline), which makes its
+    # own real fetch_courses call — mock stays active for the whole
+    # round-trip, not just the initial fetch.
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
         mock.return_value = courses
         fetch_resp = client.get(
             f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers
         )
-    assert fetch_resp.status_code == 200
+        assert fetch_resp.status_code == 200
 
-    local_id = fetch_resp.json()[0]["local_id"]
-    canvas_id = fetch_resp.json()[0]["canvas_id"]
+        local_id = fetch_resp.json()[0]["local_id"]
+        canvas_id = fetch_resp.json()[0]["canvas_id"]
 
-    set_resp = client.patch(
-        "/api/v1/canvas/active-course",
-        json={"local_course_id": local_id},
-        headers=headers,
-    )
+        set_resp = client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_id},
+            headers=headers,
+        )
     assert set_resp.status_code == 200
     assert set_resp.json()["local_id"] == local_id
     assert set_resp.json()["canvas_course_id"] == str(canvas_id)
@@ -811,26 +815,28 @@ def test_set_active_course_updates_preference(client):
     course_a = [_unique_course()]
     course_b = [_unique_course()]
 
+    # set_active_course now also calls sync_courses_if_stale, which makes
+    # its own real fetch_courses call — mock stays active for both PATCHes.
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
         mock.return_value = course_a + course_b
         fetch_resp = client.get(
             f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers
         )
-    assert fetch_resp.status_code == 200
+        assert fetch_resp.status_code == 200
 
-    local_id_a = fetch_resp.json()[0]["local_id"]
-    local_id_b = fetch_resp.json()[1]["local_id"]
+        local_id_a = fetch_resp.json()[0]["local_id"]
+        local_id_b = fetch_resp.json()[1]["local_id"]
 
-    client.patch(
-        "/api/v1/canvas/active-course",
-        json={"local_course_id": local_id_a},
-        headers=headers,
-    )
-    client.patch(
-        "/api/v1/canvas/active-course",
-        json={"local_course_id": local_id_b},
-        headers=headers,
-    )
+        client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_id_a},
+            headers=headers,
+        )
+        client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_id_b},
+            headers=headers,
+        )
 
     get_resp = client.get("/api/v1/canvas/active-course", headers=headers)
     assert get_resp.status_code == 200
@@ -858,3 +864,88 @@ def test_set_active_course_wrong_user(client):
         headers=headers_b,
     )
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# sync_courses_if_stale / canvas_course_names (chat course-name resolution)
+# ---------------------------------------------------------------------------
+
+
+# Verifies: sync_courses_if_stale respects its cooldown.
+def test_sync_courses_if_stale_respects_cooldown(client):
+    """Two 'set active course' switches on the same connection, close
+    together, must only hit Canvas once for the course list — the second
+    is a cooldown no-op, not a fresh fetch."""
+    headers = _register_with_canvas(client)
+    courses = [_unique_course(), _unique_course()]
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        fetch_resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+        assert fetch_resp.status_code == 200
+        local_id_a = fetch_resp.json()[0]["local_id"]
+        local_id_b = fetch_resp.json()[1]["local_id"]
+        assert mock.call_count == 1  # the GET /courses call itself
+
+        set_resp_a = client.patch(
+            "/api/v1/canvas/active-course", json={"local_course_id": local_id_a}, headers=headers
+        )
+        assert set_resp_a.status_code == 200
+        # Connection was just created (courses_synced_at is None) —
+        # cooldown allows a real sync here.
+        assert mock.call_count == 2
+
+        set_resp_b = client.patch(
+            "/api/v1/canvas/active-course", json={"local_course_id": local_id_b}, headers=headers
+        )
+        assert set_resp_b.status_code == 200
+        # Same connection, well within the cooldown window — must not
+        # trigger another real Canvas call.
+        assert mock.call_count == 2
+
+
+# Verifies: canvas_course_names is never overwritten once synced.
+def test_canvas_course_names_never_overwritten_once_synced(client):
+    """canvas_course_names is insert-once (ON CONFLICT DO NOTHING) — a
+    rename on Canvas between syncs must not retroactively change what an
+    in-progress chat conversation has already been calling a course, even
+    though Course.name (the dashboard's view) does pick up the rename."""
+    from app.config import settings as app_settings
+
+    headers = _register_with_canvas(client)
+    canvas_id = uuid.uuid4().int % 10_000_000
+
+    with (
+        patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock,
+        patch.object(app_settings, "CANVAS_COURSE_SYNC_COOLDOWN_SECONDS", 0),
+    ):
+        mock.return_value = [_unique_course(canvas_id) | {"name": "Original Name"}]
+        fetch_resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+        local_id = fetch_resp.json()[0]["local_id"]
+
+        set_resp_1 = client.patch(
+            "/api/v1/canvas/active-course", json={"local_course_id": local_id}, headers=headers
+        )
+        assert set_resp_1.status_code == 200
+        assert set_resp_1.json()["name"] == "Original Name"
+
+        # Renamed on Canvas; cooldown forced to 0 above so this PATCH
+        # triggers a real second sync, not a no-op.
+        mock.return_value = [_unique_course(canvas_id) | {"name": "Renamed"}]
+        set_resp_2 = client.patch(
+            "/api/v1/canvas/active-course", json={"local_course_id": local_id}, headers=headers
+        )
+        assert set_resp_2.status_code == 200
+        # Course.name picks up the rename...
+        assert set_resp_2.json()["name"] == "Renamed"
+
+    # ...but canvas_course_names — what the chat pipeline shows the LLM —
+    # keeps the name it first saw.
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "OK."}'
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        client.post("/api/v1/chat/", json={"message": "hi"}, headers=headers)
+
+    sent_message = mock_adapter.generate.call_args.args[1]
+    assert "Original Name" in sent_message
+    assert "Renamed" not in sent_message

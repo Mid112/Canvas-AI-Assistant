@@ -11,8 +11,13 @@ class ConfirmActionRequest(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    # If omitted, the service falls back to the user's active course
-    # (from user_preferences) or starts a course-less conversation.
+    # Explicit course switch from the "set active course" button. If
+    # omitted, a conversation that already has a course keeps it; a
+    # course-less conversation falls back to the user's persisted
+    # active-course preference and only then, if still unset, to the LLM
+    # naming one from the user's message (see services/chat.py's COURSE
+    # RESOLUTION system-prompt section) — the model itself never sees or
+    # produces a course ID either way.
     local_course_id: int | None = None
     # If omitted, a new conversation is started.
     conversation_id: int | None = None
@@ -43,6 +48,7 @@ class MessageResponse(BaseModel):
 class ConversationResponse(BaseModel):
     id: int
     course_id: int | None
+    course_name: str | None = None
     created_at: datetime
     messages: list[MessageResponse] = []
 

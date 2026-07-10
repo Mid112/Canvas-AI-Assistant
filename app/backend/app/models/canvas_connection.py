@@ -20,6 +20,10 @@ class CanvasConnection(Base):
     # never store the raw token — always Fernet-encrypted before insert
     encrypted_token: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    # Last time services/canvas.py's sync_courses_if_stale actually hit
+    # Canvas for this connection's course list (not just checked the
+    # cooldown) — null until the first sync ever runs.
+    courses_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # one token per user per school — prevents duplicate rows for the same Canvas URL
     __table_args__ = (UniqueConstraint("user_id", "canvas_url", name="uq_user_canvas_url"),)

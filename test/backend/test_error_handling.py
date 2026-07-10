@@ -17,6 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from app.mcp_tools.dispatcher import ToolExecutionError
 
 CANVAS_URL = "https://canvas.ubc.ca"
 
@@ -35,6 +36,49 @@ def _register(client) -> dict:
     )
     token = reg.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+def _register_with_canvas(client) -> tuple[dict, int]:
+    """Register a fresh instructor, connect Canvas, seed one course, and
+    set it active — the active-course PATCH also seeds canvas_course_names
+    (see set_active_course's sync_courses_if_stale call), which is what
+    lets a chat turn with no explicit local_course_id and no course_name
+    in the mocked LLM reply still resolve a course via the
+    UserPreference.active_course_id fallback in get_or_create_conversation."""
+    email = f"errtest_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Error Test User", "email": email, "password": "secret123"},
+    )
+    token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+            headers=headers,
+        )
+
+    canvas_course_id = uuid.uuid4().int % 10_000_000
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = [{
+            "id": canvas_course_id,
+            "name": "CPSC 310",
+            "course_code": "CPSC310",
+            "enrollment_term_id": 1,
+            "workflow_state": "available",
+        }]
+        resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+        local_course_id = resp.json()[0]["local_id"]
+        active_resp = client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_course_id},
+            headers=headers,
+        )
+        assert active_resp.status_code == 200, active_resp.text
+
+    return headers, local_course_id
 
 
 # Verifies: Malformed llm json returns safe message without leaking raw output.
@@ -92,34 +136,52 @@ def test_unknown_action_returns_safe_message_without_leaking_action_name(client)
 def test_confirm_unknown_course_returns_safe_message(client):
     """_resolve_course's ToolExecutionError ("That course could not be
     found in your account.") must reach the client as-is, without the
-    log_detail's internal local_course_id/user_id detail."""
-    headers = _register(client)
+    log_detail's internal local_course_id/user_id detail.
+
+    The LLM never supplies local_course_id itself (see COURSE RESOLUTION
+    in build_system_prompt) — the app injects the real one server-side
+    once a course_name resolves, so a bad/unowned id can no longer be
+    fabricated by mocking the model's output alone. This reproduces
+    _resolve_course's "not found" path the same way a stale/deleted
+    course reference would in production: the preview goes through
+    normally against a real, owned course, and _resolve_course is made to
+    fail specifically at confirm time."""
+    headers, local_course_id = _register_with_canvas(client)
 
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = (
-        '{"action": "intent_preview", "summary": "Fetch assignments", '
-        '"proposed_action": {"action": "fetch_assignments", "local_course_id": 999999}}'
+        '{"action": "intent_preview", "summary": "Fetch assignments", "course_name": "CPSC 310", '
+        '"proposed_action": {"action": "fetch_assignments"}}'
     )
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
         preview = client.post(
             "/api/v1/chat/",
-            json={"message": "show me assignments for course 999999"},
+            json={"message": "show me assignments"},
             headers=headers,
         )
     assert preview.status_code == 200
     pending_message_id = preview.json()["reply"]["pending_message_id"]
     conversation_id = preview.json()["conversation_id"]
 
-    confirm = client.post(
-        "/api/v1/chat/confirm",
-        json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
-        headers=headers,
-    )
+    with patch(
+        "app.mcp_tools.dispatcher._resolve_course",
+        new=AsyncMock(
+            side_effect=ToolExecutionError(
+                "That course could not be found in your account.",
+                log_detail=f"local_course_id={local_course_id} not found or not owned by user_id=<redacted>",
+            )
+        ),
+    ):
+        confirm = client.post(
+            "/api/v1/chat/confirm",
+            json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
+            headers=headers,
+        )
 
     assert confirm.status_code == 200
     body = confirm.json()
     assert body["is_error"] is True
     assert "could not be found in your account" in body["reply"]["error"]
-    # log_detail includes "local_course_id=999999" and the requesting
-    # user_id — neither should be visible to the client.
-    assert "999999" not in confirm.text
+    # log_detail includes the internal local_course_id — it should not be
+    # visible to the client.
+    assert str(local_course_id) not in confirm.text
