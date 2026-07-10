@@ -36,6 +36,17 @@ function withWelcomeMessage(restoredMessages: ChatMessage[]): ChatMessage[] {
   ];
 }
 
+function findLatestPendingMessageId(messages: ChatMessage[]): number | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.pendingActionStatus === "pending") {
+      return message.pendingMessageId;
+    }
+  }
+
+  return undefined;
+}
+
 interface ChatWindowProps {
   initialPrompt?: string | null;
   initialDraft?: string | null;
@@ -109,11 +120,7 @@ export function ChatWindow({
     const loadedMessages = mapConversationToChatMessages(loadedConversation);
     setMessages(withWelcomeMessage(loadedMessages));
     setConversationId(loadedConversation.id);
-    setActivePendingMessageId(
-      loadedMessages.find(
-        (message) => message.pendingActionStatus === "pending",
-      )?.pendingMessageId,
-    );
+    setActivePendingMessageId(findLatestPendingMessageId(loadedMessages));
     setError(null);
     setInputError(null);
     setRetryMessage(null);
@@ -146,11 +153,7 @@ export function ChatWindow({
         const restoredMessages = mapConversationToChatMessages(conversation);
         setMessages(withWelcomeMessage(restoredMessages));
         setConversationId(conversation.id);
-        setActivePendingMessageId(
-          restoredMessages.find(
-            (message) => message.pendingActionStatus === "pending",
-          )?.pendingMessageId,
-        );
+        setActivePendingMessageId(findLatestPendingMessageId(restoredMessages));
         hydratedConversationRef.current = initialConversationId;
       } catch {
         if (cancelled) {

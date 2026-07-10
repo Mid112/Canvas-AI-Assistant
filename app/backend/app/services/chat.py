@@ -406,6 +406,25 @@ async def _sync_workflow_for_preview(
     )
 
 
+async def _supersede_pending_workflow(
+    db: AsyncSession,
+    conversation_id: int,
+    pending_message_id: int | None,
+) -> None:
+    if pending_message_id is None:
+        return
+
+    await db.execute(
+        sa_update(Workflow)
+        .where(
+            Workflow.conversation_id == conversation_id,
+            Workflow.preview_message_id == pending_message_id,
+            Workflow.status == "pending",
+        )
+        .values(status="superseded")
+    )
+
+
 async def _get_recent_messages(
     db: AsyncSession, conversation_id: int
 ) -> list[dict]:
@@ -761,6 +780,12 @@ async def handle_chat_message(
             user_prompt=message,
             proposed_action=result.get("proposed_action", {}),
             affected_resources=preview_metadata.get("affected_resources", []),
+        )
+    else:
+        await _supersede_pending_workflow(
+            db,
+            conversation.id,
+            pending_message_id,
         )
 
     await db.commit()

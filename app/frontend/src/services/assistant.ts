@@ -120,8 +120,9 @@ function mapWorkflowStatus(
   switch (status) {
     case "pending":
       return "pending";
-    case "executed":
     case "executing":
+      return "executing";
+    case "executed":
       return "confirmed";
     case "cancelled":
       return "cancelled";
@@ -151,9 +152,9 @@ export function mapConversationToChatMessages(
         : { content: message.content };
       const pendingActionStatus = mapWorkflowStatus(
         message.pending_action_status,
-      );
+      ) ?? (reply?.intent_preview ? "pending" : undefined);
       const pendingMessageId =
-        pendingActionStatus || reply?.intent_preview ? message.id : undefined;
+        pendingActionStatus ? message.id : undefined;
 
       return [{
         id: `stored-${message.id}`,
@@ -170,7 +171,10 @@ export function mapConversationToChatMessages(
       }];
     }
 
-    if (message.content.startsWith("[")) {
+    if (
+      message.content === "[confirmed action]" ||
+      message.content === "[cancelled action]"
+    ) {
       return [];
     }
 

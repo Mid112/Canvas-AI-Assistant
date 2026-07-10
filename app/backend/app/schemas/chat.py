@@ -31,7 +31,8 @@ def _read_named_items(items: list[object], fallback_label: str) -> str:
     if not names:
         return f"{len(items)} {fallback_label} found"
 
-    suffix = "" if len(items) <= len(names) else f" + {len(items) - len(names)} more"
+    hidden_count = max(len(items) - 3, 0)
+    suffix = "" if hidden_count == 0 else f" + {hidden_count} more"
     return f"{fallback_label.capitalize()}: {', '.join(names)}{suffix}"
 
 
@@ -85,10 +86,24 @@ def _parse_readable_preview(content: str) -> str | None:
 
 def _conversation_preview(messages: list[Message]) -> str | None:
     for message in reversed(messages):
-        if message.role == "user" and message.content.strip().startswith("["):
+        stripped = message.content.strip()
+        if message.role == "user" and stripped in {
+            "[confirmed action]",
+            "[cancelled action]",
+        }:
+            continue
+        if message.role == "assistant" and stripped.startswith(
+            (
+                "Groq rate limit hit",
+                "HTTPException ",
+                "LLM API error:",
+                "LLM request failed:",
+                "LLM request timed out",
+            )
+        ):
             continue
 
-        preview = _parse_readable_preview(message.content)
+        preview = _parse_readable_preview(stripped)
         if preview:
             return preview
 
@@ -178,7 +193,9 @@ class ConversationSummary(BaseModel):
         messages = list(conversation.messages)
         last_message = messages[-1] if messages else None
         pending_actions = [
-            workflow for workflow in conversation.workflows if workflow.status == "pending"
+            workflow
+            for workflow in conversation.workflows
+            if workflow.status in {"pending", "executing"}
         ]
 
         return cls(

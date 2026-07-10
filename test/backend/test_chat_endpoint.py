@@ -49,6 +49,10 @@ def test_llm_error(client):
     assert body["is_error"] is True
     assert "error" in body["reply"]
 
+    history = client.get("/api/v1/chat/conversations", headers=headers)
+    assert history.status_code == 200
+    assert history.json()["items"][0]["preview"] == "List my courses"
+
 
 # Verifies: Plain text model reply is returned.
 def test_plain_text_model_reply_is_returned(client):
@@ -146,6 +150,26 @@ def test_list_conversations(client):
     assert body["items"][0]["id"] == conversation_id
     assert body["items"][0]["message_count"] == 2
     assert body["items"][0]["preview"] == "Hello from history."
+
+
+def test_conversation_preview_preserves_bracketed_user_text(client):
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.side_effect = Exception("connection refused")
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "[URGENT] Please help with grading"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+
+    history = client.get("/api/v1/chat/conversations", headers=headers)
+    assert history.status_code == 200
+    assert history.json()["items"][0]["preview"] == "[URGENT] Please help with grading"
 
 
 def test_conversation_history_is_scoped_to_current_user(client):

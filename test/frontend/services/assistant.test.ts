@@ -252,6 +252,89 @@ describe("conversation history helpers", () => {
       pendingActionStatus: "pending",
     });
   });
+
+  it("defaults restored intent previews with null workflow status to pending", () => {
+    const messages = mapConversationToChatMessages({
+      id: 9,
+      course_id: 3,
+      created_at: "2026-07-01T12:00:00Z",
+      messages: [
+        {
+          id: 22,
+          role: "assistant",
+          content: JSON.stringify({
+            intent_preview: true,
+            summary: "Create Assignment 1",
+            proposed_action: {
+              action: "create_assignment",
+              local_course_id: 3,
+            },
+          }),
+          created_at: "2026-07-01T12:01:00Z",
+          pending_action_status: null,
+        },
+      ],
+    });
+
+    expect(messages[0]).toMatchObject({
+      pendingMessageId: 22,
+      pendingActionStatus: "pending",
+    });
+  });
+
+  it("keeps executing workflow previews distinct from confirmed ones", () => {
+    const messages = mapConversationToChatMessages({
+      id: 9,
+      course_id: 3,
+      created_at: "2026-07-01T12:00:00Z",
+      messages: [
+        {
+          id: 22,
+          role: "assistant",
+          content: JSON.stringify({
+            intent_preview: true,
+            summary: "Create Assignment 1",
+            proposed_action: {
+              action: "create_assignment",
+              local_course_id: 3,
+            },
+          }),
+          created_at: "2026-07-01T12:01:00Z",
+          pending_action_status: "executing",
+        },
+      ],
+    });
+
+    expect(messages[0].pendingActionStatus).toBe("executing");
+  });
+
+  it("preserves real user messages that start with a bracket", () => {
+    const messages = mapConversationToChatMessages({
+      id: 9,
+      course_id: null,
+      created_at: "2026-07-01T12:00:00Z",
+      messages: [
+        {
+          id: 21,
+          role: "user",
+          content: "[URGENT] Please help with grading",
+          created_at: "2026-07-01T12:00:00Z",
+        },
+        {
+          id: 22,
+          role: "user",
+          content: "[confirmed action]",
+          created_at: "2026-07-01T12:01:00Z",
+        },
+      ],
+    });
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      role: "user",
+      content: "[URGENT] Please help with grading",
+    });
+  });
 });
 
 describe("confirmAssistantAction", () => {
