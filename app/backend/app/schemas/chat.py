@@ -7,7 +7,6 @@ from pydantic import BaseModel
 from app.models.conversation import Conversation
 from app.models.message import Message
 
-
 CONVERSATION_PREVIEW_MAX_CHARS = 160
 
 
