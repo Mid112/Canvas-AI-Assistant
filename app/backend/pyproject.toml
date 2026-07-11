@@ -59,9 +59,6 @@ exclude = [
 module = "app.main"
 disable_error_code = ["assignment", "attr-defined"]
 
-[tool.pytest.ini_options]
-asyncio_default_fixture_loop_scope = "function"
-
 [tool.coverage.run]
 source = ["."]
 omit = [
