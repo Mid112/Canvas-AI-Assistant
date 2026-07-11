@@ -130,9 +130,11 @@ jobs:
           echo "PostgreSQL failed to start"
           docker logs "$CONTAINER"
           exit 1
-      - name: Run tests
+      - name: Run tests with coverage
         # x64 Rosetta on Apple Silicon breaks native wheels like cryptography.
         # Run pytest inside Linux Docker with Postgres on the same network.
+        # Coverage config (including fail_under) lives in app/backend/pyproject.toml,
+        # so we run from that directory so pytest-cov picks it up.
         run: |
           docker run --rm \
             --network "ci-net-${{ github.run_id }}" \
@@ -142,9 +144,9 @@ jobs:
             -e ENVIRONMENT=test \
             -e SECRET_KEY=ci-test-secret \
             -e CANVAS_TOKEN_ENCRYPTION_KEY=cS_xtOdvX6UctctAErcx3JJC1e3YBBM-Kwh9WLY3ocI= \
-            -e PYTHONPATH=./app/backend \
+            -e PYTHONPATH=/workspace/app/backend \
             python:3.12-slim-bookworm \
-            bash -c "pip install --quiet -r app/backend/requirements.txt && pytest test/backend/ -v"
+            bash -c "pip install --quiet -r app/backend/requirements.txt && cd app/backend && pytest ../../test/backend/ -v --cov --cov-report=term-missing"
       - name: Stop PostgreSQL
         if: always()
         run: |
@@ -173,9 +175,10 @@ jobs:
         run: npm ci
       - name: Lint
         run: npm run lint
-      - name: Run tests
-        # package.json test script proxies to test/frontend internally
-        run: npm run test
+      - name: Run tests with coverage
+        # package.json test:coverage proxies to test/frontend and enforces
+        # vitest coverage thresholds from vitest.config.ts
+        run: npm run test:coverage
 
   # ── 4. Docker build check ─────────────────
   # Only runs after both lint/test jobs succeed (or are skipped
