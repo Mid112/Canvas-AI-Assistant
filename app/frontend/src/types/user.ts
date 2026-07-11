@@ -9,6 +9,7 @@ export interface User {
   name: string;
   role: UserRole;
   is_active: boolean;
+  avatar_url?: string | null;
   has_canvas_token: boolean;
   // Needed by Canvas-backed screens so API calls target the same Canvas host
   // where the token was saved, e.g. localhost Canvas Docker vs production Canvas.

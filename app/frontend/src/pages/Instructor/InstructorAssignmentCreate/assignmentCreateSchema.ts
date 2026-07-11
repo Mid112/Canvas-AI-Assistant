@@ -28,3 +28,4 @@ export const assignmentReviewSchema = z.object({
 });
 
 export type AssignmentReviewFormSchema = z.infer<typeof assignmentReviewSchema>;
+export type AssignmentReviewFormInput = z.input<typeof assignmentReviewSchema>;

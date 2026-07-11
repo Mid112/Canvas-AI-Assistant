@@ -17,6 +17,7 @@ export interface UserResponse {
   email: string;
   role: string;
   is_active: boolean;
+  avatar_url?: string | null;
   canvas_connections: CanvasConnectionResponse[];
   has_canvas_token: boolean;
 }
@@ -35,6 +36,7 @@ export interface RegisterCredentials {
 export interface ProfileUpdatePayload {
   name?: string;
   email?: string;
+  avatar_url?: string | null;
 }
 
 export interface ChangePasswordPayload {

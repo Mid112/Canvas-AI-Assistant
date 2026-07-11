@@ -25,7 +25,7 @@ import {
   fetchCourses,
   setActiveCourse as persistActiveCourse,
 } from "@/services/canvas";
-import type { ActiveCourseResponse } from "@/types/canvas";
+import type { ActiveCourseResponse, CanvasCourse } from "@/types/canvas";
 import type { ActiveCourseSelection, InstructorCourse } from "@/types/course";
 
 // Must exceed the backend's own per-call Canvas timeout (10s, see

@@ -5,7 +5,6 @@ import { AssistantAvatar } from "@/components/brand/AssistantAvatar";
 import { ActionCard } from "@/components/chat/ActionCard";
 import { ExplanationCard } from "@/components/chat/ExplanationCard";
 import { PendingActionControls } from "@/components/chat/PendingActionControls";
-import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/types/chat";
 
 interface AssistantMessageProps {
