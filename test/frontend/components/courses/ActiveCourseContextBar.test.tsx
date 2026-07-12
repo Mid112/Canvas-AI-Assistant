@@ -30,6 +30,9 @@ describe("ActiveCourseContextBar", () => {
     expect(
       screen.getByText("CS 101: Introduction to Programming"),
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/Conversations are scoped to this course/),
+    ).toBeInTheDocument();
   });
 
   // Verifies: Shows a loading message while the active course loads.

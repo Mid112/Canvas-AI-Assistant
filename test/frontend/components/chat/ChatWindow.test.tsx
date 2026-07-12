@@ -416,6 +416,141 @@ describe("ChatWindow", () => {
     ).toHaveLength(1);
   });
 
+  // Verifies: Typing "never mind" cleanly cancels a pending action instead of
+  // sending it to the LLM as a modification.
+  it("cancels the pending action when the user types 'never mind'", async () => {
+    const user = userEvent.setup();
+
+    mockedSendAssistantMessage.mockResolvedValueOnce({
+      content: "I can create the midterm exam after you confirm.",
+      conversationId: 7,
+      pendingMessageId: 42,
+      interpretedAction: {
+        action: "Create Assignment",
+        course: "CPSC 310",
+        affectedStudents: "Entire class",
+      },
+    });
+    mockedCancelAssistantAction.mockResolvedValueOnce({
+      content: "Cancelled — no changes were made.",
+      conversationId: 7,
+    });
+
+    renderWithInstitution(<ChatWindow />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "Create a midterm exam",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await screen.findByRole("button", { name: "Confirm" });
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "never mind",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Cancelled — no changes were made."),
+      ).toBeInTheDocument();
+    });
+
+    expect(mockedCancelAssistantAction).toHaveBeenCalledWith("test-token", 7, 42);
+    // The dismissal must not be forwarded to the LLM as a second message.
+    expect(mockedSendAssistantMessage).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("This action was cancelled.")).toBeInTheDocument();
+  });
+
+  // Verifies: Switching the active course starts a fresh, course-scoped chat.
+  it("starts a fresh conversation when the active course changes", async () => {
+    const user = userEvent.setup();
+
+    mockUseActiveCourse.mockReturnValue({
+      activeCourse: { localId: 1, displayName: "CS 101" },
+      availableCourses: [],
+      coursesRevision: 0,
+      isLoading: false,
+      isSaving: false,
+      error: null,
+      selectActiveCourse: vi.fn(),
+      refreshActiveCourse: vi.fn(),
+      notifyCoursesChanged: vi.fn(),
+    });
+    mockedSendAssistantMessage.mockResolvedValueOnce({
+      content: "Here is the CS 101 summary.",
+      conversationId: 1,
+    });
+
+    const { rerender } = renderWithInstitution(<ChatWindow />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "Summarize this course",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(await screen.findByText("Summarize this course")).toBeInTheDocument();
+
+    mockUseActiveCourse.mockReturnValue({
+      activeCourse: { localId: 2, displayName: "CS 202" },
+      availableCourses: [],
+      coursesRevision: 0,
+      isLoading: false,
+      isSaving: false,
+      error: null,
+      selectActiveCourse: vi.fn(),
+      refreshActiveCourse: vi.fn(),
+      notifyCoursesChanged: vi.fn(),
+    });
+
+    rerender(<ChatWindow />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Hello! I'm your Canvas AI Assistant/),
+      ).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Summarize this course")).not.toBeInTheDocument();
+  });
+
+  // Verifies: "Edit before sending" prefills the input so the user can modify a
+  // pending proposal in chat.
+  it("prefills the input when editing a pending action before sending", async () => {
+    const user = userEvent.setup();
+
+    mockedSendAssistantMessage.mockResolvedValueOnce({
+      content: "I can create the midterm exam after you confirm.",
+      conversationId: 7,
+      pendingMessageId: 42,
+      interpretedAction: {
+        action: "Create Assignment",
+        course: "CPSC 310",
+        affectedStudents: "Entire class",
+      },
+    });
+
+    renderWithInstitution(<ChatWindow />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "Create a midterm exam",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await user.click(
+      await screen.findByRole("button", { name: "Edit before sending" }),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("textbox", { name: "Chat message" }),
+      ).toHaveValue("Please change the proposed action: ");
+    });
+  });
+
   it("restores conversation history when returning from a workflow preview", async () => {
     mockedFetchConversation.mockResolvedValueOnce({
       id: 7,

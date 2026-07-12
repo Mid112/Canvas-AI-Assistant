@@ -134,7 +134,7 @@ describe("InstructorDashboardPage", () => {
       screen.getByRole("heading", { name: "Dashboard" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Welcome back, Dr. Jane Doe. Overview for UBC."),
+      screen.getByText("Welcome back, Dr. Jane Doe. Overview for canvas.ubc.ca."),
     ).toBeInTheDocument();
 
     await waitFor(() => {

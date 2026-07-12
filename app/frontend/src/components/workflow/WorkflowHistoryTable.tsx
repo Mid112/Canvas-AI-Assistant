@@ -12,13 +12,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatAuditTimestamp } from "@/lib/format-audit-timestamp";
-import { canUndoWorkflowAction } from "@/services/workflowHistory";
 import type { WorkflowHistoryEntry } from "@/types/workflowHistory";
 
 interface WorkflowHistoryTableProps {
   entries: WorkflowHistoryEntry[];
   onCancelPending?: (entry: WorkflowHistoryEntry) => Promise<void>;
-  onUndoApproved?: (entry: WorkflowHistoryEntry) => Promise<void>;
   actionError?: string | null;
   actingWorkflowId?: string | null;
 }
@@ -26,7 +24,6 @@ interface WorkflowHistoryTableProps {
 export function WorkflowHistoryTable({
   entries,
   onCancelPending,
-  onUndoApproved,
   actionError = null,
   actingWorkflowId = null,
 }: WorkflowHistoryTableProps) {
@@ -54,20 +51,6 @@ export function WorkflowHistoryTable({
     }
   };
 
-  const handleUndo = async (entry: WorkflowHistoryEntry) => {
-    if (!onUndoApproved) {
-      return;
-    }
-    setLocalError(null);
-    try {
-      await onUndoApproved(entry);
-    } catch (error) {
-      setLocalError(
-        error instanceof Error ? error.message : "Unable to undo workflow.",
-      );
-    }
-  };
-
   return (
     <div className="space-y-2">
       {actionError || localError ? (
@@ -89,10 +72,6 @@ export function WorkflowHistoryTable({
           {entries.map((entry) => {
             const isActing = actingWorkflowId === entry.id;
             const showCancel = entry.status === "pending" && onCancelPending;
-            const showUndo =
-              entry.status === "approved" &&
-              canUndoWorkflowAction(entry.actionName) &&
-              onUndoApproved;
 
             return (
               <TableRow key={entry.id}>
@@ -145,21 +124,9 @@ export function WorkflowHistoryTable({
                       >
                         {isActing ? "Cancelling..." : "Cancel"}
                       </Button>
-                    ) : null}
-                    {showUndo ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="secondary"
-                        disabled={isActing}
-                        onClick={() => void handleUndo(entry)}
-                      >
-                        {isActing ? "Undoing..." : "Undo"}
-                      </Button>
-                    ) : null}
-                    {!showCancel && !showUndo ? (
+                    ) : (
                       <span className="text-xs text-muted-foreground">—</span>
-                    ) : null}
+                    )}
                   </div>
                 </TableCell>
               </TableRow>

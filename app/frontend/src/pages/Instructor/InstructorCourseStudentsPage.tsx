@@ -31,6 +31,7 @@ import {
   fetchCourseStudentsWithSubmissionFallback,
   StudentApiError,
 } from "@/services/students";
+import { filterAnalyticsStudents } from "@/lib/student-analytics";
 import type { CourseStudent } from "@/types/student";
 import { pageEmbedded, pageShell } from "@/lib/page-shell";
 
@@ -134,8 +135,16 @@ export function InstructorCourseStudentsPage() {
     user?.has_canvas_token,
   ]);
 
+  // Keep the visible list and its count consistent with the email section:
+  // pending/invited enrollments without a usable identity are excluded so the
+  // roster total matches the students that can actually be contacted.
+  const analyticsStudents = useMemo(
+    () => filterAnalyticsStudents(students),
+    [students],
+  );
+
   const filteredStudents = useMemo(() => {
-    const searched = filterBySearch(students, search, (student) =>
+    const searched = filterBySearch(analyticsStudents, search, (student) =>
       [student.name, student.login_id ?? "", student.sortable_name ?? ""].join(
         " ",
       ),
@@ -148,7 +157,7 @@ export function InstructorCourseStudentsPage() {
     return searched.filter(
       (student) => student.enrollment_state === statusFilter,
     );
-  }, [search, statusFilter, students]);
+  }, [analyticsStudents, search, statusFilter]);
 
   const paginated = useMemo(
     () => paginateItems(filteredStudents, page, pageSize),

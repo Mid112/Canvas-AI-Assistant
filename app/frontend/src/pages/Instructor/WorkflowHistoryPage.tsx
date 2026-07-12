@@ -18,7 +18,6 @@ import {
   downloadWorkflowHistoryCsv,
   fetchWorkflowHistory,
   getWorkflowHistoryStatusCounts,
-  undoWorkflow,
   WorkflowHistoryApiError,
 } from "@/services/workflowHistory";
 import {
@@ -132,29 +131,6 @@ export function WorkflowHistoryPage() {
         error instanceof WorkflowHistoryApiError
           ? error.message
           : "Unable to cancel this workflow.";
-      setActionError(message);
-      throw error;
-    } finally {
-      setActingWorkflowId(null);
-    }
-  };
-
-  const handleUndoApproved = async (entry: WorkflowHistoryEntry) => {
-    if (!accessToken) {
-      return;
-    }
-    setActingWorkflowId(entry.id);
-    setActionError(null);
-    try {
-      const updated = await undoWorkflow(accessToken, entry);
-      setEntries((current) =>
-        current.map((item) => (item.id === entry.id ? updated : item)),
-      );
-    } catch (error) {
-      const message =
-        error instanceof WorkflowHistoryApiError
-          ? error.message
-          : "Unable to undo this workflow.";
       setActionError(message);
       throw error;
     } finally {
@@ -296,7 +272,6 @@ export function WorkflowHistoryPage() {
           <WorkflowHistoryTable
             entries={pagination.items}
             onCancelPending={handleCancelPending}
-            onUndoApproved={handleUndoApproved}
             actionError={actionError}
             actingWorkflowId={actingWorkflowId}
           />

@@ -57,7 +57,8 @@ describe("InstructorDashboardQuickActions", () => {
     );
     expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant, {
       state: {
-        initialPrompt: "Help me draft a course announcement for my active course.",
+        initialPrompt:
+          "Draft a student message or course announcement for my active course. Propose a send_message action I can review and edit before sending.",
       },
     });
 

@@ -108,7 +108,7 @@ export function InstructorAssistantPage() {
   }, [activeCourse?.localId]);
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+    <div className="flex min-h-0 flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
       <InstructorAssistantHeader />
 
       {!hasCanvas ? (

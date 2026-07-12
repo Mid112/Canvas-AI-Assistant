@@ -22,8 +22,8 @@ export const assignmentReviewSchema = z.object({
     .refine((value) => new Date(value).getTime() > Date.now(), {
       message: "Due date must be in the future",
     }),
-  pointsPossible: z.coerce
-    .number()
+  pointsPossible: z
+    .number({ message: "Points possible must be a number" })
     .positive("Points possible must be greater than 0"),
 });
 

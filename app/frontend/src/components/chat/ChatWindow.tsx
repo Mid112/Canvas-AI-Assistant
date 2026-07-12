@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { seedChatMessages } from "@/data/assistantSeedData";
+import { isCancellationPhrase } from "@/lib/chat-cancellation";
 import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
 import {
   AssistantApiError,
@@ -450,9 +451,30 @@ export function ChatWindow({
       };
 
       setMessages((current) => [...current, userMessage]);
+
+      // If the user types a dismissal like "never mind" while an action is
+      // awaiting confirmation, cleanly cancel the pending proposal instead of
+      // forwarding the text to the LLM (which can surface a malformed-response
+      // error rather than a clean cancellation).
+      if (
+        activePendingMessageId !== undefined &&
+        isCancellationPhrase(trimmed)
+      ) {
+        const pendingMessage = messages.find(
+          (entry) =>
+            entry.pendingMessageId === activePendingMessageId &&
+            entry.pendingActionStatus === "pending",
+        );
+
+        if (pendingMessage) {
+          void resolvePendingAction(pendingMessage, "cancel");
+          return;
+        }
+      }
+
       void deliverAssistantResponse(trimmed);
     },
-    [deliverAssistantResponse],
+    [activePendingMessageId, deliverAssistantResponse, messages, resolvePendingAction],
   );
 
   useEffect(() => {

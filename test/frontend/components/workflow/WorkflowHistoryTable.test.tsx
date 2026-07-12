@@ -42,35 +42,30 @@ const entries: WorkflowHistoryEntry[] = [
 ];
 
 describe("WorkflowHistoryTable", () => {
-  it("shows undo for reversible approved actions and cancel for pending", async () => {
+  it("shows a cancel action for pending workflows", async () => {
     const user = userEvent.setup();
     const onCancelPending = vi.fn().mockResolvedValue(undefined);
-    const onUndoApproved = vi.fn().mockResolvedValue(undefined);
 
     render(
       <WorkflowHistoryTable
         entries={entries}
         onCancelPending={onCancelPending}
-        onUndoApproved={onUndoApproved}
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Undo" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Undo" }));
-    expect(onUndoApproved).toHaveBeenCalledWith(entries[0]);
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onCancelPending).toHaveBeenCalledWith(entries[1]);
   });
 
-  it("does not offer undo for irreversible approved send_message actions", () => {
+  it("does not offer an undo action for executed (approved) workflows", () => {
+    // Undo is intentionally not exposed: there is no backend endpoint to
+    // reverse an executed Canvas action, so the UI must not imply otherwise.
     render(
       <WorkflowHistoryTable
-        entries={[entries[2]!]}
+        entries={[entries[0]!, entries[2]!]}
         onCancelPending={vi.fn()}
-        onUndoApproved={vi.fn()}
       />,
     );
 

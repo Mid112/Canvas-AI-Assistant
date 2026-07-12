@@ -13,6 +13,7 @@ import {
   type AiMessageDraftLocationState,
 } from "@/routes/paths";
 import { fetchCourseStudentsWithSubmissionFallback } from "@/services/students";
+import { toStudentEmailRecipients } from "@/lib/student-analytics";
 import type { FetchMessageDraftOptions } from "@/types/messageDraft";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -78,6 +79,7 @@ export function InstructorMessagesPage() {
   useEffect(() => {
     const tabParam = searchParams.get("tab");
     if (tabParam === "compose" || aiDraft) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync tab to URL/AI draft on load
       setTab("compose");
     }
   }, [aiDraft, searchParams]);
@@ -126,11 +128,9 @@ export function InstructorMessagesPage() {
           return;
         }
 
-        const recipients = students.map((student) => ({
-          id: student.canvas_user_id,
-          name: student.name,
-          email: student.login_id ?? "",
-        }));
+        // Exclude pending/identity-less students so the recipient list matches
+        // the addresses that can actually receive a message.
+        const recipients = toStudentEmailRecipients(students);
         const preferredIds = aiDraft?.recipientIds;
         const seededRecipients =
           preferredIds && preferredIds.length > 0 ?
