@@ -164,3 +164,93 @@ def test_course_overview_with_assignments_and_submissions(client):
     assert payload["recent_assignments"][0]["title"] in {"Variables Quiz", "Loops Lab"}
     assert payload["recent_assignments"][0]["total_students"] == 2
     assert payload["recent_activity"] == []
+
+
+# Verifies: missing/late counts, average_grade, completion_rate, and recent_activity
+# are computed from real submission data (not just left at their empty defaults).
+def test_course_overview_grades_completion_and_activity(client):
+    headers = _register_with_canvas(client)
+    local_id = _sync_local_course(client, headers)
+    assignment_id = uuid.uuid4().int % 10_000_000
+
+    assignments = [
+        {
+            "id": assignment_id,
+            "name": "Midterm",
+            "description": None,
+            "due_at": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
+            "points_possible": 100.0,
+            "course_id": 1,
+        }
+    ]
+    with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock:
+        mock.return_value = assignments
+        client.get(
+            f"/api/v1/canvas/courses/{local_id}/assignments?canvas_url={CANVAS_URL}",
+            headers=headers,
+        )
+
+    enrollments = [
+        {
+            "user_id": 2001,
+            "enrollment_state": "active",
+            "user": {"name": "Ada Lovelace", "sortable_name": "Lovelace, Ada"},
+        },
+        {
+            "user_id": 2002,
+            "enrollment_state": "active",
+            "user": {"name": "Grace Hopper", "sortable_name": "Hopper, Grace"},
+        },
+    ]
+    submission_id_one = uuid.uuid4().int % 10_000_000
+    submission_id_two = submission_id_one + 1
+    submissions = [
+        {
+            "id": submission_id_one,
+            "assignment_id": assignment_id,
+            "user_id": 2001,
+            "score": 90.0,
+            "grade": "A",
+            "submitted_at": "2026-01-01T12:00:00Z",
+            "workflow_state": "graded",
+            "user": {"name": "Ada Lovelace"},
+        },
+        {
+            "id": submission_id_two,
+            "assignment_id": assignment_id,
+            "user_id": 2002,
+            "score": None,
+            "grade": None,
+            "submitted_at": None,
+            "workflow_state": "unsubmitted",
+            "missing": True,
+        },
+    ]
+
+    with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
+        mock.return_value = submissions
+        submissions_resp = client.get(
+            f"/api/v1/canvas/courses/{local_id}/assignments/{assignment_id}/submissions?canvas_url={CANVAS_URL}",
+            headers=headers,
+        )
+    assert submissions_resp.status_code == 200
+
+    with (
+        patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock_enrollments,
+        patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock_assignments,
+    ):
+        mock_enrollments.return_value = enrollments
+        mock_assignments.return_value = assignments
+        response = client.get(
+            f"/api/v1/canvas/courses/{local_id}/overview?canvas_url={CANVAS_URL}",
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["missing_submissions"] == 1
+    assert payload["late_submissions"] == 0
+    assert payload["average_grade"] == 90.0
+    assert payload["completion_rate"] == 50.0
+    assert len(payload["recent_activity"]) == 1
+    assert payload["recent_activity"][0]["student_name"] == "Ada Lovelace"

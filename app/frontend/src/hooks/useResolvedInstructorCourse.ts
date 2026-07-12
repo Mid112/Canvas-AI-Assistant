@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useInstitution } from "@/contexts/useInstitution";
@@ -27,8 +27,14 @@ export function useResolvedInstructorCourse(
 ): UseResolvedInstructorCourseResult {
   const { user } = useAuth();
   const { selectedInstitution } = useInstitution();
-  const { availableCourses, isLoading, error, needsCanvasConnection } =
-    useActiveCourse();
+  const {
+    availableCourses,
+    isLoading,
+    isLoaded,
+    error,
+    needsCanvasConnection,
+    refreshActiveCourse,
+  } = useActiveCourse();
 
   const idIsValid = Number.isInteger(localCourseId) && localCourseId > 0;
 
@@ -39,6 +45,31 @@ export function useResolvedInstructorCourse(
         : null,
     [availableCourses, idIsValid, localCourseId],
   );
+
+  // course resolves from ActiveCourseProvider's already-fetched list rather than
+  // fetching independently — if the requested id isn't in that list yet (e.g. a
+  // direct/bookmarked link opened before the provider's own fetch resolved, or a
+  // course synced in another tab since this session's last fetch), retry once via
+  // a shared refresh rather than immediately reporting "not found."
+  const retriedForIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!idIsValid || course || isLoading || !isLoaded || needsCanvasConnection) {
+      return;
+    }
+    if (retriedForIdRef.current === localCourseId) {
+      return;
+    }
+    retriedForIdRef.current = localCourseId;
+    void refreshActiveCourse();
+  }, [
+    course,
+    idIsValid,
+    isLoaded,
+    isLoading,
+    localCourseId,
+    needsCanvasConnection,
+    refreshActiveCourse,
+  ]);
 
   const fallbackCanvasUrl = useMemo(
     () => resolveCanvasApiUrl(user, selectedInstitution.id),

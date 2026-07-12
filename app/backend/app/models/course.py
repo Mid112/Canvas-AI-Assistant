@@ -25,6 +25,9 @@ class Course(Base):
     canvas_url: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     term: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Canvas's course state (e.g. "available", "unpublished", "completed") — persisted
+    # so set_active_course can reject non-selectable courses without a live Canvas call.
+    workflow_state: Mapped[str] = mapped_column(String, nullable=False, default="available", server_default="available")
 
     instructor_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
 

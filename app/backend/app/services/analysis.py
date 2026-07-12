@@ -1,9 +1,11 @@
 import asyncio
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.canvas import fetch_enrollments, fetch_submissions
+from app.models.assignment import Assignment
 from app.models.course import Course
 from app.models.user import User
 from app.schemas.analysis import (
@@ -22,6 +24,22 @@ MISSING_STATUSES = (SubmissionStatus.missing, SubmissionStatus.unsubmitted)
 SUBMITTED_STATUSES = (SubmissionStatus.graded, SubmissionStatus.submitted, SubmissionStatus.late)
 
 _SECONDS_PER_DAY = 86400
+
+
+async def _resolve_assignment_published(course: Course, assignment_id: int, db: AsyncSession) -> bool:
+    """Looks up whether this assignment is published from the local mirror
+    (kept in sync by get_assignments whenever the assignments list is
+    fetched — the normal path to picking an assignment_id here). Defaults to
+    True (not a draft) when the assignment was never synced locally rather
+    than making an extra live Canvas call for what's only ever a hint, not
+    something this analysis is authoritative about."""
+    local = await db.scalar(
+        select(Assignment).where(
+            Assignment.canvas_assignment_id == str(assignment_id),
+            Assignment.course_id == course.id,
+        )
+    )
+    return local.published if local is not None else True
 
 
 async def _fetch_roster_and_submissions(
@@ -61,6 +79,7 @@ async def analyze_missing_submissions(
         fetch_enrollments(canvas_course_id, token, canvas_url),
         fetch_submissions(canvas_course_id, assignment_id, token, canvas_url),
     )
+    assignment_published = await _resolve_assignment_published(course, assignment_id, db)
 
     # Dedupe by Canvas user id — a student enrolled in multiple sections has one
     # enrollment record per section but should be analyzed once
@@ -107,6 +126,7 @@ async def analyze_missing_submissions(
         assignment_id=assignment_id,
         canvas_url=course.canvas_url,
         generated_at=datetime.now(UTC),
+        assignment_published=assignment_published,
         summary=SubmissionSummary(
             total_enrolled=total_enrolled,
             submitted_count=submitted_count,
@@ -129,6 +149,7 @@ async def analyze_late_submissions(
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     roster, submissions = await _fetch_roster_and_submissions(course, assignment_id, token, canvas_url)
+    assignment_published = await _resolve_assignment_published(course, assignment_id, db)
 
     submission_by_user = {str(raw["user_id"]): raw for raw in submissions}
 
@@ -188,6 +209,7 @@ async def analyze_late_submissions(
         assignment_id=assignment_id,
         canvas_url=course.canvas_url,
         generated_at=datetime.now(UTC),
+        assignment_published=assignment_published,
         summary=LateSubmissionSummary(
             total_enrolled=len(roster),
             submitted_count=submitted_count,

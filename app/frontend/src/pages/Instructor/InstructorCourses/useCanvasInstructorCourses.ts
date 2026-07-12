@@ -70,14 +70,22 @@ export function useCanvasInstructorCourses() {
   const hasCanvasToken = Boolean(accessToken && user?.has_canvas_token);
 
   useEffect(() => {
-    if (!accessToken || availableCourses.length === 0) {
+    if (availableCourses.length === 0) {
+      // Nothing to merge counts onto — clear any counts left over from a
+      // previous, now-replaced course list rather than letting them linger.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset when prerequisites are missing
+      setAssignmentCounts(new Map());
+      return;
+    }
+
+    if (!accessToken || !canvasUrl) {
       return;
     }
 
     const token = accessToken;
     let cancelled = false;
 
-    void loadAssignmentCounts(availableCourses, token, canvasUrl ?? "").then(
+    void loadAssignmentCounts(availableCourses, token, canvasUrl).then(
       (coursesWithCounts) => {
         if (!cancelled) {
           setAssignmentCounts(

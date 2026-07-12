@@ -314,4 +314,74 @@ describe("ActiveCourseProvider", () => {
 
     expect(authWithCanvas.logout).toHaveBeenCalled();
   });
+
+  // Verifies: A course that flipped unpublished since the last active-course read
+  // is never (re-)adopted as the resolved active course, even though
+  // fetchActiveCourse's response was read before this course-list sync — the
+  // race that previously let the frontend re-select a course the backend had
+  // just rejected/cleared.
+  it("does not adopt a course as active if it has since flipped unpublished", async () => {
+    mockedFetchActiveCourse.mockResolvedValue({
+      local_id: 1,
+      canvas_course_id: "101",
+      canvas_url: CANVAS_URL,
+      name: "Introduction to Programming",
+      term: null,
+    });
+    mockedFetchCourses.mockResolvedValue([
+      { ...canvasCourses[0]!, workflow_state: "unpublished" },
+    ]);
+
+    const { result } = renderHook(() => useActiveCourse(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.activeCourse).toBeNull();
+  });
+
+  // Verifies: A stale local-storage selection pointing at a now-unpublished
+  // course is not resolved as active either.
+  it("does not adopt a stored active-course selection if it has since flipped unpublished", async () => {
+    setStoredActiveCourseSelection("1", {
+      localId: 1,
+      displayName: "Introduction to Programming",
+    });
+    mockedFetchActiveCourse.mockResolvedValue(null);
+    mockedFetchCourses.mockResolvedValue([
+      { ...canvasCourses[0]!, workflow_state: "unpublished" },
+    ]);
+
+    const { result } = renderHook(() => useActiveCourse(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.activeCourse).toBeNull();
+  });
+
+  // Verifies: A still-published course is adopted as active normally (no
+  // over-correction from the isPublished gating above).
+  it("still adopts a published course as active", async () => {
+    mockedFetchActiveCourse.mockResolvedValue({
+      local_id: 1,
+      canvas_course_id: "101",
+      canvas_url: CANVAS_URL,
+      name: "Introduction to Programming",
+      term: null,
+    });
+
+    const { result } = renderHook(() => useActiveCourse(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.activeCourse).toEqual({
+      localId: 1,
+      displayName: "CS 101: Introduction to Programming",
+    });
+  });
 });

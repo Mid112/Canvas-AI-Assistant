@@ -858,3 +858,268 @@ def test_set_active_course_wrong_user(client):
         headers=headers_b,
     )
     assert response.status_code == 404
+
+
+# Verifies: Set active course rejects an unpublished course.
+def test_set_active_course_rejects_unpublished(client):
+    headers = _register_with_canvas(client)
+    courses = [_unique_course() | {"workflow_state": "unpublished"}]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        fetch_resp = client.get(
+            f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers
+        )
+    local_id = fetch_resp.json()[0]["local_id"]
+
+    response = client.patch(
+        "/api/v1/canvas/active-course",
+        json={"local_course_id": local_id},
+        headers=headers,
+    )
+    assert response.status_code == 400
+
+
+# Verifies: A course that becomes unpublished on a later sync is cleared as active.
+def test_active_course_cleared_when_course_becomes_unpublished(client):
+    headers = _register_with_canvas(client)
+    canvas_id = uuid.uuid4().int % 10_000_000
+    courses = [_unique_course(canvas_id) | {"workflow_state": "available"}]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        fetch_resp = client.get(
+            f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers
+        )
+    local_id = fetch_resp.json()[0]["local_id"]
+
+    set_resp = client.patch(
+        "/api/v1/canvas/active-course",
+        json={"local_course_id": local_id},
+        headers=headers,
+    )
+    assert set_resp.status_code == 200
+
+    # Course is later synced as unpublished on Canvas
+    courses_now_unpublished = [_unique_course(canvas_id) | {"workflow_state": "unpublished"}]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses_now_unpublished
+        client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+
+    get_resp = client.get("/api/v1/canvas/active-course", headers=headers)
+    assert get_resp.status_code == 200
+    assert get_resp.json() is None
+
+
+# Verifies: Course workflow_state is persisted and updated on subsequent syncs.
+def test_course_workflow_state_persisted_and_updated(client):
+    headers = _register_with_canvas(client)
+    canvas_id = uuid.uuid4().int % 10_000_000
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = [_unique_course(canvas_id) | {"workflow_state": "available"}]
+        first = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+    assert first.json()[0]["workflow_state"] == "available"
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = [_unique_course(canvas_id) | {"workflow_state": "completed"}]
+        second = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+    assert second.json()[0]["workflow_state"] == "completed"
+
+
+# Verifies: A course Canvas stops returning entirely (not just flipped unpublished)
+# is reconciled to workflow_state="deleted" and, if it was active, is cleared.
+def test_course_reconciled_and_active_cleared_when_it_vanishes_from_canvas(client):
+    headers = _register_with_canvas(client)
+    canvas_id_kept = uuid.uuid4().int % 10_000_000
+    canvas_id_vanishing = canvas_id_kept + 1
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = [
+            _unique_course(canvas_id_kept),
+            _unique_course(canvas_id_vanishing),
+        ]
+        fetch_resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+    assert fetch_resp.status_code == 200
+    local_id_vanishing = next(
+        c["local_id"] for c in fetch_resp.json() if c["canvas_id"] == canvas_id_vanishing
+    )
+
+    set_resp = client.patch(
+        "/api/v1/canvas/active-course",
+        json={"local_course_id": local_id_vanishing},
+        headers=headers,
+    )
+    assert set_resp.status_code == 200
+
+    # Next sync: Canvas no longer returns the vanishing course at all (deleted,
+    # or teacher access revoked) — only the other course comes back.
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = [_unique_course(canvas_id_kept)]
+        second_resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+    assert second_resp.status_code == 200
+    assert len(second_resp.json()) == 1
+
+    get_resp = client.get("/api/v1/canvas/active-course", headers=headers)
+    assert get_resp.status_code == 200
+    assert get_resp.json() is None
+
+    # Setting the vanished course active again is now rejected (workflow_state="deleted").
+    reject_resp = client.patch(
+        "/api/v1/canvas/active-course",
+        json={"local_course_id": local_id_vanishing},
+        headers=headers,
+    )
+    assert reject_resp.status_code == 400
+
+
+# Verifies: A course that vanishes but was NOT the active course leaves the
+# active preference untouched.
+def test_course_vanishing_does_not_clear_unrelated_active_course(client):
+    headers = _register_with_canvas(client)
+    canvas_id_kept = uuid.uuid4().int % 10_000_000
+    canvas_id_vanishing = canvas_id_kept + 1
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = [
+            _unique_course(canvas_id_kept),
+            _unique_course(canvas_id_vanishing),
+        ]
+        fetch_resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+    local_id_kept = next(
+        c["local_id"] for c in fetch_resp.json() if c["canvas_id"] == canvas_id_kept
+    )
+
+    client.patch(
+        "/api/v1/canvas/active-course",
+        json={"local_course_id": local_id_kept},
+        headers=headers,
+    )
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = [_unique_course(canvas_id_kept)]
+        client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+
+    get_resp = client.get("/api/v1/canvas/active-course", headers=headers)
+    assert get_resp.status_code == 200
+    assert get_resp.json()["local_id"] == local_id_kept
+
+
+# ---------------------------------------------------------------------------
+# Completed courses — selectable/reviewable, but read-only
+# ---------------------------------------------------------------------------
+
+
+# Verifies: A completed (concluded) course CAN be set as the active course —
+# unlike an unpublished draft, which is rejected.
+def test_set_active_course_allows_completed_course(client):
+    headers = _register_with_canvas(client)
+    courses = [_unique_course() | {"workflow_state": "completed"}]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        fetch_resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+    local_id = fetch_resp.json()[0]["local_id"]
+
+    response = client.patch(
+        "/api/v1/canvas/active-course",
+        json={"local_course_id": local_id},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    assert response.json()["local_id"] == local_id
+
+
+# Verifies: Reading assignments from a completed course still works normally —
+# only writes are blocked, not reads.
+def test_list_assignments_allowed_for_completed_course(client):
+    headers = _register_with_canvas(client)
+    courses = [_unique_course() | {"workflow_state": "completed"}]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        fetch_resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+    local_id = fetch_resp.json()[0]["local_id"]
+
+    with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock:
+        mock.return_value = MOCK_ASSIGNMENTS
+        response = client.get(
+            f"/api/v1/canvas/courses/{local_id}/assignments?canvas_url={CANVAS_URL}",
+            headers=headers,
+        )
+    assert response.status_code == 200
+    assert response.json()[0]["name"] == "Assignment 1"
+
+
+# Verifies: Creating an assignment in a completed course is rejected (read-only).
+def test_create_assignment_rejected_for_completed_course(client):
+    headers = _register_with_canvas(client)
+    courses = [_unique_course() | {"workflow_state": "completed"}]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        fetch_resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+    local_id = fetch_resp.json()[0]["local_id"]
+
+    with patch("app.services.canvas.create_assignment", new_callable=AsyncMock) as mock:
+        response = client.post(
+            f"/api/v1/canvas/courses/{local_id}/assignments?canvas_url={CANVAS_URL}",
+            json={"name": "New Assignment", "description": None, "due_at": None},
+            headers=headers,
+        )
+    assert response.status_code == 400
+    mock.assert_not_called()
+
+
+# Verifies: Updating an assignment in a completed course is rejected (read-only).
+def test_update_assignment_rejected_for_completed_course(client):
+    headers = _register_with_canvas(client)
+    courses = [_unique_course() | {"workflow_state": "completed"}]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        fetch_resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+    local_id = fetch_resp.json()[0]["local_id"]
+
+    with patch("app.services.canvas.update_assignment", new_callable=AsyncMock) as mock:
+        response = client.patch(
+            f"/api/v1/canvas/courses/{local_id}/assignments/10?canvas_url={CANVAS_URL}",
+            json={"name": "Updated", "description": None, "due_at": None},
+            headers=headers,
+        )
+    assert response.status_code == 400
+    mock.assert_not_called()
+
+
+# Verifies: Previewing an assignment creation in a completed course is
+# rejected too — fails fast at preview time, not just at commit time.
+def test_assignment_preview_rejected_for_completed_course(client):
+    headers = _register_with_canvas(client)
+    courses = [_unique_course() | {"workflow_state": "completed"}]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        fetch_resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+    local_id = fetch_resp.json()[0]["local_id"]
+
+    response = client.post(
+        f"/api/v1/canvas/courses/{local_id}/assignments/preview?canvas_url={CANVAS_URL}",
+        json={"name": "New Assignment", "description": None, "due_at": None},
+        headers=headers,
+    )
+    assert response.status_code == 400
+
+
+# Verifies: Creating/updating an assignment in a still-available (published)
+# course is unaffected by the completed-course write guard.
+def test_create_assignment_still_allowed_for_available_course(client):
+    headers = _register_with_canvas(client)
+    courses = [_unique_course() | {"workflow_state": "available"}]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        fetch_resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+    local_id = fetch_resp.json()[0]["local_id"]
+
+    created = MOCK_ASSIGNMENT | {"id": 99, "name": "New Assignment"}
+    with patch("app.services.canvas.create_assignment", new_callable=AsyncMock) as mock:
+        mock.return_value = created
+        response = client.post(
+            f"/api/v1/canvas/courses/{local_id}/assignments?canvas_url={CANVAS_URL}",
+            json={"name": "New Assignment", "description": None, "due_at": None},
+            headers=headers,
+        )
+    assert response.status_code == 200
+    mock.assert_awaited_once()

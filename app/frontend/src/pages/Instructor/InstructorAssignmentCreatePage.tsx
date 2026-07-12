@@ -62,21 +62,24 @@ export function InstructorAssignmentCreatePage() {
   } = useActiveCourse();
   const { refreshDashboard } = useInstitution();
 
-  const publishedCourses = useMemo(
-    () => availableCourses.filter((course) => course.isPublished),
+  // Creating an assignment is a write — a completed course is selectable
+  // elsewhere (e.g. the active-course selector) but can't be written to, so
+  // it's excluded here specifically, not just wherever isPublished is used.
+  const writableCourses = useMemo(
+    () => availableCourses.filter((course) => course.isWritable),
     [availableCourses],
   );
   const labelById = useMemo(
-    () => disambiguateCourseLabels(publishedCourses),
-    [publishedCourses],
+    () => disambiguateCourseLabels(writableCourses),
+    [writableCourses],
   );
   const courseOptions: AssignmentCreateCourseOption[] = useMemo(
     () =>
-      publishedCourses.map((course) => ({
+      writableCourses.map((course) => ({
         id: String(course.id),
         label: labelById.get(course.id) ?? course.name,
       })),
-    [labelById, publishedCourses],
+    [labelById, writableCourses],
   );
 
   const courseLabel =

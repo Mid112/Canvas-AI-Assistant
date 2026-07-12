@@ -21,6 +21,7 @@ function makeCourse(overrides: Partial<InstructorCourse>): InstructorCourse {
     assignmentCount: 0,
     lastActivity: "",
     isPublished: true,
+    isWritable: true,
     term: null,
     ...overrides,
   };

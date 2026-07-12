@@ -135,7 +135,10 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
       const dashboard = await fetchInstructorDashboard(accessToken);
       setApiDashboard(withSharedQuickActions(dashboard));
     } catch {
-      setApiDashboard(null);
+      // Keep whatever dashboard data is already displayed rather than blanking a
+      // working dashboard on a transient failure — this is called right after a
+      // chat action confirms or an assignment is created, so a single slow/failed
+      // round-trip here shouldn't erase data that was correct a moment ago.
     }
   }, [accessToken, user?.role]);
 

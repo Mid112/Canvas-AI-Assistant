@@ -118,7 +118,11 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
     (courses: InstructorCourse[]): ActiveCourseSelection | null => {
       const stored = getStoredActiveCourseSelection(persistenceScope);
       const storedId = stored?.localId ?? null;
-      const matched = courses.find((course) => course.id === storedId);
+      // isPublished check matters here: a stale local-storage selection can point
+      // at a course that flipped unpublished since it was cached.
+      const matched = courses.find(
+        (course) => course.id === storedId && course.isPublished,
+      );
       return matched ? toActiveCourseSelection(matched) : null;
     },
     [persistenceScope],
@@ -131,7 +135,12 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
     ): ActiveCourseSelection | null => {
       if (preferredLocalId != null) {
         const preferred = courses.find((course) => course.id === preferredLocalId);
-        if (preferred) {
+        // Only adopt the preferred course if it's still selectable — otherwise fall
+        // through to the stored selection rather than re-displaying/re-selecting a
+        // course the backend has already decided is no longer the active one (e.g.
+        // it just flipped unpublished, or a fresh serverActive read raced ahead of
+        // that flip being reflected server-side — see refreshActiveCourse below).
+        if (preferred && preferred.isPublished) {
           return toActiveCourseSelection(preferred);
         }
       }
@@ -180,12 +189,23 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
           courses,
           serverActive?.local_id ?? getStoredActiveCourseId(persistenceScope),
         );
+        // serverActive was fetched before this course-list sync, so it can be stale
+        // if this course just flipped unpublished (the backend clears the
+        // preference as part of the course-list sync we just awaited, not before
+        // it) — only trust it as a fallback if the freshly-fetched list still
+        // agrees this course is selectable.
+        const serverActiveStillSelectable = Boolean(
+          serverActive &&
+            courses.some(
+              (course) => course.id === serverActive.local_id && course.isPublished,
+            ),
+        );
 
         if (isMountedRef.current) {
           setAvailableCourses(courses);
           setActiveCourseState(
             selectedFromList ??
-              (serverActive
+              (serverActiveStillSelectable && serverActive
                 ? toActiveCourseSelectionFromResponse(serverActive)
                 : null),
           );

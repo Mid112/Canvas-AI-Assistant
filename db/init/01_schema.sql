@@ -57,6 +57,9 @@ CREATE TABLE courses (
     canvas_url       VARCHAR NOT NULL,
     name             VARCHAR NOT NULL,
     term             VARCHAR,
+    -- Canvas's course state ("available", "unpublished", "completed", ...) — lets
+    -- set_active_course reject non-selectable courses without a live Canvas call.
+    workflow_state   VARCHAR NOT NULL DEFAULT 'available',
     instructor_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     created_at       TIMESTAMPTZ DEFAULT NOW(),
     -- composite unique: the same Canvas course can exist once per instructor (co-instructors allowed)
@@ -76,6 +79,14 @@ CREATE TABLE assignments (
     description          TEXT,
     due_date             TIMESTAMPTZ,
     points_possible      FLOAT,
+    -- False once a Canvas refresh no longer returns this assignment (deleted on
+    -- Canvas) — kept rather than deleted so historical submissions/audit rows
+    -- still resolve; excluded from active counts/aggregates.
+    is_active            BOOLEAN NOT NULL DEFAULT true,
+    -- Canvas's own draft/published distinction — a draft assignment is invisible
+    -- to students and can't have real submissions, so data-analysis surfaces
+    -- (missing/late counts, average grade, completion rate) exclude drafts.
+    published            BOOLEAN NOT NULL DEFAULT true,
     created_at           TIMESTAMPTZ DEFAULT NOW(),
     -- Unique per course, not globally — two co-instructors on the same real
     -- Canvas course get separate local Course rows, and each needs its own

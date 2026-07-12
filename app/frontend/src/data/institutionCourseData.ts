@@ -37,6 +37,7 @@ export const institutionCourseData: InstitutionCourseData[] = [
         assignmentCount: 8,
         lastActivity: "2 hours ago",
         isPublished: true,
+        isWritable: true,
         term: null,
       },
       {
@@ -48,6 +49,7 @@ export const institutionCourseData: InstitutionCourseData[] = [
         assignmentCount: 6,
         lastActivity: "5 hours ago",
         isPublished: true,
+        isWritable: true,
         term: null,
       },
       {
@@ -59,6 +61,7 @@ export const institutionCourseData: InstitutionCourseData[] = [
         assignmentCount: 5,
         lastActivity: "1 day ago",
         isPublished: true,
+        isWritable: true,
         term: null,
       },
       {
@@ -70,6 +73,7 @@ export const institutionCourseData: InstitutionCourseData[] = [
         assignmentCount: 4,
         lastActivity: "6 hours ago",
         isPublished: true,
+        isWritable: true,
         term: null,
       },
       {
@@ -81,6 +85,7 @@ export const institutionCourseData: InstitutionCourseData[] = [
         assignmentCount: 10,
         lastActivity: "30 minutes ago",
         isPublished: true,
+        isWritable: true,
         term: null,
       },
       {
@@ -92,6 +97,7 @@ export const institutionCourseData: InstitutionCourseData[] = [
         assignmentCount: 7,
         lastActivity: "3 days ago",
         isPublished: true,
+        isWritable: true,
         term: null,
       },
     ],
@@ -210,6 +216,7 @@ export const institutionCourseData: InstitutionCourseData[] = [
         assignmentCount: 7,
         lastActivity: "1 hour ago",
         isPublished: true,
+        isWritable: true,
         term: null,
       },
       {
@@ -221,6 +228,7 @@ export const institutionCourseData: InstitutionCourseData[] = [
         assignmentCount: 5,
         lastActivity: "4 hours ago",
         isPublished: true,
+        isWritable: true,
         term: null,
       },
       {
@@ -232,6 +240,7 @@ export const institutionCourseData: InstitutionCourseData[] = [
         assignmentCount: 6,
         lastActivity: "2 days ago",
         isPublished: true,
+        isWritable: true,
         term: null,
       },
     ],

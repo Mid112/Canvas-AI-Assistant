@@ -93,9 +93,10 @@ async def preview_assignment_endpoint(
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.services.canvas import get_owned_course
+    from app.services.canvas import get_owned_course, require_writable_course
 
     course = await get_owned_course(course_id, current_user, canvas_url, db)
+    require_writable_course(course)
     preview = build_action_preview(
         "create_assignment",
         f"Create assignment '{body.name}' in {course.name}",
