@@ -120,6 +120,17 @@ export function mapChatReplyToAssistantResponse(
         ? reply.pending_message_id
         : undefined;
 
+    // A grouped send_message turn can resolve to more than one distinct
+    // message (see additional_previews in chat.py's
+    // _persist_additional_message_previews) — each entry is shaped
+    // identically to this same reply, so it maps the same way.
+    const additionalPreviewsRaw = Array.isArray(reply.additional_previews)
+      ? (reply.additional_previews as Record<string, unknown>[])
+      : undefined;
+    const additionalPreviews = additionalPreviewsRaw?.map((entry) =>
+      mapChatReplyToAssistantResponse(entry, false, conversationId),
+    );
+
     return {
       content:
         readString(reply.summary) ??
@@ -133,6 +144,7 @@ export function mapChatReplyToAssistantResponse(
         pendingMessageId,
       ),
       pendingMessageId,
+      additionalPreviews,
     };
   }
 

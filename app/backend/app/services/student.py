@@ -3,7 +3,8 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.integrations.canvas import fetch_enrollments
+from app.integrations.canvas import fetch_assignments, fetch_enrollments, fetch_submissions
+from app.models.course import Course
 from app.models.student import Student
 from app.models.user import User
 from app.schemas.student import StudentResponse
@@ -66,3 +67,46 @@ async def get_students(
     await db.commit()
 
     return [StudentResponse.model_validate(student_map[str(item["user_id"])]) for item in data]
+
+
+async def get_submission_derived_students(
+    course: Course,
+    user: User,
+    canvas_url: str,
+) -> list[dict]:
+    """Fallback identity corpus for resolving a student by name: some Canvas
+    instances expose submission records for a user even when the
+    enrollments endpoint (get_students' source, above) returns nothing for
+    them. Loops every assignment's submissions and returns one entry per
+    unique submitter (deduped by user_id), pulled straight from
+    fetch_submissions' include[]=user payload — deliberately skips the
+    per-user profile-enrichment call services/canvas.py's get_submissions
+    does for sparse email/login_id, since this is an expensive full-course
+    scan already and a name + user_id is enough to resolve a reference; not
+    a replacement for the roster as the primary source, only a fallback
+    when a name doesn't match anyone in it.
+
+    Returns [{"user_id": int, "name": str | None, "email": str | None,
+    "login_id": str | None}, ...]."""
+    token = require_canvas_token(user, canvas_url)
+    canvas_course_id = int(course.canvas_course_id)
+    assignments = await fetch_assignments(canvas_course_id, token, canvas_url)
+
+    seen: dict[int, dict] = {}
+    for assignment in assignments:
+        submissions = await fetch_submissions(
+            canvas_course_id, int(assignment["id"]), token, canvas_url,
+        )
+        for submission in submissions:
+            submission_user_id = int(submission["user_id"])
+            if submission_user_id in seen:
+                continue
+            submitter = submission.get("user") or {}
+            seen[submission_user_id] = {
+                "user_id": submission_user_id,
+                "name": submitter.get("name"),
+                "email": submitter.get("email") or submitter.get("primary_email"),
+                "login_id": submitter.get("login_id"),
+            }
+
+    return list(seen.values())

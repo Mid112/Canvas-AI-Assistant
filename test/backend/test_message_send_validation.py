@@ -158,6 +158,10 @@ def test_send_succeeds_when_recipient_enrolled(client):
 
 # Verifies: Send accepts submission backed recipient when roster is empty.
 def test_send_accepts_submission_backed_recipient_when_roster_is_empty(client):
+    """get_submission_derived_students (services/student.py) is the shared
+    course-wide submissions scan _submission_recipient_ids now delegates to
+    — also used by send_message's recipient-name resolution chain
+    (services/chat.py)."""
     headers, local_course_id = _register_with_canvas(client)
     draft_id = _create_draft(client, headers, local_course_id, recipient_ids=["42"])
 
@@ -168,14 +172,9 @@ def test_send_accepts_submission_backed_recipient_when_roster_is_empty(client):
             return_value=[],
         ),
         patch(
-            "app.services.message_validation.fetch_assignments",
+            "app.services.message_validation.get_submission_derived_students",
             new_callable=AsyncMock,
-            return_value=[{"id": 77}],
-        ),
-        patch(
-            "app.services.message_validation.fetch_submissions",
-            new_callable=AsyncMock,
-            return_value=[{"user_id": 42}],
+            return_value=[{"user_id": 42, "name": "Student 42", "email": None, "login_id": None}],
         ),
         patch("app.services.canvas.send_conversation", new_callable=AsyncMock) as mock_send,
     ):

@@ -10,6 +10,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from app.config import settings
 from app.core.canvas_url import canvas_urls_equivalent, normalize_canvas_url
+from app.core.database import AsyncSessionLocal
 from app.core.security import decrypt_canvas_token
 from app.integrations.canvas import (
     create_announcement,
@@ -527,20 +528,50 @@ async def run_course_sync_sweep(db: AsyncSession) -> None:
     connection's failure — a bad/expired token, a Canvas outage — is
     logged and skipped, never allowed to abort the sweep for everyone
     else. Called on a timer by app.main's lifespan; also safe to call
-    directly (e.g. from a test or a manual trigger)."""
+    directly (e.g. from a test or a manual trigger).
+
+    Each connection is synced in its own freshly opened session rather
+    than the shared `db` passed in here. Session.rollback() expires every
+    object already loaded in that session, not just the ones touched by
+    the failed operation — reusing `db` across iterations meant one
+    connection's failure (e.g. an expired token) would expire the
+    `User`/`CanvasConnection` objects still needed by every later
+    iteration too, and the next plain attribute access on those expired
+    objects (e.g. `user.canvas_connections`, a synchronous read) would
+    raise MissingGreenlet since it falls outside AsyncSession's
+    greenlet-bridged call path. An isolated session per connection means a
+    failure (and its rollback) can never leak into any other iteration."""
     users = list(
         await db.scalars(select(User).options(selectinload(User.canvas_connections)))
     )
-    for user in users:
-        for connection in user.canvas_connections:
+    connection_ids = [
+        (user.id, connection.id) for user in users for connection in user.canvas_connections
+    ]
+
+    for user_id, connection_id in connection_ids:
+        async with AsyncSessionLocal() as conn_db:
+            # require_canvas_token (called via get_courses, inside
+            # sync_courses_if_stale) synchronously reads
+            # user.canvas_connections — without eager-loading it here too,
+            # that access is an un-awaited lazy load on an AsyncSession,
+            # which SQLAlchemy always raises MissingGreenlet on, eager
+            # load or not the object's freshness.
+            user = await conn_db.scalar(
+                select(User).options(selectinload(User.canvas_connections)).where(User.id == user_id)
+            )
+            connection = await conn_db.scalar(
+                select(CanvasConnection).where(CanvasConnection.id == connection_id)
+            )
+            if user is None or connection is None:
+                continue
             try:
-                await sync_courses_if_stale(user, connection, db)
+                await sync_courses_if_stale(user, connection, conn_db)
             except Exception:
                 logger.warning(
                     "course sync sweep failed for canvas_connection_id=%s user_id=%s",
-                    connection.id, user.id, exc_info=True,
+                    connection_id, user_id, exc_info=True,
                 )
-                await db.rollback()
+                await conn_db.rollback()
 
 
 async def get_active_course(user: User, db: AsyncSession) -> ActiveCourseResponse | None:

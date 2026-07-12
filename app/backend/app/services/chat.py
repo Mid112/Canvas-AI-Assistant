@@ -3,10 +3,13 @@ import asyncio
 import json
 import logging
 import re
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
+from typing import Any
 
 import httpx
 from fastapi import HTTPException
+from pydantic import BaseModel
 from sqlalchemy import desc, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,8 +24,10 @@ from app.mcp_tools.schemas import (
     READ_ACTIONS,
     WRITE_ACTIONS,
     FetchAssignmentsAction,
+    FetchStudentsAction,
     FetchSubmissionsAction,
     IntentPreviewAction,
+    RecipientDirective,
 )
 from app.models.assignment import Assignment
 from app.models.audit_log import AuditLog
@@ -38,6 +43,8 @@ from app.models.workflow import Workflow
 from app.services.canvas import sync_courses_if_stale
 from app.services.llm.json_extraction import extract_json_object
 from app.services.llm.llm_setting import get_llm_adapter
+from app.services.student import get_submission_derived_students
+from app.services.write_preview import generate_write_preview
 
 logger = logging.getLogger(__name__)
 
@@ -498,6 +505,332 @@ async def _run_fetch_submissions_chain(
     )
 
 
+@dataclass
+class MessageGroup:
+    """One outgoing send_message: shared body text + who it goes to.
+    recipient_ids/recipient_names are empty for a class-wide announcement
+    group."""
+    body: str
+    recipient_ids: list[int] = field(default_factory=list)
+    recipient_names: list[str] = field(default_factory=list)
+
+
+_RECIPIENT_RESOLVER_SYSTEM_PROMPT = """You resolve which real students a
+user is referring to, given the real list of candidate students in their
+course and how they described each intended recipient.
+
+Respond with exactly one JSON object and nothing else:
+{"resolutions": [{"student_reference": "<copied exactly from input>", "canvas_user_id": <id or null>}, ...]}
+
+Include exactly one entry per reference given to you in "References to
+resolve", in the same order, using its exact original text for
+student_reference. Use the "canvas_user_id" value from the matching
+candidate in CANDIDATES — never a value that isn't in that list. Match on
+name (a close or partial match is fine, e.g. a first name or a common
+nickname), or on login_id/email if the reference looks like one. If a
+reference could match more than one candidate, or doesn't confidently match
+any of them, respond with null for that entry instead of guessing."""
+
+RECIPIENT_RESOLVER_TIMEOUT_SECONDS = 30.0
+
+
+async def _resolve_students_via_llm(
+    candidates: list[dict], references: list[str], user_message: str
+) -> dict[str, int | None]:
+    """Small dedicated LLM call resolving every natural-language student
+    reference against a real candidate list at once — same paradigm as
+    _resolve_assignment_reference (never trust the model to invent an ID,
+    only to point at one from a real list the app gives it), batched into
+    one call rather than one per name for latency.
+
+    Returns a dict keyed by the original reference string. Any failure
+    (timeout, HTTP error, unparseable JSON) or a reference the model
+    couldn't confidently match maps to None — never raises — so the caller
+    always has a uniform "unresolved" signal to fall back on."""
+    if not references:
+        return {}
+    listing = "\n".join(
+        f"- canvas_user_id={c['user_id']}, name={c.get('name')!r}, "
+        f"login_id={c.get('login_id')!r}, email={c.get('email')!r}"
+        for c in candidates
+    )
+    prompt = (
+        f"CANDIDATES:\n{listing}\n\n"
+        f"References to resolve: {references}\n"
+        f"User's full message: {user_message}"
+    )
+    result: dict[str, int | None] = dict.fromkeys(references)
+    adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
+    try:
+        raw = await asyncio.wait_for(
+            adapter.generate(
+                _RECIPIENT_RESOLVER_SYSTEM_PROMPT, prompt, history=[],
+                timeout=RECIPIENT_RESOLVER_TIMEOUT_SECONDS,
+            ),
+            timeout=RECIPIENT_RESOLVER_TIMEOUT_SECONDS,
+        )
+        parsed = json.loads(extract_json_object(raw))
+    except (TimeoutError, httpx.HTTPStatusError, json.JSONDecodeError):
+        return result
+
+    resolutions = parsed.get("resolutions") if isinstance(parsed, dict) else None
+    if not isinstance(resolutions, list):
+        return result
+
+    valid_ids = {c["user_id"] for c in candidates}
+    for entry in resolutions:
+        if not isinstance(entry, dict):
+            continue
+        ref = entry.get("student_reference")
+        candidate_id = entry.get("canvas_user_id")
+        if ref in result and candidate_id in valid_ids:
+            result[ref] = candidate_id
+    return result
+
+
+async def _resolve_recipient_directives(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    course: Course,
+    roster: list[dict],
+    directives: list[RecipientDirective],
+    user_message: str,
+) -> list[MessageGroup] | dict:
+    """Resolves each directive's student_reference to a real Canvas user ID
+    — the roster first, falling back to a submissions-derived corpus only
+    for names the roster couldn't match (mirrors
+    message_validation._submission_recipient_ids' existing "some Canvas
+    instances only prove membership via submissions" fallback, sharing its
+    underlying scan via get_submission_derived_students) — then groups
+    directives that share identical body text into one MessageGroup each.
+
+    Returns a clarify dict (never raises) if one or more references still
+    can't be confidently resolved after both passes."""
+    references = [d.student_reference for d in directives]
+    known: dict[int, dict] = {
+        int(s["canvas_user_id"]): {
+            "user_id": int(s["canvas_user_id"]),
+            "name": s.get("name"),
+            "login_id": s.get("login_id"),
+            "email": None,
+        }
+        for s in roster
+    }
+    resolved = await _resolve_students_via_llm(list(known.values()), references, user_message)
+
+    unresolved = [ref for ref in references if resolved.get(ref) is None]
+    if unresolved:
+        print(f"Checking {course.name} submissions for additional student records")
+        fallback_students = await _run_tracked_read(
+            db, user, conversation, user_msg.id, "fetch_submissions",
+            {"local_course_id": course.id, "scope": "all_assignments"},
+            get_submission_derived_students(course, user, course.canvas_url),
+        )
+        new_candidates = [s for s in fallback_students if s["user_id"] not in known]
+        for student in new_candidates:
+            known[student["user_id"]] = student
+        if new_candidates:
+            fallback_resolved = await _resolve_students_via_llm(new_candidates, unresolved, user_message)
+            for ref, candidate_id in fallback_resolved.items():
+                if candidate_id is not None:
+                    resolved[ref] = candidate_id
+
+    still_unresolved = [ref for ref in references if resolved.get(ref) is None]
+    if still_unresolved:
+        known_names = ", ".join(sorted({s["name"] for s in known.values() if s.get("name")}))
+        return {
+            "action": "clarify",
+            "clarify": True,
+            "question": (
+                f"I couldn't match {', '.join(still_unresolved)} to a student in "
+                f"{course.name}. Known students: {known_names or 'none found'}."
+            ),
+            "partial_plan": {"local_course_id": course.id},
+        }
+
+    by_body: dict[str, MessageGroup] = {}
+    for directive in directives:
+        canvas_user_id = resolved[directive.student_reference]
+        assert canvas_user_id is not None  # guaranteed by the still_unresolved check above
+        group = by_body.setdefault(directive.body, MessageGroup(body=directive.body))
+        group.recipient_ids.append(canvas_user_id)
+        group.recipient_names.append(known.get(canvas_user_id, {}).get("name") or directive.student_reference)
+
+    return list(by_body.values())
+
+
+def _build_grouped_send_message_result(course: Course, subject: str, groups: list[MessageGroup]) -> dict:
+    """Builds proposed_action + preview_metadata for every resolved
+    message group, without touching the DB — kept pure so it's easy to
+    unit test. The caller (handle_chat_message) persists group 0 through
+    the ordinary single-preview path unchanged (so a modify turn still
+    overwrites the same message in place exactly as it does for any other
+    write), and any remaining groups via _persist_additional_message_previews
+    right after it."""
+    entries = []
+    for index, group in enumerate(groups):
+        proposed_action = {
+            "action": "send_message",
+            "local_course_id": course.id,
+            "subject": subject,
+            "body": group.body,
+            "recipient_canvas_user_ids": group.recipient_ids,
+            # Informational only — never read by dispatcher's send_message
+            # write case, just lets write_preview.py show real names
+            # instead of bare Canvas IDs.
+            "recipient_names": group.recipient_names,
+        }
+        preview_metadata = generate_write_preview(proposed_action, course)
+        if len(groups) > 1:
+            preview_metadata["message_index"] = index + 1
+            preview_metadata["message_count"] = len(groups)
+        entries.append({"proposed_action": proposed_action, "preview_metadata": preview_metadata})
+
+    primary = entries[0]
+    result = {
+        "action": "intent_preview",
+        "intent_preview": True,
+        "summary": primary["preview_metadata"]["summary"],
+        "proposed_action": primary["proposed_action"],
+        "preview_metadata": primary["preview_metadata"],
+    }
+    if len(entries) > 1:
+        # Popped and persisted by handle_chat_message right after it
+        # handles the primary group — never sent to the client as-is.
+        result["_extra_groups"] = entries[1:]
+    return result
+
+
+async def _supersede_stale_message_previews(
+    db: AsyncSession, conversation: Conversation, pending_message_id: int | None
+) -> None:
+    """A fresh messaging batch retires any earlier one still open in this
+    conversation. "superseded" already exists in the status vocabulary
+    (see Workflow's docstring and the DB CHECK constraint) but nothing else
+    in the app has ever set it — this is its first real use. Scoped to
+    action_name == "send_message" so an unrelated pending
+    create_assignment/update_assignment preview in the same conversation is
+    left untouched, and skips the workflow being reused via
+    pending_message_id on a modify turn (that one gets reset to "pending"
+    with fresh content by _sync_workflow_for_preview instead, same as any
+    other modify)."""
+    query = select(Workflow).where(
+        Workflow.conversation_id == conversation.id,
+        Workflow.status == "pending",
+        Workflow.action_name == "send_message",
+    )
+    if pending_message_id is not None:
+        query = query.where(Workflow.preview_message_id != pending_message_id)
+    stale_workflows = await db.scalars(query)
+    for stale in stale_workflows:
+        stale.status = "superseded"
+
+
+async def _run_send_message_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    action: Any,
+    user_message: str,
+    pending_message_id: int | None,
+) -> dict:
+    """Runs the recipient-resolution + grouping chain for a send_message
+    turn that named recipients in natural language (recipient_directives)
+    or asked to broadcast privately to the whole class
+    (broadcast_to_all_students) — mirrors _run_fetch_submissions_chain's
+    "resolve server-side, never trust the model with a raw ID" shape, for
+    people instead of assignments. Only reached when handle_chat_message's
+    dispatch sees one of those two fields set; a plain send_message (an
+    announcement, or one with recipient_canvas_user_ids already known) is
+    unaffected and keeps using the existing single-preview auto-wrap path."""
+    course = await resolve_course(db, user, action.local_course_id)
+    groups: list[MessageGroup] = []
+    roster: list[dict] = []
+
+    if action.broadcast_to_all_students or action.recipient_directives:
+        print(f"Gathering {course.name} student roster")
+        fetch_action = FetchStudentsAction(local_course_id=course.id)
+        roster_result = await _run_tracked_read(
+            db, user, conversation, user_msg.id, "fetch_students",
+            fetch_action.model_dump(), execute_tool(db, user, fetch_action),
+        )
+        roster = roster_result["students"]
+
+    if action.broadcast_to_all_students:
+        active = [s for s in roster if s.get("enrollment_state") == "active"]
+        groups.append(MessageGroup(
+            body=action.body,
+            recipient_ids=[int(s["canvas_user_id"]) for s in active],
+            recipient_names=[s.get("name") or f"Student {s['canvas_user_id']}" for s in active],
+        ))
+
+    if action.recipient_directives:
+        resolved = await _resolve_recipient_directives(
+            db, user, conversation, user_msg, course, roster, action.recipient_directives, user_message,
+        )
+        if isinstance(resolved, dict):
+            return resolved
+        groups.extend(resolved)
+
+    if action.also_announce_to_class or not groups:
+        groups.append(MessageGroup(body=action.body, recipient_ids=[], recipient_names=[]))
+
+    await _supersede_stale_message_previews(db, conversation, pending_message_id)
+    return _build_grouped_send_message_result(course, action.subject, groups)
+
+
+async def _persist_additional_message_previews(
+    db: AsyncSession,
+    conversation: Conversation,
+    user: User,
+    user_msg: Message,
+    user_prompt: str,
+    extra_groups: list[dict],
+) -> list[dict]:
+    """Persists every message group after the first from a grouped
+    send_message turn (see _run_send_message_chain / _build_grouped_send_message_result)
+    — group 0 already went through the ordinary single-preview persistence
+    path in handle_chat_message, unchanged. Each of these is a brand-new
+    Message + Workflow row (pending_message_id=None always inserts, since
+    Workflow.preview_message_id is unique per row — no DB migration needed;
+    nothing enforces "at most one pending workflow per conversation" at the
+    schema level, that invariant was only ever app-level/frontend).
+
+    Phase 1: every group is shown at once, each independently
+    confirmable/cancelable. A later phase can queue these instead and
+    reveal them one at a time as earlier ones resolve, without changing
+    this persistence shape."""
+    previews = []
+    for entry in extra_groups:
+        proposed_action = entry["proposed_action"]
+        preview_metadata = entry["preview_metadata"]
+        result = {
+            "action": "intent_preview",
+            "intent_preview": True,
+            "summary": preview_metadata["summary"],
+            "proposed_action": proposed_action,
+            "preview_metadata": preview_metadata,
+        }
+        assistant_msg = await log_message(
+            db, conversation, role="assistant", content=_json_dumps(result)
+        )
+        await _sync_workflow_for_preview(
+            db, conversation, user,
+            source_user_message_id=user_msg.id,
+            pending_message_id=None,
+            preview_message_id=assistant_msg.id,
+            user_prompt=user_prompt,
+            proposed_action=proposed_action,
+            affected_resources=preview_metadata.get("affected_resources", []),
+        )
+        result["pending_message_id"] = assistant_msg.id
+        previews.append(result)
+    return previews
+
+
 async def _load_stored_intent_preview(
     db: AsyncSession, conversation_id: int, message_id: int
 ) -> dict | None:
@@ -787,9 +1120,36 @@ def _truncate_history_content(content: str) -> str:
     return content[:HISTORY_MESSAGE_MAX_CHARS] + " …[truncated]"
 
 
+def _schema_for_prompt(schema_cls: type[BaseModel]) -> dict:
+    """The model never supplies local_course_id itself — the app always
+    injects the real one server-side once a course_name resolves (see
+    COURSE RESOLUTION below and _inject_course_into_envelope). Rendering
+    it here as a required integer field directly contradicts that prose
+    instruction: a model facing "the schema says required int" vs. "never
+    output an ID" has to guess which one to follow, and a smaller/weaker
+    model has been observed resolving that tension by fabricating a
+    plausible-looking ID or by dropping some other required field
+    entirely instead. Excluding it from what's rendered removes the
+    contradiction; execute_tool/_inject_course_into_envelope still treat
+    it as a real required field at injection/validation time — this only
+    changes what the model itself is told to produce. Builds a new dict
+    rather than mutating model_json_schema()'s return value, in case
+    Pydantic ever shares/caches that object elsewhere."""
+    schema = schema_cls.model_json_schema()
+    properties = {k: v for k, v in schema.get("properties", {}).items() if k != "local_course_id"}
+    result = {**schema, "properties": properties}
+    if "required" in schema:
+        required = [f for f in schema["required"] if f != "local_course_id"]
+        if required:
+            result["required"] = required
+        else:
+            result.pop("required", None)
+    return result
+
+
 def build_system_prompt() -> str:
     tool_list = "\n".join(
-        f"- {name}: {schema.model_json_schema()}"
+        f"- {name}: {_schema_for_prompt(schema)}"
         for name, schema in ACTION_SCHEMAS.items()
         if name not in {"out_of_scope", "clarify", "intent_preview", "respond"}
     )
@@ -930,26 +1290,59 @@ proposed_action entirely, since anything omitted is preserved
 automatically.
 
 MESSAGING STUDENTS:
-send_message can either post a public class announcement (when
-recipient_canvas_user_ids is omitted) or send a private Canvas conversation
-to specific students (when recipient_canvas_user_ids is provided) — these
-have very different audiences, so never guess which one the user means.
-If the user refers to specific students (e.g. "them", "the late students",
-a named student) — including a reference to a group from earlier in this
-conversation, such as a previous fetch_students/fetch_submissions result —
-you must resolve and include their exact Canvas user IDs in
-recipient_canvas_user_ids. If you do not already have those IDs from this
-conversation, propose fetch_students or fetch_submissions first instead of
-guessing; never fall back to omitting recipient_canvas_user_ids (which
-posts a public announcement to the entire class) just because you don't
-have the IDs yet — that silently sends the message to a far larger
-audience than the user asked for. This action is course-scoped like any
-other (see COURSE RESOLUTION above). subject and body are both required
-and must be the user's actual words — if the
-user hasn't told you what the message should say, use the AMBIGUITY CHECK
-above and ask for it; do not invent wording or write a placeholder. The
-user can ask you to revise the draft before confirming — treat that like
-any other follow-up refinement.
+send_message can post a public class announcement, send a private Canvas
+message to specific students, or both in the same turn — these have very
+different audiences, so never guess which one the user means.
+
+If it's genuinely unclear whether the user wants a private message to
+specific people or a public announcement (e.g. "message my students" with
+no other detail, and you don't already know), ask via clarify using exactly
+this framing: reply with the student name(s) to send this privately to
+them, or reply "skip"/"continue" (or leave it blank) to post it as a public
+announcement to the whole class instead. Put whatever subject/body/course
+you already have into partial_plan. On the next turn, read the user's
+answer yourself the same way you read any other message — names mean
+recipient_directives (below), skip/continue/empty means an announcement
+(propose send_message with no recipient fields set, same as today).
+
+PRIVATE MESSAGE TO NAMED STUDENTS: if the user names specific people —
+directly, or via a reference to a group from earlier in this conversation
+such as a previous fetch_students/fetch_submissions result — and you do
+not already have their exact Canvas IDs, set recipient_directives: one
+entry per intended recipient, each with student_reference (the user's own
+words for that person, copied verbatim, never invented) and body (the
+message meant for them). Copy body verbatim across every entry that shares
+one message; give entries distinct body text only when the user actually
+asked for different wording per person. The app resolves each
+student_reference to a real Canvas ID server-side and groups identical
+messages together for you — never invent or guess a numeric ID yourself,
+and never fall back to a plain announcement just because you don't have the
+IDs yet, that silently sends to a far larger audience than asked for.
+
+If you already have a student's exact Canvas ID from earlier in this
+conversation, you may set recipient_canvas_user_ids directly instead
+(skips resolution) — but never mix a guessed ID into that list.
+
+BROADCASTING PRIVATELY TO THE WHOLE CLASS: if the user wants a private
+message sent to every student — not a public announcement — set
+broadcast_to_all_students: true and leave recipient_canvas_user_ids /
+recipient_directives unset; the app resolves the full active roster for
+you. This is also how to handle a follow-up like "actually send that
+announcement as a message to everyone instead": re-propose send_message
+with broadcast_to_all_students: true, dropping the announcement framing.
+
+ANNOUNCEMENT PLUS TARGETED MESSAGES: if the user wants both a public
+announcement AND a private message to specific people in the same turn,
+set also_announce_to_class: true alongside recipient_directives (or
+broadcast_to_all_students) — the top-level subject/body becomes the
+announcement text.
+
+This action is course-scoped like any other (see COURSE RESOLUTION above).
+subject and body are both required and must be the user's actual words —
+if the user hasn't told you what the message should say, use the AMBIGUITY
+CHECK above and ask for it; do not invent wording or write a placeholder.
+The user can ask you to revise the draft before confirming — treat that
+like any other follow-up refinement.
 
 AVAILABLE ACTIONS (only used inside proposed_action):
 """ + tool_list
@@ -1045,7 +1438,7 @@ async def handle_chat_message(
         )
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 429:
-            log_detail = "Groq rate limit hit"
+            log_detail = "LLM provider rate limit hit"
             user_message = "The assistant is temporarily rate-limited. Please wait a moment and try again."
         else:
             log_detail = f"LLM API error: {e.response.status_code}"
@@ -1126,15 +1519,23 @@ async def handle_chat_message(
             result = text_reply
         else:
             action = parse_action(raw_output)
-            if (
-                action.action == "intent_preview"
-                and action.proposed_action.get("action") in READ_ACTIONS
-            ):
-                # Defensive: the model wrapped a read in intent_preview
-                # despite the system prompt (INTENT PREVIEW section) saying
-                # that step is for write actions only. Unwrap and treat it
-                # as a direct read instead of showing a pointless "confirm
-                # this read" preview.
+            needs_unwrap = False
+            if action.action == "intent_preview":
+                proposed = action.proposed_action
+                proposed_name = proposed.get("action")
+                needs_unwrap = proposed_name in READ_ACTIONS or (
+                    proposed_name == "send_message"
+                    and bool(proposed.get("recipient_directives") or proposed.get("broadcast_to_all_students"))
+                )
+            if needs_unwrap:
+                # Defensive: the model wrapped a read, or a send_message
+                # that still needs server-side recipient resolution, in
+                # intent_preview despite the system prompt saying not to —
+                # both produce their own intent_preview internally (a read
+                # never does at all; a directive-bearing send_message does,
+                # via _run_send_message_chain below) — so unwrap and
+                # dispatch directly instead of showing a pointless double
+                # preview.
                 action = parse_action(json.dumps(action.proposed_action))
 
             if action.action == "fetch_submissions":
@@ -1144,6 +1545,17 @@ async def handle_chat_message(
                 # than executing directly.
                 result = await _run_fetch_submissions_chain(
                     db, user, conversation, user_msg, action, message
+                )
+            elif action.action == "send_message" and (
+                action.recipient_directives or action.broadcast_to_all_students
+            ):
+                # Named recipients without known Canvas IDs, or a
+                # whole-roster private broadcast — resolve server-side
+                # (never trust the model with a raw ID) and build one
+                # preview per distinct message group, rather than executing
+                # directly or auto-wrapping into a single intent_preview.
+                result = await _run_send_message_chain(
+                    db, user, conversation, user_msg, action, message, pending_message_id
                 )
             elif action.action in READ_ACTIONS:
                 # Every other read executes immediately — no preview, no
@@ -1217,6 +1629,16 @@ async def handle_chat_message(
             user_prompt=message,
             proposed_action=result.get("proposed_action", {}),
             affected_resources=preview_metadata.get("affected_resources", []),
+        )
+
+    # A grouped send_message turn (_run_send_message_chain) may have
+    # resolved to more than one distinct message — group 0 was just
+    # persisted above through the ordinary single-preview path unchanged;
+    # every remaining group still needs its own Message + Workflow row.
+    extra_groups = result.pop("_extra_groups", None)
+    if extra_groups:
+        result["additional_previews"] = await _persist_additional_message_previews(
+            db, conversation, user, user_msg, message, extra_groups,
         )
 
     await db.commit()

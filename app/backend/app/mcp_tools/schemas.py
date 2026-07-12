@@ -99,14 +99,48 @@ class UpdateAssignmentAction(BaseModel):
         return value if value is None else _normalize_due_date_str(value)
 
 
+class RecipientDirective(BaseModel):
+    # The user's own words for ONE intended recipient, e.g. "Yerdana" —
+    # never a numeric ID. Resolved server-side against the course roster
+    # (and, as a fallback, submission records) the same way course_name and
+    # assignment_reference are resolved, so the model never has to guess a
+    # Canvas user ID.
+    student_reference: str
+    # The message meant for this recipient. Copy the shared body verbatim
+    # across every directive that shares one message; use a distinct body
+    # per directive only when the user actually asked for different text
+    # for different people.
+    body: str
+
+
 class SendMessageAction(BaseModel):
     action: Literal["send_message"] = "send_message"
     local_course_id: int
     subject: str
     body: str
-    # When omitted or empty, posts a public class announcement. When provided,
-    # sends a Canvas conversation to the listed student Canvas user IDs.
+    # When omitted or empty (and recipient_directives/broadcast_to_all_students
+    # are also unset), posts a public class announcement. When provided
+    # directly, sends a Canvas conversation to the listed student Canvas user
+    # IDs — only ever set this when those IDs are already known from earlier
+    # in the conversation (e.g. a prior fetch_students/fetch_submissions
+    # result), never guessed.
     recipient_canvas_user_ids: list[int] | None = None
+    # Natural-language recipients, used when the user names specific people
+    # but their Canvas IDs aren't already known. The app resolves each
+    # student_reference to a real ID server-side and groups directives that
+    # share identical body text into one message — never invent or guess a
+    # numeric ID yourself. Ignored once recipient_canvas_user_ids is set.
+    recipient_directives: list[RecipientDirective] | None = None
+    # True when the user wants a private Canvas message sent to the entire
+    # active roster (as opposed to a public announcement). The app resolves
+    # the full roster server-side; never set recipient_canvas_user_ids
+    # yourself to try to represent "everyone."
+    broadcast_to_all_students: bool = False
+    # True when the user wants BOTH a public announcement (using the
+    # top-level subject/body) AND one or more targeted messages
+    # (recipient_directives) sent in the same turn. Only meaningful
+    # alongside recipient_directives or broadcast_to_all_students.
+    also_announce_to_class: bool = False
 
 
 class OutOfScopeAction(BaseModel):

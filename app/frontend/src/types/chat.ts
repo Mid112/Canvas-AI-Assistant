@@ -47,6 +47,13 @@ export interface AssistantResponse {
   interpretedAction?: InterpretedAction;
   safetyBlocked?: boolean;
   safetyMessage?: string;
+  /** A single send_message turn can resolve to more than one distinct
+   * message (different text per recipient, or an announcement plus
+   * targeted messages) — the primary preview is this response itself;
+   * every other resolved message is one more independently
+   * confirmable/cancelable preview, shown alongside it. See
+   * additional_previews in chat.py's _persist_additional_message_previews. */
+  additionalPreviews?: AssistantResponse[];
 }
 
 export interface SuggestedAction {

@@ -144,12 +144,18 @@ def _preview_send_message(course: Course, params: dict) -> dict:
     body = params.get("body", "")
     body_preview = body[:200] + ("..." if len(body) > 200 else "")
     recipient_ids = params.get("recipient_canvas_user_ids") or []
+    # Informational only, set by _build_grouped_send_message_result
+    # (services/chat.py) when recipients were resolved from names — never
+    # sent to Canvas, just lets the preview show real names instead of
+    # bare IDs.
+    recipient_names = params.get("recipient_names") or []
 
     if recipient_ids:
         recipient_count = len(recipient_ids)
+        who = ", ".join(recipient_names) if recipient_names else f"{recipient_count} selected student(s)"
         summary = (
             f"Send \"{subject.strip()}\" as a private Canvas message to "
-            f"{recipient_count} selected student(s) in {course.name}."
+            f"{who} in {course.name}."
         )
         audience = {"scope": "selected_students", "size": recipient_count}
         resource_type = "conversation"
@@ -161,13 +167,14 @@ def _preview_send_message(course: Course, params: dict) -> dict:
         audience = {"scope": "entire_class", "size": None}
         resource_type = "announcement"
 
-    return {
+    result = {
         "action": "send_message",
         "course": course.name,
         "metadata": {
             "subject": subject.strip(),
             "body_preview": body_preview,
             "recipient_canvas_user_ids": recipient_ids,
+            "recipient_names": recipient_names,
         },
         "summary": summary,
         "affected_resources": [
@@ -177,6 +184,10 @@ def _preview_send_message(course: Course, params: dict) -> dict:
         "audience": audience,
         **_reversibility_fields("send_message"),
     }
+    # message_index/message_count are attached separately by the caller
+    # (services/chat.py's _build_grouped_send_message_result) once it knows
+    # how many groups this batch resolved to — not known at this layer.
+    return result
 
 
 def _preview_update_grade(course: Course, params: dict) -> dict:

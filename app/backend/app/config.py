@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Canvas Helper AI Assistant"
     API_V1_PREFIX: str = "/api/v1"
     DEBUG: bool = False
-    DEFAULT_LLM_PROVIDER: str = "groq"
+    DEFAULT_LLM_PROVIDER: str = "huggingface"
 
     # CORS. NoDecode stops pydantic-settings from trying to JSON-parse the env
     # value so our validator can split a plain comma-separated string instead.
@@ -82,6 +82,18 @@ class Settings(BaseSettings):
     # "meta-llama/llama-4-scout-17b-16e-instruct"} to get_llm_adapter() to
     # use it.
     GROQ_MODEL: str = "qwen/qwen3.6-27b"
+
+    # LLM — Hugging Face Inference Router (hosted, OpenAI-compatible)
+    # https://router.huggingface.co/v1. HF_MODEL is pinned to Groq's
+    # backing via the ":groq" suffix — unpinned (HF picking whichever
+    # provider currently backs the model) was tried first with
+    # Qwen/Qwen3-4B-Thinking-2507 and was unusably slow (one real request
+    # hit the 90s LLM_TIMEOUT_SECONDS outright, and even a trivial
+    # fetch_courses turn took ~20s) — pinning to Groq's inference restores
+    # the sub-2s latency the app depends on, at the cost of losing
+    # automatic provider failover.
+    HF_TOKEN: str = ""
+    HF_MODEL: str = "openai/gpt-oss-20b:groq"
 
     # Both the tick interval of the background course-name sync loop
     # (app.main's lifespan) and the per-connection cooldown
