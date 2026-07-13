@@ -292,6 +292,30 @@ async def update_assignment(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
 
 
+async def delete_assignment(
+    course_id: int,
+    assignment_id: int,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> dict:
+    # Only ever called from undo_workflow, to revert a create_assignment
+    # action — never a standalone user-facing "delete assignment" action.
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.delete(
+                f"{canvas_url}/api/v1/courses/{course_id}/assignments/{assignment_id}",
+                headers=_headers(token),
+            )
+            _raise_for_canvas_error(response)
+            return response.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
 async def create_announcement(
     course_id: int,
     title: str,
@@ -410,6 +434,55 @@ async def post_announcement(
                     "message": body,
                     "is_announcement": True,
                 },
+            )
+            _raise_for_canvas_error(response)
+            return response.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
+async def fetch_conversations(
+    course_id: int,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> list[dict]:
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            return await _fetch_all_pages(
+                client,
+                f"{canvas_url}/api/v1/conversations",
+                headers=_headers(token),
+                params={
+                    "filter[]": f"course_{course_id}",
+                    "per_page": 100,
+                },
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
+async def fetch_conversation_detail(
+    conversation_id: int,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> dict:
+    # GET /conversations/:id returns the full messages[] array for this
+    # thread in one call — Canvas does not paginate a single conversation's
+    # messages, unlike the list endpoint above.
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await _get_with_retry(
+                client,
+                f"{canvas_url}/api/v1/conversations/{conversation_id}",
+                headers=_headers(token),
             )
             _raise_for_canvas_error(response)
             return response.json()

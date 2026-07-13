@@ -44,6 +44,11 @@ class CanvasWriteResult:
     reversible: bool
     affected_resources: list[dict]
     success: bool = True
+    # Only set by update_assignment today — the pre-write Canvas state,
+    # already fetched by the dispatcher to build the merge payload, threaded
+    # through here so services/chat.py can persist it as AuditLog.before_data
+    # for undo (see services/workflow.py::undo_workflow).
+    previous_data: Any = None
 
     def to_dict(self) -> dict:
         result = {
@@ -55,6 +60,12 @@ class CanvasWriteResult:
         }
         if not self.reversible:
             result["reversibility_note"] = "This action was not reversible."
+        if self.previous_data is not None:
+            result["previous_data"] = (
+                self.previous_data.model_dump()
+                if hasattr(self.previous_data, "model_dump")
+                else self.previous_data
+            )
         return result
 
 

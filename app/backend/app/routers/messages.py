@@ -5,6 +5,7 @@ from app.config import settings
 from app.core.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
+from app.schemas.canvas import ConversationSummary, ConversationThreadResponse
 from app.schemas.inbox import (
     InboxReplyRequest,
     InboxThreadDetail,
@@ -16,6 +17,7 @@ from app.schemas.messages import (
     MessageDraftUpdate,
     MessageSendResponse,
 )
+from app.services.canvas import get_conversation_thread, get_conversations
 from app.services.inbox import (
     get_inbox_thread,
     list_inbox_threads,
@@ -29,6 +31,27 @@ from app.services.messages import (
 )
 
 router = APIRouter(prefix="/messages", tags=["messages"])
+
+
+@router.get("/conversations", response_model=list[ConversationSummary])
+async def list_conversations(
+    local_course_id: int = Query(...),
+    canvas_url: str | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_conversations(local_course_id, current_user, canvas_url, db)
+
+
+@router.get("/conversations/{conversation_id}", response_model=ConversationThreadResponse)
+async def get_conversation_thread_endpoint(
+    conversation_id: int,
+    local_course_id: int = Query(...),
+    canvas_url: str | None = Query(default=None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_conversation_thread(local_course_id, conversation_id, current_user, canvas_url, db)
 
 
 @router.post("/drafts", response_model=MessageDraftResponse, status_code=status.HTTP_201_CREATED)
