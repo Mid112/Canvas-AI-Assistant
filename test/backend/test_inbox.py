@@ -209,6 +209,40 @@ def test_reply_posts_and_returns_updated():
     assert result.messages[-1].author.role == "instructor"
 
 
+# Verifies: Reply refuses to send when the instructor's own Canvas id cannot be
+# confirmed (Canvas /users/self fails AND local canvas_user_id is unset), so the
+# instructor is never added as a recipient of their own reply.
+def test_reply_refuses_when_self_identity_unresolved():
+    user = _instructor()
+    user.canvas_user_id = None  # local fallback also unavailable
+
+    with (
+        patch("app.services.inbox.require_canvas_token", return_value="token"),
+        patch(
+            "app.services.inbox.fetch_self",
+            new_callable=AsyncMock,
+            side_effect=httpx.RequestError("canvas down"),
+        ),
+        patch(
+            "app.services.inbox.fetch_conversation", new_callable=AsyncMock
+        ) as mock_fetch,
+        patch(
+            "app.services.inbox.add_conversation_message", new_callable=AsyncMock
+        ) as mock_add,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            asyncio.run(
+                reply_to_inbox_thread(
+                    9, "hi how are you", user, "http://localhost:3000", AsyncMock()
+                )
+            )
+
+    assert exc_info.value.status_code == 502
+    # Bailed before reading participants or posting anything to Canvas.
+    mock_fetch.assert_not_awaited()
+    mock_add.assert_not_awaited()
+
+
 # Verifies: add_conversation_message posts body + repeated recipient fields as form data.
 def test_add_conversation_message_posts_form_fields():
     response = httpx.Response(200, json={"id": 9})

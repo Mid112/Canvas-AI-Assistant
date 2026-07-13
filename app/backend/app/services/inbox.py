@@ -251,6 +251,16 @@ async def reply_to_inbox_thread(
     )
     self_canvas_id = await _resolve_self_canvas_id(user, token, canvas_url)
 
+    # We build the recipient list by excluding ourselves from the participants.
+    # If we can't confirm our own Canvas id, the exclusion filter would match
+    # nobody and the instructor would be added as a recipient of their own
+    # reply — so refuse rather than send to the wrong recipients.
+    if self_canvas_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Couldn't confirm your Canvas identity. Please try again.",
+        )
+
     # Canvas add_message needs an explicit recipient list, so read the current
     # participants first and reply to everyone except the instructor themselves.
     existing = await fetch_conversation(conversation_id, token, canvas_url)
