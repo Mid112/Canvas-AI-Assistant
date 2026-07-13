@@ -12,12 +12,12 @@ import {
 } from "lucide-react";
 import { useCallback, useState } from "react";
 
+import { CanvasConnectionEntry } from "@/components/canvas/CanvasConnectionEntry";
 import {
-  CanvasConnectionEntry,
   createCanvasConnectionEntry,
   isCanvasTokenValidationComplete,
   type CanvasConnectionEntryState,
-} from "@/components/canvas/CanvasConnectionEntry";
+} from "@/components/canvas/canvasConnectionEntryUtils";
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

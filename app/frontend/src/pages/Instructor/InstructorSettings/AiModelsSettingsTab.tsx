@@ -1,5 +1,5 @@
 import { AlertTriangle, CheckCircle2, Circle, Settings2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -29,14 +29,15 @@ export function AiModelsSettingsTab() {
   const [settings, setSettings] = useState<LlmProviderSettings>(() =>
     userId ? getStoredLlmProviderSettings(userId) : createDefaultLlmProviderSettings(),
   );
+  const [previousUserId, setPreviousUserId] = useState(userId);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!userId) {
-      return;
+  if (userId !== previousUserId) {
+    setPreviousUserId(userId);
+    if (userId) {
+      setSettings(getStoredLlmProviderSettings(userId));
     }
-    setSettings(getStoredLlmProviderSettings(userId));
-  }, [userId]);
+  }
 
   const selected = useMemo(
     () => getLlmProviderOption(settings.provider),

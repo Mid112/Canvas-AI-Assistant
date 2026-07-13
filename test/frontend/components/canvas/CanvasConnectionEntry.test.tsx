@@ -3,13 +3,13 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { CanvasConnectionEntry } from "@/components/canvas/CanvasConnectionEntry";
 import {
-  CanvasConnectionEntry,
   createCanvasConnectionEntry,
   getCanvasInstitutionLabel,
   isCanvasTokenValidationComplete,
   type CanvasConnectionEntryState,
-} from "@/components/canvas/CanvasConnectionEntry";
+} from "@/components/canvas/canvasConnectionEntryUtils";
 import { validateCanvasToken } from "@/services/canvas";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
