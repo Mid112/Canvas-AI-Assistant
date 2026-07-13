@@ -1,100 +1,167 @@
-import { mockMessageThreads } from "@/data/mockMessageThreads";
+import { apiRequest, ApiRequestError } from "@/lib/api-request";
 import type {
   MessageThread,
   MessageThreadListResult,
+  MessageThreadParticipant,
   MessageThreadReply,
 } from "@/types/messageThread";
 
-const STORAGE_KEY = "canvas-workflow-message-threads";
+const INBOX_PATH = "/messages/inbox";
 
-function cloneThreads(threads: MessageThread[]): MessageThread[] {
-  return structuredClone(threads);
-}
-
-function readStoredThreads(): MessageThread[] | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return null;
-    }
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return null;
-    }
-    return parsed as MessageThread[];
-  } catch {
-    return null;
+export class MessageThreadsApiError extends ApiRequestError {
+  constructor(message: string, status: number) {
+    super(message, status);
+    this.name = "MessageThreadsApiError";
   }
 }
 
-function writeStoredThreads(threads: MessageThread[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(threads));
+interface ApiParticipant {
+  id: string;
+  name: string;
+  role: string;
 }
 
-function getThreads(): MessageThread[] {
-  return readStoredThreads() ?? cloneThreads(mockMessageThreads);
+interface ApiMessage {
+  id: string;
+  author: ApiParticipant;
+  body: string;
+  sent_at: string;
 }
 
-/** Lists instructor message threads (mock-backed until Canvas inbox APIs exist). */
-export async function fetchMessageThreads(
-  _accessToken: string,
-  courseId?: number,
-): Promise<MessageThreadListResult> {
-  const threads = getThreads().filter((thread) =>
-    courseId == null ? true : thread.courseId === courseId,
-  );
+interface ApiThreadSummary {
+  id: string;
+  course_id: number | null;
+  course_name: string;
+  subject: string;
+  preview: string;
+  participants: ApiParticipant[];
+  unread_count: number;
+  updated_at: string;
+}
+
+interface ApiThreadDetail extends ApiThreadSummary {
+  messages: ApiMessage[];
+}
+
+interface ApiThreadListResponse {
+  threads: ApiThreadSummary[];
+}
+
+function toParticipantRole(role: string): MessageThreadParticipant["role"] {
+  return role === "instructor" ? "instructor" : "student";
+}
+
+function mapParticipant(participant: ApiParticipant): MessageThreadParticipant {
   return {
-    threads: [...threads].sort((a, b) =>
-      b.updatedAt.localeCompare(a.updatedAt),
-    ),
+    id: participant.id,
+    name: participant.name,
+    role: toParticipantRole(participant.role),
   };
 }
 
-export async function fetchMessageThread(
-  _accessToken: string,
-  threadId: string,
-): Promise<MessageThread | null> {
-  return getThreads().find((thread) => thread.id === threadId) ?? null;
+function mapMessage(message: ApiMessage): MessageThreadReply {
+  return {
+    id: message.id,
+    author: mapParticipant(message.author),
+    body: message.body,
+    sentAt: message.sent_at,
+  };
 }
 
+function mapSummary(thread: ApiThreadSummary): MessageThread {
+  return {
+    id: thread.id,
+    courseId: thread.course_id ?? 0,
+    courseName: thread.course_name,
+    subject: thread.subject,
+    preview: thread.preview,
+    participants: thread.participants.map(mapParticipant),
+    messages: [],
+    unreadCount: thread.unread_count,
+    updatedAt: thread.updated_at,
+  };
+}
+
+function mapDetail(thread: ApiThreadDetail): MessageThread {
+  return {
+    ...mapSummary(thread),
+    messages: thread.messages.map(mapMessage),
+  };
+}
+
+function buildQuery(courseId?: number, canvasUrl?: string): string {
+  const params = new URLSearchParams();
+  if (courseId != null) {
+    params.set("course_id", String(courseId));
+  }
+  if (canvasUrl) {
+    params.set("canvas_url", canvasUrl);
+  }
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
+function toApiError(error: unknown, fallback: string): MessageThreadsApiError {
+  const message = error instanceof Error ? error.message : fallback;
+  const status = error instanceof ApiRequestError ? error.status : 0;
+  return new MessageThreadsApiError(message, status);
+}
+
+/** Lists the instructor's Canvas inbox threads, optionally scoped to a course. */
+export async function fetchMessageThreads(
+  accessToken: string,
+  courseId?: number,
+  canvasUrl?: string,
+): Promise<MessageThreadListResult> {
+  try {
+    const data = await apiRequest<ApiThreadListResponse>(
+      `${INBOX_PATH}${buildQuery(courseId, canvasUrl)}`,
+      accessToken,
+    );
+    return { threads: data.threads.map(mapSummary) };
+  } catch (error) {
+    throw toApiError(error, "Unable to load messages.");
+  }
+}
+
+/** Fetches a single conversation with its full message history. */
+export async function fetchMessageThread(
+  accessToken: string,
+  threadId: string,
+  courseId?: number,
+  canvasUrl?: string,
+): Promise<MessageThread> {
+  try {
+    const data = await apiRequest<ApiThreadDetail>(
+      `${INBOX_PATH}/${threadId}${buildQuery(courseId, canvasUrl)}`,
+      accessToken,
+    );
+    return mapDetail(data);
+  } catch (error) {
+    throw toApiError(error, "Unable to load this conversation.");
+  }
+}
+
+/** Sends a reply to a conversation and returns the updated thread. */
 export async function replyToMessageThread(
-  _accessToken: string,
+  accessToken: string,
   threadId: string,
   body: string,
+  courseId?: number,
+  canvasUrl?: string,
 ): Promise<MessageThread> {
   const trimmed = body.trim();
   if (!trimmed) {
-    throw new Error("Reply cannot be empty.");
+    throw new MessageThreadsApiError("Reply cannot be empty.", 0);
   }
-
-  const threads = getThreads();
-  const index = threads.findIndex((thread) => thread.id === threadId);
-  if (index < 0) {
-    throw new Error("Message thread not found.");
+  try {
+    const data = await apiRequest<ApiThreadDetail>(
+      `${INBOX_PATH}/${threadId}/reply${buildQuery(courseId, canvasUrl)}`,
+      accessToken,
+      { method: "POST", body: JSON.stringify({ body: trimmed }) },
+    );
+    return mapDetail(data);
+  } catch (error) {
+    throw toApiError(error, "Unable to send reply.");
   }
-
-  const reply: MessageThreadReply = {
-    id: `msg-${globalThis.crypto?.randomUUID?.() ?? String(Date.now())}`,
-    author: { id: "instructor-1", name: "You", role: "instructor" },
-    body: trimmed,
-    sentAt: new Date().toISOString(),
-  };
-
-  const current = threads[index]!;
-  const updated: MessageThread = {
-    ...current,
-    messages: [...current.messages, reply],
-    preview: trimmed,
-    unreadCount: 0,
-    updatedAt: reply.sentAt,
-  };
-
-  const next = [...threads];
-  next[index] = updated;
-  writeStoredThreads(next);
-  return updated;
-}
-
-export function getStudentReplies(thread: MessageThread): MessageThreadReply[] {
-  return thread.messages.filter((message) => message.author.role === "student");
 }

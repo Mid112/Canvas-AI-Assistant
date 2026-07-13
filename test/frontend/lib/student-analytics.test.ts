@@ -75,7 +75,7 @@ describe("filterAnalyticsStudents", () => {
 });
 
 describe("toStudentEmailRecipients", () => {
-  it("maps only students with an email, excluding pending/identity-less ones", () => {
+  it("includes active students even without an email, dropping only pending/identity-less ones", () => {
     const students = [
       makeStudent({
         id: 1,
@@ -100,8 +100,12 @@ describe("toStudentEmailRecipients", () => {
 
     const recipients = toStudentEmailRecipients(students);
 
+    // Canvas conversations address students by user id, so the active student
+    // without an email is still a valid recipient; only the pending student
+    // without any identity is excluded.
     expect(recipients).toEqual([
       { id: "1", name: "Active One", email: "one@example.edu" },
+      { id: "3", name: "Active No Email", email: "" },
     ]);
   });
 });

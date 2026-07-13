@@ -1,6 +1,6 @@
 import type { MessageThread } from "@/types/messageThread";
 
-/** Demo inbox threads with student replies until Canvas conversation APIs exist. */
+/** Fixture threads for inbox component tests. */
 export const mockMessageThreads: MessageThread[] = [
   {
     id: "thread-1",
