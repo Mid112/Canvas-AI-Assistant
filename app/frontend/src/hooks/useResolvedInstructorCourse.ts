@@ -33,8 +33,13 @@ export function useResolvedInstructorCourse(
   const hasCanvasToken = Boolean(accessToken && user?.has_canvas_token);
 
   const fallbackCanvasUrl = useMemo(
-    () => resolveCanvasApiUrl(user, selectedInstitution.id),
-    [selectedInstitution.id, user],
+    () =>
+      resolveCanvasApiUrl(
+        user,
+        selectedInstitution.id,
+        selectedInstitution.canvasUrl,
+      ),
+    [selectedInstitution.canvasUrl, selectedInstitution.id, user],
   );
 
   const canvasUrl = course?.canvasUrl

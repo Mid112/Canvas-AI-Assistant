@@ -5,4 +5,3 @@ export interface Institution {
   /** Canvas host for this institution when derived from a saved connection. */
   canvasUrl?: string;
 }
-
