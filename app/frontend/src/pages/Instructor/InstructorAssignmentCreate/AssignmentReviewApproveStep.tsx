@@ -16,6 +16,7 @@ import type { GeneratedAssignmentDraft } from "@/types/assignmentCreate";
 
 import {
   assignmentReviewSchema,
+  type AssignmentReviewFormInput,
   type AssignmentReviewFormSchema,
 } from "./assignmentCreateSchema";
 
@@ -42,7 +43,7 @@ export function AssignmentReviewApproveStep({
     control,
     trigger,
     formState: { errors, isValid },
-  } = useForm<AssignmentReviewFormSchema>({
+  } = useForm<AssignmentReviewFormInput, unknown, AssignmentReviewFormSchema>({
     resolver: zodResolver(assignmentReviewSchema),
     defaultValues: {
       name: draft.name,
