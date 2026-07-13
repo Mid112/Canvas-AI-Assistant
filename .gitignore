@@ -7,8 +7,19 @@ venv/
 .venv.bak/
 __pycache__/
 .pytest_cache/
+node_modules/
 app/node_modules
 test/vllm/venv/
 test/mcp/venv/
 test/backend/venv/
 .vscode/*
+
+# Local runtime + process files
+*.log
+*.pid
+
+# Test coverage artifacts
+.coverage
+coverage/
+test/frontend/coverage/
+htmlcov/

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, FlaskConical, Loader2 } from "lucide-react";
 
 import { MessageInboxList } from "@/components/messages/MessageInboxList";
 import { MessageThreadView } from "@/components/messages/MessageThreadView";
@@ -98,19 +98,32 @@ export function MessageInboxPanel({ courseId }: MessageInboxPanelProps) {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
-      <MessageInboxList
-        threads={threads}
-        selectedThreadId={selectedThreadId}
-        onSelectThread={setSelectedThreadId}
-      />
-      {selectedThread ? (
-        <MessageThreadView thread={selectedThread} onReply={handleReply} />
-      ) : (
-        <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-          Select a message to view the conversation and student replies.
-        </div>
-      )}
+    <div className="space-y-4">
+      <div
+        role="note"
+        className="flex items-start gap-3 rounded-lg border border-dashed border-amber-400/60 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-500/40 dark:bg-amber-950/40 dark:text-amber-200"
+      >
+        <FlaskConical className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        <p>
+          Demo data only. The inbox and replies below are sample threads stored
+          locally in your browser — they are not connected to Canvas, and
+          replies are not delivered to students.
+        </p>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+        <MessageInboxList
+          threads={threads}
+          selectedThreadId={selectedThreadId}
+          onSelectThread={setSelectedThreadId}
+        />
+        {selectedThread ? (
+          <MessageThreadView thread={selectedThread} onReply={handleReply} />
+        ) : (
+          <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+            Select a message to view the conversation and student replies.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
