@@ -21,5 +21,9 @@ test/backend/venv/
 # Test coverage artifacts
 .coverage
 coverage/
+test/backend/coverage/
 test/frontend/coverage/
 htmlcov/
+
+# Vite / Vitest cache
+**/.vite/
