@@ -23,7 +23,7 @@ export const assignmentReviewSchema = z.object({
       message: "Due date must be in the future",
     }),
   pointsPossible: z
-    .number({ message: "Points possible must be a number" })
+    .number({ error: "Points possible is required" })
     .positive("Points possible must be greater than 0"),
 });
 
