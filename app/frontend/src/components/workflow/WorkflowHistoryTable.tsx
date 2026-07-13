@@ -14,18 +14,20 @@ import {
 import { formatAuditTimestamp } from "@/lib/format-audit-timestamp";
 import type { WorkflowHistoryEntry } from "@/types/workflowHistory";
 
+const EMPTY_ACTING_IDS: ReadonlySet<string> = new Set();
+
 interface WorkflowHistoryTableProps {
   entries: WorkflowHistoryEntry[];
   onCancelPending?: (entry: WorkflowHistoryEntry) => Promise<void>;
   actionError?: string | null;
-  actingWorkflowId?: string | null;
+  actingWorkflowIds?: ReadonlySet<string>;
 }
 
 export function WorkflowHistoryTable({
   entries,
   onCancelPending,
   actionError = null,
-  actingWorkflowId = null,
+  actingWorkflowIds = EMPTY_ACTING_IDS,
 }: WorkflowHistoryTableProps) {
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -70,7 +72,7 @@ export function WorkflowHistoryTable({
         </TableHeader>
         <TableBody>
           {entries.map((entry) => {
-            const isActing = actingWorkflowId === entry.id;
+            const isActing = actingWorkflowIds.has(entry.id);
             const showCancel = entry.status === "pending" && onCancelPending;
 
             return (

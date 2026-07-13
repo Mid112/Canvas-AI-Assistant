@@ -49,6 +49,7 @@ vi.mock("@/services/canvas", () => ({
     }
   },
   updateCanvasConnections: vi.fn(),
+  describeCanvasConnectionFailures: vi.fn(() => ""),
   updateCanvasToken: vi.fn(),
   removeCanvasConnection: vi.fn(),
   validateCanvasToken: vi.fn(),
@@ -74,13 +75,17 @@ describe("CanvasConnectionTab", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     mockedValidateCanvasToken.mockResolvedValue("valid");
     mockedUpdateCanvasConnections.mockResolvedValue({
-      id: 1,
-      name: "Dr. Jane Doe",
-      email: "instructor@example.com",
-      role: "instructor",
-      is_active: true,
-      canvas_connections: [],
-      has_canvas_token: true,
+      succeeded: [{ canvasUrl: CANVAS_URL, canvasToken: "abc123" }],
+      failed: [],
+      lastResponse: {
+        id: 1,
+        name: "Dr. Jane Doe",
+        email: "instructor@example.com",
+        role: "instructor",
+        is_active: true,
+        canvas_connections: [],
+        has_canvas_token: true,
+      },
     });
     mockedUpdateCanvasToken.mockResolvedValue({
       id: 1,

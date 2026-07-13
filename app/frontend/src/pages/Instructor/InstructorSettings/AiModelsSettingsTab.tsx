@@ -1,4 +1,10 @@
-import { AlertTriangle, CheckCircle2, Circle, Settings2 } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Circle,
+  Info,
+  Settings2,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -12,7 +18,6 @@ import {
   createDefaultLlmProviderSettings,
   getLlmProviderOption,
   hostingLabel,
-  isInternetHostedProvider,
   LLM_PROVIDERS,
 } from "@/data/llmProviders";
 import {
@@ -43,7 +48,6 @@ export function AiModelsSettingsTab() {
     () => getLlmProviderOption(settings.provider),
     [settings.provider],
   );
-  const showInternetWarning = isInternetHostedProvider(settings.provider);
 
   if (!userId) {
     return (
@@ -74,7 +78,7 @@ export function AiModelsSettingsTab() {
     const persisted = getStoredLlmProviderSettings(userId);
     setSettings(persisted);
     setSavedMessage(
-      `Saved ${getLlmProviderOption(persisted.provider).name} for the AI Assistant.`,
+      `Saved ${getLlmProviderOption(persisted.provider).name} as your preferred provider.`,
     );
   };
 
@@ -91,11 +95,24 @@ export function AiModelsSettingsTab() {
             AI Models
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            Add and configure LLM providers for the AI Assistant. Switch the
-            active model from the chat input; save detailed options here.
+            Choose a preferred LLM provider for the AI Assistant and save
+            provider-specific options.
           </p>
         </CardHeader>
         <CardContent className="space-y-5">
+          <div
+            role="note"
+            className="flex gap-3 rounded-lg border border-border/70 bg-muted/30 px-3 py-3 text-sm text-muted-foreground"
+          >
+            <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <p>
+              Your selection is saved as a preference. The AI Assistant
+              currently uses the model configured on the server, so choosing a
+              provider here does not yet change which service handles your
+              prompts.
+            </p>
+          </div>
+
           <section aria-label="Available LLM providers" className="space-y-3" role="region">
             <h3 className="text-sm font-semibold">Available providers</h3>
             <div className="grid gap-3">
@@ -198,25 +215,26 @@ export function AiModelsSettingsTab() {
             ) : null}
           </section>
 
-          {showInternetWarning ? (
-            <div
-              role="status"
-              className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950"
-            >
-              <AlertTriangle
-                className="mt-0.5 size-4 shrink-0 text-amber-700"
-                aria-hidden="true"
-              />
-              <div className="space-y-1">
-                <p className="font-medium">Internet-hosted provider selected</p>
-                <p className="text-amber-900/80">
-                  {selected.name} sends prompts over the internet to a third-party
-                  service. Avoid pasting sensitive student data unless your
-                  institution allows it.
-                </p>
-              </div>
+          <div
+            role="note"
+            className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950"
+          >
+            <AlertTriangle
+              className="mt-0.5 size-4 shrink-0 text-amber-700"
+              aria-hidden="true"
+            />
+            <div className="space-y-1">
+              <p className="font-medium">
+                Prompts are processed by the server&apos;s AI provider
+              </p>
+              <p className="text-amber-900/80">
+                The assistant sends prompts to whichever provider is configured
+                on the server, which may be an internet-hosted service. Avoid
+                pasting sensitive student data unless your institution allows
+                it.
+              </p>
             </div>
-          ) : null}
+          </div>
 
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" onClick={handleSave}>
