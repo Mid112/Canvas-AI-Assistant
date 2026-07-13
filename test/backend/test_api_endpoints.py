@@ -1,0 +1,337 @@
+"""
+API endpoint coverage for Feature #685 / #706.
+
+Fills gaps left by domain-specific suites: admin dashboard, assignment
+preview, auth sessions / change-password / password-reset confirm, and
+message draft PATCH.
+"""
+import asyncio
+import contextlib
+import uuid
+from unittest.mock import AsyncMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+from app.config import settings
+from app.main import app
+
+CANVAS_URL = "https://canvas.ubc.ca"
+
+
+@contextlib.asynccontextmanager
+async def _db():
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    engine = create_async_engine(settings.DATABASE_URL)
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            yield session
+    finally:
+        await engine.dispose()
+
+
+@pytest.fixture(scope="module")
+def client():
+    app.state.limiter.enabled = False
+    with TestClient(app) as c:
+        yield c
+    app.state.limiter.enabled = True
+
+
+def _register(client, password: str = "secret123") -> dict:
+    email = f"api_{uuid.uuid4()}@example.com"
+    resp = client.post(
+        "/api/v1/auth/register",
+        json={"name": "API Test", "email": email, "password": password},
+    )
+    assert resp.status_code == 201, resp.json()
+    token = resp.json()["access_token"]
+    return {
+        "email": email,
+        "password": password,
+        "token": token,
+        "headers": {"Authorization": f"Bearer {token}"},
+    }
+
+
+def _register_with_canvas(client) -> tuple[dict, int]:
+    reg = _register(client)
+    headers = reg["headers"]
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+            headers=headers,
+        )
+
+    canvas_course_id = uuid.uuid4().int % 10_000_000
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = [{
+            "id": canvas_course_id,
+            "name": "CPSC 310",
+            "course_code": "CPSC310",
+            "enrollment_term_id": 1,
+            "workflow_state": "available",
+        }]
+        resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+
+    assert resp.status_code == 200, resp.json()
+    return headers, resp.json()[0]["local_id"]
+
+
+def _admin_headers(client, admin_credentials) -> dict:
+    login = client.post("/api/v1/auth/admin/login", json=admin_credentials)
+    assert login.status_code == 200, login.json()
+    return {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+
+# ---------------------------------------------------------------------------
+# GET /admin/dashboard
+# ---------------------------------------------------------------------------
+
+def test_admin_dashboard_requires_auth(client):
+    resp = client.get("/api/v1/admin/dashboard")
+    assert resp.status_code == 401
+
+
+def test_admin_dashboard_rejects_instructor(client):
+    reg = _register(client)
+    resp = client.get("/api/v1/admin/dashboard", headers=reg["headers"])
+    assert resp.status_code == 403
+
+
+def test_admin_dashboard_returns_stats(client, admin_credentials):
+    headers = _admin_headers(client, admin_credentials)
+    resp = client.get("/api/v1/admin/dashboard", headers=headers)
+    assert resp.status_code == 200, resp.json()
+    body = resp.json()
+    assert "instructor_count" in body
+    assert "admin_count" in body
+    assert "active_workflows" in body
+    assert "audit_events_last_7_days" in body
+    assert body["admin_count"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# POST /canvas/courses/{id}/assignments/preview
+# ---------------------------------------------------------------------------
+
+def test_assignment_preview_unauthenticated(client):
+    resp = client.post(
+        "/api/v1/canvas/courses/1/assignments/preview",
+        json={"name": "Midterm", "description": "Ch 1"},
+    )
+    assert resp.status_code == 401
+
+
+def test_assignment_preview_success(client):
+    headers, local_course_id = _register_with_canvas(client)
+    payload = {
+        "name": "Midterm Exam",
+        "description": "Cover chapters 1-3",
+        "due_at": "2030-12-15T23:59:00Z",
+        "points_possible": 100,
+    }
+    resp = client.post(
+        f"/api/v1/canvas/courses/{local_course_id}/assignments/preview"
+        f"?canvas_url={CANVAS_URL}",
+        json=payload,
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.json()
+    body = resp.json()
+    assert body["action"] == "create_assignment"
+    assert "Midterm Exam" in body["summary"]
+    assert body["reversible"] is True
+    assert body["metadata"]["name"] == "Midterm Exam"
+    assert any(r["type"] == "course" for r in body["affected_resources"])
+    assert any(r["type"] == "assignment" for r in body["affected_resources"])
+
+
+def test_assignment_preview_course_not_owned(client):
+    headers_a, local_course_id = _register_with_canvas(client)
+    headers_b, _ = _register_with_canvas(client)
+    resp = client.post(
+        f"/api/v1/canvas/courses/{local_course_id}/assignments/preview"
+        f"?canvas_url={CANVAS_URL}",
+        json={"name": "Stolen", "description": "Nope"},
+        headers=headers_b,
+    )
+    assert resp.status_code == 404
+    assert headers_a  # keep A alive for clarity; course belongs to A
+
+
+# ---------------------------------------------------------------------------
+# Auth sessions + change-password + password-reset confirm
+# ---------------------------------------------------------------------------
+
+def test_list_sessions_includes_current(client):
+    reg = _register(client)
+    resp = client.get("/api/v1/auth/me/sessions", headers=reg["headers"])
+    assert resp.status_code == 200
+    sessions = resp.json()
+    assert len(sessions) >= 1
+    assert any(s["is_current"] for s in sessions)
+
+
+def test_revoke_other_session(client):
+    import time
+
+    password = "secret123"
+    email = f"sess_{uuid.uuid4()}@example.com"
+    first = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Session User", "email": email, "password": password},
+    )
+    assert first.status_code == 201
+    headers_a = {"Authorization": f"Bearer {first.json()['access_token']}"}
+
+    # JWT payloads only encode second-resolution expiry — sleeping past the
+    # current second guarantees login mints a distinct token/session row.
+    time.sleep(1.1)
+    second = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": password},
+    )
+    assert second.status_code == 200
+    headers_b = {"Authorization": f"Bearer {second.json()['access_token']}"}
+    assert first.json()["access_token"] != second.json()["access_token"]
+
+    sessions = client.get("/api/v1/auth/me/sessions", headers=headers_b).json()
+    assert len(sessions) >= 2
+    other = next(s for s in sessions if not s["is_current"])
+    revoke = client.delete(f"/api/v1/auth/me/sessions/{other['id']}", headers=headers_b)
+    assert revoke.status_code == 204
+
+    # Revoked session token can no longer call /me
+    assert client.get("/api/v1/auth/me", headers=headers_a).status_code == 401
+    assert client.get("/api/v1/auth/me", headers=headers_b).status_code == 200
+
+
+def test_revoke_unknown_session_returns_404(client):
+    reg = _register(client)
+    resp = client.delete("/api/v1/auth/me/sessions/999999999", headers=reg["headers"])
+    assert resp.status_code == 404
+
+
+def test_change_password_rejects_wrong_current(client):
+    reg = _register(client)
+    resp = client.post(
+        "/api/v1/auth/me/change-password",
+        json={"current_password": "wrong-password", "new_password": "newsecret1"},
+        headers=reg["headers"],
+    )
+    assert resp.status_code == 401
+    assert "incorrect" in resp.json()["detail"].lower()
+
+
+def test_change_password_success(client):
+    password = "secret123"
+    reg = _register(client, password=password)
+    resp = client.post(
+        "/api/v1/auth/me/change-password",
+        json={"current_password": password, "new_password": "brandnew99"},
+        headers=reg["headers"],
+    )
+    assert resp.status_code == 204
+
+    login_old = client.post(
+        "/api/v1/auth/login",
+        json={"email": reg["email"], "password": password},
+    )
+    assert login_old.status_code == 401
+
+    login_new = client.post(
+        "/api/v1/auth/login",
+        json={"email": reg["email"], "password": "brandnew99"},
+    )
+    assert login_new.status_code == 200
+
+
+def test_password_reset_confirm_success(client):
+    email = f"reset_{uuid.uuid4()}@example.com"
+    password = "secret123"
+    client.post(
+        "/api/v1/auth/register",
+        json={"name": "Reset User", "email": email, "password": password},
+    )
+
+    async def _issue_token() -> str:
+        from app.services.auth import request_password_reset
+
+        async with _db() as db:
+            token = await request_password_reset(db, email)
+            assert token is not None
+            return token
+
+    raw_token = asyncio.run(_issue_token())
+    confirm = client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": raw_token, "new_password": "resetpass99"},
+    )
+    assert confirm.status_code == 204
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "resetpass99"},
+    )
+    assert login.status_code == 200
+
+
+def test_password_reset_confirm_rejects_invalid_token(client):
+    resp = client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": "not-a-real-token", "new_password": "resetpass99"},
+    )
+    assert resp.status_code == 400
+    assert "invalid" in resp.json()["detail"].lower() or "expired" in resp.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# PATCH /messages/drafts/{id}
+# ---------------------------------------------------------------------------
+
+def test_patch_message_draft(client):
+    headers = _register(client)["headers"]
+    create = client.post(
+        "/api/v1/messages/drafts",
+        json={
+            "subject": "Hello",
+            "body": "Original body",
+            "recipients": [{"id": "1", "name": "Alex"}],
+        },
+        headers=headers,
+    )
+    assert create.status_code == 201, create.json()
+    draft_id = create.json()["id"]
+
+    patch = client.patch(
+        f"/api/v1/messages/drafts/{draft_id}",
+        json={"subject": "Updated subject", "body": "Updated body"},
+        headers=headers,
+    )
+    assert patch.status_code == 200, patch.json()
+    assert patch.json()["subject"] == "Updated subject"
+    assert patch.json()["body"] == "Updated body"
+
+    get = client.get(f"/api/v1/messages/drafts/{draft_id}", headers=headers)
+    assert get.json()["subject"] == "Updated subject"
+
+
+def test_patch_message_draft_isolation(client):
+    headers_a = _register(client)["headers"]
+    headers_b = _register(client)["headers"]
+    create = client.post(
+        "/api/v1/messages/drafts",
+        json={"subject": "Private", "body": "Mine", "recipients": []},
+        headers=headers_a,
+    )
+    draft_id = create.json()["id"]
+
+    patch = client.patch(
+        f"/api/v1/messages/drafts/{draft_id}",
+        json={"subject": "Hijacked"},
+        headers=headers_b,
+    )
+    assert patch.status_code == 404
