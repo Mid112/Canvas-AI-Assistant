@@ -60,6 +60,10 @@ CREATE TABLE courses (
     -- Canvas's course state ("available", "unpublished", "completed", ...) — lets
     -- set_active_course reject non-selectable courses without a live Canvas call.
     workflow_state   VARCHAR NOT NULL DEFAULT 'available',
+    -- Last time this row was written from a real Canvas response — NULL means
+    -- workflow_state above has never been confirmed against Canvas and
+    -- set_active_course must refuse to select it (see db/migrations/013).
+    synced_at        TIMESTAMPTZ,
     instructor_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     created_at       TIMESTAMPTZ DEFAULT NOW(),
     -- composite unique: the same Canvas course can exist once per instructor (co-instructors allowed)

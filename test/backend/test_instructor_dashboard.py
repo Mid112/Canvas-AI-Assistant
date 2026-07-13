@@ -378,3 +378,53 @@ def test_dashboard_missing_and_late_counts_from_real_submissions(client):
     assert payload["late_submissions"] == 1
     assert payload["courses"][0]["missing_submissions"] == 1
     assert payload["courses"][0]["late_submissions"] == 1
+
+
+# Verifies: A course Canvas no longer returns (reconciled to workflow_state
+# "deleted") drops out of course_count, the course summaries, and totals —
+# rather than lingering in dashboard aggregates indefinitely.
+def test_dashboard_excludes_deleted_course_from_aggregates(client):
+    headers = _register(client)
+    canvas_url = "https://canvas.ubc.ca"
+    canvas_course_id = uuid.uuid4().int % 10_000_000
+    course_payload = [
+        {
+            "id": canvas_course_id,
+            "name": "COSC 499",
+            "course_code": "COSC499",
+            "workflow_state": "available",
+            "total_students": 1,
+        }
+    ]
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": canvas_url},
+            headers=headers,
+        )
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock_fetch:
+        mock_fetch.return_value = course_payload
+        client.get(f"/api/v1/canvas/courses?canvas_url={canvas_url}", headers=headers)
+
+    with (
+        patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock_assignments,
+        patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock_enrollments,
+    ):
+        mock_assignments.return_value = []
+        mock_enrollments.return_value = []
+        response = client.get("/api/v1/canvas/dashboard", headers=headers)
+    assert response.json()["course_count"] == 1
+
+    # Canvas stops returning the course entirely — get_courses() reconciles it
+    # to workflow_state="deleted".
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock_fetch:
+        mock_fetch.return_value = []
+        client.get(f"/api/v1/canvas/courses?canvas_url={canvas_url}", headers=headers)
+
+    response = client.get("/api/v1/canvas/dashboard", headers=headers)
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["course_count"] == 0
+    assert payload["courses"] == []

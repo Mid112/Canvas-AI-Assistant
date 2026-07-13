@@ -1004,6 +1004,105 @@ def test_course_vanishing_does_not_clear_unrelated_active_course(client):
 
 
 # ---------------------------------------------------------------------------
+# Multi-Canvas-instance reconciliation scoping
+# ---------------------------------------------------------------------------
+
+
+# Verifies: syncing one Canvas connection does not reconcile (mark "deleted",
+# clear active) a course that belongs to a different Canvas connection on the
+# same instructor account.
+def test_course_sync_reconciliation_scoped_to_canvas_url(client):
+    headers = _register_with_canvas(client)  # connects CANVAS_URL
+    canvas_id = uuid.uuid4().int % 10_000_000
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = [_unique_course(canvas_id)]
+        first_resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+    local_id = first_resp.json()[0]["local_id"]
+
+    set_resp = client.patch(
+        "/api/v1/canvas/active-course",
+        json={"local_course_id": local_id},
+        headers=headers,
+    )
+    assert set_resp.status_code == 200
+
+    other_canvas_url = "https://canvas.sfu.ca"
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "other-token", "canvas_url": other_canvas_url},
+            headers=headers,
+        )
+
+    # Sync the second, unrelated Canvas instance — it returns no courses at all.
+    # This must not reconcile away the CANVAS_URL course or clear it as active.
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = []
+        other_resp = client.get(f"/api/v1/canvas/courses?canvas_url={other_canvas_url}", headers=headers)
+    assert other_resp.status_code == 200
+    assert other_resp.json() == []
+
+    get_resp = client.get("/api/v1/canvas/active-course", headers=headers)
+    assert get_resp.status_code == 200
+    assert get_resp.json()["local_id"] == local_id
+
+
+# ---------------------------------------------------------------------------
+# synced_at guard — active-course selection requires a real Canvas sync
+# ---------------------------------------------------------------------------
+
+
+# Verifies: a course row that has never been through a real Canvas sync
+# (synced_at is NULL — e.g. a pre-existing row from before this column
+# existed) cannot be set as the active course, even though its workflow_state
+# defaults to "available".
+def test_set_active_course_rejects_unsynced_course(client):
+    import asyncio
+
+    from app.config import settings as _settings
+    from app.models.course import Course
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    headers = _register_with_canvas(client)
+    user_id = client.get("/api/v1/auth/me", headers=headers).json()["id"]
+
+    async def _insert_unsynced_course() -> int:
+        # Fresh engine — asyncpg pools are bound to the event loop they're
+        # created in, so reusing the app's global engine from a separate
+        # loop.run_until_complete here raises "Future attached to a
+        # different loop" (see conftest.py's admin_credentials fixture).
+        _engine = create_async_engine(_settings.DATABASE_URL)
+        try:
+            async with async_sessionmaker(_engine, expire_on_commit=False)() as db:
+                course = Course(
+                    canvas_course_id=str(uuid.uuid4().int % 10_000_000),
+                    canvas_url=CANVAS_URL,
+                    name="Legacy Course",
+                    workflow_state="available",
+                    instructor_id=user_id,
+                    synced_at=None,
+                )
+                db.add(course)
+                await db.commit()
+                return course.id
+        finally:
+            await _engine.dispose()
+
+    loop = asyncio.new_event_loop()
+    try:
+        local_id = loop.run_until_complete(_insert_unsynced_course())
+    finally:
+        loop.close()
+
+    response = client.patch(
+        "/api/v1/canvas/active-course",
+        json={"local_course_id": local_id},
+        headers=headers,
+    )
+    assert response.status_code == 409
+
+
+# ---------------------------------------------------------------------------
 # Completed courses — selectable/reviewable, but read-only
 # ---------------------------------------------------------------------------
 

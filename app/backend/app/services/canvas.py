@@ -114,16 +114,25 @@ async def get_owned_course(
 async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[CourseResponse]:
     token = require_canvas_token(user, canvas_url)
     data = await fetch_courses(token, canvas_url)
+    normalized_sync_url = normalize_canvas_url(canvas_url)
 
     # Batch fetch ALL existing courses for this instructor (not just ones Canvas
     # still returns) so a course Canvas no longer returns AT ALL this sync — deleted,
     # or this instructor lost teacher access — can be reconciled below instead of
     # being left with a stale workflow_state and a never-cleared active preference.
     # instructor_id filter ensures we never touch another instructor's rows.
+    # Further filtered to courses on the SAME Canvas instance being synced — an
+    # instructor with multiple Canvas connections (different institutions) must
+    # not have this sync mark or reconcile courses that belong to a different
+    # canvas_url, since Canvas course ids are only unique within one instance.
     # Known limitation: canvas_course_id is globally UNIQUE, so two co-instructors
     # on the same Canvas course will conflict on INSERT — tracked for follow-up.
     rows = await db.scalars(select(Course).where(Course.instructor_id == user.id))
-    course_map: dict[str, Course] = {c.canvas_course_id: c for c in rows}
+    course_map: dict[str, Course] = {
+        c.canvas_course_id: c
+        for c in rows
+        if canvas_urls_equivalent(c.canvas_url, normalized_sync_url)
+    }
 
     canvas_ids = {str(item["id"]) for item in data}
 
@@ -142,16 +151,18 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
                 newly_unselectable_ids.add(course.id)
             course.name = item["name"]
             course.term = term_name
-            course.canvas_url = normalize_canvas_url(canvas_url)
+            course.canvas_url = normalized_sync_url
             course.workflow_state = workflow_state
+            course.synced_at = datetime.now(UTC)
         else:
             course = Course(
                 canvas_course_id=cid,
-                canvas_url=normalize_canvas_url(canvas_url),
+                canvas_url=normalized_sync_url,
                 name=item["name"],
                 term=term_name,
                 workflow_state=workflow_state,
                 instructor_id=user.id,
+                synced_at=datetime.now(UTC),
             )
             db.add(course)
             course_map[cid] = course
@@ -550,6 +561,18 @@ async def set_active_course(user: User, local_course_id: int, db: AsyncSession) 
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found or does not belong to you.",
+        )
+
+    # synced_at is only ever set from a real Canvas response (see get_courses()
+    # above) — a row with synced_at=None never went through that path and is
+    # trusting whatever workflow_state migration 011 backfilled it to
+    # ('available' for every pre-existing row), which may no longer be true on
+    # Canvas. Refuse to select it until a real sync has confirmed its state,
+    # rather than silently trusting stale, unverified data as a backend invariant.
+    if course.synced_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Course data has not been synced from Canvas yet — refresh courses before selecting this one as active.",
         )
 
     if course.workflow_state not in SELECTABLE_WORKFLOW_STATES:
