@@ -28,10 +28,12 @@ import { normalizeCanvasUrl, validateCanvasUrl } from "@/lib/canvas-url";
 import { ConnectCanvasTokenStatus } from "@/pages/Auth/ConnectCanvas/ConnectCanvasTokenStatus";
 import {
   CanvasApiError,
+  describeCanvasConnectionFailures,
   removeCanvasConnection,
   updateCanvasConnections,
   updateCanvasToken,
 } from "@/services/canvas";
+import type { CanvasConnectionFailure } from "@/services/canvas";
 import type { TokenValidationState } from "@/pages/Auth/ConnectCanvas/ConnectCanvasTokenStatus";
 import type { CanvasConnection } from "@/types/user";
 import { useCanvasTokenValidation } from "@/lib/useCanvasTokenValidation";
@@ -240,6 +242,22 @@ export function CanvasConnectionTab() {
     setNewEntries([createCanvasConnectionEntry()]);
   };
 
+  const keepFailedEntries = (failed: CanvasConnectionFailure[]) => {
+    const failedKeys = new Set(
+      failed.map(
+        ({ connection }) => `${connection.canvasUrl}\u0000${connection.canvasToken}`,
+      ),
+    );
+    setNewEntries((current) => {
+      const remaining = current.filter((entry) =>
+        failedKeys.has(
+          `${normalizeCanvasUrl(entry.canvasUrl)}\u0000${entry.canvasToken.trim()}`,
+        ),
+      );
+      return remaining.length > 0 ? remaining : current;
+    });
+  };
+
   const handleSaveNew = async () => {
     if (!accessToken || !canSaveNew) {
       return;
@@ -249,16 +267,37 @@ export function CanvasConnectionTab() {
     setStatusMessage(null);
 
     try {
-      await updateCanvasConnections(completedNewConnections, accessToken);
+      const result = await updateCanvasConnections(
+        completedNewConnections,
+        accessToken,
+      );
       await refreshUser();
-      resetNewEntries();
-      setStatusMessage({
-        type: "success",
-        text:
-          completedNewConnections.length === 1
-            ? "Canvas connection saved successfully."
-            : `${completedNewConnections.length} Canvas connections saved successfully.`,
-      });
+
+      if (result.failed.length === 0) {
+        resetNewEntries();
+        setStatusMessage({
+          type: "success",
+          text:
+            result.succeeded.length === 1
+              ? "Canvas connection saved successfully."
+              : `${result.succeeded.length} Canvas connections saved successfully.`,
+        });
+      } else if (result.succeeded.length > 0) {
+        // Partial success: drop the saved entries from the form and keep the
+        // ones that failed so the user can fix and retry just those.
+        keepFailedEntries(result.failed);
+        setStatusMessage({
+          type: "error",
+          text: `Saved ${result.succeeded.length} of ${completedNewConnections.length} connections. Could not save — ${describeCanvasConnectionFailures(result.failed)}`,
+        });
+      } else {
+        setStatusMessage({
+          type: "error",
+          text:
+            describeCanvasConnectionFailures(result.failed) ||
+            "Unable to save Canvas connections. Please try again.",
+        });
+      }
     } catch (error) {
       setStatusMessage({
         type: "error",

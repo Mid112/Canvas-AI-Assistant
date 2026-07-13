@@ -55,6 +55,10 @@ export function ChatModelSwitcher({
       <DropdownMenuContent align="start" side="top" className="min-w-56">
         <DropdownMenuGroup>
           <DropdownMenuLabel>AI model</DropdownMenuLabel>
+          <p className="px-2 pb-1 text-xs text-muted-foreground">
+            Saved as a preference — the assistant uses the model configured on
+            the server.
+          </p>
           {LLM_PROVIDERS.map((provider) => {
             const isActive = provider.id === settings.provider;
             return (

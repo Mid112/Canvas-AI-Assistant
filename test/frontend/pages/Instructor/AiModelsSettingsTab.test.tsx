@@ -60,20 +60,38 @@ describe("AiModelsSettingsTab", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save provider" }));
 
     expect(
-      screen.getByText(/Saved Ollama for the AI Assistant/),
+      screen.getByText(/Saved Ollama as your preferred provider/),
     ).toBeInTheDocument();
   });
 
-  it("warns for internet-hosted providers", () => {
+  it("clarifies the selection is only a saved preference", () => {
     render(
       <MemoryRouter>
         <AiModelsSettingsTab />
       </MemoryRouter>,
     );
 
-    fireEvent.click(providerButton(/^OpenAI\b/i));
     expect(
-      screen.getByText("Internet-hosted provider selected"),
+      screen.getByText(/does not yet change which service handles your prompts/),
+    ).toBeInTheDocument();
+  });
+
+  it("always shows the server-provider privacy note", () => {
+    render(
+      <MemoryRouter>
+        <AiModelsSettingsTab />
+      </MemoryRouter>,
+    );
+
+    // The note is not conditional on the selected provider because the choice
+    // does not yet change the server-configured model.
+    expect(
+      screen.getByText("Prompts are processed by the server's AI provider"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(providerButton(/Ollama/i));
+    expect(
+      screen.getByText("Prompts are processed by the server's AI provider"),
     ).toBeInTheDocument();
   });
 });

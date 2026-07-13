@@ -40,7 +40,11 @@ export function WorkflowHistoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [actingWorkflowId, setActingWorkflowId] = useState<string | null>(null);
+  // Track every in-flight cancel by id so clicking a second row does not
+  // re-enable an earlier row's button while its request is still running.
+  const [actingWorkflowIds, setActingWorkflowIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const filteredEntries = useMemo(
     () =>
@@ -116,10 +120,10 @@ export function WorkflowHistoryPage() {
   };
 
   const handleCancelPending = async (entry: WorkflowHistoryEntry) => {
-    if (!accessToken) {
+    if (!accessToken || actingWorkflowIds.has(entry.id)) {
       return;
     }
-    setActingWorkflowId(entry.id);
+    setActingWorkflowIds((current) => new Set(current).add(entry.id));
     setActionError(null);
     try {
       const updated = await cancelWorkflow(accessToken, entry.id);
@@ -134,7 +138,11 @@ export function WorkflowHistoryPage() {
       setActionError(message);
       throw error;
     } finally {
-      setActingWorkflowId(null);
+      setActingWorkflowIds((current) => {
+        const next = new Set(current);
+        next.delete(entry.id);
+        return next;
+      });
     }
   };
 
@@ -273,7 +281,7 @@ export function WorkflowHistoryPage() {
             entries={pagination.items}
             onCancelPending={handleCancelPending}
             actionError={actionError}
-            actingWorkflowId={actingWorkflowId}
+            actingWorkflowIds={actingWorkflowIds}
           />
         </CardContent>
         <CardFooter className="flex items-center justify-between border-t py-3 text-xs text-muted-foreground">
