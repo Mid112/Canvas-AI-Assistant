@@ -120,6 +120,19 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
     [user],
   );
 
+  if (
+    connectedInstitutions.length > 0 &&
+    !connectedInstitutions.some(
+      (institution) => institution.id === selectedInstitutionId,
+    )
+  ) {
+    const nextInstitutionId = connectedInstitutions[0]!.id;
+    setSelectedInstitutionId(nextInstitutionId);
+    if (user) {
+      setStoredInstitutionId(user.id, nextInstitutionId);
+    }
+  }
+
   if (accessToken !== previousAccessToken) {
     setPreviousAccessToken(accessToken);
     if (!accessToken) {
@@ -151,27 +164,6 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
       cancelled = true;
     };
   }, [accessToken, userId, user?.role]);
-
-  useEffect(() => {
-    if (connectedInstitutions.length === 0) {
-      return;
-    }
-
-    if (
-      connectedInstitutions.some(
-        (institution) => institution.id === selectedInstitutionId,
-      )
-    ) {
-      return;
-    }
-
-    const nextInstitutionId = connectedInstitutions[0]!.id;
-    setSelectedInstitutionId(nextInstitutionId);
-
-    if (user) {
-      setStoredInstitutionId(user.id, nextInstitutionId);
-    }
-  }, [connectedInstitutions, selectedInstitutionId, user]);
 
   const setSelectedInstitution = useCallback(
     (institutionId: string) => {

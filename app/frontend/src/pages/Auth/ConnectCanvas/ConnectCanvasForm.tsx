@@ -1,12 +1,12 @@
 import { Plus } from "lucide-react";
 import { useCallback, useState, type FormEvent } from "react";
 
+import { CanvasConnectionEntry } from "@/components/canvas/CanvasConnectionEntry";
 import {
-  CanvasConnectionEntry,
   createCanvasConnectionEntry,
   isCanvasTokenValidationComplete,
   type CanvasConnectionEntryState,
-} from "@/components/canvas/CanvasConnectionEntry";
+} from "@/components/canvas/canvasConnectionEntryUtils";
 import { Button } from "@/components/ui/button";
 import { normalizeCanvasUrl, validateCanvasUrl } from "@/lib/canvas-url";
 import type { CanvasConnectionInput } from "@/services/canvas";

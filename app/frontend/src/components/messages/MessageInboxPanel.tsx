@@ -56,6 +56,7 @@ export function MessageInboxPanel({ courseId }: MessageInboxPanelProps) {
   }, [accessToken, courseId]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async data load
     void loadThreads();
   }, [loadThreads]);
 
