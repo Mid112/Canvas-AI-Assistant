@@ -7,6 +7,7 @@ import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from fastapi import HTTPException, status as http_status
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.config import settings
 from app.main import app
 from app.models.audit_log import AuditLog
+from app.models.workflow import Workflow
 from app.schemas.canvas import AssignmentResponse, MessageSendResult
 
 CANVAS_URL = "https://canvas.ubc.ca"
@@ -207,6 +209,16 @@ async def _null_out_before_data(workflow_id: int) -> None:
             row = await db.scalar(select(AuditLog).where(AuditLog.workflow_id == workflow_id))
             row.before_data = None
             await db.commit()
+    finally:
+        await engine.dispose()
+
+
+async def _get_undone_at(workflow_id: int):
+    engine, Session = _make_session()
+    try:
+        async with Session() as db:
+            workflow = await db.get(Workflow, workflow_id)
+            return workflow.undone_at
     finally:
         await engine.dispose()
 
@@ -434,6 +446,66 @@ def test_undo_without_before_data_returns_422(client):
 
     response = client.post(f"/api/v1/history/workflows/{workflow_id}/undo", headers=headers)
     assert response.status_code == 422
+
+
+# Verifies: A 422 (missing before_data) must not leave the workflow
+# permanently marked undone — the Canvas assignment was never touched, so
+# the Undo button must stay available for a retry once before_data exists
+# again, rather than silently claiming the action was undone.
+def test_undo_missing_before_data_does_not_set_undone_at(client):
+    headers, local_course_id = _register_with_canvas(client)
+    workflow_id, _ = _create_executed_update_assignment_workflow(client, headers, local_course_id)
+
+    asyncio.run(_null_out_before_data(workflow_id))
+
+    response = client.post(f"/api/v1/history/workflows/{workflow_id}/undo", headers=headers)
+    assert response.status_code == 422
+    assert asyncio.run(_get_undone_at(workflow_id)) is None
+
+    history = client.get("/api/v1/history/workflows", headers=headers)
+    item = next(i for i in history.json()["items"] if i["id"] == workflow_id)
+    assert item["undone_at"] is None
+
+
+# Verifies: A Canvas API failure during the revert must not leave the
+# workflow permanently marked undone either — same failure mode as the
+# missing-before_data case, but triggered by the Canvas write itself
+# failing (e.g. a 502/504 from Canvas) instead of a local data problem.
+# The workflow must remain retryable.
+def test_undo_canvas_failure_does_not_set_undone_at(client):
+    headers, local_course_id = _register_with_canvas(client)
+    workflow_id, assignment_id = _create_executed_update_assignment_workflow(
+        client, headers, local_course_id
+    )
+
+    with patch(
+        "app.services.workflow.update_course_assignment",
+        new=AsyncMock(
+            side_effect=HTTPException(
+                status_code=http_status.HTTP_502_BAD_GATEWAY,
+                detail="Canvas server error",
+            )
+        ),
+    ) as mock_revert:
+        response = client.post(f"/api/v1/history/workflows/{workflow_id}/undo", headers=headers)
+
+    assert response.status_code == 502
+    mock_revert.assert_called_once()
+    assert asyncio.run(_get_undone_at(workflow_id)) is None
+
+    # Retry succeeds once Canvas is healthy again — a false "already undone"
+    # 409 here would mean the earlier failed attempt permanently claimed it.
+    reverted_assignment = AssignmentResponse(
+        id=assignment_id, name="Old Title", description="Original description",
+        due_at=None, points_possible=50.0, course_id=local_course_id,
+    )
+    with patch(
+        "app.services.workflow.update_course_assignment",
+        new=AsyncMock(return_value=reverted_assignment),
+    ):
+        retry = client.post(f"/api/v1/history/workflows/{workflow_id}/undo", headers=headers)
+    assert retry.status_code == 200
+    assert asyncio.run(_get_undone_at(workflow_id)) is not None
 
 
 # Verifies: Undo is scoped to the owning user.

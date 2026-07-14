@@ -91,7 +91,13 @@ async def undo_workflow(db: AsyncSession, user: User, workflow_id: int) -> Workf
 
     # Atomic conditional UPDATE — same race-safety rationale as
     # _claim_pending_workflow: two simultaneous undo requests on the same
-    # workflow must not both succeed.
+    # workflow must not both succeed. Deliberately NOT committed here: the
+    # UPDATE's row lock is what serializes concurrent undo attempts, but
+    # undone_at must not become durable until the Canvas revert below has
+    # actually succeeded — otherwise a failed revert (missing before_data,
+    # a Canvas API error, etc.) would permanently hide the Undo button
+    # while Canvas itself was never reverted. Any exception raised before
+    # the final commit rolls this claim back along with everything else.
     claim = await db.execute(
         sa_update(Workflow)
         .where(
@@ -102,12 +108,10 @@ async def undo_workflow(db: AsyncSession, user: User, workflow_id: int) -> Workf
         .values(undone_at=datetime.now(UTC))
     )
     if claim.rowcount == 0:
-        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="This action has already been undone.",
         )
-    await db.commit()
     workflow.undone_at = datetime.now(UTC)
 
     # The original write's AuditLog row (action == workflow.action_name,
