@@ -166,14 +166,7 @@ def test_cancel_unknown_pending_message_id_404s(client):
 # at all — they execute directly on the normal turn (see READ_ACTIONS in
 # services/chat.py's handle_chat_message), so there is nothing for them to
 # cancel or confirm any more. Coverage for that direct-execution behavior
-# now lives in test_chat_endpoint.py instead of here.
-
-    history = client.get("/api/v1/chat/conversations", headers=headers)
-    assert history.status_code == 200
-    item = next(
-        item for item in history.json()["items"] if item["id"] == conversation_id
-    )
-    assert item["preview"] == "No courses found"
+# lives in test_read_actions.py instead of here.
 
 
 # Verifies: Cancel after modify recovers original first request.

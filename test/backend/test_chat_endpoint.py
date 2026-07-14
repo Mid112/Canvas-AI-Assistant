@@ -207,34 +207,12 @@ def test_conversation_history_is_scoped_to_current_user(client):
     assert other_detail.status_code == 404
 
 
-def test_conversation_detail_includes_pending_action_status(client):
-    headers = _register(client)
-
-    mock_adapter = AsyncMock()
-    mock_adapter.generate.return_value = (
-        '{"action": "intent_preview", "summary": "List your courses", '
-        '"proposed_action": {"action": "fetch_courses"}}'
-    )
-
-    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
-        response = client.post(
-            "/api/v1/chat/",
-            json={"message": "what courses do I have?"},
-            headers=headers,
-        )
-
-    assert response.status_code == 200
-    conversation_id = response.json()["conversation_id"]
-    pending_message_id = response.json()["reply"]["pending_message_id"]
-
-    history = client.get(f"/api/v1/chat/conversations/{conversation_id}", headers=headers)
-    assert history.status_code == 200
-    pending_message = next(
-        message
-        for message in history.json()["messages"]
-        if message["id"] == pending_message_id
-    )
-    assert pending_message["pending_action_status"] == "pending"
+# Read actions (fetch_courses, fetch_assignments, fetch_students,
+# fetch_submissions, get_active_course) no longer go through intent_preview
+# at all — they execute directly on the normal turn (see READ_ACTIONS in
+# services/chat.py's handle_chat_message), so there is no pending preview
+# for them to have a status. Coverage for a write action's pending status
+# lives in test_conversation_workflow_status.py instead of here.
 
 
 # Verifies: Chat resolves course name before calling model.
@@ -547,13 +525,19 @@ def test_history_keeps_intent_preview_full_for_modify_turn(client):
             headers=headers,
         )
 
+    future_due_date = (datetime.now(UTC) + timedelta(days=7)).isoformat()
     mock_adapter = AsyncMock()
     mock_adapter.generate.side_effect = [
         '{"action": "intent_preview", "summary": "I will create Assignment 1.", '
         '"proposed_action": {"action": "create_assignment", '
         f'"local_course_id": {local_course_id}, "title": "Assignment 1", '
-        '"description": "Peer evaluation", "due_date": "2026-07-12T05:59:59", '
+        f'"description": "Peer evaluation", "due_date": "{future_due_date}", '
         '"points_possible": 100}}',
+        # The followup turn has both prior history and an established
+        # conversation.course_id, so it also triggers the pre-resolver
+        # course-switch check (_resolve_course_switch) before the main
+        # call — see COURSE RESOLUTION in build_system_prompt.
+        '{"switched_to": null}',
         '{"action": "respond", "message": "OK."}',
     ]
 
@@ -570,7 +554,7 @@ def test_history_keeps_intent_preview_full_for_modify_turn(client):
             headers=headers,
         )
 
-    followup_history = mock_adapter.generate.call_args_list[1].kwargs["history"]
+    followup_history = mock_adapter.generate.call_args_list[2].kwargs["history"]
     assistant_entry = next(m for m in followup_history if m["role"] == "assistant")
     assert "proposed_action" in assistant_entry["content"]
     assert "create_assignment" in assistant_entry["content"]
@@ -736,7 +720,7 @@ def test_write_action_without_intent_preview_is_forced_into_a_preview(client):
     mock_adapter.generate.return_value = (
         '{"action": "create_assignment", "course_name": "COSC 322", '
         '"title": "Assignment 1", "description": "Peer evaluation", '
-        '"due_date": "2026-07-12T05:59:59", "points_possible": 100}'
+        f'"due_date": "{future_due_date}", "points_possible": 100}}'
     )
 
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter), \
@@ -826,28 +810,19 @@ def test_canvas_action_without_token_returns_actionable_error(client):
     asyncio.run(_remove_canvas_connection(user_id))
 
     mock_adapter = AsyncMock()
-    mock_adapter.generate.return_value = (
-        '{"action": "fetch_assignments", "local_course_id": %d}' % local_course_id
-    )
+    mock_adapter.generate.return_value = '{"action": "fetch_assignments"}'
 
+    # fetch_assignments is a read action — it executes directly on the
+    # normal turn (no intent_preview/confirm round-trip), so the missing
+    # connection surfaces as an error on this same response, not a later
+    # confirm. local_course_id is passed by the client (trusted), same as
+    # a real "active course" button click — the model is never given one.
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
-        preview = client.post(
+        response = client.post(
             "/api/v1/chat/",
-            json={"message": "List assignments for COSC 777"},
+            json={"message": "List assignments for COSC 777", "local_course_id": local_course_id},
             headers=headers,
         )
-
-    assert preview.status_code == 200
-    preview_body = preview.json()
-    assert preview_body["reply"]["action"] == "intent_preview"
-    conversation_id = preview_body["conversation_id"]
-    pending_message_id = preview_body["reply"]["pending_message_id"]
-
-    response = client.post(
-        "/api/v1/chat/confirm",
-        json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
-        headers=headers,
-    )
 
     assert response.status_code == 200
     body = response.json()

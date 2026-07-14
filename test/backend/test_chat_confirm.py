@@ -267,12 +267,7 @@ def test_non_preview_modify_supersedes_pending_workflow(client):
 
     history = client.get(f"/api/v1/chat/conversations/{conversation_id}", headers=headers)
     assert history.status_code == 200
-    preview_message = next(
-        message
-        for message in history.json()["messages"]
-        if message["id"] == pending_message_id
-    )
-    assert preview_message["pending_action_status"] == "superseded"
+    assert history.json()["workflow_statuses"][str(pending_message_id)]["status"] == "superseded"
 
     confirm = client.post(
         "/api/v1/chat/confirm",

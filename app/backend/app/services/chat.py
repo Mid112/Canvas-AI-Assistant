@@ -11,7 +11,7 @@ from typing import Any, TypeVar
 import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -45,7 +45,7 @@ from app.models.user import User
 from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
 from app.services.assignment_rate import find_assignments_by_submission_rate
-from app.services.canvas import sync_courses_if_stale
+from app.services.canvas import CanvasTokenRequiredError, sync_courses_if_stale
 from app.services.llm.json_extraction import extract_json_object
 from app.services.llm.llm_setting import get_llm_adapter
 from app.services.resolved_set import (
@@ -60,6 +60,9 @@ logger = logging.getLogger(__name__)
 
 LLM_TIMEOUT_SECONDS = 90.0
 HISTORY_WINDOW = 10
+CANVAS_TOKEN_REQUIRED_MESSAGE = (
+    "This action needs a connected Canvas account. Connect Canvas in Settings, then try again."
+)
 
 # Hard cap on how many LLM decisions a single user turn may chain through
 # (see handle_chat_message's step loop) before giving up and asking the
@@ -1699,7 +1702,7 @@ def _schema_for_prompt(schema_cls: type[BaseModel]) -> dict:
     return result
 
 
-def build_system_prompt() -> str:
+def build_system_prompt(has_canvas_token: bool = True) -> str:
     tool_list = "\n".join(
         f"- {name}: {_schema_for_prompt(schema)}"
         for name, schema in ACTION_SCHEMAS.items()
@@ -2375,6 +2378,10 @@ async def handle_chat_message(
             await log_message(db, conversation, role="assistant", content=e.log_detail)
             await db.commit()
             return conversation, {"error": e.user_message}, True
+        except CanvasTokenRequiredError as e:
+            await log_message(db, conversation, role="assistant", content=str(e.detail))
+            await db.commit()
+            return conversation, {"error": CANVAS_TOKEN_REQUIRED_MESSAGE, "requires_canvas_token": True}, True
         except HTTPException as e:
             detail = e.detail if isinstance(e.detail, str) else str(e.detail)
             error_detail = f"HTTPException {e.status_code}: {detail}"
@@ -2800,5 +2807,36 @@ async def get_conversation_with_messages(
             Conversation.user_id == user.id,
         )
         .options(selectinload(Conversation.messages), selectinload(Conversation.workflows))
+    )
+
+
+async def list_conversations(
+    db: AsyncSession,
+    user: User,
+    limit: int,
+    offset: int,
+) -> tuple[list[Conversation], int]:
+    total = await db.scalar(
+        select(func.count()).select_from(Conversation).where(Conversation.user_id == user.id)
+    )
+    latest_message = (
+        select(
+            Message.conversation_id,
+            func.max(Message.created_at).label("updated_at"),
+        )
+        .group_by(Message.conversation_id)
+        .subquery()
+    )
+    rows = await db.scalars(
+        select(Conversation)
+        .outerjoin(latest_message, latest_message.c.conversation_id == Conversation.id)
+        .where(Conversation.user_id == user.id)
+        .options(selectinload(Conversation.messages), selectinload(Conversation.workflows))
+        .order_by(
+            desc(func.coalesce(latest_message.c.updated_at, Conversation.created_at)),
+            desc(Conversation.id),
+        )
+        .limit(limit)
+        .offset(offset)
     )
     return list(rows), total or 0

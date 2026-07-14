@@ -20,6 +20,7 @@ import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useInstitution } from "@/contexts/useInstitution";
 import { seedChatMessages } from "@/data/assistantSeedData";
 import { isCancellationPhrase } from "@/lib/chat-cancellation";
+import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
 import {
   AssistantApiError,
   cancelAssistantAction,
@@ -32,9 +33,26 @@ import {
 import type { AssistantMessageResult } from "@/services/assistant";
 import type { ChatMessage } from "@/types/chat";
 import { mapWorkflowStatus } from "@/types/chat";
+import type { LlmProviderId, LlmProviderSettings } from "@/types/llmProvider";
 
 function createMessageId(): string {
   return crypto.randomUUID();
+}
+
+// A stored assistant message's content is either the full JSON envelope
+// the backend returned (for structured replies like intent_preview or a
+// tool result — see mapChatReplyToAssistantResponse) or a plain string
+// (a plain-text model reply, or an error message logged verbatim). Only
+// the former needs remapping on reload; the latter is displayed as-is.
+function parseStoredAssistantReply(content: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(content);
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function withWelcomeMessage(restoredMessages: ChatMessage[]): ChatMessage[] {
@@ -48,37 +66,23 @@ function withWelcomeMessage(restoredMessages: ChatMessage[]): ChatMessage[] {
   ];
 }
 
-function findLatestPendingMessageId(messages: ChatMessage[]): number | undefined {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message.pendingActionStatus === "pending") {
-      return message.pendingMessageId;
-    }
-  }
-
-  return undefined;
-}
-
 interface InitialChatState {
   messages: ChatMessage[];
   conversationId?: number;
-  activePendingMessageId?: number;
   hydratedConversationId?: number;
 }
 
 function getInitialChatState({
   initialConversationId,
-  initialPendingMessageId,
   loadedConversation,
 }: Pick<
   ChatWindowProps,
-  "initialConversationId" | "initialPendingMessageId" | "loadedConversation"
+  "initialConversationId" | "loadedConversation"
 >): InitialChatState {
   if (!loadedConversation) {
     return {
       messages: seedChatMessages,
       conversationId: initialConversationId,
-      activePendingMessageId: initialPendingMessageId,
     };
   }
 
@@ -87,7 +91,6 @@ function getInitialChatState({
   return {
     messages: withWelcomeMessage(loadedMessages),
     conversationId: loadedConversation.id,
-    activePendingMessageId: findLatestPendingMessageId(loadedMessages),
     hydratedConversationId: loadedConversation.id,
   };
 }
@@ -133,10 +136,9 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
     () =>
       getInitialChatState({
         initialConversationId,
-        initialPendingMessageId,
         loadedConversation,
       }),
-    [initialConversationId, initialPendingMessageId, loadedConversation],
+    [initialConversationId, loadedConversation],
   );
   const [messages, setMessages] = useState<ChatMessage[]>(
     () => initialChatState.messages,
@@ -150,7 +152,23 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   // one. See additionalPreviews on AssistantResponse.
   const [activePendingMessageIds, setActivePendingMessageIds] = useState<
     number[]
-  >(initialPendingMessageId !== undefined ? [initialPendingMessageId] : []);
+  >(() => {
+    // A loadedConversation can already carry more than one still-pending
+    // preview (e.g. a grouped send_message batch) — derive the full set
+    // from its messages rather than only trusting the single
+    // initialPendingMessageId prop, which only ever names one specific
+    // preview (e.g. the one a "review preview" deep link pointed at).
+    const pendingFromMessages = initialChatState.messages
+      .filter((entry) => entry.pendingActionStatus === "pending")
+      .map((entry) => entry.pendingMessageId)
+      .filter((id): id is number => id !== undefined);
+
+    if (pendingFromMessages.length > 0) {
+      return pendingFromMessages;
+    }
+
+    return initialPendingMessageId !== undefined ? [initialPendingMessageId] : [];
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
@@ -272,7 +290,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           .map((entry) => entry.pendingMessageId)
           .filter((id): id is number => id !== undefined);
 
-        setMessages(restoredMessages.length > 0 ? restoredMessages : seedChatMessages);
+        setMessages(withWelcomeMessage(restoredMessages));
         setConversationId(conversation.id);
         setActivePendingMessageIds(nextActivePendingMessageIds);
         hydratedConversationRef.current = initialConversationId;
@@ -503,13 +521,23 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
 
       setMessages((current) => [...current, userMessage]);
 
+      // Only auto-cancel via a typed phrase ("never mind", etc.) when
+      // exactly one preview is pending — with more than one open at once
+      // (a grouped send_message batch), which one the phrase refers to is
+      // ambiguous, so it falls through to a normal turn instead. Mirrors
+      // deliverAssistantResponse's identical single-pending gate above.
+      const soleActivePendingMessageId =
+        activePendingMessageIds.length === 1
+          ? activePendingMessageIds[0]
+          : undefined;
+
       if (
-        activePendingMessageId !== undefined &&
+        soleActivePendingMessageId !== undefined &&
         isCancellationPhrase(trimmed)
       ) {
         const pendingMessage = messages.find(
           (entry) =>
-            entry.pendingMessageId === activePendingMessageId &&
+            entry.pendingMessageId === soleActivePendingMessageId &&
             entry.pendingActionStatus === "pending",
         );
 
@@ -522,7 +550,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       void deliverAssistantResponse(trimmed);
     },
     [
-      activePendingMessageId,
+      activePendingMessageIds,
       deliverAssistantResponse,
       messages,
       resolvePendingAction,

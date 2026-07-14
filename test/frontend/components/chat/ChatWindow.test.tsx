@@ -415,10 +415,14 @@ describe("ChatWindow", () => {
     ).toHaveLength(1);
   });
 
-  it("targets the newest pending action when a restored conversation has multiple pending previews", async () => {
+  it("does not target either preview when a restored conversation has multiple pending previews", async () => {
+    // With more than one preview simultaneously pending (e.g. a grouped
+    // send_message batch), which one a free-typed follow-up refers to is
+    // ambiguous — see deliverAssistantResponse's identical single-pending
+    // gate. A follow-up starts a fresh normal turn instead of guessing.
     const user = userEvent.setup();
     mockedSendAssistantMessage.mockResolvedValueOnce({
-      content: "Updated the latest proposal.",
+      content: "Here's what I found.",
       conversationId: 7,
     });
 
@@ -468,7 +472,7 @@ describe("ChatWindow", () => {
         "Change the latest one",
         expect.objectContaining({
           conversationId: 7,
-          pendingMessageId: 43,
+          pendingMessageId: undefined,
         }),
       );
     });
