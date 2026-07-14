@@ -14,8 +14,24 @@ vi.mock("@/contexts/useActiveCourse", () => ({
 }));
 
 describe("ActiveCourseContextBar", () => {
-  // Verifies: Shows the active course display name when one is selected.
-  it("shows the active course display name when one is selected", () => {
+  // Verifies: Shows guidance when no active course is selected.
+  it("shows guidance when no active course is selected", () => {
+    mockUseActiveCourse.mockReturnValue({
+      activeCourse: null,
+      error: null,
+      isLoading: false,
+    });
+
+    render(<ActiveCourseContextBar />);
+
+    expect(
+      screen.getByText(/No active course selected/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Active course selector")).toBeInTheDocument();
+  });
+
+  // Verifies: Does not duplicate the active course name — the selector shows it.
+  it("does not duplicate the active course name while one is selected", () => {
     mockUseActiveCourse.mockReturnValue({
       activeCourse: {
         localId: 1,
@@ -28,24 +44,9 @@ describe("ActiveCourseContextBar", () => {
     render(<ActiveCourseContextBar />);
 
     expect(
-      screen.getByText("CS 101: Introduction to Programming"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(/Conversations are scoped to this course/),
-    ).toBeInTheDocument();
-  });
-
-  // Verifies: Shows a loading message while the active course loads.
-  it("shows a loading message while the active course loads", () => {
-    mockUseActiveCourse.mockReturnValue({
-      activeCourse: null,
-      error: null,
-      isLoading: true,
-    });
-
-    render(<ActiveCourseContextBar />);
-
-    expect(screen.getByText("Loading active course...")).toBeInTheDocument();
+      screen.queryByText("CS 101: Introduction to Programming"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Active course selector")).toBeInTheDocument();
   });
 
   // Verifies: Shows an error alert when active course loading fails.

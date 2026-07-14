@@ -70,7 +70,8 @@ describe("InstructorCoursesCard", () => {
       id: 99,
       code: "CS 099",
       name: "Draft Seminar",
-      workflowState: "unpublished",
+      isPublished: false,
+      isWritable: false,
     };
 
     render(
