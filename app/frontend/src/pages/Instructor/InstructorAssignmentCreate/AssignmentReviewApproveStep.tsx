@@ -158,7 +158,7 @@ export function AssignmentReviewApproveStep({
               aria-describedby={
                 errors.pointsPossible ? "review-points-possible-error" : undefined
               }
-              {...register("pointsPossible")}
+              {...register("pointsPossible", { valueAsNumber: true })}
             />
             {errors.pointsPossible ? (
               <p

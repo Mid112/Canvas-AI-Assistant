@@ -39,6 +39,9 @@ class AssignmentResponse(BaseModel):
     due_at: datetime | None = None
     points_possible: float | None = None
     course_id: int
+    # Canvas's draft/published distinction — defaults true so assignments from
+    # older Canvas payloads that omit the field aren't misread as drafts.
+    published: bool = True
 
 
 class SubmissionStatus(StrEnum):

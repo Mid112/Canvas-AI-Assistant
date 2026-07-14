@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -29,6 +29,17 @@ class Assignment(Base):
     due_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True)
     points_possible: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # False once a Canvas refresh no longer returns this assignment (deleted on Canvas) —
+    # kept rather than deleted so historical submissions/audit rows still resolve, and
+    # excluded from counts/aggregates so removed assignments stop being counted as active.
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    # Canvas's own draft/published distinction — a draft assignment is invisible
+    # to students and cannot have real submissions, so data-analysis surfaces
+    # (missing/late counts, average grade, completion rate) exclude unpublished
+    # assignments rather than counting every student as "missing" something
+    # they were never actually assigned. Defaults true since Canvas assignments
+    # created outside this app are published unless explicitly drafted.
+    published: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
 
     course_id: Mapped[int] = mapped_column(Integer, ForeignKey("courses.id"), nullable=False)
 

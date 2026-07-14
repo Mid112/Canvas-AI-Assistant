@@ -15,12 +15,14 @@ import {
   getInstitutionData,
   institutions,
 } from "@/data/institutionCourseData";
+import { getConnectedInstitutions } from "@/lib/canvas-connections";
 import {
   getStoredInstitutionId,
   setStoredInstitutionId,
 } from "@/lib/institution-storage";
 import type { CourseAnalyticsOverview } from "@/types/course";
 import type { InstructorDashboardData } from "@/types/dashboard";
+import type { User } from "@/types/user";
 import { sharedDashboardQuickActions } from "@/types/dashboard";
 import { fetchInstructorDashboard } from "@/services/dashboard";
 
@@ -53,7 +55,26 @@ const EMPTY_DASHBOARD: InstructorDashboardData = {
   notifications: [],
 };
 
-function resolveInstitutionId(userId: number | undefined): string {
+function resolveInstitutionId(
+  userId: number | undefined,
+  user: User | null,
+): string {
+  const connectedInstitutions = getConnectedInstitutions(user, institutions);
+
+  if (connectedInstitutions.length > 0) {
+    if (userId) {
+      const storedId = getStoredInstitutionId(userId);
+      if (
+        storedId &&
+        connectedInstitutions.some((institution) => institution.id === storedId)
+      ) {
+        return storedId;
+      }
+    }
+
+    return connectedInstitutions[0]!.id;
+  }
+
   if (userId) {
     const storedId = getStoredInstitutionId(userId);
     if (storedId && institutions.some((institution) => institution.id === storedId)) {
@@ -80,7 +101,7 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
   const { user, accessToken } = useAuth();
   const userId = user?.id;
   const [selectedInstitutionId, setSelectedInstitutionId] = useState(() =>
-    resolveInstitutionId(userId),
+    resolveInstitutionId(userId, user),
   );
   const [previousUserId, setPreviousUserId] = useState(userId);
   const [previousAccessToken, setPreviousAccessToken] = useState(accessToken);
@@ -90,8 +111,26 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
 
   if (userId !== previousUserId) {
     setPreviousUserId(userId);
-    setSelectedInstitutionId(resolveInstitutionId(userId));
+    setSelectedInstitutionId(resolveInstitutionId(userId, user));
     setApiDashboard(null);
+  }
+
+  const connectedInstitutions = useMemo(
+    () => getConnectedInstitutions(user, institutions),
+    [user],
+  );
+
+  if (
+    connectedInstitutions.length > 0 &&
+    !connectedInstitutions.some(
+      (institution) => institution.id === selectedInstitutionId,
+    )
+  ) {
+    const nextInstitutionId = connectedInstitutions[0]!.id;
+    setSelectedInstitutionId(nextInstitutionId);
+    if (user) {
+      setStoredInstitutionId(user.id, nextInstitutionId);
+    }
   }
 
   if (accessToken !== previousAccessToken) {
@@ -126,9 +165,36 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
     };
   }, [accessToken, userId, user?.role]);
 
+  const refreshDashboard = useCallback(async () => {
+    if (!accessToken || user?.role !== "instructor") {
+      return;
+    }
+
+    try {
+      const dashboard = await fetchInstructorDashboard(accessToken);
+      setApiDashboard(withSharedQuickActions(dashboard));
+    } catch {
+      // Keep whatever dashboard data is already displayed rather than blanking a
+      // working dashboard on a transient failure — this is called right after a
+      // chat action confirms or an assignment is created, so a single slow/failed
+      // round-trip here shouldn't erase data that was correct a moment ago.
+    }
+  }, [accessToken, user?.role]);
+
   const setSelectedInstitution = useCallback(
     (institutionId: string) => {
-      if (!institutions.some((institution) => institution.id === institutionId)) {
+      const isKnownCatalog = institutions.some(
+        (institution) => institution.id === institutionId,
+      );
+      const isConnected = connectedInstitutions.some(
+        (institution) => institution.id === institutionId,
+      );
+
+      if (connectedInstitutions.length > 0) {
+        if (!isConnected) {
+          return;
+        }
+      } else if (!isKnownCatalog) {
         return;
       }
 
@@ -138,15 +204,22 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
         setStoredInstitutionId(user.id, institutionId);
       }
     },
-    [user],
+    [connectedInstitutions, user],
   );
 
-  const selectedInstitution = useMemo(
-    () =>
+  const selectedInstitution = useMemo(() => {
+    const fromConnected = connectedInstitutions.find(
+      (institution) => institution.id === selectedInstitutionId,
+    );
+    if (fromConnected) {
+      return fromConnected;
+    }
+
+    return (
       institutions.find((institution) => institution.id === selectedInstitutionId) ??
-      institutions[0]!,
-    [selectedInstitutionId],
-  );
+      institutions[0]!
+    );
+  }, [connectedInstitutions, selectedInstitutionId]);
 
   const institutionData = useMemo(
     () => getInstitutionData(selectedInstitution.id),
@@ -155,7 +228,7 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<InstitutionContextValue>(
     () => ({
-      institutions,
+      institutions: connectedInstitutions,
       selectedInstitution,
       setSelectedInstitution,
       courses: institutionData?.courses ?? [],
@@ -163,8 +236,16 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
       dashboard: withSharedQuickActions(
         apiDashboard ?? institutionData?.dashboard ?? EMPTY_DASHBOARD,
       ),
+      refreshDashboard,
     }),
-    [apiDashboard, institutionData, selectedInstitution, setSelectedInstitution],
+    [
+      apiDashboard,
+      connectedInstitutions,
+      institutionData,
+      refreshDashboard,
+      selectedInstitution,
+      setSelectedInstitution,
+    ],
   );
 
   return (

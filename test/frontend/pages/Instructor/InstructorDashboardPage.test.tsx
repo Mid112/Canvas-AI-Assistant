@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InstructorDashboardPage } from "@/pages/Instructor/InstructorDashboardPage";
 import { paths } from "@/routes/paths";
 import { fetchCourseAssignments } from "@/services/assignments";
-import { fetchCourses } from "@/services/canvas";
+import { fetchActiveCourse, fetchCourses } from "@/services/canvas";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 const mockNavigate = vi.fn();
@@ -52,6 +52,7 @@ vi.mock("@/contexts/AuthContext", async () => {
 });
 
 const mockedFetchCourses = vi.mocked(fetchCourses);
+const mockedFetchActiveCourse = vi.mocked(fetchActiveCourse);
 const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
 
 const CANVAS_URL = "https://canvas.ubc.ca";
@@ -108,6 +109,7 @@ const canvasCourses = [
 beforeEach(() => {
   vi.clearAllMocks();
   mockUseAuth.mockReturnValue(authWithCanvas);
+  mockedFetchActiveCourse.mockResolvedValue(null);
   mockedFetchCourses.mockResolvedValue(canvasCourses);
   mockedFetchCourseAssignments.mockResolvedValue([
     { id: 1, name: "Assignment 1", course_id: 101 },
@@ -134,7 +136,7 @@ describe("InstructorDashboardPage", () => {
       screen.getByRole("heading", { name: "Dashboard" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Welcome back, Dr. Jane Doe. Overview for UBC."),
+      screen.getByText("Welcome back, Dr. Jane Doe. Overview for canvas.ubc.ca."),
     ).toBeInTheDocument();
 
     await waitFor(() => {

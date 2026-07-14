@@ -11,6 +11,7 @@ import {
   type AdminSettings,
 } from "@/services/adminSettings";
 import { createAdmin } from "@/services/adminUsers";
+import { pageShell, pageShellMedium } from "@/lib/page-shell";
 
 const emptyAdminForm = { name: "", email: "", password: "" };
 
@@ -106,7 +107,7 @@ export function AdminSettingsPage() {
 
   if (loadError) {
     return (
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+      <div className={pageShell}>
         <p role="alert" className="text-sm text-destructive">
           {loadError}
         </p>
@@ -116,14 +117,14 @@ export function AdminSettingsPage() {
 
   if (!settings) {
     return (
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+      <div className={pageShell}>
         <p className="text-sm text-muted-foreground">Loading settings...</p>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6 p-4 md:p-6 lg:p-8">
+    <div className={pageShellMedium}>
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
           Admin Settings

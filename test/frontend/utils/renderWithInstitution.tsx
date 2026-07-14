@@ -14,14 +14,21 @@ export function renderWithInstitution(
   ui: ReactElement,
   { routerProps, ...options }: RenderWithInstitutionOptions = {},
 ) {
-  return render(
-    <AuthProvider>
-      <InstitutionProvider>
-        <ActiveCourseProvider>
-          <MemoryRouter {...routerProps}>{ui}</MemoryRouter>
-        </ActiveCourseProvider>
-      </InstitutionProvider>
-    </AuthProvider>,
-    options,
-  );
+  // Wraps via the `wrapper` render option (rather than nesting `ui` directly
+  // inside the providers) so that `rerender()` reapplies the same provider
+  // tree instead of replacing it — a bare `rerender(<Component />)` would
+  // otherwise unmount AuthProvider/InstitutionProvider/ActiveCourseProvider
+  // along with it.
+  return render(ui, {
+    wrapper: ({ children }) => (
+      <AuthProvider>
+        <InstitutionProvider>
+          <ActiveCourseProvider>
+            <MemoryRouter {...routerProps}>{children}</MemoryRouter>
+          </ActiveCourseProvider>
+        </InstitutionProvider>
+      </AuthProvider>
+    ),
+    ...options,
+  });
 }

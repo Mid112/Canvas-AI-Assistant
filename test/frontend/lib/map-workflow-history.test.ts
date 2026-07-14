@@ -85,4 +85,43 @@ describe("mapWorkflowHistoryApiToEntry", () => {
     expect(failed.status).toBe("rejected");
     expect(cancelled.workflowName).toBe("Update Assignment");
   });
+
+  // Verifies: Maps undoable/undone_at through to the domain shape.
+  it("maps undoable and undone_at through", () => {
+    const undoneEntry = mapWorkflowHistoryApiToEntry({
+      id: 5,
+      conversation_id: 14,
+      action_name: "update_assignment",
+      user_prompt: "rename the assignment",
+      status: "executed",
+      proposed_action: { action: "update_assignment" },
+      affected_resources: [],
+      created_at: "2026-05-01T12:00:00.000Z",
+      executed_at: "2026-05-01T12:05:00.000Z",
+      user_name: "Dr. Jane Doe",
+      undoable: true,
+      undone_at: "2026-05-01T13:00:00.000Z",
+    });
+
+    expect(undoneEntry.undoable).toBe(true);
+    expect(undoneEntry.undoneAt).toBe("2026-05-01T13:00:00.000Z");
+
+    const notUndoableEntry = mapWorkflowHistoryApiToEntry({
+      id: 6,
+      conversation_id: 15,
+      action_name: "send_message",
+      user_prompt: "remind students",
+      status: "executed",
+      proposed_action: { action: "send_message" },
+      affected_resources: [],
+      created_at: "2026-05-01T12:00:00.000Z",
+      executed_at: "2026-05-01T12:05:00.000Z",
+      user_name: "Dr. Jane Doe",
+      undoable: false,
+      undone_at: null,
+    });
+
+    expect(notUndoableEntry.undoable).toBe(false);
+    expect(notUndoableEntry.undoneAt).toBeNull();
+  });
 });

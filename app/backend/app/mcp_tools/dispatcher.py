@@ -4,8 +4,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from dateutil import parser as date_parser
+from fastapi import HTTPException
 from pydantic import ValidationError
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS, is_reversible
@@ -28,6 +28,7 @@ from app.services.canvas import (
     update_course_assignment,
 )
 from app.services.canvas_status import CanvasWriteResult
+from app.services.course_access import get_owned_course_or_404
 from app.services.llm.json_extraction import extract_json_object as _extract_json
 from app.services.message_validation import validate_message_for_send
 from app.services.student import get_students
@@ -139,18 +140,21 @@ def _create_assignment_due_date_in_past(due_date: str) -> bool:
 async def _resolve_course(
     db: AsyncSession, user: User, local_course_id: int
 ) -> Course:
-    """Shared ownership check used by every action that takes a course ID."""
-    course = await db.scalar(
-        select(Course).where(
-            Course.id == local_course_id, Course.instructor_id == user.id
-        )
-    )
-    if not course:
+    """Shared ownership check used by every action that takes a course ID.
+
+    Delegates the actual lookup to services/course_access.py's
+    get_owned_course_or_404 (the same query FastAPI routes use) rather than
+    duplicating it, translating its HTTPException into this module's
+    ToolExecutionError so every existing caller here keeps seeing the same
+    exception type it already handles."""
+    try:
+        return await get_owned_course_or_404(local_course_id, user, db)
+    except HTTPException as e:
+        detail = e.detail if isinstance(e.detail, str) else str(e.detail)
         raise ToolExecutionError(
             "That course could not be found in your account.",
-            log_detail=f"local_course_id={local_course_id} not found or not owned by user_id={user.id}",
+            log_detail=f"local_course_id={local_course_id} not found or not owned by user_id={user.id}: {detail}",
         )
-    return course
 
 
 def _add_person_submission_summary(submissions: list[SubmissionResponse]) -> str:
@@ -347,6 +351,7 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                         "changed_fields": changed_fields,
                     },
                 ],
+                previous_data=current,
             )
             return result.to_dict()
 

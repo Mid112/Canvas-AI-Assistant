@@ -18,6 +18,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { useInstructorCourseOutletContext } from "@/hooks/useInstructorCourseOutletContext";
 import { useResolvedInstructorCourse } from "@/hooks/useResolvedInstructorCourse";
+import { formatInstructorCourseTitle } from "@/lib/format-course-title";
 import {
   DEFAULT_PAGE_SIZE,
   filterBySearch,
@@ -31,7 +32,9 @@ import {
   fetchCourseStudentsWithSubmissionFallback,
   StudentApiError,
 } from "@/services/students";
+import { filterAnalyticsStudents } from "@/lib/student-analytics";
 import type { CourseStudent } from "@/types/student";
+import type { InstructorCourse } from "@/types/course";
 
 export function InstructorCourseStudentsPage() {
   const { localCourseId } = useParams();
@@ -133,8 +136,13 @@ export function InstructorCourseStudentsPage() {
     user?.has_canvas_token,
   ]);
 
+  const analyticsStudents = useMemo(
+    () => filterAnalyticsStudents(students),
+    [students],
+  );
+
   const filteredStudents = useMemo(() => {
-    const searched = filterBySearch(students, search, (student) =>
+    const searched = filterBySearch(analyticsStudents, search, (student) =>
       [student.name, student.login_id ?? "", student.sortable_name ?? ""].join(
         " ",
       ),
@@ -147,7 +155,7 @@ export function InstructorCourseStudentsPage() {
     return searched.filter(
       (student) => student.enrollment_state === statusFilter,
     );
-  }, [search, statusFilter, students]);
+  }, [analyticsStudents, search, statusFilter]);
 
   const paginated = useMemo(
     () => paginateItems(filteredStudents, page, pageSize),
@@ -186,7 +194,7 @@ export function InstructorCourseStudentsPage() {
   if (!embedded && (!user?.has_canvas_token || needsCanvasConnection)) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-        <PageHeader localCourseId={parsedLocalCourseId} embedded={embedded} />
+        <PageHeader localCourseId={parsedLocalCourseId} course={course} embedded={embedded} />
         <CanvasConnectionRequired />
       </div>
     );
@@ -259,7 +267,7 @@ export function InstructorCourseStudentsPage() {
 
   const content = (
     <>
-      <PageHeader localCourseId={parsedLocalCourseId} embedded={embedded} />
+      <PageHeader localCourseId={parsedLocalCourseId} course={course} embedded={embedded} />
 
       <DataTableToolbar
         search={search}
@@ -330,9 +338,11 @@ export function InstructorCourseStudentsPage() {
 
 function PageHeader({
   localCourseId,
+  course,
   embedded = false,
 }: {
   localCourseId: number;
+  course?: InstructorCourse | null;
   embedded?: boolean;
 }) {
   if (embedded) {
@@ -346,7 +356,9 @@ function PageHeader({
           Course Students
         </h1>
         <p className="text-muted-foreground">
-          Enrolled students for course #{localCourseId}.
+          {course
+            ? `Enrolled students for ${formatInstructorCourseTitle(course)}.`
+            : "Enrolled students for this course."}
         </p>
       </div>
       <div className="flex flex-wrap gap-2">

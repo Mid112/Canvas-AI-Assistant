@@ -53,7 +53,7 @@ describe("GuestRoute", () => {
           </Route>
           <Route
             path={paths.canvasInfo}
-            element={<div>Canvas info</div>}
+            element={<div>Canvas info page</div>}
           />
           <Route
             path={paths.instructor.dashboard}
@@ -114,7 +114,7 @@ describe("GuestRoute", () => {
 
     renderGuestRoute();
 
-    expect(screen.getByText("Canvas info")).toBeInTheDocument();
+    expect(screen.getByText("Canvas info page")).toBeInTheDocument();
     expect(screen.queryByText("Login page")).not.toBeInTheDocument();
   });
 
@@ -133,7 +133,7 @@ describe("GuestRoute", () => {
     renderGuestRoute();
 
     expect(screen.getByText("Instructor dashboard")).toBeInTheDocument();
-    expect(screen.queryByText("Canvas info")).not.toBeInTheDocument();
+    expect(screen.queryByText("Canvas info page")).not.toBeInTheDocument();
   });
 
   // Verifies: Redirects admins to the admin dashboard without completed onboarding.
@@ -151,6 +151,6 @@ describe("GuestRoute", () => {
     renderGuestRoute();
 
     expect(screen.getByText("Admin dashboard")).toBeInTheDocument();
-    expect(screen.queryByText("Canvas info")).not.toBeInTheDocument();
+    expect(screen.queryByText("Canvas info page")).not.toBeInTheDocument();
   });
 });

@@ -6,14 +6,14 @@ from datetime import UTC, date, datetime
 
 import httpx
 from fastapi import HTTPException
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_action
-from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS, IntentPreviewAction
+from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS
 from app.models.audit_log import AuditLog
 from app.models.conversation import Conversation
 from app.models.course import Course
@@ -21,10 +21,14 @@ from app.models.message import Message
 from app.models.user import User
 from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
+from app.services.canvas import CanvasTokenRequiredError
 from app.services.llm.llm_setting import get_llm_adapter
 
 LLM_TIMEOUT_SECONDS = 90.0
 HISTORY_WINDOW = 10
+CANVAS_TOKEN_REQUIRED_MESSAGE = (
+    "This action needs a connected Canvas account. Connect Canvas in Settings, then try again."
+)
 # Failure paths (parse errors, timeouts, HTTP errors) log the full raw
 # diagnostic — for a "thinking" model that can mean the entire verbose
 # <think> block, hundreds to thousands of tokens — as the assistant message
@@ -271,6 +275,30 @@ def _plain_text_response(raw_output: str) -> dict | None:
     return None
 
 
+def _coerce_direct_action_to_preview(action) -> dict:
+    """Turn a model-emitted Canvas action into a pending preview.
+
+    This is the server-side safety net for models that skip the required
+    intent_preview wrapper. Do not route this through execute_tool's
+    intent_preview case: that path can ask clarifying questions for malformed
+    model-authored previews, but the critical invariant here is simpler and
+    stronger: a direct action on a normal chat turn must never execute.
+    """
+    proposed_action = action.model_dump()
+    action_name = action.action
+
+    return {
+        "action": "intent_preview",
+        "intent_preview": True,
+        "summary": (
+            f"I'll {action_name.replace('_', ' ')} as described below. "
+            "Please review before confirming."
+        ),
+        "proposed_action": proposed_action,
+        "preview_metadata": {"action": action_name},
+    }
+
+
 async def log_message(
     db: AsyncSession,
     conversation: Conversation,
@@ -406,6 +434,25 @@ async def _sync_workflow_for_preview(
     )
 
 
+async def _supersede_pending_workflow(
+    db: AsyncSession,
+    conversation_id: int,
+    pending_message_id: int | None,
+) -> None:
+    if pending_message_id is None:
+        return
+
+    await db.execute(
+        sa_update(Workflow)
+        .where(
+            Workflow.conversation_id == conversation_id,
+            Workflow.preview_message_id == pending_message_id,
+            Workflow.status == "pending",
+        )
+        .values(status="superseded")
+    )
+
+
 async def _get_recent_messages(
     db: AsyncSession, conversation_id: int
 ) -> list[dict]:
@@ -473,7 +520,7 @@ def _truncate_history_content(content: str) -> str:
     return content[:HISTORY_MESSAGE_MAX_CHARS] + " …[truncated]"
 
 
-def build_system_prompt() -> str:
+def build_system_prompt(has_canvas_token: bool = True) -> str:
     tool_list = "\n".join(
         f"- {name}: {schema.model_json_schema()}"
         for name, schema in ACTION_SCHEMAS.items()
@@ -486,12 +533,24 @@ def build_system_prompt() -> str:
         '"in two weeks") against this date — never against a year from your\n'
         "training data. A resolved date must always fall on or after today.\n"
     )
+    # The backend already fails safely without this (CanvasTokenRequiredError
+    # is caught and turned into a friendly message), so this is purely an
+    # optimization to skip a doomed-to-fail LLM round-trip for the common
+    # case of a user who hasn't connected Canvas yet asking a Canvas question.
+    canvas_gate_line = "" if has_canvas_token else (
+        "\nThe current user has NOT connected a Canvas account yet. Do not "
+        "propose any Canvas-touching action (fetch/create/update/send) — it "
+        "will fail. If the request needs Canvas data, respond with "
+        '{"action": "respond", "message": "..."} telling them to connect '
+        "Canvas in Settings first. Still answer general, non-Canvas "
+        "questions normally.\n"
+    )
 
     return """You are a Canvas LMS assistant for instructors. You help
 with course management, assignments, student submissions, and
 communicating with students.
 
-""" + today_line + """
+""" + today_line + canvas_gate_line + """
 SCOPE CHECK — do this first, before anything else:
 Decide whether the request is about Canvas course management or student
 communication. If the request is not about Canvas (e.g. creative
@@ -654,7 +713,7 @@ async def handle_chat_message(
         if stored_preview:
             current_proposed_action = stored_preview.get("proposed_action")
 
-    system_prompt = build_system_prompt()
+    system_prompt = build_system_prompt(has_canvas_token=bool(user.canvas_connections))
     adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
 
     try:
@@ -713,15 +772,17 @@ async def handle_chat_message(
                 # real intent_preview here, rather than rejecting outright,
                 # gives the user the same confirmation step they should
                 # have gotten without losing the turn to an error message.
-                action = IntentPreviewAction(
-                    summary=f"I'll {action.action.replace('_', ' ')} as described below. Please review before confirming.",
-                    proposed_action=action.model_dump(),
-                )
-            result = await execute_tool(db, user, action)
+                result = _coerce_direct_action_to_preview(action)
+            else:
+                result = await execute_tool(db, user, action)
     except ToolExecutionError as e:
         await log_message(db, conversation, role="assistant", content=e.log_detail)
         await db.commit()
         return conversation, {"error": e.user_message}, True
+    except CanvasTokenRequiredError as e:
+        await log_message(db, conversation, role="assistant", content=str(e.detail))
+        await db.commit()
+        return conversation, {"error": CANVAS_TOKEN_REQUIRED_MESSAGE, "requires_canvas_token": True}, True
     except HTTPException as e:
         detail = e.detail if isinstance(e.detail, str) else str(e.detail)
         error_detail = f"HTTPException {e.status_code}: {detail}"
@@ -761,6 +822,12 @@ async def handle_chat_message(
             user_prompt=message,
             proposed_action=result.get("proposed_action", {}),
             affected_resources=preview_metadata.get("affected_resources", []),
+        )
+    else:
+        await _supersede_pending_workflow(
+            db,
+            conversation.id,
+            pending_message_id,
         )
 
     await db.commit()
@@ -883,6 +950,12 @@ async def handle_confirmed_action(
         workflow.error_detail = e.log_detail
         await db.commit()
         return conversation, {"error": e.user_message}, True
+    except CanvasTokenRequiredError as e:
+        await log_message(db, conversation, role="assistant", content=str(e.detail))
+        workflow.status = "failed"
+        workflow.error_detail = str(e.detail)
+        await db.commit()
+        return conversation, {"error": CANVAS_TOKEN_REQUIRED_MESSAGE, "requires_canvas_token": True}, True
     except HTTPException as e:
         # Semantic validators (e.g. validate_assignment_for_create) and
         # services/canvas.py raise HTTPException directly rather than
@@ -938,6 +1011,13 @@ async def handle_confirmed_action(
         # normalize them.
         data = json.loads(_json_dumps(result.get("data") or {}))
         resource_id = str(data["id"]) if isinstance(data, dict) and data.get("id") is not None else None
+        # Only set for update_assignment today (see CanvasWriteResult.previous_data) —
+        # the state undo_workflow re-applies to revert this action.
+        before_data = (
+            json.loads(_json_dumps(result["previous_data"]))
+            if result.get("previous_data") is not None
+            else None
+        )
         db.add(
             AuditLog(
                 user_id=user.id,
@@ -948,6 +1028,7 @@ async def handle_confirmed_action(
                 resource_id=resource_id,
                 operation=operation,
                 status="success",
+                before_data=before_data,
                 after_data=data,
                 request_payload=workflow.proposed_action,
             )
@@ -1054,5 +1135,37 @@ async def get_conversation_with_messages(
             Conversation.id == conversation_id,
             Conversation.user_id == user.id,
         )
-        .options(selectinload(Conversation.messages))
+        .options(selectinload(Conversation.messages), selectinload(Conversation.workflows))
     )
+
+
+async def list_conversations(
+    db: AsyncSession,
+    user: User,
+    limit: int,
+    offset: int,
+) -> tuple[list[Conversation], int]:
+    total = await db.scalar(
+        select(func.count()).select_from(Conversation).where(Conversation.user_id == user.id)
+    )
+    latest_message = (
+        select(
+            Message.conversation_id,
+            func.max(Message.created_at).label("updated_at"),
+        )
+        .group_by(Message.conversation_id)
+        .subquery()
+    )
+    rows = await db.scalars(
+        select(Conversation)
+        .outerjoin(latest_message, latest_message.c.conversation_id == Conversation.id)
+        .where(Conversation.user_id == user.id)
+        .options(selectinload(Conversation.messages), selectinload(Conversation.workflows))
+        .order_by(
+            desc(func.coalesce(latest_message.c.updated_at, Conversation.created_at)),
+            desc(Conversation.id),
+        )
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(rows), total or 0

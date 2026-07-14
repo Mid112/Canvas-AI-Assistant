@@ -1,10 +1,10 @@
 import {
   BarChart3,
   ClipboardList,
-  FileText,
-  Sparkles,
+  MessageSquare,
 } from "lucide-react";
 
+import { AssistantAvatar } from "@/components/brand/AssistantAvatar";
 import { cn } from "@/lib/utils";
 import {
   dashboardColors,
@@ -23,18 +23,9 @@ export function InstructorAssistantHeader({
 }: InstructorAssistantHeaderProps) {
   return (
     <div className="flex items-start gap-3">
-      <div
-        className={cn(
-          "flex size-11 shrink-0 items-center justify-center",
-          dashboardColors.purple.iconSquare,
-        )}
-      >
-        <Sparkles className="size-5" aria-hidden="true" />
-      </div>
+      <AssistantAvatar size="lg" />
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
-          {title}
-        </h1>
+        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">{title}</h1>
         <p className="text-muted-foreground">{subtitle}</p>
       </div>
     </div>
@@ -43,9 +34,9 @@ export function InstructorAssistantHeader({
 
 const actionIcons = {
   "missing-submissions": ClipboardList,
-  "summarize-quiz": FileText,
   "late-assignments": ClipboardList,
   "course-performance": BarChart3,
+  "draft-student-message": MessageSquare,
 } as const;
 
 interface InstructorAssistantSuggestedActionsProps {
@@ -61,11 +52,11 @@ export function InstructorAssistantSuggestedActions({
 }: InstructorAssistantSuggestedActionsProps) {
   return (
     <section aria-label="Suggested actions" className="space-y-3">
-      <h2 className="text-sm font-semibold">Suggested Actions</h2>
+      <h2 className="text-sm font-semibold">Suggested actions</h2>
       <div className="grid gap-3 sm:grid-cols-2">
         {actions.map((action) => {
           const Icon =
-            actionIcons[action.id as keyof typeof actionIcons] ?? Sparkles;
+            actionIcons[action.id as keyof typeof actionIcons] ?? ClipboardList;
 
           return (
             <button
@@ -81,19 +72,17 @@ export function InstructorAssistantSuggestedActions({
               <div
                 className={cn(
                   "flex size-9 shrink-0 items-center justify-center",
-                  dashboardColors.blue.iconSquare,
+                  dashboardColors.red.iconSquare,
                   dashboardInteractive.actionIcon,
                 )}
               >
                 <Icon className="size-4" aria-hidden="true" />
               </div>
               <div className="min-w-0 space-y-0.5 text-left">
-                <p className="text-sm font-medium transition-colors group-hover:text-blue-700">
+                <p className="text-sm font-medium transition-colors group-hover:text-primary">
                   {action.title}
                 </p>
-                <p className="text-sm text-muted-foreground">
-                  {action.description}
-                </p>
+                <p className="text-sm text-muted-foreground">{action.description}</p>
               </div>
             </button>
           );

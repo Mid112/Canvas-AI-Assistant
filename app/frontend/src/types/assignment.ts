@@ -5,6 +5,9 @@ export interface Assignment {
   due_at: string | null;
   points_possible: number | null;
   course_id: number;
+  /** Canvas's draft/published distinction — a draft is invisible to students
+   * and can't have real submissions. */
+  published: boolean;
 }
 
 export interface AssignmentCreatePayload {

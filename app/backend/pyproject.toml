@@ -58,3 +58,17 @@ exclude = [
 [[tool.mypy.overrides]]
 module = "app.main"
 disable_error_code = ["assignment", "attr-defined"]
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    ".venv/*",
+    "*/tests/*",
+    "*/__pycache__/*",
+]
+
+[tool.coverage.report]
+# Baseline from current suite (~68.9%); ratchet up as coverage improves.
+fail_under = 68
+show_missing = true
+skip_covered = false

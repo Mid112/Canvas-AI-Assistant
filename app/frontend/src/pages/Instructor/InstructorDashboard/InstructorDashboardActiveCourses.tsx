@@ -66,7 +66,7 @@ export function InstructorDashboardActiveCourses({
                   className={cn(
                     "shrink-0 rounded-md px-2 py-1 text-sm font-medium transition-colors duration-200",
                     dashboardColors.blue.link,
-                    "hover:bg-blue-50",
+                    "hover:bg-primary/10",
                   )}
                 >
                   View

@@ -21,6 +21,51 @@ describe("filterInstructorCourses", () => {
     expect(results).toHaveLength(1);
     expect(results[0]?.code).toBe("CS 250");
   });
+
+  it("defaults to showing all courses regardless of publish status", () => {
+    const courses = [
+      { ...ubcCourses[0]!, isPublished: true },
+      { ...ubcCourses[1]!, isPublished: false },
+    ];
+
+    expect(filterInstructorCourses(courses, "")).toHaveLength(2);
+  });
+
+  it("filters to published courses only", () => {
+    const courses = [
+      { ...ubcCourses[0]!, isPublished: true },
+      { ...ubcCourses[1]!, isPublished: false },
+    ];
+
+    const results = filterInstructorCourses(courses, "", "published");
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.isPublished).toBe(true);
+  });
+
+  it("filters to unpublished courses only", () => {
+    const courses = [
+      { ...ubcCourses[0]!, isPublished: true },
+      { ...ubcCourses[1]!, isPublished: false },
+    ];
+
+    const results = filterInstructorCourses(courses, "", "unpublished");
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.isPublished).toBe(false);
+  });
+
+  it("combines the search query with the publish-status filter", () => {
+    const courses = [
+      { ...ubcCourses[0]!, code: "CS 250", name: "Databases", isPublished: true },
+      { ...ubcCourses[1]!, code: "CS 251", name: "Databases II", isPublished: false },
+    ];
+
+    const results = filterInstructorCourses(courses, "database", "published");
+
+    expect(results).toHaveLength(1);
+    expect(results[0]?.code).toBe("CS 250");
+  });
 });
 
 describe("sortInstructorCourses", () => {

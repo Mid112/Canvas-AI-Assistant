@@ -64,6 +64,30 @@ describe("InstructorCoursesCard", () => {
     ).toBeDisabled();
   });
 
+  it("shows publish status badges", () => {
+    const unpublished: (typeof courses)[number] = {
+      ...courses[0]!,
+      id: 99,
+      code: "CS 099",
+      name: "Draft Seminar",
+      isPublished: false,
+      isWritable: false,
+    };
+
+    render(
+      <MemoryRouter>
+        <InstructorCoursesCard
+          course={unpublished}
+          isActive={false}
+          onSetActive={vi.fn()}
+          isSettingActive={false}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Unpublished")).toBeInTheDocument();
+  });
+
   // Verifies: Shows a clear active state.
   it("shows a clear active state", () => {
     render(
@@ -80,6 +104,22 @@ describe("InstructorCoursesCard", () => {
     expect(
       screen.getByRole("button", { name: "Active Course" }),
     ).toBeDisabled();
+  });
+
+  it("shows an Unpublished badge and disables Set Active for an unpublished course", () => {
+    render(
+      <MemoryRouter>
+        <InstructorCoursesCard
+          course={{ ...courses[0]!, isPublished: false }}
+          isActive={false}
+          onSetActive={vi.fn()}
+          isSettingActive={false}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Unpublished")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Set Active" })).toBeDisabled();
   });
 });
 
@@ -118,6 +158,30 @@ describe("InstructorCoursesList", () => {
 
     expect(screen.getByRole("button", { name: "Setting..." })).toBeDisabled();
     expect(screen.getAllByRole("button", { name: "Set Active" })).toHaveLength(1);
+  });
+
+  it("shows an Unpublished badge and disables Set Active for an unpublished course row", () => {
+    const unpublishedCourses = [
+      { ...courses[0]!, isPublished: false },
+      courses[1]!,
+    ];
+
+    render(
+      <MemoryRouter>
+        <InstructorCoursesList
+          courses={unpublishedCourses}
+          {...activeCourseProps}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Unpublished")).toBeInTheDocument();
+    const [unpublishedButton, publishedButton] = screen.getAllByRole(
+      "button",
+      { name: "Set Active" },
+    );
+    expect(unpublishedButton).toBeDisabled();
+    expect(publishedButton).toBeEnabled();
   });
 });
 

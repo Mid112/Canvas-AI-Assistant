@@ -31,4 +31,14 @@ describe("InstructorDashboardNotifications", () => {
     });
     expect(viewAllLink).toHaveAttribute("href", paths.instructor.notifications);
   });
+
+  // Verifies: Hides the unread badge when there are no notifications.
+  it("hides the unread badge when there are no notifications", () => {
+    renderWithRouter(
+      <InstructorDashboardNotifications notifications={[]} />,
+    );
+
+    expect(screen.getByText("Notifications")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/unread/)).not.toBeInTheDocument();
+  });
 });

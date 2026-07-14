@@ -8,7 +8,7 @@ from fastapi import HTTPException, status
 
 from app.config import settings
 from app.schemas.preview import AssignmentDraftRequest, AssignmentDraftResponse
-from app.services.llm.json_extraction import extract_json_object
+from app.services.llm.json_extraction import loads_llm_json
 from app.services.llm.llm_setting import get_llm_adapter
 
 _LIST_ITEM_RE = re.compile(r"<li[^>]*>", re.IGNORECASE)
@@ -60,7 +60,7 @@ async def generate_assignment_draft(body: AssignmentDraftRequest) -> AssignmentD
         ) from e
 
     try:
-        data = json.loads(extract_json_object(raw))
+        data = loads_llm_json(raw)
     except (json.JSONDecodeError, ValueError) as e:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

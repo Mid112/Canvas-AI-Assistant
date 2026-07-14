@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -121,5 +121,37 @@ describe("LoginForm", () => {
       "Enter a valid email address",
     );
     expect(screen.getByRole("button", { name: "Sign In" })).toBeDisabled();
+  });
+
+  // Verifies: Does not submit when the form is incomplete.
+  it("does not submit when the form is incomplete", () => {
+    const onSubmit = vi.fn();
+
+    renderWithRouter(<LoginForm onSubmit={onSubmit} />);
+
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Sign In" }).closest("form")!,
+    );
+
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  // Verifies: Does not submit while a submission is already in progress.
+  it("does not submit while a submission is already in progress", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+
+    renderWithRouter(<LoginForm onSubmit={onSubmit} isSubmitting />);
+
+    await user.type(
+      screen.getByLabelText("Email Address"),
+      "professor@university.edu",
+    );
+    await user.type(screen.getByLabelText("Password"), "secret123");
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Signing In..." }).closest("form")!,
+    );
+
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 });

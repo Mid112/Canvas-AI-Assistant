@@ -29,13 +29,13 @@ const features = [
 
 export function LandingFeatures() {
   return (
-    <section id="features" className="px-6 py-16 md:px-8 md:py-20">
-      <div className="mx-auto max-w-6xl space-y-12">
+    <section id="features" className="scroll-mt-4 px-6 pb-16 pt-2 md:px-8 md:pb-20 md:pt-4">
+      <div className="mx-auto max-w-6xl space-y-8">
         <div className="mx-auto max-w-2xl space-y-3 text-center">
-          <h2 className="text-3xl font-bold tracking-tight text-[#1e293b]">
+          <h2 className="text-3xl font-bold tracking-tight text-foreground">
             Powerful Features for Educators
           </h2>
-          <p className="text-base leading-relaxed text-[#64748b]">
+          <p className="text-base leading-relaxed text-muted-foreground">
             Everything you need to streamline your Canvas workflow while
             maintaining security and control
           </p>
@@ -44,15 +44,15 @@ export function LandingFeatures() {
           {features.map((feature) => (
             <div
               key={feature.title}
-              className="space-y-4 rounded-xl border border-[#e2e8f0] bg-white p-6 shadow-[0_1px_3px_rgba(0,0,0,0.06)]"
+              className="space-y-4 rounded-xl border border-border bg-card p-6 shadow-sm"
             >
-              <div className="flex size-10 items-center justify-center rounded-lg bg-[#eff6ff] text-[#2563eb]">
+              <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <feature.icon className="size-5" aria-hidden="true" />
               </div>
-              <h3 className="text-base font-semibold text-[#1e293b]">
+              <h3 className="text-base font-semibold text-foreground">
                 {feature.title}
               </h3>
-              <p className="text-sm leading-relaxed text-[#64748b]">
+              <p className="text-sm leading-relaxed text-muted-foreground">
                 {feature.description}
               </p>
             </div>

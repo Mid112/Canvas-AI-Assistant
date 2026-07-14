@@ -46,7 +46,7 @@ export function PreviewActions({
             variant="outline"
             onClick={onModify}
             disabled={isConfirming}
-            className="border-[#2563eb]/30 text-[#2563eb] hover:bg-[#2563eb]/5 hover:text-[#2563eb]"
+            className="border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
           >
             <Pencil className="size-4" aria-hidden="true" />
             Modify Request
@@ -55,7 +55,7 @@ export function PreviewActions({
             type="button"
             onClick={onConfirm}
             disabled={isConfirming}
-            className="bg-emerald-600 text-white hover:bg-emerald-700"
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
           >
             <Check className="size-4" aria-hidden="true" />
             {isConfirming ? "Approving..." : "Approve & Execute"}

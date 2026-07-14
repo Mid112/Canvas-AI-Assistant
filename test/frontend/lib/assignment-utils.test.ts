@@ -15,6 +15,7 @@ const assignment: Assignment = {
   due_at: "2026-12-01T23:59:00.000Z",
   points_possible: 100,
   course_id: 7,
+  published: true,
 };
 
 describe("assignment-utils", () => {

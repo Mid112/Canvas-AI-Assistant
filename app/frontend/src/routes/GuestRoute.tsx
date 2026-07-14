@@ -8,7 +8,7 @@ export function GuestRoute() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-svh items-center justify-center bg-[#e8eef4] text-sm text-[#64748b]">
+      <div className="flex min-h-svh items-center justify-center bg-canvas-muted text-sm text-muted-foreground">
         Loading...
       </div>
     );

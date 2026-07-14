@@ -31,7 +31,7 @@ const actionIcons = {
 // review: these two actions used to be indistinguishable from that button.
 const quickActionPrompts: Record<string, string> = {
   "draft-announcement":
-    "Help me draft a course announcement for my active course.",
+    "Draft a student message or course announcement for my active course. Propose a send_message action I can review and edit before sending.",
   "grade-analysis":
     "Give me a grade and submission performance analysis for my active course.",
 };
@@ -94,7 +94,7 @@ export function InstructorDashboardQuickActions({
                 <Icon className="size-4" aria-hidden="true" />
               </div>
               <div className="min-w-0 space-y-0.5">
-                <p className="text-sm font-medium transition-colors group-hover:text-blue-700">
+                <p className="text-sm font-medium transition-colors group-hover:text-primary">
                   {action.title}
                 </p>
                 <p className="text-sm text-muted-foreground">

@@ -1,13 +1,23 @@
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
+import { MessageInboxPanel } from "@/components/messages/MessageInboxPanel";
+import {
+  MessageDraftPage,
+  MessageDraftPageHeader,
+} from "@/components/messages/MessageDraftPage";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
-import { StudentMessageDraftPage } from "@/pages/StudentMessageDraftPage";
+import {
+  type AiMessageDraftLocationState,
+} from "@/routes/paths";
 import { fetchCourseStudentsWithSubmissionFallback } from "@/services/students";
+import { toStudentEmailRecipients } from "@/lib/student-analytics";
 import type { FetchMessageDraftOptions } from "@/types/messageDraft";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
 
 const RECIPIENT_LOAD_TIMEOUT_MS = 5000;
 
@@ -19,9 +29,15 @@ export function InstructorMessagesPage() {
     isLoading: isLoadingCourses,
   } = useActiveCourse();
   const canvasUrl = useCanvasConnectionUrl();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [fetchOptions, setFetchOptions] =
     useState<FetchMessageDraftOptions | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [tab, setTab] = useState("inbox");
+
+  const aiDraft = (location.state as AiMessageDraftLocationState | null)
+    ?.aiMessageDraft;
 
   const basePrompt = useMemo(
     () =>
@@ -43,16 +59,30 @@ export function InstructorMessagesPage() {
   );
   const fallbackFetchOptions = useMemo<FetchMessageDraftOptions | null>(
     () =>
-      // Seed the draft with an empty recipient list until the live roster load completes.
       activeCourse ?
         {
           courseId: activeCourse.localId,
-          prompt: basePrompt,
+          prompt: aiDraft?.prompt ?? basePrompt,
+          subject: aiDraft?.subject,
+          body: aiDraft?.body,
           emptyRecipients: true,
         }
       : null,
-    [activeCourse, basePrompt],
+    [activeCourse, aiDraft, basePrompt],
   );
+  const draftSeedKey = [
+    aiDraft?.subject ?? "",
+    aiDraft?.body ?? "",
+    aiDraft?.prompt ?? "",
+  ].join("|");
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam === "compose" || aiDraft) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync tab to URL/AI draft on load
+      setTab("compose");
+    }
+  }, [aiDraft, searchParams]);
 
   useEffect(() => {
     if (!activeCourse) {
@@ -74,7 +104,6 @@ export function InstructorMessagesPage() {
       setLoadError(null);
 
       try {
-        // Race the roster fetch against a timeout so the composer stays usable if Canvas stalls.
         const students = await Promise.race([
           fetchCourseStudentsWithSubmissionFallback(
             localCourseId,
@@ -99,15 +128,22 @@ export function InstructorMessagesPage() {
           return;
         }
 
-        // Convert the roster response into the recipient shape expected by the draft page.
+        // Exclude pending/identity-less students so the recipient list matches
+        // the addresses that can actually receive a message.
+        const recipients = toStudentEmailRecipients(students);
+        const preferredIds = aiDraft?.recipientIds;
+        const seededRecipients =
+          preferredIds && preferredIds.length > 0 ?
+            recipients.filter((recipient) => preferredIds.includes(recipient.id))
+          : recipients;
+
         setFetchOptions({
           courseId: localCourseId,
-          prompt: basePrompt,
-          recipients: students.map((student) => ({
-            id: student.canvas_user_id,
-            name: student.name,
-            email: student.login_id ?? "",
-          })),
+          prompt: aiDraft?.prompt ?? basePrompt,
+          subject: aiDraft?.subject,
+          body: aiDraft?.body,
+          recipients:
+            seededRecipients.length > 0 ? seededRecipients : recipients,
         });
       } catch (error) {
         if (
@@ -123,10 +159,11 @@ export function InstructorMessagesPage() {
             error.message
           : "Unable to load course students for messaging.",
         );
-        // Fall back to an empty recipient list so the draft view still renders.
         setFetchOptions({
           courseId: localCourseId,
-          prompt: basePrompt,
+          prompt: aiDraft?.prompt ?? basePrompt,
+          subject: aiDraft?.subject,
+          body: aiDraft?.body,
           emptyRecipients: true,
         });
       }
@@ -141,6 +178,7 @@ export function InstructorMessagesPage() {
     accessToken,
     activeCourse,
     activeCourseDetails?.studentCount,
+    aiDraft,
     basePrompt,
     canvasUrl,
   ]);
@@ -162,7 +200,7 @@ export function InstructorMessagesPage() {
               className="size-4 animate-spin text-primary"
               aria-hidden="true"
             />
-            Preparing message draft...
+            Preparing messages...
           </CardContent>
         </Card>
       </div>
@@ -174,7 +212,7 @@ export function InstructorMessagesPage() {
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
         <Card className="shadow-sm ring-1 ring-border/60">
           <CardContent className="p-6 text-sm text-muted-foreground">
-            Select an active course to load real message recipients.
+            Select an active course to view messages and draft new ones.
           </CardContent>
         </Card>
       </div>
@@ -182,27 +220,48 @@ export function InstructorMessagesPage() {
   }
 
   return (
-    <>
-      {loadError ?
-        <div className="px-4 pt-4 md:px-6 md:pt-6 lg:px-8 lg:pt-8">
-          <Card className="shadow-sm ring-1 ring-border/60">
-            <CardContent className="flex items-start gap-3 p-4 text-sm text-muted-foreground">
-              <AlertCircle
-                className="mt-0.5 size-4 shrink-0"
-                aria-hidden="true"
-              />
-              <p>
-                {loadError} You can still compose a draft, but recipients may
-                need to be added manually.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      : null}
-      {/* The draft composer handles both the live recipient list and the fallback empty state. */}
-      <StudentMessageDraftPage
-        fetchOptions={activeFetchOptions ?? fallbackFetchOptions ?? undefined}
-      />
-    </>
+    <div className="flex flex-1 flex-col gap-4 p-4 md:p-6 lg:p-8">
+      <header className="space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
+          Messages
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          View conversations and student replies, or compose a new message for{" "}
+          {activeCourse.displayName}.
+        </p>
+      </header>
+
+      {loadError ? (
+        <Card className="shadow-sm ring-1 ring-border/60">
+          <CardContent className="flex items-start gap-3 p-4 text-sm text-muted-foreground">
+            <AlertCircle
+              className="mt-0.5 size-4 shrink-0"
+              aria-hidden="true"
+            />
+            <p>
+              {loadError} You can still compose a draft, but recipients may need
+              to be added manually.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
+
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList>
+          <TabsTrigger value="inbox">Inbox & replies</TabsTrigger>
+          <TabsTrigger value="compose">Compose</TabsTrigger>
+        </TabsList>
+        <TabsContent value="inbox" className="mt-4">
+          <MessageInboxPanel courseId={activeCourse.localId} />
+        </TabsContent>
+        <TabsContent value="compose" className="mt-4 space-y-6">
+          <MessageDraftPageHeader />
+          <MessageDraftPage
+            key={draftSeedKey || "default-draft"}
+            fetchOptions={activeFetchOptions ?? fallbackFetchOptions ?? undefined}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }

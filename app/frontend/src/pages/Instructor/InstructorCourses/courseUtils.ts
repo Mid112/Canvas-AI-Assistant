@@ -1,18 +1,25 @@
-import type { InstructorCourse } from "@/types/course";
+import type { CoursePublishFilter, InstructorCourse } from "@/types/course";
 
 export function filterInstructorCourses(
   courses: InstructorCourse[],
   search: string,
+  publishFilter: CoursePublishFilter = "all",
 ): InstructorCourse[] {
   const query = search.trim().toLowerCase();
 
-  if (query.length === 0) {
-    return courses;
-  }
+  return courses.filter((course) => {
+    if (publishFilter === "published" && !course.isPublished) {
+      return false;
+    }
+    if (publishFilter === "unpublished" && course.isPublished) {
+      return false;
+    }
 
-  return courses.filter((course) =>
-    `${course.code} ${course.name}`.toLowerCase().includes(query),
-  );
+    return (
+      query.length === 0 ||
+      `${course.code} ${course.name}`.toLowerCase().includes(query)
+    );
+  });
 }
 
 export function sortInstructorCourses(

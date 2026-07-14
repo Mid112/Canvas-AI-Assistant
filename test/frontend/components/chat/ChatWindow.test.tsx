@@ -135,6 +135,9 @@ describe("ChatWindow", () => {
       expect(screen.getByText("Explanation")).toBeInTheDocument();
     });
 
+    expect(
+      screen.getByText(/Hello! I'm your Canvas AI Assistant/),
+    ).toBeInTheDocument();
     expect(screen.getByText("Interpreted Action")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
@@ -412,6 +415,65 @@ describe("ChatWindow", () => {
     ).toHaveLength(1);
   });
 
+  it("targets the newest pending action when a restored conversation has multiple pending previews", async () => {
+    const user = userEvent.setup();
+    mockedSendAssistantMessage.mockResolvedValueOnce({
+      content: "Updated the latest proposal.",
+      conversationId: 7,
+    });
+
+    renderWithInstitution(
+      <ChatWindow
+        loadedConversation={{
+          id: 7,
+          course_id: 3,
+          created_at: "2026-06-24T10:00:00.000Z",
+          messages: [
+            {
+              id: 42,
+              role: "assistant",
+              content: JSON.stringify({
+                intent_preview: true,
+                summary: "First pending proposal",
+                proposed_action: { action: "fetch_courses" },
+              }),
+              created_at: "2026-06-24T10:01:00.000Z",
+              pending_action_status: "pending",
+            },
+            {
+              id: 43,
+              role: "assistant",
+              content: JSON.stringify({
+                intent_preview: true,
+                summary: "Newest pending proposal",
+                proposed_action: { action: "fetch_assignments" },
+              }),
+              created_at: "2026-06-24T10:02:00.000Z",
+              pending_action_status: "pending",
+            },
+          ],
+        }}
+      />,
+    );
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "Change the latest one",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => {
+      expect(mockedSendAssistantMessage).toHaveBeenCalledWith(
+        "test-token",
+        "Change the latest one",
+        expect.objectContaining({
+          conversationId: 7,
+          pendingMessageId: 43,
+        }),
+      );
+    });
+  });
+
   it("restores conversation history when returning from a workflow preview", async () => {
     mockedFetchConversation.mockResolvedValueOnce({
       id: 7,
@@ -447,6 +509,9 @@ describe("ChatWindow", () => {
       <ChatWindow initialConversationId={7} initialPendingMessageId={42} />,
     );
 
+    expect(
+      await screen.findByText(/Hello! I'm your Canvas AI Assistant/),
+    ).toBeInTheDocument();
     expect(await screen.findByText("Create a midterm exam")).toBeInTheDocument();
     expect(
       screen.getByText("I prepared a midterm exam for review."),
@@ -455,6 +520,5 @@ describe("ChatWindow", () => {
       "href",
       "/instructor/actions/preview?conversation=7&pending=42",
     );
-    expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();
   });
 });

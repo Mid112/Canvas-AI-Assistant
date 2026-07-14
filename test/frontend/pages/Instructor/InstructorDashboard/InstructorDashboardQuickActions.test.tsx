@@ -57,7 +57,8 @@ describe("InstructorDashboardQuickActions", () => {
     );
     expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant, {
       state: {
-        initialPrompt: "Help me draft a course announcement for my active course.",
+        initialPrompt:
+          "Draft a student message or course announcement for my active course. Propose a send_message action I can review and edit before sending.",
       },
     });
 
@@ -74,6 +75,28 @@ describe("InstructorDashboardQuickActions", () => {
     await user.click(
       screen.getByRole("button", { name: "Open AI Assistant" }),
     );
+    expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant);
+  });
+
+  // Verifies: Opens the assistant for unknown quick action ids.
+  it("opens the assistant for unknown quick action ids", async () => {
+    const user = userEvent.setup();
+    mockNavigate.mockClear();
+
+    renderWithRouter(
+      <InstructorDashboardQuickActions
+        actions={[
+          {
+            id: "custom-action",
+            title: "Custom Action",
+            description: "Fallback to assistant",
+          },
+        ]}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Custom Action/i }));
+
     expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant);
   });
 });

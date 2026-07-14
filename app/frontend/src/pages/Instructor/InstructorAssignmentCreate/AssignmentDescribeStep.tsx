@@ -151,9 +151,9 @@ export function AssignmentDescribeStep({
                   onClick={() => applySuggestedPrompt(suggestion.text)}
                   className={cn(
                     "rounded-lg border px-3 py-2 text-left text-sm transition-colors",
-                    "hover:border-blue-300 hover:bg-blue-50/60",
+                    "hover:border-primary/30 hover:bg-primary/5",
                     promptValue === suggestion.text
-                      ? "border-blue-400 bg-blue-50/80"
+                      ? "border-primary bg-primary/10"
                       : "border-border bg-background",
                   )}
                 >

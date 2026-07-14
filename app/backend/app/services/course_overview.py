@@ -17,6 +17,7 @@ from app.schemas.course_overview import (
     RecentAssignmentSummary,
     StudentActivityItem,
 )
+from app.services.canvas import get_assignments
 from app.services.student import get_students
 
 _SUBMITTED_STATUSES = ("submitted", "graded", "late")
@@ -64,6 +65,11 @@ async def get_course_overview(
     db: AsyncSession,
 ) -> CourseOverviewResponse:
     roster = await get_students(local_course_id, user, canvas_url, db)
+    # Refresh the local assignment mirror from Canvas before reading it below —
+    # get_assignments() upserts by canvas_assignment_id, so this must run before
+    # the select() so a newly added/removed Canvas assignment is reflected in
+    # the count and recent-assignments list rather than a stale prior sync.
+    await get_assignments(local_course_id, user, canvas_url, db)
 
     course = await db.scalar(
         select(Course)
@@ -77,9 +83,19 @@ async def get_course_overview(
         raise ValueError("Course not found")
 
     student_count = len(roster)
-    assignments = list(course.assignments)
+    assignments = [a for a in course.assignments if a.is_active]
+    # assignment_count/recent_assignments deliberately include drafts (unpublished
+    # assignments) — instructors need visibility into their own WIP assignments.
+    # Everything below that measures actual student progress (missing/late/
+    # submitted counts, average grade, completion rate) is scoped to published
+    # assignments only — a draft is invisible to students and can't have real
+    # submissions, so counting it would understate completion rate and could
+    # register every enrolled student as "missing" something they were never
+    # actually assigned.
     assignment_count = len(assignments)
-    assignment_ids = [assignment.id for assignment in assignments]
+    published_assignments = [a for a in assignments if a.published]
+    published_assignment_count = len(published_assignments)
+    assignment_ids = [assignment.id for assignment in published_assignments]
 
     missing_count = 0
     late_count = 0
@@ -124,6 +140,8 @@ async def get_course_overview(
         .join(Assignment, Assignment.id == Submission.assignment_id)
         .where(
             Assignment.course_id == course.id,
+            Assignment.is_active.is_(True),
+            Assignment.published.is_(True),
             Submission.score.is_not(None),
             Assignment.points_possible.is_not(None),
             Assignment.points_possible > 0,
@@ -136,7 +154,7 @@ async def get_course_overview(
 
     average_grade = round(sum(percentages) / len(percentages), 1) if percentages else None
 
-    total_slots = student_count * assignment_count
+    total_slots = student_count * published_assignment_count
     completion_rate = (
         round((submitted_count / total_slots) * 100, 1) if total_slots > 0 else None
     )
@@ -174,6 +192,7 @@ async def get_course_overview(
                     submitted_count=assignment_submitted,
                     total_students=student_count,
                 ),
+                published=assignment.published,
             )
         )
 
@@ -187,6 +206,7 @@ async def get_course_overview(
         .join(Assignment, Assignment.id == Submission.assignment_id)
         .where(
             Assignment.course_id == course.id,
+            Assignment.is_active.is_(True),
             Submission.submitted_at.is_not(None),
         )
         .order_by(desc(Submission.submitted_at))

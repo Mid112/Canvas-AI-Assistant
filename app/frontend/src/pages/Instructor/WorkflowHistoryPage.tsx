@@ -2,6 +2,8 @@ import { AlertCircle, Download, Loader2, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AuditLogPagination } from "@/components/admin/AuditLogPagination";
+import { AdminToast } from "@/components/admin/AdminToast";
+import { ConfirmationDialog } from "@/components/admin/ConfirmationDialog";
 import { WorkflowHistoryTable } from "@/components/workflow/WorkflowHistoryTable";
 import { WorkflowStatusSummary } from "@/components/workflow/WorkflowStatusSummary";
 import { Button } from "@/components/ui/button";
@@ -14,9 +16,11 @@ import {
   sortWorkflowHistoryByDate,
 } from "@/lib/workflow-history-query";
 import {
+  cancelWorkflow,
   downloadWorkflowHistoryCsv,
   fetchWorkflowHistory,
   getWorkflowHistoryStatusCounts,
+  undoWorkflow,
   WorkflowHistoryApiError,
 } from "@/services/workflowHistory";
 import {
@@ -38,6 +42,15 @@ export function WorkflowHistoryPage() {
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  // Track every in-flight cancel by id so clicking a second row does not
+  // re-enable an earlier row's button while its request is still running.
+  const [actingWorkflowIds, setActingWorkflowIds] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [undoTarget, setUndoTarget] = useState<WorkflowHistoryEntry | null>(null);
+  const [isUndoing, setIsUndoing] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   const filteredEntries = useMemo(
     () =>
@@ -59,6 +72,29 @@ export function WorkflowHistoryPage() {
     () => getWorkflowHistoryStatusCounts(entries),
     [entries],
   );
+
+  // Undoing a create_assignment permanently deletes the Canvas assignment —
+  // a materially more destructive, unrecoverable action than undoing an
+  // edit (which just re-applies the prior field values). The confirmation
+  // copy calls that out explicitly rather than showing the same generic
+  // "Undo this action" text for both.
+  const undoConfirmCopy = useMemo(() => {
+    if (!undoTarget) {
+      return { title: "", description: "", confirmLabel: "" };
+    }
+    if (undoTarget.actionName === "create_assignment") {
+      return {
+        title: "Delete this assignment",
+        description: `Undo "${undoTarget.workflowName}"? This permanently deletes the assignment from Canvas. This cannot be undone.`,
+        confirmLabel: "Delete assignment",
+      };
+    }
+    return {
+      title: "Undo this action",
+      description: `Undo "${undoTarget.workflowName}"? This reverts the assignment back to its state before this action.`,
+      confirmLabel: "Undo action",
+    };
+  }, [undoTarget]);
 
   const showClear = hasActiveWorkflowHistoryFilters(filters);
 
@@ -110,6 +146,63 @@ export function WorkflowHistoryPage() {
 
   const handleExport = () => {
     downloadWorkflowHistoryCsv(filteredEntries);
+  };
+
+  const handleCancelPending = async (entry: WorkflowHistoryEntry) => {
+    if (!accessToken || actingWorkflowIds.has(entry.id)) {
+      return;
+    }
+    setActingWorkflowIds((current) => new Set(current).add(entry.id));
+    setActionError(null);
+    try {
+      const updated = await cancelWorkflow(accessToken, entry.id);
+      setEntries((current) =>
+        current.map((item) => (item.id === entry.id ? updated : item)),
+      );
+    } catch (error) {
+      const message =
+        error instanceof WorkflowHistoryApiError
+          ? error.message
+          : "Unable to cancel this workflow.";
+      setActionError(message);
+      throw error;
+    } finally {
+      setActingWorkflowIds((current) => {
+        const next = new Set(current);
+        next.delete(entry.id);
+        return next;
+      });
+    }
+  };
+
+  const handleConfirmUndo = async () => {
+    if (!undoTarget || !accessToken) {
+      return;
+    }
+
+    setIsUndoing(true);
+    try {
+      await undoWorkflow(accessToken, undoTarget.id);
+      const successMessage =
+        undoTarget.actionName === "create_assignment"
+          ? `"${undoTarget.workflowName}" was undone — the assignment was deleted.`
+          : `"${undoTarget.workflowName}" was undone.`;
+      setToast({ message: successMessage, type: "success" });
+      setUndoTarget(null);
+      await loadEntries();
+    } catch (error) {
+      // 409 (already undone) and 422 (no prior state recorded) both carry
+      // their own actionable detail text from the backend — surface it
+      // directly rather than a generic failure message.
+      const message =
+        error instanceof WorkflowHistoryApiError
+          ? error.message
+          : "Unable to undo this action. Please try again.";
+      setToast({ message, type: "error" });
+      setUndoTarget(null);
+    } finally {
+      setIsUndoing(false);
+    }
   };
 
   function formatFooter(): string {
@@ -243,7 +336,13 @@ export function WorkflowHistoryPage() {
 
       <Card className="shadow-sm ring-1 ring-border/60">
         <CardContent className="p-0">
-          <WorkflowHistoryTable entries={pagination.items} />
+          <WorkflowHistoryTable
+            entries={pagination.items}
+            onCancelPending={handleCancelPending}
+            actionError={actionError}
+            actingWorkflowIds={actingWorkflowIds}
+            onUndo={(entry) => setUndoTarget(entry)}
+          />
         </CardContent>
         <CardFooter className="flex items-center justify-between border-t py-3 text-xs text-muted-foreground">
           <span>{formatFooter()}</span>
@@ -256,6 +355,29 @@ export function WorkflowHistoryPage() {
       </Card>
 
       <WorkflowStatusSummary counts={statusCounts} />
+
+      <ConfirmationDialog
+        open={undoTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setUndoTarget(null);
+          }
+        }}
+        title={undoConfirmCopy.title}
+        description={undoConfirmCopy.description}
+        confirmLabel={undoConfirmCopy.confirmLabel}
+        variant="destructive"
+        isLoading={isUndoing}
+        onConfirm={() => void handleConfirmUndo()}
+      />
+
+      {toast ? (
+        <AdminToast
+          message={toast.message}
+          type={toast.type}
+          onDismiss={() => setToast(null)}
+        />
+      ) : null}
     </div>
   );
 }

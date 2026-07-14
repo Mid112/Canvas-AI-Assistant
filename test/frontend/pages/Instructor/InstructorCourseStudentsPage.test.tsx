@@ -141,6 +141,36 @@ describe("InstructorCourseStudentsPage", () => {
     });
   });
 
+  // Verifies: Pending students without a contact identity are excluded so the
+  // visible roster stays consistent with the count and email section.
+  it("excludes pending students without an email from the roster", async () => {
+    mockedFetchStudents.mockResolvedValue([
+      {
+        id: 1,
+        canvas_user_id: "101",
+        course_id: course.id,
+        name: "Active Student",
+        sortable_name: "Student, Active",
+        login_id: "active@example.edu",
+        enrollment_state: "active",
+      },
+      {
+        id: 2,
+        canvas_user_id: "202",
+        course_id: course.id,
+        name: "Pending NoEmail",
+        sortable_name: "NoEmail, Pending",
+        login_id: null,
+        enrollment_state: "invited",
+      },
+    ]);
+
+    renderWithRouter(<CourseStudentsRoute />);
+
+    expect(await screen.findByText("Active Student")).toBeInTheDocument();
+    expect(screen.queryByText("Pending NoEmail")).not.toBeInTheDocument();
+  });
+
   // Verifies: Passes the expected course count so empty rosters can fall back to submissions.
   it("passes the expected course count so empty rosters can fall back to submissions", async () => {
     mockedFetchStudents.mockResolvedValue([

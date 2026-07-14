@@ -7,5 +7,9 @@ export function useCanvasConnectionUrl(preferredUrl?: string): string | undefine
   const { user } = useAuth();
   const { selectedInstitution } = useInstitution();
 
-  return resolveCanvasApiUrl(user, selectedInstitution.id, preferredUrl);
+  return resolveCanvasApiUrl(
+    user,
+    selectedInstitution.id,
+    preferredUrl ?? selectedInstitution.canvasUrl,
+  );
 }

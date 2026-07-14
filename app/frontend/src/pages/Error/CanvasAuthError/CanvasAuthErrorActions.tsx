@@ -16,7 +16,7 @@ export function CanvasAuthErrorActions({
       <Button
         type="button"
         onClick={onRetry}
-        className="h-11 w-full rounded-lg bg-[#2563eb] text-base font-semibold text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] hover:bg-[#1d4ed8]"
+        className="h-11 w-full rounded-lg bg-primary text-base font-semibold text-white shadow-sm shadow-primary/20 hover:bg-primary/90"
       >
         <RefreshCw className="size-4" aria-hidden="true" />
         Retry Connection
@@ -24,7 +24,7 @@ export function CanvasAuthErrorActions({
       <Button
         type="button"
         variant="outline"
-        className="h-11 w-full rounded-lg border-[#e2e8f0] bg-white text-base font-semibold text-[#1e293b] hover:bg-[#f8fafc]"
+        className="h-11 w-full rounded-lg border-border bg-white text-base font-semibold text-foreground hover:bg-muted"
         render={<a href="mailto:support@institution.edu" />}
       >
         <Mail className="size-4" aria-hidden="true" />
@@ -33,7 +33,7 @@ export function CanvasAuthErrorActions({
       <button
         type="button"
         onClick={onReturnToLogin}
-        className="flex w-full items-center justify-center gap-2 py-2 text-sm font-medium text-[#475569] hover:text-[#1e293b]"
+        className="flex w-full items-center justify-center gap-2 py-2 text-sm font-medium text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="size-4" aria-hidden="true" />
         Return to Login
@@ -44,8 +44,8 @@ export function CanvasAuthErrorActions({
 
 export function CanvasAuthErrorFooter() {
   return (
-    <footer className="mt-8 border-t border-[#e2e8f0] pt-6 text-center">
-      <p className="text-xs text-[#94a3b8]">
+    <footer className="mt-8 border-t border-border pt-6 text-center">
+      <p className="text-xs text-muted-foreground">
         Need help? Contact your institution&apos;s IT support team
       </p>
     </footer>

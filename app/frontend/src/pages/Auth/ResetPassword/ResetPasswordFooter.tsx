@@ -6,18 +6,18 @@ import { paths } from "@/routes/paths";
 export function ResetPasswordFooter() {
   return (
     <div className="mt-8">
-      <div className="border-t border-[#e2e8f0] pt-6">
+      <div className="border-t border-border pt-6">
         <Link
           to={paths.login}
-          className="flex items-center justify-center gap-1.5 text-sm font-medium text-[#475569] hover:text-[#1e293b]"
+          className="flex items-center justify-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
           Return to Login
         </Link>
       </div>
-      <p className="mt-8 text-center text-xs text-[#94a3b8]">
+      <p className="mt-8 text-center text-xs text-muted-foreground">
         Powered by{" "}
-        <span className="font-semibold text-[#64748b]">Canvas LMS</span>
+        <span className="font-semibold text-muted-foreground">Canvas LMS</span>
       </p>
     </div>
   );

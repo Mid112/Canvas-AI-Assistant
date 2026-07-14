@@ -11,7 +11,7 @@ export function MessageTemplateSummary({
   selectedTemplateName,
 }: MessageTemplateSummaryProps) {
   return (
-    <div className="rounded-xl border border-border/60 bg-white shadow-sm ring-1 ring-border/60">
+    <div className="rounded-xl border border-border/60 bg-card shadow-sm ring-1 ring-border/60">
       <div className="border-b border-border/60 px-4 py-3">
         <h2 className="text-sm font-semibold">Message Template</h2>
       </div>
@@ -27,15 +27,15 @@ export function MessageTemplateSummary({
               className={cn(
                 "rounded-lg border px-3 py-2.5 transition-colors",
                 isSelected
-                  ? "border-blue-500 bg-blue-50/50 ring-1 ring-blue-500/20"
-                  : "border-border/60 bg-white opacity-70",
+                  ? "border-primary bg-primary/10 ring-1 ring-primary/20"
+                  : "border-border/60 bg-card opacity-70",
               )}
               aria-current={isSelected ? "true" : undefined}
             >
               <p
                 className={cn(
                   "text-sm font-medium",
-                  isSelected ? "text-blue-700" : "text-foreground",
+                  isSelected ? "text-primary" : "text-foreground",
                 )}
               >
                 {template.name}

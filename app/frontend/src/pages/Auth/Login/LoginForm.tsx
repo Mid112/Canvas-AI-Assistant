@@ -39,7 +39,7 @@ export function LoginForm({
       <div className="space-y-2">
         <label
           htmlFor="email"
-          className="text-sm font-semibold text-[#1e293b]"
+          className="text-sm font-semibold text-foreground"
         >
           Email Address
         </label>
@@ -50,12 +50,12 @@ export function LoginForm({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           aria-invalid={showEmailError}
-          className="h-11 rounded-lg border-[#e2e8f0] bg-white px-3.5 text-[#1e293b] shadow-none placeholder:text-[#94a3b8]"
+          className="h-11 rounded-lg border-border bg-card px-3.5 text-foreground shadow-none placeholder:text-muted-foreground"
         />
       </div>
 
       {showEmailError && (
-        <p className="text-sm text-[#dc2626]" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           Enter a valid email address
         </p>
       )}
@@ -63,7 +63,7 @@ export function LoginForm({
       <div className="space-y-2">
         <label
           htmlFor="password"
-          className="text-sm font-semibold text-[#1e293b]"
+          className="text-sm font-semibold text-foreground"
         >
           Password
         </label>
@@ -73,7 +73,7 @@ export function LoginForm({
           placeholder="Enter your password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="h-11 rounded-lg border-[#e2e8f0] bg-white px-3.5 text-[#1e293b] shadow-none placeholder:text-[#94a3b8]"
+          className="h-11 rounded-lg border-border bg-card px-3.5 text-foreground shadow-none placeholder:text-muted-foreground"
         />
       </div>
 
@@ -83,22 +83,22 @@ export function LoginForm({
             type="checkbox"
             aria-label="Remember me"
             className={cn(
-              "size-4 rounded border-[#cbd5e1] text-[#2563eb]",
-              "focus:ring-2 focus:ring-[#2563eb]/20 focus:ring-offset-0",
+              "size-4 rounded border-input text-primary",
+              "focus:ring-2 focus:ring-primary/20 focus:ring-offset-0",
             )}
           />
-          <span className="text-sm text-[#475569]">Remember me</span>
+          <span className="text-sm text-muted-foreground">Remember me</span>
         </label>
         <Link
           to={paths.resetPassword}
-          className="text-sm font-medium text-[#2563eb] hover:underline"
+          className="text-sm font-medium text-primary hover:underline"
         >
           Forgot password?
         </Link>
       </div>
 
       {error && (
-        <p className="text-sm text-[#dc2626]" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           {error}
         </p>
       )}
@@ -106,7 +106,7 @@ export function LoginForm({
       <Button
         type="submit"
         disabled={!isFormComplete || isSubmitting}
-        className="h-11 w-full rounded-lg bg-[#2563eb] text-base font-semibold text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] hover:bg-[#1d4ed8] disabled:bg-[#cbd5e1] disabled:text-[#94a3b8] disabled:shadow-none disabled:hover:bg-[#cbd5e1]"
+        className="h-11 w-full text-base font-semibold"
       >
         {isSubmitting ? "Signing In..." : "Sign In"}
       </Button>

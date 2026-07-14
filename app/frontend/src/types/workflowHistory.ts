@@ -10,6 +10,11 @@ export interface WorkflowHistoryEntry {
   status: WorkflowStatus;
   affectedResources: Array<Record<string, unknown>>;
   affectedResourcesSummary: string;
+  /** Whether this action *type* has a working undo path at all — still
+   * needs status === "approved" (i.e. backend "executed") and no undoneAt
+   * before actually showing an Undo affordance. */
+  undoable: boolean;
+  undoneAt: string | null;
 }
 
 /**
@@ -27,6 +32,8 @@ export interface WorkflowHistoryApiItem {
   created_at: string;
   executed_at: string | null;
   user_name: string;
+  undoable: boolean;
+  undone_at: string | null;
 }
 
 export interface WorkflowHistoryApiResponse {

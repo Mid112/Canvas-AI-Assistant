@@ -37,6 +37,7 @@ import {
 } from "@/services/assignments";
 import type { Assignment } from "@/types/assignment";
 import type { InstructorCourse } from "@/types/course";
+import { pageEmbedded, pageShell } from "@/lib/page-shell";
 
 export function InstructorCourseAssignmentsPage() {
   const { localCourseId } = useParams();
@@ -173,7 +174,7 @@ export function InstructorCourseAssignmentsPage() {
 
   if (!embedded && (!user?.has_canvas_token || needsCanvasConnection)) {
     return (
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+      <div className={pageShell}>
         <PageHeader localCourseId={parsedLocalCourseId} course={course} embedded={embedded} />
         <CanvasConnectionRequired />
       </div>
@@ -290,7 +291,14 @@ export function InstructorCourseAssignmentsPage() {
                       <TableRow key={assignment.id}>
                         <TableCell>
                           <div className="space-y-1">
-                            <p className="font-medium">{assignment.name}</p>
+                            <p className="font-medium">
+                              {assignment.name}
+                              {!assignment.published ? (
+                                <span className="ml-2 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                  Unpublished
+                                </span>
+                              ) : null}
+                            </p>
                             <p className="text-xs text-muted-foreground">
                               ID: {assignment.id}
                             </p>
@@ -353,9 +361,9 @@ export function InstructorCourseAssignmentsPage() {
   );
 
   return embedded ? (
-    <div className="space-y-6">{content}</div>
+    <div className={pageEmbedded}>{content}</div>
   ) : (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">{content}</div>
+    <div className={pageShell}>{content}</div>
   );
 }
 
@@ -433,6 +441,6 @@ function PageState({
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">{card}</div>
+    <div className={pageShell}>{card}</div>
   );
 }
