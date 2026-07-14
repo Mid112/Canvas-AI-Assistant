@@ -273,6 +273,73 @@ async def _find_or_fork_conversation_for_course(
     return conversation
 
 
+_COURSE_SWITCH_RESOLVER_SYSTEM_PROMPT = """You determine whether a user's
+message is asking about a course OTHER than the one their conversation is
+currently about, given the real list of their courses.
+
+Respond with exactly one JSON object and nothing else:
+{"switched_to": "<exact course name from CURRENT COURSES, or null>"}
+
+Set switched_to to the exact name of a course from CURRENT COURSES —
+copied verbatim, never invented — ONLY when the message clearly asks about
+a course that is NOT the current one: naming a different course directly,
+or asking to switch/open a different one. If the message doesn't name a
+course at all, is a plain follow-up about the current course, or doesn't
+clearly and unambiguously point at one specific different course, respond
+with {"switched_to": null} instead of guessing."""
+
+COURSE_SWITCH_RESOLVER_TIMEOUT_SECONDS = 30.0
+
+
+async def _resolve_course_switch(
+    course_names: list[CanvasCourseName],
+    current_course_name: str | None,
+    user_message: str,
+) -> CanvasCourseName | None:
+    """Detects a course switch from the raw user message ALONE, before
+    history or the main system prompt are built for this turn — closes a
+    real gap in the original design: course-switch detection depended
+    entirely on the main model's own course_name output, which only comes
+    back *after* that same call already ran using the OLD conversation's
+    history and "CURRENT COURSE" framing (confirmed live: a genuine
+    conversation-265-vs-266 fork, with cosc 501's Q&A still sitting in the
+    history sent for a cosc 502 request). This is a separate, narrowly
+    scoped call for exactly that one question — mirrors
+    _resolve_assignment_reference/_resolve_students_via_llm's paradigm
+    (small dedicated call, given a real candidate list, never trusted to
+    invent a value) rather than reusing the main call's broader reasoning.
+
+    Returns None (never raises) on no course set yet, no switch detected,
+    or any failure (timeout/HTTP/bad JSON/unmatched name) — the caller
+    falls back to the existing post-hoc detection from the main model's
+    own output in every one of those cases, so a miss here is never worse
+    than today's behavior, only a hit closes the gap."""
+    if not course_names or current_course_name is None:
+        return None
+
+    listing = "\n".join(f"- {cn.name}" for cn in course_names)
+    prompt = (
+        f"CURRENT COURSES:\n{listing}\n\n"
+        f"This conversation is currently about: {current_course_name}\n"
+        f"User's message: {user_message}"
+    )
+    adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
+    try:
+        raw = await asyncio.wait_for(
+            adapter.generate(
+                _COURSE_SWITCH_RESOLVER_SYSTEM_PROMPT, prompt, history=[],
+                timeout=COURSE_SWITCH_RESOLVER_TIMEOUT_SECONDS,
+            ),
+            timeout=COURSE_SWITCH_RESOLVER_TIMEOUT_SECONDS,
+        )
+        parsed = json.loads(extract_json_object(raw))
+    except (TimeoutError, httpx.HTTPStatusError, json.JSONDecodeError):
+        return None
+
+    candidate_name = parsed.get("switched_to") if isinstance(parsed, dict) else None
+    return _match_course_name(course_names, candidate_name)
+
+
 def _inject_course_into_envelope(parsed_envelope: dict, local_course_id: int | None) -> dict:
     """Injects the resolved local_course_id directly into the model's raw
     parsed JSON — into proposed_action if it already wrapped its answer in
@@ -1401,9 +1468,34 @@ async def handle_chat_message(
 
     conversation = await get_or_create_conversation(db, user, conversation_id, local_course_id)
     user_msg = await log_message(db, conversation, role="user", content=message)
-
-    history = await _get_recent_messages(db, conversation.id)
     course_names = await _get_course_names_for_user(db, user)
+    history = await _get_recent_messages(db, conversation.id)
+
+    # Pre-resolve a course switch from the raw message alone, before the
+    # main prompt is built for this turn — see _resolve_course_switch's
+    # docstring for why this has to happen here, not after the main LLM
+    # call. Gated on actually having prior history, not just
+    # conversation.course_id being set: a conversation's first-ever turn
+    # can already have course_id set (seeded from the "set active course"
+    # button or the persisted UserPreference fallback — see
+    # get_or_create_conversation) with nothing yet said in it, so there is
+    # no stale framing/history to leak and nothing worth paying an extra
+    # call for. Also skipped for a modify turn (pending_message_id set —
+    # that's revising an existing proposed action tied to this
+    # conversation, not a fresh request).
+    if pending_message_id is None and conversation.course_id is not None and history:
+        switched = await _resolve_course_switch(course_names, conversation.course_name, message)
+        if (
+            switched is not None
+            and switched.local_course_id is not None
+            and switched.local_course_id != conversation.course_id
+        ):
+            target = await _find_or_fork_conversation_for_course(
+                db, user, switched.local_course_id, switched.name
+            )
+            user_msg.conversation_id = target.id
+            conversation = target
+            history = await _get_recent_messages(db, conversation.id)
 
     stored_preview = None
     current_proposed_action = None

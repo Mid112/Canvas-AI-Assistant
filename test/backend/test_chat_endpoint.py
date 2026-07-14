@@ -226,7 +226,11 @@ def test_chat_reuses_conversation_course_context_on_followup(client):
             headers=headers,
         )
 
-    followup_user_message = mock_adapter.generate.call_args_list[1].args[1]
+    # Turn 1 has no prior history, so _resolve_course_switch is skipped
+    # (see handle_chat_message) and it's a single LLM call — call[0].
+    # Turn 2 already has turn 1's history, so it costs two calls: the new
+    # course-switch pre-resolver (call[1]), then the main call (call[2]).
+    followup_user_message = mock_adapter.generate.call_args_list[2].args[1]
     assert "CURRENT COURSE FOR THIS CONVERSATION: COSC 310" in followup_user_message
 
 
@@ -285,8 +289,13 @@ def test_chat_followup_stays_on_conversation_course_despite_conflicting_active_c
         # Turn 1: the model resolves the message to COSC 499, not the
         # active course — this is what "named explicitly in turn 1" means
         # now that course resolution is the model's job, not a deterministic
-        # text match.
+        # text match. Turn 1 has no prior history yet, so
+        # _resolve_course_switch is skipped (see handle_chat_message) —
+        # only one call for this turn.
         '{"action": "respond", "course_name": "COSC 499", "message": "OK."}',
+        # Turn 2 now has turn 1's history, so _resolve_course_switch runs
+        # first — "all assignments" names no course, so it reports no switch.
+        '{"switched_to": null}',
         '{"action": "respond", "message": "OK."}',
     ]
 
@@ -304,7 +313,7 @@ def test_chat_followup_stays_on_conversation_course_despite_conflicting_active_c
             headers=headers,
         )
 
-    followup_user_message = mock_adapter.generate.call_args_list[1].args[1]
+    followup_user_message = mock_adapter.generate.call_args_list[2].args[1]
     assert "CURRENT COURSE FOR THIS CONVERSATION: COSC 499" in followup_user_message
 
 

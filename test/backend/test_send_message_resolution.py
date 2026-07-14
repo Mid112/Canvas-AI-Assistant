@@ -393,6 +393,11 @@ def test_new_message_batch_supersedes_only_stale_send_message_previews(client):
 
     students_v2 = students_v1 + [_student("502", local_course_id, "Bob")]
     second_outputs = [
+        # By this turn the conversation has real prior history (the first
+        # send_message batch, plus the create_assignment turn), so
+        # _resolve_course_switch runs first — "actually message bob
+        # instead" names no course, so it reports no switch.
+        '{"switched_to": null}',
         '{"action": "send_message", "course_name": "CPSC 310", "subject": "Second", '
         '"body": "Second body", "recipient_directives": '
         '[{"student_reference": "Bob", "body": "Second body"}]}',
