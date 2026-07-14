@@ -50,6 +50,18 @@ class FetchStudentsAction(BaseModel):
     local_course_id: int
 
 
+class ResolveMissingSubmissionsAction(BaseModel):
+    action: Literal["resolve_missing_submissions"] = "resolve_missing_submissions"
+    local_course_id: int
+    # Same convention as FetchSubmissionsAction: pass assignment_id directly
+    # only when it's already a real Canvas ID from earlier in this
+    # conversation, otherwise describe the assignment in assignment_reference
+    # and let the app resolve it server-side (see
+    # _run_resolve_missing_submissions_chain in services/chat.py).
+    assignment_id: int | None = None
+    assignment_reference: str | None = None
+
+
 class SetActiveCourseAction(BaseModel):
     action: Literal["set_active_course"] = "set_active_course"
     local_course_id: int
@@ -131,6 +143,14 @@ class SendMessageAction(BaseModel):
     # share identical body text into one message — never invent or guess a
     # numeric ID yourself. Ignored once recipient_canvas_user_ids is set.
     recipient_directives: list[RecipientDirective] | None = None
+    # A handle from an earlier resolve_missing_submissions result in this
+    # conversation, representing a bulk, already-computed recipient set —
+    # copy it verbatim, exactly as given, never invent one and never build
+    # recipient_directives out of that result's "sample" names instead
+    # (sample is a preview excerpt, not the full set). The app materializes
+    # the real recipients server-side, scoped to this conversation. Ignored
+    # once recipient_canvas_user_ids is set.
+    recipient_handle: str | None = None
     # True when the user wants a private Canvas message sent to the entire
     # active roster (as opposed to a public announcement). The app resolves
     # the full roster server-side; never set recipient_canvas_user_ids
@@ -184,6 +204,7 @@ ACTION_SCHEMAS: dict[str, type[BaseModel]] = {
     "fetch_assignments": FetchAssignmentsAction,
     "fetch_submissions": FetchSubmissionsAction,
     "fetch_students": FetchStudentsAction,
+    "resolve_missing_submissions": ResolveMissingSubmissionsAction,
     "set_active_course": SetActiveCourseAction,
     "get_active_course": GetActiveCourseAction,
     "create_assignment": CreateAssignmentAction,
@@ -211,6 +232,7 @@ ACTION_CLASSIFICATION: dict[str, ActionClassification] = {
     "fetch_assignments": "read_only",
     "fetch_submissions": "read_only",
     "fetch_students": "read_only",
+    "resolve_missing_submissions": "read_only",
     "get_active_course": "read_only",
     # Writes a local UserPreference row only — no Canvas footprint, and not
     # gated by the preview/confirm flow at all (not in dispatcher.py's

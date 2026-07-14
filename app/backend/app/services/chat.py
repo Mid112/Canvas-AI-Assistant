@@ -3,9 +3,10 @@ import asyncio
 import json
 import logging
 import re
+from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from typing import Any
+from typing import Any, TypeVar
 
 import httpx
 from fastapi import HTTPException
@@ -28,6 +29,7 @@ from app.mcp_tools.schemas import (
     FetchSubmissionsAction,
     IntentPreviewAction,
     RecipientDirective,
+    ResolveMissingSubmissionsAction,
 )
 from app.models.assignment import Assignment
 from app.models.audit_log import AuditLog
@@ -43,6 +45,11 @@ from app.models.workflow import Workflow
 from app.services.canvas import sync_courses_if_stale
 from app.services.llm.json_extraction import extract_json_object
 from app.services.llm.llm_setting import get_llm_adapter
+from app.services.resolved_set import (
+    compute_missing_submissions,
+    create_resolved_set,
+    materialize_resolved_set,
+)
 from app.services.student import get_submission_derived_students
 from app.services.write_preview import generate_write_preview
 
@@ -388,6 +395,9 @@ def _inject_course_into_envelope(parsed_envelope: dict, local_course_id: int | N
     return parsed_envelope
 
 
+_ReadResult = TypeVar("_ReadResult")
+
+
 async def _run_tracked_read(
     db: AsyncSession,
     user: User,
@@ -395,8 +405,8 @@ async def _run_tracked_read(
     triggering_message_id: int,
     action_name: str,
     parameters: dict,
-    coro,
-) -> dict:
+    coro: Coroutine[Any, Any, _ReadResult],
+) -> _ReadResult:
     """Runs a single read-action coroutine and records its
     pending/executing/executed/failed lifecycle in tool_call_logs — the
     per-call bookkeeping intent_preview/Workflow used to provide implicitly
@@ -497,28 +507,33 @@ async def _resolve_assignment_reference(
     return candidate if candidate in valid_ids else None
 
 
-async def _run_fetch_submissions_chain(
+async def _resolve_course_and_assignment(
     db: AsyncSession,
     user: User,
     conversation: Conversation,
     user_msg: Message,
-    action: FetchSubmissionsAction,
+    local_course_id: int,
+    assignment_id: int | None,
+    assignment_reference: str | None,
     user_message: str,
-) -> dict:
-    """fetch_submissions needs a real Canvas assignment_id, which the model
-    is never allowed to invent (see COURSE RESOLUTION/assignment sections
-    in build_system_prompt). When it isn't already known, this resolves it
-    server-side — chaining an internal fetch_assignments call and
-    _resolve_assignment_reference — all inside the single request handling
-    the user's one message, instead of making the user ask a second time
-    once the assignment list is in history.
+) -> tuple[Course, int] | dict:
+    """Shared by every chain that needs a real Canvas assignment_id before
+    it can proceed (_run_fetch_submissions_chain,
+    _run_resolve_missing_submissions_chain): resolves the course, then
+    verifies/resolves the assignment — chaining an internal
+    fetch_assignments call and _resolve_assignment_reference when needed —
+    all inside the single request handling the user's one message, instead
+    of making the user ask a second time once the assignment list is in
+    history.
+
+    Returns (course, assignment_id) on success, or a clarify dict (never
+    raises) when nothing confidently resolves.
 
     print() lines are a deliberate, simple placeholder for step-by-step
     transparency while a multi-call chain is in flight (stdout/server logs
     only, never returned to the client) — not one per tracked read action,
     just markers for this specific multi-step chain."""
-    course = await resolve_course(db, user, action.local_course_id)
-    assignment_id = action.assignment_id
+    course = await resolve_course(db, user, local_course_id)
 
     if assignment_id is not None:
         # Only trust a bare assignment_id the model hands back if it
@@ -553,7 +568,7 @@ async def _run_fetch_submissions_chain(
                 "partial_plan": {"local_course_id": course.id},
             }
         assignment_id = await _resolve_assignment_reference(
-            assignments, action.assignment_reference, user_message
+            assignments, assignment_reference, user_message
         )
         if assignment_id is None:
             names = ", ".join(a["name"] for a in assignments)
@@ -564,12 +579,92 @@ async def _run_fetch_submissions_chain(
                 "partial_plan": {"local_course_id": course.id},
             }
 
+    return course, assignment_id
+
+
+async def _run_fetch_submissions_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    action: FetchSubmissionsAction,
+    user_message: str,
+) -> dict:
+    """fetch_submissions needs a real Canvas assignment_id, which the model
+    is never allowed to invent (see COURSE RESOLUTION/assignment sections
+    in build_system_prompt). When it isn't already known, _resolve_course_and_assignment
+    resolves it server-side, all inside the single request handling the
+    user's one message, instead of making the user ask a second time once
+    the assignment list is in history."""
+    resolved = await _resolve_course_and_assignment(
+        db, user, conversation, user_msg,
+        action.local_course_id, action.assignment_id, action.assignment_reference, user_message,
+    )
+    if isinstance(resolved, dict):
+        return resolved
+    course, assignment_id = resolved
+
     print(f"Combing through {course.name} submissions")
     submit_action = FetchSubmissionsAction(local_course_id=course.id, assignment_id=assignment_id)
     return await _run_tracked_read(
         db, user, conversation, user_msg.id, "fetch_submissions",
         submit_action.model_dump(), execute_tool(db, user, submit_action),
     )
+
+
+_RESOLVED_SET_SAMPLE_SIZE = 5
+
+
+async def _run_resolve_missing_submissions_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    action: ResolveMissingSubmissionsAction,
+    user_message: str,
+) -> dict:
+    """Resolves "students missing submissions for <assignment>" entirely
+    server-side — never dumps the raw submission/roster lists into the
+    LLM's context or conversation history (unlike a plain fetch_submissions
+    call, whose full result is left as-is by
+    _summarize_assistant_history_content). Only a compact
+    {count, sample, handle} summary is returned; the handle is later
+    materialized by _run_send_message_chain when a send_message turn sets
+    recipient_handle, scoped to this conversation
+    (see materialize_resolved_set)."""
+    resolved = await _resolve_course_and_assignment(
+        db, user, conversation, user_msg,
+        action.local_course_id, action.assignment_id, action.assignment_reference, user_message,
+    )
+    if isinstance(resolved, dict):
+        return resolved
+    course, assignment_id = resolved
+
+    print(f"Checking {course.name} for missing submissions")
+    missing = await _run_tracked_read(
+        db, user, conversation, user_msg.id, "resolve_missing_submissions",
+        {"local_course_id": course.id, "assignment_id": assignment_id},
+        compute_missing_submissions(course, assignment_id, user, db),
+    )
+
+    resolved_set = await create_resolved_set(
+        db, conversation, kind="missing_submissions",
+        query={"local_course_id": course.id, "assignment_id": assignment_id},
+        recipients=missing,
+    )
+
+    sample = [r["name"] for r in missing[:_RESOLVED_SET_SAMPLE_SIZE]]
+    summary = f"{len(missing)} active student(s) in {course.name} are missing this assignment."
+    if sample:
+        summary += f" Examples: {', '.join(sample)}."
+
+    return {
+        "action": "resolve_missing_submissions",
+        "count": len(missing),
+        "sample": sample,
+        "handle": resolved_set.handle,
+        "summary": summary,
+    }
 
 
 @dataclass
@@ -805,14 +900,16 @@ async def _run_send_message_chain(
     pending_message_id: int | None,
 ) -> dict:
     """Runs the recipient-resolution + grouping chain for a send_message
-    turn that named recipients in natural language (recipient_directives)
-    or asked to broadcast privately to the whole class
-    (broadcast_to_all_students) — mirrors _run_fetch_submissions_chain's
-    "resolve server-side, never trust the model with a raw ID" shape, for
-    people instead of assignments. Only reached when handle_chat_message's
-    dispatch sees one of those two fields set; a plain send_message (an
-    announcement, or one with recipient_canvas_user_ids already known) is
-    unaffected and keeps using the existing single-preview auto-wrap path."""
+    turn that named recipients in natural language (recipient_directives),
+    asked to broadcast privately to the whole class
+    (broadcast_to_all_students), or referenced a server-computed set from an
+    earlier resolve_missing_submissions turn (recipient_handle) — mirrors
+    _run_fetch_submissions_chain's "resolve server-side, never trust the
+    model with a raw ID" shape, for people instead of assignments. Only
+    reached when handle_chat_message's dispatch sees one of those three
+    fields set; a plain send_message (an announcement, or one with
+    recipient_canvas_user_ids already known) is unaffected and keeps using
+    the existing single-preview auto-wrap path."""
     course = await resolve_course(db, user, action.local_course_id)
     groups: list[MessageGroup] = []
     roster: list[dict] = []
@@ -841,6 +938,25 @@ async def _run_send_message_chain(
         if isinstance(resolved, dict):
             return resolved
         groups.extend(resolved)
+
+    if action.recipient_handle:
+        resolved_set = await materialize_resolved_set(db, action.recipient_handle, conversation.id)
+        if resolved_set is None:
+            return {
+                "action": "clarify",
+                "clarify": True,
+                "question": (
+                    "That resolved recipient set is no longer available (it may have "
+                    "expired) — should I check again for students missing this assignment?"
+                ),
+                "partial_plan": {"local_course_id": course.id},
+            }
+        recipients = resolved_set.snapshot_recipients
+        groups.append(MessageGroup(
+            body=action.body,
+            recipient_ids=[r["user_id"] for r in recipients],
+            recipient_names=[r["name"] for r in recipients],
+        ))
 
     if action.also_announce_to_class or not groups:
         groups.append(MessageGroup(body=action.body, recipient_ids=[], recipient_names=[]))
@@ -1271,9 +1387,9 @@ data, so the user must see and confirm exactly what will happen first:
 The user will confirm, modify, or cancel from here.
 
 READ ACTIONS — execute immediately, no preview:
-fetch_courses, fetch_assignments, fetch_students, fetch_submissions, and
-get_active_course never change any data, so propose them directly and
-plainly — do NOT wrap them in intent_preview:
+fetch_courses, fetch_assignments, fetch_students, fetch_submissions,
+resolve_missing_submissions, and get_active_course never change any data,
+so propose them directly and plainly — do NOT wrap them in intent_preview:
 {"action": "fetch_assignments", "course_name": "<course>"}
 They run right away and their result is shown to the user in this same
 response, not a separate confirm step.
@@ -1340,6 +1456,23 @@ intent_preview). The app resolves assignment_reference to a real ID for
 you, the same way course_name is resolved to a course — never invent or
 guess a numeric assignment_id yourself.
 
+FINDING STUDENTS MISSING A SUBMISSION:
+When the user wants to find or message students who have not submitted an
+assignment (e.g. "who's missing assignment 4", "remind students who
+haven't submitted the project"), do not propose fetch_submissions and read
+through the results yourself — for a large class that puts every student
+into your context when you only need a count. Instead propose
+resolve_missing_submissions directly (same convention as
+fetch_submissions: not intent_preview, and assignment_id/
+assignment_reference resolve the assignment the same way):
+{"action": "resolve_missing_submissions", "course_name": "<course>", "assignment_reference": "<assignment>"}
+The result gives you a "count", a short "sample" of names, and a "handle"
+string — never the full list. To message everyone in that resolved set,
+propose send_message with recipient_handle set to that exact handle
+string, copied verbatim from the result — never invent one, and never
+build recipient_directives out of the "sample" names instead, that's only
+a preview excerpt, not the full set.
+
 RESOLVING AN ASSIGNMENT FOR update_assignment:
 update_assignment is a write action, so unlike fetch_submissions it needs
 an exact Canvas assignment_id before you can propose it — the preview must
@@ -1390,6 +1523,14 @@ If you already have a student's exact Canvas ID from earlier in this
 conversation, you may set recipient_canvas_user_ids directly instead
 (skips resolution) — but never mix a guessed ID into that list.
 
+MESSAGING STUDENTS MISSING A SUBMISSION: if the user wants to message
+students missing a specific assignment, use recipient_handle (see FINDING
+STUDENTS MISSING A SUBMISSION above) — first propose
+resolve_missing_submissions to get a handle, then once you have it from
+that turn's result, propose send_message with recipient_handle set to
+that handle. Never guess how many people are in the set or build
+recipient_directives from its "sample" names.
+
 BROADCASTING PRIVATELY TO THE WHOLE CLASS: if the user wants a private
 message sent to every student — not a public announcement — set
 broadcast_to_all_students: true and leave recipient_canvas_user_ids /
@@ -1401,8 +1542,8 @@ with broadcast_to_all_students: true, dropping the announcement framing.
 ANNOUNCEMENT PLUS TARGETED MESSAGES: if the user wants both a public
 announcement AND a private message to specific people in the same turn,
 set also_announce_to_class: true alongside recipient_directives (or
-broadcast_to_all_students) — the top-level subject/body becomes the
-announcement text.
+broadcast_to_all_students, or recipient_handle) — the top-level
+subject/body becomes the announcement text.
 
 This action is course-scoped like any other (see COURSE RESOLUTION above).
 subject and body are both required and must be the user's actual words —
@@ -1617,17 +1758,21 @@ async def handle_chat_message(
                 proposed_name = proposed.get("action")
                 needs_unwrap = proposed_name in READ_ACTIONS or (
                     proposed_name == "send_message"
-                    and bool(proposed.get("recipient_directives") or proposed.get("broadcast_to_all_students"))
+                    and bool(
+                        proposed.get("recipient_directives")
+                        or proposed.get("broadcast_to_all_students")
+                        or proposed.get("recipient_handle")
+                    )
                 )
             if needs_unwrap:
                 # Defensive: the model wrapped a read, or a send_message
                 # that still needs server-side recipient resolution, in
                 # intent_preview despite the system prompt saying not to —
                 # both produce their own intent_preview internally (a read
-                # never does at all; a directive-bearing send_message does,
-                # via _run_send_message_chain below) — so unwrap and
-                # dispatch directly instead of showing a pointless double
-                # preview.
+                # never does at all; a directive-/handle-bearing
+                # send_message does, via _run_send_message_chain below) —
+                # so unwrap and dispatch directly instead of showing a
+                # pointless double preview.
                 action = parse_action(json.dumps(action.proposed_action))
 
             if action.action == "fetch_submissions":
@@ -1638,14 +1783,23 @@ async def handle_chat_message(
                 result = await _run_fetch_submissions_chain(
                     db, user, conversation, user_msg, action, message
                 )
+            elif action.action == "resolve_missing_submissions":
+                # Same assignment-resolution need as fetch_submissions,
+                # plus server-side filtering down to a compact
+                # {count, sample, handle} summary — never the raw list.
+                result = await _run_resolve_missing_submissions_chain(
+                    db, user, conversation, user_msg, action, message
+                )
             elif action.action == "send_message" and (
-                action.recipient_directives or action.broadcast_to_all_students
+                action.recipient_directives or action.broadcast_to_all_students or action.recipient_handle
             ):
-                # Named recipients without known Canvas IDs, or a
-                # whole-roster private broadcast — resolve server-side
-                # (never trust the model with a raw ID) and build one
-                # preview per distinct message group, rather than executing
-                # directly or auto-wrapping into a single intent_preview.
+                # Named recipients without known Canvas IDs, a whole-roster
+                # private broadcast, or a server-computed recipient handle
+                # from an earlier resolve_missing_submissions turn —
+                # resolve server-side (never trust the model with a raw
+                # ID) and build one preview per distinct message group,
+                # rather than executing directly or auto-wrapping into a
+                # single intent_preview.
                 result = await _run_send_message_chain(
                     db, user, conversation, user_msg, action, message, pending_message_id
                 )

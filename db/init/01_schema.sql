@@ -232,6 +232,27 @@ CREATE INDEX idx_tool_call_logs_course_id ON tool_call_logs(course_id);
 CREATE INDEX idx_tool_call_logs_status ON tool_call_logs(status);
 
 -- ─────────────────────────────────────────────
+-- Resolved Sets
+-- Server-computed recipient sets (e.g. "students missing submissions for
+-- assignment 4"), persisted so the LLM only ever sees a compact
+-- {count, sample, handle} summary from resolve_missing_submissions --
+-- never the raw per-student list -- and a later send_message turn can
+-- materialize the real recipient IDs back out via recipient_handle,
+-- scoped to the conversation that created the set.
+-- ─────────────────────────────────────────────
+CREATE TABLE resolved_sets (
+    handle                VARCHAR PRIMARY KEY,
+    conversation_id       INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    kind                  VARCHAR NOT NULL,
+    query                 JSONB NOT NULL,
+    snapshot_recipients   JSONB NOT NULL,
+    created_at            TIMESTAMPTZ DEFAULT NOW(),
+    expires_at            TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX idx_resolved_sets_conversation_id ON resolved_sets(conversation_id);
+
+-- ─────────────────────────────────────────────
 -- Audit Logs
 -- Records an actual Canvas data mutation performed by a confirmed
 -- Workflow. Only written on success.
@@ -386,4 +407,5 @@ INSERT INTO schema_migrations (filename) VALUES
     ('009_assignment_unique_per_course.sql'),
     ('010_workflow_schema_repair.sql'),
     ('011_course_name_tracking.sql'),
-    ('012_tool_call_logs.sql');
+    ('012_tool_call_logs.sql'),
+    ('013_resolved_sets.sql');

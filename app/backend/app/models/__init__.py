@@ -10,6 +10,7 @@ from app.models.message import Message
 from app.models.message_draft import MessageDraft
 from app.models.message_template import MessageTemplate
 from app.models.password_reset_token import PasswordResetToken
+from app.models.resolved_set import ResolvedSet
 from app.models.session import Session
 from app.models.student import Student
 from app.models.submission import Submission
@@ -31,6 +32,7 @@ __all__ = [
     "MessageDraft",
     "MessageTemplate",
     "PasswordResetToken",
+    "ResolvedSet",
     "Session",
     "Student",
     "Submission",
