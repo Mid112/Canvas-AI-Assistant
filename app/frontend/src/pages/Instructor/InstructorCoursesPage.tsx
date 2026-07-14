@@ -55,15 +55,6 @@ export function InstructorCoursesPage() {
     [courses, publishFilter],
   );
 
-  // Overview metrics track the publish-status filter (all/published/
-  // unpublished) but deliberately ignore the search text — typing a search
-  // query narrows the list below without also shrinking the aggregate
-  // course/student/assignment counts.
-  const overviewCourses = useMemo(
-    () => filterInstructorCourses(courses, "", publishFilter),
-    [courses, publishFilter],
-  );
-
   const handleSetActiveCourse = async (courseId: number) => {
     const course = courses.find((item) => item.id === courseId);
     if (!course) {
