@@ -17,7 +17,6 @@ describe("InstructorCoursesSearch", () => {
     );
 
     expect(screen.getByLabelText("Search courses")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Published" })).toBeInTheDocument();
   });
 
   // Verifies: Calls onSearchChange when typing.
@@ -39,7 +38,22 @@ describe("InstructorCoursesSearch", () => {
     expect(onSearchChange).toHaveBeenCalled();
   });
 
-  it("calls onPublishFilterChange when a status filter is selected", async () => {
+  it("renders the publish-status filter defaulted to all courses", () => {
+    render(
+      <InstructorCoursesSearch
+        search=""
+        onSearchChange={vi.fn()}
+        publishFilter="all"
+        onPublishFilterChange={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByLabelText("Filter by publish status"),
+    ).toHaveValue("all");
+  });
+
+  it("calls onPublishFilterChange when a different option is selected", async () => {
     const user = userEvent.setup();
     const onPublishFilterChange = vi.fn();
 
@@ -52,7 +66,11 @@ describe("InstructorCoursesSearch", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Unpublished" }));
-    expect(onPublishFilterChange).toHaveBeenCalledWith("unpublished");
+    await user.selectOptions(
+      screen.getByLabelText("Filter by publish status"),
+      "published",
+    );
+
+    expect(onPublishFilterChange).toHaveBeenCalledWith("published");
   });
 });

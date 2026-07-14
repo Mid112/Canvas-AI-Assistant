@@ -49,6 +49,11 @@ class MissingSubmissionAnalysis(BaseModel):
     assignment_id: int
     canvas_url: str
     generated_at: datetime
+    # False when the assignment is an unpublished draft — students can't see or
+    # submit to it, so a high missing_count here reflects that, not a real
+    # at-risk cohort. Callers should surface this distinctly rather than
+    # showing an alarming "100% missing" for a draft nobody has seen yet.
+    assignment_published: bool
     summary: SubmissionSummary
     missing_students: list[MissingStudent]
 
@@ -72,5 +77,7 @@ class LateSubmissionAnalysis(BaseModel):
     assignment_id: int
     canvas_url: str
     generated_at: datetime
+    # See MissingSubmissionAnalysis.assignment_published — same rationale.
+    assignment_published: bool
     summary: LateSubmissionSummary
     late_students: list[LateStudent]

@@ -6,6 +6,7 @@ export interface CanvasCourse {
   course_code: string;
   workflow_state: string;
   total_students: number | null;
+  term_name: string | null;
 }
 
 /** Matches PATCH /api/v1/auth/me/canvas-token request body. */

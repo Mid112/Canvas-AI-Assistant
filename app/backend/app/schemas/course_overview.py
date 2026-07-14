@@ -11,6 +11,10 @@ class RecentAssignmentSummary(BaseModel):
     submitted_count: int
     total_students: int
     status: Literal["active", "upcoming", "completed"]
+    # Canvas's draft/published distinction — a draft is still listed here for
+    # instructor visibility, but submitted_count/status reflect that it can't
+    # have real submissions yet (see get_course_overview).
+    published: bool = True
 
 
 class StudentActivityItem(BaseModel):

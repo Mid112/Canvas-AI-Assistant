@@ -44,7 +44,16 @@ export function InstructorCoursesPage() {
   const filteredCourses = useMemo(() => {
     const filtered = filterInstructorCourses(courses, search, publishFilter);
     return sortInstructorCourses(filtered);
-  }, [courses, publishFilter, search]);
+  }, [courses, search, publishFilter]);
+
+  // Overview metrics track the publish-status filter (all/published/
+  // unpublished) but deliberately ignore the search text — typing a search
+  // query narrows the list below without also shrinking the aggregate
+  // course/student/assignment counts.
+  const overviewCourses = useMemo(
+    () => filterInstructorCourses(courses, "", publishFilter),
+    [courses, publishFilter],
+  );
 
   const handleSetActiveCourse = async (courseId: number) => {
     const course = courses.find((item) => item.id === courseId);
@@ -109,7 +118,7 @@ export function InstructorCoursesPage() {
         </p>
       ) : null}
 
-      <InstructorCoursesOverview courses={courses} />
+      <InstructorCoursesOverview courses={overviewCourses} />
 
       {isLoading ? (
         <Card className="shadow-sm ring-1 ring-border/60">
@@ -127,13 +136,7 @@ export function InstructorCoursesPage() {
           are available in your Canvas account.
         </p>
       ) : filteredCourses.length === 0 ? (
-        <InstructorCoursesEmptyState
-          description={
-            publishFilter === "all"
-              ? "No Canvas courses matched this search."
-              : "No courses matched this search and publish filter."
-          }
-        />
+        <InstructorCoursesEmptyState description="No Canvas courses matched this search." />
       ) : (
         <InstructorCoursesSection
           courses={filteredCourses}

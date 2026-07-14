@@ -230,6 +230,46 @@ def test_modify_snapshots_previous_proposed_action(client):
     assert second_reply["previous_proposed_action"]["points_possible"] == 50
 
 
+def test_non_preview_modify_supersedes_pending_workflow(client):
+    headers, local_course_id = _register_with_canvas(client)
+    conversation_id, pending_message_id = _propose_create_assignment(
+        client, headers, local_course_id
+    )
+
+    modify_adapter = AsyncMock()
+    modify_adapter.generate.return_value = (
+        '{"action": "respond", "message": "No problem, I will leave that proposal alone."}'
+    )
+    with patch("app.services.chat.get_llm_adapter", return_value=modify_adapter):
+        modify_response = client.post(
+            "/api/v1/chat/",
+            json={
+                "message": "never mind",
+                "conversation_id": conversation_id,
+                "pending_message_id": pending_message_id,
+            },
+            headers=headers,
+        )
+
+    assert modify_response.status_code == 200
+
+    history = client.get(f"/api/v1/chat/conversations/{conversation_id}", headers=headers)
+    assert history.status_code == 200
+    preview_message = next(
+        message
+        for message in history.json()["messages"]
+        if message["id"] == pending_message_id
+    )
+    assert preview_message["pending_action_status"] == "superseded"
+
+    confirm = client.post(
+        "/api/v1/chat/confirm",
+        json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
+        headers=headers,
+    )
+    assert confirm.status_code == 409
+
+
 # Verifies: Incomplete create assignment is clarified not previewed.
 def test_incomplete_create_assignment_is_clarified_not_previewed(client):
     """Regression test: a model can technically satisfy Pydantic's `str`

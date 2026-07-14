@@ -37,6 +37,34 @@ from app.schemas.canvas import (
 
 logger = logging.getLogger(__name__)
 
+# The only Canvas workflow_state that allows Canvas-content writes (create/update
+# assignment, send message) — a concluded course is read-only even though it can
+# still be the active course (see SELECTABLE_WORKFLOW_STATES below). Mirrored on
+# the frontend in mapCanvasCourse.ts's WRITABLE_WORKFLOW_STATE — keep in sync.
+WRITABLE_WORKFLOW_STATE = "available"
+
+# Canvas workflow_states that count as "selectable as the active course" — an
+# instructor can still review/analyze a concluded ("completed") course, just not
+# write to it (see WRITABLE_WORKFLOW_STATE and require_writable_course below).
+# Shared between get_courses()'s flip-detection and set_active_course()'s
+# rejection check so the two can't drift apart. Mirrored on the frontend in
+# mapCanvasCourse.ts's SELECTABLE_WORKFLOW_STATES — keep both in sync.
+SELECTABLE_WORKFLOW_STATES = frozenset({WRITABLE_WORKFLOW_STATE, "completed"})
+
+
+def require_writable_course(course: Course) -> None:
+    """Raises if this course is read-only (concluded) — call before any Canvas
+    write (assignment create/update, message send). Selecting a concluded
+    course as active or reading its data is still fine; only mutating it isn't.
+    None is treated as writable — an unpersisted Course instance (e.g. built
+    directly in a test, not yet flushed) reads back as None in Python even
+    though the column's DB default is "available"."""
+    if course.workflow_state is not None and course.workflow_state != WRITABLE_WORKFLOW_STATE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This course has concluded and is read-only — writes are disabled.",
+        )
+
 
 def require_canvas_token(user: User, canvas_url: str) -> str:
     canvas_url = normalize_canvas_url(canvas_url)
@@ -86,45 +114,78 @@ async def get_owned_course(
 async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[CourseResponse]:
     token = require_canvas_token(user, canvas_url)
     data = await fetch_courses(token, canvas_url)
+    normalized_sync_url = normalize_canvas_url(canvas_url)
 
-    if not data:
-        return []
-
-    # Batch fetch all existing courses for this instructor in one query — avoids N+1.
+    # Batch fetch ALL existing courses for this instructor (not just ones Canvas
+    # still returns) so a course Canvas no longer returns AT ALL this sync — deleted,
+    # or this instructor lost teacher access — can be reconciled below instead of
+    # being left with a stale workflow_state and a never-cleared active preference.
     # instructor_id filter ensures we never touch another instructor's rows.
+    # Further filtered to courses on the SAME Canvas instance being synced — an
+    # instructor with multiple Canvas connections (different institutions) must
+    # not have this sync mark or reconcile courses that belong to a different
+    # canvas_url, since Canvas course ids are only unique within one instance.
     # Known limitation: canvas_course_id is globally UNIQUE, so two co-instructors
     # on the same Canvas course will conflict on INSERT — tracked for follow-up.
-    canvas_ids = [str(item["id"]) for item in data]
-    rows = await db.scalars(
-        select(Course).where(
-            Course.canvas_course_id.in_(canvas_ids),
-            Course.instructor_id == user.id,
-        )
-    )
-    course_map: dict[str, Course] = {c.canvas_course_id: c for c in rows}
+    rows = await db.scalars(select(Course).where(Course.instructor_id == user.id))
+    course_map: dict[str, Course] = {
+        c.canvas_course_id: c
+        for c in rows
+        if canvas_urls_equivalent(c.canvas_url, normalized_sync_url)
+    }
+
+    canvas_ids = {str(item["id"]) for item in data}
+
+    # Courses that flip from selectable ("available") to not on this sync, so the
+    # active-course preference can be cleared below if one of them is currently active.
+    newly_unselectable_ids: set[int] = set()
 
     for item in data:
         cid = str(item["id"])
         term_name: str | None = (item.get("term") or {}).get("name")
+        workflow_state = item.get("workflow_state", WRITABLE_WORKFLOW_STATE)
 
         if cid in course_map:
-            course_map[cid].name = item["name"]
-            course_map[cid].term = term_name
-            course_map[cid].canvas_url = normalize_canvas_url(canvas_url)
+            course = course_map[cid]
+            if course.workflow_state in SELECTABLE_WORKFLOW_STATES and workflow_state not in SELECTABLE_WORKFLOW_STATES:
+                newly_unselectable_ids.add(course.id)
+            course.name = item["name"]
+            course.term = term_name
+            course.canvas_url = normalized_sync_url
+            course.workflow_state = workflow_state
+            course.synced_at = datetime.now(UTC)
         else:
             course = Course(
                 canvas_course_id=cid,
-                canvas_url=normalize_canvas_url(canvas_url),
+                canvas_url=normalized_sync_url,
                 name=item["name"],
                 term=term_name,
+                workflow_state=workflow_state,
                 instructor_id=user.id,
+                synced_at=datetime.now(UTC),
             )
             db.add(course)
             course_map[cid] = course
 
+    # Reconcile disappearances: a course Canvas didn't return at all this sync is no
+    # longer selectable either — "deleted" here means "no longer visible to us,"
+    # not necessarily deleted on Canvas (could also be lost teacher access).
+    for cid, course in course_map.items():
+        if cid not in canvas_ids and course.workflow_state != "deleted":
+            if course.workflow_state in SELECTABLE_WORKFLOW_STATES:
+                newly_unselectable_ids.add(course.id)
+            course.workflow_state = "deleted"
+
     # flush() sends all INSERTs in one round-trip and populates auto-generated IDs
     # before we build the response — commit() finalises the transaction after
     await db.flush()
+
+    if newly_unselectable_ids:
+        pref = await db.scalar(select(UserPreference).where(UserPreference.user_id == user.id))
+        if pref and pref.active_course_id in newly_unselectable_ids:
+            pref.active_course_id = None
+            pref.updated_at = datetime.now(UTC)
+
     await db.commit()
 
     return [
@@ -139,24 +200,27 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
     ]
 
 
-async def get_assignments(local_course_id: int, user: User, canvas_url: str | None, db: AsyncSession) -> list[AssignmentResponse]:
+async def get_assignments(
+    local_course_id: int,
+    user: User,
+    canvas_url: str | None,
+    db: AsyncSession,
+) -> list[AssignmentResponse]:
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     resolved_canvas_url = course.canvas_url
     token = require_canvas_token(user, resolved_canvas_url)
     data = await fetch_assignments(int(course.canvas_course_id), token, resolved_canvas_url)
 
-    if not data:
-        return []
-
-    # Batch-fetch existing assignment rows for this course to avoid N+1 on upsert
-    canvas_ids = [str(item["id"]) for item in data]
-    rows = await db.scalars(
-        select(Assignment).where(
-            Assignment.canvas_assignment_id.in_(canvas_ids),
-            Assignment.course_id == course.id,
-        )
-    )
+    # Batch-fetch ALL local assignment rows for this course (not just ones Canvas
+    # still returns) so rows Canvas no longer returns (deleted assignment) can be
+    # reconciled to is_active=False below instead of being left stale and counted.
+    rows = await db.scalars(select(Assignment).where(Assignment.course_id == course.id))
     assignment_map: dict[str, Assignment] = {a.canvas_assignment_id: a for a in rows}
+
+    # Deliberately no `if not data:` special case here — the reconciliation loop
+    # below already marks every existing row inactive when canvas_ids is empty,
+    # producing the identical result without a separate, redundant branch.
+    canvas_ids = {str(item["id"]) for item in data}
 
     for item in data:
         aid = str(item["id"])
@@ -164,12 +228,15 @@ async def get_assignments(local_course_id: int, user: User, canvas_url: str | No
         description = item.get("description")
         due_date = _parse_dt(item.get("due_at"))
         points_possible = item.get("points_possible")
+        published = item.get("published", True)
 
         if aid in assignment_map:
             assignment_map[aid].title = title
             assignment_map[aid].description = description
             assignment_map[aid].due_date = due_date
             assignment_map[aid].points_possible = points_possible
+            assignment_map[aid].is_active = True
+            assignment_map[aid].published = published
         else:
             assignment = Assignment(
                 canvas_assignment_id=aid,
@@ -178,9 +245,16 @@ async def get_assignments(local_course_id: int, user: User, canvas_url: str | No
                 description=description,
                 due_date=due_date,
                 points_possible=points_possible,
+                published=published,
             )
             db.add(assignment)
             assignment_map[aid] = assignment
+
+    # Reconcile deletions: any local row Canvas didn't return this time is no
+    # longer on Canvas — mark inactive rather than leaving it counted as active.
+    for aid, assignment in assignment_map.items():
+        if aid not in canvas_ids:
+            assignment.is_active = False
 
     await db.flush()
     await db.commit()
@@ -225,6 +299,7 @@ async def create_course_assignment(
 ) -> AssignmentResponse:
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
+    require_writable_course(course)
     data = await create_assignment(
         int(course.canvas_course_id),
         payload.model_dump(mode="json"),
@@ -244,6 +319,7 @@ async def update_course_assignment(
 ) -> AssignmentResponse:
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
+    require_writable_course(course)
     data = await update_assignment(
         int(course.canvas_course_id),
         assignment_id,
@@ -271,6 +347,7 @@ async def send_course_message(
 
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
+    require_writable_course(course)
     canvas_course_id = int(course.canvas_course_id)
 
     if recipient_canvas_user_ids:
@@ -489,6 +566,24 @@ async def set_active_course(user: User, local_course_id: int, db: AsyncSession) 
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found or does not belong to you.",
+        )
+
+    # synced_at is only ever set from a real Canvas response (see get_courses()
+    # above) — a row with synced_at=None never went through that path and is
+    # trusting whatever workflow_state migration 011 backfilled it to
+    # ('available' for every pre-existing row), which may no longer be true on
+    # Canvas. Refuse to select it until a real sync has confirmed its state,
+    # rather than silently trusting stale, unverified data as a backend invariant.
+    if course.synced_at is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Course data has not been synced from Canvas yet — refresh courses before selecting this one as active.",
+        )
+
+    if course.workflow_state not in SELECTABLE_WORKFLOW_STATES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot set an unpublished or non-selectable course as active.",
         )
 
     # Upsert: update if a preference row already exists, otherwise insert a new one

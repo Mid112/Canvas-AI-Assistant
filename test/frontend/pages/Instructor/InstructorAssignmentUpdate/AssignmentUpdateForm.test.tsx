@@ -13,6 +13,7 @@ const assignment: Assignment = {
   due_at: "2026-12-15T12:00:00.000Z",
   points_possible: 50,
   course_id: 3,
+  published: true,
 };
 
 describe("AssignmentUpdateForm", () => {

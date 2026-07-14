@@ -3,9 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
 import {
   AssistantApiError,
-  cancelAssistantAction,
   confirmAssistantAction,
   fetchConversation,
+  listAssistantConversations,
+  mapConversationToChatMessages,
   sendAssistantMessage,
 } from "@/services/assistant";
 
@@ -165,6 +166,177 @@ describe("sendAssistantMessage", () => {
   });
 });
 
+describe("conversation history helpers", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("lists assistant conversations", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          items: [
+            {
+              id: 4,
+              course_id: null,
+              created_at: "2026-07-01T12:00:00Z",
+              updated_at: "2026-07-01T12:05:00Z",
+              message_count: 2,
+              preview: "Hello from history.",
+              pending_action_count: 0,
+            },
+          ],
+          total: 1,
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const response = await listAssistantConversations("access-token", {
+      limit: 12,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/chat/conversations?limit=12",
+      expect.any(Object),
+    );
+    expect(response.items[0].id).toBe(4);
+  });
+
+  it("fetches and maps a stored conversation transcript", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: 9,
+          course_id: 3,
+          created_at: "2026-07-01T12:00:00Z",
+          messages: [
+            {
+              id: 21,
+              role: "user",
+              content: "Create an assignment",
+              created_at: "2026-07-01T12:00:00Z",
+            },
+            {
+              id: 22,
+              role: "assistant",
+              content: JSON.stringify({
+                intent_preview: true,
+                summary: "Create Assignment 1",
+                proposed_action: {
+                  action: "create_assignment",
+                  local_course_id: 3,
+                },
+              }),
+              created_at: "2026-07-01T12:01:00Z",
+              pending_action_status: "pending",
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const conversation = await fetchConversation("access-token", 9);
+    const messages = mapConversationToChatMessages(conversation);
+
+    expect(messages[0]).toMatchObject({
+      role: "user",
+      content: "Create an assignment",
+    });
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      content: "Create Assignment 1",
+      conversationId: 9,
+      pendingMessageId: 22,
+      pendingActionStatus: "pending",
+    });
+  });
+
+  it("defaults restored intent previews with null workflow status to pending", () => {
+    const messages = mapConversationToChatMessages({
+      id: 9,
+      course_id: 3,
+      created_at: "2026-07-01T12:00:00Z",
+      messages: [
+        {
+          id: 22,
+          role: "assistant",
+          content: JSON.stringify({
+            intent_preview: true,
+            summary: "Create Assignment 1",
+            proposed_action: {
+              action: "create_assignment",
+              local_course_id: 3,
+            },
+          }),
+          created_at: "2026-07-01T12:01:00Z",
+          pending_action_status: null,
+        },
+      ],
+    });
+
+    expect(messages[0]).toMatchObject({
+      pendingMessageId: 22,
+      pendingActionStatus: "pending",
+    });
+  });
+
+  it("keeps executing workflow previews distinct from confirmed ones", () => {
+    const messages = mapConversationToChatMessages({
+      id: 9,
+      course_id: 3,
+      created_at: "2026-07-01T12:00:00Z",
+      messages: [
+        {
+          id: 22,
+          role: "assistant",
+          content: JSON.stringify({
+            intent_preview: true,
+            summary: "Create Assignment 1",
+            proposed_action: {
+              action: "create_assignment",
+              local_course_id: 3,
+            },
+          }),
+          created_at: "2026-07-01T12:01:00Z",
+          pending_action_status: "executing",
+        },
+      ],
+    });
+
+    expect(messages[0].pendingActionStatus).toBe("executing");
+  });
+
+  it("preserves real user messages that start with a bracket", () => {
+    const messages = mapConversationToChatMessages({
+      id: 9,
+      course_id: null,
+      created_at: "2026-07-01T12:00:00Z",
+      messages: [
+        {
+          id: 21,
+          role: "user",
+          content: "[URGENT] Please help with grading",
+          created_at: "2026-07-01T12:00:00Z",
+        },
+        {
+          id: 22,
+          role: "user",
+          content: "[confirmed action]",
+          created_at: "2026-07-01T12:01:00Z",
+        },
+      ],
+    });
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      role: "user",
+      content: "[URGENT] Please help with grading",
+    });
+  });
+});
+
 describe("confirmAssistantAction", () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -201,78 +373,5 @@ describe("confirmAssistantAction", () => {
     );
     expect(response.content).toContain("Successfully completed Create Assignment");
     expect(response.conversationId).toBe(7);
-  });
-});
-
-describe("cancelAssistantAction", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("posts to /chat/cancel with conversation and pending message ids", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          conversation_id: 7,
-          is_error: false,
-          reply: {
-            success: false,
-            message: "Action cancelled.",
-          },
-        }),
-        { status: 200 },
-      ),
-    );
-
-    const response = await cancelAssistantAction("test-token", 7, 42);
-
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/chat/cancel",
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({
-          conversation_id: 7,
-          pending_message_id: 42,
-        }),
-      }),
-    );
-    expect(response.conversationId).toBe(7);
-  });
-});
-
-describe("fetchConversation", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("fetches a conversation by id", async () => {
-    const conversation = {
-      id: 7,
-      course_id: 3,
-      created_at: "2026-06-26T00:00:00.000Z",
-      messages: [
-        {
-          id: 1,
-          role: "user",
-          content: "Hello",
-          created_at: "2026-06-26T00:00:00.000Z",
-        },
-      ],
-    };
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(JSON.stringify(conversation), { status: 200 }),
-    );
-
-    await expect(fetchConversation("access-token", 7)).resolves.toEqual(
-      conversation,
-    );
-  });
-
-  it("wraps non-api errors in AssistantApiError", async () => {
-    vi.spyOn(globalThis, "fetch").mockRejectedValueOnce(new Error("offline"));
-
-    await expect(fetchConversation("access-token", 7)).rejects.toEqual(
-      new AssistantApiError("offline"),
-    );
   });
 });

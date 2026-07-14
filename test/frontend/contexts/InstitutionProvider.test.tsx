@@ -95,6 +95,26 @@ describe("InstitutionProvider dashboard fetch", () => {
       expect(mockedFetchInstructorDashboard).toHaveBeenCalledWith("token");
     });
   });
+
+  // Verifies: refreshDashboard keeps previously-good data on a transient failure
+  // instead of blanking it — this matters because it's called right after a
+  // chat action confirms or an assignment is created, so a single slow/failed
+  // round-trip here shouldn't erase data that was correct a moment ago.
+  it("keeps the last-known-good dashboard when refreshDashboard fails", async () => {
+    mockUseAuth.mockReturnValue(instructorAuth);
+
+    const { result } = renderHook(() => useInstitution(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.dashboard.metrics.totalStudents).toBe(1);
+    });
+
+    mockedFetchInstructorDashboard.mockRejectedValueOnce(new Error("network blip"));
+
+    await result.current.refreshDashboard();
+
+    expect(result.current.dashboard.metrics.totalStudents).toBe(1);
+  });
 });
 
 describe("InstitutionProvider connected institutions", () => {

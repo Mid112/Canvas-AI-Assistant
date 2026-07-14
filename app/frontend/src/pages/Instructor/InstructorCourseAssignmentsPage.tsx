@@ -291,7 +291,14 @@ export function InstructorCourseAssignmentsPage() {
                       <TableRow key={assignment.id}>
                         <TableCell>
                           <div className="space-y-1">
-                            <p className="font-medium">{assignment.name}</p>
+                            <p className="font-medium">
+                              {assignment.name}
+                              {!assignment.published ? (
+                                <span className="ml-2 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                  Unpublished
+                                </span>
+                              ) : null}
+                            </p>
                             <p className="text-xs text-muted-foreground">
                               ID: {assignment.id}
                             </p>

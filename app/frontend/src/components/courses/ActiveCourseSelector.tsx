@@ -1,6 +1,8 @@
+import { useMemo } from "react";
 import { BookOpen, Loader2 } from "lucide-react";
 
 import { useActiveCourse } from "@/contexts/useActiveCourse";
+import { disambiguateCourseLabels } from "@/lib/disambiguate-course-labels";
 import { cn } from "@/lib/utils";
 
 const selectClassName = cn(
@@ -25,7 +27,23 @@ export function ActiveCourseSelector({
     selectActiveCourse,
   } = useActiveCourse();
 
-  const isDisabled = isLoading || isSaving || availableCourses.length === 0;
+  // Setting a course active is an action, not just a display — only offer
+  // published courses here, same as the assignment-creation course picker.
+  const selectableCourses = useMemo(
+    () => availableCourses.filter((course) => course.isPublished),
+    [availableCourses],
+  );
+  const labelById = useMemo(
+    () => disambiguateCourseLabels(selectableCourses),
+    [selectableCourses],
+  );
+
+  const isDisabled = isLoading || isSaving || selectableCourses.length === 0;
+  const emptyOptionLabel = isLoading
+    ? "Loading courses..."
+    : availableCourses.length > 0 && selectableCourses.length === 0
+      ? "No published courses available"
+      : "Select a course";
 
   return (
     <div className={cn("flex min-w-0 items-center gap-2", className)}>
@@ -50,11 +68,11 @@ export function ActiveCourseSelector({
         aria-label="Select active course"
       >
         <option value="" disabled>
-          {isLoading ? "Loading courses..." : "Select a course"}
+          {emptyOptionLabel}
         </option>
-        {availableCourses.map((course) => (
+        {selectableCourses.map((course) => (
           <option key={course.id} value={course.id}>
-            {course.code}: {course.name}
+            {labelById.get(course.id)}
           </option>
         ))}
       </select>

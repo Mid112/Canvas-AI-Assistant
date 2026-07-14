@@ -9,7 +9,7 @@ import {
   generateAssignmentDraft,
   previewAssignmentDraft,
 } from "@/services/assignmentCreator";
-import { fetchCourses } from "@/services/canvas";
+import type { InstructorCourse } from "@/types/course";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -46,22 +46,35 @@ vi.mock("@/services/assignmentCreator", () => ({
   approveAssignmentDraft: vi.fn(),
 }));
 
-vi.mock("@/services/canvas", () => ({
-  fetchCourses: vi.fn(),
-  CanvasApiError: class CanvasApiError extends Error {
-    status: number;
+const course: InstructorCourse = {
+  id: 42,
+  canvasCourseId: 101,
+  canvasUrl: "https://canvas.university.edu",
+  code: "CS 101",
+  name: "Introduction to Programming",
+  progress: 0,
+  studentCount: 35,
+  assignmentCount: 0,
+  lastActivity: "",
+  isPublished: true,
+  isWritable: true,
+  term: null,
+};
 
-    constructor(message: string, status: number) {
-      super(message);
-      this.status = status;
-    }
-  },
+const mockUseActiveCourse = vi.fn();
+const mockUseInstitution = vi.fn();
+
+vi.mock("@/contexts/useActiveCourse", () => ({
+  useActiveCourse: () => mockUseActiveCourse(),
+}));
+
+vi.mock("@/contexts/useInstitution", () => ({
+  useInstitution: () => mockUseInstitution(),
 }));
 
 const mockedGenerate = vi.mocked(generateAssignmentDraft);
 const mockedPreview = vi.mocked(previewAssignmentDraft);
 const mockedApprove = vi.mocked(approveAssignmentDraft);
-const mockedFetchCourses = vi.mocked(fetchCourses);
 
 function renderPage() {
   return renderWithRouter(
@@ -94,16 +107,16 @@ describe("InstructorAssignmentCreatePage", () => {
       affectedResources: [{ type: "assignment", name: "Python Functions Quiz" }],
     });
     mockedApprove.mockResolvedValue();
-    mockedFetchCourses.mockResolvedValue([
-      {
-        canvas_id: 101,
-        local_id: 42,
-        name: "Introduction to Programming",
-        course_code: "CS 101",
-        workflow_state: "available",
-        total_students: 35,
-      },
-    ]);
+    mockUseActiveCourse.mockReturnValue({
+      availableCourses: [course],
+      isLoading: false,
+      error: null,
+      needsCanvasConnection: false,
+      refreshActiveCourse: vi.fn(),
+    });
+    mockUseInstitution.mockReturnValue({
+      refreshDashboard: vi.fn(),
+    });
   });
 
   it("walks through describe, review, preview, and approve steps", async () => {

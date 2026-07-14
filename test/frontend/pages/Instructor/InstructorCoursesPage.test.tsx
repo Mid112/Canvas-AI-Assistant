@@ -1,6 +1,4 @@
-import type { ComponentProps } from "react";
-import type React from "react";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -30,26 +28,6 @@ vi.mock("@/services/assignments", () => ({
   },
   fetchCourseAssignments: vi.fn(),
 }));
-
-const instructorCoursesSectionMock = vi.hoisted(() => vi.fn());
-const instructorCoursesSectionState = vi.hoisted(() => ({
-  ActualSection: null as React.ComponentType<Record<string, unknown>> | null,
-}));
-
-vi.mock("@/pages/Instructor/InstructorCourses/InstructorCoursesSection", async () => {
-  const actual = await vi.importActual<
-    typeof import("@/pages/Instructor/InstructorCourses/InstructorCoursesSection")
-  >("@/pages/Instructor/InstructorCourses/InstructorCoursesSection");
-
-  instructorCoursesSectionState.ActualSection = actual.InstructorCoursesSection;
-
-  return {
-    ...actual,
-    InstructorCoursesSection: (
-      props: ComponentProps<typeof actual.InstructorCoursesSection>,
-    ) => instructorCoursesSectionMock(props),
-  };
-});
 
 const mockUseAuth = vi.fn();
 const mockedFetchCourses = vi.mocked(fetchCourses);
@@ -145,10 +123,6 @@ beforeEach(() => {
   localStorage.clear();
   vi.clearAllMocks();
   vi.unstubAllEnvs();
-  const ActualSection = instructorCoursesSectionState.ActualSection!;
-  instructorCoursesSectionMock.mockImplementation((props) => (
-    <ActualSection {...props} />
-  ));
   mockUseAuth.mockReturnValue(authWithCanvas);
   mockedFetchCourses.mockResolvedValue(canvasCourses);
   mockedFetchActiveCourse.mockResolvedValue(null);
@@ -303,7 +277,91 @@ describe("InstructorCoursesPage", () => {
     ).toBeInTheDocument();
   });
 
-  // Verifies: Shows the empty state when no courses match the search.
+  it("filters courses by publish status", async () => {
+    const user = userEvent.setup();
+    mockedFetchCourses.mockResolvedValue([
+      ...canvasCourses,
+      {
+        canvas_id: 104,
+        local_id: 4,
+        name: "Draft Seminar",
+        course_code: "CS 499",
+        workflow_state: "unpublished",
+        total_students: 0,
+      },
+    ]);
+
+    renderWithInstitution(<InstructorCoursesPage />);
+    await screen.findByText("Your Courses (4)");
+
+    await user.selectOptions(
+      screen.getByLabelText("Filter by publish status"),
+      "unpublished",
+    );
+
+    expect(screen.getByText("Your Courses (1)")).toBeInTheDocument();
+    expect(screen.getByText("CS 499: Draft Seminar")).toBeInTheDocument();
+    expect(
+      screen.queryByText("CS 101: Introduction to Programming"),
+    ).not.toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByLabelText("Filter by publish status"),
+      "published",
+    );
+
+    expect(screen.getByText("Your Courses (3)")).toBeInTheDocument();
+    expect(screen.queryByText("CS 499: Draft Seminar")).not.toBeInTheDocument();
+  });
+
+  it("scopes the overview metrics to the publish-status filter", async () => {
+    const user = userEvent.setup();
+    mockedFetchCourses.mockResolvedValue([
+      ...canvasCourses,
+      {
+        canvas_id: 104,
+        local_id: 4,
+        name: "Draft Seminar",
+        course_code: "CS 499",
+        workflow_state: "unpublished",
+        total_students: 12,
+      },
+    ]);
+
+    renderWithInstitution(<InstructorCoursesPage />);
+    await screen.findByText("Your Courses (4)");
+
+    const totalStudentsCard = () =>
+      screen.getByText("Total Students").closest("div.shadow-sm")!;
+
+    // All 4 courses (45 + 38 + 52 + 12 students) counted before filtering.
+    expect(within(totalStudentsCard()).getByText("147")).toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByLabelText("Filter by publish status"),
+      "unpublished",
+    );
+
+    expect(screen.getByText("Your Courses (1)")).toBeInTheDocument();
+    expect(within(totalStudentsCard()).getByText("12")).toBeInTheDocument();
+  });
+
+  it("keeps the overview metrics scoped to the publish filter while searching", async () => {
+    const user = userEvent.setup();
+
+    renderWithInstitution(<InstructorCoursesPage />);
+    await screen.findByText("Your Courses (3)");
+
+    await user.type(screen.getByLabelText("Search courses"), "Database");
+
+    expect(screen.getByText("Your Courses (1)")).toBeInTheDocument();
+    // Overview's "Total Courses" still reflects all 3 published courses,
+    // unaffected by the search text.
+    const totalCoursesCard = screen.getByText("Total Courses").closest("div.shadow-sm");
+    expect(totalCoursesCard).not.toBeNull();
+    expect(within(totalCoursesCard!).getByText("3")).toBeInTheDocument();
+  });
+
   it("shows the empty state when no courses match the search", async () => {
     const user = userEvent.setup();
 
@@ -438,24 +496,5 @@ describe("InstructorCoursesPage", () => {
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Active Course" })).toBeDisabled();
     });
-  });
-
-  // Verifies: Ignores setting active when the course no longer exists.
-  it("ignores setting active when the course no longer exists", async () => {
-    const user = userEvent.setup();
-
-    instructorCoursesSectionMock.mockImplementation(({ onSetActiveCourse }) => (
-      <button type="button" onClick={() => onSetActiveCourse(999)}>
-        Trigger missing course
-      </button>
-    ));
-
-    renderWithInstitution(<InstructorCoursesPage />);
-
-    await user.click(
-      await screen.findByRole("button", { name: "Trigger missing course" }),
-    );
-
-    expect(mockedSetActiveCourse).not.toHaveBeenCalled();
   });
 });

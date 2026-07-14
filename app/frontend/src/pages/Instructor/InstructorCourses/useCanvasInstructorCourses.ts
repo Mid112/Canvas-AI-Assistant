@@ -1,14 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
-import { isCanvasConnectionRequiredError } from "@/lib/canvas-connection";
 import { fetchCourseAssignments } from "@/services/assignments";
-import { CanvasApiError, fetchCourses } from "@/services/canvas";
 import type { InstructorCourse } from "@/types/course";
-
-import { mapCanvasCourseToInstructorCourse } from "./mapCanvasCourse";
 
 const ASSIGNMENT_COUNT_CONCURRENCY = 3;
 
@@ -49,112 +45,79 @@ async function loadAssignmentCounts(
 }
 
 /**
- * Loads instructor courses from Canvas for the selected institution.
- * Assignment counts are fetched in the background with limited concurrency.
- * Reloads when the active-course provider signals Canvas data changed.
+ * Reads the instructor's Canvas courses from the shared ActiveCourseProvider
+ * list (one fetch for the whole app) and layers in per-course assignment
+ * counts, fetched in the background with limited concurrency.
  */
 export function useCanvasInstructorCourses() {
-  const { accessToken, user, logout } = useAuth();
-  const { coursesRevision } = useActiveCourse();
+  const { accessToken, user } = useAuth();
   const canvasUrl = useCanvasConnectionUrl();
-  const [courses, setCourses] = useState<InstructorCourse[]>([]);
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [needsCanvasConnection, setNeedsCanvasConnection] = useState(false);
-  const [reloadToken, setReloadToken] = useState(0);
+  const {
+    availableCourses,
+    isLoading,
+    isLoaded,
+    error,
+    needsCanvasConnection,
+    refreshActiveCourse,
+  } = useActiveCourse();
+  // Keyed by course id — filled in as the background assignment-count fetch
+  // resolves, and merged onto the shared course list below rather than
+  // storing a second copy of the whole list in state.
+  const [assignmentCounts, setAssignmentCounts] = useState<Map<number, number>>(
+    new Map(),
+  );
 
   const hasCanvasToken = Boolean(accessToken && user?.has_canvas_token);
 
-  const reloadCourses = useCallback(() => {
-    if (!hasCanvasToken) {
+  useEffect(() => {
+    if (availableCourses.length === 0) {
+      // Nothing to merge counts onto — clear any counts left over from a
+      // previous, now-replaced course list rather than letting them linger.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset when prerequisites are missing
+      setAssignmentCounts(new Map());
       return;
     }
 
-    setReloadToken((count) => count + 1);
-  }, [hasCanvasToken]);
-
-  useEffect(() => {
-    if (!hasCanvasToken || !accessToken) {
+    if (!accessToken || !canvasUrl) {
       return;
     }
 
     const token = accessToken;
     let cancelled = false;
 
-    async function loadCanvasCourses() {
-      if (!canvasUrl) {
-        setNeedsCanvasConnection(true);
-        setCourses([]);
-        setIsLoaded(true);
-        return;
-      }
-
-      setIsLoaded(false);
-      setError(null);
-      setNeedsCanvasConnection(false);
-
-      try {
-        const data = await fetchCourses(token, canvasUrl);
-        if (cancelled) {
-          return;
-        }
-
-        const baseCourses = data
-          .map((course) => mapCanvasCourseToInstructorCourse(course, canvasUrl))
-          .filter((course): course is InstructorCourse => course !== null);
-
-        setCourses(baseCourses);
-
-        void loadAssignmentCounts(baseCourses, token, canvasUrl).then(
-          (coursesWithCounts) => {
-            if (!cancelled) {
-              setCourses(coursesWithCounts);
-            }
-          },
-        );
-      } catch (loadError) {
-        if (cancelled) {
-          return;
-        }
-
-        if (loadError instanceof CanvasApiError && loadError.status === 401) {
-          logout();
-          return;
-        }
-
-        if (isCanvasConnectionRequiredError(loadError)) {
-          setNeedsCanvasConnection(true);
-          setCourses([]);
-          return;
-        }
-
-        const message =
-          loadError instanceof CanvasApiError
-            ? loadError.message
-            : "Unable to load courses from Canvas.";
-        setError(message);
-        setCourses([]);
-      } finally {
+    void loadAssignmentCounts(availableCourses, token, canvasUrl).then(
+      (coursesWithCounts) => {
         if (!cancelled) {
-          setIsLoaded(true);
+          setAssignmentCounts(
+            new Map(
+              coursesWithCounts.map((course) => [course.id, course.assignmentCount]),
+            ),
+          );
         }
-      }
-    }
-
-    void loadCanvasCourses();
+      },
+    );
 
     return () => {
       cancelled = true;
     };
-  }, [accessToken, canvasUrl, coursesRevision, hasCanvasToken, logout, reloadToken]);
+  }, [accessToken, availableCourses, canvasUrl]);
+
+  const courses = useMemo(
+    () =>
+      availableCourses.map((course) => {
+        const count = assignmentCounts.get(course.id);
+        return count === undefined ? course : { ...course, assignmentCount: count };
+      }),
+    [availableCourses, assignmentCounts],
+  );
 
   return {
     courses,
     error,
     hasCanvasToken,
     isLoaded,
-    isLoading: hasCanvasToken && !isLoaded && !error && !needsCanvasConnection,
+    isLoading,
     needsCanvasConnection,
-    reloadCourses,
+    reloadCourses: refreshActiveCourse,
   };
 }

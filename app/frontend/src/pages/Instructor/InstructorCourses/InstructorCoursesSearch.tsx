@@ -1,15 +1,8 @@
-import { Search } from "lucide-react";
+import { Filter, Search } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { CoursePublishFilter } from "@/types/course";
-
-const PUBLISH_FILTERS: { value: CoursePublishFilter; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "published", label: "Published" },
-  { value: "unpublished", label: "Unpublished" },
-];
 
 interface InstructorCoursesSearchProps {
   search: string;
@@ -18,6 +11,11 @@ interface InstructorCoursesSearchProps {
   onPublishFilterChange: (value: CoursePublishFilter) => void;
 }
 
+const selectClassName = cn(
+  "h-9 rounded-lg border border-input bg-background pl-8 pr-3 text-sm outline-none",
+  "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+);
+
 export function InstructorCoursesSearch({
   search,
   onSearchChange,
@@ -25,7 +23,7 @@ export function InstructorCoursesSearch({
   onPublishFilterChange,
 }: InstructorCoursesSearchProps) {
   return (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-wrap items-center gap-3">
       <div className="relative max-w-xl flex-1">
         <Search
           className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
@@ -41,27 +39,23 @@ export function InstructorCoursesSearch({
         />
       </div>
 
-      <div
-        className="flex flex-wrap items-center gap-1 rounded-lg border border-border/70 bg-muted/30 p-1"
-        role="group"
-        aria-label="Filter by publish status"
-      >
-        {PUBLISH_FILTERS.map((filter) => (
-          <Button
-            key={filter.value}
-            type="button"
-            size="sm"
-            variant={publishFilter === filter.value ? "default" : "ghost"}
-            className={cn(
-              "h-8",
-              publishFilter !== filter.value && "text-muted-foreground",
-            )}
-            aria-pressed={publishFilter === filter.value}
-            onClick={() => onPublishFilterChange(filter.value)}
-          >
-            {filter.label}
-          </Button>
-        ))}
+      <div className="relative">
+        <Filter
+          className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <select
+          value={publishFilter}
+          onChange={(event) =>
+            onPublishFilterChange(event.target.value as CoursePublishFilter)
+          }
+          className={selectClassName}
+          aria-label="Filter by publish status"
+        >
+          <option value="all">All courses</option>
+          <option value="published">Published only</option>
+          <option value="unpublished">Unpublished only</option>
+        </select>
       </div>
     </div>
   );

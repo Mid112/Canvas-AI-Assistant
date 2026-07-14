@@ -1,5 +1,13 @@
-import { AlertCircle } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, Plus } from "lucide-react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { AssistantMessage } from "@/components/chat/AssistantMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -9,15 +17,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
+import { useInstitution } from "@/contexts/useInstitution";
 import { seedChatMessages } from "@/data/assistantSeedData";
 import { isCancellationPhrase } from "@/lib/chat-cancellation";
-import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
 import {
   AssistantApiError,
   cancelAssistantAction,
   confirmAssistantAction,
   fetchConversation,
+  mapConversationToChatMessages,
   sendAssistantMessage,
+  type ConversationResponse,
 } from "@/services/assistant";
 import type { ChatMessage } from "@/types/chat";
 import type { LlmProviderId, LlmProviderSettings } from "@/types/llmProvider";
@@ -26,15 +36,59 @@ function createMessageId(): string {
   return crypto.randomUUID();
 }
 
-function parseStoredAssistantReply(content: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(content) as unknown;
-    return parsed && typeof parsed === "object"
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
+function withWelcomeMessage(restoredMessages: ChatMessage[]): ChatMessage[] {
+  if (restoredMessages.length === 0) {
+    return seedChatMessages;
   }
+
+  return [
+    ...seedChatMessages,
+    ...restoredMessages.filter((message) => message.id !== "welcome"),
+  ];
+}
+
+function findLatestPendingMessageId(messages: ChatMessage[]): number | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.pendingActionStatus === "pending") {
+      return message.pendingMessageId;
+    }
+  }
+
+  return undefined;
+}
+
+interface InitialChatState {
+  messages: ChatMessage[];
+  conversationId?: number;
+  activePendingMessageId?: number;
+  hydratedConversationId?: number;
+}
+
+function getInitialChatState({
+  initialConversationId,
+  initialPendingMessageId,
+  loadedConversation,
+}: Pick<
+  ChatWindowProps,
+  "initialConversationId" | "initialPendingMessageId" | "loadedConversation"
+>): InitialChatState {
+  if (!loadedConversation) {
+    return {
+      messages: seedChatMessages,
+      conversationId: initialConversationId,
+      activePendingMessageId: initialPendingMessageId,
+    };
+  }
+
+  const loadedMessages = mapConversationToChatMessages(loadedConversation);
+
+  return {
+    messages: withWelcomeMessage(loadedMessages),
+    conversationId: loadedConversation.id,
+    activePendingMessageId: findLatestPendingMessageId(loadedMessages),
+    hydratedConversationId: loadedConversation.id,
+  };
 }
 
 interface ChatWindowProps {
@@ -42,34 +96,56 @@ interface ChatWindowProps {
   initialDraft?: string | null;
   initialConversationId?: number;
   initialPendingMessageId?: number;
+  loadedConversation?: ConversationResponse | null;
   onInitialPromptConsumed?: () => void;
   onModifyContextConsumed?: () => void;
+  onConversationChange?: (conversationId: number) => void;
   onLoadingChange?: (isLoading: boolean) => void;
+  onStartNewChat?: () => void;
   modelSettings?: LlmProviderSettings | null;
   onModelProviderChange?: (providerId: LlmProviderId) => void;
 }
 
-export function ChatWindow({
+export interface ChatWindowHandle {
+  sendPrompt: (prompt: string) => void;
+}
+
+export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function ChatWindow({
   initialPrompt = null,
   initialDraft = null,
   initialConversationId,
   initialPendingMessageId,
+  loadedConversation = null,
   onInitialPromptConsumed,
   onModifyContextConsumed,
+  onConversationChange,
   onLoadingChange,
+  onStartNewChat,
   modelSettings = null,
   onModelProviderChange,
-}: ChatWindowProps) {
+}, ref) {
   const { accessToken } = useAuth();
   const { activeCourse, refreshActiveCourse, notifyCoursesChanged } =
     useActiveCourse();
-  const [messages, setMessages] = useState<ChatMessage[]>(seedChatMessages);
+  const { refreshDashboard } = useInstitution();
+  const initialChatState = useMemo(
+    () =>
+      getInitialChatState({
+        initialConversationId,
+        initialPendingMessageId,
+        loadedConversation,
+      }),
+    [initialConversationId, initialPendingMessageId, loadedConversation],
+  );
+  const [messages, setMessages] = useState<ChatMessage[]>(
+    () => initialChatState.messages,
+  );
   const [conversationId, setConversationId] = useState<number | undefined>(
-    initialConversationId,
+    () => initialChatState.conversationId,
   );
   const [activePendingMessageId, setActivePendingMessageId] = useState<
     number | undefined
-  >(initialPendingMessageId);
+  >(() => initialChatState.activePendingMessageId);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
@@ -80,13 +156,12 @@ export function ChatWindow({
   const [pendingActionError, setPendingActionError] = useState<string | null>(
     null,
   );
-  const [editDraft, setEditDraft] = useState("");
-  const [editDraftKey, setEditDraftKey] = useState(0);
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const initialPromptHandledRef = useRef<string | null>(null);
-  const hydratedConversationRef = useRef<number | undefined>(undefined);
+  const hydratedConversationRef = useRef<number | undefined>(
+    initialChatState.hydratedConversationId,
+  );
   const isDeliveringRef = useRef(false);
-  const previousCourseIdRef = useRef<number | null | undefined>(undefined);
 
   const assistantContext = useMemo(
     () => ({
@@ -104,42 +179,10 @@ export function ChatWindow({
     onLoadingChange?.(isLoading);
   }, [isLoading, onLoadingChange]);
 
-  // Reset the chat thread when the active course changes so the UI does not
-  // keep showing another course's history while the backend forks a new
-  // conversation on the next send.
-  useEffect(() => {
-    const nextCourseId = activeCourse?.localId ?? null;
-    const previousCourseId = previousCourseIdRef.current;
-    previousCourseIdRef.current = nextCourseId;
-
-    // First observation (including null → first course load) should not wipe
-    // an in-progress hydrate or modify-return flow.
-    if (previousCourseId === undefined) {
-      return;
-    }
-    if (previousCourseId === nextCourseId) {
-      return;
-    }
-    if (previousCourseId === null && nextCourseId !== null) {
-      return;
-    }
-
-    setMessages(seedChatMessages);
-    setConversationId(undefined);
-    setActivePendingMessageId(undefined);
-    setError(null);
-    setInputError(null);
-    setRetryMessage(null);
-    setPendingActionError(null);
-    setEditDraft("");
-    setEditDraftKey((key) => key + 1);
-    hydratedConversationRef.current = undefined;
-    initialPromptHandledRef.current = null;
-  }, [activeCourse?.localId]);
-
   useEffect(() => {
     if (
       !accessToken ||
+      loadedConversation ||
       initialConversationId === undefined ||
       hydratedConversationRef.current === initialConversationId
     ) {
@@ -158,91 +201,10 @@ export function ChatWindow({
           return;
         }
 
-        const pendingStatuses = new Map<number, ChatMessage["pendingActionStatus"]>();
-        let latestPendingMessageId: number | undefined;
-
-        for (const storedMessage of conversation.messages) {
-          const parsed =
-            storedMessage.role === "assistant"
-              ? parseStoredAssistantReply(storedMessage.content)
-              : null;
-
-          if (parsed?.intent_preview) {
-            pendingStatuses.set(storedMessage.id, "pending");
-            latestPendingMessageId = storedMessage.id;
-          }
-
-          if (storedMessage.role === "user" && latestPendingMessageId !== undefined) {
-            if (storedMessage.content === "[cancelled action]") {
-              pendingStatuses.set(latestPendingMessageId, "cancelled");
-              latestPendingMessageId = undefined;
-            } else if (storedMessage.content === "[confirmed action]") {
-              pendingStatuses.set(latestPendingMessageId, "confirmed");
-              latestPendingMessageId = undefined;
-            }
-          }
-        }
-
-        const restoredMessages = conversation.messages.flatMap<ChatMessage>((storedMessage) => {
-          const timestamp = new Date(storedMessage.created_at);
-
-          if (storedMessage.role === "user") {
-            if (storedMessage.content.startsWith("[")) {
-              return [];
-            }
-
-            return [{
-              id: String(storedMessage.id),
-              role: "user",
-              content: storedMessage.content,
-              timestamp,
-              conversationId: conversation.id,
-            }];
-          }
-
-          const parsed = parseStoredAssistantReply(storedMessage.content);
-          if (!parsed) {
-            return [{
-              id: String(storedMessage.id),
-              role: "assistant",
-              content: storedMessage.content,
-              timestamp,
-              conversationId: conversation.id,
-            }];
-          }
-
-          const reply = parsed.intent_preview && parsed.pending_message_id === undefined
-            ? { ...parsed, pending_message_id: storedMessage.id }
-            : parsed;
-          const mapped = mapChatReplyToAssistantResponse(reply, false, conversation.id);
-
-          return [{
-            id: String(storedMessage.id),
-            role: "assistant",
-            content: mapped.content,
-            timestamp,
-            conversationId: conversation.id,
-            pendingMessageId: mapped.pendingMessageId,
-            pendingActionStatus: mapped.pendingMessageId
-              ? pendingStatuses.get(mapped.pendingMessageId) ?? "pending"
-              : undefined,
-            explanation: mapped.explanation,
-            interpretedAction: mapped.interpretedAction,
-            safetyBlocked: mapped.safetyBlocked,
-            safetyMessage: mapped.safetyMessage,
-          }];
-        });
-
-        let nextActivePendingMessageId: number | undefined;
-        for (const [messageId, status] of pendingStatuses) {
-          if (status === "pending") {
-            nextActivePendingMessageId = messageId;
-          }
-        }
-
-        setMessages(restoredMessages.length > 0 ? restoredMessages : seedChatMessages);
+        const restoredMessages = mapConversationToChatMessages(conversation);
+        setMessages(withWelcomeMessage(restoredMessages));
         setConversationId(conversation.id);
-        setActivePendingMessageId(nextActivePendingMessageId);
+        setActivePendingMessageId(findLatestPendingMessageId(restoredMessages));
         hydratedConversationRef.current = initialConversationId;
       } catch {
         if (cancelled) {
@@ -261,7 +223,7 @@ export function ChatWindow({
     return () => {
       cancelled = true;
     };
-  }, [accessToken, initialConversationId, initialPendingMessageId]);
+  }, [accessToken, initialConversationId, initialPendingMessageId, loadedConversation]);
 
   const appendAssistantMessage = useCallback(
     (response: {
@@ -335,6 +297,7 @@ export function ChatWindow({
         }
 
         setConversationId(response.conversationId);
+        onConversationChange?.(response.conversationId);
         appendAssistantMessage(response);
         setRetryMessage(null);
       } catch (requestError) {
@@ -354,6 +317,7 @@ export function ChatWindow({
       appendAssistantMessage,
       assistantContext,
       conversationId,
+      onConversationChange,
       onModifyContextConsumed,
     ],
   );
@@ -391,6 +355,7 @@ export function ChatWindow({
               );
 
         setConversationId(response.conversationId);
+        onConversationChange?.(response.conversationId);
         setActivePendingMessageId(undefined);
         setMessages((current) =>
           current.map((entry) =>
@@ -404,9 +369,16 @@ export function ChatWindow({
           ),
         );
         appendAssistantMessage(response);
+
         if (action === "confirm") {
+          // The confirmed action just committed a write to Canvas/the local
+          // DB — ActiveCourseProvider and InstitutionProvider are both
+          // mounted once for the whole session, so nothing else will ask
+          // them to re-fetch. Without this, course/assignment counts and
+          // dashboard metrics stay stale until a full page reload.
           void refreshActiveCourse();
           notifyCoursesChanged();
+          void refreshDashboard();
         }
       } catch (requestError) {
         const errorMessage =
@@ -423,15 +395,11 @@ export function ChatWindow({
       appendAssistantMessage,
       conversationId,
       notifyCoursesChanged,
+      onConversationChange,
       refreshActiveCourse,
+      refreshDashboard,
     ],
   );
-
-  const handleModifyPendingAction = useCallback(() => {
-    setEditDraft("Please change the proposed action: ");
-    setEditDraftKey((key) => key + 1);
-    setInputError(null);
-  }, []);
 
   const handleSend = useCallback(
     (text: string) => {
@@ -452,10 +420,6 @@ export function ChatWindow({
 
       setMessages((current) => [...current, userMessage]);
 
-      // If the user types a dismissal like "never mind" while an action is
-      // awaiting confirmation, cleanly cancel the pending proposal instead of
-      // forwarding the text to the LLM (which can surface a malformed-response
-      // error rather than a clean cancellation).
       if (
         activePendingMessageId !== undefined &&
         isCancellationPhrase(trimmed)
@@ -474,7 +438,20 @@ export function ChatWindow({
 
       void deliverAssistantResponse(trimmed);
     },
-    [activePendingMessageId, deliverAssistantResponse, messages, resolvePendingAction],
+    [
+      activePendingMessageId,
+      deliverAssistantResponse,
+      messages,
+      resolvePendingAction,
+    ],
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      sendPrompt: handleSend,
+    }),
+    [handleSend],
   );
 
   useEffect(() => {
@@ -507,6 +484,21 @@ export function ChatWindow({
   return (
     <Card className="flex min-h-[32rem] flex-1 flex-col overflow-hidden shadow-sm ring-1 ring-border/60">
       <CardContent className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:p-6">
+        {onStartNewChat ? (
+          <div className="flex shrink-0 justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onStartNewChat}
+              disabled={isLoading}
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              New Chat
+            </Button>
+          </div>
+        ) : null}
+
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
           {messages.map((message) =>
             message.role === "assistant" ? (
@@ -525,12 +517,6 @@ export function ChatWindow({
                 onCancelPendingAction={
                   message.pendingMessageId
                     ? () => void resolvePendingAction(message, "cancel")
-                    : undefined
-                }
-                onModifyPendingAction={
-                  message.pendingMessageId &&
-                  message.pendingActionStatus === "pending"
-                    ? handleModifyPendingAction
                     : undefined
                 }
               />
@@ -568,15 +554,15 @@ export function ChatWindow({
         ) : null}
 
         <ChatInput
-          key={`${initialDraft ?? ""}-${editDraftKey}`}
+          key={initialDraft ?? ""}
           onSend={handleSend}
           isLoading={isLoading}
           inputError={inputError}
-          initialValue={editDraft || initialDraft || ""}
+          initialValue={initialDraft ?? ""}
           modelSettings={modelSettings}
           onModelProviderChange={onModelProviderChange}
         />
       </CardContent>
     </Card>
   );
-}
+});
