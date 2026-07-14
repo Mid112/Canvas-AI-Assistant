@@ -433,4 +433,9 @@ INSERT INTO schema_migrations (filename) VALUES
     ('011_course_name_tracking.sql'),
     ('012_tool_call_logs.sql'),
     ('013_resolved_sets.sql'),
-    ('014_canvas_course_names_workflow_state.sql');
+    ('014_canvas_course_names_workflow_state.sql'),
+    ('015_course_workflow_state_and_assignment_active.sql'),
+    ('016_assignment_published.sql'),
+    ('017_course_synced_at.sql'),
+    ('018_workflow_undo.sql'),
+    ('019_audit_logs_allow_delete_operation.sql');
