@@ -207,6 +207,11 @@ export function InstructorAssistantPage() {
     setPendingConversationId(conversationId);
     void loadConversationList();
   };
+  const hasActiveConversation =
+    selectedConversation !== null ||
+    pendingConversationId !== undefined ||
+    pendingPrompt !== null ||
+    pendingDraft !== null;
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-6 overflow-hidden p-4 md:p-6 lg:p-8">
@@ -218,11 +223,13 @@ export function InstructorAssistantPage() {
         <>
       <ActiveCourseContextBar />
 
-      <InstructorAssistantSuggestedActions
-        actions={suggestedActions}
-        onSelect={handleSuggestedAction}
-        disabled={isLoading}
-      />
+      {!hasActiveConversation ? (
+        <InstructorAssistantSuggestedActions
+          actions={suggestedActions}
+          onSelect={handleSuggestedAction}
+          disabled={isLoading}
+        />
+      ) : null}
 
       <div className="grid min-h-0 flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_20rem]">
         <ChatWindow
