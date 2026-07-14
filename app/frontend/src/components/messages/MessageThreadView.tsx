@@ -1,5 +1,4 @@
 import { MessageReplyComposer } from "@/components/messages/MessageReplyComposer";
-import { StudentRepliesSection } from "@/components/messages/StudentRepliesSection";
 import { formatAuditTimestamp } from "@/lib/format-audit-timestamp";
 import { cn } from "@/lib/utils";
 import type { MessageThread } from "@/types/messageThread";
@@ -59,7 +58,6 @@ export function MessageThreadView({ thread, onReply }: MessageThreadViewProps) {
         </ul>
       </section>
 
-      <StudentRepliesSection thread={thread} />
       <MessageReplyComposer onSend={onReply} />
     </div>
   );

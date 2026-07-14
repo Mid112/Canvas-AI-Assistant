@@ -59,18 +59,18 @@ export interface StudentEmailRecipient {
 }
 
 /**
- * Builds the emailable recipient list: analytics students that have a real
- * email address. Recipients without an email are excluded so the count of
- * recipients matches the addresses that can actually receive a message.
+ * Builds the messaging recipient list. Canvas conversations are addressed by
+ * the student's Canvas user id, not by email, so every analytics student is a
+ * valid recipient — including active students that Canvas returns without a
+ * login/email. The email is included when available (for display) but is not
+ * required to message a student.
  */
 export function toStudentEmailRecipients(
   students: CourseStudent[],
 ): StudentEmailRecipient[] {
-  return filterAnalyticsStudents(students)
-    .filter(hasContactIdentity)
-    .map((student) => ({
-      id: student.canvas_user_id,
-      name: student.name,
-      email: student.login_id ?? "",
-    }));
+  return filterAnalyticsStudents(students).map((student) => ({
+    id: student.canvas_user_id,
+    name: student.name,
+    email: student.login_id ?? "",
+  }));
 }

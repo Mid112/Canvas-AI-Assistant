@@ -34,7 +34,7 @@ export function InstructorMessagesPage() {
   const [fetchOptions, setFetchOptions] =
     useState<FetchMessageDraftOptions | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [tab, setTab] = useState("compose");
+  const [tab, setTab] = useState("inbox");
 
   const aiDraft = (location.state as AiMessageDraftLocationState | null)
     ?.aiMessageDraft;
@@ -226,8 +226,8 @@ export function InstructorMessagesPage() {
           Messages
         </h1>
         <p className="text-sm text-muted-foreground">
-          Compose a new message for {activeCourse.displayName}. The inbox is a
-          local demo preview and is not yet connected to Canvas.
+          View conversations and student replies, or compose a new message for{" "}
+          {activeCourse.displayName}.
         </p>
       </header>
 
@@ -248,7 +248,7 @@ export function InstructorMessagesPage() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
-          <TabsTrigger value="inbox">Inbox & replies (Demo)</TabsTrigger>
+          <TabsTrigger value="inbox">Inbox & replies</TabsTrigger>
           <TabsTrigger value="compose">Compose</TabsTrigger>
         </TabsList>
         <TabsContent value="inbox" className="mt-4">

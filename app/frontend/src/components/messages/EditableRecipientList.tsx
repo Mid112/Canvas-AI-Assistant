@@ -55,7 +55,9 @@ export function EditableRecipientList({
               >
                 {recipient.name}
               </p>
-              <p className="text-xs text-muted-foreground">{recipient.email}</p>
+              <p className="text-xs text-muted-foreground">
+                {recipient.email || "No email on file"}
+              </p>
             </label>
             <Button
               type="button"
