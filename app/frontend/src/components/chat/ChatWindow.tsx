@@ -179,7 +179,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   const [pendingActionError, setPendingActionError] = useState<string | null>(
     null,
   );
-  const scrollAnchorRef = useRef<HTMLDivElement>(null);
+  const messageListRef = useRef<HTMLDivElement>(null);
   const initialPromptHandledRef = useRef<string | null>(null);
   const hydratedConversationRef = useRef<number | undefined>(
     initialChatState.hydratedConversationId,
@@ -195,7 +195,12 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   );
 
   useEffect(() => {
-    scrollAnchorRef.current?.scrollIntoView?.({ behavior: "smooth" });
+    const messageList = messageListRef.current;
+    if (!messageList) {
+      return;
+    }
+
+    messageList.scrollTop = messageList.scrollHeight;
   }, [messages, isLoading, error]);
 
   useEffect(() => {
@@ -612,7 +617,10 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           </div>
         ) : null}
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+        <div
+          ref={messageListRef}
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
+        >
           {messages.map((message) =>
             message.role === "assistant" ? (
               <AssistantMessage
@@ -639,7 +647,6 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           )}
 
           {isLoading ? <LoadingIndicator /> : null}
-          <div ref={scrollAnchorRef} />
         </div>
 
         {error ? (
