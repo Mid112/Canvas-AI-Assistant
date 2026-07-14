@@ -362,7 +362,13 @@ async def _resolve_course_switch(
             timeout=COURSE_SWITCH_RESOLVER_TIMEOUT_SECONDS,
         )
         parsed = json.loads(extract_json_object(raw))
-    except (TimeoutError, httpx.HTTPStatusError, json.JSONDecodeError):
+    except Exception:
+        # Broad on purpose: a provider/network failure (httpx.ConnectError,
+        # httpx.ReadTimeout, httpx.RemoteProtocolError, ...) or malformed
+        # parsed data must never escape this resolver and 500 the whole
+        # turn — every failure mode here degrades to "no switch detected,"
+        # which is always safe (see this function's own docstring: the
+        # caller falls back to post-hoc detection either way).
         return None
 
     candidate_name = parsed.get("switched_to") if isinstance(parsed, dict) else None
@@ -466,6 +472,23 @@ async def _run_tracked_read(
     return result
 
 
+def _coerce_int(value: Any) -> int | None:
+    """LLM output is untrusted and inconsistent — a numeric ID sometimes
+    comes back as a JSON string ("4821") instead of a number, which would
+    otherwise silently fail an `in valid_ids` set-membership check even
+    though it's semantically the exact right answer. Used by every
+    resolver that compares a model-supplied ID against a real candidate
+    set. Explicitly rejects bool — a subclass of int in Python, so
+    accepting it would let a stray True/False silently coerce to 1/0 and
+    false-positive match a real id of 1 or 0."""
+    if isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 _ASSIGNMENT_RESOLVER_SYSTEM_PROMPT = """You resolve which assignment a user
 is referring to, given the real list of assignments in their course and how
 they described the one they mean.
@@ -496,24 +519,30 @@ async def _resolve_assignment_reference(
     the app gives it.
 
     Returns None (never raises) on any failure — timeout, HTTP error,
-    unparseable JSON, or a confident "I can't tell" from the model itself
-    — so the caller can fall back to asking the user directly instead of
-    surfacing this as an error. Nothing has failed in the sense of a lost
-    write; this is a read that just needs one more piece of information."""
-    if len(assignments) == 1:
-        return assignments[0]["id"]
-
-    listing = "\n".join(
-        f"- id={a['id']}, name={a['name']!r}, due_at={a['due_at']}, points_possible={a['points_possible']}"
-        for a in assignments
-    )
-    prompt = (
-        f"ASSIGNMENTS:\n{listing}\n\n"
-        f"User's reference to an assignment: {reference or '(not given)'}\n"
-        f"User's full message: {user_message}"
-    )
-    adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
+    a broader provider/network failure (connection reset, malformed
+    response, ...), unparseable JSON, a malformed assignment dict, or a
+    confident "I can't tell" from the model itself — so the caller can
+    fall back to asking the user directly instead of surfacing this as an
+    error. Nothing has failed in the sense of a lost write; this is a
+    read that just needs one more piece of information. The whole body is
+    one try/except so this guarantee holds even for the dict access below
+    (constructing the listing, the single-assignment shortcut) — not just
+    the LLM call itself."""
     try:
+        if len(assignments) == 1:
+            return _coerce_int(assignments[0].get("id"))
+
+        listing = "\n".join(
+            f"- id={a.get('id')}, name={a.get('name')!r}, due_at={a.get('due_at')}, "
+            f"points_possible={a.get('points_possible')}"
+            for a in assignments
+        )
+        prompt = (
+            f"ASSIGNMENTS:\n{listing}\n\n"
+            f"User's reference to an assignment: {reference or '(not given)'}\n"
+            f"User's full message: {user_message}"
+        )
+        adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
         raw = await asyncio.wait_for(
             adapter.generate(
                 _ASSIGNMENT_RESOLVER_SYSTEM_PROMPT, prompt, history=[],
@@ -522,11 +551,15 @@ async def _resolve_assignment_reference(
             timeout=ASSIGNMENT_RESOLVER_TIMEOUT_SECONDS,
         )
         parsed = json.loads(extract_json_object(raw))
-    except (TimeoutError, httpx.HTTPStatusError, json.JSONDecodeError):
+        candidate = _coerce_int(parsed.get("assignment_id")) if isinstance(parsed, dict) else None
+        # Coerce both sides — the model sometimes returns a numeric id as
+        # a JSON string ("4821"), which would otherwise silently fail this
+        # membership check even though it's the semantically correct answer.
+        valid_ids = {_coerce_int(a.get("id")) for a in assignments}
+        valid_ids.discard(None)
+        return candidate if candidate in valid_ids else None
+    except Exception:
         return None
-    candidate = parsed.get("assignment_id") if isinstance(parsed, dict) else None
-    valid_ids = {a["id"] for a in assignments}
-    return candidate if candidate in valid_ids else None
 
 
 async def _resolve_course_and_assignment(
@@ -927,25 +960,30 @@ async def _resolve_students_via_llm(
     only to point at one from a real list the app gives it), batched into
     one call rather than one per name for latency.
 
-    Returns a dict keyed by the original reference string. Any failure
-    (timeout, HTTP error, unparseable JSON) or a reference the model
-    couldn't confidently match maps to None — never raises — so the caller
-    always has a uniform "unresolved" signal to fall back on."""
+    Returns a dict keyed by the original reference string. Any failure —
+    timeout, HTTP error, a broader provider/network failure (connection
+    reset, malformed response, ...), unparseable JSON, a malformed
+    candidate/resolution entry — or a reference the model couldn't
+    confidently match maps to None — never raises — so the caller always
+    has a uniform "unresolved" signal to fall back on. The whole body is
+    one try/except so this guarantee holds even for the dict access below
+    (constructing the listing, reading resolutions back out) — not just
+    the LLM call itself."""
     if not references:
         return {}
-    listing = "\n".join(
-        f"- canvas_user_id={c['user_id']}, name={c.get('name')!r}, "
-        f"login_id={c.get('login_id')!r}, email={c.get('email')!r}"
-        for c in candidates
-    )
-    prompt = (
-        f"CANDIDATES:\n{listing}\n\n"
-        f"References to resolve: {references}\n"
-        f"User's full message: {user_message}"
-    )
     result: dict[str, int | None] = dict.fromkeys(references)
-    adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
     try:
+        listing = "\n".join(
+            f"- canvas_user_id={c.get('user_id')}, name={c.get('name')!r}, "
+            f"login_id={c.get('login_id')!r}, email={c.get('email')!r}"
+            for c in candidates
+        )
+        prompt = (
+            f"CANDIDATES:\n{listing}\n\n"
+            f"References to resolve: {references}\n"
+            f"User's full message: {user_message}"
+        )
+        adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
         raw = await asyncio.wait_for(
             adapter.generate(
                 _RECIPIENT_RESOLVER_SYSTEM_PROMPT, prompt, history=[],
@@ -954,22 +992,26 @@ async def _resolve_students_via_llm(
             timeout=RECIPIENT_RESOLVER_TIMEOUT_SECONDS,
         )
         parsed = json.loads(extract_json_object(raw))
-    except (TimeoutError, httpx.HTTPStatusError, json.JSONDecodeError):
-        return result
 
-    resolutions = parsed.get("resolutions") if isinstance(parsed, dict) else None
-    if not isinstance(resolutions, list):
-        return result
+        resolutions = parsed.get("resolutions") if isinstance(parsed, dict) else None
+        if not isinstance(resolutions, list):
+            return result
 
-    valid_ids = {c["user_id"] for c in candidates}
-    for entry in resolutions:
-        if not isinstance(entry, dict):
-            continue
-        ref = entry.get("student_reference")
-        candidate_id = entry.get("canvas_user_id")
-        if ref in result and candidate_id in valid_ids:
-            result[ref] = candidate_id
-    return result
+        # Coerce both sides — the model sometimes returns a numeric id as
+        # a JSON string ("4821"), which would otherwise silently fail this
+        # membership check even though it's the semantically correct answer.
+        valid_ids = {_coerce_int(c.get("user_id")) for c in candidates}
+        valid_ids.discard(None)
+        for entry in resolutions:
+            if not isinstance(entry, dict):
+                continue
+            ref = entry.get("student_reference")
+            candidate_id = _coerce_int(entry.get("canvas_user_id"))
+            if isinstance(ref, str) and ref in result and candidate_id in valid_ids:
+                result[ref] = candidate_id
+        return result
+    except Exception:
+        return result
 
 
 async def _resolve_recipient_directives(
