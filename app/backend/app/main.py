@@ -44,15 +44,20 @@ async def _course_sync_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Catches an existing database up on any schema change
-    # Base.metadata.create_all() below can't handle on its own — it only
-    # creates missing tables, never ALTERs an existing one (see
-    # core/migrations.py for why this runs first, and what it deliberately
-    # never touches).
-    await run_pending_migrations(engine)
-    # Create all tables on startup if they don't exist
+    # Create all tables on startup if they don't exist. Must run before
+    # run_pending_migrations below: on a genuinely fresh database (no
+    # tables at all) an ALTER TABLE ... ADD COLUMN IF NOT EXISTS migration
+    # fails outright because the table itself doesn't exist yet. Running
+    # create_all() first means every current model's columns (including
+    # ones later migrations also add, e.g. assignments.published) are
+    # already present on a fresh table, so those migrations become no-ops.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    # Catches an existing database up on any schema change
+    # Base.metadata.create_all() above can't handle on its own — it only
+    # creates missing tables, never ALTERs an existing one (see
+    # core/migrations.py for what it deliberately never touches).
+    await run_pending_migrations(engine)
     async with AsyncSessionLocal() as db:
         await seed_admin(db)
     sync_task = asyncio.create_task(_course_sync_loop())

@@ -121,6 +121,7 @@ jobs:
           docker run -d \
             --name "$CONTAINER" \
             --network "$NETWORK" \
+            -v "${{ github.workspace }}/db/init:/docker-entrypoint-initdb.d:ro" \
             -e POSTGRES_USER=testuser \
             -e POSTGRES_PASSWORD=testpass \
             -e POSTGRES_DB=testdb \
@@ -202,6 +203,7 @@ jobs:
           docker run -d \
             --name "$CONTAINER" \
             -p 127.0.0.1::5432 \
+            -v "${{ github.workspace }}/db/init:/docker-entrypoint-initdb.d:ro" \
             -e POSTGRES_USER=appuser \
             -e POSTGRES_PASSWORD=localdev \
             -e POSTGRES_DB=appdb \
