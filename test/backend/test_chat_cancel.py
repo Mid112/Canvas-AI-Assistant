@@ -204,6 +204,13 @@ def test_confirm_read_action_preview_succeeds(client):
     assert response.status_code == 200
     assert response.json()["reply"]["courses"] == []
 
+    history = client.get("/api/v1/chat/conversations", headers=headers)
+    assert history.status_code == 200
+    item = next(
+        item for item in history.json()["items"] if item["id"] == conversation_id
+    )
+    assert item["preview"] == "No courses found"
+
 
 # Verifies: Cancel after modify recovers original first request.
 def test_cancel_after_modify_recovers_original_first_request(client):

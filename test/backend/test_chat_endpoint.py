@@ -50,6 +50,10 @@ def test_llm_error(client):
     assert body["is_error"] is True
     assert "error" in body["reply"]
 
+    history = client.get("/api/v1/chat/conversations", headers=headers)
+    assert history.status_code == 200
+    assert history.json()["items"][0]["preview"] == "List my courses"
+
 
 # Verifies: Plain text model reply is returned.
 def test_plain_text_model_reply_is_returned(client):
@@ -116,6 +120,115 @@ def test_user_log(client):
     assert history.status_code == 200
     roles = [m["role"] for m in history.json()["messages"]]
     assert "user" in roles
+
+
+def test_list_conversations_requires_auth(client):
+    response = client.get("/api/v1/chat/conversations")
+    assert response.status_code == 401
+
+
+def test_list_conversations(client):
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "Hello from history."}'
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "Can you help?"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    conversation_id = response.json()["conversation_id"]
+
+    history = client.get("/api/v1/chat/conversations?limit=10", headers=headers)
+
+    assert history.status_code == 200
+    body = history.json()
+    assert body["total"] >= 1
+    assert body["items"][0]["id"] == conversation_id
+    assert body["items"][0]["message_count"] == 2
+    assert body["items"][0]["preview"] == "Hello from history."
+
+
+def test_conversation_preview_preserves_bracketed_user_text(client):
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.side_effect = Exception("connection refused")
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "[URGENT] Please help with grading"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+
+    history = client.get("/api/v1/chat/conversations", headers=headers)
+    assert history.status_code == 200
+    assert history.json()["items"][0]["preview"] == "[URGENT] Please help with grading"
+
+
+def test_conversation_history_is_scoped_to_current_user(client):
+    owner_headers = _register(client)
+    other_headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "Private transcript."}'
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "remember this"},
+            headers=owner_headers,
+        )
+
+    assert response.status_code == 200
+    conversation_id = response.json()["conversation_id"]
+
+    other_list = client.get("/api/v1/chat/conversations", headers=other_headers)
+    assert other_list.status_code == 200
+    assert conversation_id not in [item["id"] for item in other_list.json()["items"]]
+
+    other_detail = client.get(
+        f"/api/v1/chat/conversations/{conversation_id}",
+        headers=other_headers,
+    )
+    assert other_detail.status_code == 404
+
+
+def test_conversation_detail_includes_pending_action_status(client):
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        '{"action": "intent_preview", "summary": "List your courses", '
+        '"proposed_action": {"action": "fetch_courses"}}'
+    )
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "what courses do I have?"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    conversation_id = response.json()["conversation_id"]
+    pending_message_id = response.json()["reply"]["pending_message_id"]
+
+    history = client.get(f"/api/v1/chat/conversations/{conversation_id}", headers=headers)
+    assert history.status_code == 200
+    pending_message = next(
+        message
+        for message in history.json()["messages"]
+        if message["id"] == pending_message_id
+    )
+    assert pending_message["pending_action_status"] == "pending"
 
 
 # Verifies: Chat resolves course name before calling model.

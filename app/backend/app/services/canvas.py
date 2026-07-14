@@ -200,7 +200,12 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
     ]
 
 
-async def get_assignments(local_course_id: int, user: User, canvas_url: str | None, db: AsyncSession) -> list[AssignmentResponse]:
+async def get_assignments(
+    local_course_id: int,
+    user: User,
+    canvas_url: str | None,
+    db: AsyncSession,
+) -> list[AssignmentResponse]:
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     resolved_canvas_url = course.canvas_url
     token = require_canvas_token(user, resolved_canvas_url)
