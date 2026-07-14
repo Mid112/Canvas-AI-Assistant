@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -625,6 +626,7 @@ def test_write_action_without_intent_preview_is_forced_into_a_preview(client):
         )
     local_course_id = courses.json()[0]["local_id"]
 
+    future_due_date = (datetime.now(UTC) + timedelta(days=7)).isoformat()
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = (
         '{"action": "create_assignment", "local_course_id": %d, '

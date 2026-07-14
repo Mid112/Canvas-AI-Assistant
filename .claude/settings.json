@@ -7,7 +7,10 @@
       "Bash(echo \"unmerged-check-exit:$?\")",
       "Bash(app/backend/.venv/bin/pytest test/backend/ -q)",
       "Bash(git stash *)",
-      "Bash(git ls-tree *)"
+      "Bash(git ls-tree *)",
+      "Bash(docker exec *)",
+      "Bash(PYTHONPATH=./app DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb .venv/Scripts/python.exe -m pytest ../../test/backend/test_canvas.py ../../test/backend/test_instructor_dashboard.py ../../test/backend/test_course_overview.py -v)",
+      "Bash(npm run *)"
     ]
   }
 }

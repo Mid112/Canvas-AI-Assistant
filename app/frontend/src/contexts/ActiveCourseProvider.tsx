@@ -18,6 +18,7 @@ import {
 } from "@/lib/active-course-storage";
 import { resolveCanvasApiUrl } from "@/lib/canvas-connections";
 import { isCanvasConnectionRequiredError } from "@/lib/canvas-connection";
+import { mapCanvasCourseToInstructorCourse } from "@/pages/Instructor/InstructorCourses/mapCanvasCourse";
 import {
   CanvasApiError,
   fetchActiveCourse,
@@ -32,24 +33,6 @@ import type { ActiveCourseSelection, InstructorCourse } from "@/types/course";
 // value here means the UI can show "timed out" while the backend is
 // still legitimately within its own budget and would have succeeded.
 const COURSE_SYNC_TIMEOUT_MS = 20000;
-
-function mapCanvasCourseToInstructorCourse(
-  course: CanvasCourse,
-): InstructorCourse | null {
-  if (course.local_id == null) {
-    return null;
-  }
-
-  return {
-    id: course.local_id,
-    code: course.course_code,
-    name: course.name,
-    progress: 0,
-    studentCount: course.total_students ?? 0,
-    assignmentCount: 0,
-    lastActivity: "Synced from Canvas",
-  };
-}
 
 function toActiveCourseSelection(
   course: InstructorCourse,
@@ -99,15 +82,17 @@ function fetchCoursesWithTimeout(
 }
 
 export function ActiveCourseProvider({ children }: { children: ReactNode }) {
-  const { accessToken, user } = useAuth();
+  const { accessToken, user, logout } = useAuth();
   const { selectedInstitution } = useInstitution();
   const [activeCourse, setActiveCourseState] = useState<ActiveCourseSelection | null>(
     null,
   );
   const [availableCourses, setAvailableCourses] = useState<InstructorCourse[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsCanvasConnection, setNeedsCanvasConnection] = useState(false);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -133,7 +118,11 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
     (courses: InstructorCourse[]): ActiveCourseSelection | null => {
       const stored = getStoredActiveCourseSelection(persistenceScope);
       const storedId = stored?.localId ?? null;
-      const matched = courses.find((course) => course.id === storedId);
+      // isPublished check matters here: a stale local-storage selection can point
+      // at a course that flipped unpublished since it was cached.
+      const matched = courses.find(
+        (course) => course.id === storedId && course.isPublished,
+      );
       return matched ? toActiveCourseSelection(matched) : null;
     },
     [persistenceScope],
@@ -146,7 +135,12 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
     ): ActiveCourseSelection | null => {
       if (preferredLocalId != null) {
         const preferred = courses.find((course) => course.id === preferredLocalId);
-        if (preferred) {
+        // Only adopt the preferred course if it's still selectable — otherwise fall
+        // through to the stored selection rather than re-displaying/re-selecting a
+        // course the backend has already decided is no longer the active one (e.g.
+        // it just flipped unpublished, or a fresh serverActive read raced ahead of
+        // that flip being reflected server-side — see refreshActiveCourse below).
+        if (preferred && preferred.isPublished) {
           return toActiveCourseSelection(preferred);
         }
       }
@@ -160,6 +154,7 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
     if (isMountedRef.current) {
       setIsLoading(true);
       setError(null);
+      setNeedsCanvasConnection(false);
       // Hydrate from local storage before any Canvas request so navigation to
       // the assistant can display and use the chosen course immediately.
       setActiveCourseState(getStoredActiveCourseSelection(persistenceScope));
@@ -175,6 +170,7 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
         if (!canvasUrl) {
           if (isMountedRef.current) {
             setAvailableCourses([]);
+            setNeedsCanvasConnection(true);
             if (!serverActive) {
               setActiveCourseState(null);
             }
@@ -185,18 +181,31 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
         const coursesData = await fetchCoursesWithTimeout(accessToken, canvasUrl);
 
         const courses = coursesData
-          .map(mapCanvasCourseToInstructorCourse)
+          .map((canvasCourse) =>
+            mapCanvasCourseToInstructorCourse(canvasCourse, canvasUrl),
+          )
           .filter((course): course is InstructorCourse => course !== null);
         const selectedFromList = applyActiveCourseFromList(
           courses,
           serverActive?.local_id ?? getStoredActiveCourseId(persistenceScope),
+        );
+        // serverActive was fetched before this course-list sync, so it can be stale
+        // if this course just flipped unpublished (the backend clears the
+        // preference as part of the course-list sync we just awaited, not before
+        // it) — only trust it as a fallback if the freshly-fetched list still
+        // agrees this course is selectable.
+        const serverActiveStillSelectable = Boolean(
+          serverActive &&
+            courses.some(
+              (course) => course.id === serverActive.local_id && course.isPublished,
+            ),
         );
 
         if (isMountedRef.current) {
           setAvailableCourses(courses);
           setActiveCourseState(
             selectedFromList ??
-              (serverActive
+              (serverActiveStillSelectable && serverActive
                 ? toActiveCourseSelectionFromResponse(serverActive)
                 : null),
           );
@@ -214,7 +223,13 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
           setAvailableCourses([]);
           setActiveCourseState(null);
           setError(null);
+          setNeedsCanvasConnection(true);
         }
+        return;
+      }
+
+      if (err instanceof CanvasApiError && err.status === 401) {
+        logout();
         return;
       }
 
@@ -231,12 +246,14 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
     } finally {
       if (isMountedRef.current) {
         setIsLoading(false);
+        setIsLoaded(true);
       }
     }
   }, [
     accessToken,
     applyActiveCourseFromList,
     canvasUrl,
+    logout,
     persistenceScope,
     usesCanvasCourses,
   ]);
@@ -315,8 +332,10 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
       activeCourse,
       availableCourses,
       isLoading,
+      isLoaded,
       isSaving,
       error,
+      needsCanvasConnection,
       selectActiveCourse,
       refreshActiveCourse,
     }),
@@ -324,8 +343,10 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
       activeCourse,
       availableCourses,
       error,
+      isLoaded,
       isLoading,
       isSaving,
+      needsCanvasConnection,
       refreshActiveCourse,
       selectActiveCourse,
     ],

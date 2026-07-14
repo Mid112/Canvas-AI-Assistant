@@ -25,6 +25,14 @@ class Course(Base):
     canvas_url: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
     term: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Canvas's course state (e.g. "available", "unpublished", "completed") — persisted
+    # so set_active_course can reject non-selectable courses without a live Canvas call.
+    workflow_state: Mapped[str] = mapped_column(String, nullable=False, default="available", server_default="available")
+    # When this row was last written from a real Canvas response (get_courses()).
+    # NULL for rows that predate this column and were never re-synced — lets
+    # set_active_course distinguish "we've verified this state against Canvas"
+    # from "this is just the migration's backfilled default."
+    synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     instructor_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
 

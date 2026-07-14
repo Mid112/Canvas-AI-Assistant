@@ -126,6 +126,22 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
     };
   }, [accessToken, userId, user?.role]);
 
+  const refreshDashboard = useCallback(async () => {
+    if (!accessToken || user?.role !== "instructor") {
+      return;
+    }
+
+    try {
+      const dashboard = await fetchInstructorDashboard(accessToken);
+      setApiDashboard(withSharedQuickActions(dashboard));
+    } catch {
+      // Keep whatever dashboard data is already displayed rather than blanking a
+      // working dashboard on a transient failure — this is called right after a
+      // chat action confirms or an assignment is created, so a single slow/failed
+      // round-trip here shouldn't erase data that was correct a moment ago.
+    }
+  }, [accessToken, user?.role]);
+
   const setSelectedInstitution = useCallback(
     (institutionId: string) => {
       if (!institutions.some((institution) => institution.id === institutionId)) {
@@ -163,8 +179,15 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
       dashboard: withSharedQuickActions(
         apiDashboard ?? institutionData?.dashboard ?? EMPTY_DASHBOARD,
       ),
+      refreshDashboard,
     }),
-    [apiDashboard, institutionData, selectedInstitution, setSelectedInstitution],
+    [
+      apiDashboard,
+      institutionData,
+      refreshDashboard,
+      selectedInstitution,
+      setSelectedInstitution,
+    ],
   );
 
   return (
