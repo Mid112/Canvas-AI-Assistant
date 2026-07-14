@@ -3,6 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from app.mcp_tools.schemas import is_undoable
 from app.models.workflow import Workflow
 
 
@@ -17,6 +18,13 @@ class WorkflowHistoryItem(BaseModel):
     created_at: datetime
     executed_at: datetime | None = None
     user_name: str
+    # Whether this action *type* has a working undo path at all (see
+    # mcp_tools.schemas.UNDOABLE_ACTIONS) — the frontend still also checks
+    # status == "executed" and undone_at is None before showing an Undo
+    # affordance, since undoable-in-principle isn't the same as undoable
+    # right now.
+    undoable: bool = False
+    undone_at: datetime | None = None
 
     @classmethod
     def from_workflow(cls, workflow: Workflow) -> "WorkflowHistoryItem":
@@ -31,6 +39,8 @@ class WorkflowHistoryItem(BaseModel):
             created_at=workflow.created_at,
             executed_at=workflow.executed_at,
             user_name=workflow.user.name,
+            undoable=is_undoable(workflow.action_name),
+            undone_at=workflow.undone_at,
         )
 
 

@@ -93,5 +93,7 @@ export function mapWorkflowHistoryApiToEntry(
     status: mapWorkflowStatus(item.status),
     affectedResources,
     affectedResourcesSummary: summarizeAffectedResources(affectedResources),
+    undoable: item.undoable,
+    undoneAt: item.undone_at,
   };
 }

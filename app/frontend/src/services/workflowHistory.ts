@@ -85,6 +85,28 @@ export async function cancelWorkflow(
   }
 }
 
+export async function undoWorkflow(
+  accessToken: string,
+  workflowId: string,
+): Promise<WorkflowHistoryEntry> {
+  try {
+    const item = await apiRequest<WorkflowHistoryApiItem>(
+      `${WORKFLOW_HISTORY_PATH}/${workflowId}/undo`,
+      accessToken,
+      { method: "POST" },
+    );
+    return mapWorkflowHistoryApiToEntry(item);
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unable to undo this action. Please try again.";
+
+    const status = error instanceof ApiRequestError ? error.status : 0;
+    throw new WorkflowHistoryApiError(message, status);
+  }
+}
+
 export function getWorkflowHistoryStatusCounts(
   entries: WorkflowHistoryEntry[],
 ): WorkflowStatusCounts {

@@ -1,4 +1,4 @@
-import { Calendar } from "lucide-react";
+import { Calendar, Undo2 } from "lucide-react";
 import { useState } from "react";
 
 import { WorkflowStatusBadge } from "@/components/workflow/WorkflowStatusBadge";
@@ -21,6 +21,11 @@ interface WorkflowHistoryTableProps {
   onCancelPending?: (entry: WorkflowHistoryEntry) => Promise<void>;
   actionError?: string | null;
   actingWorkflowIds?: ReadonlySet<string>;
+  onUndo?: (entry: WorkflowHistoryEntry) => void;
+}
+
+function canUndo(entry: WorkflowHistoryEntry): boolean {
+  return entry.undoable && entry.status === "approved" && !entry.undoneAt;
 }
 
 export function WorkflowHistoryTable({
@@ -28,6 +33,7 @@ export function WorkflowHistoryTable({
   onCancelPending,
   actionError = null,
   actingWorkflowIds = EMPTY_ACTING_IDS,
+  onUndo,
 }: WorkflowHistoryTableProps) {
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -74,6 +80,7 @@ export function WorkflowHistoryTable({
           {entries.map((entry) => {
             const isActing = actingWorkflowIds.has(entry.id);
             const showCancel = entry.status === "pending" && onCancelPending;
+            const showUndo = !showCancel && onUndo && canUndo(entry);
 
             return (
               <TableRow key={entry.id}>
@@ -125,6 +132,16 @@ export function WorkflowHistoryTable({
                         onClick={() => void handleCancel(entry)}
                       >
                         {isActing ? "Cancelling..." : "Cancel"}
+                      </Button>
+                    ) : showUndo ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onUndo(entry)}
+                      >
+                        <Undo2 className="size-4" aria-hidden="true" />
+                        Undo
                       </Button>
                     ) : (
                       <span className="text-xs text-muted-foreground">—</span>

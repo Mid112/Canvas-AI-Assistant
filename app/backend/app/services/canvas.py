@@ -12,6 +12,7 @@ from app.core.security import decrypt_canvas_token
 from app.integrations.canvas import (
     create_announcement,
     create_assignment,
+    delete_assignment,
     fetch_assignment,
     fetch_assignments,
     fetch_courses,
@@ -66,6 +67,19 @@ def require_writable_course(course: Course) -> None:
         )
 
 
+class CanvasTokenRequiredError(HTTPException):
+    """Raised in place of a bare HTTPException when a Canvas action is
+    attempted with no connected token, so callers (services/chat.py) can
+    special-case this into an actionable, non-technical chat message instead
+    of surfacing the raw 'PATCH to /api/v1/auth/me/canvas-token' detail."""
+
+    def __init__(self, canvas_url: str):
+        super().__init__(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"No Canvas token for {canvas_url}. PATCH to /api/v1/auth/me/canvas-token first.",
+        )
+
+
 def require_canvas_token(user: User, canvas_url: str) -> str:
     canvas_url = normalize_canvas_url(canvas_url)
     conn = next(
@@ -73,10 +87,7 @@ def require_canvas_token(user: User, canvas_url: str) -> str:
         None,
     )
     if not conn:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"No Canvas token for {canvas_url}. PATCH to /api/v1/auth/me/canvas-token first.",
-        )
+        raise CanvasTokenRequiredError(canvas_url)
     try:
         return decrypt_canvas_token(conn.encrypted_token)
     except InvalidToken:
@@ -328,6 +339,34 @@ async def update_course_assignment(
         canvas_url,
     )
     return AssignmentResponse(**data)
+
+
+async def delete_course_assignment(
+    local_course_id: int,
+    assignment_id: int,
+    user: User,
+    canvas_url: str,
+    db: AsyncSession,
+) -> None:
+    """Only ever called from undo_workflow, to revert a create_assignment
+    action — there is no standalone user-facing "delete assignment" chat
+    action. Also marks the local mirror row inactive immediately, rather
+    than waiting for the next get_assignments sync to notice Canvas no
+    longer returns it."""
+    token = require_canvas_token(user, canvas_url)
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    require_writable_course(course)
+    await delete_assignment(int(course.canvas_course_id), assignment_id, token, canvas_url)
+
+    local = await db.scalar(
+        select(Assignment).where(
+            Assignment.canvas_assignment_id == str(assignment_id),
+            Assignment.course_id == course.id,
+        )
+    )
+    if local is not None:
+        local.is_active = False
+        await db.commit()
 
 
 async def send_course_message(

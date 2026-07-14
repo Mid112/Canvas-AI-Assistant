@@ -88,6 +88,7 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
     null,
   );
   const [availableCourses, setAvailableCourses] = useState<InstructorCourse[]>([]);
+  const [coursesRevision, setCoursesRevision] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -263,6 +264,10 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
     void refreshActiveCourse();
   }, [refreshActiveCourse]);
 
+  const notifyCoursesChanged = useCallback(() => {
+    setCoursesRevision((count) => count + 1);
+  }, []);
+
   const selectActiveCourse = useCallback(
     async (
       localCourseId: number,
@@ -331,6 +336,7 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
     () => ({
       activeCourse,
       availableCourses,
+      coursesRevision,
       isLoading,
       isLoaded,
       isSaving,
@@ -338,15 +344,18 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
       needsCanvasConnection,
       selectActiveCourse,
       refreshActiveCourse,
+      notifyCoursesChanged,
     }),
     [
       activeCourse,
       availableCourses,
+      coursesRevision,
       error,
       isLoaded,
       isLoading,
       isSaving,
       needsCanvasConnection,
+      notifyCoursesChanged,
       refreshActiveCourse,
       selectActiveCourse,
     ],

@@ -19,8 +19,10 @@ class AuditLog(Base):
     """Records an actual Canvas data mutation performed by a confirmed
     Workflow. Only written on success — a failed attempt isn't a mutation,
     and Workflow.status="failed"/error_detail already fully capture that
-    case. before_data is not populated yet (see workflow_id docstring on
-    the write side for why)."""
+    case. before_data is only populated for update_assignment (see
+    CanvasWriteResult.previous_data in services/canvas_status.py and its
+    wiring in services/chat.py::handle_confirmed_action) — every other
+    write action still leaves it null."""
 
     __tablename__ = "audit_logs"
 

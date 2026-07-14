@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
@@ -5,8 +6,13 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.config import settings
+from app.core.security import decode_access_token
 from app.main import app
+from app.models.canvas_connection import CanvasConnection
 
 
 @pytest.fixture(scope="module")
@@ -631,7 +637,7 @@ def test_write_action_without_intent_preview_is_forced_into_a_preview(client):
     mock_adapter.generate.return_value = (
         '{"action": "create_assignment", "local_course_id": %d, '
         '"title": "Assignment 1", "description": "Peer evaluation", '
-        '"due_date": "2030-01-15T05:59:59", "points_possible": 100}' % local_course_id
+        '"due_date": "%s", "points_possible": 100}' % (local_course_id, future_due_date)
     )
 
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter), \
@@ -649,6 +655,107 @@ def test_write_action_without_intent_preview_is_forced_into_a_preview(client):
     assert body["reply"]["proposed_action"]["action"] == "create_assignment"
     assert "pending_message_id" in body["reply"]
     mock_create.assert_not_called()
+
+
+# Verifies: General/standalone questions succeed even with no Canvas connection.
+def test_chat_general_question_succeeds_without_canvas_token(client):
+    headers = _register(client)  # never connects a Canvas token
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        '{"action": "respond", "message": "Office hours are usually posted on your syllabus."}'
+    )
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "What are typical office hours?"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_error"] is False
+    assert body["reply"]["action"] == "respond"
+
+
+# Verifies: A Canvas-needed action against a course whose token connection
+# has since been removed returns an actionable, non-technical error rather
+# than leaking the raw internal detail. (fetch_courses itself can't exercise
+# this path — it falls back to a different, already-friendly "no connections
+# at all" check in dispatcher.py's _default_canvas_url before ever reaching
+# require_canvas_token. This test instead syncs a course while connected,
+# then removes the connection, so a later fetch_assignments call reaches
+# require_canvas_token/CanvasTokenRequiredError for real.)
+def test_canvas_action_without_token_returns_actionable_error(client):
+    headers = _register(client)
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            headers=headers,
+        )
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock_courses:
+        mock_courses.return_value = [
+            {
+                "id": 777,
+                "name": "COSC 777",
+                "course_code": "COSC 777",
+                "enrollment_term_id": 1,
+                "workflow_state": "available",
+            }
+        ]
+        courses = client.get(
+            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            headers=headers,
+        )
+    local_course_id = courses.json()[0]["local_id"]
+    user_id = int(decode_access_token(headers["Authorization"].removeprefix("Bearer "))[0])
+
+    async def _remove_canvas_connection(uid: int):
+        engine = create_async_engine(settings.DATABASE_URL)
+        Session = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            async with Session() as db:
+                await db.execute(delete(CanvasConnection).where(CanvasConnection.user_id == uid))
+                await db.commit()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_remove_canvas_connection(user_id))
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        '{"action": "fetch_assignments", "local_course_id": %d}' % local_course_id
+    )
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        preview = client.post(
+            "/api/v1/chat/",
+            json={"message": "List assignments for COSC 777"},
+            headers=headers,
+        )
+
+    assert preview.status_code == 200
+    preview_body = preview.json()
+    assert preview_body["reply"]["action"] == "intent_preview"
+    conversation_id = preview_body["conversation_id"]
+    pending_message_id = preview_body["reply"]["pending_message_id"]
+
+    response = client.post(
+        "/api/v1/chat/confirm",
+        json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_error"] is True
+    assert body["reply"]["requires_canvas_token"] is True
+    assert "connect canvas" in body["reply"]["error"].lower()
+    assert "PATCH" not in body["reply"]["error"]
 
 
 def test_canvas_failure_returns_chat_error(client):
