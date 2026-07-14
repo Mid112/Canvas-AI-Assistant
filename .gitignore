@@ -7,7 +7,12 @@ venv/
 .venv.bak/
 __pycache__/
 .pytest_cache/
+.coverage
+coverage/
 app/node_modules
+node_modules/
+test/frontend/coverage/
+test/backend/coverage/
 test/vllm/venv/
 test/mcp/venv/
 test/backend/venv/

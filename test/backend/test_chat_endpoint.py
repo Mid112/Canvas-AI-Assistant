@@ -518,14 +518,14 @@ def test_write_action_without_intent_preview_is_forced_into_a_preview(client):
     mock_adapter.generate.return_value = (
         '{"action": "create_assignment", "local_course_id": %d, '
         '"title": "Assignment 1", "description": "Peer evaluation", '
-        '"due_date": "%s", "points_possible": 100}' % (local_course_id, future_due_date)
+        '"due_date": "2030-01-15T05:59:59", "points_possible": 100}' % local_course_id
     )
 
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter), \
          patch("app.mcp_tools.dispatcher.create_course_assignment", new=AsyncMock()) as mock_create:
         response = client.post(
             "/api/v1/chat/",
-            json={"message": "create assignment 1 due date July 11 details \"Peer evaluation\""},
+            json={"message": "create assignment 1 due date January 15 2030 details \"Peer evaluation\""},
             headers=headers,
         )
 
