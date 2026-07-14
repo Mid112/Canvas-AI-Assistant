@@ -48,6 +48,13 @@ vi.mock("@/services/messageDraft", () => ({
 const mockedFetchStudents = vi.mocked(fetchCourseStudentsWithSubmissionFallback);
 const mockedFetchDraft = vi.mocked(fetchMessageDraft);
 
+function renderMessagesPage(options?: { compose?: boolean }) {
+  const initialEntry = options?.compose ? "/?tab=compose" : "/";
+  return renderWithRouter(<InstructorMessagesPage />, {
+    routerProps: { initialEntries: [initialEntry] },
+  });
+}
+
 describe("InstructorMessagesPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -146,7 +153,9 @@ describe("InstructorMessagesPage", () => {
     renderWithRouter(<InstructorMessagesPage />);
 
     expect(
-      screen.getByText("Select an active course to load real message recipients."),
+      screen.getByText(
+        "Select an active course to view messages and draft new ones.",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -168,7 +177,7 @@ describe("InstructorMessagesPage", () => {
       refreshUser: vi.fn(),
     });
 
-    renderWithRouter(<InstructorMessagesPage />);
+    renderMessagesPage({ compose: true });
 
     expect(await screen.findByLabelText("Subject")).toHaveValue(
       mockMessageDraft.subject,
@@ -196,7 +205,7 @@ describe("InstructorMessagesPage", () => {
       new Error("Unable to load course students for messaging."),
     );
 
-    renderWithRouter(<InstructorMessagesPage />);
+    renderMessagesPage({ compose: true });
 
     await waitFor(() => {
       expect(
