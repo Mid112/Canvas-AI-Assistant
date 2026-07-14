@@ -257,6 +257,9 @@ jobs:
         working-directory: ./test/e2e
         env:
           CI: "true"
+          E2E_BACKEND_PORT: "18000"
+          E2E_FRONTEND_PORT: "15173"
+          E2E_BASE_URL: "http://127.0.0.1:15173"
           ADMIN_EMAIL: admin@example.com
           ADMIN_PASSWORD: AdminPass123!
           SECRET_KEY: ci-e2e-secret

@@ -5,7 +5,11 @@ import { fileURLToPath } from "node:url";
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const backendDir = path.join(rootDir, "app/backend");
 const frontendDir = path.join(rootDir, "app/frontend");
-const baseURL = process.env.E2E_BASE_URL ?? "http://localhost:5173";
+const backendPort = process.env.E2E_BACKEND_PORT ?? "8000";
+const frontendPort = process.env.E2E_FRONTEND_PORT ?? "5173";
+const backendURL = process.env.E2E_BACKEND_URL ?? `http://127.0.0.1:${backendPort}`;
+const frontendURL = process.env.E2E_BASE_URL ?? `http://127.0.0.1:${frontendPort}`;
+const baseURL = frontendURL;
 const reuseExistingServer = !process.env.CI;
 
 /** Prefer a non-empty env value; otherwise use the e2e default. */
@@ -38,9 +42,9 @@ export default defineConfig({
   globalSetup: "./global-setup.ts",
   webServer: [
     {
-      command: `${path.join(backendDir, ".venv/bin/python")} -m uvicorn app.main:app --host 0.0.0.0 --port 8000`,
+      command: `${path.join(backendDir, ".venv/bin/python")} -m uvicorn app.main:app --host 0.0.0.0 --port ${backendPort}`,
       cwd: backendDir,
-      url: "http://localhost:8000/docs",
+      url: `${backendURL}/docs`,
       reuseExistingServer,
       timeout: 120_000,
       env: {
@@ -51,7 +55,7 @@ export default defineConfig({
         ),
         SECRET_KEY: envOr("SECRET_KEY", "localdevsecret"),
         DEBUG: "true",
-        BACKEND_CORS_ORIGINS: "http://localhost:5173",
+        BACKEND_CORS_ORIGINS: frontendURL,
         CANVAS_API_URL: envOr("CANVAS_API_URL", "http://localhost:3000"),
         CANVAS_TOKEN_ENCRYPTION_KEY: envOr(
           "CANVAS_TOKEN_ENCRYPTION_KEY",
@@ -63,11 +67,15 @@ export default defineConfig({
       },
     },
     {
-      command: "npm run dev -- --host 0.0.0.0 --port 5173",
+      command: `npm run dev -- --host 0.0.0.0 --port ${frontendPort}`,
       cwd: frontendDir,
       url: baseURL,
       reuseExistingServer,
       timeout: 120_000,
+      env: {
+        ...process.env,
+        VITE_PROXY_TARGET: backendURL,
+      },
     },
   ],
 });
