@@ -1,8 +1,8 @@
 import { History, Loader2, RefreshCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 
-import { ChatWindow } from "@/components/chat/ChatWindow";
+import { ChatWindow, type ChatWindowHandle } from "@/components/chat/ChatWindow";
 import { ActiveCourseContextBar } from "@/components/courses/ActiveCourseContextBar";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -99,6 +99,7 @@ export function InstructorAssistantPage() {
   const [loadingConversationId, setLoadingConversationId] = useState<
     number | null
   >(null);
+  const chatWindowRef = useRef<ChatWindowHandle>(null);
 
   const loadConversationList = useCallback(async () => {
     if (!accessToken || !user?.has_canvas_token) {
@@ -125,11 +126,13 @@ export function InstructorAssistantPage() {
   }, [accessToken, user?.has_canvas_token]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async history load on mount/auth changes
     void loadConversationList();
   }, [loadConversationList]);
 
   const handleSuggestedAction = (prompt: string) => {
-    setPendingPrompt(prompt);
+    setSelectedConversation(null);
+    chatWindowRef.current?.sendPrompt(prompt);
   };
 
   const handleStartNewChat = () => {
@@ -157,6 +160,7 @@ export function InstructorAssistantPage() {
       setPendingPrompt(null);
       setPendingConversationId(conversation.id);
       setPendingMessageId(undefined);
+      setChatSessionKey((current) => current + 1);
     } catch (requestError) {
       setHistoryError(
         requestError instanceof AssistantApiError
@@ -191,6 +195,7 @@ export function InstructorAssistantPage() {
 
       <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <ChatWindow
+          ref={chatWindowRef}
           key={chatSessionKey}
           initialPrompt={pendingPrompt}
           initialDraft={pendingDraft}

@@ -1,5 +1,13 @@
 import { AlertCircle, Plus } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { AssistantMessage } from "@/components/chat/AssistantMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -47,6 +55,39 @@ function findLatestPendingMessageId(messages: ChatMessage[]): number | undefined
   return undefined;
 }
 
+interface InitialChatState {
+  messages: ChatMessage[];
+  conversationId?: number;
+  activePendingMessageId?: number;
+  hydratedConversationId?: number;
+}
+
+function getInitialChatState({
+  initialConversationId,
+  initialPendingMessageId,
+  loadedConversation,
+}: Pick<
+  ChatWindowProps,
+  "initialConversationId" | "initialPendingMessageId" | "loadedConversation"
+>): InitialChatState {
+  if (!loadedConversation) {
+    return {
+      messages: seedChatMessages,
+      conversationId: initialConversationId,
+      activePendingMessageId: initialPendingMessageId,
+    };
+  }
+
+  const loadedMessages = mapConversationToChatMessages(loadedConversation);
+
+  return {
+    messages: withWelcomeMessage(loadedMessages),
+    conversationId: loadedConversation.id,
+    activePendingMessageId: findLatestPendingMessageId(loadedMessages),
+    hydratedConversationId: loadedConversation.id,
+  };
+}
+
 interface ChatWindowProps {
   initialPrompt?: string | null;
   initialDraft?: string | null;
@@ -60,7 +101,11 @@ interface ChatWindowProps {
   onStartNewChat?: () => void;
 }
 
-export function ChatWindow({
+export interface ChatWindowHandle {
+  sendPrompt: (prompt: string) => void;
+}
+
+export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function ChatWindow({
   initialPrompt = null,
   initialDraft = null,
   initialConversationId,
@@ -71,16 +116,27 @@ export function ChatWindow({
   onConversationChange,
   onLoadingChange,
   onStartNewChat,
-}: ChatWindowProps) {
+}, ref) {
   const { accessToken } = useAuth();
   const { activeCourse } = useActiveCourse();
-  const [messages, setMessages] = useState<ChatMessage[]>(seedChatMessages);
+  const initialChatState = useMemo(
+    () =>
+      getInitialChatState({
+        initialConversationId,
+        initialPendingMessageId,
+        loadedConversation,
+      }),
+    [initialConversationId, initialPendingMessageId, loadedConversation],
+  );
+  const [messages, setMessages] = useState<ChatMessage[]>(
+    () => initialChatState.messages,
+  );
   const [conversationId, setConversationId] = useState<number | undefined>(
-    initialConversationId,
+    () => initialChatState.conversationId,
   );
   const [activePendingMessageId, setActivePendingMessageId] = useState<
     number | undefined
-  >(initialPendingMessageId);
+  >(() => initialChatState.activePendingMessageId);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
@@ -93,7 +149,9 @@ export function ChatWindow({
   );
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const initialPromptHandledRef = useRef<string | null>(null);
-  const hydratedConversationRef = useRef<number | undefined>(undefined);
+  const hydratedConversationRef = useRef<number | undefined>(
+    initialChatState.hydratedConversationId,
+  );
   const isDeliveringRef = useRef(false);
 
   const assistantContext = useMemo(
@@ -111,22 +169,6 @@ export function ChatWindow({
   useEffect(() => {
     onLoadingChange?.(isLoading);
   }, [isLoading, onLoadingChange]);
-
-  useEffect(() => {
-    if (!loadedConversation) {
-      return;
-    }
-
-    const loadedMessages = mapConversationToChatMessages(loadedConversation);
-    setMessages(withWelcomeMessage(loadedMessages));
-    setConversationId(loadedConversation.id);
-    setActivePendingMessageId(findLatestPendingMessageId(loadedMessages));
-    setError(null);
-    setInputError(null);
-    setRetryMessage(null);
-    setPendingActionError(null);
-    hydratedConversationRef.current = loadedConversation.id;
-  }, [loadedConversation]);
 
   useEffect(() => {
     if (
@@ -354,6 +396,14 @@ export function ChatWindow({
     [deliverAssistantResponse],
   );
 
+  useImperativeHandle(
+    ref,
+    () => ({
+      sendPrompt: handleSend,
+    }),
+    [handleSend],
+  );
+
   useEffect(() => {
     if (!initialPrompt || initialPromptHandledRef.current === initialPrompt) {
       return;
@@ -463,4 +513,4 @@ export function ChatWindow({
       </CardContent>
     </Card>
   );
-}
+});
