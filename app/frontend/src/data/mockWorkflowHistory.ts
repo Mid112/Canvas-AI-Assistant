@@ -15,6 +15,8 @@ export const mockWorkflowHistory: WorkflowHistoryEntry[] = [
     status: "approved",
     affectedResources: [],
     affectedResourcesSummary: "None recorded",
+    undoable: false,
+    undoneAt: null,
   },
   {
     id: "wh-2",
@@ -27,6 +29,8 @@ export const mockWorkflowHistory: WorkflowHistoryEntry[] = [
     status: "approved",
     affectedResources: [],
     affectedResourcesSummary: "None recorded",
+    undoable: false,
+    undoneAt: null,
   },
   {
     id: "wh-3",
@@ -38,6 +42,8 @@ export const mockWorkflowHistory: WorkflowHistoryEntry[] = [
     status: "rejected",
     affectedResources: [],
     affectedResourcesSummary: "None recorded",
+    undoable: false,
+    undoneAt: null,
   },
   {
     id: "wh-4",
@@ -49,6 +55,8 @@ export const mockWorkflowHistory: WorkflowHistoryEntry[] = [
     status: "approved",
     affectedResources: [],
     affectedResourcesSummary: "None recorded",
+    undoable: false,
+    undoneAt: null,
   },
   {
     id: "wh-5",
@@ -60,6 +68,8 @@ export const mockWorkflowHistory: WorkflowHistoryEntry[] = [
     status: "rejected",
     affectedResources: [],
     affectedResourcesSummary: "None recorded",
+    undoable: false,
+    undoneAt: null,
   },
   {
     id: "wh-6",
@@ -71,6 +81,8 @@ export const mockWorkflowHistory: WorkflowHistoryEntry[] = [
     status: "pending",
     affectedResources: [],
     affectedResourcesSummary: "None recorded",
+    undoable: false,
+    undoneAt: null,
   },
   {
     id: "wh-7",
@@ -82,6 +94,8 @@ export const mockWorkflowHistory: WorkflowHistoryEntry[] = [
     status: "approved",
     affectedResources: [],
     affectedResourcesSummary: "None recorded",
+    undoable: false,
+    undoneAt: null,
   },
 ];
 

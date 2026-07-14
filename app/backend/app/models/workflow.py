@@ -65,6 +65,10 @@ class Workflow(Base):
     status: Mapped[str] = mapped_column(String, nullable=False, default="pending", index=True)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set when a reversible action (see mcp_tools.schemas.UNDOABLE_ACTIONS)
+    # has been undone — kept separate from `status` so its lifecycle
+    # meaning isn't overloaded with a new terminal value.
+    undone_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

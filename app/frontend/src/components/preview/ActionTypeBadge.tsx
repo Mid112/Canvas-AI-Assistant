@@ -5,17 +5,17 @@ import type { DryRunActionType, DryRunHttpMethod } from "@/types/dryRunPreview";
 const actionTypeStyles: Record<DryRunActionType, string> = {
   "Read Only":
     "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-50",
-  Create: "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50",
+  Create: "border-primary/20 bg-primary/10 text-primary hover:bg-primary/10",
   Update: "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-50",
   Delete:
     "border-destructive/20 bg-destructive/10 text-destructive hover:bg-destructive/10",
   "Send Message":
-    "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-50",
+    "border-border bg-muted text-foreground hover:bg-muted",
 };
 
 const httpMethodStyles: Record<DryRunHttpMethod, string> = {
   GET: "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-50",
-  POST: "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-50",
+  POST: "border-primary/20 bg-primary/10 text-primary hover:bg-primary/10",
   PUT: "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-50",
   PATCH: "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-50",
   DELETE:

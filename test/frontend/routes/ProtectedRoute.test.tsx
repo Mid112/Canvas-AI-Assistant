@@ -55,6 +55,10 @@ describe("ProtectedRoute", () => {
           <Route element={<ProtectedRoute />}>
             <Route path="/protected" element={<div>Protected content</div>} />
             <Route path={paths.canvasInfo} element={<div>Canvas info</div>} />
+            <Route
+              path={paths.instructor.assistant}
+              element={<div>Assistant page</div>}
+            />
           </Route>
           <Route path={paths.login} element={<div>Login page</div>} />
         </Routes>
@@ -129,6 +133,36 @@ describe("ProtectedRoute", () => {
 
     expect(screen.getByText("Canvas info")).toBeInTheDocument();
     expect(screen.queryByText("Protected content")).not.toBeInTheDocument();
+  });
+
+  // Verifies: Redirects instructor app routes to onboarding before completion.
+  it("redirects instructor app routes to onboarding before completion", () => {
+    mockedIsOnboardingComplete.mockReturnValue(false);
+    mockedUseAuth.mockReturnValue({
+      user: instructorUser,
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter initialEntries={[paths.instructor.assistant]}>
+        <Routes>
+          <Route element={<ProtectedRoute />}>
+            <Route
+              path={paths.instructor.assistant}
+              element={<div>Assistant page</div>}
+            />
+            <Route path={paths.canvasInfo} element={<div>Canvas info</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Canvas info")).toBeInTheDocument();
+    expect(screen.queryByText("Assistant page")).not.toBeInTheDocument();
   });
 
   // Verifies: Allows onboarding routes before onboarding is complete.

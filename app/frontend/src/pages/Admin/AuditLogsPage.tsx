@@ -24,6 +24,7 @@ import {
   type AuditLogFilters,
   type AuditLogSort,
 } from "@/types/auditLog";
+import { pageShellXWide } from "@/lib/page-shell";
 
 export function AuditLogsPage() {
   const { accessToken } = useAuth();
@@ -132,7 +133,7 @@ export function AuditLogsPage() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 md:p-6 lg:p-8">
+    <div className={pageShellXWide}>
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">

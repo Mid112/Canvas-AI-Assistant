@@ -5,6 +5,8 @@ import type { ActiveCourseSelection, InstructorCourse } from "@/types/course";
 export interface ActiveCourseContextValue {
   activeCourse: ActiveCourseSelection | null;
   availableCourses: InstructorCourse[];
+  /** Bumped after Canvas writes so course lists refetch fresh data. */
+  coursesRevision: number;
   isLoading: boolean;
   /** True once the first course-list fetch attempt has completed (success
    * or failure) — never reset back to false afterward. Distinct from
@@ -23,6 +25,8 @@ export interface ActiveCourseContextValue {
     optimisticCourse?: InstructorCourse | ActiveCourseSelection,
   ) => Promise<boolean>;
   refreshActiveCourse: () => Promise<void>;
+  /** Ask course pages to reload from Canvas without duplicating provider state. */
+  notifyCoursesChanged: () => void;
 }
 
 export const ActiveCourseContext = createContext<ActiveCourseContextValue | null>(

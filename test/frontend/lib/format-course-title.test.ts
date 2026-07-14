@@ -3,6 +3,16 @@ import { describe, expect, it } from "vitest";
 import { formatInstructorCourseTitle } from "@/lib/format-course-title";
 
 describe("formatInstructorCourseTitle", () => {
+  // Verifies: Returns the course name when the code is empty.
+  it("returns the course name when the code is empty", () => {
+    expect(
+      formatInstructorCourseTitle({
+        code: "",
+        name: "Introduction to Programming",
+      }),
+    ).toBe("Introduction to Programming");
+  });
+
   // Verifies: Returns only the code when code and name match.
   it("returns only the code when code and name match", () => {
     expect(

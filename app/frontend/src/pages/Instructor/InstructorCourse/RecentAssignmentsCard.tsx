@@ -8,7 +8,7 @@ import type { RecentAssignmentSummary } from "@/types/courseOverview";
 
 const STATUS_STYLES = {
   active: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-  upcoming: "bg-blue-50 text-blue-700 ring-blue-200",
+  upcoming: "bg-primary/10 text-primary ring-primary/20",
   completed: "bg-muted text-muted-foreground ring-border",
 } as const;
 

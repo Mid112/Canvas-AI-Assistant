@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   getCanvasConnectionUrlForInstitution,
+  getConnectedInstitutions,
   getPrimaryCanvasConnectionUrl,
+  isInstitutionConnected,
 } from "@/lib/canvas-connections";
 import type { User } from "@/types/user";
 
@@ -150,5 +152,80 @@ describe("getCanvasConnectionUrlForInstitution", () => {
         "ubc",
       ),
     ).toBe("http://localhost:3000");
+  });
+});
+
+describe("isInstitutionConnected", () => {
+  // Verifies: Returns false when the user has no Canvas connections.
+  it("returns false when the user has no Canvas connections", () => {
+    expect(isInstitutionConnected(baseUser, "ubc")).toBe(false);
+    expect(isInstitutionConnected(null, "ubc")).toBe(false);
+  });
+});
+
+describe("getConnectedInstitutions", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  const catalog = [
+    { id: "ubc", name: "University of British Columbia", shortName: "UBC" },
+    { id: "ubco", name: "UBC Okanagan", shortName: "UBCO" },
+  ];
+
+  // Verifies: Returns an empty list when the user has no Canvas connections.
+  it("returns an empty list when the user has no Canvas connections", () => {
+    expect(getConnectedInstitutions(baseUser, catalog)).toEqual([]);
+    expect(getConnectedInstitutions(null, catalog)).toEqual([]);
+  });
+
+  // Verifies: Returns only institutions with a matching saved Canvas connection.
+  it("returns only institutions with a matching saved Canvas connection", () => {
+    vi.stubEnv("VITE_CANVAS_UBC_URL", "https://canvas.ubc.ca");
+    vi.stubEnv("VITE_CANVAS_UBCO_URL", "https://canvas.ok.ubc.ca");
+
+    expect(
+      getConnectedInstitutions(
+        {
+          ...baseUser,
+          canvas_connections: [
+            {
+              id: 1,
+              canvas_url: "https://canvas.ubc.ca",
+              created_at: "2026-06-26T00:00:00.000Z",
+            },
+          ],
+        },
+        catalog,
+      ),
+    ).toEqual([{ ...catalog[0], canvasUrl: "https://canvas.ubc.ca" }]);
+  });
+
+  // Verifies: Maps unmatched Canvas connections to selectable institutions.
+  it("maps unmatched Canvas connections to selectable institutions", () => {
+    vi.unstubAllEnvs();
+
+    expect(
+      getConnectedInstitutions(
+        {
+          ...baseUser,
+          canvas_connections: [
+            {
+              id: 1,
+              canvas_url: "http://localhost:3000",
+              created_at: "2026-06-26T00:00:00.000Z",
+            },
+          ],
+        },
+        catalog,
+      ),
+    ).toEqual([
+      {
+        id: "connection-1",
+        name: "http://localhost:3000",
+        shortName: "localhost",
+        canvasUrl: "http://localhost:3000",
+      },
+    ]);
   });
 });

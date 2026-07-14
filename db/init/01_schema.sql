@@ -171,6 +171,10 @@ CREATE TABLE workflows (
                              CHECK (status IN ('pending', 'executing', 'executed', 'failed', 'cancelled', 'superseded')),
     error_detail             TEXT,
     executed_at              TIMESTAMPTZ,
+    -- Set when a reversible action (currently update_assignment only) has
+    -- been undone — kept separate from `status` so its lifecycle meaning
+    -- isn't overloaded with a new terminal value.
+    undone_at                TIMESTAMPTZ,
     created_at               TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -196,7 +200,7 @@ CREATE TABLE audit_logs (
     action            VARCHAR NOT NULL,
     resource_type     VARCHAR NOT NULL CHECK (resource_type IN ('assignment', 'announcement', 'conversation')),
     resource_id       VARCHAR,
-    operation         VARCHAR NOT NULL CHECK (operation IN ('create', 'update')),
+    operation         VARCHAR NOT NULL CHECK (operation IN ('create', 'update', 'delete')),
     status            VARCHAR NOT NULL DEFAULT 'success' CHECK (status IN ('success', 'failed')),
     before_data       JSONB,
     after_data        JSONB,

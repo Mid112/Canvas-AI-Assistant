@@ -21,6 +21,7 @@ import {
   updateAssignment,
 } from "@/services/assignments";
 import type { Assignment, AssignmentFormValues } from "@/types/assignment";
+import { pageShell } from "@/lib/page-shell";
 
 type PageMode = "edit" | "preview";
 
@@ -208,7 +209,7 @@ export function InstructorAssignmentUpdatePage() {
 
   if (!user?.has_canvas_token) {
     return (
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+      <div className={pageShell}>
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
             Update Assignment
@@ -251,7 +252,7 @@ export function InstructorAssignmentUpdatePage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+    <div className={pageShell}>
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
           Update Assignment
@@ -304,7 +305,7 @@ function PageState({
   action?: ReactNode;
 }) {
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+    <div className={pageShell}>
       <Card className="max-w-2xl shadow-sm ring-1 ring-border/60">
         <CardContent className="flex flex-col items-start gap-4 p-6">
           <div className="flex items-center gap-3">

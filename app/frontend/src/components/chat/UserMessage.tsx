@@ -15,7 +15,7 @@ export function UserMessage({ message }: UserMessageProps) {
   return (
     <div className="flex justify-end">
       <div className="min-w-0 max-w-[85%] space-y-1 sm:max-w-[75%]">
-        <div className="rounded-2xl rounded-tr-md bg-blue-600 px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap text-white">
+        <div className="rounded-2xl rounded-tr-md bg-primary px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap text-white">
           {message.content}
         </div>
         <time

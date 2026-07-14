@@ -1,10 +1,11 @@
 import { Send } from "lucide-react";
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 
+import { ChatModelSwitcher } from "@/components/chat/ChatModelSwitcher";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
+import type { LlmProviderId, LlmProviderSettings } from "@/types/llmProvider";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -12,6 +13,8 @@ interface ChatInputProps {
   isDisabled?: boolean;
   inputError?: string | null;
   initialValue?: string;
+  modelSettings?: LlmProviderSettings | null;
+  onModelProviderChange?: (providerId: LlmProviderId) => void;
 }
 
 export function ChatInput({
@@ -20,6 +23,8 @@ export function ChatInput({
   isDisabled = false,
   inputError,
   initialValue = "",
+  modelSettings = null,
+  onModelProviderChange,
 }: ChatInputProps) {
   const [value, setValue] = useState(initialValue);
 
@@ -43,7 +48,7 @@ export function ChatInput({
     submitMessage();
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       submitMessage();
@@ -52,8 +57,18 @@ export function ChatInput({
 
   return (
     <div className="space-y-2">
-      <form onSubmit={handleSubmit} className="relative">
-        <Input
+      <form
+        onSubmit={handleSubmit}
+        className={cn(
+          "rounded-2xl border border-border/80 bg-background shadow-sm",
+          "focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/30",
+        )}
+      >
+        <label htmlFor="chat-message-input" className="sr-only">
+          Chat message
+        </label>
+        <textarea
+          id="chat-message-input"
           value={value}
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={handleKeyDown}
@@ -61,20 +76,36 @@ export function ChatInput({
           disabled={isLoading || isDisabled}
           aria-label="Chat message"
           aria-invalid={Boolean(inputError)}
-          className="h-12 rounded-full pr-14"
-        />
-        <Button
-          type="submit"
-          size="icon"
-          disabled={isLoading || isDisabled}
+          rows={2}
           className={cn(
-            "absolute top-1/2 right-1.5 size-9 -translate-y-1/2 rounded-full",
-            dashboardColors.blue.button,
+            "min-h-[52px] w-full resize-none bg-transparent px-4 pt-3 pb-2 text-sm outline-none",
+            "placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
           )}
-          aria-label="Send message"
-        >
-          <Send className="size-4" />
-        </Button>
+        />
+
+        <div className="flex items-center justify-between gap-2 px-2 pb-2">
+          <div className="min-w-0">
+            {modelSettings && onModelProviderChange ? (
+              <ChatModelSwitcher
+                settings={modelSettings}
+                onProviderChange={onModelProviderChange}
+                disabled={isDisabled}
+              />
+            ) : (
+              <span className="px-2 text-xs text-muted-foreground">Model</span>
+            )}
+          </div>
+
+          <Button
+            type="submit"
+            size="icon"
+            disabled={isLoading || isDisabled}
+            className={cn("size-9 rounded-full", dashboardColors.blue.button)}
+            aria-label="Send message"
+          >
+            <Send className="size-4" />
+          </Button>
+        </div>
       </form>
 
       {inputError ? (
@@ -84,7 +115,7 @@ export function ChatInput({
       ) : null}
 
       <p className="text-center text-xs text-muted-foreground">
-        AI Assistant can make mistakes. Please verify important information.
+        AI Assistant can make mistakes. Please verify important information before approving Canvas changes.
       </p>
     </div>
   );

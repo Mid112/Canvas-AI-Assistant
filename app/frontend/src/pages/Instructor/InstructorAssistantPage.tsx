@@ -12,6 +12,14 @@ import {
   InstructorAssistantSuggestedActions,
 } from "@/pages/Instructor/InstructorAssistant/InstructorAssistantHeader";
 import { buildSuggestedActions } from "@/data/assistantSeedData";
+import {
+  createDefaultLlmProviderSettings,
+  getLlmProviderOption,
+} from "@/data/llmProviders";
+import {
+  getStoredLlmProviderSettings,
+  setStoredLlmProviderSettings,
+} from "@/lib/llm-provider-storage";
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import {
   AssistantApiError,
@@ -20,6 +28,7 @@ import {
   type ConversationResponse,
   type ConversationSummary,
 } from "@/services/assistant";
+import type { LlmProviderId, LlmProviderSettings } from "@/types/llmProvider";
 
 interface InstructorAssistantLocationState {
   initialPrompt?: string;
@@ -91,6 +100,11 @@ export function InstructorAssistantPage() {
   );
   const [chatSessionKey, setChatSessionKey] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [llmSettings, setLlmSettings] = useState<LlmProviderSettings>(() =>
+    user
+      ? getStoredLlmProviderSettings(user.id)
+      : createDefaultLlmProviderSettings(),
+  );
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selectedConversation, setSelectedConversation] =
     useState<ConversationResponse | null>(null);
@@ -100,6 +114,23 @@ export function InstructorAssistantPage() {
     number | null
   >(null);
   const chatWindowRef = useRef<ChatWindowHandle>(null);
+
+  const handleModelProviderChange = useCallback(
+    (providerId: LlmProviderId) => {
+      const option = getLlmProviderOption(providerId);
+      const next: LlmProviderSettings = {
+        provider: providerId,
+        model: option.defaultModel,
+        baseUrl:
+          providerId === "openai_compatible_custom" ? llmSettings.baseUrl : "",
+      };
+      setLlmSettings(next);
+      if (user) {
+        setStoredLlmProviderSettings(user.id, next);
+      }
+    },
+    [llmSettings.baseUrl, user],
+  );
 
   const loadConversationList = useCallback(async () => {
     if (!accessToken || !user?.has_canvas_token) {
@@ -211,6 +242,8 @@ export function InstructorAssistantPage() {
           onConversationChange={handleConversationChange}
           onLoadingChange={setIsLoading}
           onStartNewChat={handleStartNewChat}
+          modelSettings={llmSettings}
+          onModelProviderChange={handleModelProviderChange}
         />
 
         <section

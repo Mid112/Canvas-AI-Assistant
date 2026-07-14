@@ -74,7 +74,7 @@ describe("InstructorAssistantPage", () => {
     expect(
       screen.getByText("Canvas Workflow Management Assistant"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Suggested Actions")).toBeInTheDocument();
+    expect(screen.getByText("Suggested actions")).toBeInTheDocument();
     expect(screen.getByText("Show missing submissions")).toBeInTheDocument();
     expect(
       screen.getByText(/Hello! I'm your Canvas AI Assistant/),

@@ -46,7 +46,9 @@ describe("InstructorCoursesHeader", () => {
       screen.getByRole("heading", { name: "Course Management" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/Manage all your courses and track performance at UBC\./),
+      screen.getByText(
+        /Manage all your courses and track performance at canvas\.ubc\.ca\./,
+      ),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "New Course" }),

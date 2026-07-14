@@ -28,6 +28,7 @@ import { AssignmentDescribeStep } from "./InstructorAssignmentCreate/AssignmentD
 import { AssignmentPreviewDialog } from "./InstructorAssignmentCreate/AssignmentPreviewDialog";
 import { AssignmentReviewApproveStep } from "./InstructorAssignmentCreate/AssignmentReviewApproveStep";
 import type { AssignmentReviewFormSchema } from "./InstructorAssignmentCreate/assignmentCreateSchema";
+import { pageShellNarrow } from "@/lib/page-shell";
 
 const initialDescribeValues: AssignmentDescribeValues = {
   courseId: "",
@@ -199,7 +200,7 @@ export function InstructorAssignmentCreatePage() {
 
   if (!user?.has_canvas_token) {
     return (
-      <div className="mx-auto max-w-3xl space-y-6">
+      <div className={pageShellNarrow}>
         <header className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">
             AI Assignment Creator
@@ -227,7 +228,7 @@ export function InstructorAssignmentCreatePage() {
 
   if (approvedValues) {
     return (
-      <div className="mx-auto max-w-3xl space-y-6">
+      <div className={pageShellNarrow}>
         <header className="space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">
             AI Assignment Creator
@@ -274,7 +275,7 @@ export function InstructorAssignmentCreatePage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className={pageShellNarrow}>
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">AI Assignment Creator</h1>
         <p className="text-sm text-muted-foreground">

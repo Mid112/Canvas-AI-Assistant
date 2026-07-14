@@ -46,6 +46,7 @@ vi.mock("@/lib/onboarding-storage", () => ({
 
 vi.mock("@/services/canvas", () => ({
   updateCanvasConnections: vi.fn(),
+  describeCanvasConnectionFailures: vi.fn(() => ""),
   validateCanvasToken: vi.fn(),
   CanvasApiError: class CanvasApiError extends Error {
     status: number;
@@ -91,10 +92,14 @@ describe("ConnectCanvasPage", () => {
   it("navigates to review permissions after a successful connection", async () => {
     const user = userEvent.setup();
     mockedUpdateCanvasConnections.mockResolvedValue({
-      id: 1,
-      email: "professor@university.edu",
-      is_active: true,
-      has_canvas_token: true,
+      succeeded: [{ canvasUrl: CANVAS_URL, canvasToken: "valid-token" }],
+      failed: [],
+      lastResponse: {
+        id: 1,
+        email: "professor@university.edu",
+        is_active: true,
+        has_canvas_token: true,
+      },
     });
 
     renderWithRouter(<ConnectCanvasPage />);
@@ -120,10 +125,14 @@ describe("ConnectCanvasPage", () => {
   it("still navigates when the post-connect auth refresh fails", async () => {
     const user = userEvent.setup();
     mockedUpdateCanvasConnections.mockResolvedValue({
-      id: 1,
-      email: "professor@university.edu",
-      is_active: true,
-      has_canvas_token: true,
+      succeeded: [{ canvasUrl: CANVAS_URL, canvasToken: "valid-token" }],
+      failed: [],
+      lastResponse: {
+        id: 1,
+        email: "professor@university.edu",
+        is_active: true,
+        has_canvas_token: true,
+      },
     });
     // Token save is the critical path; a later /auth/me refresh failure should
     // not surface as a failed Canvas connection after navigation has started.

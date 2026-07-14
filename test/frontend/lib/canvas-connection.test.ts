@@ -40,6 +40,15 @@ describe("isCanvasConnectionRequiredError", () => {
     ).toBe(true);
   });
 
+  // Verifies: Returns true for lowercase invalid canvas token messages.
+  it("returns true for lowercase invalid canvas token messages", () => {
+    expect(
+      isCanvasConnectionRequiredError(
+        new CanvasApiError("invalid canvas token", 403),
+      ),
+    ).toBe(true);
+  });
+
   // Verifies: Returns false for other API errors.
   it("returns false for other API errors", () => {
     expect(

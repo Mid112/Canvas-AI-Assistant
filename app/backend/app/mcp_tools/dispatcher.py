@@ -351,6 +351,7 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                         "changed_fields": changed_fields,
                     },
                 ],
+                previous_data=current,
             )
             return result.to_dict()
 

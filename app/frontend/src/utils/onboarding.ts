@@ -24,6 +24,17 @@ export function isOnboardingComplete(user: Pick<User, "id" | "canvas_connections
   );
 }
 
+export function canAccessWithoutOnboarding(
+  pathname: string,
+  role: UserRole,
+): boolean {
+  if (role === "admin") {
+    return true;
+  }
+
+  return isOnboardingPath(pathname);
+}
+
 export function getPostAuthPath(user: Pick<User, "id" | "role" | "canvas_connections">): string {
   if (!requiresOnboarding(user.role) || isOnboardingComplete(user)) {
     return getDashboardPath(user.role);

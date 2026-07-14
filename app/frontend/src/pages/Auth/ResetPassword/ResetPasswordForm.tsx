@@ -30,9 +30,9 @@ export function ResetPasswordForm({ onSubmit }: ResetPasswordFormProps) {
   if (submitted) {
     return (
       <div className="space-y-4 text-center">
-        <p className="text-sm leading-relaxed text-[#475569]" role="status">
+        <p className="text-sm leading-relaxed text-muted-foreground" role="status">
           If an account exists for{" "}
-          <span className="font-semibold text-[#1e293b]">{trimmedEmail}</span>,
+          <span className="font-semibold text-foreground">{trimmedEmail}</span>,
           we sent a password reset link. Check your inbox and follow the
           instructions.
         </p>
@@ -45,13 +45,13 @@ export function ResetPasswordForm({ onSubmit }: ResetPasswordFormProps) {
       <div className="space-y-2">
         <label
           htmlFor="reset-email"
-          className="text-sm font-semibold text-[#1e293b]"
+          className="text-sm font-semibold text-foreground"
         >
           Email Address
         </label>
         <div className="relative">
           <Mail
-            className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-[#94a3b8]"
+            className="pointer-events-none absolute top-1/2 left-3.5 size-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"
           />
           <Input
@@ -61,13 +61,13 @@ export function ResetPasswordForm({ onSubmit }: ResetPasswordFormProps) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             aria-invalid={showEmailError}
-            className="h-11 rounded-lg border-[#e2e8f0] bg-white pr-3.5 pl-10 text-[#1e293b] shadow-none placeholder:text-[#94a3b8]"
+            className="h-11 rounded-lg border-border bg-card pr-3.5 pl-10 text-foreground shadow-none placeholder:text-muted-foreground"
           />
         </div>
       </div>
 
       {showEmailError && (
-        <p className="text-sm text-[#dc2626]" role="alert">
+        <p className="text-sm text-destructive" role="alert">
           Enter a valid email address
         </p>
       )}
@@ -75,7 +75,7 @@ export function ResetPasswordForm({ onSubmit }: ResetPasswordFormProps) {
       <Button
         type="submit"
         disabled={!isFormComplete}
-        className="h-11 w-full rounded-lg bg-[#2563eb] text-base font-semibold text-white shadow-[0_4px_14px_rgba(37,99,235,0.35)] hover:bg-[#1d4ed8] disabled:bg-[#cbd5e1] disabled:text-[#94a3b8] disabled:shadow-none disabled:hover:bg-[#cbd5e1]"
+        className="h-11 w-full text-base font-semibold"
       >
         Send Reset Link
       </Button>

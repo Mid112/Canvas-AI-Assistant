@@ -5,7 +5,6 @@ import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { Sidebar } from "@/components/layouts/Sidebar";
-import { InstitutionProvider } from "@/contexts/InstitutionProvider";
 import { paths } from "@/routes/paths";
 import { instructorNavItems } from "@/utils/navigation";
 
@@ -31,36 +30,85 @@ vi.mock("@/contexts/AuthContext", () => ({
       name: "Dr. Jane Doe",
       role: "instructor" as const,
       is_active: true,
-      has_canvas_token: true,
+      has_canvas_token: false,
+      canvas_connections: [],
     },
     isAuthenticated: true,
     isLoading: false,
   }),
 }));
 
+vi.mock("@/contexts/useInstitution", () => ({
+  useInstitution: () => ({
+    institutions: [],
+    selectedInstitution: {
+      id: "ubc",
+      name: "University of British Columbia",
+      shortName: "UBC",
+    },
+    setSelectedInstitution: vi.fn(),
+    courses: [],
+    analytics: {},
+    dashboard: {},
+  }),
+}));
+
 function renderSidebar(props: ComponentProps<typeof Sidebar>) {
   return render(
-    <InstitutionProvider>
-      <MemoryRouter>
-        <Sidebar {...props} />
-      </MemoryRouter>
-    </InstitutionProvider>,
+    <MemoryRouter>
+      <Sidebar {...props} />
+    </MemoryRouter>,
   );
 }
 
 describe("Sidebar", () => {
-  // Verifies: Renders navigation items and portal branding.
-  it("renders navigation items and portal branding", () => {
+  // Verifies: Renders navigation items, portal branding, and account menu footer.
+  it("renders navigation items, portal branding, and account menu footer", () => {
     renderSidebar({
       navItems: instructorNavItems,
       role: "instructor",
       roleLabel: "Instructor",
     });
 
-    expect(screen.getByText("Canvas AI")).toBeInTheDocument();
+    expect(screen.getAllByText("Canvas AI").length).toBeGreaterThan(0);
     expect(screen.getByText("Instructor Portal")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Dashboard" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open profile menu" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Account menu" })).toBeInTheDocument();
+    expect(screen.getByText("Dr. Jane Doe")).toBeInTheDocument();
+    expect(screen.getByText("Instructor")).toBeInTheDocument();
+  });
+
+  // Verifies: Keeps the instructor role on the profile trigger.
+  it("keeps the instructor role on the profile trigger", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+
+    renderSidebar({
+      navItems: instructorNavItems,
+      role: "instructor",
+      roleLabel: "Instructor",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Account menu" }));
+
+    expect(screen.getAllByText("Instructor").length).toBeGreaterThanOrEqual(1);
+    expect(await screen.findByText("Connect institution")).toBeInTheDocument();
+  });
+
+  // Verifies: Highlights the active navigation item.
+  it("highlights the active navigation item", () => {
+    render(
+      <MemoryRouter initialEntries={["/instructor/dashboard"]}>
+        <Sidebar
+          navItems={instructorNavItems}
+          role="instructor"
+          roleLabel="Instructor"
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: "Dashboard" })).toHaveClass(
+      "bg-sidebar-primary",
+    );
   });
 
   // Verifies: Calls onToggle when the close sidebar button is clicked.
@@ -81,8 +129,8 @@ describe("Sidebar", () => {
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
-  // Verifies: Logs out from the profile menu.
-  it("logs out from the profile menu", async () => {
+  // Verifies: Logs out from the account menu footer.
+  it("logs out from the account menu footer", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     const onNavigate = vi.fn();
     mockNavigate.mockClear();
@@ -95,7 +143,7 @@ describe("Sidebar", () => {
       onNavigate,
     });
 
-    await user.click(screen.getByRole("button", { name: "Open profile menu" }));
+    await user.click(screen.getByRole("button", { name: "Account menu" }));
     await user.click(await screen.findByText("Log out"));
 
     expect(mockLogout).toHaveBeenCalledTimes(1);

@@ -2,6 +2,7 @@ import { apiRequest, ApiRequestError } from "@/lib/api-request";
 import { formatAuditTimestamp } from "@/lib/format-audit-timestamp";
 import { mapWorkflowHistoryApiToEntry } from "@/lib/map-workflow-history";
 import type {
+  WorkflowHistoryApiItem,
   WorkflowHistoryApiResponse,
   WorkflowHistoryEntry,
   WorkflowStatusCounts,
@@ -56,6 +57,50 @@ export async function fetchWorkflowHistory(
       error instanceof Error
         ? error.message
         : "Unable to load workflow history. Please try again.";
+
+    const status = error instanceof ApiRequestError ? error.status : 0;
+    throw new WorkflowHistoryApiError(message, status);
+  }
+}
+
+/** Cancels a pending workflow via the backend cancel endpoint. */
+export async function cancelWorkflow(
+  accessToken: string,
+  workflowId: string,
+): Promise<WorkflowHistoryEntry> {
+  try {
+    const data = await apiRequest<WorkflowHistoryApiItem>(
+      `${WORKFLOW_HISTORY_PATH}/${workflowId}/cancel`,
+      accessToken,
+      { method: "POST" },
+    );
+    return mapWorkflowHistoryApiToEntry(data);
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unable to cancel this workflow.";
+    const status = error instanceof ApiRequestError ? error.status : 0;
+    throw new WorkflowHistoryApiError(message, status);
+  }
+}
+
+export async function undoWorkflow(
+  accessToken: string,
+  workflowId: string,
+): Promise<WorkflowHistoryEntry> {
+  try {
+    const item = await apiRequest<WorkflowHistoryApiItem>(
+      `${WORKFLOW_HISTORY_PATH}/${workflowId}/undo`,
+      accessToken,
+      { method: "POST" },
+    );
+    return mapWorkflowHistoryApiToEntry(item);
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unable to undo this action. Please try again.";
 
     const status = error instanceof ApiRequestError ? error.status : 0;
     throw new WorkflowHistoryApiError(message, status);

@@ -45,4 +45,13 @@ describe("InstructorDashboardActiveCourses", () => {
       "/instructor/courses/2",
     );
   });
+
+  // Verifies: Renders an empty state when there are no courses.
+  it("renders an empty state when there are no courses", () => {
+    renderWithRouter(<InstructorDashboardActiveCourses courses={[]} />);
+
+    expect(
+      screen.getByText("No Canvas courses to display yet."),
+    ).toBeInTheDocument();
+  });
 });

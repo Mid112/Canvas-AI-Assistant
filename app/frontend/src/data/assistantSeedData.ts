@@ -5,7 +5,7 @@ export const seedChatMessages: ChatMessage[] = [
     id: "welcome",
     role: "assistant",
     content:
-      "Hello! I'm your Canvas AI Assistant. I can help you manage courses, create assignments, analyze student performance, and much more. How can I assist you today?",
+      "Hello! I'm your Canvas AI Assistant. I can help you manage courses, create assignments, analyze student performance, and much more. Every write action requires your preview and approval before it is published to Canvas. How can I assist you today?",
     timestamp: new Date("2026-06-24T10:00:00"),
   },
 ];
@@ -24,18 +24,13 @@ export function buildSuggestedActions(courseLabel?: string): SuggestedAction[] {
   const forCourse = courseLabel ? ` for ${courseLabel}` : "";
   const inCourse = courseLabel ? ` in ${courseLabel}` : "";
 
+  // Keep exactly four actions so the 2×2 suggested-actions grid stays balanced.
   return [
     {
       id: "missing-submissions",
       title: "Show missing submissions",
       description: "View all missing assignments across courses",
       prompt: `Show missing submissions${forCourse}`,
-    },
-    {
-      id: "summarize-quiz",
-      title: "Summarize quiz results",
-      description: "Get a performance summary for a recent quiz",
-      prompt: `Summarize the most recent quiz results${forCourse}`,
     },
     {
       id: "late-assignments",
@@ -48,6 +43,12 @@ export function buildSuggestedActions(courseLabel?: string): SuggestedAction[] {
       title: "View course performance",
       description: "See overall course analytics",
       prompt: `View course performance${forCourse}`,
+    },
+    {
+      id: "draft-student-message",
+      title: "Draft a student message",
+      description: "Write a message or announcement with AI",
+      prompt: `Draft a message to students${inCourse} about an upcoming deadline. Propose a send_message action I can review and edit before sending.`,
     },
   ];
 }

@@ -36,6 +36,13 @@ describe("getLoginErrorMessage", () => {
       "Unable to sign in. Please try again.",
     );
   });
+
+  // Verifies: Returns fallback for unmapped API status codes.
+  it("returns fallback for unmapped API status codes", () => {
+    expect(getLoginErrorMessage(new AuthApiError("Server error", 500))).toBe(
+      "Unable to sign in. Please try again.",
+    );
+  });
 });
 
 describe("getRegisterErrorMessage", () => {
@@ -86,6 +93,14 @@ describe("getRegisterErrorMessage", () => {
 
   it("returns a network error message when fetch fails", () => {
     expect(getRegisterErrorMessage(new TypeError("Failed to fetch"))).toBe(
+      "Can't reach the server right now. Please check your connection and try again.",
+    );
+  });
+
+  it("returns a network error message for NetworkError failures", () => {
+    expect(
+      getRegisterErrorMessage(new TypeError("NetworkError when attempting to fetch resource.")),
+    ).toBe(
       "Can't reach the server right now. Please check your connection and try again.",
     );
   });

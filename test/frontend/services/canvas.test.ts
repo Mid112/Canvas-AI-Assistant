@@ -2,10 +2,26 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import {
   CanvasApiError,
+  fetchActiveCourse,
+  fetchCourses,
+  removeCanvasConnection,
+  setActiveCourse,
+  updateCanvasConnections,
   updateCanvasToken,
   updateCanvasTokens,
   validateCanvasToken,
 } from "@/services/canvas";
+
+vi.mock("@/config/api", () => ({
+  API_BASE_URL: "http://localhost:8000/api/v1",
+}));
+
+const tokenResponse = {
+  id: 1,
+  email: "professor@university.edu",
+  is_active: true,
+  has_canvas_token: true,
+};
 
 describe("canvas service", () => {
   beforeEach(() => {
@@ -125,5 +141,159 @@ describe("canvas service", () => {
     const result = await validateCanvasToken("bad-token", "jwt-token");
 
     expect(result).toBe("invalid");
+  });
+
+  it("includes canvas_url when updating a token", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => tokenResponse,
+    } as Response);
+
+    await updateCanvasToken(
+      "canvas-token-123",
+      "jwt-token",
+      "https://canvas.university.edu",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/auth/me/canvas-token",
+      expect.objectContaining({
+        body: JSON.stringify({
+          canvas_token: "canvas-token-123",
+          canvas_url: "https://canvas.university.edu",
+        }),
+      }),
+    );
+  });
+
+  it("saves multiple canvas connections", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => tokenResponse,
+    } as Response);
+
+    await updateCanvasConnections(
+      [
+        {
+          canvasUrl: "https://canvas.ubc.ca",
+          canvasToken: "token-1",
+        },
+        {
+          canvasUrl: "https://canvas.ubco.ca",
+          canvasToken: "token-2",
+        },
+      ],
+      "jwt-token",
+    );
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects empty canvas connection updates", async () => {
+    await expect(updateCanvasConnections([], "jwt-token")).rejects.toEqual(
+      new CanvasApiError("Canvas token is required", 400),
+    );
+  });
+
+  it("removes a saved canvas connection", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 204,
+      json: async () => ({}),
+    } as Response);
+
+    await removeCanvasConnection(10, "jwt-token");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/auth/me/canvas-connections/10",
+      expect.objectContaining({
+        method: "DELETE",
+        headers: { Authorization: "Bearer jwt-token" },
+      }),
+    );
+  });
+
+  it("fetches canvas courses with an optional canvas_url", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => [{ id: 1, name: "CS 101" }],
+    } as Response);
+
+    const courses = await fetchCourses(
+      "jwt-token",
+      "https://canvas.university.edu",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/canvas/courses?canvas_url=https%3A%2F%2Fcanvas.university.edu",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer jwt-token" },
+      }),
+    );
+    expect(courses).toHaveLength(1);
+  });
+
+  it("fetches and sets the active course", async () => {
+    const activeCourse = {
+      local_course_id: 3,
+      name: "CS 101",
+      canvas_course_id: 123,
+    };
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => activeCourse,
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => activeCourse,
+      } as Response);
+
+    await expect(fetchActiveCourse("jwt-token")).resolves.toEqual(activeCourse);
+    await expect(setActiveCourse(3, "jwt-token")).resolves.toEqual(activeCourse);
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "http://localhost:8000/api/v1/canvas/active-course",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer jwt-token" },
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "http://localhost:8000/api/v1/canvas/active-course",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ local_course_id: 3 }),
+      }),
+    );
+  });
+
+  it("throws CanvasApiError with a 404-specific message", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+      status: 404,
+      json: async () => ({ detail: "Not found" }),
+    } as Response);
+
+    await expect(fetchCourses("jwt-token")).rejects.toEqual(
+      new CanvasApiError(
+        "The requested API endpoint was not found. Make sure the backend is running.",
+        404,
+      ),
+    );
+  });
+
+  it("returns invalid when token validation fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ detail: "Unauthorized" }),
+    } as Response);
+
+    await expect(
+      validateCanvasToken("bad-token", "jwt-token", "https://canvas.university.edu"),
+    ).resolves.toBe("invalid");
   });
 });

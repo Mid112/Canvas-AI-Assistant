@@ -11,7 +11,9 @@ export type PendingActionStatus =
 export interface ActionLink {
   label: string;
   href: string;
+  state?: Record<string, unknown>;
 }
+
 
 export interface InterpretedAction {
   action: string;

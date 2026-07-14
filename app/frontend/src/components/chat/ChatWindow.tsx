@@ -19,6 +19,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useInstitution } from "@/contexts/useInstitution";
 import { seedChatMessages } from "@/data/assistantSeedData";
+import { isCancellationPhrase } from "@/lib/chat-cancellation";
 import {
   AssistantApiError,
   cancelAssistantAction,
@@ -29,6 +30,7 @@ import {
   type ConversationResponse,
 } from "@/services/assistant";
 import type { ChatMessage } from "@/types/chat";
+import type { LlmProviderId, LlmProviderSettings } from "@/types/llmProvider";
 
 function createMessageId(): string {
   return crypto.randomUUID();
@@ -100,6 +102,8 @@ interface ChatWindowProps {
   onConversationChange?: (conversationId: number) => void;
   onLoadingChange?: (isLoading: boolean) => void;
   onStartNewChat?: () => void;
+  modelSettings?: LlmProviderSettings | null;
+  onModelProviderChange?: (providerId: LlmProviderId) => void;
 }
 
 export interface ChatWindowHandle {
@@ -117,9 +121,12 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   onConversationChange,
   onLoadingChange,
   onStartNewChat,
+  modelSettings = null,
+  onModelProviderChange,
 }, ref) {
   const { accessToken } = useAuth();
-  const { activeCourse, refreshActiveCourse } = useActiveCourse();
+  const { activeCourse, refreshActiveCourse, notifyCoursesChanged } =
+    useActiveCourse();
   const { refreshDashboard } = useInstitution();
   const initialChatState = useMemo(
     () =>
@@ -370,6 +377,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           // them to re-fetch. Without this, course/assignment counts and
           // dashboard metrics stay stale until a full page reload.
           void refreshActiveCourse();
+          notifyCoursesChanged();
           void refreshDashboard();
         }
       } catch (requestError) {
@@ -386,6 +394,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       accessToken,
       appendAssistantMessage,
       conversationId,
+      notifyCoursesChanged,
       onConversationChange,
       refreshActiveCourse,
       refreshDashboard,
@@ -410,9 +419,31 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       };
 
       setMessages((current) => [...current, userMessage]);
+
+      if (
+        activePendingMessageId !== undefined &&
+        isCancellationPhrase(trimmed)
+      ) {
+        const pendingMessage = messages.find(
+          (entry) =>
+            entry.pendingMessageId === activePendingMessageId &&
+            entry.pendingActionStatus === "pending",
+        );
+
+        if (pendingMessage) {
+          void resolvePendingAction(pendingMessage, "cancel");
+          return;
+        }
+      }
+
       void deliverAssistantResponse(trimmed);
     },
-    [deliverAssistantResponse],
+    [
+      activePendingMessageId,
+      deliverAssistantResponse,
+      messages,
+      resolvePendingAction,
+    ],
   );
 
   useImperativeHandle(
@@ -528,6 +559,8 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           isLoading={isLoading}
           inputError={inputError}
           initialValue={initialDraft ?? ""}
+          modelSettings={modelSettings}
+          onModelProviderChange={onModelProviderChange}
         />
       </CardContent>
     </Card>

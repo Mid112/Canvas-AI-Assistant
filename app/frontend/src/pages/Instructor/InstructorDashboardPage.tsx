@@ -13,6 +13,7 @@ import { useCanvasInstructorCourses } from "@/pages/Instructor/InstructorCourses
 import type { DashboardMetrics } from "@/types/dashboard";
 import { sharedDashboardQuickActions } from "@/types/dashboard";
 import type { InstructorCourse } from "@/types/course";
+import { pageShell } from "@/lib/page-shell";
 
 function deriveDashboardMetrics(
   courses: InstructorCourse[],
@@ -42,7 +43,7 @@ export function InstructorDashboardPage() {
 
   if (!user?.has_canvas_token || needsCanvasConnection) {
     return (
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+      <div className={pageShell}>
         <InstructorDashboardHeader
           userName={user?.name ?? "Instructor"}
           institutionShortName={selectedInstitution.shortName}
@@ -53,7 +54,7 @@ export function InstructorDashboardPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+    <div className={pageShell}>
       <InstructorDashboardHeader
         userName={user?.name ?? "Instructor"}
         institutionShortName={selectedInstitution.shortName}

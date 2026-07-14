@@ -77,6 +77,7 @@ export function useCourseSubmissionAnalytics(
       const fallbackCanvasUrl = resolveCanvasApiUrl(
         user,
         selectedInstitution.id,
+        selectedInstitution.canvasUrl,
       );
 
       const seededCourse = options?.seedCourse ?? null;
@@ -258,6 +259,7 @@ export function useCourseSubmissionAnalytics(
     isCourseListLoaded,
     localCourseId,
     logout,
+    selectedInstitution.canvasUrl,
     selectedInstitution.id,
     user,
     options?.seedCourse,

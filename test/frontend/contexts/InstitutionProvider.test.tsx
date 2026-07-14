@@ -1,5 +1,5 @@
-import { renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { InstitutionProvider } from "@/contexts/InstitutionProvider";
 import { useInstitution } from "@/contexts/useInstitution";
@@ -53,6 +53,7 @@ function wrapper({ children }: { children: React.ReactNode }) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
   mockedFetchInstructorDashboard.mockResolvedValue({
     metrics: {
       activeCourses: 1,
@@ -68,6 +69,10 @@ beforeEach(() => {
     activeCourses: [],
     notifications: [],
   });
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 describe("InstitutionProvider dashboard fetch", () => {
@@ -109,5 +114,57 @@ describe("InstitutionProvider dashboard fetch", () => {
     await result.current.refreshDashboard();
 
     expect(result.current.dashboard.metrics.totalStudents).toBe(1);
+  });
+});
+
+describe("InstitutionProvider connected institutions", () => {
+  it("exposes only institutions with matching canvas connections", () => {
+    vi.stubEnv("VITE_CANVAS_UBC_URL", "https://canvas.ubc.ca");
+
+    mockUseAuth.mockReturnValue({
+      ...instructorAuth,
+      user: {
+        ...instructorAuth.user,
+        canvas_connections: [
+          {
+            id: 1,
+            canvas_url: "https://canvas.ubc.ca",
+            created_at: "2026-06-26T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    const { result } = renderHook(() => useInstitution(), { wrapper });
+
+    expect(result.current.institutions).toHaveLength(1);
+    expect(result.current.institutions[0]?.id).toBe("ubc");
+    expect(result.current.selectedInstitution.id).toBe("ubc");
+  });
+
+  it("prevents switching to institutions without a saved connection", () => {
+    vi.stubEnv("VITE_CANVAS_UBC_URL", "https://canvas.ubc.ca");
+
+    mockUseAuth.mockReturnValue({
+      ...instructorAuth,
+      user: {
+        ...instructorAuth.user,
+        canvas_connections: [
+          {
+            id: 1,
+            canvas_url: "https://canvas.ubc.ca",
+            created_at: "2026-06-26T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    const { result } = renderHook(() => useInstitution(), { wrapper });
+
+    act(() => {
+      result.current.setSelectedInstitution("ubco");
+    });
+
+    expect(result.current.selectedInstitution.id).toBe("ubc");
   });
 });
