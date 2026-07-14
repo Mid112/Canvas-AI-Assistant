@@ -3,7 +3,8 @@ Integration: administrator workflows (#712 / parent #687).
 
 Covers the admin operational sequence end-to-end:
   login → dashboard → settings → create instructor → list → disable →
-  verify instructor lockout → audit logs → re-enable.
+  verify instructor lockout → audit logs → re-enable → revoke Canvas access →
+  create admin → logout invalidates session.
 """
 
 import uuid
@@ -12,7 +13,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from integration_helpers import admin_login, auth, register_instructor
+from integration_helpers import (
+    CANVAS_URL,
+    admin_login,
+    auth,
+    connect_canvas_and_sync_course,
+    register_instructor,
+)
 
 INSTRUCTORS = "/api/v1/admin/instructors"
 
@@ -120,3 +127,68 @@ def test_admin_settings_round_trip(client, admin_headers):
     )
     assert restore.status_code == 200
     assert restore.json()["settings"]["organization_name"] == org_name
+
+
+# Verifies: Admin revoke removes Canvas connection and blocks Canvas courses.
+def test_admin_revoke_canvas_access_blocks_instructor(client, admin_headers):
+    instructor = register_instructor(client, prefix="revoke")
+    connect_canvas_and_sync_course(client, instructor["headers"])
+
+    before = client.get("/api/v1/auth/me", headers=instructor["headers"])
+    assert before.status_code == 200
+    assert before.json()["has_canvas_token"] is True
+    instructor_id = before.json()["id"]
+
+    revoke = client.delete(
+        f"{INSTRUCTORS}/{instructor_id}/access",
+        headers=admin_headers,
+    )
+    assert revoke.status_code == 204
+
+    after = client.get("/api/v1/auth/me", headers=instructor["headers"])
+    assert after.status_code == 200
+    assert after.json()["has_canvas_token"] is False
+
+    courses = client.get(
+        f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}",
+        headers=instructor["headers"],
+    )
+    assert courses.status_code == 403
+
+
+# Verifies: Admin can create another admin who can then log in.
+def test_admin_can_create_admin_and_login(client, admin_headers):
+    email = f"newadmin_{uuid.uuid4()}@example.com"
+    password = "NewAdminPass123!"
+
+    created = client.post(
+        "/api/v1/admin/users",
+        json={"name": "Second Admin", "email": email, "password": password},
+        headers=admin_headers,
+    )
+    assert created.status_code == 201, created.json()
+    assert created.json()["role"] == "admin"
+
+    login = client.post(
+        "/api/v1/auth/admin/login",
+        json={"email": email, "password": password},
+    )
+    assert login.status_code == 200
+    new_headers = auth(login.json()["access_token"])
+
+    dashboard = client.get("/api/v1/admin/dashboard", headers=new_headers)
+    assert dashboard.status_code == 200
+
+
+# Verifies: Admin logout invalidates the session for later admin calls.
+def test_admin_logout_invalidates_session(client, admin_credentials):
+    headers = admin_login(client, admin_credentials)
+
+    ok = client.get("/api/v1/admin/dashboard", headers=headers)
+    assert ok.status_code == 200
+
+    logout = client.post("/api/v1/auth/logout", headers=headers)
+    assert logout.status_code == 204
+
+    denied = client.get("/api/v1/admin/dashboard", headers=headers)
+    assert denied.status_code == 401

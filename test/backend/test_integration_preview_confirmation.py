@@ -6,6 +6,8 @@ Covers the human-in-the-loop write path:
   chat intent_preview → cancel blocks later confirm
   confirm replay is rejected (409)
   pending preview is visible in workflow history before confirmation
+  chat modify snapshots previous proposed action
+  non-chat assignment preview endpoint (dry-run metadata)
 """
 
 from unittest.mock import AsyncMock, patch
@@ -15,6 +17,8 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from integration_helpers import (
+    CANVAS_URL,
+    chat_turn,
     fake_assignment,
     propose_create_assignment,
     register_with_canvas,
@@ -139,3 +143,100 @@ def test_confirm_unknown_pending_message_fails(client):
         headers=headers,
     )
     assert resp.status_code == 404
+
+
+# Verifies: Modify updates the pending preview and keeps a one-step previous snapshot.
+def test_modify_updates_pending_preview_then_confirm(client):
+    headers, local_course_id = register_with_canvas(client, prefix="modify")
+    conversation_id, pending_message_id = propose_create_assignment(
+        client, headers, local_course_id, title="Modifiable Exam"
+    )
+
+    modified = chat_turn(
+        client,
+        headers,
+        "make it worth 50 points",
+        (
+            '{"action": "intent_preview", "summary": "Create Modifiable Exam worth 50", '
+            '"proposed_action": {"action": "create_assignment", '
+            f'"local_course_id": {local_course_id}, "title": "Modifiable Exam", '
+            '"description": "Covers chapters 1-5", "due_date": "2030-01-01T00:00:00", '
+            '"points_possible": 50}}'
+        ),
+        conversation_id=conversation_id,
+        pending_message_id=pending_message_id,
+    )
+    reply = modified["reply"]
+    assert reply["pending_message_id"] == pending_message_id
+    assert reply["proposed_action"]["points_possible"] == 50
+    assert reply["previous_proposed_action"]["points_possible"] == 100
+
+    with patch(
+        "app.mcp_tools.dispatcher.create_course_assignment",
+        new=AsyncMock(return_value=fake_assignment("Modifiable Exam")),
+    ) as mock_create:
+        confirm = client.post(
+            "/api/v1/chat/confirm",
+            json={
+                "conversation_id": conversation_id,
+                "pending_message_id": pending_message_id,
+            },
+            headers=headers,
+        )
+    assert confirm.status_code == 200
+    assert confirm.json()["reply"]["success"] is True
+    mock_create.assert_called_once()
+
+
+# Verifies: Non-chat assignment preview returns dry-run metadata without writing.
+def test_non_chat_assignment_preview_does_not_write(client):
+    headers, local_course_id = register_with_canvas(client, prefix="asnprev")
+    payload = {
+        "name": "Previewed Lab",
+        "description": "Dry run only",
+        "due_at": "2030-09-01T23:59:00Z",
+        "points_possible": 10,
+    }
+
+    with patch(
+        "app.services.canvas.create_assignment",
+        new_callable=AsyncMock,
+    ) as mock_create:
+        preview = client.post(
+            f"/api/v1/canvas/courses/{local_course_id}/assignments/preview"
+            f"?canvas_url={CANVAS_URL}",
+            json=payload,
+            headers=headers,
+        )
+
+    assert preview.status_code == 200, preview.json()
+    body = preview.json()
+    assert body["action"] == "create_assignment"
+    assert "Previewed Lab" in body["summary"]
+    assert body["metadata"]["name"] == "Previewed Lab"
+    assert isinstance(body["affected_resources"], list)
+    mock_create.assert_not_called()
+
+
+# Verifies: Generate-draft preview path returns structured assignment fields.
+def test_assignment_generate_draft_preview(client):
+    headers, _ = register_with_canvas(client, prefix="draftprev")
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        '{"title": "Draft Quiz", "description": "Cover recursion.", '
+        '"due_at": null, "points_possible": 20}'
+    )
+
+    with patch(
+        "app.services.assignment_draft.get_llm_adapter",
+        return_value=mock_adapter,
+    ):
+        resp = client.post(
+            "/api/v1/canvas/courses/1/assignments/generate-draft",
+            json={"prompt": "Create a quiz on recursion"},
+            headers=headers,
+        )
+
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["title"] == "Draft Quiz"
+    assert resp.json()["points_possible"] == 20
