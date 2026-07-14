@@ -156,4 +156,22 @@ describe("Header", () => {
     expect(mockLogout).toHaveBeenCalledTimes(1);
     expect(mockNavigate).toHaveBeenCalledWith(paths.login);
   });
+
+  // #691 — Verify responsive layouts
+  // Verifies: Mobile navigation trigger is marked for small viewports only.
+  it("marks the mobile navigation trigger as lg:hidden", () => {
+    renderWithRouter(
+      <Header
+        title="Dashboard"
+        role="instructor"
+        roleLabel="Instructor"
+        navItems={instructorNavItems}
+      />,
+    );
+
+    const mobileTrigger = screen.getByRole("button", {
+      name: "Open navigation menu",
+    });
+    expect(mobileTrigger.className).toMatch(/lg:hidden/);
+  });
 });

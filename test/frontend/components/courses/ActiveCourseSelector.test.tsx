@@ -1,10 +1,11 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ActiveCourseSelector } from "@/components/courses/ActiveCourseSelector";
 import type { InstructorCourse } from "@/types/course";
 
+const mockSelectActiveCourse = vi.fn();
 const mockUseActiveCourse = vi.fn();
 
 vi.mock("@/contexts/useActiveCourse", () => ({
@@ -28,6 +29,107 @@ function makeCourse(overrides: Partial<InstructorCourse>): InstructorCourse {
 }
 
 describe("ActiveCourseSelector", () => {
+  beforeEach(() => {
+    mockSelectActiveCourse.mockReset();
+    mockUseActiveCourse.mockReset();
+  });
+
+  // #689 — Add missing frontend tests
+  // Verifies: Renders course options and the current selection.
+  it("renders available courses with the active course selected", () => {
+    mockUseActiveCourse.mockReturnValue({
+      activeCourse: {
+        localId: 10,
+        displayName: "COSC 499: Capstone",
+      },
+      availableCourses: [
+        makeCourse({
+          id: 10,
+          name: "Capstone",
+          code: "COSC 499",
+          term: "2026S",
+          studentCount: 20,
+          assignmentCount: 4,
+        }),
+        makeCourse({
+          id: 11,
+          name: "Algorithms",
+          code: "COSC 320",
+          term: "2026S",
+          studentCount: 40,
+          assignmentCount: 6,
+        }),
+      ],
+      isLoading: false,
+      isSaving: false,
+      selectActiveCourse: mockSelectActiveCourse,
+    });
+
+    render(<ActiveCourseSelector />);
+
+    const select = screen.getByLabelText("Select active course");
+    expect(select).toHaveValue("10");
+    expect(screen.getByRole("option", { name: "COSC 499: Capstone" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "COSC 320: Algorithms" }),
+    ).toBeInTheDocument();
+  });
+
+  // Verifies: Changing the select calls selectActiveCourse.
+  it("calls selectActiveCourse when a different course is chosen", async () => {
+    const user = userEvent.setup();
+    mockUseActiveCourse.mockReturnValue({
+      activeCourse: {
+        localId: 10,
+        displayName: "COSC 499: Capstone",
+      },
+      availableCourses: [
+        makeCourse({
+          id: 10,
+          name: "Capstone",
+          code: "COSC 499",
+          term: "2026S",
+        }),
+        makeCourse({
+          id: 11,
+          name: "Algorithms",
+          code: "COSC 320",
+          term: "2026S",
+        }),
+      ],
+      isLoading: false,
+      isSaving: false,
+      selectActiveCourse: mockSelectActiveCourse,
+    });
+
+    render(<ActiveCourseSelector />);
+
+    await user.selectOptions(
+      screen.getByLabelText("Select active course"),
+      "11",
+    );
+
+    expect(mockSelectActiveCourse).toHaveBeenCalledWith(11);
+  });
+
+  // Verifies: Loading state disables the control.
+  it("disables the selector while courses are loading", () => {
+    mockUseActiveCourse.mockReturnValue({
+      activeCourse: null,
+      availableCourses: [],
+      isLoading: true,
+      isSaving: false,
+      selectActiveCourse: mockSelectActiveCourse,
+    });
+
+    render(<ActiveCourseSelector />);
+
+    expect(screen.getByLabelText("Select active course")).toBeDisabled();
+    expect(
+      screen.getByRole("option", { name: "Loading courses..." }),
+    ).toBeInTheDocument();
+  });
+
   it("only lists published courses, using the shared course title format (not a raw code: name duplicate)", () => {
     mockUseActiveCourse.mockReturnValue({
       activeCourse: null,
@@ -37,7 +139,7 @@ describe("ActiveCourseSelector", () => {
       ],
       isLoading: false,
       isSaving: false,
-      selectActiveCourse: vi.fn(),
+      selectActiveCourse: mockSelectActiveCourse,
     });
 
     render(<ActiveCourseSelector />);
@@ -56,7 +158,7 @@ describe("ActiveCourseSelector", () => {
       ],
       isLoading: false,
       isSaving: false,
-      selectActiveCourse: vi.fn(),
+      selectActiveCourse: mockSelectActiveCourse,
     });
 
     render(<ActiveCourseSelector />);
@@ -76,7 +178,7 @@ describe("ActiveCourseSelector", () => {
       ],
       isLoading: false,
       isSaving: false,
-      selectActiveCourse: vi.fn(),
+      selectActiveCourse: mockSelectActiveCourse,
     });
 
     render(<ActiveCourseSelector />);
@@ -90,14 +192,13 @@ describe("ActiveCourseSelector", () => {
   });
 
   it("calls selectActiveCourse when a course is chosen", async () => {
-    const selectActiveCourse = vi.fn();
     const user = userEvent.setup();
     mockUseActiveCourse.mockReturnValue({
       activeCourse: null,
       availableCourses: [makeCourse({ id: 7, code: "COSC 310", name: "COSC 310" })],
       isLoading: false,
       isSaving: false,
-      selectActiveCourse,
+      selectActiveCourse: mockSelectActiveCourse,
     });
 
     render(<ActiveCourseSelector />);
@@ -107,6 +208,6 @@ describe("ActiveCourseSelector", () => {
       "7",
     );
 
-    expect(selectActiveCourse).toHaveBeenCalledWith(7);
+    expect(mockSelectActiveCourse).toHaveBeenCalledWith(7);
   });
 });

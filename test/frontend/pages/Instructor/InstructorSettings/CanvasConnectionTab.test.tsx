@@ -11,25 +11,28 @@ import {
 } from "@/services/canvas";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
-const mockRefreshUser = vi.fn();
+const { mockRefreshUser, mockAuthUser } = vi.hoisted(() => ({
+  mockRefreshUser: vi.fn(),
+  mockAuthUser: {
+    id: 1,
+    email: "instructor@example.com",
+    name: "Dr. Jane Doe",
+    role: "instructor" as const,
+    is_active: true,
+    has_canvas_token: true,
+    canvas_connections: [
+      {
+        id: 10,
+        canvas_url: "https://canvas.university.edu",
+        created_at: "2026-06-26T00:00:00.000Z",
+      },
+    ],
+  },
+}));
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
-    user: {
-      id: 1,
-      email: "instructor@example.com",
-      name: "Dr. Jane Doe",
-      role: "instructor",
-      is_active: true,
-      has_canvas_token: true,
-      canvas_connections: [
-        {
-          id: 10,
-          canvas_url: "https://canvas.university.edu",
-          created_at: "2026-06-26T00:00:00.000Z",
-        },
-      ],
-    },
+    user: mockAuthUser,
     accessToken: "access-token",
     refreshUser: mockRefreshUser,
     login: vi.fn(),
@@ -73,6 +76,14 @@ describe("CanvasConnectionTab", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    mockAuthUser.has_canvas_token = true;
+    mockAuthUser.canvas_connections = [
+      {
+        id: 10,
+        canvas_url: CANVAS_URL,
+        created_at: "2026-06-26T00:00:00.000Z",
+      },
+    ];
     mockedValidateCanvasToken.mockResolvedValue("valid");
     mockedUpdateCanvasConnections.mockResolvedValue({
       succeeded: [{ canvasUrl: CANVAS_URL, canvasToken: "abc123" }],
@@ -102,6 +113,21 @@ describe("CanvasConnectionTab", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  // #689 / #692 — Settings Canvas connection empty and reconnect path
+  // Verifies: Empty state explains how to connect and shows form fields.
+  it("shows the empty connection state and connect form fields", () => {
+    mockAuthUser.has_canvas_token = false;
+    mockAuthUser.canvas_connections = [];
+
+    renderWithRouter(<CanvasConnectionTab />);
+
+    expect(
+      screen.getByText(/No Canvas connections yet/i),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText(/Canvas URL/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Canvas API Token/i)).toBeInTheDocument();
   });
 
   it("shows saved connections and always allows adding more", () => {

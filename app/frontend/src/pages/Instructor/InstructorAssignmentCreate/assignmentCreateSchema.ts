@@ -27,5 +27,7 @@ export const assignmentReviewSchema = z.object({
     .positive("Points possible must be greater than 0"),
 });
 
-export type AssignmentReviewFormSchema = z.infer<typeof assignmentReviewSchema>;
+/** Form values after Zod coercion/validation (submit payload). */
+export type AssignmentReviewFormSchema = z.output<typeof assignmentReviewSchema>;
+/** Form values before coercion (HTML inputs may supply strings). */
 export type AssignmentReviewFormInput = z.input<typeof assignmentReviewSchema>;
