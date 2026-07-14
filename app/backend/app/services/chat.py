@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_action
-from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS, IntentPreviewAction
+from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS
 from app.models.audit_log import AuditLog
 from app.models.conversation import Conversation
 from app.models.course import Course
@@ -269,6 +269,30 @@ def _plain_text_response(raw_output: str) -> dict | None:
     if stripped and "{" not in stripped and "}" not in stripped:
         return {"action": "respond", "message": stripped}
     return None
+
+
+def _coerce_direct_action_to_preview(action) -> dict:
+    """Turn a model-emitted Canvas action into a pending preview.
+
+    This is the server-side safety net for models that skip the required
+    intent_preview wrapper. Do not route this through execute_tool's
+    intent_preview case: that path can ask clarifying questions for malformed
+    model-authored previews, but the critical invariant here is simpler and
+    stronger: a direct action on a normal chat turn must never execute.
+    """
+    proposed_action = action.model_dump()
+    action_name = action.action
+
+    return {
+        "action": "intent_preview",
+        "intent_preview": True,
+        "summary": (
+            f"I'll {action_name.replace('_', ' ')} as described below. "
+            "Please review before confirming."
+        ),
+        "proposed_action": proposed_action,
+        "preview_metadata": {"action": action_name},
+    }
 
 
 async def log_message(
@@ -732,11 +756,9 @@ async def handle_chat_message(
                 # real intent_preview here, rather than rejecting outright,
                 # gives the user the same confirmation step they should
                 # have gotten without losing the turn to an error message.
-                action = IntentPreviewAction(
-                    summary=f"I'll {action.action.replace('_', ' ')} as described below. Please review before confirming.",
-                    proposed_action=action.model_dump(),
-                )
-            result = await execute_tool(db, user, action)
+                result = _coerce_direct_action_to_preview(action)
+            else:
+                result = await execute_tool(db, user, action)
     except ToolExecutionError as e:
         await log_message(db, conversation, role="assistant", content=e.log_detail)
         await db.commit()
