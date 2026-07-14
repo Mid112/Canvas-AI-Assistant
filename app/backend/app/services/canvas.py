@@ -16,7 +16,7 @@ from app.integrations.canvas import (
     fetch_assignment,
     fetch_assignments,
     fetch_conversation_detail,
-    fetch_conversations,
+    fetch_course_conversations,
     fetch_courses,
     fetch_submissions,
     fetch_user_profile,
@@ -290,7 +290,7 @@ async def get_conversations(
     fetched live on every call, same as any other display-only view."""
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     token = require_canvas_token(user, course.canvas_url)
-    data = await fetch_conversations(int(course.canvas_course_id), token, course.canvas_url)
+    data = await fetch_course_conversations(int(course.canvas_course_id), token, course.canvas_url)
     return [ConversationSummary.model_validate(item) for item in data]
 
 

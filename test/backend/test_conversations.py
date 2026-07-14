@@ -101,7 +101,7 @@ def test_list_conversations_happy_path(client):
     headers = _register_with_canvas(client)
     local_course_id = _sync_local_course(client, headers)
 
-    with patch("app.services.canvas.fetch_conversations", new_callable=AsyncMock) as mock:
+    with patch("app.services.canvas.fetch_course_conversations", new_callable=AsyncMock) as mock:
         mock.return_value = MOCK_CONVERSATIONS
         response = client.get(
             f"/api/v1/messages/conversations?local_course_id={local_course_id}",

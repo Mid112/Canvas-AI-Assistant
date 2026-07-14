@@ -444,7 +444,7 @@ async def post_announcement(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
 
 
-async def fetch_conversations(
+async def fetch_course_conversations(
     course_id: int,
     token: str,
     canvas_url: str = settings.CANVAS_API_URL,
