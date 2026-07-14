@@ -165,7 +165,14 @@ def test_llm_http_error_returns_generic_message(client):
 # Raw read action auto-wrap (same safety as write wrap)
 # ---------------------------------------------------------------------------
 
-def test_raw_read_action_is_auto_wrapped_into_intent_preview(client):
+def test_raw_read_action_executes_directly_without_a_confirm_step(client):
+    """A read action can never mutate Canvas state, so — unlike a write —
+    it's never gated behind intent_preview/confirm: it executes directly on
+    the normal turn (see READ_ACTIONS in services/chat.py's
+    handle_chat_message). This still matters as a safety property: the
+    fetch actually happens (nothing here can accidentally skip it and leave
+    stale-looking success), and no pending action is left dangling for a
+    later confirm to (mis)execute."""
     headers, local_course_id = _register_with_course(client)
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = (
@@ -174,7 +181,7 @@ def test_raw_read_action_is_auto_wrapped_into_intent_preview(client):
 
     with (
         patch("app.services.chat.get_llm_adapter", return_value=mock_adapter),
-        patch("app.mcp_tools.dispatcher.get_assignments", new_callable=AsyncMock) as mock_fetch,
+        patch("app.mcp_tools.dispatcher.get_assignments", new=AsyncMock(return_value=[])) as mock_fetch,
     ):
         resp = client.post(
             "/api/v1/chat/",
@@ -185,10 +192,9 @@ def test_raw_read_action_is_auto_wrapped_into_intent_preview(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["is_error"] is False
-    assert body["reply"]["action"] == "intent_preview"
-    assert body["reply"]["proposed_action"]["action"] == "fetch_assignments"
-    assert "pending_message_id" in body["reply"]
-    mock_fetch.assert_not_called()
+    assert body["reply"]["assignments"] == []
+    assert "pending_message_id" not in body["reply"]
+    mock_fetch.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------

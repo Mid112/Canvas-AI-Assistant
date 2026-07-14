@@ -18,8 +18,13 @@ def _course(course_id: int, name: str, assignment_ids: list[int], student_count:
     return SimpleNamespace(
         id=course_id,
         name=name,
-        assignments=[SimpleNamespace(id=aid) for aid in assignment_ids],
-        students=[SimpleNamespace(id=i) for i in range(student_count)],
+        canvas_url="https://canvas.ubc.ca",
+        assignments=[
+            SimpleNamespace(id=aid, is_active=True, published=True) for aid in assignment_ids
+        ],
+        students=[
+            SimpleNamespace(id=i, enrollment_state="active") for i in range(student_count)
+        ],
     )
 
 
@@ -37,12 +42,17 @@ def _workflow(workflow_id: int, action_name: str, status: str):
 async def test_get_instructor_dashboard_empty_state():
     """No courses at all — every count is zero, no per-course queries run."""
     db = AsyncMock()
-    db.scalars = AsyncMock(side_effect=[[], []])  # courses, then recent workflows
+    # own_courses (for the Canvas mirror refresh), courses (eager-loaded), then
+    # recent workflows — see get_instructor_dashboard's three db.scalars calls.
+    db.scalars = AsyncMock(side_effect=[[], [], []])
     db.scalar = AsyncMock(return_value=0)  # pending_workflows count
 
     user = SimpleNamespace(id=1)
 
-    with patch("app.services.dashboard.get_active_course", new=AsyncMock(return_value=None)):
+    with (
+        patch("app.services.dashboard.get_active_course", new=AsyncMock(return_value=None)),
+        patch("app.services.dashboard._refresh_course_mirror", new=AsyncMock(return_value=None)),
+    ):
         result = await get_instructor_dashboard(user, db)
 
     assert result.course_count == 0
@@ -66,7 +76,10 @@ async def test_get_instructor_dashboard_aggregates_across_courses_with_assignmen
         _course(2, "COSC 499", assignment_ids=[], student_count=5),
     ]
     workflows = [_workflow(100, "create_assignment", "pending")]
-    db.scalars = AsyncMock(side_effect=[courses, workflows])
+    # own_courses and the eager-loaded courses re-fetch both return the same
+    # data (a real Canvas refresh in between doesn't change what's returned
+    # in this mocked scenario), then recent workflows.
+    db.scalars = AsyncMock(side_effect=[courses, courses, workflows])
     # Course 1 has assignments -> missing_count, late_count queried.
     # Course 2 has no assignments -> the two count queries are skipped entirely.
     # Then pending_workflows count is queried once at the end.
@@ -74,7 +87,10 @@ async def test_get_instructor_dashboard_aggregates_across_courses_with_assignmen
 
     user = SimpleNamespace(id=1)
 
-    with patch("app.services.dashboard.get_active_course", new=AsyncMock(return_value=None)):
+    with (
+        patch("app.services.dashboard.get_active_course", new=AsyncMock(return_value=None)),
+        patch("app.services.dashboard._refresh_course_mirror", new=AsyncMock(return_value=None)),
+    ):
         result = await get_instructor_dashboard(user, db)
 
     assert result.course_count == 2
@@ -99,12 +115,15 @@ async def test_get_instructor_dashboard_null_counts_default_to_zero():
     response — it should coalesce to 0."""
     db = AsyncMock()
     courses = [_course(1, "COSC 111", assignment_ids=[10])]
-    db.scalars = AsyncMock(side_effect=[courses, []])
+    db.scalars = AsyncMock(side_effect=[courses, courses, []])
     db.scalar = AsyncMock(side_effect=[None, None, None])
 
     user = SimpleNamespace(id=1)
 
-    with patch("app.services.dashboard.get_active_course", new=AsyncMock(return_value=None)):
+    with (
+        patch("app.services.dashboard.get_active_course", new=AsyncMock(return_value=None)),
+        patch("app.services.dashboard._refresh_course_mirror", new=AsyncMock(return_value=None)),
+    ):
         result = await get_instructor_dashboard(user, db)
 
     assert result.missing_submissions == 0
@@ -115,7 +134,7 @@ async def test_get_instructor_dashboard_null_counts_default_to_zero():
 @pytest.mark.asyncio
 async def test_get_instructor_dashboard_includes_active_course():
     db = AsyncMock()
-    db.scalars = AsyncMock(side_effect=[[], []])
+    db.scalars = AsyncMock(side_effect=[[], [], []])
     db.scalar = AsyncMock(return_value=0)
     active = SimpleNamespace(
         local_id=7,
@@ -127,7 +146,10 @@ async def test_get_instructor_dashboard_includes_active_course():
 
     user = SimpleNamespace(id=1)
 
-    with patch("app.services.dashboard.get_active_course", new=AsyncMock(return_value=active)):
+    with (
+        patch("app.services.dashboard.get_active_course", new=AsyncMock(return_value=active)),
+        patch("app.services.dashboard._refresh_course_mirror", new=AsyncMock(return_value=None)),
+    ):
         result = await get_instructor_dashboard(user, db)
 
     assert result.active_course is not None

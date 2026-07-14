@@ -35,7 +35,18 @@ def register_instructor(client: TestClient, *, prefix: str = "inst") -> dict:
 
 
 def connect_canvas_and_sync_course(client: TestClient, headers: dict) -> int:
-    """Connect Canvas for the instructor and sync one course. Returns local_course_id."""
+    """Connect Canvas for the instructor and sync one course, then set it
+    active. Returns local_course_id.
+
+    The active-course PATCH also seeds canvas_course_names (see
+    set_active_course's sync_courses_if_stale call) — that's what lets a
+    chat turn with no explicit local_course_id and no course_name in the
+    mocked LLM reply still resolve a course via the
+    UserPreference.active_course_id fallback in get_or_create_conversation.
+    Without it, the model is never trusted with a raw local_course_id
+    (see COURSE RESOLUTION in build_system_prompt), so every chat turn
+    below would get stuck asking "Which course is this about?" instead of
+    producing a real preview."""
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         patch_resp = client.patch(
             "/api/v1/auth/me/canvas-token",
@@ -60,9 +71,18 @@ def connect_canvas_and_sync_course(client: TestClient, headers: dict) -> int:
             f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}",
             headers=headers,
         )
-    assert resp.status_code == 200, resp.json()
-    assert len(resp.json()) >= 1
-    return resp.json()[0]["local_id"]
+        assert resp.status_code == 200, resp.json()
+        assert len(resp.json()) >= 1
+        local_course_id = resp.json()[0]["local_id"]
+
+        active_resp = client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_course_id},
+            headers=headers,
+        )
+        assert active_resp.status_code == 200, active_resp.json()
+
+    return local_course_id
 
 
 def register_with_canvas(client: TestClient, *, prefix: str = "canvas") -> tuple[dict, int]:

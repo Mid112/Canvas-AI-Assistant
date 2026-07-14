@@ -40,7 +40,11 @@ def _db_with_flush_assigning_ids() -> AsyncMock:
 
 @pytest.mark.asyncio
 async def test_get_students_returns_empty_list_when_no_enrollments():
+    """Even an empty enrollments response still queries existing local student
+    rows — that's what lets the reconciliation loop mark a student who's no
+    longer actively enrolled as inactive instead of leaving them stale."""
     db = AsyncMock()
+    db.scalars = AsyncMock(return_value=[])
     course = SimpleNamespace(id=1, canvas_course_id="500", canvas_url="https://canvas.ubc.ca")
     user = SimpleNamespace(id=1)
 
@@ -52,8 +56,8 @@ async def test_get_students_returns_empty_list_when_no_enrollments():
         result = await get_students(1, user, "https://canvas.ubc.ca", db)
 
     assert result == []
-    db.scalars.assert_not_called()
-    db.commit.assert_not_called()
+    db.scalars.assert_awaited_once()
+    db.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio

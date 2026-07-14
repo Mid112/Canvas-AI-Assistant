@@ -27,6 +27,7 @@ from app.mcp_tools.schemas import (
     SetActiveCourseAction,
     UpdateAssignmentAction,
 )
+from app.schemas.canvas import SubmissionStatus
 
 
 def _course(course_id: int = 1, canvas_url: str = "https://canvas.ubc.ca", name: str = "COSC 111"):
@@ -79,15 +80,21 @@ async def test_execute_fetch_submissions_builds_person_summary():
     action = FetchSubmissionsAction(local_course_id=1, assignment_id=10)
 
     submissions = [
-        SimpleNamespace(student_name="Alice", user_id=1, workflow_state="submitted", model_dump=lambda: {}),
-        SimpleNamespace(student_name=None, user_id=2, workflow_state="unsubmitted", model_dump=lambda: {}),
+        SimpleNamespace(
+            student_name="Alice", user_id=1, status=SubmissionStatus.submitted, model_dump=lambda: {},
+        ),
+        SimpleNamespace(
+            student_name=None, user_id=2, status=SubmissionStatus.unsubmitted, model_dump=lambda: {},
+        ),
     ]
 
     with patch("app.mcp_tools.dispatcher.get_submissions", new=AsyncMock(return_value=submissions)):
         result = await execute_tool(db, user, action)
 
-    assert "Alice submitted" in result["summary"]
-    assert "Student 2 has not submitted" in result["summary"]
+    assert result["submitted_students"] == [{"user_id": 1, "name": "Alice"}]
+    assert result["pending_students"] == [{"user_id": 2, "name": "Student 2"}]
+    assert result["counts"]["submitted"] == 1
+    assert result["counts"]["unsubmitted"] == 1
 
 
 @pytest.mark.asyncio

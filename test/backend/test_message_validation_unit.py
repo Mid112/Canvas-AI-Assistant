@@ -174,16 +174,8 @@ async def test_send_falls_back_to_submission_ids_when_roster_empty():
             new=AsyncMock(return_value=[]),
         ),
         patch(
-            "app.services.message_validation.require_canvas_token",
-            return_value="tok",
-        ),
-        patch(
-            "app.services.message_validation.fetch_assignments",
-            new=AsyncMock(return_value=[{"id": 5}]),
-        ),
-        patch(
-            "app.services.message_validation.fetch_submissions",
-            new=AsyncMock(return_value=[{"user_id": 42}]),
+            "app.services.message_validation.get_submission_derived_students",
+            new=AsyncMock(return_value=[{"user_id": 42, "name": None, "email": None, "login_id": None}]),
         ),
     ):
         course = await validate_message_for_send(
