@@ -56,19 +56,6 @@ export function InstructorCoursesCard({
                   Active
                 </span>
               ) : null}
-              {!course.isPublished ? (
-                <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700">
-                  Unpublished
-                </span>
-              ) : null}
-              {course.isPublished && !course.isWritable ? (
-                <span
-                  className="rounded-full bg-slate-500/10 px-2 py-0.5 text-xs font-medium text-slate-600"
-                  title="This course has concluded — viewable, but read-only"
-                >
-                  Completed
-                </span>
-              ) : null}
             </div>
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
@@ -177,19 +164,6 @@ export function InstructorCoursesList({
                 {activeCourseId === course.id ? (
                   <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                     Active
-                  </span>
-                ) : null}
-                {!course.isPublished ? (
-                  <span className="ml-2 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700">
-                    Unpublished
-                  </span>
-                ) : null}
-                {course.isPublished && !course.isWritable ? (
-                  <span
-                    className="ml-2 rounded-full bg-slate-500/10 px-2 py-0.5 text-xs font-medium text-slate-600"
-                    title="This course has concluded — viewable, but read-only"
-                  >
-                    Completed
                   </span>
                 ) : null}
               </p>
