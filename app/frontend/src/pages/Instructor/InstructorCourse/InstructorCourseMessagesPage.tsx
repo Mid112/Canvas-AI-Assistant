@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useInstructorCourseOutletContext } from "@/hooks/useInstructorCourseOutletContext";
 import { fetchCourseStudentsWithSubmissionFallback } from "@/services/students";
 import type { FetchMessageDraftOptions } from "@/types/messageDraft";
+import { pageEmbedded } from "@/lib/page-shell";
 
 export function InstructorCourseMessagesPage() {
   const { accessToken } = useAuth();
@@ -114,7 +115,7 @@ export function InstructorCourseMessagesPage() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className={pageEmbedded}>
       {loadError ? (
         <Card className="shadow-sm ring-1 ring-border/60">
           <CardContent className="flex items-start gap-3 p-4 text-sm text-muted-foreground">

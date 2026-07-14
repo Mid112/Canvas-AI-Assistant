@@ -1,5 +1,6 @@
-import { Sparkles } from "lucide-react";
+import { Eye } from "lucide-react";
 
+import { PreviewBanner } from "@/components/brand/PreviewBanner";
 import { ActionSummaryCard } from "@/components/preview/ActionSummaryCard";
 import { ActionTypeSection } from "@/components/preview/ActionTypeSection";
 import { AffectedResourcesCard } from "@/components/preview/AffectedResourcesCard";
@@ -26,10 +27,12 @@ export function PreviewPanel({
 }: PreviewPanelProps) {
   return (
     <div className="space-y-6">
+      <PreviewBanner />
+
       <header className="space-y-1">
         <div className="flex items-center gap-2">
-          <Sparkles className="size-5 text-violet-600" aria-hidden="true" />
-          <h1 className="text-2xl font-bold tracking-tight text-[#1e293b]">
+          <Eye className="size-5 text-primary" aria-hidden="true" />
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             {preview.title}
           </h1>
         </div>

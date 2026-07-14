@@ -4,7 +4,7 @@ import { LandingHero } from "@/pages/Landing/LandingHero";
 
 export function LandingPage() {
   return (
-    <div className="min-h-svh bg-white">
+    <div className="min-h-svh scroll-smooth bg-card">
       <LandingHeader />
       <main>
         <LandingHero />

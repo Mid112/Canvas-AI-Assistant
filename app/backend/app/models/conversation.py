@@ -42,5 +42,10 @@ class Conversation(Base):
 
     user: Mapped[User] = relationship("User", back_populates="conversations")
     course: Mapped[Course | None] = relationship("Course")
-    messages: Mapped[list[Message]] = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
+    messages: Mapped[list[Message]] = relationship(
+        "Message",
+        back_populates="conversation",
+        cascade="all, delete-orphan",
+        order_by="Message.id",
+    )
     workflows: Mapped[list[Workflow]] = relationship("Workflow", back_populates="conversation", cascade="all, delete-orphan")

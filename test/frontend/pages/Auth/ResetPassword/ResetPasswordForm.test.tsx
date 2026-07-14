@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -63,16 +63,18 @@ describe("ResetPasswordForm", () => {
     );
   });
 
-  // Verifies: Allows typing into the email field.
-  it("allows typing into the email field", async () => {
+  // Verifies: Does not submit when the email is invalid.
+  it("does not submit when the email is invalid", async () => {
     const user = userEvent.setup();
+    const onSubmit = vi.fn();
 
-    renderWithRouter(<ResetPasswordForm onSubmit={vi.fn()} />);
+    renderWithRouter(<ResetPasswordForm onSubmit={onSubmit} />);
 
-    const emailInput = screen.getByLabelText("Email Address");
+    await user.type(screen.getByLabelText("Email Address"), "invalid-email");
+    fireEvent.submit(
+      screen.getByRole("button", { name: "Send Reset Link" }).closest("form")!,
+    );
 
-    await user.type(emailInput, "you@university.edu");
-
-    expect(emailInput).toHaveValue("you@university.edu");
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 });

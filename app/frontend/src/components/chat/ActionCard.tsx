@@ -39,7 +39,10 @@ export function ActionCard({ action }: ActionCardProps) {
           {action.primaryLink ? (
             <Link
               to={action.primaryLink.href}
-              state={{ returnTo: paths.instructor.assistant }}
+              state={{
+                returnTo: paths.instructor.assistant,
+                ...action.primaryLink.state,
+              }}
               className={cn(buttonVariants({ size: "sm" }))}
             >
               {action.primaryLink.label}
@@ -49,6 +52,7 @@ export function ActionCard({ action }: ActionCardProps) {
           {action.secondaryLink ? (
             <Link
               to={action.secondaryLink.href}
+              state={action.secondaryLink.state}
               className={cn(buttonVariants({ size: "sm", variant: "outline" }))}
             >
               {action.secondaryLink.label}

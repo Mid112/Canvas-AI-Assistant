@@ -1,3 +1,4 @@
+import json
 import re
 
 
@@ -47,3 +48,66 @@ def extract_json_object(raw_llm_output: str) -> str:
                 return without_thinking[start : index + 1]
 
     return without_thinking[start:].strip()
+
+
+def escape_control_chars_in_json_strings(text: str) -> str:
+    """Escape literal control characters that appear inside JSON string values.
+
+    Models often emit multi-line description fields with raw newlines inside
+    quotes, which is invalid JSON (`json.loads` raises "Invalid control
+    character"). Walk the text the same way extract_json_object does and only
+    rewrite control chars while inside a string literal.
+    """
+    out: list[str] = []
+    in_string = False
+    escaped = False
+    for char in text:
+        if in_string:
+            if escaped:
+                out.append(char)
+                escaped = False
+                continue
+            if char == "\\":
+                out.append(char)
+                escaped = True
+                continue
+            if char == '"':
+                out.append(char)
+                in_string = False
+                continue
+            if char == "\n":
+                out.append("\\n")
+                continue
+            if char == "\r":
+                out.append("\\r")
+                continue
+            if char == "\t":
+                out.append("\\t")
+                continue
+            if ord(char) < 0x20:
+                out.append(f"\\u{ord(char):04x}")
+                continue
+            out.append(char)
+            continue
+
+        if char == '"':
+            in_string = True
+        out.append(char)
+    return "".join(out)
+
+
+def loads_llm_json(raw_llm_output: str) -> dict:
+    """Extract and parse the first JSON object from model output.
+
+    Retries after escaping literal control characters inside strings — a
+    common failure mode when the model writes a multi-line description
+    field without JSON-escaping the newlines.
+    """
+    text = extract_json_object(raw_llm_output)
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        data = json.loads(escape_control_chars_in_json_strings(text))
+    if not isinstance(data, dict):
+        raise ValueError("LLM JSON was not an object")
+    return data

@@ -1,0 +1,151 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  mapInstructorDashboardApiToData,
+  mapRecentWorkflowsToActivity,
+  type InstructorDashboardApiResponse,
+} from "@/lib/map-dashboard";
+import { sharedDashboardQuickActions } from "@/types/dashboard";
+
+const baseResponse: InstructorDashboardApiResponse = {
+  course_count: 2,
+  student_count: 45,
+  assignment_count: 8,
+  missing_submissions: 0,
+  late_submissions: 0,
+  pending_workflows: 0,
+  active_course: {
+    local_id: 1,
+    name: "CS 101: Intro",
+    canvas_course_id: 123,
+  },
+  courses: [
+    {
+      local_id: 1,
+      name: "CS 101: Intro",
+      student_count: 30,
+      assignment_count: 5,
+      missing_submissions: 0,
+      late_submissions: 0,
+    },
+    {
+      local_id: 2,
+      name: "MATH 200",
+      student_count: 15,
+      assignment_count: 3,
+      missing_submissions: 0,
+      late_submissions: 0,
+    },
+  ],
+  recent_workflows: [
+    {
+      id: 10,
+      action_name: "create_assignment",
+      user_prompt: "Create quiz",
+      status: "completed",
+      created_at: "2026-10-01T12:00:00Z",
+    },
+    {
+      id: 11,
+      action_name: "send_message",
+      user_prompt: "Announce exam",
+      status: "completed",
+      created_at: "2026-10-02T12:00:00Z",
+    },
+    {
+      id: 12,
+      action_name: "unknown_action",
+      user_prompt: "Other",
+      status: "completed",
+      created_at: "2026-10-03T12:00:00Z",
+    },
+  ],
+};
+
+describe("mapInstructorDashboardApiToData", () => {
+  it("maps overview metrics, courses, and activity", () => {
+    const result = mapInstructorDashboardApiToData(baseResponse);
+
+    expect(result.metrics).toEqual({
+      activeCourses: 2,
+      activeCoursesTrend: 0,
+      totalStudents: 45,
+      totalStudentsTrend: 0,
+      missingSubmissions: 0,
+      missingSubmissionsTrend: 0,
+      pendingApprovals: 0,
+    });
+    expect(result.quickActions).toEqual(sharedDashboardQuickActions);
+    expect(result.activeCourses).toEqual([
+      {
+        id: 1,
+        code: "CS 101",
+        name: "CS 101: Intro",
+        studentCount: 30,
+        assignmentCount: 5,
+      },
+      {
+        id: 2,
+        code: "MATH 200",
+        name: "MATH 200",
+        studentCount: 15,
+        assignmentCount: 3,
+      },
+    ]);
+    expect(result.recentActivity).toEqual([
+      {
+        id: "10",
+        type: "assignment_created",
+        title: "Create Assignment",
+        courseLabel: "CS 101: Intro",
+        timestamp: "2026-10-01T12:00:00Z",
+      },
+      {
+        id: "11",
+        type: "announcement_posted",
+        title: "Send Message",
+        courseLabel: "CS 101: Intro",
+        timestamp: "2026-10-02T12:00:00Z",
+      },
+      {
+        id: "12",
+        type: "message_received",
+        title: "Unknown Action",
+        courseLabel: "CS 101: Intro",
+        timestamp: "2026-10-03T12:00:00Z",
+      },
+    ]);
+    expect(result.notifications).toEqual([]);
+  });
+
+  it("adds notifications for missing, late, and pending counts", () => {
+    const result = mapInstructorDashboardApiToData({
+      ...baseResponse,
+      missing_submissions: 3,
+      late_submissions: 2,
+      pending_workflows: 1,
+    });
+
+    expect(result.notifications).toHaveLength(3);
+    expect(result.notifications[0]?.id).toBe("missing-submissions");
+    expect(result.notifications[1]?.id).toBe("late-submissions");
+    expect(result.notifications[2]?.id).toBe("pending-workflows");
+  });
+
+  it("uses a fallback course label when no active course is present", () => {
+    const result = mapInstructorDashboardApiToData({
+      ...baseResponse,
+      active_course: null,
+    });
+
+    expect(result.recentActivity[0]?.courseLabel).toBe("Your courses");
+  });
+});
+
+describe("mapRecentWorkflowsToActivity", () => {
+  it("returns only recent activity entries", () => {
+    expect(mapRecentWorkflowsToActivity(baseResponse)).toEqual(
+      mapInstructorDashboardApiToData(baseResponse).recentActivity,
+    );
+  });
+});

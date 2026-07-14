@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useInstitution } from "@/contexts/useInstitution";
 import { resolveCanvasApiUrl } from "@/lib/canvas-connections";
 import { isCanvasConnectionRequiredError } from "@/lib/canvas-connection";
-import { mapCanvasCourseToInstructorCourse } from "@/pages/Instructor/InstructorCourses/mapCanvasCourse";
 import {
   AssignmentApiError,
   fetchCourseAssignments,
 } from "@/services/assignments";
-import { CanvasApiError, fetchCourses } from "@/services/canvas";
 import {
   SubmissionApiError,
   fetchAssignmentSubmissions,
@@ -47,6 +46,7 @@ export function useCourseSubmissionAnalytics(
 ): UseCourseSubmissionAnalyticsResult {
   const { accessToken, user, logout } = useAuth();
   const { selectedInstitution } = useInstitution();
+  const { availableCourses, isLoaded: isCourseListLoaded } = useActiveCourse();
   const [course, setCourse] = useState<InstructorCourse | null>(null);
   const [canvasAssignments, setCanvasAssignments] = useState<Assignment[]>([]);
   const [assignments, setAssignments] = useState<AssignmentSubmissionAnalysis[]>(
@@ -77,6 +77,7 @@ export function useCourseSubmissionAnalytics(
       const fallbackCanvasUrl = resolveCanvasApiUrl(
         user,
         selectedInstitution.id,
+        selectedInstitution.canvasUrl,
       );
 
       const seededCourse = options?.seedCourse ?? null;
@@ -152,42 +153,51 @@ export function useCourseSubmissionAnalytics(
         return;
       }
 
+      // Wait for ActiveCourseProvider's shared course list to complete its
+      // first fetch before concluding the course isn't in it — otherwise a
+      // course lookup that runs before that fetch resolves would wrongly
+      // report "not available" for a course that just hasn't loaded yet.
+      if (!isCourseListLoaded) {
+        setIsLoading(true);
+        return;
+      }
+
       setIsLoading(true);
       setLoadError(null);
       setNeedsCanvasConnection(false);
 
-      try {
-        const courses = await fetchCourses(token, fallbackCanvasUrl);
-        if (cancelled) {
-          return;
-        }
+      const matchedCourse =
+        availableCourses.find((entry) => entry.id === localCourseId) ?? null;
 
-        const matchedCourse = courses
-          .map((entry) => mapCanvasCourseToInstructorCourse(entry, fallbackCanvasUrl))
-          .find((entry) => entry?.id === localCourseId);
-
-        if (!matchedCourse) {
+      if (!matchedCourse) {
+        if (!cancelled) {
           setCourse(null);
           setCanvasAssignments([]);
           setAssignments([]);
           setLoadError("This course is not available in your synced Canvas courses.");
-          return;
+          setIsLoading(false);
         }
+        return;
+      }
 
-        const selectedCanvasUrl = resolveCanvasApiUrl(
-          user,
-          selectedInstitution.id,
-          matchedCourse.canvasUrl,
-        );
+      const selectedCanvasUrl = resolveCanvasApiUrl(
+        user,
+        selectedInstitution.id,
+        matchedCourse.canvasUrl,
+      );
 
-        if (!selectedCanvasUrl) {
+      if (!selectedCanvasUrl) {
+        if (!cancelled) {
           setNeedsCanvasConnection(true);
           setCourse(null);
           setCanvasAssignments([]);
           setAssignments([]);
-          return;
+          setIsLoading(false);
         }
+        return;
+      }
 
+      try {
         const assignmentList = await fetchCourseAssignments(
           localCourseId,
           token,
@@ -209,7 +219,7 @@ export function useCourseSubmissionAnalytics(
           return;
         }
 
-        if (error instanceof CanvasApiError && error.status === 401) {
+        if (error instanceof AssignmentApiError && error.status === 401) {
           logout();
           return;
         }
@@ -223,7 +233,6 @@ export function useCourseSubmissionAnalytics(
         }
 
         const message =
-          error instanceof CanvasApiError ||
           error instanceof AssignmentApiError
             ? error.message
             : "Unable to load course analytics.";
@@ -245,9 +254,12 @@ export function useCourseSubmissionAnalytics(
     };
   }, [
     accessToken,
+    availableCourses,
     hasCanvasToken,
+    isCourseListLoaded,
     localCourseId,
     logout,
+    selectedInstitution.canvasUrl,
     selectedInstitution.id,
     user,
     options?.seedCourse,

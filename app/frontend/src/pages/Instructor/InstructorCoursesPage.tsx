@@ -17,7 +17,7 @@ import {
   InstructorCoursesSection,
 } from "@/pages/Instructor/InstructorCourses/InstructorCoursesSection";
 import { useCanvasInstructorCourses } from "@/pages/Instructor/InstructorCourses/useCanvasInstructorCourses";
-import type { CourseViewMode } from "@/types/course";
+import type { CoursePublishFilter, CourseViewMode } from "@/types/course";
 
 export function InstructorCoursesPage() {
   const { user } = useAuth();
@@ -35,15 +35,25 @@ export function InstructorCoursesPage() {
     reloadCourses,
   } = useCanvasInstructorCourses();
   const [search, setSearch] = useState("");
+  const [publishFilter, setPublishFilter] = useState<CoursePublishFilter>("all");
   const [viewMode, setViewMode] = useState<CourseViewMode>("grid");
   const [settingActiveCourseId, setSettingActiveCourseId] = useState<number | null>(
     null,
   );
 
   const filteredCourses = useMemo(() => {
-    const filtered = filterInstructorCourses(courses, search);
+    const filtered = filterInstructorCourses(courses, search, publishFilter);
     return sortInstructorCourses(filtered);
-  }, [courses, search]);
+  }, [courses, search, publishFilter]);
+
+  // Overview metrics track the publish-status filter (all/published/
+  // unpublished) but deliberately ignore the search text — typing a search
+  // query narrows the list below without also shrinking the aggregate
+  // course/student/assignment counts.
+  const overviewCourses = useMemo(
+    () => filterInstructorCourses(courses, "", publishFilter),
+    [courses, publishFilter],
+  );
 
   const handleSetActiveCourse = async (courseId: number) => {
     const course = courses.find((item) => item.id === courseId);
@@ -75,7 +85,12 @@ export function InstructorCoursesPage() {
         isRefreshing={isLoading}
       />
 
-      <InstructorCoursesSearch search={search} onSearchChange={setSearch} />
+      <InstructorCoursesSearch
+        search={search}
+        onSearchChange={setSearch}
+        publishFilter={publishFilter}
+        onPublishFilterChange={setPublishFilter}
+      />
 
       {error ? (
         <p
@@ -103,7 +118,7 @@ export function InstructorCoursesPage() {
         </p>
       ) : null}
 
-      <InstructorCoursesOverview courses={courses} />
+      <InstructorCoursesOverview courses={overviewCourses} />
 
       {isLoading ? (
         <Card className="shadow-sm ring-1 ring-border/60">

@@ -6,6 +6,7 @@ import {
   MessageDraftPageHeader,
 } from "@/components/messages/MessageDraftPage";
 import type { FetchMessageDraftOptions } from "@/types/messageDraft";
+import { pageShell } from "@/lib/page-shell";
 
 interface StudentMessageDraftPageProps {
   fetchOptions?: FetchMessageDraftOptions;
@@ -34,7 +35,7 @@ export function StudentMessageDraftPage({
   );
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+    <div className={pageShell}>
       <MessageDraftPageHeader />
       <MessageDraftPage fetchOptions={fetchOptions} />
     </div>

@@ -8,6 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { paths } from "@/routes/paths";
 import { fetchAdminDashboard } from "@/services/adminDashboard";
+import { pageShell } from "@/lib/page-shell";
 
 export function AdminDashboardPage() {
   const { accessToken } = useAuth();
@@ -56,7 +57,7 @@ export function AdminDashboardPage() {
   ];
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+    <div className={pageShell}>
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
           Admin Dashboard

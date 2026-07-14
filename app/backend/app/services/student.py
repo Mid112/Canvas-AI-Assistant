@@ -23,20 +23,23 @@ async def get_students(
 
     data = await fetch_enrollments(canvas_course_id, token, canvas_url)
 
-    if not data:
-        return []
-
-    # Batch-fetch existing student rows for this course to avoid N+1 on upsert
-    canvas_user_ids = [str(item["user_id"]) for item in data]
-    rows = await db.scalars(
-        select(Student).where(
-            Student.canvas_user_id.in_(canvas_user_ids),
-            Student.course_id == course.id,
-        )
-    )
+    # Batch-fetch ALL local student rows for this course (not just ones Canvas still
+    # returns) — fetch_enrollments only requests state[]=active, so a row missing from
+    # `data` means Canvas no longer considers this an active enrollment (unenrolled,
+    # deactivated, or any other non-"active" transition — e.g. "invited"/"completed").
+    # Deliberately not narrowed to "genuinely unenrolled only": every consumer of
+    # get_students (dashboard/course-overview counts, message_validation's recipient
+    # check) wants "currently active enrollment," which this already correctly
+    # provides — a student who is merely re-invited-but-not-accepted or whose
+    # enrollment concluded shouldn't count as an active, message-able roster member
+    # either. No `if not data:` special case needed — the reconciliation loop below
+    # already marks every existing row inactive when canvas_user_ids is empty.
+    rows = await db.scalars(select(Student).where(Student.course_id == course.id))
     student_map: dict[str, Student] = {s.canvas_user_id: s for s in rows}
 
     now = datetime.now(UTC)
+    canvas_user_ids = {str(item["user_id"]) for item in data}
+
     for item in data:
         uid = str(item["user_id"])
         user_obj = item.get("user") or {}
@@ -62,6 +65,13 @@ async def get_students(
             )
             db.add(student)
             student_map[uid] = student
+
+    # Reconcile unenrollments: any local row Canvas didn't return as active this
+    # time is no longer an active enrollment — mark inactive rather than leaving
+    # it counted as an active student.
+    for uid, student in student_map.items():
+        if uid not in canvas_user_ids and student.enrollment_state != "inactive":
+            student.enrollment_state = "inactive"
 
     await db.flush()
     await db.commit()

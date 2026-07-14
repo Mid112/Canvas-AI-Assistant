@@ -1,4 +1,4 @@
-import { Bot } from "lucide-react";
+import { AssistantAvatar } from "@/components/brand/AssistantAvatar";
 
 export function LoadingIndicator() {
   return (
@@ -8,12 +8,7 @@ export function LoadingIndicator() {
       aria-live="polite"
       aria-label="Assistant is typing"
     >
-      <div
-        className="flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600"
-        aria-hidden="true"
-      >
-        <Bot className="size-4" />
-      </div>
+      <AssistantAvatar size="sm" />
 
       <div className="flex items-center gap-1 rounded-2xl rounded-tl-md bg-muted/70 px-4 py-3">
         <span className="size-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:-0.3s]" />

@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -275,6 +275,91 @@ describe("InstructorCoursesPage", () => {
     expect(
       screen.getByText("CS 250: Database Systems"),
     ).toBeInTheDocument();
+  });
+
+  it("filters courses by publish status", async () => {
+    const user = userEvent.setup();
+    mockedFetchCourses.mockResolvedValue([
+      ...canvasCourses,
+      {
+        canvas_id: 104,
+        local_id: 4,
+        name: "Draft Seminar",
+        course_code: "CS 499",
+        workflow_state: "unpublished",
+        total_students: 0,
+      },
+    ]);
+
+    renderWithInstitution(<InstructorCoursesPage />);
+    await screen.findByText("Your Courses (4)");
+
+    await user.selectOptions(
+      screen.getByLabelText("Filter by publish status"),
+      "unpublished",
+    );
+
+    expect(screen.getByText("Your Courses (1)")).toBeInTheDocument();
+    expect(screen.getByText("CS 499: Draft Seminar")).toBeInTheDocument();
+    expect(
+      screen.queryByText("CS 101: Introduction to Programming"),
+    ).not.toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByLabelText("Filter by publish status"),
+      "published",
+    );
+
+    expect(screen.getByText("Your Courses (3)")).toBeInTheDocument();
+    expect(screen.queryByText("CS 499: Draft Seminar")).not.toBeInTheDocument();
+  });
+
+  it("scopes the overview metrics to the publish-status filter", async () => {
+    const user = userEvent.setup();
+    mockedFetchCourses.mockResolvedValue([
+      ...canvasCourses,
+      {
+        canvas_id: 104,
+        local_id: 4,
+        name: "Draft Seminar",
+        course_code: "CS 499",
+        workflow_state: "unpublished",
+        total_students: 12,
+      },
+    ]);
+
+    renderWithInstitution(<InstructorCoursesPage />);
+    await screen.findByText("Your Courses (4)");
+
+    const totalStudentsCard = () =>
+      screen.getByText("Total Students").closest("div.shadow-sm")!;
+
+    // All 4 courses (45 + 38 + 52 + 12 students) counted before filtering.
+    expect(within(totalStudentsCard()).getByText("147")).toBeInTheDocument();
+
+    await user.selectOptions(
+      screen.getByLabelText("Filter by publish status"),
+      "unpublished",
+    );
+
+    expect(screen.getByText("Your Courses (1)")).toBeInTheDocument();
+    expect(within(totalStudentsCard()).getByText("12")).toBeInTheDocument();
+  });
+
+  it("keeps the overview metrics scoped to the publish filter while searching", async () => {
+    const user = userEvent.setup();
+
+    renderWithInstitution(<InstructorCoursesPage />);
+    await screen.findByText("Your Courses (3)");
+
+    await user.type(screen.getByLabelText("Search courses"), "Database");
+
+    expect(screen.getByText("Your Courses (1)")).toBeInTheDocument();
+    // Overview's "Total Courses" still reflects all 3 published courses,
+    // unaffected by the search text.
+    const totalCoursesCard = screen.getByText("Total Courses").closest("div.shadow-sm");
+    expect(totalCoursesCard).not.toBeNull();
+    expect(within(totalCoursesCard!).getByText("3")).toBeInTheDocument();
   });
 
   // Verifies: Shows the empty state when no courses match the search.

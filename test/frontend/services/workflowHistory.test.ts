@@ -4,7 +4,9 @@ import { mockWorkflowHistory } from "@/data/mockWorkflowHistory";
 import { mapWorkflowHistoryApiToEntry } from "@/lib/map-workflow-history";
 import {
   buildWorkflowHistoryCsv,
+  downloadWorkflowHistoryCsv,
   fetchWorkflowHistory,
+  undoWorkflow,
   WORKFLOW_HISTORY_PATH,
 } from "@/services/workflowHistory";
 import type { WorkflowHistoryApiResponse } from "@/types/workflowHistory";
@@ -153,6 +155,50 @@ describe("workflowHistory service", () => {
     expect(csv).toContain("Create Assignment");
   });
 
+  // Verifies: Undoes a workflow via the undo endpoint and maps the result.
+  it("undoes a workflow via the undo endpoint", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: 5,
+          conversation_id: 14,
+          action_name: "update_assignment",
+          user_prompt: "rename the assignment",
+          status: "executed",
+          proposed_action: { action: "update_assignment" },
+          affected_resources: [],
+          created_at: "2026-05-01T12:00:00.000Z",
+          executed_at: "2026-05-01T12:05:00.000Z",
+          user_name: "Dr. Jane Doe",
+          undoable: true,
+          undone_at: "2026-05-01T13:00:00.000Z",
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const entry = await undoWorkflow("access-token", "5");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `http://localhost:8000/api/v1${WORKFLOW_HISTORY_PATH}/5/undo`,
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(entry.undoneAt).toBe("2026-05-01T13:00:00.000Z");
+  });
+
+  // Verifies: Undo failures surface the backend's actionable detail text.
+  it("surfaces the backend's detail text when undo fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ detail: "This action has already been undone." }), {
+        status: 409,
+      }),
+    );
+
+    await expect(undoWorkflow("access-token", "5")).rejects.toThrow(
+      "This action has already been undone.",
+    );
+  });
+
   // Verifies: Prefixes spreadsheet formula characters in exported values.
   it("prefixes spreadsheet formula characters in exported values", () => {
     const csv = buildWorkflowHistoryCsv([
@@ -163,5 +209,32 @@ describe("workflowHistory service", () => {
     ]);
 
     expect(csv).toContain("'=SUM(A1:A10)");
+  });
+
+  it("downloads workflow history as csv", () => {
+    const click = vi.fn();
+    const createObjectURL = vi.fn().mockReturnValue("blob:history");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL,
+      revokeObjectURL,
+    });
+    const link = {
+      href: "",
+      download: "",
+      click,
+      remove: vi.fn(),
+    } as unknown as HTMLAnchorElement;
+    vi.spyOn(document, "createElement").mockReturnValue(link);
+    vi.spyOn(document.body, "appendChild").mockImplementation(() => link);
+
+    downloadWorkflowHistoryCsv(mockWorkflowHistory.slice(0, 1), "history.csv");
+
+    expect(link.download).toBe("history.csv");
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(link.remove).toHaveBeenCalledTimes(1);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:history");
+    vi.unstubAllGlobals();
   });
 });

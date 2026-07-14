@@ -3,6 +3,7 @@ import {
   instructorChatPreviewPath,
   instructorCourseAnalyticsPath,
   instructorDryRunPreviewPath,
+  instructorMessagesPath,
   paths,
 } from "@/routes/paths";
 import type { AssistantResponse } from "@/types/chat";
@@ -81,9 +82,27 @@ function buildInterpretedAction(
   }
 
   if (actionName === "send_message") {
+    const subject = readString(proposed.subject);
+    const body = readString(proposed.body);
+    const recipientIds = Array.isArray(proposed.recipient_canvas_user_ids)
+      ? proposed.recipient_canvas_user_ids
+          .map((id) => String(id))
+          .filter((id) => id.length > 0)
+      : undefined;
+
     interpretedAction.secondaryLink = {
-      label: "Open message drafts",
-      href: paths.instructor.messages,
+      label: "Edit in message draft",
+      href: instructorMessagesPath({ tab: "compose" }),
+      state: {
+        returnTo: paths.instructor.assistant,
+        aiMessageDraft: {
+          subject,
+          body,
+          prompt: readString(previewMetadata?.summary),
+          courseId,
+          recipientIds,
+        },
+      },
     };
   }
 

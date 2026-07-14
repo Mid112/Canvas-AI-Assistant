@@ -284,6 +284,20 @@ def is_reversible(action: str) -> bool:
     return ACTION_CLASSIFICATION.get(action) in ("read_only", "modifying")
 
 
+# Actions with a working undo path (see services/workflow.py::undo_workflow):
+# update_assignment re-applies the pre-write state; create_assignment deletes
+# the assignment that was created (there's no "prior state" to re-apply — it
+# didn't exist before). send_message is excluded since it's classified
+# "irreversible" above (a sent Canvas announcement/message can't be un-sent),
+# and is deliberately not extended to a standalone user-facing "delete
+# assignment" action — delete_course_assignment exists only for undo to call.
+UNDOABLE_ACTIONS = frozenset({"update_assignment", "create_assignment"})
+
+
+def is_undoable(action_name: str) -> bool:
+    return action_name in UNDOABLE_ACTIONS
+
+
 # Canvas-mutating actions that must never execute except via the
 # intent_preview -> confirm flow. This is the single source of truth for
 # that gate: dispatcher.py's intent_preview case uses it to decide which

@@ -13,6 +13,19 @@ export interface InstructorCourse {
   studentCount: number;
   assignmentCount: number;
   lastActivity: string;
+  /** True when Canvas's workflow_state is "available" or "completed" — a
+   * concluded course can still be selected/reviewed, just not written to (see
+   * isWritable). "unpublished" (a draft) and "deleted" courses are non-selectable. */
+  isPublished: boolean;
+  /** True only when Canvas's workflow_state is "available" — controls whether
+   * Canvas-content writes are offered (assignment creation, etc.), matching the
+   * backend's require_writable_course check. A completed course is isPublished
+   * but not isWritable: reviewable, but read-only. */
+  isWritable: boolean;
+  /** Canvas term name, e.g. "Fall 2026" — used only to disambiguate two
+   * courses that would otherwise display an identical label (see
+   * lib/disambiguate-course-labels.ts). Never shown on its own. */
+  term: string | null;
 }
 
 export interface CourseAnalyticsOverview {
@@ -34,6 +47,9 @@ export interface InstitutionCourseData {
 }
 
 export type CourseViewMode = "grid" | "list";
+
+/** Course Management's publish-status filter — "all" shows every course. */
+export type CoursePublishFilter = "all" | "published" | "unpublished";
 
 /** Frontend-only active course selection persisted in local storage. */
 export interface ActiveCourseSelection {

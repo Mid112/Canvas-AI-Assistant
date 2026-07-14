@@ -65,8 +65,8 @@ describe("RegisterPage", () => {
     ).toBeInTheDocument();
   });
 
-  // Verifies: Navigates to canvas info on create account.
-  it("navigates to canvas info on create account", async () => {
+  // Verifies: Navigates to onboarding on create account.
+  it("navigates to onboarding on create account", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
     mockRegister.mockResolvedValue({

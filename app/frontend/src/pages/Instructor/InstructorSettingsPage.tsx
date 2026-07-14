@@ -1,11 +1,12 @@
 import { useSearchParams } from "react-router-dom";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AiModelsSettingsTab } from "@/pages/Instructor/InstructorSettings/AiModelsSettingsTab";
 import { CanvasConnectionTab } from "@/pages/Instructor/InstructorSettings/CanvasConnectionTab";
 import { NotificationSettingsTab } from "@/pages/Instructor/InstructorSettings/NotificationSettingsTab";
 import { SecuritySettingsTab } from "@/pages/Instructor/InstructorSettings/SecuritySettingsTab";
 
-const SETTINGS_TABS = ["canvas", "notifications", "security"] as const;
+const SETTINGS_TABS = ["canvas", "notifications", "security", "ai-models"] as const;
 type SettingsTab = (typeof SETTINGS_TABS)[number];
 
 function isSettingsTab(value: string | null): value is SettingsTab {
@@ -41,6 +42,7 @@ export function InstructorSettingsPage() {
           <TabsTrigger value="canvas">Canvas Connection</TabsTrigger>
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsTrigger value="ai-models">AI Models</TabsTrigger>
         </TabsList>
 
         <TabsContent value="canvas" className="mt-6">
@@ -51,6 +53,9 @@ export function InstructorSettingsPage() {
         </TabsContent>
         <TabsContent value="security" className="mt-6">
           <SecuritySettingsTab />
+        </TabsContent>
+        <TabsContent value="ai-models" className="mt-6">
+          <AiModelsSettingsTab />
         </TabsContent>
       </Tabs>
     </div>

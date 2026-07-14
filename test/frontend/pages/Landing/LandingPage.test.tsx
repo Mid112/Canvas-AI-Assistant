@@ -4,7 +4,7 @@ import { LandingPage } from '@/pages/Landing/LandingPage';
 import { renderWithRouter } from '@test/utils/renderWithRouter';
 
 describe('LandingPage', () => {
-  it('renders the LandingHeader, LandingHero, and LandingFeatures sections', () => {
+  it('renders the header, hero, and features sections', () => {
     renderWithRouter(<LandingPage />);
     
     expect(
@@ -16,5 +16,6 @@ describe('LandingPage', () => {
       }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Conversational AI/i)).toBeInTheDocument();
+    expect(screen.getByText(/Powerful Features for Educators/i)).toBeInTheDocument();
   });
 });

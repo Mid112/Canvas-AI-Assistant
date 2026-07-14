@@ -31,10 +31,10 @@ export function ReviewPermissionsRestrictedActions() {
       className="mb-5"
     >
       <div className="mb-3 flex items-center gap-2">
-        <CircleX className="size-4 text-[#dc2626]" aria-hidden="true" />
+        <CircleX className="size-4 text-destructive" aria-hidden="true" />
         <h2
           id="restricted-actions-heading"
-          className="text-sm font-semibold text-[#1e293b]"
+          className="text-sm font-semibold text-foreground"
         >
           Restricted Actions
         </h2>
@@ -43,20 +43,20 @@ export function ReviewPermissionsRestrictedActions() {
         {RESTRICTED_ACTIONS.map((action) => (
           <li
             key={action.title}
-            className="flex items-center gap-3 rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3"
+            className="flex items-center gap-3 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3"
           >
             <action.icon
-              className="size-4 shrink-0 text-[#dc2626]"
+              className="size-4 shrink-0 text-destructive"
               aria-hidden="true"
             />
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-[#1e293b]">
+              <p className="text-sm font-semibold text-foreground">
                 {action.title}
               </p>
-              <p className="text-sm text-[#64748b]">{action.description}</p>
+              <p className="text-sm text-muted-foreground">{action.description}</p>
             </div>
             <CircleX
-              className="size-4 shrink-0 text-[#dc2626]"
+              className="size-4 shrink-0 text-destructive"
               aria-hidden="true"
             />
           </li>

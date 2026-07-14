@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { institutionSubmissionsData } from "@/data/institutionSubmissionsData";
-import { buildSubmissionsExportCsv } from "@/pages/Instructor/InstructorSubmissionsAnalysis/submissionExport";
+import {
+  buildSubmissionsExportCsv,
+  downloadSubmissionsReport,
+} from "@/pages/Instructor/InstructorSubmissionsAnalysis/submissionExport";
 
 const assignment = institutionSubmissionsData[0]!.assignments[0]!;
 
@@ -36,5 +39,70 @@ describe("buildSubmissionsExportCsv", () => {
     );
 
     expect(csv).toContain("missing,'=CMD(),'+evil@example.com");
+  });
+
+  it("quotes values that contain commas or newlines", () => {
+    const csv = buildSubmissionsExportCsv(
+      assignment,
+      [
+        {
+          id: "comma",
+          name: 'Student, Jr.',
+          email: "student@example.com",
+          avatarColor: "bg-sky-500",
+        },
+      ],
+      [],
+    );
+
+    expect(csv).toContain('"Student, Jr."');
+  });
+});
+
+describe("downloadSubmissionsReport", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("downloads a csv report in the browser", () => {
+    const click = vi.fn();
+    const createObjectURL = vi.fn().mockReturnValue("blob:report");
+    const revokeObjectURL = vi.fn();
+    vi.stubGlobal("URL", {
+      ...URL,
+      createObjectURL,
+      revokeObjectURL,
+    });
+    const link = {
+      href: "",
+      download: "",
+      style: { display: "" },
+      click,
+    } as unknown as HTMLAnchorElement;
+    const createElement = vi
+      .spyOn(document, "createElement")
+      .mockReturnValue(link);
+    const appendChild = vi
+      .spyOn(document.body, "appendChild")
+      .mockImplementation(() => link);
+    const removeChild = vi
+      .spyOn(document.body, "removeChild")
+      .mockImplementation(() => link);
+
+    downloadSubmissionsReport(
+      assignment,
+      assignment.missingSubmissions.slice(0, 1),
+      [],
+    );
+
+    expect(createObjectURL).toHaveBeenCalled();
+    expect(link.download).toBe(`${assignment.id}-submissions-report.csv`);
+    expect(click).toHaveBeenCalledTimes(1);
+    expect(removeChild).toHaveBeenCalledWith(link);
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:report");
+    createElement.mockRestore();
+    appendChild.mockRestore();
+    removeChild.mockRestore();
+    vi.unstubAllGlobals();
   });
 });

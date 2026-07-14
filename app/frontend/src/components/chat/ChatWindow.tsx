@@ -1,5 +1,13 @@
-import { AlertCircle } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertCircle, Plus } from "lucide-react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { AssistantMessage } from "@/components/chat/AssistantMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -9,14 +17,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
+import { useInstitution } from "@/contexts/useInstitution";
 import { seedChatMessages } from "@/data/assistantSeedData";
-import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
+import { isCancellationPhrase } from "@/lib/chat-cancellation";
 import {
   AssistantApiError,
   cancelAssistantAction,
   confirmAssistantAction,
   fetchConversation,
+  mapConversationToChatMessages,
   sendAssistantMessage,
+  type ConversationResponse,
 } from "@/services/assistant";
 import type { AssistantMessageResult } from "@/services/assistant";
 import type { ChatMessage } from "@/types/chat";
@@ -26,15 +37,59 @@ function createMessageId(): string {
   return crypto.randomUUID();
 }
 
-function parseStoredAssistantReply(content: string): Record<string, unknown> | null {
-  try {
-    const parsed = JSON.parse(content) as unknown;
-    return parsed && typeof parsed === "object"
-      ? (parsed as Record<string, unknown>)
-      : null;
-  } catch {
-    return null;
+function withWelcomeMessage(restoredMessages: ChatMessage[]): ChatMessage[] {
+  if (restoredMessages.length === 0) {
+    return seedChatMessages;
   }
+
+  return [
+    ...seedChatMessages,
+    ...restoredMessages.filter((message) => message.id !== "welcome"),
+  ];
+}
+
+function findLatestPendingMessageId(messages: ChatMessage[]): number | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.pendingActionStatus === "pending") {
+      return message.pendingMessageId;
+    }
+  }
+
+  return undefined;
+}
+
+interface InitialChatState {
+  messages: ChatMessage[];
+  conversationId?: number;
+  activePendingMessageId?: number;
+  hydratedConversationId?: number;
+}
+
+function getInitialChatState({
+  initialConversationId,
+  initialPendingMessageId,
+  loadedConversation,
+}: Pick<
+  ChatWindowProps,
+  "initialConversationId" | "initialPendingMessageId" | "loadedConversation"
+>): InitialChatState {
+  if (!loadedConversation) {
+    return {
+      messages: seedChatMessages,
+      conversationId: initialConversationId,
+      activePendingMessageId: initialPendingMessageId,
+    };
+  }
+
+  const loadedMessages = mapConversationToChatMessages(loadedConversation);
+
+  return {
+    messages: withWelcomeMessage(loadedMessages),
+    conversationId: loadedConversation.id,
+    activePendingMessageId: findLatestPendingMessageId(loadedMessages),
+    hydratedConversationId: loadedConversation.id,
+  };
 }
 
 interface ChatWindowProps {
@@ -42,25 +97,52 @@ interface ChatWindowProps {
   initialDraft?: string | null;
   initialConversationId?: number;
   initialPendingMessageId?: number;
+  loadedConversation?: ConversationResponse | null;
   onInitialPromptConsumed?: () => void;
   onModifyContextConsumed?: () => void;
+  onConversationChange?: (conversationId: number) => void;
   onLoadingChange?: (isLoading: boolean) => void;
+  onStartNewChat?: () => void;
+  modelSettings?: LlmProviderSettings | null;
+  onModelProviderChange?: (providerId: LlmProviderId) => void;
 }
 
-export function ChatWindow({
+export interface ChatWindowHandle {
+  sendPrompt: (prompt: string) => void;
+}
+
+export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function ChatWindow({
   initialPrompt = null,
   initialDraft = null,
   initialConversationId,
   initialPendingMessageId,
+  loadedConversation = null,
   onInitialPromptConsumed,
   onModifyContextConsumed,
+  onConversationChange,
   onLoadingChange,
-}: ChatWindowProps) {
+  onStartNewChat,
+  modelSettings = null,
+  onModelProviderChange,
+}, ref) {
   const { accessToken } = useAuth();
-  const { activeCourse } = useActiveCourse();
-  const [messages, setMessages] = useState<ChatMessage[]>(seedChatMessages);
+  const { activeCourse, refreshActiveCourse, notifyCoursesChanged } =
+    useActiveCourse();
+  const { refreshDashboard } = useInstitution();
+  const initialChatState = useMemo(
+    () =>
+      getInitialChatState({
+        initialConversationId,
+        initialPendingMessageId,
+        loadedConversation,
+      }),
+    [initialConversationId, initialPendingMessageId, loadedConversation],
+  );
+  const [messages, setMessages] = useState<ChatMessage[]>(
+    () => initialChatState.messages,
+  );
   const [conversationId, setConversationId] = useState<number | undefined>(
-    initialConversationId,
+    () => initialChatState.conversationId,
   );
   // A grouped send_message turn can resolve to more than one distinct
   // message, each independently confirmable/cancelable — so more than one
@@ -81,7 +163,9 @@ export function ChatWindow({
   );
   const scrollAnchorRef = useRef<HTMLDivElement>(null);
   const initialPromptHandledRef = useRef<string | null>(null);
-  const hydratedConversationRef = useRef<number | undefined>(undefined);
+  const hydratedConversationRef = useRef<number | undefined>(
+    initialChatState.hydratedConversationId,
+  );
   const isDeliveringRef = useRef(false);
 
   const assistantContext = useMemo(
@@ -103,6 +187,7 @@ export function ChatWindow({
   useEffect(() => {
     if (
       !accessToken ||
+      loadedConversation ||
       initialConversationId === undefined ||
       hydratedConversationRef.current === initialConversationId
     ) {
@@ -210,7 +295,7 @@ export function ChatWindow({
     return () => {
       cancelled = true;
     };
-  }, [accessToken, initialConversationId, initialPendingMessageId]);
+  }, [accessToken, initialConversationId, initialPendingMessageId, loadedConversation]);
 
   const appendAssistantMessage = useCallback(
     (response: AssistantMessageResult) => {
@@ -294,6 +379,7 @@ export function ChatWindow({
         }
 
         setConversationId(response.conversationId);
+        onConversationChange?.(response.conversationId);
         appendAssistantMessage(response);
         setRetryMessage(null);
       } catch (requestError) {
@@ -313,6 +399,7 @@ export function ChatWindow({
       appendAssistantMessage,
       assistantContext,
       conversationId,
+      onConversationChange,
       onModifyContextConsumed,
     ],
   );
@@ -365,6 +452,17 @@ export function ChatWindow({
           ),
         );
         appendAssistantMessage(response);
+
+        if (action === "confirm") {
+          // The confirmed action just committed a write to Canvas/the local
+          // DB — ActiveCourseProvider and InstitutionProvider are both
+          // mounted once for the whole session, so nothing else will ask
+          // them to re-fetch. Without this, course/assignment counts and
+          // dashboard metrics stay stale until a full page reload.
+          void refreshActiveCourse();
+          notifyCoursesChanged();
+          void refreshDashboard();
+        }
       } catch (requestError) {
         const errorMessage =
           requestError instanceof AssistantApiError
@@ -375,7 +473,15 @@ export function ChatWindow({
         setResolvingMessageId(null);
       }
     },
-    [accessToken, appendAssistantMessage, conversationId],
+    [
+      accessToken,
+      appendAssistantMessage,
+      conversationId,
+      notifyCoursesChanged,
+      onConversationChange,
+      refreshActiveCourse,
+      refreshDashboard,
+    ],
   );
 
   const handleSend = useCallback(
@@ -396,9 +502,39 @@ export function ChatWindow({
       };
 
       setMessages((current) => [...current, userMessage]);
+
+      if (
+        activePendingMessageId !== undefined &&
+        isCancellationPhrase(trimmed)
+      ) {
+        const pendingMessage = messages.find(
+          (entry) =>
+            entry.pendingMessageId === activePendingMessageId &&
+            entry.pendingActionStatus === "pending",
+        );
+
+        if (pendingMessage) {
+          void resolvePendingAction(pendingMessage, "cancel");
+          return;
+        }
+      }
+
       void deliverAssistantResponse(trimmed);
     },
-    [deliverAssistantResponse],
+    [
+      activePendingMessageId,
+      deliverAssistantResponse,
+      messages,
+      resolvePendingAction,
+    ],
+  );
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      sendPrompt: handleSend,
+    }),
+    [handleSend],
   );
 
   useEffect(() => {
@@ -431,6 +567,21 @@ export function ChatWindow({
   return (
     <Card className="flex min-h-[32rem] flex-1 flex-col overflow-hidden shadow-sm ring-1 ring-border/60">
       <CardContent className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:p-6">
+        {onStartNewChat ? (
+          <div className="flex shrink-0 justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onStartNewChat}
+              disabled={isLoading}
+            >
+              <Plus className="size-4" aria-hidden="true" />
+              New Chat
+            </Button>
+          </div>
+        ) : null}
+
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
           {messages.map((message) =>
             message.role === "assistant" ? (
@@ -491,8 +642,10 @@ export function ChatWindow({
           isLoading={isLoading}
           inputError={inputError}
           initialValue={initialDraft ?? ""}
+          modelSettings={modelSettings}
+          onModelProviderChange={onModelProviderChange}
         />
       </CardContent>
     </Card>
   );
-}
+});

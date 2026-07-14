@@ -13,25 +13,25 @@ interface ConnectCanvasTokenStatusProps {
 
 const statusConfig = {
   validating: {
-    className: "text-[#64748b]",
+    className: "text-muted-foreground",
     icon: LoaderCircle,
     message: "Checking token...",
     spin: true,
   },
   valid: {
-    className: "text-[#16a34a]",
+    className: "text-emerald-600",
     icon: CheckCircle2,
     message: "Token is valid",
     spin: false,
   },
   expired: {
-    className: "text-[#dc2626]",
+    className: "text-destructive",
     icon: AlertCircle,
     message: "Token has expired",
     spin: false,
   },
   invalid: {
-    className: "text-[#dc2626]",
+    className: "text-destructive",
     icon: AlertCircle,
     message: "Token is invalid",
     spin: false,

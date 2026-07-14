@@ -51,7 +51,7 @@ describe("LoginPage", () => {
       screen.getByText("Canvas Workflow Assistant"),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Welcome Back" }),
+      screen.getByRole("heading", { name: "Welcome back" }),
     ).toBeInTheDocument();
     expect(screen.getByLabelText("Email Address")).toBeInTheDocument();
     expect(screen.getByLabelText("Password")).toBeInTheDocument();
@@ -61,8 +61,8 @@ describe("LoginPage", () => {
     ).toBeInTheDocument();
   });
 
-  // Verifies: Navigates to canvas info after successful sign in.
-  it("navigates to canvas info after successful sign in", async () => {
+  // Verifies: Navigates to onboarding after successful sign in.
+  it("navigates to onboarding after successful sign in", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
     mockLogin.mockResolvedValue({

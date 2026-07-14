@@ -168,6 +168,13 @@ def test_cancel_unknown_pending_message_id_404s(client):
 # cancel or confirm any more. Coverage for that direct-execution behavior
 # now lives in test_chat_endpoint.py instead of here.
 
+    history = client.get("/api/v1/chat/conversations", headers=headers)
+    assert history.status_code == 200
+    item = next(
+        item for item in history.json()["items"] if item["id"] == conversation_id
+    )
+    assert item["preview"] == "No courses found"
+
 
 # Verifies: Cancel after modify recovers original first request.
 def test_cancel_after_modify_recovers_original_first_request(client):

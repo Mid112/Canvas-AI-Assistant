@@ -5,7 +5,7 @@ from app.core.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.history import WorkflowHistoryItem, WorkflowHistoryResponse
-from app.services.workflow import cancel_workflow, list_workflow_history
+from app.services.workflow import cancel_workflow, list_workflow_history, undo_workflow
 
 router = APIRouter(tags=["history"])
 
@@ -50,4 +50,14 @@ async def cancel_workflow_endpoint(
     db: AsyncSession = Depends(get_db),
 ):
     workflow = await cancel_workflow(db, current_user, workflow_id)
+    return WorkflowHistoryItem.from_workflow(workflow)
+
+
+@router.post("/history/workflows/{workflow_id}/undo", response_model=WorkflowHistoryItem)
+async def undo_workflow_endpoint(
+    workflow_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    workflow = await undo_workflow(db, current_user, workflow_id)
     return WorkflowHistoryItem.from_workflow(workflow)

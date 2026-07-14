@@ -1,11 +1,18 @@
+import asyncio
 import uuid
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from app.config import settings
+from app.core.security import decode_access_token
 from app.main import app
+from app.models.canvas_connection import CanvasConnection
 
 
 @pytest.fixture(scope="module")
@@ -48,6 +55,10 @@ def test_llm_error(client):
     body = response.json()
     assert body["is_error"] is True
     assert "error" in body["reply"]
+
+    history = client.get("/api/v1/chat/conversations", headers=headers)
+    assert history.status_code == 200
+    assert history.json()["items"][0]["preview"] == "List my courses"
 
 
 # Verifies: Plain text model reply is returned.
@@ -115,6 +126,115 @@ def test_user_log(client):
     assert history.status_code == 200
     roles = [m["role"] for m in history.json()["messages"]]
     assert "user" in roles
+
+
+def test_list_conversations_requires_auth(client):
+    response = client.get("/api/v1/chat/conversations")
+    assert response.status_code == 401
+
+
+def test_list_conversations(client):
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "Hello from history."}'
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "Can you help?"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    conversation_id = response.json()["conversation_id"]
+
+    history = client.get("/api/v1/chat/conversations?limit=10", headers=headers)
+
+    assert history.status_code == 200
+    body = history.json()
+    assert body["total"] >= 1
+    assert body["items"][0]["id"] == conversation_id
+    assert body["items"][0]["message_count"] == 2
+    assert body["items"][0]["preview"] == "Hello from history."
+
+
+def test_conversation_preview_preserves_bracketed_user_text(client):
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.side_effect = Exception("connection refused")
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "[URGENT] Please help with grading"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+
+    history = client.get("/api/v1/chat/conversations", headers=headers)
+    assert history.status_code == 200
+    assert history.json()["items"][0]["preview"] == "[URGENT] Please help with grading"
+
+
+def test_conversation_history_is_scoped_to_current_user(client):
+    owner_headers = _register(client)
+    other_headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "Private transcript."}'
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "remember this"},
+            headers=owner_headers,
+        )
+
+    assert response.status_code == 200
+    conversation_id = response.json()["conversation_id"]
+
+    other_list = client.get("/api/v1/chat/conversations", headers=other_headers)
+    assert other_list.status_code == 200
+    assert conversation_id not in [item["id"] for item in other_list.json()["items"]]
+
+    other_detail = client.get(
+        f"/api/v1/chat/conversations/{conversation_id}",
+        headers=other_headers,
+    )
+    assert other_detail.status_code == 404
+
+
+def test_conversation_detail_includes_pending_action_status(client):
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        '{"action": "intent_preview", "summary": "List your courses", '
+        '"proposed_action": {"action": "fetch_courses"}}'
+    )
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "what courses do I have?"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    conversation_id = response.json()["conversation_id"]
+    pending_message_id = response.json()["reply"]["pending_message_id"]
+
+    history = client.get(f"/api/v1/chat/conversations/{conversation_id}", headers=headers)
+    assert history.status_code == 200
+    pending_message = next(
+        message
+        for message in history.json()["messages"]
+        if message["id"] == pending_message_id
+    )
+    assert pending_message["pending_action_status"] == "pending"
 
 
 # Verifies: Chat resolves course name before calling model.
@@ -611,6 +731,7 @@ def test_write_action_without_intent_preview_is_forced_into_a_preview(client):
             headers=headers,
         )
 
+    future_due_date = (datetime.now(UTC) + timedelta(days=7)).isoformat()
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = (
         '{"action": "create_assignment", "course_name": "COSC 322", '
@@ -622,7 +743,7 @@ def test_write_action_without_intent_preview_is_forced_into_a_preview(client):
          patch("app.mcp_tools.dispatcher.create_course_assignment", new=AsyncMock()) as mock_create:
         response = client.post(
             "/api/v1/chat/",
-            json={"message": "create assignment 1 due date July 11 details \"Peer evaluation\""},
+            json={"message": "create assignment 1 due date January 15 2030 details \"Peer evaluation\""},
             headers=headers,
         )
 
@@ -633,6 +754,107 @@ def test_write_action_without_intent_preview_is_forced_into_a_preview(client):
     assert body["reply"]["proposed_action"]["action"] == "create_assignment"
     assert "pending_message_id" in body["reply"]
     mock_create.assert_not_called()
+
+
+# Verifies: General/standalone questions succeed even with no Canvas connection.
+def test_chat_general_question_succeeds_without_canvas_token(client):
+    headers = _register(client)  # never connects a Canvas token
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        '{"action": "respond", "message": "Office hours are usually posted on your syllabus."}'
+    )
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "What are typical office hours?"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_error"] is False
+    assert body["reply"]["action"] == "respond"
+
+
+# Verifies: A Canvas-needed action against a course whose token connection
+# has since been removed returns an actionable, non-technical error rather
+# than leaking the raw internal detail. (fetch_courses itself can't exercise
+# this path — it falls back to a different, already-friendly "no connections
+# at all" check in dispatcher.py's _default_canvas_url before ever reaching
+# require_canvas_token. This test instead syncs a course while connected,
+# then removes the connection, so a later fetch_assignments call reaches
+# require_canvas_token/CanvasTokenRequiredError for real.)
+def test_canvas_action_without_token_returns_actionable_error(client):
+    headers = _register(client)
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            headers=headers,
+        )
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock_courses:
+        mock_courses.return_value = [
+            {
+                "id": 777,
+                "name": "COSC 777",
+                "course_code": "COSC 777",
+                "enrollment_term_id": 1,
+                "workflow_state": "available",
+            }
+        ]
+        courses = client.get(
+            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            headers=headers,
+        )
+    local_course_id = courses.json()[0]["local_id"]
+    user_id = int(decode_access_token(headers["Authorization"].removeprefix("Bearer "))[0])
+
+    async def _remove_canvas_connection(uid: int):
+        engine = create_async_engine(settings.DATABASE_URL)
+        Session = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            async with Session() as db:
+                await db.execute(delete(CanvasConnection).where(CanvasConnection.user_id == uid))
+                await db.commit()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_remove_canvas_connection(user_id))
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        '{"action": "fetch_assignments", "local_course_id": %d}' % local_course_id
+    )
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        preview = client.post(
+            "/api/v1/chat/",
+            json={"message": "List assignments for COSC 777"},
+            headers=headers,
+        )
+
+    assert preview.status_code == 200
+    preview_body = preview.json()
+    assert preview_body["reply"]["action"] == "intent_preview"
+    conversation_id = preview_body["conversation_id"]
+    pending_message_id = preview_body["reply"]["pending_message_id"]
+
+    response = client.post(
+        "/api/v1/chat/confirm",
+        json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_error"] is True
+    assert body["reply"]["requires_canvas_token"] is True
+    assert "connect canvas" in body["reply"]["error"].lower()
+    assert "PATCH" not in body["reply"]["error"]
 
 
 def test_canvas_failure_returns_chat_error(client):

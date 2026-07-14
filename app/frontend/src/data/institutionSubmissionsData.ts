@@ -90,7 +90,7 @@ export const institutionSubmissionsData: InstitutionSubmissionsData[] = [
             id: "ubc-m6",
             name: "Noah Patel",
             email: "noah.patel@student.ubc.ca",
-            avatarColor: "bg-blue-500",
+            avatarColor: "bg-primary/100",
             lastActive: "1 day ago",
           },
           {

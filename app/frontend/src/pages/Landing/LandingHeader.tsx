@@ -1,30 +1,29 @@
 import { Link } from "react-router-dom";
-import { GraduationCap } from "lucide-react";
 
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { paths } from "@/routes/paths";
 
 export function LandingHeader() {
   return (
-    <header className="border-b border-[#e2e8f0] bg-white">
+    <header className="border-b border-border bg-card">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4 md:px-8">
-        <div className="flex items-center gap-2.5">
-          <div className="flex size-9 items-center justify-center rounded-lg bg-[#2563eb] text-white">
-            <GraduationCap className="size-5" aria-hidden="true" />
-          </div>
-          <span className="text-base font-bold tracking-tight text-[#1e293b] md:text-lg">
-            Safe AI-Powered Canvas Workflow Assistant
-          </span>
-        </div>
+        <BrandLogo
+          to={paths.home}
+          variant="full"
+          landing
+          iconClassName="size-9 rounded-lg"
+          wordmarkClassName="[&_span]:text-sm [&_span]:font-bold [&_span]:leading-snug sm:[&_span]:text-base md:[&_span]:text-lg"
+        />
         <nav className="flex items-center gap-6">
           <a
             href="#features"
-            className="text-sm font-medium text-[#475569] hover:text-[#1e293b]"
+            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             About
           </a>
           <Link
             to={paths.login}
-            className="text-sm font-medium text-[#2563eb] hover:underline"
+            className="text-sm font-medium text-primary hover:underline"
           >
             Sign In
           </Link>

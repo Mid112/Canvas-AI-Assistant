@@ -1,8 +1,9 @@
 import { Link, NavLink } from "react-router-dom";
 import { GraduationCap, PanelLeftClose } from "lucide-react";
 
+import { AccountMenu } from "@/components/layouts/AccountMenu";
 import { Button } from "@/components/ui/button";
-import { SidebarProfile } from "@/components/layouts/SidebarProfile";
+import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 import type { NavItem } from "@/types/navigation";
 import { paths } from "@/routes/paths";
@@ -30,7 +31,7 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        "flex h-full w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
+        "flex h-full max-h-svh w-64 shrink-0 flex-col overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground",
         className,
       )}
     >
@@ -38,14 +39,16 @@ export function Sidebar({
         <Link
           to={paths.home}
           onClick={onNavigate}
-          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-1 py-2 transition-colors hover:bg-sidebar-accent/40"
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-2 transition-colors hover:bg-sidebar-accent/60"
         >
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-            <GraduationCap className="size-5" />
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
+            <GraduationCap className="size-5" aria-hidden="true" />
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold">Canvas AI</p>
-            <p className="truncate text-xs text-muted-foreground">
+            <p className="truncate text-sm font-semibold text-sidebar-foreground">
+              {BRAND.shortName}
+            </p>
+            <p className="truncate text-xs text-sidebar-foreground/70">
               {roleLabel} Portal
             </p>
           </div>
@@ -55,7 +58,7 @@ export function Sidebar({
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="shrink-0 text-muted-foreground hover:text-sidebar-foreground"
+            className="shrink-0 text-sidebar-foreground/70 hover:text-sidebar-foreground"
             aria-label="Close sidebar"
             onClick={onToggle}
           >
@@ -63,7 +66,7 @@ export function Sidebar({
           </Button>
         ) : null}
       </div>
-      <nav className="flex flex-1 flex-col gap-1 p-3">
+      <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-3">
         {navItems.map((item) => (
           <NavLink
             key={item.href}
@@ -71,19 +74,29 @@ export function Sidebar({
             onClick={onNavigate}
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 isActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground",
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                  : "text-sidebar-foreground/90 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
               )
             }
           >
-            <item.icon className="size-4 shrink-0" />
-            <span>{item.title}</span>
+            <item.icon className="size-4 shrink-0" aria-hidden="true" />
+            {item.title}
           </NavLink>
         ))}
       </nav>
-      <SidebarProfile role={role} onNavigate={onNavigate} />
+      <div className="mt-auto w-full shrink-0 border-t border-sidebar-border p-3">
+        <AccountMenu
+          role={role}
+          roleLabel={roleLabel}
+          onNavigate={onNavigate}
+          trigger="profile"
+          align="start"
+          side="top"
+          className="w-full"
+        />
+      </div>
     </aside>
   );
 }

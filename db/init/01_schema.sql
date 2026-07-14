@@ -61,6 +61,13 @@ CREATE TABLE courses (
     canvas_url       VARCHAR NOT NULL,
     name             VARCHAR NOT NULL,
     term             VARCHAR,
+    -- Canvas's course state ("available", "unpublished", "completed", ...) — lets
+    -- set_active_course reject non-selectable courses without a live Canvas call.
+    workflow_state   VARCHAR NOT NULL DEFAULT 'available',
+    -- Last time this row was written from a real Canvas response — NULL means
+    -- workflow_state above has never been confirmed against Canvas and
+    -- set_active_course must refuse to select it (see db/migrations/013).
+    synced_at        TIMESTAMPTZ,
     instructor_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     created_at       TIMESTAMPTZ DEFAULT NOW(),
     -- composite unique: the same Canvas course can exist once per instructor (co-instructors allowed)
@@ -111,6 +118,14 @@ CREATE TABLE assignments (
     description          TEXT,
     due_date             TIMESTAMPTZ,
     points_possible      FLOAT,
+    -- False once a Canvas refresh no longer returns this assignment (deleted on
+    -- Canvas) — kept rather than deleted so historical submissions/audit rows
+    -- still resolve; excluded from active counts/aggregates.
+    is_active            BOOLEAN NOT NULL DEFAULT true,
+    -- Canvas's own draft/published distinction — a draft assignment is invisible
+    -- to students and can't have real submissions, so data-analysis surfaces
+    -- (missing/late counts, average grade, completion rate) exclude drafts.
+    published            BOOLEAN NOT NULL DEFAULT true,
     created_at           TIMESTAMPTZ DEFAULT NOW(),
     -- Unique per course, not globally — two co-instructors on the same real
     -- Canvas course get separate local Course rows, and each needs its own
@@ -197,6 +212,10 @@ CREATE TABLE workflows (
                              CHECK (status IN ('pending', 'executing', 'executed', 'failed', 'cancelled', 'superseded')),
     error_detail             TEXT,
     executed_at              TIMESTAMPTZ,
+    -- Set when a reversible action (currently update_assignment only) has
+    -- been undone — kept separate from `status` so its lifecycle meaning
+    -- isn't overloaded with a new terminal value.
+    undone_at                TIMESTAMPTZ,
     created_at               TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -274,7 +293,7 @@ CREATE TABLE audit_logs (
     action            VARCHAR NOT NULL,
     resource_type     VARCHAR NOT NULL CHECK (resource_type IN ('assignment', 'announcement', 'conversation')),
     resource_id       VARCHAR,
-    operation         VARCHAR NOT NULL CHECK (operation IN ('create', 'update')),
+    operation         VARCHAR NOT NULL CHECK (operation IN ('create', 'update', 'delete')),
     status            VARCHAR NOT NULL DEFAULT 'success' CHECK (status IN ('success', 'failed')),
     before_data       JSONB,
     after_data        JSONB,

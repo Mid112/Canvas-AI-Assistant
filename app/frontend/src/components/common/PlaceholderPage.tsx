@@ -6,6 +6,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { BRAND } from "@/lib/brand";
 
 interface PlaceholderPageProps {
   title: string;
@@ -33,8 +34,8 @@ export function PlaceholderPage({
             <Badge variant="secondary">{message}</Badge>
           </div>
           <CardDescription>
-            Canvas Workflow Assistant will power this experience with secure,
-            role-based AI workflows.
+            {BRAND.name} will power this experience with secure, preview-first AI
+            workflows.
           </CardDescription>
         </CardHeader>
         <CardContent>

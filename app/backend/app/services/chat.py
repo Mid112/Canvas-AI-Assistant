@@ -1586,6 +1586,25 @@ async def _sync_workflow_for_preview(
     )
 
 
+async def _supersede_pending_workflow(
+    db: AsyncSession,
+    conversation_id: int,
+    pending_message_id: int | None,
+) -> None:
+    if pending_message_id is None:
+        return
+
+    await db.execute(
+        sa_update(Workflow)
+        .where(
+            Workflow.conversation_id == conversation_id,
+            Workflow.preview_message_id == pending_message_id,
+            Workflow.status == "pending",
+        )
+        .values(status="superseded")
+    )
+
+
 async def _get_recent_messages(
     db: AsyncSession, conversation_id: int
 ) -> list[dict]:
@@ -1693,12 +1712,24 @@ def build_system_prompt() -> str:
         '"in two weeks") against this date — never against a year from your\n'
         "training data. A resolved date must always fall on or after today.\n"
     )
+    # The backend already fails safely without this (CanvasTokenRequiredError
+    # is caught and turned into a friendly message), so this is purely an
+    # optimization to skip a doomed-to-fail LLM round-trip for the common
+    # case of a user who hasn't connected Canvas yet asking a Canvas question.
+    canvas_gate_line = "" if has_canvas_token else (
+        "\nThe current user has NOT connected a Canvas account yet. Do not "
+        "propose any Canvas-touching action (fetch/create/update/send) — it "
+        "will fail. If the request needs Canvas data, respond with "
+        '{"action": "respond", "message": "..."} telling them to connect '
+        "Canvas in Settings first. Still answer general, non-Canvas "
+        "questions normally.\n"
+    )
 
     return """You are a Canvas LMS assistant for instructors. You help
 with course management, assignments, student submissions, and
 communicating with students.
 
-""" + today_line + """
+""" + today_line + canvas_gate_line + """
 SCOPE CHECK — do this first, before anything else:
 Decide whether the request is about Canvas course management or student
 communication. If the request is not about Canvas (e.g. creative
@@ -2074,7 +2105,7 @@ async def handle_chat_message(
         if stored_preview:
             current_proposed_action = stored_preview.get("proposed_action")
 
-    system_prompt = build_system_prompt()
+    system_prompt = build_system_prompt(has_canvas_token=bool(user.canvas_connections))
     adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
 
     # Step loop: lets the model chain a bounded sequence of read/resolver
@@ -2405,6 +2436,12 @@ async def handle_chat_message(
             proposed_action=result.get("proposed_action", {}),
             affected_resources=preview_metadata.get("affected_resources", []),
         )
+    else:
+        await _supersede_pending_workflow(
+            db,
+            conversation.id,
+            pending_message_id,
+        )
 
     # A grouped send_message turn (_run_send_message_chain) may have
     # resolved to more than one distinct message — group 0 was just
@@ -2536,6 +2573,12 @@ async def handle_confirmed_action(
         workflow.error_detail = e.log_detail
         await db.commit()
         return conversation, {"error": e.user_message}, True
+    except CanvasTokenRequiredError as e:
+        await log_message(db, conversation, role="assistant", content=str(e.detail))
+        workflow.status = "failed"
+        workflow.error_detail = str(e.detail)
+        await db.commit()
+        return conversation, {"error": CANVAS_TOKEN_REQUIRED_MESSAGE, "requires_canvas_token": True}, True
     except HTTPException as e:
         # Semantic validators (e.g. validate_assignment_for_create) and
         # services/canvas.py raise HTTPException directly rather than
@@ -2591,6 +2634,13 @@ async def handle_confirmed_action(
         # normalize them.
         data = json.loads(_json_dumps(result.get("data") or {}))
         resource_id = str(data["id"]) if isinstance(data, dict) and data.get("id") is not None else None
+        # Only set for update_assignment today (see CanvasWriteResult.previous_data) —
+        # the state undo_workflow re-applies to revert this action.
+        before_data = (
+            json.loads(_json_dumps(result["previous_data"]))
+            if result.get("previous_data") is not None
+            else None
+        )
         db.add(
             AuditLog(
                 user_id=user.id,
@@ -2601,6 +2651,7 @@ async def handle_confirmed_action(
                 resource_id=resource_id,
                 operation=operation,
                 status="success",
+                before_data=before_data,
                 after_data=data,
                 request_payload=workflow.proposed_action,
             )
@@ -2750,3 +2801,4 @@ async def get_conversation_with_messages(
         )
         .options(selectinload(Conversation.messages), selectinload(Conversation.workflows))
     )
+    return list(rows), total or 0

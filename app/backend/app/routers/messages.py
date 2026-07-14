@@ -5,11 +5,21 @@ from app.config import settings
 from app.core.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
+from app.schemas.inbox import (
+    InboxReplyRequest,
+    InboxThreadDetail,
+    InboxThreadList,
+)
 from app.schemas.messages import (
     MessageDraftCreate,
     MessageDraftResponse,
     MessageDraftUpdate,
     MessageSendResponse,
+)
+from app.services.inbox import (
+    get_inbox_thread,
+    list_inbox_threads,
+    reply_to_inbox_thread,
 )
 from app.services.messages import (
     create_message_draft,
@@ -66,4 +76,48 @@ async def send_draft(
         canvas_topic_id=getattr(draft, "canvas_topic_id", None),
         delivery_mode=getattr(draft, "delivery_mode", None),
         recipient_count=getattr(draft, "recipient_count", None),
+    )
+
+
+@router.get("/inbox", response_model=InboxThreadList)
+async def list_inbox(
+    current_user: User = Depends(get_current_user),
+    course_id: int | None = Query(default=None),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await list_inbox_threads(
+        current_user, canvas_url, db, local_course_id=course_id
+    )
+
+
+@router.get("/inbox/{conversation_id}", response_model=InboxThreadDetail)
+async def get_inbox_conversation(
+    conversation_id: int,
+    current_user: User = Depends(get_current_user),
+    course_id: int | None = Query(default=None),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_inbox_thread(
+        conversation_id, current_user, canvas_url, db, local_course_id=course_id
+    )
+
+
+@router.post("/inbox/{conversation_id}/reply", response_model=InboxThreadDetail)
+async def reply_to_inbox_conversation(
+    conversation_id: int,
+    body: InboxReplyRequest,
+    current_user: User = Depends(get_current_user),
+    course_id: int | None = Query(default=None),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await reply_to_inbox_thread(
+        conversation_id,
+        body.body,
+        current_user,
+        canvas_url,
+        db,
+        local_course_id=course_id,
     )

@@ -79,21 +79,72 @@ export async function updateCanvasToken(
   return response.json() as Promise<CanvasTokenUpdateResponse>;
 }
 
-/** Saves one or more connections via separate PATCH requests (one per institution). */
+export interface CanvasConnectionFailure {
+  connection: CanvasConnectionInput;
+  error: CanvasApiError;
+}
+
+export interface CanvasConnectionsSaveResult {
+  succeeded: CanvasConnectionInput[];
+  failed: CanvasConnectionFailure[];
+  lastResponse?: CanvasTokenUpdateResponse;
+}
+
+/** Human-readable summary of which connections failed and why. */
+export function describeCanvasConnectionFailures(
+  failed: CanvasConnectionFailure[],
+): string {
+  return failed
+    .map(({ connection, error }) => `${connection.canvasUrl}: ${error.message}`)
+    .join("; ");
+}
+
+/**
+ * Saves one or more connections via separate PATCH requests (one per
+ * institution). Each request is isolated: a failure on one connection does not
+ * abort the others, and the result reports exactly which ones saved vs failed
+ * so callers can surface partial success. A 401 is re-thrown immediately since
+ * it means the session itself is invalid and further requests would also fail.
+ */
 export async function updateCanvasConnections(
   connections: CanvasConnectionInput[],
   accessToken: string,
-): Promise<CanvasTokenUpdateResponse> {
+): Promise<CanvasConnectionsSaveResult> {
   if (connections.length === 0) {
     throw new CanvasApiError("Canvas token is required", 400);
   }
 
+  const succeeded: CanvasConnectionInput[] = [];
+  const failed: CanvasConnectionFailure[] = [];
   let lastResponse: CanvasTokenUpdateResponse | undefined;
-  for (const { canvasUrl, canvasToken } of connections) {
-    lastResponse = await updateCanvasToken(canvasToken, accessToken, canvasUrl);
+
+  for (const connection of connections) {
+    try {
+      lastResponse = await updateCanvasToken(
+        connection.canvasToken,
+        accessToken,
+        connection.canvasUrl,
+      );
+      succeeded.push(connection);
+    } catch (error) {
+      if (error instanceof CanvasApiError && error.status === 401) {
+        throw error;
+      }
+
+      failed.push({
+        connection,
+        error:
+          error instanceof CanvasApiError
+            ? error
+            : new CanvasApiError(
+                "Unable to save Canvas connection. Please try again.",
+                0,
+              ),
+      });
+    }
   }
 
-  return lastResponse!;
+  return { succeeded, failed, lastResponse };
 }
 
 /** @deprecated Use updateCanvasConnections with canvas URLs instead. */

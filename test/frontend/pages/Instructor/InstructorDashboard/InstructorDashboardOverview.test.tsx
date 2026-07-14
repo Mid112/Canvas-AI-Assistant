@@ -36,9 +36,9 @@ describe("InstructorDashboardOverview", () => {
 
     render(<InstructorDashboardOverview metrics={metrics} />);
 
-    expect(screen.getByText("+8%")).toHaveClass("text-emerald-600");
-    expect(screen.getByText("+12%")).toHaveClass("text-emerald-600");
-    expect(screen.getByText("5%")).toHaveClass("text-red-500");
+    expect(screen.getByText("+8%")).toHaveClass("text-emerald-700");
+    expect(screen.getByText("+12%")).toHaveClass("text-emerald-700");
+    expect(screen.getByText("5%")).toHaveClass("text-destructive");
   });
 
   // Verifies: Shows green when missing submissions trend improves.
@@ -50,6 +50,6 @@ describe("InstructorDashboardOverview", () => {
 
     render(<InstructorDashboardOverview metrics={metrics} />);
 
-    expect(screen.getByText("5%")).toHaveClass("text-emerald-600");
+    expect(screen.getByText("5%")).toHaveClass("text-emerald-700");
   });
 });

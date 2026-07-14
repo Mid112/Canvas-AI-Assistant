@@ -135,4 +135,51 @@ describe("students service", () => {
       "https://canvas.example.edu",
     );
   });
+
+  it("throws StudentApiError when the roster request fails", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ detail: "Course not found" }), {
+        status: 404,
+      }),
+    );
+
+    await expect(fetchCourseStudents(7, "access-token")).rejects.toMatchObject({
+      name: "StudentApiError",
+      status: 404,
+      message: "Course not found",
+    });
+  });
+
+  it("returns roster students without fallback when expected count is zero", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify([]), { status: 200 }),
+    );
+
+    const students = await fetchCourseStudentsWithSubmissionFallback(
+      7,
+      "access-token",
+      "https://canvas.example.edu",
+      0,
+    );
+
+    expect(students).toEqual([]);
+    expect(mockedFetchAssignments).not.toHaveBeenCalled();
+  });
+
+  it("returns an empty list when no assignments exist for submission fallback", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify([]), { status: 200 }),
+    );
+    mockedFetchAssignments.mockResolvedValue([]);
+
+    const students = await fetchCourseStudentsWithSubmissionFallback(
+      7,
+      "access-token",
+      "https://canvas.example.edu",
+      5,
+    );
+
+    expect(students).toEqual([]);
+    expect(mockedFetchSubmissions).not.toHaveBeenCalled();
+  });
 });

@@ -6,11 +6,12 @@ describe("buildSuggestedActions", () => {
   it("references the real active course name in every prompt", () => {
     const actions = buildSuggestedActions("COSC 501");
 
+    expect(actions).toHaveLength(4);
     expect(actions.map((action) => action.prompt)).toEqual([
       "Show missing submissions for COSC 501",
-      "Summarize the most recent quiz results for COSC 501",
       "Show late assignments in COSC 501",
       "View course performance for COSC 501",
+      "Draft a message to students in COSC 501 about an upcoming deadline. Propose a send_message action I can review and edit before sending.",
     ]);
   });
 
@@ -26,9 +27,9 @@ describe("buildSuggestedActions", () => {
 
     expect(actions.map((action) => action.prompt)).toEqual([
       "Show missing submissions",
-      "Summarize the most recent quiz results",
       "Show late assignments",
       "View course performance",
+      "Draft a message to students about an upcoming deadline. Propose a send_message action I can review and edit before sending.",
     ]);
   });
 });

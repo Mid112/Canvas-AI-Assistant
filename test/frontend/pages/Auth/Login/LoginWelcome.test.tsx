@@ -9,7 +9,7 @@ describe("LoginWelcome", () => {
     render(<LoginWelcome />);
 
     expect(
-      screen.getByRole("heading", { name: "Welcome Back" }),
+      screen.getByRole("heading", { name: "Welcome back" }),
     ).toBeInTheDocument();
   });
 

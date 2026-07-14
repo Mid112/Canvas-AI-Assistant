@@ -7,6 +7,7 @@ import { PreviewPanel } from "@/components/preview/PreviewPanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { defaultDryRunPreviewId } from "@/data/mockDryRunPreview";
 import { paths } from "@/routes/paths";
 import {
@@ -62,6 +63,7 @@ function DryRunPreviewContent({
 }: DryRunPreviewContentProps) {
   const navigate = useNavigate();
   const { accessToken, user } = useAuth();
+  const { refreshActiveCourse, notifyCoursesChanged } = useActiveCourse();
   const [preview, setPreview] = useState<DryRunPreviewData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -225,6 +227,8 @@ function DryRunPreviewContent({
       }
 
       setShowSuccessToast(true);
+      void refreshActiveCourse();
+      notifyCoursesChanged();
     } catch (error) {
       const message =
         error instanceof DryRunPreviewError || error instanceof AssistantApiError
@@ -239,7 +243,7 @@ function DryRunPreviewContent({
   if (isLoading) {
     return (
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-3 p-4 md:p-6 lg:p-8">
-        <Loader2 className="size-8 animate-spin text-[#2563eb]" aria-hidden="true" />
+        <Loader2 className="size-8 animate-spin text-primary" aria-hidden="true" />
         <p className="text-sm text-muted-foreground">Loading workflow preview...</p>
       </div>
     );
@@ -254,7 +258,7 @@ function DryRunPreviewContent({
           <CardContent className="flex flex-col items-center gap-4 px-6 py-12 text-center">
             <AlertCircle className="size-10 text-muted-foreground" aria-hidden="true" />
             <div className="space-y-2">
-              <h1 className="text-xl font-semibold text-[#1e293b]">
+              <h1 className="text-xl font-semibold text-foreground">
                 {isEmpty ? "No Preview Available" : "Unable to Load Preview"}
               </h1>
               <p className="text-sm text-muted-foreground">{loadError}</p>
@@ -288,7 +292,7 @@ function DryRunPreviewContent({
           <CardContent className="flex flex-col items-center gap-4 px-6 py-12 text-center">
             <CheckCircle2 className="size-10 text-emerald-600" aria-hidden="true" />
             <div className="space-y-2">
-              <h1 className="text-xl font-semibold text-[#1e293b]">Workflow Approved</h1>
+              <h1 className="text-xl font-semibold text-foreground">Workflow Approved</h1>
               <p className="text-sm text-muted-foreground" role="status">
                 {confirmedMessage}
               </p>

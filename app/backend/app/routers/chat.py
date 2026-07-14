@@ -1,5 +1,5 @@
 # app/backend/app/routers/chat.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -18,6 +18,7 @@ from app.services.chat import (
     handle_cancelled_action,
     handle_chat_message,
     handle_confirmed_action,
+    list_conversations,
 )
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -64,6 +65,25 @@ async def chat(
         body.pending_message_id,
     )
     return ChatResponse(conversation_id=conversation.id, reply=reply, is_error=is_error)
+
+
+@router.get("/conversations", response_model=ConversationListResponse)
+async def get_conversations(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    conversations, total = await list_conversations(
+        db,
+        current_user,
+        limit=limit,
+        offset=offset,
+    )
+    return ConversationListResponse(
+        items=[ConversationSummary.from_conversation(item) for item in conversations],
+        total=total,
+    )
 
 
 @router.get("/conversations/{conversation_id}", response_model=ConversationResponse)

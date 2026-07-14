@@ -14,7 +14,7 @@ describe("MessageTemplateSummary", () => {
     );
 
     const selected = screen.getByText("Assignment Reminder").closest("div");
-    expect(selected).toHaveClass("border-blue-500");
+    expect(selected).toHaveClass("border-primary");
     expect(screen.getByText("Encouragement")).toBeInTheDocument();
   });
 });

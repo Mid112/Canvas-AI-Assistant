@@ -2,6 +2,7 @@ export type ChatMessageRole = "user" | "assistant";
 
 export type PendingActionStatus =
   | "pending"
+  | "executing"
   | "confirmed"
   | "cancelled"
   | "superseded"
@@ -40,7 +41,9 @@ export function mapWorkflowStatus(
 export interface ActionLink {
   label: string;
   href: string;
+  state?: Record<string, unknown>;
 }
+
 
 export interface InterpretedAction {
   action: string;

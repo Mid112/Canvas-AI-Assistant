@@ -4,18 +4,18 @@ import { paths } from "@/routes/paths";
 
 export function RegisterFooter() {
   return (
-    <p className="mt-8 text-center text-sm text-[#64748b]">
+    <p className="mt-8 text-center text-sm text-muted-foreground">
       Already have an account?{" "}
       <Link
         to={paths.login}
-        className="font-medium text-[#2563eb] hover:underline"
+        className="font-medium text-primary hover:underline"
       >
         Sign in
       </Link>{" "}
       or{" "}
       <Link
         to={paths.home}
-        className="font-medium text-[#2563eb] hover:underline"
+        className="font-medium text-primary hover:underline"
       >
         Back to home
       </Link>

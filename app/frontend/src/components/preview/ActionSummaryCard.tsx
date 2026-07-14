@@ -43,7 +43,7 @@ export function ActionSummaryCard({
       <Card className="shadow-sm ring-1 ring-border/60">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base font-semibold">
-            <FileText className="size-4 text-blue-600" aria-hidden="true" />
+            <FileText className="size-4 text-primary" aria-hidden="true" />
             {hasStructuredPlan ? "Proposed Plan" : "Original Request"}
           </CardTitle>
         </CardHeader>
@@ -52,13 +52,13 @@ export function ActionSummaryCard({
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 text-sm">
               {proposedPlan.map((planField) => (
                 <div key={planField.field} className="contents">
-                  <dt className="font-medium text-[#1e293b]">{planField.label}</dt>
-                  <dd className="text-[#334155]">{planField.value}</dd>
+                  <dt className="font-medium text-foreground">{planField.label}</dt>
+                  <dd className="text-muted-foreground">{planField.value}</dd>
                 </div>
               ))}
             </dl>
           ) : (
-            <p className="text-sm leading-relaxed text-[#334155]">{originalRequest}</p>
+            <p className="text-sm leading-relaxed text-muted-foreground">{originalRequest}</p>
           )}
           <p className="text-xs text-muted-foreground">
             Requested by: {requestedBy} &bull; {formatRelativeTime(requestedAt)}
@@ -79,23 +79,23 @@ export function ActionSummaryCard({
         </CardContent>
       </Card>
 
-      <Card className="border-blue-100 bg-blue-50/60 shadow-sm ring-1 ring-blue-100/80">
+      <Card className="border-primary/20 bg-primary/5 shadow-sm ring-1 ring-primary/10">
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base font-semibold text-[#1e3a5f]">
-            <Sparkles className="size-4 text-violet-600" aria-hidden="true" />
+          <CardTitle className="flex items-center gap-2 text-base font-semibold text-foreground">
+            <Sparkles className="size-4 text-primary" aria-hidden="true" />
             AI Explanation
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 pt-0">
-          <p className="text-sm font-medium text-[#1e3a5f]">What this workflow will do:</p>
-          <p className="text-sm leading-relaxed text-[#334155]">{summary}</p>
-          <ul className="list-disc space-y-2 pl-5 text-sm text-[#334155]">
+          <p className="text-sm font-medium text-foreground">What this workflow will do:</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">{summary}</p>
+          <ul className="list-disc space-y-2 pl-5 text-sm text-muted-foreground">
             {aiExplanation.map((step) => (
               <li key={step}>{step}</li>
             ))}
           </ul>
           {aiExplanationNote ? (
-            <p className="text-xs italic text-[#475569]">Note: {aiExplanationNote}</p>
+            <p className="text-xs italic text-muted-foreground">Note: {aiExplanationNote}</p>
           ) : null}
         </CardContent>
       </Card>

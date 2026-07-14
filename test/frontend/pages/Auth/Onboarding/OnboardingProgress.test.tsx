@@ -29,7 +29,7 @@ describe("OnboardingProgress", () => {
     );
 
     const completedSteps = container.querySelectorAll(
-      ".border-\\[\\#16a34a\\].bg-\\[\\#16a34a\\]",
+      ".border-emerald-600.bg-emerald-600",
     );
     expect(completedSteps.length).toBeGreaterThanOrEqual(1);
   });
@@ -39,6 +39,6 @@ describe("OnboardingProgress", () => {
     render(<OnboardingProgress currentStep="reviewPermissions" />);
 
     const dashboardLabel = screen.getByText("Dashboard");
-    expect(dashboardLabel).toHaveClass("text-[#94a3b8]");
+    expect(dashboardLabel).toHaveClass("text-muted-foreground");
   });
 });
