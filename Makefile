@@ -1,4 +1,4 @@
-.PHONY: install install-vllm install-ollama lint lint-fix test test-llm test-ollama test-vague-llm test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset run-vllm run-ollama dev e2e-up reload
+.PHONY: install install-vllm install-ollama lint lint-fix test test-llm test-ollama test-vague-llm test-e2e test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset run-vllm run-ollama dev e2e-up reload
 
 # ── Install ──────────────────────────────────
 # Creates a venv (if one doesn't exist) and installs backend deps
@@ -54,6 +54,18 @@ lint-fix:
 test:
 	PYTHONPATH=./app/backend DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb app/backend/.venv/bin/pytest test/backend/ -v
 	cd app/frontend && npm run test
+
+# ── Browser E2E (Playwright) ─────────────────
+# Full-app UI flows for #687 / #711–#714. Requires Postgres on :5433.
+# Reuses backend (:8000) / frontend (:5173) if already running (e.g. make e2e-up);
+# otherwise Playwright starts them via webServer. Canvas sandbox is optional.
+test-e2e:
+	docker compose -f docker-compose.dev.yml up -d postgres
+	@echo "Waiting for Postgres..."
+	@sleep 3
+	cd test/e2e && npm ci
+	cd test/e2e && npx playwright install --with-deps chromium
+	cd test/e2e && npm test
 
 # ── Test LLM adapter ─────────────────────────
 # Runs the LLM adapter test (test/backend/llm_test.py). This test mocks

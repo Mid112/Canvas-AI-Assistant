@@ -13,6 +13,10 @@ app/node_modules
 node_modules/
 test/frontend/coverage/
 test/backend/coverage/
+test/e2e/test-results/
+test/e2e/playwright-report/
+test/e2e/blob-report/
+test/e2e/playwright/.cache/
 test/vllm/venv/
 test/mcp/venv/
 test/backend/venv/

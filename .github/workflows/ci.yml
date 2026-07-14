@@ -36,6 +36,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      e2e: ${{ steps.filter.outputs.e2e }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -48,6 +49,10 @@ jobs:
             frontend:
               - 'app/frontend/**'
               - 'test/frontend/**'
+            e2e:
+              - 'app/backend/**'
+              - 'app/frontend/**'
+              - 'test/e2e/**'
 
   # ── 1. Backend lint + type check ──────────
   backend-lint:
@@ -180,6 +185,64 @@ jobs:
         # vitest coverage thresholds from vitest.config.ts
         run: npm run test:coverage
 
+  # ── 3b. Browser E2E (Playwright) ───────────
+  e2e-test:
+    runs-on:
+    - self-hosted
+    - macOS
+    - ARM64
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure Postgres is running
+        run: |
+          docker compose -f docker-compose.dev.yml up -d postgres
+          for i in $(seq 1 30); do
+            if docker compose -f docker-compose.dev.yml exec -T postgres pg_isready -U appuser -d appdb >/dev/null 2>&1; then
+              echo "PostgreSQL is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "PostgreSQL failed to start"
+          exit 1
+      - name: Set up Python venv + backend deps
+        run: |
+          python3.12 -m venv app/backend/.venv
+          app/backend/.venv/bin/pip install --upgrade pip
+          app/backend/.venv/bin/pip install -r app/backend/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+          cache: "npm"
+          cache-dependency-path: |
+            app/frontend/package-lock.json
+            test/e2e/package-lock.json
+      - name: Install frontend deps
+        working-directory: ./app/frontend
+        run: npm ci
+      - name: Install Playwright
+        working-directory: ./test/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Run browser E2E tests
+        working-directory: ./test/e2e
+        env:
+          CI: "true"
+          DATABASE_URL: postgresql+asyncpg://appuser:localdev@localhost:5433/appdb
+          ADMIN_EMAIL: admin@example.com
+          ADMIN_PASSWORD: AdminPass123!
+        run: npm test
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: test/e2e/playwright-report
+          retention-days: 7
+
   # ── 4. Docker build check ─────────────────
   # Only runs after both lint/test jobs succeed (or are skipped
   # because that part of the repo didn't change).
@@ -188,7 +251,7 @@ jobs:
     - self-hosted
     - macOS
     - ARM64
-    needs: [backend-test, frontend-test]
+    needs: [backend-test, frontend-test, e2e-test]
     if: always() && !failure() && !cancelled()
     steps:
       - uses: actions/checkout@v4
