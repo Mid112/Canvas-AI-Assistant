@@ -115,6 +115,17 @@ class ConfirmActionRequest(BaseModel):
     pending_message_id: int
 
 
+class ModelSettings(BaseModel):
+    """Mirrors the frontend's LlmProviderSettings (types/llmProvider.ts) —
+    which provider/model the AI Models settings page (or the in-chat
+    switcher) has saved for this user. Passed through to
+    get_llm_adapter(); server-side API keys (GROQ_API_KEY, HF_TOKEN, ...)
+    are never supplied by the client, only which provider/model to use."""
+    provider: str
+    model: str | None = None
+    base_url: str | None = None
+
+
 class ChatRequest(BaseModel):
     message: str
     # Explicit course switch from the "set active course" button. If
@@ -132,6 +143,10 @@ class ChatRequest(BaseModel):
     # a new message being appended, so conversation history stays clean
     # and the LLM sees only the latest agreed plan on the next turn.
     pending_message_id: int | None = None
+    # If omitted, falls back to settings.DEFAULT_LLM_PROVIDER (server's
+    # own .env default) — unchanged behavior for any client that doesn't
+    # send this.
+    model_settings: ModelSettings | None = None
 
 
 class ChatResponse(BaseModel):

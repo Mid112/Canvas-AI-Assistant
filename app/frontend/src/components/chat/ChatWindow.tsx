@@ -379,6 +379,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           context: assistantContext,
           conversationId,
           pendingMessageId: pendingMessageIdToSend,
+          modelSettings: modelSettings ?? undefined,
         });
 
         if (pendingMessageIdToSend !== undefined) {
@@ -417,6 +418,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       appendAssistantMessage,
       assistantContext,
       conversationId,
+      modelSettings,
       onConversationChange,
       onModifyContextConsumed,
     ],

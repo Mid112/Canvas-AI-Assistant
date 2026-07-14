@@ -65,6 +65,7 @@ async def chat(
         body.local_course_id,
         body.conversation_id,
         body.pending_message_id,
+        body.model_settings.model_dump(exclude_none=True) if body.model_settings else None,
     )
     return ChatResponse(conversation_id=conversation.id, reply=reply, is_error=is_error)
 

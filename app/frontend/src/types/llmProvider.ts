@@ -1,5 +1,6 @@
 /** Provider ids aligned with backend `get_llm_adapter` providers. */
 export type LlmProviderId =
+  | "huggingface"
   | "groq"
   | "ollama"
   | "vllm"

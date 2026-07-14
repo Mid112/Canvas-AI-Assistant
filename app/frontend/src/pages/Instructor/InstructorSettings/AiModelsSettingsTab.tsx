@@ -106,10 +106,10 @@ export function AiModelsSettingsTab() {
           >
             <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <p>
-              Your selection is saved as a preference. The AI Assistant
-              currently uses the model configured on the server, so choosing a
-              provider here does not yet change which service handles your
-              prompts.
+              Your selection is saved as a preference and used for every
+              message you send the AI Assistant. Providers marked "Needs
+              server key" or "Needs local runtime" only work once an admin
+              has configured that provider on the server.
             </p>
           </div>
 
@@ -228,8 +228,8 @@ export function AiModelsSettingsTab() {
                 Prompts are processed by the server&apos;s AI provider
               </p>
               <p className="text-amber-900/80">
-                The assistant sends prompts to whichever provider is configured
-                on the server, which may be an internet-hosted service. Avoid
+                The assistant sends prompts to whichever provider you've
+                selected, which may be an internet-hosted service. Avoid
                 pasting sensitive student data unless your institution allows
                 it.
               </p>
@@ -241,7 +241,7 @@ export function AiModelsSettingsTab() {
               Save provider
             </Button>
             <Button type="button" variant="outline" onClick={handleReset}>
-              Reset to Groq default
+              Reset to server default
             </Button>
             {savedMessage ? (
               <p className="text-sm text-muted-foreground" role="status">

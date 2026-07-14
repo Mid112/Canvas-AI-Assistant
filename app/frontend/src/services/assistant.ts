@@ -6,6 +6,7 @@ import type {
   ChatMessage,
   PendingActionStatus,
 } from "@/types/chat";
+import type { LlmProviderSettings } from "@/types/llmProvider";
 
 export class AssistantApiError extends Error {
   status?: number;
@@ -22,6 +23,7 @@ export interface SendAssistantMessageOptions {
   localCourseId?: number;
   pendingMessageId?: number;
   context?: AssistantContext;
+  modelSettings?: LlmProviderSettings;
 }
 
 export interface AssistantMessageResult extends AssistantResponse {
@@ -207,6 +209,7 @@ export async function sendAssistantMessage(
 ): Promise<AssistantMessageResult> {
   const context = options.context ?? {};
   const localCourseId = options.localCourseId ?? context.activeCourseId;
+  const modelSettings = options.modelSettings;
 
   try {
     const response = await apiRequest<ChatApiResponse>("/chat/", accessToken, {
@@ -216,6 +219,13 @@ export async function sendAssistantMessage(
         conversation_id: options.conversationId,
         local_course_id: localCourseId,
         pending_message_id: options.pendingMessageId,
+        model_settings: modelSettings
+          ? {
+              provider: modelSettings.provider,
+              model: modelSettings.model || undefined,
+              base_url: modelSettings.baseUrl || undefined,
+            }
+          : undefined,
       }),
     });
 

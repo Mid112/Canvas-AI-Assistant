@@ -64,7 +64,7 @@ describe("AiModelsSettingsTab", () => {
     ).toBeInTheDocument();
   });
 
-  it("clarifies the selection is only a saved preference", () => {
+  it("clarifies the selection is used for every message", () => {
     render(
       <MemoryRouter>
         <AiModelsSettingsTab />
@@ -72,7 +72,7 @@ describe("AiModelsSettingsTab", () => {
     );
 
     expect(
-      screen.getByText(/does not yet change which service handles your prompts/),
+      screen.getByText(/used for every message you send the AI Assistant/),
     ).toBeInTheDocument();
   });
 
@@ -83,8 +83,8 @@ describe("AiModelsSettingsTab", () => {
       </MemoryRouter>,
     );
 
-    // The note is not conditional on the selected provider because the choice
-    // does not yet change the server-configured model.
+    // The note is not conditional on the selected provider — any provider
+    // could be internet-hosted, so the warning always applies.
     expect(
       screen.getByText("Prompts are processed by the server's AI provider"),
     ).toBeInTheDocument();

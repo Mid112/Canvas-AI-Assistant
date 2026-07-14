@@ -8,7 +8,7 @@ httpx.RemoteProtocolError) used to escape and 500 the whole chat turn —
 and must accept a numeric id the model returns as a JSON string ("222")
 just as readily as a real number, since both are semantically the exact
 same answer."""
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -54,10 +54,9 @@ def _course_names() -> list[CanvasCourseName]:
 async def test_assignment_resolver_survives_any_provider_failure(exc):
     adapter = AsyncMock()
     adapter.generate.side_effect = exc
-    with patch("app.services.chat.get_llm_adapter", return_value=adapter):
-        result = await _resolve_assignment_reference(
-            _assignments(), "the final project", "show me the final project"
-        )
+    result = await _resolve_assignment_reference(
+        _assignments(), "the final project", "show me the final project", adapter
+    )
     assert result is None
 
 
@@ -70,8 +69,7 @@ async def test_assignment_resolver_survives_any_provider_failure(exc):
 async def test_student_resolver_survives_any_provider_failure(exc):
     adapter = AsyncMock()
     adapter.generate.side_effect = exc
-    with patch("app.services.chat.get_llm_adapter", return_value=adapter):
-        result = await _resolve_students_via_llm(_students(), ["Alice"], "message alice")
+    result = await _resolve_students_via_llm(_students(), ["Alice"], "message alice", adapter)
     assert result == {"Alice": None}
 
 
@@ -84,8 +82,7 @@ async def test_student_resolver_survives_any_provider_failure(exc):
 async def test_course_switch_resolver_survives_any_provider_failure(exc):
     adapter = AsyncMock()
     adapter.generate.side_effect = exc
-    with patch("app.services.chat.get_llm_adapter", return_value=adapter):
-        result = await _resolve_course_switch(_course_names(), "CPSC 310", "switch to CPSC 320")
+    result = await _resolve_course_switch(_course_names(), "CPSC 310", "switch to CPSC 320", adapter)
     assert result is None
 
 
@@ -97,8 +94,7 @@ async def test_assignment_resolver_survives_a_malformed_candidate_dict():
     adapter = AsyncMock()
     adapter.generate.return_value = '{"assignment_id": 222}'
     malformed = [{"name": "Untitled"}, {"id": 222, "name": "Final Project"}]
-    with patch("app.services.chat.get_llm_adapter", return_value=adapter):
-        result = await _resolve_assignment_reference(malformed, "final project", "show final project")
+    result = await _resolve_assignment_reference(malformed, "final project", "show final project", adapter)
     assert result == 222
 
 
@@ -108,10 +104,9 @@ async def test_assignment_resolver_survives_a_malformed_candidate_dict():
 async def test_assignment_resolver_accepts_a_string_id():
     adapter = AsyncMock()
     adapter.generate.return_value = '{"assignment_id": "222"}'
-    with patch("app.services.chat.get_llm_adapter", return_value=adapter):
-        result = await _resolve_assignment_reference(
-            _assignments(), "the final project", "show me the final project"
-        )
+    result = await _resolve_assignment_reference(
+        _assignments(), "the final project", "show me the final project", adapter
+    )
     assert result == 222
 
 
@@ -128,8 +123,7 @@ async def test_assignment_resolver_rejects_a_bool_masquerading_as_an_id():
         {"id": 1, "name": "Assignment 1", "due_at": None, "points_possible": 10.0},
         {"id": 2, "name": "Assignment 2", "due_at": None, "points_possible": 10.0},
     ]
-    with patch("app.services.chat.get_llm_adapter", return_value=adapter):
-        result = await _resolve_assignment_reference(assignments, "assignment 1", "show assignment 1")
+    result = await _resolve_assignment_reference(assignments, "assignment 1", "show assignment 1", adapter)
     assert result is None
 
 
@@ -139,8 +133,7 @@ async def test_student_resolver_accepts_a_string_id():
     adapter.generate.return_value = (
         '{"resolutions": [{"student_reference": "Alice", "canvas_user_id": "501"}]}'
     )
-    with patch("app.services.chat.get_llm_adapter", return_value=adapter):
-        result = await _resolve_students_via_llm(_students(), ["Alice"], "message alice")
+    result = await _resolve_students_via_llm(_students(), ["Alice"], "message alice", adapter)
     assert result == {"Alice": 501}
 
 
@@ -150,6 +143,5 @@ async def test_student_resolver_still_rejects_an_id_outside_the_candidate_list()
     adapter.generate.return_value = (
         '{"resolutions": [{"student_reference": "Alice", "canvas_user_id": "999"}]}'
     )
-    with patch("app.services.chat.get_llm_adapter", return_value=adapter):
-        result = await _resolve_students_via_llm(_students(), ["Alice"], "message alice")
+    result = await _resolve_students_via_llm(_students(), ["Alice"], "message alice", adapter)
     assert result == {"Alice": None}

@@ -46,6 +46,7 @@ from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
 from app.services.assignment_rate import find_assignments_by_submission_rate
 from app.services.canvas import CanvasTokenRequiredError, sync_courses_if_stale
+from app.services.llm.base import LLMAdapter
 from app.services.llm.json_extraction import extract_json_object
 from app.services.llm.llm_setting import get_llm_adapter
 from app.services.resolved_set import (
@@ -374,6 +375,7 @@ async def _resolve_course_switch(
     course_names: list[CanvasCourseName],
     current_course_name: str | None,
     user_message: str,
+    adapter: LLMAdapter,
 ) -> CanvasCourseName | None:
     """Detects a course switch from the raw user message ALONE, before
     history or the main system prompt are built for this turn — closes a
@@ -402,7 +404,6 @@ async def _resolve_course_switch(
         f"This conversation is currently about: {current_course_name}\n"
         f"User's message: {user_message}"
     )
-    adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
     try:
         raw = await asyncio.wait_for(
             adapter.generate(
@@ -559,7 +560,7 @@ ASSIGNMENT_RESOLVER_TIMEOUT_SECONDS = 30.0
 
 
 async def _resolve_assignment_reference(
-    assignments: list[dict], reference: str | None, user_message: str
+    assignments: list[dict], reference: str | None, user_message: str, adapter: LLMAdapter,
 ) -> int | None:
     """Resolves a natural-language assignment reference (e.g. "the latest
     assignment") to a real Canvas assignment ID, via a small dedicated LLM
@@ -592,7 +593,6 @@ async def _resolve_assignment_reference(
             f"User's reference to an assignment: {reference or '(not given)'}\n"
             f"User's full message: {user_message}"
         )
-        adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
         raw = await asyncio.wait_for(
             adapter.generate(
                 _ASSIGNMENT_RESOLVER_SYSTEM_PROMPT, prompt, history=[],
@@ -621,6 +621,7 @@ async def _resolve_course_and_assignment(
     assignment_id: int | None,
     assignment_reference: str | None,
     user_message: str,
+    adapter: LLMAdapter,
 ) -> tuple[Course, int] | dict:
     """Shared by every chain that needs a real Canvas assignment_id before
     it can proceed (_run_fetch_submissions_chain,
@@ -673,7 +674,7 @@ async def _resolve_course_and_assignment(
                 "partial_plan": {"local_course_id": course.id},
             }
         assignment_id = await _resolve_assignment_reference(
-            assignments, assignment_reference, user_message
+            assignments, assignment_reference, user_message, adapter
         )
         if assignment_id is None:
             names = ", ".join(a["name"] for a in assignments)
@@ -694,6 +695,7 @@ async def _run_fetch_submissions_chain(
     user_msg: Message,
     action: FetchSubmissionsAction,
     user_message: str,
+    adapter: LLMAdapter,
 ) -> dict:
     """fetch_submissions needs a real Canvas assignment_id, which the model
     is never allowed to invent (see COURSE RESOLUTION/assignment sections
@@ -716,6 +718,7 @@ async def _run_fetch_submissions_chain(
     resolved = await _resolve_course_and_assignment(
         db, user, conversation, user_msg,
         action.local_course_id, action.assignment_id, action.assignment_reference, user_message,
+        adapter,
     )
     if isinstance(resolved, dict):
         return resolved
@@ -785,6 +788,7 @@ async def _run_resolve_missing_submissions_chain(
     user_msg: Message,
     action: ResolveMissingSubmissionsAction,
     user_message: str,
+    adapter: LLMAdapter,
 ) -> dict:
     """Resolves "students missing (or late on) submissions for
     <assignment>" entirely server-side — never dumps the raw
@@ -800,6 +804,7 @@ async def _run_resolve_missing_submissions_chain(
     resolved = await _resolve_course_and_assignment(
         db, user, conversation, user_msg,
         action.local_course_id, action.assignment_id, action.assignment_reference, user_message,
+        adapter,
     )
     if isinstance(resolved, dict):
         return resolved
@@ -933,6 +938,7 @@ async def _run_update_assignment_chain(
     user_msg: Message,
     action: Any,
     user_message: str,
+    adapter: LLMAdapter,
 ) -> dict:
     """update_assignment needs an exact Canvas assignment_id before a
     preview can be built, but — like fetch_submissions,
@@ -947,6 +953,7 @@ async def _run_update_assignment_chain(
     resolved = await _resolve_course_and_assignment(
         db, user, conversation, user_msg,
         action.local_course_id, action.assignment_id, action.assignment_reference, user_message,
+        adapter,
     )
     if isinstance(resolved, dict):
         return resolved
@@ -1002,7 +1009,7 @@ RECIPIENT_RESOLVER_TIMEOUT_SECONDS = 30.0
 
 
 async def _resolve_students_via_llm(
-    candidates: list[dict], references: list[str], user_message: str
+    candidates: list[dict], references: list[str], user_message: str, adapter: LLMAdapter,
 ) -> dict[str, int | None]:
     """Small dedicated LLM call resolving every natural-language student
     reference against a real candidate list at once — same paradigm as
@@ -1033,7 +1040,6 @@ async def _resolve_students_via_llm(
             f"References to resolve: {references}\n"
             f"User's full message: {user_message}"
         )
-        adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
         raw = await asyncio.wait_for(
             adapter.generate(
                 _RECIPIENT_RESOLVER_SYSTEM_PROMPT, prompt, history=[],
@@ -1073,6 +1079,7 @@ async def _resolve_recipient_directives(
     roster: list[dict],
     directives: list[RecipientDirective],
     user_message: str,
+    adapter: LLMAdapter,
 ) -> list[MessageGroup] | dict:
     """Resolves each directive's student_reference to a real Canvas user ID
     — the roster first, falling back to a submissions-derived corpus only
@@ -1094,7 +1101,7 @@ async def _resolve_recipient_directives(
         }
         for s in roster
     }
-    resolved = await _resolve_students_via_llm(list(known.values()), references, user_message)
+    resolved = await _resolve_students_via_llm(list(known.values()), references, user_message, adapter)
 
     unresolved = [ref for ref in references if resolved.get(ref) is None]
     if unresolved:
@@ -1108,7 +1115,7 @@ async def _resolve_recipient_directives(
         for student in new_candidates:
             known[student["user_id"]] = student
         if new_candidates:
-            fallback_resolved = await _resolve_students_via_llm(new_candidates, unresolved, user_message)
+            fallback_resolved = await _resolve_students_via_llm(new_candidates, unresolved, user_message, adapter)
             for ref, candidate_id in fallback_resolved.items():
                 if candidate_id is not None:
                     resolved[ref] = candidate_id
@@ -1212,6 +1219,7 @@ async def _run_send_message_chain(
     action: Any,
     user_message: str,
     pending_message_id: int | None,
+    adapter: LLMAdapter,
 ) -> dict:
     """Runs the recipient-resolution + grouping chain for a send_message
     turn that named recipients in natural language (recipient_directives),
@@ -1248,6 +1256,7 @@ async def _run_send_message_chain(
     if action.recipient_directives:
         resolved = await _resolve_recipient_directives(
             db, user, conversation, user_msg, course, roster, action.recipient_directives, user_message,
+            adapter,
         )
         if isinstance(resolved, dict):
             return resolved
@@ -2002,6 +2011,7 @@ async def handle_chat_message(
     local_course_id: int | None,
     conversation_id: int | None,
     pending_message_id: int | None = None,
+    model_settings: dict | None = None,
 ) -> tuple[Conversation, dict, bool]:
     """Main chat handler. Two distinct flows:
 
@@ -2063,6 +2073,26 @@ async def handle_chat_message(
     course_names = await _get_course_names_for_user(db, user)
     history = await _get_recent_messages(db, conversation.id)
 
+    # Built once per turn and threaded into every resolver call below
+    # (_resolve_course_switch, _resolve_assignment_reference via
+    # _resolve_course_and_assignment, _resolve_students_via_llm via
+    # _resolve_recipient_directives) so a user's chosen provider/model
+    # (AI Models settings page / in-chat switcher) governs the whole
+    # turn consistently, not just the main call. Falls back to
+    # settings.DEFAULT_LLM_PROVIDER when the client didn't send one.
+    try:
+        adapter = get_llm_adapter(model_settings or {"provider": settings.DEFAULT_LLM_PROVIDER})
+    except (KeyError, ValueError) as e:
+        # An unknown provider id, or a provider (openai/anthropic/custom)
+        # that needs a key the server hasn't configured and the client
+        # never supplies — surface as a normal chat error rather than a
+        # raw 500, same as any other failure this function returns.
+        await log_message(db, conversation, role="assistant", content=f"LLM provider error: {e}")
+        await db.commit()
+        return conversation, {
+            "error": "The selected AI model isn't available right now. Try a different one in Settings.",
+        }, True
+
     # Pre-resolve a course switch from the raw message alone, before the
     # main prompt is built for this turn — see _resolve_course_switch's
     # docstring for why this has to happen here, not after the main LLM
@@ -2086,7 +2116,7 @@ async def handle_chat_message(
         and conversation.course_id is not None
         and history
     ):
-        switched = await _resolve_course_switch(course_names, conversation.course_name, message)
+        switched = await _resolve_course_switch(course_names, conversation.course_name, message, adapter)
         if (
             switched is not None
             and switched.local_course_id is not None
@@ -2109,7 +2139,6 @@ async def handle_chat_message(
             current_proposed_action = stored_preview.get("proposed_action")
 
     system_prompt = build_system_prompt(has_canvas_token=bool(user.canvas_connections))
-    adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
 
     # Step loop: lets the model chain a bounded sequence of read/resolver
     # decisions within this ONE user turn, instead of every read
@@ -2307,14 +2336,14 @@ async def handle_chat_message(
                 # an internal fetch_assignments call when needed) rather
                 # than executing directly.
                 result = await _run_fetch_submissions_chain(
-                    db, user, conversation, user_msg, action, message
+                    db, user, conversation, user_msg, action, message, adapter
                 )
             elif action.action == "resolve_missing_submissions":
                 # Same assignment-resolution need as fetch_submissions,
                 # plus server-side filtering down to a compact
                 # {count, sample, handle} summary — never the raw list.
                 result = await _run_resolve_missing_submissions_chain(
-                    db, user, conversation, user_msg, action, message
+                    db, user, conversation, user_msg, action, message, adapter
                 )
             elif action.action == "find_assignment_by_submission_rate":
                 # Scans every assignment's real submission data server-side
@@ -2330,7 +2359,7 @@ async def handle_chat_message(
                 # directly, in this same turn, rather than making the user
                 # ask again once a fetch_assignments result is in history.
                 result = await _run_update_assignment_chain(
-                    db, user, conversation, user_msg, action, message
+                    db, user, conversation, user_msg, action, message, adapter
                 )
             elif action.action == "send_message" and (
                 action.recipient_directives or action.broadcast_to_all_students or action.recipient_handle
@@ -2343,7 +2372,7 @@ async def handle_chat_message(
                 # rather than executing directly or auto-wrapping into a
                 # single intent_preview.
                 result = await _run_send_message_chain(
-                    db, user, conversation, user_msg, action, message, pending_message_id
+                    db, user, conversation, user_msg, action, message, pending_message_id, adapter
                 )
             elif action.action in READ_ACTIONS:
                 # Every other read executes immediately — no preview, no

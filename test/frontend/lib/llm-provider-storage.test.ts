@@ -10,10 +10,10 @@ describe("llm-provider-storage", () => {
     localStorage.clear();
   });
 
-  it("defaults to Groq when nothing is stored", () => {
+  it("defaults to Hugging Face when nothing is stored", () => {
     expect(getStoredLlmProviderSettings(42)).toEqual({
-      provider: "groq",
-      model: "meta-llama/llama-4-scout-17b-16e-instruct",
+      provider: "huggingface",
+      model: "openai/gpt-oss-20b:groq",
       baseUrl: "",
     });
   });
@@ -35,7 +35,7 @@ describe("llm-provider-storage", () => {
   it("falls back to defaults for corrupt storage", () => {
     localStorage.setItem("canvas-workflow-llm-provider:42", "{not-json");
 
-    expect(getStoredLlmProviderSettings(42).provider).toBe("groq");
+    expect(getStoredLlmProviderSettings(42).provider).toBe("huggingface");
   });
 
   it("scopes storage per user", () => {
