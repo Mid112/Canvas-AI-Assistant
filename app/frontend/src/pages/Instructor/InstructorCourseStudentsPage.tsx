@@ -332,6 +332,7 @@ export function InstructorCourseStudentsPage() {
 
 function PageHeader({
   localCourseId,
+  course,
   embedded = false,
 }: {
   localCourseId: number;
