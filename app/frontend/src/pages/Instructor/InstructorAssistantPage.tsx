@@ -209,7 +209,7 @@ export function InstructorAssistantPage() {
   };
 
   return (
-    <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-6 overflow-hidden p-4 md:p-6 lg:p-8">
       <InstructorAssistantHeader />
 
       {!user?.has_canvas_token ? (
@@ -224,7 +224,7 @@ export function InstructorAssistantPage() {
         disabled={isLoading}
       />
 
-      <div className="grid min-h-0 gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid min-h-0 flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_20rem]">
         <ChatWindow
           ref={chatWindowRef}
           key={chatSessionKey}
@@ -248,7 +248,7 @@ export function InstructorAssistantPage() {
 
         <section
           aria-labelledby="assistant-history-heading"
-          className="flex min-h-[20rem] flex-col rounded-lg border border-border/70 bg-background p-4 shadow-sm"
+          className="flex min-h-0 flex-col rounded-lg border border-border/70 bg-background p-4 shadow-sm"
         >
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
