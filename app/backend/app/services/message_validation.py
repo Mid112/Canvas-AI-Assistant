@@ -2,12 +2,10 @@
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.integrations.canvas import fetch_assignments, fetch_submissions
 from app.models.course import Course
 from app.models.user import User
-from app.services.canvas import require_canvas_token
 from app.services.course_access import get_owned_course_or_404
-from app.services.student import get_students
+from app.services.student import get_students, get_submission_derived_students
 
 
 def _check_subject(subject: str) -> None:
@@ -68,24 +66,15 @@ async def _submission_recipient_ids(
     user: User,
     canvas_url: str,
 ) -> set[int]:
-    token = require_canvas_token(user, canvas_url)
-    canvas_course_id = int(course.canvas_course_id)
-    assignments = await fetch_assignments(canvas_course_id, token, canvas_url)
-    allowed_ids: set[int] = set()
-
     # Some Canvas instances expose submission placeholder rows even when the
     # enrollment endpoint is empty. Those rows still prove that Canvas
     # recognizes the user in the course, so they are valid message targets.
-    for assignment in assignments:
-        submissions = await fetch_submissions(
-            canvas_course_id,
-            int(assignment["id"]),
-            token,
-            canvas_url,
-        )
-        allowed_ids.update(int(submission["user_id"]) for submission in submissions)
-
-    return allowed_ids
+    # get_submission_derived_students (services/student.py) does the actual
+    # course-wide submissions scan — shared with the send_message
+    # recipient-name-resolution fallback so the two don't duplicate the same
+    # "loop every assignment's submissions" logic.
+    students = await get_submission_derived_students(course, user, canvas_url)
+    return {student["user_id"] for student in students}
 
 
 async def validate_message_for_send(

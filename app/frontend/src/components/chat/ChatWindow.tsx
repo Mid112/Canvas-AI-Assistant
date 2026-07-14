@@ -20,6 +20,7 @@ import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useInstitution } from "@/contexts/useInstitution";
 import { seedChatMessages } from "@/data/assistantSeedData";
 import { isCancellationPhrase } from "@/lib/chat-cancellation";
+import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
 import {
   AssistantApiError,
   cancelAssistantAction,
@@ -29,11 +30,29 @@ import {
   sendAssistantMessage,
   type ConversationResponse,
 } from "@/services/assistant";
+import type { AssistantMessageResult } from "@/services/assistant";
 import type { ChatMessage } from "@/types/chat";
+import { mapWorkflowStatus } from "@/types/chat";
 import type { LlmProviderId, LlmProviderSettings } from "@/types/llmProvider";
 
 function createMessageId(): string {
   return crypto.randomUUID();
+}
+
+// A stored assistant message's content is either the full JSON envelope
+// the backend returned (for structured replies like intent_preview or a
+// tool result — see mapChatReplyToAssistantResponse) or a plain string
+// (a plain-text model reply, or an error message logged verbatim). Only
+// the former needs remapping on reload; the latter is displayed as-is.
+function parseStoredAssistantReply(content: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(content);
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
 }
 
 function withWelcomeMessage(restoredMessages: ChatMessage[]): ChatMessage[] {
@@ -47,37 +66,23 @@ function withWelcomeMessage(restoredMessages: ChatMessage[]): ChatMessage[] {
   ];
 }
 
-function findLatestPendingMessageId(messages: ChatMessage[]): number | undefined {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message.pendingActionStatus === "pending") {
-      return message.pendingMessageId;
-    }
-  }
-
-  return undefined;
-}
-
 interface InitialChatState {
   messages: ChatMessage[];
   conversationId?: number;
-  activePendingMessageId?: number;
   hydratedConversationId?: number;
 }
 
 function getInitialChatState({
   initialConversationId,
-  initialPendingMessageId,
   loadedConversation,
 }: Pick<
   ChatWindowProps,
-  "initialConversationId" | "initialPendingMessageId" | "loadedConversation"
+  "initialConversationId" | "loadedConversation"
 >): InitialChatState {
   if (!loadedConversation) {
     return {
       messages: seedChatMessages,
       conversationId: initialConversationId,
-      activePendingMessageId: initialPendingMessageId,
     };
   }
 
@@ -86,7 +91,6 @@ function getInitialChatState({
   return {
     messages: withWelcomeMessage(loadedMessages),
     conversationId: loadedConversation.id,
-    activePendingMessageId: findLatestPendingMessageId(loadedMessages),
     hydratedConversationId: loadedConversation.id,
   };
 }
@@ -132,10 +136,9 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
     () =>
       getInitialChatState({
         initialConversationId,
-        initialPendingMessageId,
         loadedConversation,
       }),
-    [initialConversationId, initialPendingMessageId, loadedConversation],
+    [initialConversationId, loadedConversation],
   );
   const [messages, setMessages] = useState<ChatMessage[]>(
     () => initialChatState.messages,
@@ -143,9 +146,29 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   const [conversationId, setConversationId] = useState<number | undefined>(
     () => initialChatState.conversationId,
   );
-  const [activePendingMessageId, setActivePendingMessageId] = useState<
-    number | undefined
-  >(() => initialChatState.activePendingMessageId);
+  // A grouped send_message turn can resolve to more than one distinct
+  // message, each independently confirmable/cancelable — so more than one
+  // preview can be simultaneously pending, not just the single most recent
+  // one. See additionalPreviews on AssistantResponse.
+  const [activePendingMessageIds, setActivePendingMessageIds] = useState<
+    number[]
+  >(() => {
+    // A loadedConversation can already carry more than one still-pending
+    // preview (e.g. a grouped send_message batch) — derive the full set
+    // from its messages rather than only trusting the single
+    // initialPendingMessageId prop, which only ever names one specific
+    // preview (e.g. the one a "review preview" deep link pointed at).
+    const pendingFromMessages = initialChatState.messages
+      .filter((entry) => entry.pendingActionStatus === "pending")
+      .map((entry) => entry.pendingMessageId)
+      .filter((id): id is number => id !== undefined);
+
+    if (pendingFromMessages.length > 0) {
+      return pendingFromMessages;
+    }
+
+    return initialPendingMessageId !== undefined ? [initialPendingMessageId] : [];
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
@@ -156,7 +179,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   const [pendingActionError, setPendingActionError] = useState<string | null>(
     null,
   );
-  const scrollAnchorRef = useRef<HTMLDivElement>(null);
+  const messageListRef = useRef<HTMLDivElement>(null);
   const initialPromptHandledRef = useRef<string | null>(null);
   const hydratedConversationRef = useRef<number | undefined>(
     initialChatState.hydratedConversationId,
@@ -172,7 +195,12 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   );
 
   useEffect(() => {
-    scrollAnchorRef.current?.scrollIntoView?.({ behavior: "smooth" });
+    const messageList = messageListRef.current;
+    if (!messageList) {
+      return;
+    }
+
+    messageList.scrollTop = messageList.scrollHeight;
   }, [messages, isLoading, error]);
 
   useEffect(() => {
@@ -201,10 +229,75 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           return;
         }
 
-        const restoredMessages = mapConversationToChatMessages(conversation);
+        // Authoritative per-preview status, keyed by preview_message_id —
+        // see WorkflowStatus in app/backend/app/schemas/chat.py. Replaces
+        // the old FIFO reconstruction (matching "[confirmed action]"/
+        // "[cancelled action]" marker text to the oldest still-open
+        // preview in transcript order), which mislabeled cards whenever
+        // more than one preview existed and they were resolved out of
+        // order. Live, in-session confirm/cancel (resolvePendingAction)
+        // was always unaffected by that bug — it matches by exact message
+        // id — this only fixes the post-reload reconstruction.
+        const workflowStatuses = conversation.workflow_statuses ?? {};
+
+        const restoredMessages = conversation.messages.flatMap<ChatMessage>((storedMessage) => {
+          const timestamp = new Date(storedMessage.created_at);
+
+          if (storedMessage.role === "user") {
+            if (storedMessage.content.startsWith("[")) {
+              return [];
+            }
+
+            return [{
+              id: String(storedMessage.id),
+              role: "user",
+              content: storedMessage.content,
+              timestamp,
+              conversationId: conversation.id,
+            }];
+          }
+
+          const parsed = parseStoredAssistantReply(storedMessage.content);
+          if (!parsed) {
+            return [{
+              id: String(storedMessage.id),
+              role: "assistant",
+              content: storedMessage.content,
+              timestamp,
+              conversationId: conversation.id,
+            }];
+          }
+
+          const reply = parsed.intent_preview && parsed.pending_message_id === undefined
+            ? { ...parsed, pending_message_id: storedMessage.id }
+            : parsed;
+          const mapped = mapChatReplyToAssistantResponse(reply, false, conversation.id);
+
+          return [{
+            id: String(storedMessage.id),
+            role: "assistant",
+            content: mapped.content,
+            timestamp,
+            conversationId: conversation.id,
+            pendingMessageId: mapped.pendingMessageId,
+            pendingActionStatus: mapped.pendingMessageId
+              ? mapWorkflowStatus(workflowStatuses[mapped.pendingMessageId]?.status)
+              : undefined,
+            explanation: mapped.explanation,
+            interpretedAction: mapped.interpretedAction,
+            safetyBlocked: mapped.safetyBlocked,
+            safetyMessage: mapped.safetyMessage,
+          }];
+        });
+
+        const nextActivePendingMessageIds = restoredMessages
+          .filter((entry) => entry.pendingActionStatus === "pending")
+          .map((entry) => entry.pendingMessageId)
+          .filter((id): id is number => id !== undefined);
+
         setMessages(withWelcomeMessage(restoredMessages));
         setConversationId(conversation.id);
-        setActivePendingMessageId(findLatestPendingMessageId(restoredMessages));
+        setActivePendingMessageIds(nextActivePendingMessageIds);
         hydratedConversationRef.current = initialConversationId;
       } catch {
         if (cancelled) {
@@ -214,7 +307,9 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
         // Keep the seeded assistant greeting if restoring history fails; the
         // next send still continues in the existing conversation id.
         setConversationId(initialConversationId);
-        setActivePendingMessageId(initialPendingMessageId);
+        setActivePendingMessageIds(
+          initialPendingMessageId !== undefined ? [initialPendingMessageId] : [],
+        );
       }
     }
 
@@ -226,33 +321,34 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   }, [accessToken, initialConversationId, initialPendingMessageId, loadedConversation]);
 
   const appendAssistantMessage = useCallback(
-    (response: {
-      content: string;
-      conversationId: number;
-      explanation?: string;
-      interpretedAction?: ChatMessage["interpretedAction"];
-      safetyBlocked?: boolean;
-      safetyMessage?: string;
-      pendingMessageId?: number;
-    }) => {
-      const assistantMessage: ChatMessage = {
+    (response: AssistantMessageResult) => {
+      // A grouped send_message turn can resolve to more than one distinct
+      // message — the primary response plus every entry in
+      // additionalPreviews all become their own message row, each
+      // independently confirmable/cancelable.
+      const allResponses = [response, ...(response.additionalPreviews ?? [])];
+
+      const newMessages: ChatMessage[] = allResponses.map((entry) => ({
         id: createMessageId(),
         role: "assistant",
-        content: response.content,
+        content: entry.content,
         timestamp: new Date(),
-        conversationId: response.conversationId,
-        pendingMessageId: response.pendingMessageId,
-        pendingActionStatus: response.pendingMessageId ? "pending" : undefined,
-        explanation: response.explanation,
-        interpretedAction: response.interpretedAction,
-        safetyBlocked: response.safetyBlocked,
-        safetyMessage: response.safetyMessage,
-      };
+        conversationId: entry.conversationId ?? response.conversationId,
+        pendingMessageId: entry.pendingMessageId,
+        pendingActionStatus: entry.pendingMessageId ? "pending" : undefined,
+        explanation: entry.explanation,
+        interpretedAction: entry.interpretedAction,
+        safetyBlocked: entry.safetyBlocked,
+        safetyMessage: entry.safetyMessage,
+      }));
 
-      setMessages((current) => [...current, assistantMessage]);
+      setMessages((current) => [...current, ...newMessages]);
 
-      if (response.pendingMessageId) {
-        setActivePendingMessageId(response.pendingMessageId);
+      const newPendingIds = newMessages
+        .map((entry) => entry.pendingMessageId)
+        .filter((id): id is number => id !== undefined);
+      if (newPendingIds.length > 0) {
+        setActivePendingMessageIds((current) => [...current, ...newPendingIds]);
       }
     },
     [],
@@ -274,13 +370,21 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       setError(null);
       setRetryMessage(userText);
 
-      const pendingMessageIdToSend = activePendingMessageId;
+      // Only target a specific preview for modification when exactly one is
+      // currently pending — with more than one open at once (a grouped
+      // send_message batch), which one a free-typed follow-up should modify
+      // is ambiguous, so it starts a fresh normal turn instead. A future
+      // auto-advancing queue (only ever surfacing one preview at a time)
+      // removes this limitation.
+      const pendingMessageIdToSend =
+        activePendingMessageIds.length === 1 ? activePendingMessageIds[0] : undefined;
 
       try {
         const response = await sendAssistantMessage(accessToken, userText, {
           context: assistantContext,
           conversationId,
           pendingMessageId: pendingMessageIdToSend,
+          modelSettings: modelSettings ?? undefined,
         });
 
         if (pendingMessageIdToSend !== undefined) {
@@ -292,7 +396,9 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
                 : entry,
             ),
           );
-          setActivePendingMessageId(undefined);
+          setActivePendingMessageIds((current) =>
+            current.filter((id) => id !== pendingMessageIdToSend),
+          );
           onModifyContextConsumed?.();
         }
 
@@ -313,10 +419,11 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
     },
     [
       accessToken,
-      activePendingMessageId,
+      activePendingMessageIds,
       appendAssistantMessage,
       assistantContext,
       conversationId,
+      modelSettings,
       onConversationChange,
       onModifyContextConsumed,
     ],
@@ -355,8 +462,9 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
               );
 
         setConversationId(response.conversationId);
-        onConversationChange?.(response.conversationId);
-        setActivePendingMessageId(undefined);
+        setActivePendingMessageIds((current) =>
+          current.filter((id) => id !== message.pendingMessageId),
+        );
         setMessages((current) =>
           current.map((entry) =>
             entry.id === message.id
@@ -420,13 +528,23 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
 
       setMessages((current) => [...current, userMessage]);
 
+      // Only auto-cancel via a typed phrase ("never mind", etc.) when
+      // exactly one preview is pending — with more than one open at once
+      // (a grouped send_message batch), which one the phrase refers to is
+      // ambiguous, so it falls through to a normal turn instead. Mirrors
+      // deliverAssistantResponse's identical single-pending gate above.
+      const soleActivePendingMessageId =
+        activePendingMessageIds.length === 1
+          ? activePendingMessageIds[0]
+          : undefined;
+
       if (
-        activePendingMessageId !== undefined &&
+        soleActivePendingMessageId !== undefined &&
         isCancellationPhrase(trimmed)
       ) {
         const pendingMessage = messages.find(
           (entry) =>
-            entry.pendingMessageId === activePendingMessageId &&
+            entry.pendingMessageId === soleActivePendingMessageId &&
             entry.pendingActionStatus === "pending",
         );
 
@@ -439,7 +557,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       void deliverAssistantResponse(trimmed);
     },
     [
-      activePendingMessageId,
+      activePendingMessageIds,
       deliverAssistantResponse,
       messages,
       resolvePendingAction,
@@ -482,7 +600,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   };
 
   return (
-    <Card className="flex min-h-[32rem] flex-1 flex-col overflow-hidden shadow-sm ring-1 ring-border/60">
+    <Card className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden shadow-sm ring-1 ring-border/60">
       <CardContent className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:p-6">
         {onStartNewChat ? (
           <div className="flex shrink-0 justify-end">
@@ -499,7 +617,10 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           </div>
         ) : null}
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+        <div
+          ref={messageListRef}
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1"
+        >
           {messages.map((message) =>
             message.role === "assistant" ? (
               <AssistantMessage
@@ -526,7 +647,6 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           )}
 
           {isLoading ? <LoadingIndicator /> : null}
-          <div ref={scrollAnchorRef} />
         </div>
 
         {error ? (

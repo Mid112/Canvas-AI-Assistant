@@ -1,3 +1,6 @@
+import asyncio
+import contextlib
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -9,19 +12,60 @@ import app.models  # noqa: F401 — registers all models with Base
 from app.config import settings
 from app.core.database import AsyncSessionLocal, Base, engine
 from app.core.limiter import limiter
+from app.core.migrations import run_pending_migrations
 from app.core.seeder import seed_admin
 from app.routers import admin, audit, auth, canvas, chat, history, message_templates, messages
+from app.services.canvas import run_course_sync_sweep
+
+logger = logging.getLogger(__name__)
+
+
+async def _course_sync_loop() -> None:
+    """Keeps canvas_course_names fresh in the background, independent of
+    any request — see services/canvas.py's sync_courses_if_stale for why
+    the chat pipeline never does this inline. Runs its own DB session per
+    tick (the request-scoped session from get_db doesn't outlive a
+    request, and this loop outlives all of them) and ticks at
+    CANVAS_COURSE_SYNC_COOLDOWN_SECONDS — the same window
+    sync_courses_if_stale's own per-connection cooldown uses, so most
+    ticks do real Canvas work for whichever connections are actually due.
+    One sweep failing outright (e.g. the DB is briefly unreachable) is
+    logged and retried next tick, not fatal to the loop."""
+    while True:
+        try:
+            async with AsyncSessionLocal() as db:
+                await run_course_sync_sweep(db)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.warning("course sync sweep tick failed", exc_info=True)
+        await asyncio.sleep(settings.CANVAS_COURSE_SYNC_COOLDOWN_SECONDS)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create all tables on startup if they don't exist
+    # Create all tables on startup if they don't exist. Must run before
+    # run_pending_migrations below: on a genuinely fresh database (no
+    # tables at all) an ALTER TABLE ... ADD COLUMN IF NOT EXISTS migration
+    # fails outright because the table itself doesn't exist yet. Running
+    # create_all() first means every current model's columns (including
+    # ones later migrations also add, e.g. assignments.published) are
+    # already present on a fresh table, so those migrations become no-ops.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    # Catches an existing database up on any schema change
+    # Base.metadata.create_all() above can't handle on its own — it only
+    # creates missing tables, never ALTERs an existing one (see
+    # core/migrations.py for what it deliberately never touches).
+    await run_pending_migrations(engine)
     async with AsyncSessionLocal() as db:
         await seed_admin(db)
+    sync_task = asyncio.create_task(_course_sync_loop())
     yield
-    # Clean up DB connections on shutdown
+    # Clean up DB connections and the background sync loop on shutdown
+    sync_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await sync_task
     await engine.dispose()
 
 

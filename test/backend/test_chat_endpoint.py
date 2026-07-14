@@ -207,38 +207,19 @@ def test_conversation_history_is_scoped_to_current_user(client):
     assert other_detail.status_code == 404
 
 
-def test_conversation_detail_includes_pending_action_status(client):
-    headers = _register(client)
-
-    mock_adapter = AsyncMock()
-    mock_adapter.generate.return_value = (
-        '{"action": "intent_preview", "summary": "List your courses", '
-        '"proposed_action": {"action": "fetch_courses"}}'
-    )
-
-    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
-        response = client.post(
-            "/api/v1/chat/",
-            json={"message": "what courses do I have?"},
-            headers=headers,
-        )
-
-    assert response.status_code == 200
-    conversation_id = response.json()["conversation_id"]
-    pending_message_id = response.json()["reply"]["pending_message_id"]
-
-    history = client.get(f"/api/v1/chat/conversations/{conversation_id}", headers=headers)
-    assert history.status_code == 200
-    pending_message = next(
-        message
-        for message in history.json()["messages"]
-        if message["id"] == pending_message_id
-    )
-    assert pending_message["pending_action_status"] == "pending"
+# Read actions (fetch_courses, fetch_assignments, fetch_students,
+# fetch_submissions, get_active_course) no longer go through intent_preview
+# at all — they execute directly on the normal turn (see READ_ACTIONS in
+# services/chat.py's handle_chat_message), so there is no pending preview
+# for them to have a status. Coverage for a write action's pending status
+# lives in test_conversation_workflow_status.py instead of here.
 
 
 # Verifies: Chat resolves course name before calling model.
 def test_chat_resolves_course_name_before_calling_model(client):
+    """The prompt built for the LLM carries the user's real course names
+    (YOUR COURSES) — course resolution is the model's job (COURSE
+    RESOLUTION in build_system_prompt), never a pre-injected numeric ID."""
     headers = _register(client)
 
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
@@ -262,11 +243,20 @@ def test_chat_resolves_course_name_before_calling_model(client):
             "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
             headers=headers,
         )
-    assert courses.status_code == 200
-    local_course_id = courses.json()[0]["local_id"]
+        assert courses.status_code == 200
+        local_course_id = courses.json()[0]["local_id"]
+        # Seeds canvas_course_names via set_active_course's sync call —
+        # that's the only source _build_llm_message's YOUR COURSES list
+        # reads from.
+        active_resp = client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_course_id},
+            headers=headers,
+        )
+        assert active_resp.status_code == 200
 
     mock_adapter = AsyncMock()
-    mock_adapter.generate.return_value = '{"action": "respond", "message": "Resolved."}'
+    mock_adapter.generate.return_value = '{"action": "respond", "course_name": "COSC 499", "message": "Resolved."}'
 
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
         response = client.post(
@@ -277,8 +267,10 @@ def test_chat_resolves_course_name_before_calling_model(client):
 
     assert response.status_code == 200
     generated_user_message = mock_adapter.generate.call_args.args[1]
-    assert f"local_course_id: {local_course_id}" in generated_user_message
-    assert "do not ask the user for internal IDs" in generated_user_message
+    assert "YOUR COURSES" in generated_user_message
+    assert "COSC 499" in generated_user_message
+    assert "local_course_id:" not in generated_user_message
+    assert "canvas_course_id:" not in generated_user_message
 
 
 # Verifies: Chat reuses conversation course context on followup.
@@ -306,7 +298,15 @@ def test_chat_reuses_conversation_course_context_on_followup(client):
             "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
             headers=headers,
         )
-    local_course_id = courses.json()[0]["local_id"]
+        local_course_id = courses.json()[0]["local_id"]
+        # Seeds canvas_course_names via set_active_course's sync call —
+        # the only source _build_llm_message's YOUR COURSES/CURRENT
+        # COURSE block reads from.
+        client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_course_id},
+            headers=headers,
+        )
 
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = '{"action": "respond", "message": "OK."}'
@@ -324,17 +324,24 @@ def test_chat_reuses_conversation_course_context_on_followup(client):
             headers=headers,
         )
 
-    followup_user_message = mock_adapter.generate.call_args_list[1].args[1]
-    assert f"local_course_id: {local_course_id}" in followup_user_message
+    # Turn 1 has no prior history, so _resolve_course_switch is skipped
+    # (see handle_chat_message) and it's a single LLM call — call[0].
+    # Turn 2 already has turn 1's history, so it costs two calls: the new
+    # course-switch pre-resolver (call[1]), then the main call (call[2]).
+    followup_user_message = mock_adapter.generate.call_args_list[2].args[1]
+    assert "CURRENT COURSE FOR THIS CONVERSATION: COSC 310" in followup_user_message
 
 
 def test_chat_followup_stays_on_conversation_course_despite_conflicting_active_course(
     client,
 ):
-    """A conversation named a course by text in turn 1 (e.g. answering a
-    clarify question about a different course than the user's global active
-    course) must not snap back to the global active course on a turn 2 that
-    names no course at all — the conversation's own course_id should win."""
+    """A conversation the model resolved to one course in turn 1 (naming
+    it explicitly in its course_name field — e.g. answering what the user
+    typed) must not snap back to the user's global active course on a
+    turn 2 that names no course at all — the conversation's own,
+    already-resolved course_id should win over the
+    UserPreference.active_course_id fallback, which is only ever a seed
+    for a still course-less conversation (see get_or_create_conversation)."""
     headers = _register(client)
 
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
@@ -365,20 +372,32 @@ def test_chat_followup_stays_on_conversation_course_despite_conflicting_active_c
             "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
             headers=headers,
         )
-    local_ids = {c["name"]: c["local_id"] for c in courses.json()}
+        local_ids = {c["name"]: c["local_id"] for c in courses.json()}
 
-    # Global active course is set to COSC 310 ...
-    client.patch(
-        "/api/v1/canvas/active-course",
-        json={"local_course_id": local_ids["COSC 310"]},
-        headers=headers,
-    )
+        # Global active course is set to COSC 310 (also seeds
+        # canvas_course_names for both courses, via sync_courses_if_stale).
+        client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_ids["COSC 310"]},
+            headers=headers,
+        )
 
     mock_adapter = AsyncMock()
-    mock_adapter.generate.return_value = '{"action": "respond", "message": "OK."}'
+    mock_adapter.generate.side_effect = [
+        # Turn 1: the model resolves the message to COSC 499, not the
+        # active course — this is what "named explicitly in turn 1" means
+        # now that course resolution is the model's job, not a deterministic
+        # text match. Turn 1 has no prior history yet, so
+        # _resolve_course_switch is skipped (see handle_chat_message) —
+        # only one call for this turn.
+        '{"action": "respond", "course_name": "COSC 499", "message": "OK."}',
+        # Turn 2 now has turn 1's history, so _resolve_course_switch runs
+        # first — "all assignments" names no course, so it reports no switch.
+        '{"switched_to": null}',
+        '{"action": "respond", "message": "OK."}',
+    ]
 
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
-        # ... but this conversation is about COSC 499, named explicitly in turn 1.
         first = client.post(
             "/api/v1/chat/",
             json={"message": "show assignments for COSC 499"},
@@ -392,8 +411,8 @@ def test_chat_followup_stays_on_conversation_course_despite_conflicting_active_c
             headers=headers,
         )
 
-    followup_user_message = mock_adapter.generate.call_args_list[1].args[1]
-    assert f"local_course_id: {local_ids['COSC 499']}" in followup_user_message
+    followup_user_message = mock_adapter.generate.call_args_list[2].args[1]
+    assert "CURRENT COURSE FOR THIS CONVERSATION: COSC 499" in followup_user_message
 
 
 def test_history_sent_to_llm_truncates_oversized_prior_messages(client):
@@ -473,19 +492,59 @@ def test_history_keeps_intent_preview_full_for_modify_turn(client):
     """Unlike clarify/respond turns, an intent_preview must stay full JSON
     in history — a follow-up 'modify' turn needs the complete previous
     proposed_action to correctly carry forward fields the user didn't ask
-    to change."""
+    to change. Uses create_assignment (a write) since reads no longer
+    produce an intent_preview at all — they execute directly (see
+    READ_ACTIONS in handle_chat_message)."""
     headers = _register(client)
 
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            headers=headers,
+        )
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock_courses:
+        mock_courses.return_value = [
+            {
+                "id": 322,
+                "name": "COSC 322",
+                "course_code": "COSC 322",
+                "enrollment_term_id": 1,
+                "workflow_state": "available",
+            }
+        ]
+        courses = client.get(
+            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            headers=headers,
+        )
+        local_course_id = courses.json()[0]["local_id"]
+        client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_course_id},
+            headers=headers,
+        )
+
+    future_due_date = (datetime.now(UTC) + timedelta(days=7)).isoformat()
     mock_adapter = AsyncMock()
     mock_adapter.generate.side_effect = [
-        '{"action": "intent_preview", "summary": "I will fetch your courses.", "proposed_action": {"action": "fetch_courses"}}',
+        '{"action": "intent_preview", "summary": "I will create Assignment 1.", '
+        '"proposed_action": {"action": "create_assignment", '
+        f'"local_course_id": {local_course_id}, "title": "Assignment 1", '
+        f'"description": "Peer evaluation", "due_date": "{future_due_date}", '
+        '"points_possible": 100}}',
+        # The followup turn has both prior history and an established
+        # conversation.course_id, so it also triggers the pre-resolver
+        # course-switch check (_resolve_course_switch) before the main
+        # call — see COURSE RESOLUTION in build_system_prompt.
+        '{"switched_to": null}',
         '{"action": "respond", "message": "OK."}',
     ]
 
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
         first = client.post(
             "/api/v1/chat/",
-            json={"message": "show me my courses"},
+            json={"message": "create assignment 1"},
             headers=headers,
         )
         conversation_id = first.json()["conversation_id"]
@@ -495,17 +554,18 @@ def test_history_keeps_intent_preview_full_for_modify_turn(client):
             headers=headers,
         )
 
-    followup_history = mock_adapter.generate.call_args_list[1].kwargs["history"]
+    followup_history = mock_adapter.generate.call_args_list[2].kwargs["history"]
     assistant_entry = next(m for m in followup_history if m["role"] == "assistant")
     assert "proposed_action" in assistant_entry["content"]
-    assert "fetch_courses" in assistant_entry["content"]
+    assert "create_assignment" in assistant_entry["content"]
 
 
-def test_course_name_resolution_prefers_longest_match(client):
-    """Two courses whose normalized names overlap as substrings (one name
-    contained within another) must resolve to the more specific, longer
-    match deterministically rather than whichever the DB query happens to
-    return first."""
+def test_course_name_resolution_is_exact_not_fuzzy(client):
+    """Course resolution matches the model's course_name exactly against
+    YOUR COURSES — never a substring/fuzzy match. Disambiguating similar
+    names (e.g. "COSC 310" vs "COSC 310 Advanced") is the model's job now
+    (COURSE RESOLUTION in build_system_prompt); the app's only role is an
+    exact lookup once the model has already named one precisely."""
     headers = _register(client)
 
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
@@ -536,20 +596,38 @@ def test_course_name_resolution_prefers_longest_match(client):
             "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
             headers=headers,
         )
-    local_ids = {c["name"]: c["local_id"] for c in courses.json()}
+        local_ids = {c["name"]: c["local_id"] for c in courses.json()}
+        # Seeds canvas_course_names for both courses.
+        client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_ids["COSC 310"]},
+            headers=headers,
+        )
 
     mock_adapter = AsyncMock()
-    mock_adapter.generate.return_value = '{"action": "respond", "message": "OK."}'
+    mock_adapter.generate.return_value = (
+        '{"action": "fetch_assignments", "course_name": "COSC 310 Advanced"}'
+    )
 
-    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
-        client.post(
+    with (
+        patch("app.services.chat.get_llm_adapter", return_value=mock_adapter),
+        patch(
+            "app.mcp_tools.dispatcher.get_assignments", new=AsyncMock(return_value=[])
+        ) as mock_fetch_assignments,
+    ):
+        response = client.post(
             "/api/v1/chat/",
             json={"message": "Summarize COSC 310 Advanced"},
             headers=headers,
         )
 
-    sent_message = mock_adapter.generate.call_args_list[0].args[1]
-    assert f"local_course_id: {local_ids['COSC 310 Advanced']}" in sent_message
+    # fetch_assignments is a read action now — it executes directly, no
+    # intent_preview/confirm step, so the resolved local_course_id is only
+    # observable via what actually got passed to the Canvas-facing call.
+    assert response.status_code == 200
+    assert response.json()["reply"]["assignments"] == []
+    mock_fetch_assignments.assert_awaited_once()
+    assert mock_fetch_assignments.await_args.args[0] == local_ids["COSC 310 Advanced"]
 
 
 def test_chat_uses_saved_active_course_when_client_context_is_not_ready(client):
@@ -576,17 +654,17 @@ def test_chat_uses_saved_active_course_when_client_context_is_not_ready(client):
             "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
             headers=headers,
         )
-    local_course_id = courses.json()[0]["local_id"]
+        local_course_id = courses.json()[0]["local_id"]
 
-    active = client.patch(
-        "/api/v1/canvas/active-course",
-        json={"local_course_id": local_course_id},
-        headers=headers,
-    )
-    assert active.status_code == 200
+        active = client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_course_id},
+            headers=headers,
+        )
+        assert active.status_code == 200
 
     mock_adapter = AsyncMock()
-    mock_adapter.generate.return_value = '{"action": "respond", "message": "Using active course."}'
+    mock_adapter.generate.return_value = '{"action": "respond", "course_name": "COSC 499", "message": "Using active course."}'
 
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
         response = client.post(
@@ -597,8 +675,8 @@ def test_chat_uses_saved_active_course_when_client_context_is_not_ready(client):
 
     assert response.status_code == 200
     generated_user_message = mock_adapter.generate.call_args.args[1]
-    assert f"local_course_id: {local_course_id}" in generated_user_message
-    assert "course_name: COSC 499" in generated_user_message
+    assert "CURRENT COURSE FOR THIS CONVERSATION: COSC 499" in generated_user_message
+    assert "local_course_id:" not in generated_user_message
 
 
 def test_write_action_without_intent_preview_is_forced_into_a_preview(client):
@@ -630,14 +708,19 @@ def test_write_action_without_intent_preview_is_forced_into_a_preview(client):
             "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
             headers=headers,
         )
-    local_course_id = courses.json()[0]["local_id"]
+        local_course_id = courses.json()[0]["local_id"]
+        client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_course_id},
+            headers=headers,
+        )
 
     future_due_date = (datetime.now(UTC) + timedelta(days=7)).isoformat()
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = (
-        '{"action": "create_assignment", "local_course_id": %d, '
+        '{"action": "create_assignment", "course_name": "COSC 322", '
         '"title": "Assignment 1", "description": "Peer evaluation", '
-        '"due_date": "%s", "points_possible": 100}' % (local_course_id, future_due_date)
+        f'"due_date": "{future_due_date}", "points_possible": 100}}'
     )
 
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter), \
@@ -727,28 +810,19 @@ def test_canvas_action_without_token_returns_actionable_error(client):
     asyncio.run(_remove_canvas_connection(user_id))
 
     mock_adapter = AsyncMock()
-    mock_adapter.generate.return_value = (
-        '{"action": "fetch_assignments", "local_course_id": %d}' % local_course_id
-    )
+    mock_adapter.generate.return_value = '{"action": "fetch_assignments"}'
 
+    # fetch_assignments is a read action — it executes directly on the
+    # normal turn (no intent_preview/confirm round-trip), so the missing
+    # connection surfaces as an error on this same response, not a later
+    # confirm. local_course_id is passed by the client (trusted), same as
+    # a real "active course" button click — the model is never given one.
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
-        preview = client.post(
+        response = client.post(
             "/api/v1/chat/",
-            json={"message": "List assignments for COSC 777"},
+            json={"message": "List assignments for COSC 777", "local_course_id": local_course_id},
             headers=headers,
         )
-
-    assert preview.status_code == 200
-    preview_body = preview.json()
-    assert preview_body["reply"]["action"] == "intent_preview"
-    conversation_id = preview_body["conversation_id"]
-    pending_message_id = preview_body["reply"]["pending_message_id"]
-
-    response = client.post(
-        "/api/v1/chat/confirm",
-        json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
-        headers=headers,
-    )
 
     assert response.status_code == 200
     body = response.json()
@@ -759,12 +833,10 @@ def test_canvas_action_without_token_returns_actionable_error(client):
 
 
 def test_canvas_failure_returns_chat_error(client):
-    """Canvas API failures during read actions return a user-friendly chat
-    error. A raw fetch_courses response (the model skipping intent_preview)
-    now gets auto-wrapped into a real preview rather than executed
-    directly on the normal turn — see handle_chat_message — so the
-    Canvas call, and its failure, only happen once that preview is
-    confirmed."""
+    """Canvas API failures during a read action surface immediately as a
+    user-friendly chat error. fetch_courses is a read action — it executes
+    directly on the normal turn now (see READ_ACTIONS in
+    handle_chat_message), no preview/confirm step to fail at separately."""
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
@@ -783,32 +855,21 @@ def test_canvas_failure_returns_chat_error(client):
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = '{"action": "fetch_courses"}'
 
-    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
-        preview = client.post(
-            "/api/v1/chat/",
-            json={"message": "List my courses"},
-            headers=headers,
-        )
-
-    assert preview.status_code == 200
-    preview_body = preview.json()
-    assert preview_body["is_error"] is False
-    assert preview_body["reply"]["action"] == "intent_preview"
-    conversation_id = preview_body["conversation_id"]
-    pending_message_id = preview_body["reply"]["pending_message_id"]
-
-    with patch(
-        "app.mcp_tools.dispatcher.get_courses",
-        new=AsyncMock(
-            side_effect=HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail="Canvas server error: 503",
-            )
+    with (
+        patch("app.services.chat.get_llm_adapter", return_value=mock_adapter),
+        patch(
+            "app.mcp_tools.dispatcher.get_courses",
+            new=AsyncMock(
+                side_effect=HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Canvas server error: 503",
+                )
+            ),
         ),
     ):
         response = client.post(
-            "/api/v1/chat/confirm",
-            json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
+            "/api/v1/chat/",
+            json={"message": "List my courses"},
             headers=headers,
         )
 
@@ -816,3 +877,106 @@ def test_canvas_failure_returns_chat_error(client):
     body = response.json()
     assert body["is_error"] is True
     assert body["reply"]["error"] == "Canvas server error: 503"
+
+
+def test_switching_course_and_back_returns_to_the_original_conversation(client):
+    """A conversation's course, once set, is never mutated in place —
+    switching to a different course (via the "set active course" button)
+    routes to a different conversation, reusing one that already exists
+    for the target course rather than always forking fresh. Switching
+    back a second time must land back in the *original* conversation,
+    with its earlier history intact, not a brand-new third one."""
+    headers = _register(client)
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            headers=headers,
+        )
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock_courses:
+        mock_courses.return_value = [
+            {
+                "id": 501,
+                "name": "COSC 501",
+                "course_code": "COSC 501",
+                "enrollment_term_id": 1,
+                "workflow_state": "available",
+            },
+            {
+                "id": 502,
+                "name": "COSC 502",
+                "course_code": "COSC 502",
+                "enrollment_term_id": 1,
+                "workflow_state": "available",
+            },
+        ]
+        courses = client.get(
+            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            headers=headers,
+        )
+        local_ids = {c["name"]: c["local_id"] for c in courses.json()}
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "OK."}'
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        # Turn 1: conversation A, course 501, via the button.
+        client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_ids["COSC 501"]},
+            headers=headers,
+        )
+        first = client.post(
+            "/api/v1/chat/",
+            json={"message": "first message about 501", "local_course_id": local_ids["COSC 501"]},
+            headers=headers,
+        )
+        conversation_a_id = first.json()["conversation_id"]
+
+        # Turn 2: switch to course 502 mid-thread — routes to a new
+        # conversation B, not conversation A.
+        client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_ids["COSC 502"]},
+            headers=headers,
+        )
+        second = client.post(
+            "/api/v1/chat/",
+            json={
+                "message": "switch to 502",
+                "conversation_id": conversation_a_id,
+                "local_course_id": local_ids["COSC 502"],
+            },
+            headers=headers,
+        )
+        conversation_b_id = second.json()["conversation_id"]
+        assert conversation_b_id != conversation_a_id
+
+        # Turn 3: switch back to course 501 — must reuse conversation A,
+        # not fork a third one.
+        client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_ids["COSC 501"]},
+            headers=headers,
+        )
+        third = client.post(
+            "/api/v1/chat/",
+            json={
+                "message": "back to 501",
+                "conversation_id": conversation_b_id,
+                "local_course_id": local_ids["COSC 501"],
+            },
+            headers=headers,
+        )
+        conversation_c_id = third.json()["conversation_id"]
+
+    assert conversation_c_id == conversation_a_id
+
+    history = client.get(f"/api/v1/chat/conversations/{conversation_a_id}", headers=headers)
+    assert history.status_code == 200
+    contents = [m["content"] for m in history.json()["messages"]]
+    assert "first message about 501" in contents
+    assert "back to 501" in contents
+    assert "switch to 502" not in contents

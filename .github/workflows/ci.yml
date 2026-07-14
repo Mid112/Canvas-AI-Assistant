@@ -36,6 +36,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
+      e2e: ${{ steps.filter.outputs.e2e }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -48,6 +49,10 @@ jobs:
             frontend:
               - 'app/frontend/**'
               - 'test/frontend/**'
+            e2e:
+              - 'app/backend/**'
+              - 'app/frontend/**'
+              - 'test/e2e/**'
 
   # ── 1. Backend lint + type check ──────────
   backend-lint:
@@ -116,6 +121,7 @@ jobs:
           docker run -d \
             --name "$CONTAINER" \
             --network "$NETWORK" \
+            -v "${{ github.workspace }}/db/init:/docker-entrypoint-initdb.d:ro" \
             -e POSTGRES_USER=testuser \
             -e POSTGRES_PASSWORD=testpass \
             -e POSTGRES_DB=testdb \
@@ -180,6 +186,100 @@ jobs:
         # vitest coverage thresholds from vitest.config.ts
         run: npm run test:coverage
 
+  # ── 3b. Browser E2E (Playwright) ───────────
+  e2e-test:
+    runs-on:
+    - self-hosted
+    - macOS
+    - ARM64
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start isolated PostgreSQL
+        run: |
+          CONTAINER="ci-e2e-postgres-${{ github.run_id }}-${{ github.run_attempt }}"
+          docker rm -f "$CONTAINER" 2>/dev/null || true
+          docker run -d \
+            --name "$CONTAINER" \
+            -p 127.0.0.1::5432 \
+            -v "${{ github.workspace }}/db/init:/docker-entrypoint-initdb.d:ro" \
+            -e POSTGRES_USER=appuser \
+            -e POSTGRES_PASSWORD=localdev \
+            -e POSTGRES_DB=appdb \
+            postgres:16-alpine
+
+          for i in $(seq 1 30); do
+            if docker exec "$CONTAINER" pg_isready -U appuser -d appdb >/dev/null 2>&1; then
+              echo "PostgreSQL is ready"
+              E2E_DB_PORT="$(docker port "$CONTAINER" 5432/tcp | sed 's/.*://')"
+              echo "E2E_DB_CONTAINER=$CONTAINER" >> "$GITHUB_ENV"
+              echo "E2E_DB_PORT=$E2E_DB_PORT" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "PostgreSQL failed to start"
+          docker logs "$CONTAINER"
+          exit 1
+      - name: Set up Python venv + backend deps
+        run: |
+          python3.12 -m venv app/backend/.venv
+          app/backend/.venv/bin/pip install --upgrade pip
+          app/backend/.venv/bin/pip install -r app/backend/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+          cache: "npm"
+          cache-dependency-path: |
+            app/frontend/package-lock.json
+            test/e2e/package-lock.json
+      - name: Install frontend deps
+        working-directory: ./app/frontend
+        run: npm ci
+      - name: Install Playwright
+        working-directory: ./test/e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Free E2E ports
+        # Self-hosted runners can retain stale backend/frontend processes from
+        # prior runs; Playwright sets reuseExistingServer=false in CI.
+        run: |
+          for port in 8000 5173; do
+            pids=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
+            if [ -n "$pids" ]; then
+              echo "Killing stale listener(s) on :$port: $pids"
+              kill $pids 2>/dev/null || true
+              sleep 1
+              kill -9 $pids 2>/dev/null || true
+            fi
+          done
+      - name: Run browser E2E tests
+        working-directory: ./test/e2e
+        env:
+          CI: "true"
+          E2E_BACKEND_PORT: "18000"
+          E2E_FRONTEND_PORT: "15173"
+          E2E_BASE_URL: "http://127.0.0.1:15173"
+          ADMIN_EMAIL: admin@example.com
+          ADMIN_PASSWORD: AdminPass123!
+          SECRET_KEY: ci-e2e-secret
+          CANVAS_TOKEN_ENCRYPTION_KEY: ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=
+        run: |
+          export DATABASE_URL="postgresql+asyncpg://appuser:localdev@127.0.0.1:${E2E_DB_PORT}/appdb"
+          npm test
+      - name: Stop isolated PostgreSQL
+        if: always()
+        run: docker rm -f "${E2E_DB_CONTAINER:-ci-e2e-postgres-${{ github.run_id }}-${{ github.run_attempt }}}" 2>/dev/null || true
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: test/e2e/playwright-report
+          retention-days: 7
+
   # ── 4. Docker build check ─────────────────
   # Only runs after both lint/test jobs succeed (or are skipped
   # because that part of the repo didn't change).
@@ -188,7 +288,7 @@ jobs:
     - self-hosted
     - macOS
     - ARM64
-    needs: [backend-test, frontend-test]
+    needs: [backend-test, frontend-test, e2e-test]
     if: always() && !failure() && !cancelled()
     steps:
       - uses: actions/checkout@v4

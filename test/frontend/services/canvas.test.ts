@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   CanvasApiError,
   fetchActiveCourse,
+  fetchCachedCourses,
   fetchCourses,
   removeCanvasConnection,
   setActiveCourse,
@@ -226,6 +227,26 @@ describe("canvas service", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:8000/api/v1/canvas/courses?canvas_url=https%3A%2F%2Fcanvas.university.edu",
+      expect.objectContaining({
+        headers: { Authorization: "Bearer jwt-token" },
+      }),
+    );
+    expect(courses).toHaveLength(1);
+  });
+
+  it("fetches cached canvas courses with an optional canvas_url", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => [{ id: 1, name: "CS 101" }],
+    } as Response);
+
+    const courses = await fetchCachedCourses(
+      "jwt-token",
+      "https://canvas.university.edu",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/canvas/courses/cached?canvas_url=https%3A%2F%2Fcanvas.university.edu",
       expect.objectContaining({
         headers: { Authorization: "Bearer jwt-token" },
       }),

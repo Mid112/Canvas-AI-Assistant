@@ -42,8 +42,11 @@ class OpenAICompatibleAdapter(LLMAdapter):
                 # never sees any JSON. 2048 was still not enough for requests
                 # reasoning over several parameters at once (e.g. assignment
                 # creation with name+course+points+due date, or composing a
-                # message body) — raised to 4096.
-                json={"model": self.model, "messages": messages, "max_tokens": 4096},
+                # message body); 4096 in turn wasn't enough once course-name
+                # resolution (reasoning over a candidate list of course names
+                # on every turn, see services/chat.py) was added on top —
+                # raised to 8192.
+                json={"model": self.model, "messages": messages, "max_tokens": 8192},
             )
             response.raise_for_status()
             return response.json()["choices"][0]["message"]["content"]

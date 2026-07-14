@@ -16,7 +16,13 @@ def client():
 
 
 def _register_with_canvas(client) -> tuple[dict, int]:
-    """Register a fresh instructor, connect Canvas, seed one course. Returns (headers, local_course_id)."""
+    """Register a fresh instructor, connect Canvas, seed one course, and
+    set it active — the active-course PATCH also seeds canvas_course_names
+    (see set_active_course's sync_courses_if_stale call), which is what
+    lets a chat turn with no explicit local_course_id and no course_name
+    in the mocked LLM reply still resolve a course via the
+    UserPreference.active_course_id fallback in get_or_create_conversation.
+    Returns (headers, local_course_id)."""
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
@@ -42,8 +48,14 @@ def _register_with_canvas(client) -> tuple[dict, int]:
             "workflow_state": "available",
         }]
         resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+        local_course_id = resp.json()[0]["local_id"]
+        active_resp = client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_course_id},
+            headers=headers,
+        )
+        assert active_resp.status_code == 200, active_resp.text
 
-    local_course_id = resp.json()[0]["local_id"]
     return headers, local_course_id
 
 
@@ -149,67 +161,12 @@ def test_cancel_unknown_pending_message_id_404s(client):
     assert response.status_code == 404
 
 
-# Verifies: Cancel read action preview succeeds.
-def test_cancel_read_action_preview_succeeds(client):
-    """Every intent_preview gets a Workflow row now, read or write — the
-    system prompt requires *every* action to go through preview->confirm,
-    so read-action previews must be cancellable (and confirmable) exactly
-    like write ones. (Earlier iteration of this test asserted a 404 here,
-    which was actually a regression: it meant confirming a plain read
-    query like "what courses do I have?" always failed too.)"""
-    headers, _ = _register_with_canvas(client)
-    body = _chat(
-        client, headers, "what courses do I have?", None, None,
-        '{"action": "intent_preview", "summary": "List your courses", "proposed_action": {"action": "fetch_courses"}}',
-    )
-    conversation_id = body["conversation_id"]
-    pending_message_id = body["reply"]["pending_message_id"]
-
-    response = client.post(
-        "/api/v1/chat/cancel",
-        json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
-        headers=headers,
-    )
-    assert response.status_code == 200
-    assert response.json()["reply"]["cancelled"] is True
-
-    # and a later confirm on that same id must still be blocked
-    confirm = client.post(
-        "/api/v1/chat/confirm",
-        json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
-        headers=headers,
-    )
-    assert confirm.status_code == 409
-
-
-# Verifies: Confirm read action preview succeeds.
-def test_confirm_read_action_preview_succeeds(client):
-    """Direct regression test for the bug found during manual
-    verification: confirming a plain read-action preview (no cancel
-    involved) must actually execute the read, not 404."""
-    headers, _ = _register_with_canvas(client)
-    body = _chat(
-        client, headers, "what courses do I have?", None, None,
-        '{"action": "intent_preview", "summary": "List your courses", "proposed_action": {"action": "fetch_courses"}}',
-    )
-    conversation_id = body["conversation_id"]
-    pending_message_id = body["reply"]["pending_message_id"]
-
-    with patch("app.mcp_tools.dispatcher.get_courses", new=AsyncMock(return_value=[])):
-        response = client.post(
-            "/api/v1/chat/confirm",
-            json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
-            headers=headers,
-        )
-    assert response.status_code == 200
-    assert response.json()["reply"]["courses"] == []
-
-    history = client.get("/api/v1/chat/conversations", headers=headers)
-    assert history.status_code == 200
-    item = next(
-        item for item in history.json()["items"] if item["id"] == conversation_id
-    )
-    assert item["preview"] == "No courses found"
+# Read actions (fetch_courses, fetch_assignments, fetch_students,
+# fetch_submissions, get_active_course) no longer go through intent_preview
+# at all — they execute directly on the normal turn (see READ_ACTIONS in
+# services/chat.py's handle_chat_message), so there is nothing for them to
+# cancel or confirm any more. Coverage for that direct-execution behavior
+# lives in test_read_actions.py instead of here.
 
 
 # Verifies: Cancel after modify recovers original first request.

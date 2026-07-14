@@ -12,6 +12,8 @@ from app.schemas.chat import (
     ConversationListResponse,
     ConversationResponse,
     ConversationSummary,
+    MessageResponse,
+    WorkflowStatus,
 )
 from app.services.chat import (
     get_conversation_with_messages,
@@ -63,6 +65,7 @@ async def chat(
         body.local_course_id,
         body.conversation_id,
         body.pending_message_id,
+        body.model_settings.model_dump(exclude_none=True) if body.model_settings else None,
     )
     return ChatResponse(conversation_id=conversation.id, reply=reply, is_error=is_error)
 
@@ -95,4 +98,20 @@ async def get_conversation(
     conversation = await get_conversation_with_messages(db, current_user, conversation_id)
     if not conversation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
-    return ConversationResponse.from_conversation(conversation)
+    workflow_statuses = {
+        workflow.preview_message_id: WorkflowStatus(
+            workflow_id=workflow.id,
+            status=workflow.status,
+            action_name=workflow.action_name,
+            result_message_id=workflow.result_message_id,
+        )
+        for workflow in conversation.workflows
+    }
+    return ConversationResponse(
+        id=conversation.id,
+        course_id=conversation.course_id,
+        course_name=conversation.course_name,
+        created_at=conversation.created_at,
+        messages=[MessageResponse.model_validate(m) for m in conversation.messages],
+        workflow_statuses=workflow_statuses,
+    )

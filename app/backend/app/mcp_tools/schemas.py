@@ -29,12 +29,52 @@ class FetchAssignmentsAction(BaseModel):
 class FetchSubmissionsAction(BaseModel):
     action: Literal["fetch_submissions"] = "fetch_submissions"
     local_course_id: int
-    assignment_id: int
+    # Both optional: the LLM should supply assignment_id directly only when
+    # it already has a real Canvas assignment ID from earlier in this
+    # conversation (e.g. a previous fetch_assignments/fetch_submissions
+    # result). Otherwise it should leave this unset and describe which
+    # assignment it means in assignment_reference instead — the app
+    # resolves that server-side (see _run_fetch_submissions_chain in
+    # services/chat.py), the same way course_name is resolved to
+    # local_course_id, so the model never has to guess or invent a
+    # numeric ID.
+    assignment_id: int | None = None
+    # The user's own words for which assignment they mean, e.g. "the latest
+    # assignment", "Assignment 2", "the final project" — copied from the
+    # user's message, not invented. Ignored once assignment_id is set.
+    assignment_reference: str | None = None
 
 
 class FetchStudentsAction(BaseModel):
     action: Literal["fetch_students"] = "fetch_students"
     local_course_id: int
+
+
+class ResolveMissingSubmissionsAction(BaseModel):
+    action: Literal["resolve_missing_submissions"] = "resolve_missing_submissions"
+    local_course_id: int
+    # Same convention as FetchSubmissionsAction: pass assignment_id directly
+    # only when it's already a real Canvas ID from earlier in this
+    # conversation, otherwise describe the assignment in assignment_reference
+    # and let the app resolve it server-side (see
+    # _run_resolve_missing_submissions_chain in services/chat.py).
+    assignment_id: int | None = None
+    assignment_reference: str | None = None
+    # "missing" (default): students who have not submitted at all.
+    # "late": students who DID submit, but after the due date — a
+    # separate, mutually exclusive category from "missing". See
+    # compute_submissions_by_status in services/resolved_set.py for the
+    # exact definitions.
+    status: Literal["missing", "late"] = "missing"
+
+
+class FindAssignmentBySubmissionRateAction(BaseModel):
+    action: Literal["find_assignment_by_submission_rate"] = "find_assignment_by_submission_rate"
+    local_course_id: int
+    # "below" for "fewer than X% submitted", "above" for "more than X%".
+    comparator: Literal["below", "above"] = "below"
+    # e.g. 30 for "30%" — never a fraction like 0.3.
+    threshold_percent: float
 
 
 class SetActiveCourseAction(BaseModel):
@@ -71,7 +111,17 @@ class UpdateAssignmentAction(BaseModel):
     # NOT the local Assignment.id. Every function this reuses (get_assignment,
     # update_course_assignment) already takes the Canvas ID, and the LLM already
     # sees this value as "id" in fetch_assignments/fetch_submissions results.
-    assignment_id: int
+    # Pass this directly only when it's already known from earlier in this
+    # conversation; otherwise leave it unset and use assignment_reference
+    # instead — the app resolves it server-side (see
+    # _run_update_assignment_chain in services/chat.py) before ever
+    # building a preview, the same way fetch_submissions resolves a
+    # natural-language reference, never guessed.
+    assignment_id: int | None = None
+    # The user's own words for which assignment they mean, e.g. "the final
+    # exam", "assignment 1" — copied verbatim, never invented. Ignored once
+    # assignment_id is set.
+    assignment_reference: str | None = None
     # All optional — natural-language updates are almost always partial
     # (e.g. "push the due date back a week"). None means "leave unchanged";
     # the dispatcher merges omitted fields in from the current Canvas state.
@@ -86,14 +136,56 @@ class UpdateAssignmentAction(BaseModel):
         return value if value is None else _normalize_due_date_str(value)
 
 
+class RecipientDirective(BaseModel):
+    # The user's own words for ONE intended recipient, e.g. "Yerdana" —
+    # never a numeric ID. Resolved server-side against the course roster
+    # (and, as a fallback, submission records) the same way course_name and
+    # assignment_reference are resolved, so the model never has to guess a
+    # Canvas user ID.
+    student_reference: str
+    # The message meant for this recipient. Copy the shared body verbatim
+    # across every directive that shares one message; use a distinct body
+    # per directive only when the user actually asked for different text
+    # for different people.
+    body: str
+
+
 class SendMessageAction(BaseModel):
     action: Literal["send_message"] = "send_message"
     local_course_id: int
     subject: str
     body: str
-    # When omitted or empty, posts a public class announcement. When provided,
-    # sends a Canvas conversation to the listed student Canvas user IDs.
+    # When omitted or empty (and recipient_directives/broadcast_to_all_students
+    # are also unset), posts a public class announcement. When provided
+    # directly, sends a Canvas conversation to the listed student Canvas user
+    # IDs — only ever set this when those IDs are already known from earlier
+    # in the conversation (e.g. a prior fetch_students/fetch_submissions
+    # result), never guessed.
     recipient_canvas_user_ids: list[int] | None = None
+    # Natural-language recipients, used when the user names specific people
+    # but their Canvas IDs aren't already known. The app resolves each
+    # student_reference to a real ID server-side and groups directives that
+    # share identical body text into one message — never invent or guess a
+    # numeric ID yourself. Ignored once recipient_canvas_user_ids is set.
+    recipient_directives: list[RecipientDirective] | None = None
+    # A handle from an earlier resolve_missing_submissions result in this
+    # conversation, representing a bulk, already-computed recipient set —
+    # copy it verbatim, exactly as given, never invent one and never build
+    # recipient_directives out of that result's "sample" names instead
+    # (sample is a preview excerpt, not the full set). The app materializes
+    # the real recipients server-side, scoped to this conversation. Ignored
+    # once recipient_canvas_user_ids is set.
+    recipient_handle: str | None = None
+    # True when the user wants a private Canvas message sent to the entire
+    # active roster (as opposed to a public announcement). The app resolves
+    # the full roster server-side; never set recipient_canvas_user_ids
+    # yourself to try to represent "everyone."
+    broadcast_to_all_students: bool = False
+    # True when the user wants BOTH a public announcement (using the
+    # top-level subject/body) AND one or more targeted messages
+    # (recipient_directives) sent in the same turn. Only meaningful
+    # alongside recipient_directives or broadcast_to_all_students.
+    also_announce_to_class: bool = False
 
 
 class OutOfScopeAction(BaseModel):
@@ -137,6 +229,8 @@ ACTION_SCHEMAS: dict[str, type[BaseModel]] = {
     "fetch_assignments": FetchAssignmentsAction,
     "fetch_submissions": FetchSubmissionsAction,
     "fetch_students": FetchStudentsAction,
+    "resolve_missing_submissions": ResolveMissingSubmissionsAction,
+    "find_assignment_by_submission_rate": FindAssignmentBySubmissionRateAction,
     "set_active_course": SetActiveCourseAction,
     "get_active_course": GetActiveCourseAction,
     "create_assignment": CreateAssignmentAction,
@@ -164,6 +258,8 @@ ACTION_CLASSIFICATION: dict[str, ActionClassification] = {
     "fetch_assignments": "read_only",
     "fetch_submissions": "read_only",
     "fetch_students": "read_only",
+    "resolve_missing_submissions": "read_only",
+    "find_assignment_by_submission_rate": "read_only",
     "get_active_course": "read_only",
     # Writes a local UserPreference row only — no Canvas footprint, and not
     # gated by the preview/confirm flow at all (not in dispatcher.py's
@@ -212,3 +308,13 @@ def is_undoable(action_name: str) -> bool:
 # excluded: it only writes a local UserPreference row, has no Canvas
 # footprint, and always executes immediately regardless of provider.
 WRITE_ACTIONS = frozenset({"create_assignment", "update_assignment", "send_message", "update_grade"})
+
+# Every read-only Canvas action, derived from ACTION_CLASSIFICATION rather
+# than hand-listed a second time. services/chat.py's handle_chat_message
+# uses this to execute reads immediately on a normal turn instead of
+# gating them behind intent_preview/confirm like every write action still
+# is — a read can never mutate Canvas state, so there's nothing for the
+# user to review before it runs.
+READ_ACTIONS = frozenset(
+    name for name, kind in ACTION_CLASSIFICATION.items() if kind == "read_only"
+)

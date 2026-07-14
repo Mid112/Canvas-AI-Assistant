@@ -28,7 +28,7 @@ export function PendingActionControls({
           : status === "superseded"
             ? "This proposal was replaced by a newer request."
             : status === "failed"
-              ? "This action failed."
+              ? "This action failed to complete — nothing was changed."
               : "This action was cancelled."}
       </p>
     );

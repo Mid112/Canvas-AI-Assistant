@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Canvas Helper AI Assistant"
     API_V1_PREFIX: str = "/api/v1"
     DEBUG: bool = False
-    DEFAULT_LLM_PROVIDER: str = "groq"
+    DEFAULT_LLM_PROVIDER: str = "huggingface"
 
     # CORS. NoDecode stops pydantic-settings from trying to JSON-parse the env
     # value so our validator can split a plain comma-separated string instead.
@@ -68,13 +68,42 @@ class Settings(BaseSettings):
 
     # LLM — Groq (hosted, OpenAI-compatible)
     GROQ_API_KEY: str = ""
-    # meta-llama/llama-4-scout-17b-16e-instruct: a plain instruct model (no
-    # <think> reasoning phase), switched to after qwen/qwen3.6-27b's
-    # reasoning traces were blowing through free-tier rate limits and
-    # occasionally getting truncated mid-response. qwen/qwen3.6-27b is
-    # still fully supported, pass {"model": "qwen/qwen3.6-27b"} to
-    # get_llm_adapter() to use it.
-    GROQ_MODEL: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+    # qwen/qwen3.6-27b: a "thinking" model (reasons in a <think> block
+    # before answering). Reintroduced as the default because course-name
+    # resolution (services/chat.py) needs real reasoning over a candidate
+    # list — e.g. deciding whether "Introduction to Programming" uniquely
+    # matches one course or is ambiguous between two — which
+    # meta-llama/llama-4-scout-17b-16e-instruct (a plain instruct model,
+    # the previous default) could not do reliably. The earlier switch away
+    # from qwen was to dodge free-tier rate limits and truncated
+    # mid-response output; both are mitigated now by the raised max_tokens
+    # in openai_compatible.py. meta-llama/llama-4-scout-17b-16e-instruct is
+    # still fully supported, pass {"model":
+    # "meta-llama/llama-4-scout-17b-16e-instruct"} to get_llm_adapter() to
+    # use it.
+    GROQ_MODEL: str = "qwen/qwen3.6-27b"
+
+    # LLM — Hugging Face Inference Router (hosted, OpenAI-compatible)
+    # https://router.huggingface.co/v1. HF_MODEL is pinned to Groq's
+    # backing via the ":groq" suffix — unpinned (HF picking whichever
+    # provider currently backs the model) was tried first with
+    # Qwen/Qwen3-4B-Thinking-2507 and was unusably slow (one real request
+    # hit the 90s LLM_TIMEOUT_SECONDS outright, and even a trivial
+    # fetch_courses turn took ~20s) — pinning to Groq's inference restores
+    # the sub-2s latency the app depends on, at the cost of losing
+    # automatic provider failover.
+    HF_TOKEN: str = ""
+    HF_MODEL: str = "openai/gpt-oss-20b:groq"
+
+    # Both the tick interval of the background course-name sync loop
+    # (app.main's lifespan) and the per-connection cooldown
+    # sync_courses_if_stale enforces before making a real Canvas call —
+    # the same window doubles as both so the periodic sweep does real
+    # work on (roughly) every tick instead of mostly no-oping. The chat
+    # pipeline itself never triggers this fetch; it only reads whatever
+    # the sweep (or a just-completed write, or the "set active course"
+    # button) last populated.
+    CANVAS_COURSE_SYNC_COOLDOWN_SECONDS: int = 60
 
     @field_validator("CANVAS_TOKEN_ENCRYPTION_KEY", mode="before")
     @classmethod

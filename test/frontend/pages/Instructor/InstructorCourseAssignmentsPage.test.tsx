@@ -4,7 +4,7 @@ import { Route, Routes } from "react-router-dom";
 
 import { InstructorCourseAssignmentsPage } from "@/pages/Instructor/InstructorCourseAssignmentsPage";
 import { fetchCourseAssignments } from "@/services/assignments";
-import { fetchActiveCourse, fetchCourses } from "@/services/canvas";
+import { fetchActiveCourse, fetchCachedCourses, fetchCourses } from "@/services/canvas";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 vi.mock("@/services/canvas", () => ({
@@ -17,6 +17,7 @@ vi.mock("@/services/canvas", () => ({
     }
   },
   fetchCourses: vi.fn(),
+  fetchCachedCourses: vi.fn(),
   fetchActiveCourse: vi.fn(),
   setActiveCourse: vi.fn(),
 }));
@@ -31,6 +32,7 @@ vi.mock("@/services/assignments", () => ({
 const mockUseAuth = vi.fn();
 const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
 const mockedFetchCourses = vi.mocked(fetchCourses);
+const mockedFetchCachedCourses = vi.mocked(fetchCachedCourses);
 const mockedFetchActiveCourse = vi.mocked(fetchActiveCourse);
 
 vi.mock("@/contexts/AuthContext", async () => {
@@ -102,6 +104,7 @@ describe("InstructorCourseAssignmentsPage", () => {
         total_students: 45,
       },
     ]);
+    mockedFetchCachedCourses.mockResolvedValue([]);
     mockedFetchCourseAssignments.mockResolvedValue([
       {
         id: 10,

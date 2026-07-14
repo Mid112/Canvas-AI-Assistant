@@ -26,6 +26,7 @@ from app.services.canvas import (
     get_active_course,
     get_assignment,
     get_assignments,
+    get_cached_courses,
     get_courses,
     get_submissions,
     set_active_course,
@@ -64,6 +65,18 @@ async def list_courses(
     db: AsyncSession = Depends(get_db),
 ):
     return await get_courses(current_user, canvas_url, db)
+
+
+# Last-synced courses straight from the local DB, no live Canvas call — lets the
+# dashboard paint instantly, with the frontend also calling GET /courses in the
+# background to revalidate. See get_cached_courses()'s docstring.
+@router.get("/courses/cached", response_model=list[CourseResponse])
+async def list_cached_courses(
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_cached_courses(current_user, canvas_url, db)
 
 
 @router.get("/courses/{course_id}/assignments", response_model=list[AssignmentResponse])

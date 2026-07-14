@@ -22,11 +22,15 @@ CREATE TABLE users (
 -- Canvas Connections (one row per user per Canvas instance)
 -- ─────────────────────────────────────────────
 CREATE TABLE canvas_connections (
-    id               SERIAL PRIMARY KEY,
-    user_id          INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    canvas_url       VARCHAR NOT NULL,
-    encrypted_token  TEXT NOT NULL,
-    created_at       TIMESTAMPTZ DEFAULT NOW(),
+    id                  SERIAL PRIMARY KEY,
+    user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    canvas_url          VARCHAR NOT NULL,
+    encrypted_token     TEXT NOT NULL,
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    -- Last time services/canvas.py's sync_courses_if_stale actually hit
+    -- Canvas for this connection's course list, not just checked the
+    -- cooldown. Null until the first sync ever runs.
+    courses_synced_at   TIMESTAMPTZ,
     CONSTRAINT uq_user_canvas_url UNIQUE (user_id, canvas_url)
 );
 
@@ -64,6 +68,11 @@ CREATE TABLE courses (
     -- workflow_state above has never been confirmed against Canvas and
     -- set_active_course must refuse to select it (see db/migrations/013).
     synced_at        TIMESTAMPTZ,
+    -- Canvas's course_code (e.g. "COSC 111") and enrollment count — cached
+    -- locally so get_cached_courses() can render a full course card without
+    -- a live Canvas call (see db/migrations/020).
+    course_code      TEXT,
+    total_students   INTEGER,
     instructor_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     created_at       TIMESTAMPTZ DEFAULT NOW(),
     -- composite unique: the same Canvas course can exist once per instructor (co-instructors allowed)
@@ -71,6 +80,37 @@ CREATE TABLE courses (
 );
 
 CREATE INDEX idx_courses_instructor_id ON courses(instructor_id);
+
+-- ─────────────────────────────────────────────
+-- Canvas Course Names
+-- A small, connection-scoped, write-once canvas_course_id -> name index
+-- used only by the chat/LLM course-resolution pathway (services/chat.py).
+-- Separate from `courses` because it's keyed by canvas_connection_id (so
+-- two institutions with colliding numeric canvas_course_ids never
+-- collide) and rows are never overwritten once inserted (so a rename on
+-- Canvas mid-conversation doesn't retroactively change what an
+-- in-progress conversation has been calling a course).
+-- ─────────────────────────────────────────────
+CREATE TABLE canvas_course_names (
+    id                      SERIAL PRIMARY KEY,
+    canvas_connection_id    INTEGER NOT NULL REFERENCES canvas_connections(id) ON DELETE CASCADE,
+    canvas_course_id        VARCHAR NOT NULL,
+    -- Populated from the Course row the same Canvas fetch upserts
+    -- (services/canvas.py get_courses) -- lets the chat resolver go
+    -- straight from a matched name to something dispatcher.py can
+    -- execute against, no extra query.
+    local_course_id         INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    name                    VARCHAR NOT NULL,
+    -- Canvas's own workflow_state at insert time ("available",
+    -- "unpublished", "completed") -- lets _match_course_name narrow a
+    -- duplicate-name match (same course code taught in multiple terms) to
+    -- the still-active offering instead of giving up outright.
+    workflow_state          VARCHAR,
+    created_at              TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT uq_connection_canvas_course UNIQUE (canvas_connection_id, canvas_course_id)
+);
+
+CREATE INDEX idx_canvas_course_names_connection_id ON canvas_course_names(canvas_connection_id);
 
 -- ─────────────────────────────────────────────
 -- Assignments
@@ -123,10 +163,16 @@ CREATE INDEX idx_submissions_student_canvas_id ON submissions(student_canvas_id)
 -- Conversations
 -- ─────────────────────────────────────────────
 CREATE TABLE conversations (
-    id         SERIAL PRIMARY KEY,
-    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    course_id  INTEGER REFERENCES courses(id) ON DELETE SET NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    -- Set once (at creation or on this conversation's first course
+    -- resolution) and never mutated after -- a subject switch routes to a
+    -- different conversation row instead (see services/chat.py
+    -- _find_or_fork_conversation_for_course).
+    course_id   INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    -- Denormalized snapshot of course.name at the time course_id was set.
+    course_name VARCHAR,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_conversations_user_id ON conversations(user_id);
@@ -182,6 +228,58 @@ CREATE INDEX idx_workflows_user_id ON workflows(user_id);
 CREATE INDEX idx_workflows_conversation_id ON workflows(conversation_id);
 CREATE INDEX idx_workflows_course_id ON workflows(course_id);
 CREATE INDEX idx_workflows_status ON workflows(status);
+
+-- ─────────────────────────────────────────────
+-- Tool Call Logs
+-- Tracks the pending/executing/executed/failed lifecycle of a single
+-- Canvas-reading call (fetch_courses, fetch_assignments, fetch_students,
+-- fetch_submissions), including internal sub-calls the app makes on the
+-- user's behalf without a separate turn (e.g. the fetch_assignments call
+-- inside fetch_submissions' assignment-resolution chain). Deliberately
+-- separate from workflows: that table's preview_message_id is tied 1:1 to
+-- a specific assistant message the user reviews and confirms, which no
+-- longer applies now that reads execute immediately with no review step.
+-- ─────────────────────────────────────────────
+CREATE TABLE tool_call_logs (
+    id                      SERIAL PRIMARY KEY,
+    conversation_id         INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    user_id                 INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    course_id               INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    triggering_message_id   INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    action_name             VARCHAR NOT NULL,
+    parameters               JSONB NOT NULL,
+    status                  VARCHAR NOT NULL DEFAULT 'pending'
+                             CHECK (status IN ('pending', 'executing', 'executed', 'failed')),
+    error_detail            TEXT,
+    completed_at             TIMESTAMPTZ,
+    created_at               TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_tool_call_logs_user_id ON tool_call_logs(user_id);
+CREATE INDEX idx_tool_call_logs_conversation_id ON tool_call_logs(conversation_id);
+CREATE INDEX idx_tool_call_logs_course_id ON tool_call_logs(course_id);
+CREATE INDEX idx_tool_call_logs_status ON tool_call_logs(status);
+
+-- ─────────────────────────────────────────────
+-- Resolved Sets
+-- Server-computed recipient sets (e.g. "students missing submissions for
+-- assignment 4"), persisted so the LLM only ever sees a compact
+-- {count, sample, handle} summary from resolve_missing_submissions --
+-- never the raw per-student list -- and a later send_message turn can
+-- materialize the real recipient IDs back out via recipient_handle,
+-- scoped to the conversation that created the set.
+-- ─────────────────────────────────────────────
+CREATE TABLE resolved_sets (
+    handle                VARCHAR PRIMARY KEY,
+    conversation_id       INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    kind                  VARCHAR NOT NULL,
+    query                 JSONB NOT NULL,
+    snapshot_recipients   JSONB NOT NULL,
+    created_at            TIMESTAMPTZ DEFAULT NOW(),
+    expires_at            TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX idx_resolved_sets_conversation_id ON resolved_sets(conversation_id);
 
 -- ─────────────────────────────────────────────
 -- Audit Logs
@@ -307,3 +405,43 @@ CREATE TABLE system_settings (
     value       JSONB NOT NULL,
     updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ─────────────────────────────────────────────
+-- Schema Migrations
+-- Tracks which db/migrations/*.sql files have been applied — read and
+-- written by app/backend/app/core/migrations.py on every backend startup,
+-- so an existing database picks up a schema change automatically instead
+-- of crashing the first time a query touches a column/table that isn't
+-- there yet (Base.metadata.create_all() alone only creates missing
+-- tables, it never ALTERs an existing one). A database created fresh from
+-- this file already reflects every migration listed below directly, so
+-- they're pre-stamped here rather than left for the app to re-discover.
+-- Whenever a new migration file is added, add its filename to both this
+-- INSERT and the CREATE TABLE/ALTER TABLE it describes above.
+-- ─────────────────────────────────────────────
+CREATE TABLE schema_migrations (
+    filename    VARCHAR PRIMARY KEY,
+    applied_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO schema_migrations (filename) VALUES
+    ('002_remove_ta_role.sql'),
+    ('002_submission_status_and_grading.sql'),
+    ('003_rename_audit_logs_to_session.sql'),
+    ('004_workflow_auditlog_redesign.sql'),
+    ('005_assignment_description.sql'),
+    ('006_workflow_affected_resources.sql'),
+    ('007_audit_logs_allow_conversation_resource_type.sql'),
+    ('008_unstarted_backend_features.sql'),
+    ('009_assignment_unique_per_course.sql'),
+    ('010_workflow_schema_repair.sql'),
+    ('011_course_name_tracking.sql'),
+    ('012_tool_call_logs.sql'),
+    ('013_resolved_sets.sql'),
+    ('014_canvas_course_names_workflow_state.sql'),
+    ('015_course_workflow_state_and_assignment_active.sql'),
+    ('016_assignment_published.sql'),
+    ('017_course_synced_at.sql'),
+    ('018_workflow_undo.sql'),
+    ('019_audit_logs_allow_delete_operation.sql'),
+    ('020_course_cache_columns.sql');

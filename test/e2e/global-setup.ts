@@ -1,0 +1,36 @@
+import { execFileSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+const python = path.join(rootDir, "app/backend/.venv/bin/python");
+const script = path.join(rootDir, "test/e2e/ensure_admin.py");
+
+/** Prefer a non-empty env value; otherwise use the e2e default. */
+function envOr(key: string, fallback: string): string {
+  const value = process.env[key]?.trim();
+  return value ? value : fallback;
+}
+
+export default async function globalSetup() {
+  execFileSync(python, [script], {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      DATABASE_URL: envOr(
+        "DATABASE_URL",
+        "postgresql+asyncpg://appuser:localdev@localhost:5433/appdb",
+      ),
+      SECRET_KEY: envOr("SECRET_KEY", "localdevsecret"),
+      // Must match playwright.config.ts webServer defaults so Settings() loads
+      // the same key the backend process uses in CI / local e2e.
+      CANVAS_TOKEN_ENCRYPTION_KEY: envOr(
+        "CANVAS_TOKEN_ENCRYPTION_KEY",
+        "ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=",
+      ),
+      ADMIN_EMAIL: envOr("ADMIN_EMAIL", "admin@example.com"),
+      ADMIN_PASSWORD: envOr("ADMIN_PASSWORD", "AdminPass123!"),
+      ADMIN_NAME: envOr("ADMIN_NAME", "Administrator"),
+    },
+  });
+}

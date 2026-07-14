@@ -29,6 +29,17 @@ def get_llm_adapter(llm_settings: dict) -> LLMAdapter:
             api_key=llm_settings.get("api_key", settings.GROQ_API_KEY),
         )
 
+    if provider == "huggingface":
+        # https://router.huggingface.co/v1 — HF's own router, not a
+        # specific inference provider. No ":provider" suffix on the model
+        # id (e.g. ":nscale") so HF picks whichever provider currently
+        # backs the model rather than pinning one.
+        return OpenAICompatibleAdapter(
+            base_url="https://router.huggingface.co/v1",
+            model=llm_settings.get("model", settings.HF_MODEL),
+            api_key=llm_settings.get("api_key", settings.HF_TOKEN),
+        )
+
     if provider == "openai":
         return OpenAICompatibleAdapter(
             base_url="https://api.openai.com/v1",

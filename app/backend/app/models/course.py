@@ -28,6 +28,10 @@ class Course(Base):
     # Canvas's course state (e.g. "available", "unpublished", "completed") — persisted
     # so set_active_course can reject non-selectable courses without a live Canvas call.
     workflow_state: Mapped[str] = mapped_column(String, nullable=False, default="available", server_default="available")
+    # Canvas's course_code (e.g. "COSC 111") and enrollment count — cached locally
+    # so get_cached_courses() can render a full course card without a live Canvas call.
+    course_code: Mapped[str | None] = mapped_column(String, nullable=True)
+    total_students: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # When this row was last written from a real Canvas response (get_courses()).
     # NULL for rows that predate this column and were never re-synced — lets
     # set_active_course distinguish "we've verified this state against Canvas"

@@ -7,12 +7,21 @@ import type {
 /** Catalog of providers the AI Assistant can target (frontend preference). */
 export const LLM_PROVIDERS: LlmProviderOption[] = [
   {
-    id: "groq",
-    name: "Groq",
-    description: "Fast hosted Llama models via Groq’s OpenAI-compatible API.",
+    id: "huggingface",
+    name: "Hugging Face",
+    description: "The server's current default model, routed through Hugging Face's inference API.",
     hosting: "internet",
     availability: "ready",
-    defaultModel: "meta-llama/llama-4-scout-17b-16e-instruct",
+    defaultModel: "openai/gpt-oss-20b:groq",
+    configFields: ["model"],
+  },
+  {
+    id: "groq",
+    name: "Groq",
+    description: "Fast hosted models via Groq’s OpenAI-compatible API.",
+    hosting: "internet",
+    availability: "ready",
+    defaultModel: "qwen/qwen3.6-27b",
     configFields: ["model"],
   },
   {
@@ -62,7 +71,12 @@ export const LLM_PROVIDERS: LlmProviderOption[] = [
   },
 ];
 
-export const DEFAULT_LLM_PROVIDER_ID: LlmProviderId = "groq";
+// Matches the backend's own settings.DEFAULT_LLM_PROVIDER (app/backend/app/config.py)
+// — a user who has never touched the AI Models settings page must see (and
+// keep sending) the model that's actually already answering their messages,
+// not silently jump to a different provider the first time this preference
+// starts being honored.
+export const DEFAULT_LLM_PROVIDER_ID: LlmProviderId = "huggingface";
 
 export function getLlmProviderOption(
   providerId: LlmProviderId,

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS, is_reversible
 from app.models.course import Course
 from app.models.user import User
-from app.schemas.canvas import AssignmentCreate, AssignmentResponse, AssignmentUpdate, SubmissionResponse
+from app.schemas.canvas import AssignmentCreate, AssignmentResponse, AssignmentUpdate, SubmissionResponse, SubmissionStatus
 from app.services.assignment_validation import (
     validate_assignment_for_create,
     validate_assignment_for_update,
@@ -157,21 +157,38 @@ async def _resolve_course(
         )
 
 
-def _add_person_submission_summary(submissions: list[SubmissionResponse]) -> str:
-    """Names are assembled here for display — the LLM never sees or
-    generates student PII directly.
+def _build_submissions_result(submissions: list[SubmissionResponse]) -> dict:
+    """Groups raw submissions by Canvas's own status categories
+    (graded/submitted/late/missing/unsubmitted/excused — see
+    SubmissionStatus/_parse_submission_status in services/canvas.py) so
+    "who hasn't submitted" is a first-class, directly-readable field
+    instead of something the caller has to infer by scanning the raw
+    per-submission list itself. "pending_students" (missing + unsubmitted
+    combined) mirrors the same default definition
+    compute_submissions_by_status's status="missing" uses (see
+    services/resolved_set.py), kept consistent across both code paths.
 
-    student_name is already populated on each submission by
-    get_submissions (services/canvas.py), which requests Canvas's
-    include[]=user. An earlier version of this function fetched course
-    enrollments separately to resolve user_id -> name, duplicating a
-    roster fetch that wasn't needed."""
-    lines = []
+    Names are assembled here for display — the LLM never sees or
+    generates student PII directly. student_name is already populated on
+    each submission by get_submissions (services/canvas.py), which
+    requests Canvas's include[]=user."""
+    groups: dict[str, list[dict]] = {status.value: [] for status in SubmissionStatus}
     for s in submissions:
         name = s.student_name or f"Student {s.user_id}"
-        status = "submitted" if s.workflow_state == "submitted" else "has not submitted"
-        lines.append(f"{name} {status}")
-    return "\n".join(lines)
+        groups[s.status.value].append({"user_id": s.user_id, "name": name})
+
+    counts = {status: len(students) for status, students in groups.items()}
+    pending_students = groups["missing"] + groups["unsubmitted"]
+
+    return {
+        "submissions": [s.model_dump() for s in submissions],
+        "counts": counts,
+        "pending_students": pending_students,
+        "submitted_students": groups["submitted"],
+        "late_students": groups["late"],
+        "graded_students": groups["graded"],
+        "excused_students": groups["excused"],
+    }
 
 
 def _merge_assignment_update(current: AssignmentResponse, action: Any) -> AssignmentUpdate:
@@ -228,11 +245,7 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             submissions = await get_submissions(
                 course.id, action.assignment_id, user, course.canvas_url, db
             )
-            summary = _add_person_submission_summary(submissions)
-            return {
-                "submissions": [s.model_dump() for s in submissions],
-                "summary": summary,
-            }
+            return _build_submissions_result(submissions)
 
         case "fetch_students":
             course = await _resolve_course(db, user, action.local_course_id)

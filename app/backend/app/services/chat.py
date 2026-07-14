@@ -1,34 +1,89 @@
 # app/backend/app/services/chat.py
 import asyncio
 import json
+import logging
 import re
+from collections.abc import Coroutine
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
+from typing import Any, TypeVar
 
 import httpx
 from fastapi import HTTPException
+from pydantic import BaseModel
 from sqlalchemy import desc, func, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import settings
+from app.core.canvas_url import canvas_urls_equivalent
+from app.core.database import AsyncSessionLocal
 from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_action
-from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS
+from app.mcp_tools.dispatcher import _resolve_course as resolve_course
+from app.mcp_tools.schemas import (
+    ACTION_SCHEMAS,
+    READ_ACTIONS,
+    WRITE_ACTIONS,
+    FetchAssignmentsAction,
+    FetchStudentsAction,
+    FetchSubmissionsAction,
+    FindAssignmentBySubmissionRateAction,
+    IntentPreviewAction,
+    RecipientDirective,
+    ResolveMissingSubmissionsAction,
+)
+from app.models.assignment import Assignment
 from app.models.audit_log import AuditLog
+from app.models.canvas_connection import CanvasConnection
+from app.models.canvas_course_name import CanvasCourseName
 from app.models.conversation import Conversation
 from app.models.course import Course
 from app.models.message import Message
+from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
 from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
-from app.services.canvas import CanvasTokenRequiredError
+from app.services.assignment_rate import find_assignments_by_submission_rate
+from app.services.canvas import CanvasTokenRequiredError, sync_courses_if_stale
+from app.services.llm.base import LLMAdapter
+from app.services.llm.json_extraction import extract_json_object
 from app.services.llm.llm_setting import get_llm_adapter
+from app.services.resolved_set import (
+    compute_submissions_by_status,
+    create_resolved_set,
+    materialize_resolved_set,
+)
+from app.services.student import get_submission_derived_students
+from app.services.write_preview import generate_write_preview
+
+logger = logging.getLogger(__name__)
 
 LLM_TIMEOUT_SECONDS = 90.0
 HISTORY_WINDOW = 10
 CANVAS_TOKEN_REQUIRED_MESSAGE = (
     "This action needs a connected Canvas account. Connect Canvas in Settings, then try again."
 )
+
+# Hard cap on how many LLM decisions a single user turn may chain through
+# (see handle_chat_message's step loop) before giving up and asking the
+# user to continue. Local to one handle_chat_message call — since a new
+# HTTP request is a fresh call, and modify/confirm/cancel turns each go
+# through their own separate call (handle_chat_message /
+# handle_confirmed_action / handle_cancelled_action), this counter is
+# already reset on every new chat message and on every confirm/cancel/
+# modify by construction, with no persisted state needed.
+MAX_TURN_STEPS = 15
+
+# Read actions whose result is specifically meant to feed a follow-up
+# decision within the SAME turn (see their own docstrings —
+# resolve_missing_submissions produces a recipient_handle for send_message;
+# find_assignment_by_submission_rate produces an assignment_id for
+# update_assignment) — these always continue the step loop, asking the
+# model what to do next, rather than terminating the turn like an ordinary
+# read. Adding a future resolver here is the only wiring a new one needs
+# to get automatic multi-step chaining — no loop/dispatch changes required.
+_CHAINABLE_READ_ACTIONS = frozenset({"resolve_missing_submissions", "find_assignment_by_submission_rate"})
 # Failure paths (parse errors, timeouts, HTTP errors) log the full raw
 # diagnostic — for a "thinking" model that can mean the entire verbose
 # <think> block, hundreds to thousands of tokens — as the assistant message
@@ -41,18 +96,22 @@ CANVAS_TOKEN_REQUIRED_MESSAGE = (
 # history message's contribution regardless of why it got large.
 HISTORY_MESSAGE_MAX_CHARS = 2000
 
-# A normal chat turn may only ever produce one of these — every real
-# Canvas action (read or write) must be proposed via intent_preview first,
-# never executed directly. Nothing in execute_tool's dispatch enforces
-# this on its own (fetch_courses, fetch_assignments, get_active_course,
-# create_assignment, etc. are all independently reachable top-level
-# cases), and the model does not reliably follow the system prompt's
-# instruction to always preview first — observed skipping straight to a
-# raw get_active_course/fetch_assignments call with no preview shown at
-# all. handle_confirmed_action's PATH B is exempt: executing the
-# previously-proposed action directly is the entire point of confirm. A
-# raw action outside this set gets auto-wrapped into a real intent_preview
-# instead of rejected outright — see handle_chat_message.
+# A normal chat turn may only ever *propose* one of these without going
+# through intent_preview/confirm — every write action (create_assignment,
+# update_assignment, send_message) must still be proposed via
+# intent_preview first, never executed directly. Read actions
+# (READ_ACTIONS, from app.mcp_tools.schemas) are a separate, deliberately
+# ungated category handled earlier in handle_chat_message's dispatch: they
+# execute immediately since they can never mutate Canvas state, so there's
+# nothing for intent_preview to protect. Nothing in execute_tool's dispatch
+# enforces the write gate on its own (create_assignment etc. are
+# independently reachable top-level cases), and the model does not
+# reliably follow the system prompt's instruction to always preview a
+# write first — observed skipping straight to a raw create_assignment call
+# with no preview shown at all. handle_confirmed_action's PATH B is exempt:
+# executing the previously-proposed action directly is the entire point of
+# confirm. A raw write action outside this set gets auto-wrapped into a
+# real intent_preview instead of rejected outright — see handle_chat_message.
 NORMAL_TURN_ALLOWED_ACTIONS = {"intent_preview", "clarify", "out_of_scope", "respond"}
 
 # WRITE_ACTIONS (imported from app.mcp_tools.schemas) is also the set of
@@ -96,6 +155,25 @@ async def get_or_create_conversation(
     conversation_id: int | None,
     local_course_id: int | None,
 ) -> Conversation:
+    """local_course_id here is only ever the client-supplied explicit value
+    (pathway a — the "set active course" button; see ChatRequest.local_course_id)
+    — never something guessed from message text. A conversation's course,
+    once set, is never mutated in place: switching away from it routes to
+    a different conversation (reused if one already exists for the target
+    course, forked otherwise) via _find_or_fork_conversation_for_course.
+    conversation_id=None (a deliberate "new chat" request) always creates
+    fresh regardless of local_course_id — the find-or-reuse rule only
+    applies when routing away from a conversation that already had a
+    course.
+
+    When local_course_id is omitted and a conversation has no course yet
+    (brand new, or an existing conversation that was never resolved), this
+    falls back to the user's persisted UserPreference.active_course_id —
+    still pathway (a) (the button), just read from storage instead of
+    requiring the client to resend it on every request (e.g. the client's
+    own active-course context hasn't loaded yet). Never used to override a
+    conversation that already has a course — only to seed one that has
+    none, exactly like the explicit-local_course_id case above."""
     if conversation_id is not None:
         conversation = await db.scalar(
             select(Conversation).where(
@@ -104,92 +182,1159 @@ async def get_or_create_conversation(
             )
         )
         if conversation:
-            if conversation.course_id is None and local_course_id is not None:
-                conversation.course_id = local_course_id
+            if conversation.course_id is None:
+                seed_course_id = local_course_id
+                if seed_course_id is None:
+                    seed_course_id = await db.scalar(
+                        select(UserPreference.active_course_id).where(UserPreference.user_id == user.id)
+                    )
+                if seed_course_id is not None:
+                    course = await db.scalar(
+                        select(Course).where(Course.id == seed_course_id, Course.instructor_id == user.id)
+                    )
+                    if course is not None:
+                        conversation.course_id = course.id
+                        conversation.course_name = await _stable_course_name(db, course.id, course.name)
                 return conversation
             if (
                 local_course_id is not None
                 and conversation.course_id is not None
                 and conversation.course_id != local_course_id
             ):
-                conversation_id = None
-            else:
+                course = await db.scalar(
+                    select(Course).where(Course.id == local_course_id, Course.instructor_id == user.id)
+                )
+                if course is not None:
+                    return await _find_or_fork_conversation_for_course(db, user, course.id, course.name)
                 return conversation
+            return conversation
 
-    conversation = Conversation(user_id=user.id, course_id=local_course_id)
+    seed_course_id = local_course_id
+    if seed_course_id is None:
+        seed_course_id = await db.scalar(
+            select(UserPreference.active_course_id).where(UserPreference.user_id == user.id)
+        )
+    course_name = None
+    if seed_course_id is not None:
+        course_name = await db.scalar(
+            select(Course.name).where(Course.id == seed_course_id, Course.instructor_id == user.id)
+        )
+        if course_name is None:
+            seed_course_id = None
+        else:
+            course_name = await _stable_course_name(db, seed_course_id, course_name)
+    conversation = Conversation(user_id=user.id, course_id=seed_course_id, course_name=course_name)
     db.add(conversation)
     await db.flush()
     return conversation
 
 
-async def _resolve_chat_course_context(
-    db: AsyncSession,
-    user: User,
-    message: str,
-    requested_local_course_id: int | None,
-    conversation_id: int | None = None,
-) -> Course | None:
-    """Find the course context in deterministic app code before the LLM runs.
-
-    Local models cannot know our database IDs. Priority order: an explicit
-    local ID from the client, then a course name mentioned in this message,
-    then the course this conversation is already anchored to (so a
-    follow-up reply to a clarify question — e.g. "all assignments" — stays
-    on the course named earlier in the same thread instead of silently
-    snapping back to the user's global active-course preference), then
-    finally that global active-course preference for a brand new thread.
-    """
-    if requested_local_course_id is not None:
-        return await db.scalar(
-            select(Course).where(
-                Course.id == requested_local_course_id,
-                Course.instructor_id == user.id,
-            )
-        )
-
-    courses = list(
-        await db.scalars(select(Course).where(Course.instructor_id == user.id))
+async def _stable_course_name(db: AsyncSession, local_course_id: int, fallback: str) -> str:
+    """Prefers canvas_course_names' write-once name over Course.name
+    (overwritten in place on every Canvas sync) for anything that becomes
+    a Conversation.course_name snapshot — same rename-stability rationale
+    as CanvasCourseName's docstring: a course renamed on Canvas
+    mid-conversation must not change what that conversation has already
+    been calling it. Falls back to the given Course.name only when this
+    course has never been synced into canvas_course_names yet (e.g. its
+    connection's first sync hasn't run)."""
+    stable_name = await db.scalar(
+        select(CanvasCourseName.name).where(CanvasCourseName.local_course_id == local_course_id)
     )
-    normalized_message = _normalize_course_text(message)
-    # Course names are synced locally, so resolve phrases like "COSC 499"
-    # before asking the model to choose a database-local course ID. Prefer
-    # the longest matching name when more than one matches (e.g. two
-    # courses that happen to share "COSC499" as a substring of their
-    # normalized name) so the more specific course wins deterministically
-    # instead of whichever the DB happened to return first.
-    matches = [
-        course
-        for course in courses
-        if (name := _normalize_course_text(course.name)) and name in normalized_message
+    return stable_name if stable_name is not None else fallback
+
+
+async def _get_course_names_for_user(db: AsyncSession, user: User) -> list[CanvasCourseName]:
+    """The full canvas_course_names index across every Canvas connection
+    this user has — the only source of course names the LLM is ever shown
+    (see _build_llm_message) and the only thing course_name is matched
+    against (see _match_course_name). Never queries `courses` directly for
+    this purpose: canvas_course_names is connection-scoped (so two
+    institutions with colliding numeric canvas_course_ids never collide)
+    and write-once (so a mid-conversation Canvas rename can't retroactively
+    change what a conversation has been calling a course)."""
+    return list(
+        await db.scalars(
+            select(CanvasCourseName)
+            .join(CanvasConnection, CanvasCourseName.canvas_connection_id == CanvasConnection.id)
+            .where(CanvasConnection.user_id == user.id)
+        )
+    )
+
+
+_COURSE_NAME_FUZZY_MATCH_MIN_LENGTH = 4
+
+
+def _resolve_duplicate_course_name_matches(
+    matches: list[CanvasCourseName],
+) -> CanvasCourseName | None:
+    """canvas_course_names is write-once and fetch_courses deliberately
+    includes completed (past-term) courses alongside active ones (so a
+    Canvas rename mid-conversation can never retroactively change what an
+    in-progress conversation has been calling a course) — so an instructor
+    who has taught the same course code more than once accumulates
+    multiple rows with an identical name. That's the normal steady state
+    for a returning instructor, not a rare edge case, so a same-name
+    collision shouldn't immediately give up: narrow to whichever match(es)
+    aren't a known-completed term first. Still returns None (ambiguous) if
+    that doesn't narrow to exactly one — e.g. two genuinely active
+    sections, or a legacy row with no workflow_state recorded at all
+    sitting alongside another candidate."""
+    still_relevant = [cn for cn in matches if cn.workflow_state != "completed"]
+    return still_relevant[0] if len(still_relevant) == 1 else None
+
+
+def _match_course_name(course_names: list[CanvasCourseName], course_name: str | None) -> CanvasCourseName | None:
+    """Exact (normalized) match first; a normalized substring match only
+    if that finds nothing, since the model is given the literal course
+    name strings in YOUR COURSES and told to copy one verbatim, so exact
+    is both the expected and the safest case. The substring fallback
+    exists only for a smaller/weaker model paraphrasing or abbreviating
+    despite that instruction — restricted to a single unambiguous
+    candidate (in either substring direction) and a minimum normalized
+    length, so a short/generic fragment can't spuriously match half the
+    course list. Either stage can still hit a same-name collision across
+    terms (see _resolve_duplicate_course_name_matches); if that's also
+    ambiguous, this returns None either way — no match is ever guessed,
+    only ever resolved to something already unambiguous — and the caller
+    falls back to its existing sticky-course behavior, same
+    belt-and-suspenders philosophy as dispatcher.py's
+    _create_assignment_missing_field."""
+    if not course_name:
+        return None
+    normalized_target = _normalize_course_text(course_name)
+
+    exact_matches = [cn for cn in course_names if _normalize_course_text(cn.name) == normalized_target]
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    if len(exact_matches) > 1:
+        return _resolve_duplicate_course_name_matches(exact_matches)
+
+    if len(normalized_target) < _COURSE_NAME_FUZZY_MATCH_MIN_LENGTH:
+        return None
+    substring_matches = [
+        cn for cn in course_names
+        if normalized_target in _normalize_course_text(cn.name)
+        or _normalize_course_text(cn.name) in normalized_target
     ]
-    if matches:
-        return max(matches, key=lambda c: len(_normalize_course_text(c.name)))
+    if len(substring_matches) == 1:
+        return substring_matches[0]
+    if len(substring_matches) > 1:
+        return _resolve_duplicate_course_name_matches(substring_matches)
+    return None
 
-    if conversation_id is not None:
-        existing_course_id = await db.scalar(
-            select(Conversation.course_id).where(
-                Conversation.id == conversation_id,
-                Conversation.user_id == user.id,
-            )
-        )
-        if existing_course_id is not None:
-            existing = next(
-                (course for course in courses if course.id == existing_course_id),
-                None,
-            )
-            if existing is not None:
-                return existing
 
-    active_course_id = await db.scalar(
-        select(UserPreference.active_course_id).where(UserPreference.user_id == user.id)
+async def _find_or_fork_conversation_for_course(
+    db: AsyncSession, user: User, local_course_id: int, course_name: str
+) -> Conversation:
+    """Reuse the most recent conversation already anchored to this course,
+    or start a new one. Only called when actively switching a conversation
+    away from a course it already had (button click or the model naming a
+    different course mid-conversation) — never for a conversation's first
+    course resolution (course_id None -> some value), which just sets
+    course_id on the same conversation instead.
+
+    course_name is only ever used as a fallback: _stable_course_name
+    always prefers whatever canvas_course_names already has for this
+    course, so a caller passing a freshly-synced (and possibly renamed)
+    Course.name here can't undermine that stability guarantee."""
+    existing = await db.scalar(
+        select(Conversation)
+        .where(Conversation.user_id == user.id, Conversation.course_id == local_course_id)
+        .order_by(Conversation.id.desc())
+        .limit(1)
     )
-    if active_course_id is None:
+    if existing:
+        return existing
+    stable_name = await _stable_course_name(db, local_course_id, course_name)
+    conversation = Conversation(user_id=user.id, course_id=local_course_id, course_name=stable_name)
+    db.add(conversation)
+    await db.flush()
+    return conversation
+
+
+_COURSE_SWITCH_RESOLVER_SYSTEM_PROMPT = """You determine whether a user's
+message is asking about a course OTHER than the one their conversation is
+currently about, given the real list of their courses.
+
+Respond with exactly one JSON object and nothing else:
+{"switched_to": "<exact course name from CURRENT COURSES, or null>"}
+
+Set switched_to to the exact name of a course from CURRENT COURSES —
+copied verbatim, never invented — ONLY when the message clearly asks about
+a course that is NOT the current one: naming a different course directly,
+or asking to switch/open a different one. If the message doesn't name a
+course at all, is a plain follow-up about the current course, or doesn't
+clearly and unambiguously point at one specific different course, respond
+with {"switched_to": null} instead of guessing."""
+
+COURSE_SWITCH_RESOLVER_TIMEOUT_SECONDS = 30.0
+
+
+async def _resolve_course_switch(
+    course_names: list[CanvasCourseName],
+    current_course_name: str | None,
+    user_message: str,
+    adapter: LLMAdapter,
+) -> CanvasCourseName | None:
+    """Detects a course switch from the raw user message ALONE, before
+    history or the main system prompt are built for this turn — closes a
+    real gap in the original design: course-switch detection depended
+    entirely on the main model's own course_name output, which only comes
+    back *after* that same call already ran using the OLD conversation's
+    history and "CURRENT COURSE" framing (confirmed live: a genuine
+    conversation-265-vs-266 fork, with cosc 501's Q&A still sitting in the
+    history sent for a cosc 502 request). This is a separate, narrowly
+    scoped call for exactly that one question — mirrors
+    _resolve_assignment_reference/_resolve_students_via_llm's paradigm
+    (small dedicated call, given a real candidate list, never trusted to
+    invent a value) rather than reusing the main call's broader reasoning.
+
+    Returns None (never raises) on no course set yet, no switch detected,
+    or any failure (timeout/HTTP/bad JSON/unmatched name) — the caller
+    falls back to the existing post-hoc detection from the main model's
+    own output in every one of those cases, so a miss here is never worse
+    than today's behavior, only a hit closes the gap."""
+    if not course_names or current_course_name is None:
         return None
 
-    return next(
-        (course for course in courses if course.id == active_course_id),
-        None,
+    listing = "\n".join(f"- {cn.name}" for cn in course_names)
+    prompt = (
+        f"CURRENT COURSES:\n{listing}\n\n"
+        f"This conversation is currently about: {current_course_name}\n"
+        f"User's message: {user_message}"
     )
+    try:
+        raw = await asyncio.wait_for(
+            adapter.generate(
+                _COURSE_SWITCH_RESOLVER_SYSTEM_PROMPT, prompt, history=[],
+                timeout=COURSE_SWITCH_RESOLVER_TIMEOUT_SECONDS,
+            ),
+            timeout=COURSE_SWITCH_RESOLVER_TIMEOUT_SECONDS,
+        )
+        parsed = json.loads(extract_json_object(raw))
+    except Exception:
+        # Broad on purpose: a provider/network failure (httpx.ConnectError,
+        # httpx.ReadTimeout, httpx.RemoteProtocolError, ...) or malformed
+        # parsed data must never escape this resolver and 500 the whole
+        # turn — every failure mode here degrades to "no switch detected,"
+        # which is always safe (see this function's own docstring: the
+        # caller falls back to post-hoc detection either way).
+        return None
+
+    candidate_name = parsed.get("switched_to") if isinstance(parsed, dict) else None
+    return _match_course_name(course_names, candidate_name)
+
+
+def _inject_course_into_envelope(parsed_envelope: dict, local_course_id: int | None) -> dict:
+    """Injects the resolved local_course_id directly into the model's raw
+    parsed JSON — into proposed_action if it already wrapped its answer in
+    intent_preview, or into the envelope itself if it named a raw action
+    (NORMAL_TURN_ALLOWED_ACTIONS auto-wrapping turns that same dict into
+    proposed_action right after parse_action succeeds, so either shape
+    ends up with the id in the right place).
+
+    This has to happen *before* parse_action's strict schema validation,
+    not after: the model is never allowed to supply local_course_id
+    itself (see COURSE RESOLUTION in build_system_prompt), so a
+    course-scoped action's schema — which still declares local_course_id
+    as required, unchanged — would otherwise fail validation on a
+    required field it was never given. Checked dynamically via
+    ACTION_SCHEMAS.model_fields rather than a hardcoded action-name set,
+    the same self-maintaining approach build_system_prompt's tool list
+    already uses.
+
+    If the action needs a course and none could be resolved this turn,
+    replaces the whole envelope with a clarify response instead of
+    letting a missing local_course_id crash Pydantic validation
+    downstream (same belt-and-suspenders philosophy as dispatcher.py's
+    _create_assignment_missing_field). Returns the (possibly replaced)
+    envelope; the caller re-serializes it in place of the raw LLM output."""
+    if (
+        parsed_envelope.get("action") == "intent_preview"
+        and isinstance(parsed_envelope.get("proposed_action"), dict)
+    ):
+        target = parsed_envelope["proposed_action"]
+    else:
+        target = parsed_envelope
+
+    schema_cls = ACTION_SCHEMAS.get(target.get("action"))
+    if schema_cls is None or "local_course_id" not in schema_cls.model_fields:
+        return parsed_envelope
+
+    if local_course_id is None:
+        partial_plan = {key: value for key, value in target.items() if key != "action"}
+        return {
+            "action": "clarify",
+            "question": "Which course is this about?",
+            "partial_plan": partial_plan,
+        }
+
+    target["local_course_id"] = local_course_id
+    return parsed_envelope
+
+
+_ReadResult = TypeVar("_ReadResult")
+
+
+async def _run_tracked_read(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    triggering_message_id: int,
+    action_name: str,
+    parameters: dict,
+    coro: Coroutine[Any, Any, _ReadResult],
+) -> _ReadResult:
+    """Runs a single read-action coroutine and records its
+    pending/executing/executed/failed lifecycle in tool_call_logs — the
+    per-call bookkeeping intent_preview/Workflow used to provide implicitly
+    (a user confirming a preview was also confirming "yes, make this
+    Canvas call"), which reads no longer get now that they execute
+    immediately (see handle_chat_message). Created directly in "executing"
+    status: unlike workflows' pending state, there's no async gap here
+    waiting on a human click between creating the row and starting the call.
+
+    On failure, marks the row "failed" with the exception text and
+    re-raises unchanged — the caller's existing ToolExecutionError/
+    HTTPException handling in handle_chat_message is what actually turns
+    this into a user-facing error; this function only adds the log row."""
+    call_log = ToolCallLog(
+        conversation_id=conversation.id,
+        user_id=user.id,
+        course_id=parameters.get("local_course_id"),
+        triggering_message_id=triggering_message_id,
+        action_name=action_name,
+        parameters=parameters,
+        status="executing",
+    )
+    db.add(call_log)
+    await db.flush()
+    try:
+        result = await coro
+    except Exception as e:
+        call_log.status = "failed"
+        call_log.error_detail = str(e)
+        await db.flush()
+        raise
+    call_log.status = "executed"
+    call_log.completed_at = datetime.now(UTC)
+    await db.flush()
+    return result
+
+
+def _coerce_int(value: Any) -> int | None:
+    """LLM output is untrusted and inconsistent — a numeric ID sometimes
+    comes back as a JSON string ("4821") instead of a number, which would
+    otherwise silently fail an `in valid_ids` set-membership check even
+    though it's semantically the exact right answer. Used by every
+    resolver that compares a model-supplied ID against a real candidate
+    set. Explicitly rejects bool — a subclass of int in Python, so
+    accepting it would let a stray True/False silently coerce to 1/0 and
+    false-positive match a real id of 1 or 0."""
+    if isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+_ASSIGNMENT_RESOLVER_SYSTEM_PROMPT = """You resolve which assignment a user
+is referring to, given the real list of assignments in their course and how
+they described the one they mean.
+
+Respond with exactly one JSON object and nothing else:
+{"assignment_id": <id>}
+
+Use the "id" value from the matching assignment in ASSIGNMENTS — never a
+value that isn't in that list. If the reference is "latest"/"most recent"/
+"newest", pick the assignment with the latest due_at (if none have a
+due_at, there is no reliable way to tell — treat it as no confident match).
+If the reference is "earliest"/"first"/"oldest", pick the earliest due_at
+the same way. If the reference names or closely matches one assignment's
+name, pick that one. If you cannot confidently pick exactly one, respond
+with {"assignment_id": null} instead of guessing."""
+
+ASSIGNMENT_RESOLVER_TIMEOUT_SECONDS = 30.0
+
+
+async def _resolve_assignment_reference(
+    assignments: list[dict], reference: str | None, user_message: str, adapter: LLMAdapter,
+) -> int | None:
+    """Resolves a natural-language assignment reference (e.g. "the latest
+    assignment") to a real Canvas assignment ID, via a small dedicated LLM
+    call — not a recursive re-entry into handle_chat_message's full
+    pipeline. Mirrors how course_name is resolved: the model is never
+    trusted to invent a numeric ID, only to point at one from a real list
+    the app gives it.
+
+    Returns None (never raises) on any failure — timeout, HTTP error,
+    a broader provider/network failure (connection reset, malformed
+    response, ...), unparseable JSON, a malformed assignment dict, or a
+    confident "I can't tell" from the model itself — so the caller can
+    fall back to asking the user directly instead of surfacing this as an
+    error. Nothing has failed in the sense of a lost write; this is a
+    read that just needs one more piece of information. The whole body is
+    one try/except so this guarantee holds even for the dict access below
+    (constructing the listing, the single-assignment shortcut) — not just
+    the LLM call itself."""
+    try:
+        if len(assignments) == 1:
+            return _coerce_int(assignments[0].get("id"))
+
+        listing = "\n".join(
+            f"- id={a.get('id')}, name={a.get('name')!r}, due_at={a.get('due_at')}, "
+            f"points_possible={a.get('points_possible')}"
+            for a in assignments
+        )
+        prompt = (
+            f"ASSIGNMENTS:\n{listing}\n\n"
+            f"User's reference to an assignment: {reference or '(not given)'}\n"
+            f"User's full message: {user_message}"
+        )
+        raw = await asyncio.wait_for(
+            adapter.generate(
+                _ASSIGNMENT_RESOLVER_SYSTEM_PROMPT, prompt, history=[],
+                timeout=ASSIGNMENT_RESOLVER_TIMEOUT_SECONDS,
+            ),
+            timeout=ASSIGNMENT_RESOLVER_TIMEOUT_SECONDS,
+        )
+        parsed = json.loads(extract_json_object(raw))
+        candidate = _coerce_int(parsed.get("assignment_id")) if isinstance(parsed, dict) else None
+        # Coerce both sides — the model sometimes returns a numeric id as
+        # a JSON string ("4821"), which would otherwise silently fail this
+        # membership check even though it's the semantically correct answer.
+        valid_ids = {_coerce_int(a.get("id")) for a in assignments}
+        valid_ids.discard(None)
+        return candidate if candidate in valid_ids else None
+    except Exception:
+        return None
+
+
+async def _resolve_course_and_assignment(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    local_course_id: int,
+    assignment_id: int | None,
+    assignment_reference: str | None,
+    user_message: str,
+    adapter: LLMAdapter,
+) -> tuple[Course, int] | dict:
+    """Shared by every chain that needs a real Canvas assignment_id before
+    it can proceed (_run_fetch_submissions_chain,
+    _run_resolve_missing_submissions_chain): resolves the course, then
+    verifies/resolves the assignment — chaining an internal
+    fetch_assignments call and _resolve_assignment_reference when needed —
+    all inside the single request handling the user's one message, instead
+    of making the user ask a second time once the assignment list is in
+    history.
+
+    Returns (course, assignment_id) on success, or a clarify dict (never
+    raises) when nothing confidently resolves.
+
+    print() lines are a deliberate, simple placeholder for step-by-step
+    transparency while a multi-call chain is in flight (stdout/server logs
+    only, never returned to the client) — not one per tracked read action,
+    just markers for this specific multi-step chain."""
+    course = await resolve_course(db, user, local_course_id)
+
+    if assignment_id is not None:
+        # Only trust a bare assignment_id the model hands back if it
+        # verifies against this course's locally synced assignments (from
+        # any prior get_assignments call) — it could be hallucinated,
+        # stale, or belong to a different course. If it doesn't verify,
+        # fall through to the full resolution chain below exactly as if no
+        # assignment_id had been given at all.
+        verified = await db.scalar(
+            select(Assignment.id).where(
+                Assignment.course_id == course.id,
+                Assignment.canvas_assignment_id == str(assignment_id),
+            )
+        )
+        if verified is None:
+            assignment_id = None
+
+    if assignment_id is None:
+        print(f"Gathering {course.name} data")
+        print(f"Collecting {course.name} assignments")
+        fetch_action = FetchAssignmentsAction(local_course_id=course.id)
+        assignments_result = await _run_tracked_read(
+            db, user, conversation, user_msg.id, "fetch_assignments",
+            fetch_action.model_dump(), execute_tool(db, user, fetch_action),
+        )
+        assignments = assignments_result["assignments"]
+        if not assignments:
+            return {
+                "action": "clarify",
+                "clarify": True,
+                "question": f"{course.name} has no assignments yet — is there something else I can help with?",
+                "partial_plan": {"local_course_id": course.id},
+            }
+        assignment_id = await _resolve_assignment_reference(
+            assignments, assignment_reference, user_message, adapter
+        )
+        if assignment_id is None:
+            names = ", ".join(a["name"] for a in assignments)
+            return {
+                "action": "clarify",
+                "clarify": True,
+                "question": f"Which assignment in {course.name} did you mean? Options: {names}.",
+                "partial_plan": {"local_course_id": course.id},
+            }
+
+    return course, assignment_id
+
+
+async def _run_fetch_submissions_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    action: FetchSubmissionsAction,
+    user_message: str,
+    adapter: LLMAdapter,
+) -> dict:
+    """fetch_submissions needs a real Canvas assignment_id, which the model
+    is never allowed to invent (see COURSE RESOLUTION/assignment sections
+    in build_system_prompt). When it isn't already known, _resolve_course_and_assignment
+    resolves it server-side, all inside the single request handling the
+    user's one message, instead of making the user ask a second time once
+    the assignment list is in history.
+
+    Attaches the resolved assignment's own id/name/due date to the result
+    (under "assignment") and rewrites "summary" to name it explicitly
+    (e.g. "For Final Project, 3 students have not submitted...") — without
+    this, a plain submissions list/count is ambiguous about which
+    assignment it's even about once "latest assignment" or a name
+    resolved server-side, especially once the result is scrollback in
+    conversation history. The local Assignment row read here is always
+    already populated with the real Canvas title/due_date by the time
+    _resolve_course_and_assignment returns — either freshly upserted by
+    its own internal fetch_assignments call, or by an earlier one that
+    let the model already know this assignment_id."""
+    resolved = await _resolve_course_and_assignment(
+        db, user, conversation, user_msg,
+        action.local_course_id, action.assignment_id, action.assignment_reference, user_message,
+        adapter,
+    )
+    if isinstance(resolved, dict):
+        return resolved
+    course, assignment_id = resolved
+
+    assignment_row = await db.scalar(
+        select(Assignment).where(
+            Assignment.course_id == course.id,
+            Assignment.canvas_assignment_id == str(assignment_id),
+        )
+    )
+    assignment_name = assignment_row.title if assignment_row else f"Assignment {assignment_id}"
+    due_at = assignment_row.due_date if assignment_row else None
+
+    print(f"Combing through {course.name} submissions")
+    submit_action = FetchSubmissionsAction(local_course_id=course.id, assignment_id=assignment_id)
+    result = await _run_tracked_read(
+        db, user, conversation, user_msg.id, "fetch_submissions",
+        submit_action.model_dump(), execute_tool(db, user, submit_action),
+    )
+    result["assignment"] = {
+        "assignment_id": assignment_id,
+        "assignment_name": assignment_name,
+        "due_at": due_at.isoformat() if due_at else None,
+    }
+    result["summary"] = _build_fetch_submissions_summary(
+        assignment_name, due_at, result["counts"], result["pending_students"],
+    )
+    return result
+
+
+def _build_fetch_submissions_summary(
+    assignment_name: str,
+    due_at: datetime | None,
+    counts: dict[str, int],
+    pending_students: list[dict],
+) -> str:
+    """Names the resolved assignment explicitly and leads with the
+    instructor-relevant question ("who's pending?") rather than a bare
+    count — mirrors the "For Final Project, these students have not
+    submitted..." shape, plus late/graded/excused counts so those aren't
+    left buried in the raw per-submission list either."""
+    due_part = f" (due {due_at.strftime('%B %d, %Y at %I:%M %p')})" if due_at else ""
+    if pending_students:
+        names = [p["name"] for p in pending_students]
+        sample = ", ".join(names[:10])
+        more = f", and {len(names) - 10} more" if len(names) > 10 else ""
+        lines = [f"For {assignment_name}{due_part}, {len(names)} student(s) have not submitted: {sample}{more}."]
+    else:
+        lines = [f"For {assignment_name}{due_part}, every student has submitted."]
+    if counts.get("late"):
+        lines.append(f"{counts['late']} submitted late.")
+    if counts.get("graded"):
+        lines.append(f"{counts['graded']} have been graded.")
+    if counts.get("excused"):
+        lines.append(f"{counts['excused']} are excused.")
+    return " ".join(lines)
+
+
+_RESOLVED_SET_SAMPLE_SIZE = 5
+
+
+async def _run_resolve_missing_submissions_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    action: ResolveMissingSubmissionsAction,
+    user_message: str,
+    adapter: LLMAdapter,
+) -> dict:
+    """Resolves "students missing (or late on) submissions for
+    <assignment>" entirely server-side — never dumps the raw
+    submission/roster lists into the LLM's context or conversation
+    history (unlike a plain fetch_submissions call, whose full result is
+    left as-is by _summarize_assistant_history_content). Only a compact
+    {count, sample, handle} summary is returned; the handle is later
+    materialized by _run_send_message_chain when a send_message turn sets
+    recipient_handle, scoped to this conversation
+    (see materialize_resolved_set). action.status picks which category
+    (see compute_submissions_by_status) — "missing" and "late" are
+    mutually exclusive, so this always resolves exactly one at a time."""
+    resolved = await _resolve_course_and_assignment(
+        db, user, conversation, user_msg,
+        action.local_course_id, action.assignment_id, action.assignment_reference, user_message,
+        adapter,
+    )
+    if isinstance(resolved, dict):
+        return resolved
+    course, assignment_id = resolved
+
+    print(f"Checking {course.name} for {action.status} submissions")
+    matched = await _run_tracked_read(
+        db, user, conversation, user_msg.id, "resolve_missing_submissions",
+        {"local_course_id": course.id, "assignment_id": assignment_id, "status": action.status},
+        compute_submissions_by_status(course, assignment_id, user, db, action.status),
+    )
+
+    resolved_set = await create_resolved_set(
+        db, conversation, kind=f"{action.status}_submissions",
+        query={"local_course_id": course.id, "assignment_id": assignment_id, "status": action.status},
+        recipients=matched,
+    )
+
+    sample = [r["name"] for r in matched[:_RESOLVED_SET_SAMPLE_SIZE]]
+    if action.status == "missing":
+        summary = f"{len(matched)} active student(s) in {course.name} are missing this assignment."
+    else:
+        summary = f"{len(matched)} active student(s) in {course.name} submitted this assignment late."
+    if sample:
+        summary += f" Examples: {', '.join(sample)}."
+
+    return {
+        "action": "resolve_missing_submissions",
+        "status": action.status,
+        "count": len(matched),
+        "sample": sample,
+        "handle": resolved_set.handle,
+        "summary": summary,
+    }
+
+
+async def _run_find_assignment_by_submission_rate_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    action: FindAssignmentBySubmissionRateAction,
+    user_message: str,
+) -> dict:
+    """Resolves "the assignment with fewer/more than X% submissions" to a
+    single assignment — mirrors _resolve_assignment_reference's "resolve
+    server-side, never trust the model with a raw ID" shape, but the
+    criterion is a computed submission rate rather than a name/recency
+    reference, so it needs real Canvas data (not just the model's
+    judgment) to evaluate. Scans every assignment in the course
+    (find_assignments_by_submission_rate), then picks "the last" — the
+    matching assignment with the latest due date — the same "latest"
+    convention _resolve_assignment_reference already uses. Resolves to a
+    single ID, not a bulk recipient set, so this has no ResolvedSet/handle
+    involvement: the returned assignment_id is meant to be used directly in
+    a follow-up update_assignment turn, the same way a fetch_assignments
+    result's "id" field already is (see RESOLVING AN ASSIGNMENT FOR
+    update_assignment in build_system_prompt)."""
+    course = await resolve_course(db, user, action.local_course_id)
+
+    print(f"Gathering {course.name} data")
+    print(f"Collecting {course.name} assignments")
+    fetch_action = FetchAssignmentsAction(local_course_id=course.id)
+    assignments_result = await _run_tracked_read(
+        db, user, conversation, user_msg.id, "fetch_assignments",
+        fetch_action.model_dump(), execute_tool(db, user, fetch_action),
+    )
+    assignments = assignments_result["assignments"]
+    if not assignments:
+        return {
+            "action": "find_assignment_by_submission_rate",
+            "matched": False,
+            "assignment_id": None,
+            "assignment_name": None,
+            "due_date": None,
+            "submission_rate_percent": None,
+            "summary": f"{course.name} has no assignments yet.",
+        }
+
+    print(f"Checking {course.name} assignment submission rates")
+    matches = await _run_tracked_read(
+        db, user, conversation, user_msg.id, "find_assignment_by_submission_rate",
+        {
+            "local_course_id": course.id,
+            "comparator": action.comparator,
+            "threshold_percent": action.threshold_percent,
+        },
+        find_assignments_by_submission_rate(
+            course, assignments, action.comparator, action.threshold_percent, user, db,
+        ),
+    )
+
+    if not matches:
+        return {
+            "action": "find_assignment_by_submission_rate",
+            "matched": False,
+            "assignment_id": None,
+            "assignment_name": None,
+            "due_date": None,
+            "submission_rate_percent": None,
+            "summary": (
+                f"No assignment in {course.name} currently has a submission rate "
+                f"{action.comparator} {action.threshold_percent}%."
+            ),
+        }
+
+    best = max(matches, key=lambda m: m["due_at"] or datetime.min.replace(tzinfo=UTC))
+    due_date = best["due_at"].isoformat() if best["due_at"] else None
+    rate = round(best["rate_percent"], 1)
+    return {
+        "action": "find_assignment_by_submission_rate",
+        "matched": True,
+        "assignment_id": best["id"],
+        "assignment_name": best["name"],
+        "due_date": due_date,
+        "submission_rate_percent": rate,
+        "summary": (
+            f'"{best["name"]}" in {course.name} has a {rate}% submission rate '
+            f'(current due date: {due_date or "not set"}).'
+        ),
+    }
+
+
+_UPDATE_ASSIGNMENT_FIELDS = ("title", "description", "due_date", "points_possible")
+
+
+async def _run_update_assignment_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    action: Any,
+    user_message: str,
+    adapter: LLMAdapter,
+) -> dict:
+    """update_assignment needs an exact Canvas assignment_id before a
+    preview can be built, but — like fetch_submissions,
+    resolve_missing_submissions, and find_assignment_by_submission_rate —
+    the model doesn't need to know it itself. Only reached when
+    assignment_id is unset and assignment_reference is given; resolves it
+    server-side via _resolve_course_and_assignment (the exact same shared
+    helper those other chains use) and builds the intent_preview directly
+    — one user turn, no loop needed — the same way
+    _build_grouped_send_message_result builds a preview without routing
+    back through execute_tool's own intent_preview case."""
+    resolved = await _resolve_course_and_assignment(
+        db, user, conversation, user_msg,
+        action.local_course_id, action.assignment_id, action.assignment_reference, user_message,
+        adapter,
+    )
+    if isinstance(resolved, dict):
+        return resolved
+    course, assignment_id = resolved
+
+    proposed_action: dict[str, Any] = {
+        "action": "update_assignment",
+        "local_course_id": course.id,
+        "assignment_id": assignment_id,
+    }
+    for field_name in _UPDATE_ASSIGNMENT_FIELDS:
+        value = getattr(action, field_name)
+        if value is not None:
+            proposed_action[field_name] = value
+
+    preview_metadata = generate_write_preview(proposed_action, course)
+    return {
+        "action": "intent_preview",
+        "intent_preview": True,
+        "summary": preview_metadata["summary"],
+        "proposed_action": proposed_action,
+        "preview_metadata": preview_metadata,
+    }
+
+
+@dataclass
+class MessageGroup:
+    """One outgoing send_message: shared body text + who it goes to.
+    recipient_ids/recipient_names are empty for a class-wide announcement
+    group."""
+    body: str
+    recipient_ids: list[int] = field(default_factory=list)
+    recipient_names: list[str] = field(default_factory=list)
+
+
+_RECIPIENT_RESOLVER_SYSTEM_PROMPT = """You resolve which real students a
+user is referring to, given the real list of candidate students in their
+course and how they described each intended recipient.
+
+Respond with exactly one JSON object and nothing else:
+{"resolutions": [{"student_reference": "<copied exactly from input>", "canvas_user_id": <id or null>}, ...]}
+
+Include exactly one entry per reference given to you in "References to
+resolve", in the same order, using its exact original text for
+student_reference. Use the "canvas_user_id" value from the matching
+candidate in CANDIDATES — never a value that isn't in that list. Match on
+name (a close or partial match is fine, e.g. a first name or a common
+nickname), or on login_id/email if the reference looks like one. If a
+reference could match more than one candidate, or doesn't confidently match
+any of them, respond with null for that entry instead of guessing."""
+
+RECIPIENT_RESOLVER_TIMEOUT_SECONDS = 30.0
+
+
+async def _resolve_students_via_llm(
+    candidates: list[dict], references: list[str], user_message: str, adapter: LLMAdapter,
+) -> dict[str, int | None]:
+    """Small dedicated LLM call resolving every natural-language student
+    reference against a real candidate list at once — same paradigm as
+    _resolve_assignment_reference (never trust the model to invent an ID,
+    only to point at one from a real list the app gives it), batched into
+    one call rather than one per name for latency.
+
+    Returns a dict keyed by the original reference string. Any failure —
+    timeout, HTTP error, a broader provider/network failure (connection
+    reset, malformed response, ...), unparseable JSON, a malformed
+    candidate/resolution entry — or a reference the model couldn't
+    confidently match maps to None — never raises — so the caller always
+    has a uniform "unresolved" signal to fall back on. The whole body is
+    one try/except so this guarantee holds even for the dict access below
+    (constructing the listing, reading resolutions back out) — not just
+    the LLM call itself."""
+    if not references:
+        return {}
+    result: dict[str, int | None] = dict.fromkeys(references)
+    try:
+        listing = "\n".join(
+            f"- canvas_user_id={c.get('user_id')}, name={c.get('name')!r}, "
+            f"login_id={c.get('login_id')!r}, email={c.get('email')!r}"
+            for c in candidates
+        )
+        prompt = (
+            f"CANDIDATES:\n{listing}\n\n"
+            f"References to resolve: {references}\n"
+            f"User's full message: {user_message}"
+        )
+        raw = await asyncio.wait_for(
+            adapter.generate(
+                _RECIPIENT_RESOLVER_SYSTEM_PROMPT, prompt, history=[],
+                timeout=RECIPIENT_RESOLVER_TIMEOUT_SECONDS,
+            ),
+            timeout=RECIPIENT_RESOLVER_TIMEOUT_SECONDS,
+        )
+        parsed = json.loads(extract_json_object(raw))
+
+        resolutions = parsed.get("resolutions") if isinstance(parsed, dict) else None
+        if not isinstance(resolutions, list):
+            return result
+
+        # Coerce both sides — the model sometimes returns a numeric id as
+        # a JSON string ("4821"), which would otherwise silently fail this
+        # membership check even though it's the semantically correct answer.
+        valid_ids = {_coerce_int(c.get("user_id")) for c in candidates}
+        valid_ids.discard(None)
+        for entry in resolutions:
+            if not isinstance(entry, dict):
+                continue
+            ref = entry.get("student_reference")
+            candidate_id = _coerce_int(entry.get("canvas_user_id"))
+            if isinstance(ref, str) and ref in result and candidate_id in valid_ids:
+                result[ref] = candidate_id
+        return result
+    except Exception:
+        return result
+
+
+async def _resolve_recipient_directives(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    course: Course,
+    roster: list[dict],
+    directives: list[RecipientDirective],
+    user_message: str,
+    adapter: LLMAdapter,
+) -> list[MessageGroup] | dict:
+    """Resolves each directive's student_reference to a real Canvas user ID
+    — the roster first, falling back to a submissions-derived corpus only
+    for names the roster couldn't match (mirrors
+    message_validation._submission_recipient_ids' existing "some Canvas
+    instances only prove membership via submissions" fallback, sharing its
+    underlying scan via get_submission_derived_students) — then groups
+    directives that share identical body text into one MessageGroup each.
+
+    Returns a clarify dict (never raises) if one or more references still
+    can't be confidently resolved after both passes."""
+    references = [d.student_reference for d in directives]
+    known: dict[int, dict] = {
+        int(s["canvas_user_id"]): {
+            "user_id": int(s["canvas_user_id"]),
+            "name": s.get("name"),
+            "login_id": s.get("login_id"),
+            "email": None,
+        }
+        for s in roster
+    }
+    resolved = await _resolve_students_via_llm(list(known.values()), references, user_message, adapter)
+
+    unresolved = [ref for ref in references if resolved.get(ref) is None]
+    if unresolved:
+        print(f"Checking {course.name} submissions for additional student records")
+        fallback_students = await _run_tracked_read(
+            db, user, conversation, user_msg.id, "fetch_submissions",
+            {"local_course_id": course.id, "scope": "all_assignments"},
+            get_submission_derived_students(course, user, course.canvas_url),
+        )
+        new_candidates = [s for s in fallback_students if s["user_id"] not in known]
+        for student in new_candidates:
+            known[student["user_id"]] = student
+        if new_candidates:
+            fallback_resolved = await _resolve_students_via_llm(new_candidates, unresolved, user_message, adapter)
+            for ref, candidate_id in fallback_resolved.items():
+                if candidate_id is not None:
+                    resolved[ref] = candidate_id
+
+    still_unresolved = [ref for ref in references if resolved.get(ref) is None]
+    if still_unresolved:
+        known_names = ", ".join(sorted({s["name"] for s in known.values() if s.get("name")}))
+        return {
+            "action": "clarify",
+            "clarify": True,
+            "question": (
+                f"I couldn't match {', '.join(still_unresolved)} to a student in "
+                f"{course.name}. Known students: {known_names or 'none found'}."
+            ),
+            "partial_plan": {"local_course_id": course.id},
+        }
+
+    by_body: dict[str, MessageGroup] = {}
+    for directive in directives:
+        canvas_user_id = resolved[directive.student_reference]
+        assert canvas_user_id is not None  # guaranteed by the still_unresolved check above
+        group = by_body.setdefault(directive.body, MessageGroup(body=directive.body))
+        group.recipient_ids.append(canvas_user_id)
+        group.recipient_names.append(known.get(canvas_user_id, {}).get("name") or directive.student_reference)
+
+    return list(by_body.values())
+
+
+def _build_grouped_send_message_result(course: Course, subject: str, groups: list[MessageGroup]) -> dict:
+    """Builds proposed_action + preview_metadata for every resolved
+    message group, without touching the DB — kept pure so it's easy to
+    unit test. The caller (handle_chat_message) persists group 0 through
+    the ordinary single-preview path unchanged (so a modify turn still
+    overwrites the same message in place exactly as it does for any other
+    write), and any remaining groups via _persist_additional_message_previews
+    right after it."""
+    entries = []
+    for index, group in enumerate(groups):
+        proposed_action = {
+            "action": "send_message",
+            "local_course_id": course.id,
+            "subject": subject,
+            "body": group.body,
+            "recipient_canvas_user_ids": group.recipient_ids,
+            # Informational only — never read by dispatcher's send_message
+            # write case, just lets write_preview.py show real names
+            # instead of bare Canvas IDs.
+            "recipient_names": group.recipient_names,
+        }
+        preview_metadata = generate_write_preview(proposed_action, course)
+        if len(groups) > 1:
+            preview_metadata["message_index"] = index + 1
+            preview_metadata["message_count"] = len(groups)
+        entries.append({"proposed_action": proposed_action, "preview_metadata": preview_metadata})
+
+    primary = entries[0]
+    result = {
+        "action": "intent_preview",
+        "intent_preview": True,
+        "summary": primary["preview_metadata"]["summary"],
+        "proposed_action": primary["proposed_action"],
+        "preview_metadata": primary["preview_metadata"],
+    }
+    if len(entries) > 1:
+        # Popped and persisted by handle_chat_message right after it
+        # handles the primary group — never sent to the client as-is.
+        result["_extra_groups"] = entries[1:]
+    return result
+
+
+async def _supersede_stale_message_previews(
+    db: AsyncSession, conversation: Conversation, pending_message_id: int | None
+) -> None:
+    """A fresh messaging batch retires any earlier one still open in this
+    conversation. "superseded" already exists in the status vocabulary
+    (see Workflow's docstring and the DB CHECK constraint) but nothing else
+    in the app has ever set it — this is its first real use. Scoped to
+    action_name == "send_message" so an unrelated pending
+    create_assignment/update_assignment preview in the same conversation is
+    left untouched, and skips the workflow being reused via
+    pending_message_id on a modify turn (that one gets reset to "pending"
+    with fresh content by _sync_workflow_for_preview instead, same as any
+    other modify)."""
+    query = select(Workflow).where(
+        Workflow.conversation_id == conversation.id,
+        Workflow.status == "pending",
+        Workflow.action_name == "send_message",
+    )
+    if pending_message_id is not None:
+        query = query.where(Workflow.preview_message_id != pending_message_id)
+    stale_workflows = await db.scalars(query)
+    for stale in stale_workflows:
+        stale.status = "superseded"
+
+
+async def _run_send_message_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    action: Any,
+    user_message: str,
+    pending_message_id: int | None,
+    adapter: LLMAdapter,
+) -> dict:
+    """Runs the recipient-resolution + grouping chain for a send_message
+    turn that named recipients in natural language (recipient_directives),
+    asked to broadcast privately to the whole class
+    (broadcast_to_all_students), or referenced a server-computed set from an
+    earlier resolve_missing_submissions turn (recipient_handle) — mirrors
+    _run_fetch_submissions_chain's "resolve server-side, never trust the
+    model with a raw ID" shape, for people instead of assignments. Only
+    reached when handle_chat_message's dispatch sees one of those three
+    fields set; a plain send_message (an announcement, or one with
+    recipient_canvas_user_ids already known) is unaffected and keeps using
+    the existing single-preview auto-wrap path."""
+    course = await resolve_course(db, user, action.local_course_id)
+    groups: list[MessageGroup] = []
+    roster: list[dict] = []
+
+    if action.broadcast_to_all_students or action.recipient_directives:
+        print(f"Gathering {course.name} student roster")
+        fetch_action = FetchStudentsAction(local_course_id=course.id)
+        roster_result = await _run_tracked_read(
+            db, user, conversation, user_msg.id, "fetch_students",
+            fetch_action.model_dump(), execute_tool(db, user, fetch_action),
+        )
+        roster = roster_result["students"]
+
+    if action.broadcast_to_all_students:
+        active = [s for s in roster if s.get("enrollment_state") == "active"]
+        groups.append(MessageGroup(
+            body=action.body,
+            recipient_ids=[int(s["canvas_user_id"]) for s in active],
+            recipient_names=[s.get("name") or f"Student {s['canvas_user_id']}" for s in active],
+        ))
+
+    if action.recipient_directives:
+        resolved = await _resolve_recipient_directives(
+            db, user, conversation, user_msg, course, roster, action.recipient_directives, user_message,
+            adapter,
+        )
+        if isinstance(resolved, dict):
+            return resolved
+        groups.extend(resolved)
+
+    if action.recipient_handle:
+        resolved_set = await materialize_resolved_set(db, action.recipient_handle, conversation.id)
+        if resolved_set is None:
+            return {
+                "action": "clarify",
+                "clarify": True,
+                "question": (
+                    "That resolved recipient set is no longer available (it may have "
+                    "expired) — should I check again for students missing this assignment?"
+                ),
+                "partial_plan": {"local_course_id": course.id},
+            }
+        recipients = resolved_set.snapshot_recipients
+        groups.append(MessageGroup(
+            body=action.body,
+            recipient_ids=[r["user_id"] for r in recipients],
+            recipient_names=[r["name"] for r in recipients],
+        ))
+
+    if action.also_announce_to_class or not groups:
+        groups.append(MessageGroup(body=action.body, recipient_ids=[], recipient_names=[]))
+
+    await _supersede_stale_message_previews(db, conversation, pending_message_id)
+    return _build_grouped_send_message_result(course, action.subject, groups)
+
+
+async def _persist_additional_message_previews(
+    db: AsyncSession,
+    conversation: Conversation,
+    user: User,
+    user_msg: Message,
+    user_prompt: str,
+    extra_groups: list[dict],
+) -> list[dict]:
+    """Persists every message group after the first from a grouped
+    send_message turn (see _run_send_message_chain / _build_grouped_send_message_result)
+    — group 0 already went through the ordinary single-preview persistence
+    path in handle_chat_message, unchanged. Each of these is a brand-new
+    Message + Workflow row (pending_message_id=None always inserts, since
+    Workflow.preview_message_id is unique per row — no DB migration needed;
+    nothing enforces "at most one pending workflow per conversation" at the
+    schema level, that invariant was only ever app-level/frontend).
+
+    Phase 1: every group is shown at once, each independently
+    confirmable/cancelable. A later phase can queue these instead and
+    reveal them one at a time as earlier ones resolve, without changing
+    this persistence shape."""
+    previews = []
+    for entry in extra_groups:
+        proposed_action = entry["proposed_action"]
+        preview_metadata = entry["preview_metadata"]
+        result = {
+            "action": "intent_preview",
+            "intent_preview": True,
+            "summary": preview_metadata["summary"],
+            "proposed_action": proposed_action,
+            "preview_metadata": preview_metadata,
+        }
+        assistant_msg = await log_message(
+            db, conversation, role="assistant", content=_json_dumps(result)
+        )
+        await _sync_workflow_for_preview(
+            db, conversation, user,
+            source_user_message_id=user_msg.id,
+            pending_message_id=None,
+            preview_message_id=assistant_msg.id,
+            user_prompt=user_prompt,
+            proposed_action=proposed_action,
+            affected_resources=preview_metadata.get("affected_resources", []),
+        )
+        result["pending_message_id"] = assistant_msg.id
+        previews.append(result)
+    return previews
 
 
 async def _load_stored_intent_preview(
@@ -222,8 +1367,10 @@ async def _load_stored_intent_preview(
 
 def _build_llm_message(
     message: str,
-    course: Course | None,
+    course_names: list[CanvasCourseName],
+    current_course_name: str | None,
     current_proposed_action: dict | None,
+    loop_steps: list[dict] | None = None,
 ) -> str:
     """Wraps the user's raw message with whatever structured context the
     model needs, rather than leaving it to re-derive that context from
@@ -232,17 +1379,27 @@ def _build_llm_message(
     active course, and a modify turn that only restates the part being
     changed (e.g. just the date) can lose already-answered fields
     (description, points_possible) that the model fails to carry forward
-    from scrollback on its own."""
+    from scrollback on its own.
+
+    Course context is name-only, by design — never a numeric ID. The
+    model resolves which course (if any) this message is about itself,
+    from this list, and reports it back via the top-level course_name
+    field (see build_system_prompt's COURSE RESOLUTION section); the app
+    resolves that name to a real ID afterward (handle_chat_message).
+
+    loop_steps carries results already produced earlier IN THIS SAME turn
+    (see the step loop in handle_chat_message) — distinct from `history`,
+    which is prior TURNS only. Never populated for a modify turn (which
+    never loops); empty/None means "first step of this turn", identical to
+    every existing single-step request."""
     parts = []
 
-    if course is not None:
+    if course_names:
+        names = "\n".join(f"- {cn.name}" for cn in course_names)
         parts.append(
-            "Course context for this request:\n"
-            f"- local_course_id: {course.id}\n"
-            f"- course_name: {course.name}\n"
-            f"- canvas_course_id: {course.canvas_course_id}\n"
-            "Use this local_course_id for course-specific actions; do not "
-            "ask the user for internal IDs."
+            "YOUR COURSES:\n"
+            f"{names}\n\n"
+            f"CURRENT COURSE FOR THIS CONVERSATION: {current_course_name or 'none set yet'}"
         )
 
     if current_proposed_action is not None:
@@ -254,6 +1411,21 @@ def _build_llm_message(
             "other field exactly as it is — do not drop description, "
             "points_possible, or any other already-answered field just "
             "because this message doesn't repeat it."
+        )
+
+    if loop_steps:
+        steps_text = "\n\n".join(
+            f'Step {i + 1} result ({step["action"]}):\n{json.dumps(step["result"])}'
+            for i, step in enumerate(loop_steps)
+        )
+        parts.append(
+            "You are mid-way through a multi-step turn — the steps below "
+            "already ran, in order, still for this same user request below "
+            "(not a new one). Decide the next action based on their "
+            "results: propose another read/resolver to gather more, a "
+            "write (via intent_preview) once you have everything it needs, "
+            "or respond/clarify if you're done or stuck. Do not repeat a "
+            "step you already have a result for below.\n\n" + steps_text
         )
 
     parts.append(f"User request: {message}")
@@ -275,28 +1447,21 @@ def _plain_text_response(raw_output: str) -> dict | None:
     return None
 
 
-def _coerce_direct_action_to_preview(action) -> dict:
-    """Turn a model-emitted Canvas action into a pending preview.
-
-    This is the server-side safety net for models that skip the required
-    intent_preview wrapper. Do not route this through execute_tool's
-    intent_preview case: that path can ask clarifying questions for malformed
-    model-authored previews, but the critical invariant here is simpler and
-    stronger: a direct action on a normal chat turn must never execute.
-    """
-    proposed_action = action.model_dump()
-    action_name = action.action
-
-    return {
-        "action": "intent_preview",
-        "intent_preview": True,
-        "summary": (
-            f"I'll {action_name.replace('_', ' ')} as described below. "
-            "Please review before confirming."
-        ),
-        "proposed_action": proposed_action,
-        "preview_metadata": {"action": action_name},
-    }
+def _step_budget_exhausted_response(loop_steps: list[dict]) -> dict:
+    """Terminal fallback when MAX_TURN_STEPS is reached mid-chain without
+    the model ever reaching a write/respond/clarify — surfaces whatever
+    the last step already found (its "summary", if it has one) rather
+    than silently discarding it, and asks the user to narrow the request
+    instead of erroring outright (nothing failed — the turn just needed
+    more steps than the budget allows)."""
+    message = "I wasn't able to finish this request within the allowed number of steps."
+    if loop_steps:
+        last_result = loop_steps[-1]["result"]
+        last_summary = last_result.get("summary") if isinstance(last_result, dict) else None
+        if last_summary:
+            message += f" Here's what I found so far: {last_summary}"
+    message += " Could you narrow down what you'd like me to do next?"
+    return {"action": "respond", "message": message}
 
 
 async def log_message(
@@ -360,14 +1525,13 @@ async def _sync_workflow_for_preview(
 ) -> None:
     """Creates or updates the Workflow row backing an intent_preview — the
     state machine handle_confirmed_action checks to guarantee an action
-    executes at most once. Covers every action, not just WRITE_ACTIONS:
-    the system prompt requires *every* action, read or write, to go
-    through intent_preview -> confirm, so scoping this to writes only
-    would 404 every read-action confirm (e.g. "what courses do I have?")
-    — a real regression caught during manual verification, not a
-    deliberate design choice. AuditLog writing in handle_confirmed_action
-    stays gated to WRITE_ACTIONS separately, since audit rows are only
-    ever about actual Canvas mutations.
+    executes at most once. Only ever called for `result.get("intent_preview")`
+    turns, which read actions no longer produce (READ_ACTIONS execute
+    immediately in handle_chat_message — see _run_tracked_read/
+    _run_fetch_submissions_chain and their own tool_call_logs tracking) —
+    in practice this is reached by write actions only now. AuditLog writing
+    in handle_confirmed_action stays gated to WRITE_ACTIONS separately,
+    since audit rows are only ever about actual Canvas mutations.
 
     Also backfills conversation.course_id from the proposed action the
     first time one is seen, since the client (e.g. the manual test
@@ -520,9 +1684,36 @@ def _truncate_history_content(content: str) -> str:
     return content[:HISTORY_MESSAGE_MAX_CHARS] + " …[truncated]"
 
 
+def _schema_for_prompt(schema_cls: type[BaseModel]) -> dict:
+    """The model never supplies local_course_id itself — the app always
+    injects the real one server-side once a course_name resolves (see
+    COURSE RESOLUTION below and _inject_course_into_envelope). Rendering
+    it here as a required integer field directly contradicts that prose
+    instruction: a model facing "the schema says required int" vs. "never
+    output an ID" has to guess which one to follow, and a smaller/weaker
+    model has been observed resolving that tension by fabricating a
+    plausible-looking ID or by dropping some other required field
+    entirely instead. Excluding it from what's rendered removes the
+    contradiction; execute_tool/_inject_course_into_envelope still treat
+    it as a real required field at injection/validation time — this only
+    changes what the model itself is told to produce. Builds a new dict
+    rather than mutating model_json_schema()'s return value, in case
+    Pydantic ever shares/caches that object elsewhere."""
+    schema = schema_cls.model_json_schema()
+    properties = {k: v for k, v in schema.get("properties", {}).items() if k != "local_course_id"}
+    result = {**schema, "properties": properties}
+    if "required" in schema:
+        required = [f for f in schema["required"] if f != "local_course_id"]
+        if required:
+            result["required"] = required
+        else:
+            result.pop("required", None)
+    return result
+
+
 def build_system_prompt(has_canvas_token: bool = True) -> str:
     tool_list = "\n".join(
-        f"- {name}: {schema.model_json_schema()}"
+        f"- {name}: {_schema_for_prompt(schema)}"
         for name, schema in ACTION_SCHEMAS.items()
         if name not in {"out_of_scope", "clarify", "intent_preview", "respond"}
     )
@@ -563,9 +1754,9 @@ Only ask about a field that is REQUIRED by that action's schema (see
 AVAILABLE ACTIONS) and that the user did not give you, directly or
 earlier in CONVERSATION HISTORY. Do not ask about optional fields, and
 do not ask about anything that isn't literally one of that action's
-fields — e.g. fetch_submissions only needs local_course_id and
-assignment_id, so never ask what format, detail level, or extra info
-the user wants to see. If every required field is known, propose the
+fields — e.g. fetch_submissions only needs a course and an assignment,
+so never ask what format, detail level, or extra info the user wants to
+see. If every required field is known, propose the
 action immediately; do not ask a question just to double-check. Never
 invent, guess, or write a placeholder value for a required field you
 don't have. To ask, respond ONLY with:
@@ -582,10 +1773,32 @@ If any required field is missing or was not stated by the user, use the
 AMBIGUITY CHECK format to ask for it. Never invent a placeholder value
 and never silently omit a required field from proposed_action.
 
-INTENT PREVIEW — if the request is clear enough to act on:
-Before executing any action, always show the user what you are about to do:
+INTENT PREVIEW — before executing a WRITE action:
+create_assignment, update_assignment, and send_message change real Canvas
+data, so the user must see and confirm exactly what will happen first:
 {"action": "intent_preview", "summary": "<plain English description>", "proposed_action": <dict>}
 The user will confirm, modify, or cancel from here.
+
+READ ACTIONS — execute immediately, no preview:
+fetch_courses, fetch_assignments, fetch_students, fetch_submissions,
+resolve_missing_submissions, find_assignment_by_submission_rate, and
+get_active_course never change any data, so propose them directly and
+plainly — do NOT wrap them in intent_preview:
+{"action": "fetch_assignments", "course_name": "<course>"}
+They run right away and their result is shown to the user in this same
+response, not a separate confirm step.
+
+MULTI-STEP REQUESTS: some requests need more than one step to satisfy in
+a single message — e.g. "message students missing assignment 4" needs
+resolve_missing_submissions before send_message can even be proposed;
+"push back the last assignment under 30% submissions by 3 days" needs
+find_assignment_by_submission_rate before update_assignment. Propose the
+first step you need; if it's resolve_missing_submissions or
+find_assignment_by_submission_rate, you'll be asked again, in the same
+turn, what to do next once you have its result — use that next turn to
+propose the write (or another read) the original request actually needed,
+instead of stopping at the first step's raw result. Only stop early with
+clarify/respond if something is genuinely missing or ambiguous.
 
 CONVERSATION HISTORY:
 Previous messages in this conversation are provided below. If this is
@@ -593,12 +1806,29 @@ a follow-up to a clarification question or a refinement of a previous
 plan, incorporate the user's feedback into the updated partial_plan
 before responding.
 
-COURSE CONTEXT MISMATCH:
-If the user's message names a course that does not match the injected
-course_name, always use the injected local_course_id anyway — never ask
-which course to use, and never treat this as an AMBIGUITY CHECK case.
-Add one short sentence noting the mismatch in your summary or response
-text instead.
+COURSE RESOLUTION:
+Every response must include a top-level "course_name" field naming
+exactly one course from YOUR COURSES (see the list injected with each
+message) — copy the name exactly as given, character for character.
+Never invent a course name, never output a course ID (local or Canvas),
+and never ask the user for one — they only know their courses by name,
+never by an internal ID.
+- If the message clearly names one of YOUR COURSES, even a partial name
+  (e.g. "Intro to Programming" for "COSC 111 - Introduction to
+  Programming with Java"), set course_name to that course's exact full
+  name and use it as the subject of this and future turns.
+- If a partial name could match more than one course in YOUR COURSES
+  (e.g. "Intro to Programming" when both COSC 111 and COSC 121 exist),
+  do not guess — use the AMBIGUITY CHECK format to ask which one,
+  listing the full names of the candidates.
+- If the message doesn't name a course, reuse CURRENT COURSE FOR THIS
+  CONVERSATION (also injected with each message) as course_name — do not
+  ask again just because this message didn't repeat the name.
+- If there is no CURRENT COURSE and the message doesn't name one either,
+  and the action you're proposing needs a course, ask which course using
+  the AMBIGUITY CHECK format.
+- out_of_scope and general "respond" answers that aren't about a
+  specific course may omit course_name entirely.
 
 META QUESTIONS — if the user asks what you can do, asks for help,
 or needs a natural language reply that isn't a Canvas tool call, respond with:
@@ -619,46 +1849,156 @@ only omit points_possible if the user explicitly says it's ungraded or
 has no point value. Never invent a value for a field the user didn't
 give you.
 
-RESOLVING AN ASSIGNMENT BY NAME:
-fetch_submissions and update_assignment both require assignment_id — the
-assignment's Canvas ID, not its title. Never invent, guess, or write a
-placeholder value (e.g. a description like "<the ID for Assignment 1>")
-into assignment_id, and never ask the user for it either — the user does
-not know or need to know internal Canvas IDs, the same as local_course_id.
-This is the one exception to the AMBIGUITY CHECK's "ask, don't guess"
-rule: if the user refers to an assignment by name and you do not already
-have its Canvas ID from this conversation (e.g. from a previous
-fetch_assignments or fetch_submissions result), your response must be
-intent_preview proposing fetch_assignments — that is always a complete,
-valid action on its own, and is the ONLY correct way to resolve a name to
-an ID. Do not respond with clarify to ask the user for an ID; clarify is
-only for missing information the user themselves would know (e.g. which
-course, or which student). Once you do have the assignment data, its
-Canvas ID is the "id" field, not "local_id". For update_assignment
-specifically, only include the fields the user actually wants changed —
-leave every other field out of proposed_action entirely, since anything
-omitted is preserved automatically.
+RESOLVING AN ASSIGNMENT FOR fetch_submissions:
+fetch_submissions needs an assignment, but you do not need to know its
+Canvas ID yourself. If you already have it from earlier in this
+conversation (the "id" field from a previous fetch_assignments or
+fetch_submissions result), pass it directly as assignment_id. Otherwise
+leave assignment_id unset and instead set assignment_reference to the
+user's own words for which assignment they mean — e.g. "the latest
+assignment", "Assignment 2", "the final project" — and propose
+fetch_submissions directly (not fetch_assignments, and not
+intent_preview). The app resolves assignment_reference to a real ID for
+you, the same way course_name is resolved to a course — never invent or
+guess a numeric assignment_id yourself.
+
+The result carries "assignment" (the resolved assignment's own
+assignment_id/assignment_name/due_at — always name it explicitly when you
+answer, e.g. "For Final Project, ..."), "counts" (submitted/missing/
+unsubmitted/late/graded/excused), and "pending_students" (missing +
+unsubmitted combined — this app's definition of "who hasn't submitted",
+matching resolve_missing_submissions). When answering "who hasn't
+submitted" or similar from a fetch_submissions result already in history,
+read pending_students/counts directly — do not recompute it yourself by
+scanning the raw "submissions" list.
+
+FINDING STUDENTS MISSING OR LATE ON A SUBMISSION:
+When the user wants to find or message students who have not submitted an
+assignment, or who submitted it LATE (e.g. "who's missing assignment 4",
+"remind students who haven't submitted the project", "who turned in
+assignment 2 late"), do not propose fetch_submissions and read through
+the results yourself — for a large class that puts every student into
+your context when you only need a count. Instead propose
+resolve_missing_submissions directly (same convention as
+fetch_submissions: not intent_preview, and assignment_id/
+assignment_reference resolve the assignment the same way):
+{"action": "resolve_missing_submissions", "course_name": "<course>", "assignment_reference": "<assignment>", "status": "missing"}
+Set status to "missing" (the default — not submitted at all) or "late"
+(submitted, but after the due date) — these are separate, mutually
+exclusive groups; never guess which one the user means if it's ambiguous
+("students behind on assignment 4" usually means missing; "students who
+turned it in late" means late). The result gives you a "count", a short
+"sample" of names, and a "handle" string — never the full list. To
+message everyone in that resolved set, propose send_message with
+recipient_handle set to that exact handle string, copied verbatim from
+the result — never invent one, and never build recipient_directives out
+of the "sample" names instead, that's only a preview excerpt, not the
+full set.
+
+FINDING AN ASSIGNMENT BY SUBMISSION RATE:
+When the user describes an assignment by a submission-rate criterion
+instead of by name (e.g. "the last assignment with fewer than 30%
+submissions", "the assignment more than half the class has turned in"),
+do not propose fetch_submissions per assignment and compute this yourself
+— that dumps every student's data into your context once per assignment.
+Instead propose find_assignment_by_submission_rate directly (same
+convention as resolve_missing_submissions: not intent_preview):
+{"action": "find_assignment_by_submission_rate", "course_name": "<course>", "comparator": "below", "threshold_percent": 30}
+comparator is "below" for "fewer than X%" or "above" for "more than X%";
+threshold_percent is a plain number like 30, never a fraction like 0.3.
+The app scans every assignment's real submission data server-side and
+picks the one with the latest due date among matches — "matched" is false
+with no assignment_id when nothing qualifies, in which case say so plainly
+rather than guessing. When it matches, the result's "assignment_id" and
+"due_date" are real values from this course, safe to use directly in a
+follow-up update_assignment turn — the same as any other id you already
+have from earlier in this conversation.
+
+RESOLVING AN ASSIGNMENT FOR update_assignment:
+update_assignment needs an exact Canvas assignment_id, but — like
+fetch_submissions — you do not need to know it yourself. If you already
+have it from earlier in this conversation (the "id" field from a
+previous fetch_assignments/fetch_submissions result, or "assignment_id"
+from find_assignment_by_submission_rate), pass it directly as
+assignment_id and propose intent_preview wrapping update_assignment as
+usual — the preview must show precisely what will change. Otherwise leave
+assignment_id unset and instead set assignment_reference to the user's
+own words for which assignment they mean — e.g. "the final exam",
+"assignment 1", "the midterm" — and propose update_assignment directly
+(not fetch_assignments, and not intent_preview), together with whichever
+fields the user wants changed. The app resolves assignment_reference to a
+real ID for you and builds the preview in this same turn — never invent
+or guess a numeric assignment_id yourself. Do not respond with clarify to
+ask the user for an ID — clarify is only for information the user
+themselves would know (e.g. which course, or which student); an
+unresolvable assignment_reference is handled for you automatically. Only
+include the fields the user actually wants changed — leave every other
+field out of proposed_action entirely, since anything omitted is
+preserved automatically.
 
 MESSAGING STUDENTS:
-send_message can either post a public class announcement (when
-recipient_canvas_user_ids is omitted) or send a private Canvas conversation
-to specific students (when recipient_canvas_user_ids is provided) — these
-have very different audiences, so never guess which one the user means.
-If the user refers to specific students (e.g. "them", "the late students",
-a named student) — including a reference to a group from earlier in this
-conversation, such as a previous fetch_students/fetch_submissions result —
-you must resolve and include their exact Canvas user IDs in
-recipient_canvas_user_ids. If you do not already have those IDs from this
-conversation, propose fetch_students or fetch_submissions first instead of
-guessing; never fall back to omitting recipient_canvas_user_ids (which
-posts a public announcement to the entire class) just because you don't
-have the IDs yet — that silently sends the message to a far larger
-audience than the user asked for. Always require local_course_id. subject
-and body are both required and must be the user's actual words — if the
-user hasn't told you what the message should say, use the AMBIGUITY CHECK
-above and ask for it; do not invent wording or write a placeholder. The
-user can ask you to revise the draft before confirming — treat that like
-any other follow-up refinement.
+send_message can post a public class announcement, send a private Canvas
+message to specific students, or both in the same turn — these have very
+different audiences, so never guess which one the user means.
+
+If it's genuinely unclear whether the user wants a private message to
+specific people or a public announcement (e.g. "message my students" with
+no other detail, and you don't already know), ask via clarify using exactly
+this framing: reply with the student name(s) to send this privately to
+them, or reply "skip"/"continue" (or leave it blank) to post it as a public
+announcement to the whole class instead. Put whatever subject/body/course
+you already have into partial_plan. On the next turn, read the user's
+answer yourself the same way you read any other message — names mean
+recipient_directives (below), skip/continue/empty means an announcement
+(propose send_message with no recipient fields set, same as today).
+
+PRIVATE MESSAGE TO NAMED STUDENTS: if the user names specific people —
+directly, or via a reference to a group from earlier in this conversation
+such as a previous fetch_students/fetch_submissions result — and you do
+not already have their exact Canvas IDs, set recipient_directives: one
+entry per intended recipient, each with student_reference (the user's own
+words for that person, copied verbatim, never invented) and body (the
+message meant for them). Copy body verbatim across every entry that shares
+one message; give entries distinct body text only when the user actually
+asked for different wording per person. The app resolves each
+student_reference to a real Canvas ID server-side and groups identical
+messages together for you — never invent or guess a numeric ID yourself,
+and never fall back to a plain announcement just because you don't have the
+IDs yet, that silently sends to a far larger audience than asked for.
+
+If you already have a student's exact Canvas ID from earlier in this
+conversation, you may set recipient_canvas_user_ids directly instead
+(skips resolution) — but never mix a guessed ID into that list.
+
+MESSAGING STUDENTS MISSING OR LATE ON A SUBMISSION: if the user wants to
+message students missing or late on a specific assignment, use
+recipient_handle (see FINDING STUDENTS MISSING OR LATE ON A SUBMISSION
+above) — first propose resolve_missing_submissions (with the right
+status) to get a handle, then once you have it from that turn's result,
+propose send_message with recipient_handle set to that handle. Never
+guess how many people are in the set or build recipient_directives from
+its "sample" names.
+
+BROADCASTING PRIVATELY TO THE WHOLE CLASS: if the user wants a private
+message sent to every student — not a public announcement — set
+broadcast_to_all_students: true and leave recipient_canvas_user_ids /
+recipient_directives unset; the app resolves the full active roster for
+you. This is also how to handle a follow-up like "actually send that
+announcement as a message to everyone instead": re-propose send_message
+with broadcast_to_all_students: true, dropping the announcement framing.
+
+ANNOUNCEMENT PLUS TARGETED MESSAGES: if the user wants both a public
+announcement AND a private message to specific people in the same turn,
+set also_announce_to_class: true alongside recipient_directives (or
+broadcast_to_all_students, or recipient_handle) — the top-level
+subject/body becomes the announcement text.
+
+This action is course-scoped like any other (see COURSE RESOLUTION above).
+subject and body are both required and must be the user's actual words —
+if the user hasn't told you what the message should say, use the AMBIGUITY
+CHECK above and ask for it; do not invent wording or write a placeholder.
+The user can ask you to revise the draft before confirming — treat that
+like any other follow-up refinement.
 
 AVAILABLE ACTIONS (only used inside proposed_action):
 """ + tool_list
@@ -671,6 +2011,7 @@ async def handle_chat_message(
     local_course_id: int | None,
     conversation_id: int | None,
     pending_message_id: int | None = None,
+    model_settings: dict | None = None,
 ) -> tuple[Conversation, dict, bool]:
     """Main chat handler. Two distinct flows:
 
@@ -682,27 +2023,111 @@ async def handle_chat_message(
       same as normal, but if the result is an intent_preview, the old
       preview message is overwritten in place rather than a new row
       being appended. This keeps conversation history clean so the LLM
-      sees only the latest agreed plan on subsequent turns."""
+      sees only the latest agreed plan on subsequent turns. Modify turns
+      only ever apply to write actions now — a read never produces a
+      pending preview to revise.
 
-    course_context = await _resolve_chat_course_context(
-        db, user, message, local_course_id, conversation_id
-    )
-    resolved_local_course_id = course_context.id if course_context else local_course_id
-    conversation = await get_or_create_conversation(
-        db, user, conversation_id, resolved_local_course_id
-    )
-    if course_context is None and conversation.course_id is not None:
-        course_context = await db.scalar(
-            select(Course).where(
-                Course.id == conversation.course_id,
-                Course.instructor_id == user.id,
-            )
-        )
-    if conversation.course_id is None and course_context is not None:
-        conversation.course_id = course_context.id
+    Action execution: write actions (create_assignment, update_assignment,
+    send_message) are still gated behind intent_preview -> confirm exactly
+    as before. Read actions (READ_ACTIONS) execute immediately within this
+    same call — no preview, no confirm click — since they can never mutate
+    Canvas state; each tracked read call is logged in tool_call_logs
+    (see _run_tracked_read). fetch_submissions additionally resolves a
+    missing/unverified assignment_id server-side before executing, chaining
+    an internal fetch_assignments call and a small dedicated LLM call when
+    needed (see _run_fetch_submissions_chain) — still all within this one
+    request, so a question like "show me submissions for the latest
+    assignment" never needs a second user turn.
+
+    Multi-step turns: an ordinary single read (fetch_assignments,
+    fetch_students, ...) still terminates the turn on its own first
+    result, exactly as always. But a _CHAINABLE_READ_ACTIONS result
+    (resolve_missing_submissions, find_assignment_by_submission_rate) is
+    fed back for another LLM decision within the SAME turn — see the step
+    loop below — bounded by MAX_TURN_STEPS, so e.g. "message students
+    missing assignment 4" can resolve the recipient set AND propose the
+    send_message in one turn instead of needing a follow-up message. Once
+    genuinely mid-chain (past the first step), any further read continues
+    the same way. A modify turn never enters this loop at all — revising
+    an already-proposed write is a single edit, not a multi-step plan.
+
+    Course resolution: local_course_id here is only ever an explicit
+    client-supplied value (the "set active course" button). Every other
+    way a course enters this turn — the user naming one in the message,
+    or answering a clarify question — is resolved by the LLM itself
+    (COURSE RESOLUTION in build_system_prompt) against real course names,
+    never a numeric ID; the app matches that name back to a real course
+    only after the LLM call returns (see below).
+
+    Course data (canvas_course_names) is never fetched from Canvas live,
+    in-band, as part of handling a message — this turn only ever reads
+    it. Keeping it fresh is a decoupled background concern: a periodic
+    sweep (see app.main's lifespan) and a refresh right after a
+    successful write (handle_confirmed_action) — both live in
+    app.services.canvas. A chat turn is a pure local-DB read for course
+    names, so a slow/broken Canvas connection can never fail a chat
+    request that doesn't even need fresh course data."""
+
+    conversation = await get_or_create_conversation(db, user, conversation_id, local_course_id)
     user_msg = await log_message(db, conversation, role="user", content=message)
-
+    course_names = await _get_course_names_for_user(db, user)
     history = await _get_recent_messages(db, conversation.id)
+
+    # Built once per turn and threaded into every resolver call below
+    # (_resolve_course_switch, _resolve_assignment_reference via
+    # _resolve_course_and_assignment, _resolve_students_via_llm via
+    # _resolve_recipient_directives) so a user's chosen provider/model
+    # (AI Models settings page / in-chat switcher) governs the whole
+    # turn consistently, not just the main call. Falls back to
+    # settings.DEFAULT_LLM_PROVIDER when the client didn't send one.
+    try:
+        adapter = get_llm_adapter(model_settings or {"provider": settings.DEFAULT_LLM_PROVIDER})
+    except (KeyError, ValueError) as e:
+        # An unknown provider id, or a provider (openai/anthropic/custom)
+        # that needs a key the server hasn't configured and the client
+        # never supplies — surface as a normal chat error rather than a
+        # raw 500, same as any other failure this function returns.
+        await log_message(db, conversation, role="assistant", content=f"LLM provider error: {e}")
+        await db.commit()
+        return conversation, {
+            "error": "The selected AI model isn't available right now. Try a different one in Settings.",
+        }, True
+
+    # Pre-resolve a course switch from the raw message alone, before the
+    # main prompt is built for this turn — see _resolve_course_switch's
+    # docstring for why this has to happen here, not after the main LLM
+    # call. Gated on actually having prior history, not just
+    # conversation.course_id being set: a conversation's first-ever turn
+    # can already have course_id set (seeded from the "set active course"
+    # button or the persisted UserPreference fallback — see
+    # get_or_create_conversation) with nothing yet said in it, so there is
+    # no stale framing/history to leak and nothing worth paying an extra
+    # call for. Also skipped for a modify turn (pending_message_id set —
+    # that's revising an existing proposed action tied to this
+    # conversation, not a fresh request). Also skipped when local_course_id
+    # is explicitly given (the "set active course" button, sent alongside
+    # this same message) — that explicit selection is a stronger,
+    # deliberate signal than a course name the message happens to mention,
+    # and wins outright for this turn rather than being silently
+    # overridden by this resolver.
+    if (
+        pending_message_id is None
+        and local_course_id is None
+        and conversation.course_id is not None
+        and history
+    ):
+        switched = await _resolve_course_switch(course_names, conversation.course_name, message, adapter)
+        if (
+            switched is not None
+            and switched.local_course_id is not None
+            and switched.local_course_id != conversation.course_id
+        ):
+            target = await _find_or_fork_conversation_for_course(
+                db, user, switched.local_course_id, switched.name
+            )
+            user_msg.conversation_id = target.id
+            conversation = target
+            history = await _get_recent_messages(db, conversation.id)
 
     stored_preview = None
     current_proposed_action = None
@@ -714,81 +2139,305 @@ async def handle_chat_message(
             current_proposed_action = stored_preview.get("proposed_action")
 
     system_prompt = build_system_prompt(has_canvas_token=bool(user.canvas_connections))
-    adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
 
-    try:
-        raw_output = await asyncio.wait_for(
-            adapter.generate(
-                system_prompt,
-                _build_llm_message(message, course_context, current_proposed_action),
-                history=history,
+    # Step loop: lets the model chain a bounded sequence of read/resolver
+    # decisions within this ONE user turn, instead of every read
+    # terminating the turn immediately. Only a _CHAINABLE_READ_ACTIONS
+    # result (or, once already mid-chain at step > 1, any read result)
+    # continues the loop — an ordinary single read at step 1 (e.g. "show
+    # me my assignments") breaks immediately below exactly as it always
+    # has, so every existing single-step/two-step (chain) case is
+    # unaffected: this is a strict superset of prior behavior, not a
+    # replacement for it. A modify turn (pending_message_id set) never
+    # loops at all — is_chainable_step is unconditionally False for one —
+    # since revising an already-proposed write is a single edit, not a
+    # multi-step plan. loop_steps accumulates each step's result so later
+    # steps' prompts (_build_llm_message) can see everything gathered so
+    # far in this same turn, distinct from `history` (prior turns only).
+    loop_steps: list[dict] = []
+    result: dict = {}
+
+    for step in range(1, MAX_TURN_STEPS + 1):
+        try:
+            raw_output = await asyncio.wait_for(
+                adapter.generate(
+                    system_prompt,
+                    _build_llm_message(
+                        message, course_names, conversation.course_name,
+                        current_proposed_action, loop_steps,
+                    ),
+                    history=history,
+                    timeout=LLM_TIMEOUT_SECONDS,
+                ),
                 timeout=LLM_TIMEOUT_SECONDS,
-            ),
-            timeout=LLM_TIMEOUT_SECONDS,
-        )
-    except TimeoutError:
-        log_detail = f"LLM request timed out after {LLM_TIMEOUT_SECONDS}s"
-        await log_message(db, conversation, role="assistant", content=log_detail)
-        await db.commit()
-        return (
-            conversation,
-            {"error": "The assistant took too long to respond. Please try again."},
-            True,
-        )
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 429:
-            log_detail = "Groq rate limit hit"
-            user_message = "The assistant is temporarily rate-limited. Please wait a moment and try again."
-        else:
-            log_detail = f"LLM API error: {e.response.status_code}"
-            user_message = "The assistant service returned an error. Please try again shortly."
-        await log_message(db, conversation, role="assistant", content=log_detail)
-        await db.commit()
-        return conversation, {"error": user_message}, True
-    except Exception as e:
-        log_detail = f"LLM request failed: {type(e).__name__}: {e}"
-        await log_message(db, conversation, role="assistant", content=log_detail)
-        await db.commit()
-        return (
-            conversation,
-            {"error": "The assistant is currently unavailable. Please try again shortly."},
-            True,
-        )
+            )
+        except TimeoutError:
+            log_detail = f"LLM request timed out after {LLM_TIMEOUT_SECONDS}s"
+            await log_message(db, conversation, role="assistant", content=log_detail)
+            await db.commit()
+            return (
+                conversation,
+                {"error": "The assistant took too long to respond. Please try again."},
+                True,
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                log_detail = "LLM provider rate limit hit"
+                user_message = "The assistant is temporarily rate-limited. Please wait a moment and try again."
+            else:
+                log_detail = f"LLM API error: {e.response.status_code}"
+                user_message = "The assistant service returned an error. Please try again shortly."
+            await log_message(db, conversation, role="assistant", content=log_detail)
+            await db.commit()
+            return conversation, {"error": user_message}, True
+        except Exception as e:
+            log_detail = f"LLM request failed: {type(e).__name__}: {e}"
+            await log_message(db, conversation, role="assistant", content=log_detail)
+            await db.commit()
+            return (
+                conversation,
+                {"error": "The assistant is currently unavailable. Please try again shortly."},
+                True,
+            )
 
-    try:
-        text_reply = _plain_text_response(raw_output)
-        if text_reply is not None:
-            result = text_reply
-        else:
+        # Course resolution: pull the model's own course_name call-out out of
+        # the raw response (same <think>-stripping + brace-scanning helper
+        # dispatcher.py's parse_action uses, so this works uniformly whether
+        # the model answered with clarify/intent_preview/a raw action, or
+        # plain prose with no JSON at all — in which case there's nothing to
+        # extract and course_name_from_llm stays None). This never touches an
+        # ID: it matches the model's name against canvas_course_names and
+        # only reads the local_course_id that lookup already carries.
+        try:
+            parsed_envelope = json.loads(extract_json_object(raw_output))
+        except json.JSONDecodeError:
+            parsed_envelope = None
+        course_name_from_llm = parsed_envelope.get("course_name") if isinstance(parsed_envelope, dict) else None
+
+        resolved_local_course_id = conversation.course_id
+        matched = _match_course_name(course_names, course_name_from_llm)
+        if matched is not None:
+            matched_local_course_id = matched.local_course_id
+            if matched_local_course_id is None:
+                # Defensive fallback — shouldn't happen, sync_courses_if_stale
+                # always populates this from the Course row it upserts in the
+                # same transaction, but don't let a null here silently break
+                # course resolution.
+                matched_local_course_id = await db.scalar(
+                    select(Course.id).where(
+                        Course.canvas_course_id == matched.canvas_course_id,
+                        Course.instructor_id == user.id,
+                    )
+                )
+            if matched_local_course_id is not None:
+                if conversation.course_id is None or not history:
+                    # This conversation's first course resolution, OR a
+                    # preference-seeded new conversation
+                    # (get_or_create_conversation) that hasn't accumulated
+                    # any real prior-turn history yet — either way there's
+                    # nothing to preserve by forking, so mutate in place.
+                    # Without the `not history` half: a brand-new
+                    # conversation gets course_id seeded from the user's
+                    # active-course preference immediately, even before
+                    # anything is said in it; if its first message then
+                    # named a DIFFERENT course, the fork below would
+                    # re-parent that only message away, leaving the
+                    # preference-seeded conversation permanently empty and
+                    # orphaned.
+                    conversation.course_id = matched_local_course_id
+                    conversation.course_name = matched.name
+                    resolved_local_course_id = matched_local_course_id
+                elif (
+                    pending_message_id is None
+                    and local_course_id is None
+                    and matched_local_course_id != conversation.course_id
+                ):
+                    # Switching away from a course this conversation
+                    # already had, with real prior activity — route to a
+                    # different conversation (reused or forked) instead of
+                    # mutating this one, and re-parent this turn's user
+                    # message onto it.
+                    #
+                    # Never on a modify turn (pending_message_id set):
+                    # update_message_content further below looks that
+                    # message up scoped to conversation.id, so forking
+                    # here would silently break "revise this pending
+                    # action" — the message no longer exists in the new
+                    # conversation.id, raising an unhandled
+                    # ToolExecutionError instead of applying the revision.
+                    #
+                    # Never when the client just explicitly set the active
+                    # course this same turn either (local_course_id set,
+                    # the "set active course" button) — an explicit click
+                    # is a stronger, more deliberate signal than a course
+                    # name the model merely echoed from message text, and
+                    # wins outright rather than being silently overridden.
+                    target = await _find_or_fork_conversation_for_course(
+                        db, user, matched_local_course_id, matched.name
+                    )
+                    user_msg.conversation_id = target.id
+                    conversation = target
+                    history = await _get_recent_messages(db, conversation.id)
+                    resolved_local_course_id = matched_local_course_id
+                # else: either the model just confirmed the conversation's
+                # own course (nothing to do), or one of the guards above
+                # blocked a would-be switch — resolved_local_course_id
+                # stays pinned to conversation.course_id (its default,
+                # set above) either way.
+
+        # Inject the resolved course id (or downgrade to a clarify envelope)
+        # directly into the parsed JSON, before parse_action's strict schema
+        # validation ever sees it — see _inject_course_into_envelope. Only
+        # when parsing succeeded as a dict; a plain-text/malformed reply has
+        # nothing to inject into and falls through to the existing
+        # _plain_text_response/parse_action handling on the original raw_output.
+        if isinstance(parsed_envelope, dict):
+            parsed_envelope = _inject_course_into_envelope(parsed_envelope, resolved_local_course_id)
+            raw_output = json.dumps(parsed_envelope)
+
+        try:
+            text_reply = _plain_text_response(raw_output)
+            if text_reply is not None:
+                result = text_reply
+                break
             action = parse_action(raw_output)
-            if action.action not in NORMAL_TURN_ALLOWED_ACTIONS:
-                # The model named a Canvas action directly (read or write)
-                # instead of wrapping it in intent_preview like the system
-                # prompt asks. Not every model follows that instruction
-                # reliably (smaller local models especially, and even
-                # capable ones on read actions — observed live skipping
-                # straight to a raw get_active_course/fetch_assignments
-                # call with no preview shown at all). Auto-wrapping into a
+            needs_unwrap = False
+            if action.action == "intent_preview":
+                proposed = action.proposed_action
+                proposed_name = proposed.get("action")
+                needs_unwrap = proposed_name in READ_ACTIONS or (
+                    proposed_name == "send_message"
+                    and bool(
+                        proposed.get("recipient_directives")
+                        or proposed.get("broadcast_to_all_students")
+                        or proposed.get("recipient_handle")
+                    )
+                ) or (
+                    proposed_name == "update_assignment"
+                    and proposed.get("assignment_id") is None
+                    and bool(proposed.get("assignment_reference"))
+                )
+            if needs_unwrap:
+                # Defensive: the model wrapped a read, a send_message that
+                # still needs server-side recipient resolution, or an
+                # update_assignment that still needs server-side
+                # assignment resolution, in intent_preview despite the
+                # system prompt saying not to — each produces its own
+                # intent_preview internally (a read never does at all; a
+                # directive-/handle-bearing send_message and a
+                # reference-bearing update_assignment do, via their own
+                # chains below) — so unwrap and dispatch directly instead
+                # of showing a pointless double preview.
+                action = parse_action(json.dumps(action.proposed_action))
+
+            if action.action == "fetch_submissions":
+                # Needs a real Canvas assignment_id, which the model is
+                # never allowed to invent — resolve it server-side (chains
+                # an internal fetch_assignments call when needed) rather
+                # than executing directly.
+                result = await _run_fetch_submissions_chain(
+                    db, user, conversation, user_msg, action, message, adapter
+                )
+            elif action.action == "resolve_missing_submissions":
+                # Same assignment-resolution need as fetch_submissions,
+                # plus server-side filtering down to a compact
+                # {count, sample, handle} summary — never the raw list.
+                result = await _run_resolve_missing_submissions_chain(
+                    db, user, conversation, user_msg, action, message, adapter
+                )
+            elif action.action == "find_assignment_by_submission_rate":
+                # Scans every assignment's real submission data server-side
+                # to resolve a single assignment by a computed criterion
+                # (e.g. "fewer than 30% submitted") — never trusts the
+                # model's own judgment over raw data it was never shown.
+                result = await _run_find_assignment_by_submission_rate_chain(
+                    db, user, conversation, user_msg, action, message
+                )
+            elif action.action == "update_assignment" and action.assignment_id is None and action.assignment_reference:
+                # Same assignment-resolution need as fetch_submissions —
+                # resolve the reference server-side and build the preview
+                # directly, in this same turn, rather than making the user
+                # ask again once a fetch_assignments result is in history.
+                result = await _run_update_assignment_chain(
+                    db, user, conversation, user_msg, action, message, adapter
+                )
+            elif action.action == "send_message" and (
+                action.recipient_directives or action.broadcast_to_all_students or action.recipient_handle
+            ):
+                # Named recipients without known Canvas IDs, a whole-roster
+                # private broadcast, or a server-computed recipient handle
+                # from an earlier resolve_missing_submissions turn —
+                # resolve server-side (never trust the model with a raw
+                # ID) and build one preview per distinct message group,
+                # rather than executing directly or auto-wrapping into a
+                # single intent_preview.
+                result = await _run_send_message_chain(
+                    db, user, conversation, user_msg, action, message, pending_message_id, adapter
+                )
+            elif action.action in READ_ACTIONS:
+                # Every other read executes immediately — no preview, no
+                # confirm click, nothing to review before a call that can
+                # never mutate Canvas state. get_active_course is a local
+                # UserPreference read with no Canvas call and nothing that
+                # can meaningfully fail, so it's the one read left
+                # untracked (see _run_tracked_read's docstring).
+                if action.action == "get_active_course":
+                    result = await execute_tool(db, user, action)
+                else:
+                    result = await _run_tracked_read(
+                        db, user, conversation, user_msg.id, action.action,
+                        action.model_dump(), execute_tool(db, user, action),
+                    )
+            elif action.action not in NORMAL_TURN_ALLOWED_ACTIONS:
+                # The model named a write action directly instead of
+                # wrapping it in intent_preview like the system prompt
+                # asks. Not every model follows that instruction reliably
+                # (smaller local models especially). Auto-wrapping into a
                 # real intent_preview here, rather than rejecting outright,
                 # gives the user the same confirmation step they should
                 # have gotten without losing the turn to an error message.
-                result = _coerce_direct_action_to_preview(action)
+                action = IntentPreviewAction(
+                    summary=f"I'll {action.action.replace('_', ' ')} as described below. Please review before confirming.",
+                    proposed_action=action.model_dump(),
+                )
+                result = await execute_tool(db, user, action)
             else:
                 result = await execute_tool(db, user, action)
-    except ToolExecutionError as e:
-        await log_message(db, conversation, role="assistant", content=e.log_detail)
-        await db.commit()
-        return conversation, {"error": e.user_message}, True
-    except CanvasTokenRequiredError as e:
-        await log_message(db, conversation, role="assistant", content=str(e.detail))
-        await db.commit()
-        return conversation, {"error": CANVAS_TOKEN_REQUIRED_MESSAGE, "requires_canvas_token": True}, True
-    except HTTPException as e:
-        detail = e.detail if isinstance(e.detail, str) else str(e.detail)
-        error_detail = f"HTTPException {e.status_code}: {detail}"
-        await log_message(db, conversation, role="assistant", content=error_detail)
-        await db.commit()
-        return conversation, {"error": detail}, True
+        except ToolExecutionError as e:
+            await log_message(db, conversation, role="assistant", content=e.log_detail)
+            await db.commit()
+            return conversation, {"error": e.user_message}, True
+        except CanvasTokenRequiredError as e:
+            await log_message(db, conversation, role="assistant", content=str(e.detail))
+            await db.commit()
+            return conversation, {"error": CANVAS_TOKEN_REQUIRED_MESSAGE, "requires_canvas_token": True}, True
+        except HTTPException as e:
+            detail = e.detail if isinstance(e.detail, str) else str(e.detail)
+            error_detail = f"HTTPException {e.status_code}: {detail}"
+            await log_message(db, conversation, role="assistant", content=error_detail)
+            await db.commit()
+            return conversation, {"error": detail}, True
+
+        # A clarify result is always terminal regardless of action name —
+        # it means the model needs the USER to answer something, so
+        # calling the LLM again immediately would be pointless. Otherwise,
+        # a _CHAINABLE_READ_ACTIONS result always continues (that's the
+        # entire point of those actions — see MAX_TURN_STEPS' docstring);
+        # any other read only continues once already mid-chain (step > 1),
+        # so a lone ordinary read at step 1 is untouched from before this
+        # loop existed.
+        is_chainable_step = (
+            pending_message_id is None
+            and action.action in READ_ACTIONS
+            and not result.get("clarify")
+            and (action.action in _CHAINABLE_READ_ACTIONS or step > 1)
+        )
+        if not is_chainable_step:
+            break
+        loop_steps.append({"action": action.action, "result": result})
+        if step >= MAX_TURN_STEPS:
+            result = _step_budget_exhausted_response(loop_steps)
+            break
 
     # Log the assistant result — if this is a modify turn superseding a
     # previous intent_preview, overwrite that message in place rather than
@@ -828,6 +2477,16 @@ async def handle_chat_message(
             db,
             conversation.id,
             pending_message_id,
+        )
+
+    # A grouped send_message turn (_run_send_message_chain) may have
+    # resolved to more than one distinct message — group 0 was just
+    # persisted above through the ordinary single-preview path unchanged;
+    # every remaining group still needs its own Message + Workflow row.
+    extra_groups = result.pop("_extra_groups", None)
+    if extra_groups:
+        result["additional_previews"] = await _persist_additional_message_previews(
+            db, conversation, user, user_msg, message, extra_groups,
         )
 
     await db.commit()
@@ -1035,6 +2694,43 @@ async def handle_confirmed_action(
         )
 
     await db.commit()
+
+    # Opportunistic course-name refresh: a write just happened, so this is
+    # a natural moment to also refresh canvas_course_names for the
+    # connection it touched (the other trigger is the periodic sweep in
+    # app.main's lifespan — chat turns themselves never call Canvas for
+    # this, see handle_chat_message). Best-effort, and run in an ISOLATED
+    # session — never the shared `db` this function returns objects from
+    # (mirrors run_course_sync_sweep's own fix for the identical bug, see
+    # its docstring in services/canvas.py). AsyncSession.rollback() always
+    # expires every object already loaded in that session, not just the
+    # ones touched by the failed operation, regardless of
+    # expire_on_commit. Rolling back the shared `db` here would expire
+    # `conversation` right before this function returns it, and the
+    # caller's very next plain attribute read (routers/chat.py's
+    # `conversation.id`) would raise MissingGreenlet — turning an
+    # already-successful confirmed write into a 500.
+    if workflow.action_name in WRITE_ACTIONS and workflow.course_id is not None:
+        async with AsyncSessionLocal() as sync_db:
+            course = await sync_db.scalar(select(Course).where(Course.id == workflow.course_id))
+            sync_user = await sync_db.scalar(
+                select(User).where(User.id == user.id).options(selectinload(User.canvas_connections))
+            )
+            if course is not None and sync_user is not None:
+                connection = next(
+                    (c for c in sync_user.canvas_connections if canvas_urls_equivalent(c.canvas_url, course.canvas_url)),
+                    None,
+                )
+                if connection is not None:
+                    try:
+                        await sync_courses_if_stale(sync_user, connection, sync_db)
+                    except Exception:
+                        logger.warning(
+                            "post-write sync_courses_if_stale failed for canvas_connection_id=%s user_id=%s",
+                            connection.id, user.id, exc_info=True,
+                        )
+                        await sync_db.rollback()
+
     return conversation, result, False
 
 
@@ -1129,6 +2825,10 @@ async def handle_cancelled_action(
 async def get_conversation_with_messages(
     db: AsyncSession, user: User, conversation_id: int
 ) -> Conversation | None:
+    """Eager-loads workflows alongside messages — see WorkflowStatus in
+    schemas/chat.py for why: the router builds an authoritative
+    preview-status map from conversation.workflows for the frontend,
+    instead of leaving it to reconstruct status from transcript text."""
     return await db.scalar(
         select(Conversation)
         .where(
