@@ -15,8 +15,6 @@ from app.integrations.canvas import (
     delete_assignment,
     fetch_assignment,
     fetch_assignments,
-    fetch_conversation_detail,
-    fetch_course_conversations,
     fetch_courses,
     fetch_submissions,
     fetch_user_profile,
@@ -32,8 +30,6 @@ from app.schemas.canvas import (
     AssignmentCreate,
     AssignmentResponse,
     AssignmentUpdate,
-    ConversationSummary,
-    ConversationThreadResponse,
     CourseResponse,
     MessageSendResult,
     SubmissionResponse,
@@ -281,26 +277,6 @@ async def get_assignments(
         })
         for item in data
     ]
-
-
-async def get_conversations(
-    local_course_id: int, user: User, canvas_url: str | None, db: AsyncSession
-) -> list[ConversationSummary]:
-    """Read-through — no local persistence. Canvas conversations are
-    fetched live on every call, same as any other display-only view."""
-    course = await get_owned_course(local_course_id, user, canvas_url, db)
-    token = require_canvas_token(user, course.canvas_url)
-    data = await fetch_course_conversations(int(course.canvas_course_id), token, course.canvas_url)
-    return [ConversationSummary.model_validate(item) for item in data]
-
-
-async def get_conversation_thread(
-    local_course_id: int, conversation_id: int, user: User, canvas_url: str | None, db: AsyncSession
-) -> ConversationThreadResponse:
-    course = await get_owned_course(local_course_id, user, canvas_url, db)
-    token = require_canvas_token(user, course.canvas_url)
-    data = await fetch_conversation_detail(conversation_id, token, course.canvas_url)
-    return ConversationThreadResponse.model_validate(data)
 
 
 def _parse_dt(value: str | None) -> datetime | None:

@@ -96,51 +96,6 @@ class SubmissionResponse(BaseModel):
     graded_at: datetime | None = None
 
 
-class ConversationParticipant(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    id: int
-    name: str
-
-
-class ConversationSummary(BaseModel):
-    """One row in a course's Canvas conversation list — read-through, not
-    persisted locally (see get_conversations in services/canvas.py)."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    id: int
-    subject: str | None = None
-    workflow_state: str
-    last_message: str | None = None
-    last_message_at: datetime | None = None
-    message_count: int = 0
-    participants: list[ConversationParticipant] = Field(default_factory=list)
-
-
-class ThreadMessage(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-
-    id: int
-    author_id: int
-    body: str
-    created_at: datetime
-
-
-class ConversationThreadResponse(BaseModel):
-    """Full detail for one conversation, including every message in the
-    thread — Canvas returns this in a single call (see
-    fetch_conversation_detail in integrations/canvas.py)."""
-
-    model_config = ConfigDict(extra="ignore")
-
-    id: int
-    subject: str | None = None
-    workflow_state: str
-    participants: list[ConversationParticipant] = Field(default_factory=list)
-    messages: list[ThreadMessage] = Field(default_factory=list)
-
-
 class ActiveCourseSet(BaseModel):
     local_course_id: int
 
