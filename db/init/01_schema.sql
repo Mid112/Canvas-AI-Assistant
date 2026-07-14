@@ -355,3 +355,35 @@ CREATE TABLE system_settings (
     value       JSONB NOT NULL,
     updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ─────────────────────────────────────────────
+-- Schema Migrations
+-- Tracks which db/migrations/*.sql files have been applied — read and
+-- written by app/backend/app/core/migrations.py on every backend startup,
+-- so an existing database picks up a schema change automatically instead
+-- of crashing the first time a query touches a column/table that isn't
+-- there yet (Base.metadata.create_all() alone only creates missing
+-- tables, it never ALTERs an existing one). A database created fresh from
+-- this file already reflects every migration listed below directly, so
+-- they're pre-stamped here rather than left for the app to re-discover.
+-- Whenever a new migration file is added, add its filename to both this
+-- INSERT and the CREATE TABLE/ALTER TABLE it describes above.
+-- ─────────────────────────────────────────────
+CREATE TABLE schema_migrations (
+    filename    VARCHAR PRIMARY KEY,
+    applied_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO schema_migrations (filename) VALUES
+    ('002_remove_ta_role.sql'),
+    ('002_submission_status_and_grading.sql'),
+    ('003_rename_audit_logs_to_session.sql'),
+    ('004_workflow_auditlog_redesign.sql'),
+    ('005_assignment_description.sql'),
+    ('006_workflow_affected_resources.sql'),
+    ('007_audit_logs_allow_conversation_resource_type.sql'),
+    ('008_unstarted_backend_features.sql'),
+    ('009_assignment_unique_per_course.sql'),
+    ('010_workflow_schema_repair.sql'),
+    ('011_course_name_tracking.sql'),
+    ('012_tool_call_logs.sql');

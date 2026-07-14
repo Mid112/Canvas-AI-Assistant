@@ -12,6 +12,7 @@ import app.models  # noqa: F401 — registers all models with Base
 from app.config import settings
 from app.core.database import AsyncSessionLocal, Base, engine
 from app.core.limiter import limiter
+from app.core.migrations import run_pending_migrations
 from app.core.seeder import seed_admin
 from app.routers import admin, audit, auth, canvas, chat, history, message_templates, messages
 from app.services.canvas import run_course_sync_sweep
@@ -43,6 +44,12 @@ async def _course_sync_loop() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Catches an existing database up on any schema change
+    # Base.metadata.create_all() below can't handle on its own — it only
+    # creates missing tables, never ALTERs an existing one (see
+    # core/migrations.py for why this runs first, and what it deliberately
+    # never touches).
+    await run_pending_migrations(engine)
     # Create all tables on startup if they don't exist
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

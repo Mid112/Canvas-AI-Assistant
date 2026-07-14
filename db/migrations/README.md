@@ -2,7 +2,13 @@
 
 `db/init/01_schema.sql` is applied automatically on **fresh** database containers. It reflects the current schema only.
 
-If you have an **existing** local or shared database created before the `ta` role was removed, run the numbered migration scripts in order before relying on the updated schema. For local development, recreating the database (`docker compose down -v && docker compose up`) is also acceptable.
+**Existing databases catch up automatically.** `app/backend/app/core/migrations.py` runs on every backend startup: it applies any `db/migrations/*.sql` file not yet recorded in the `schema_migrations` table, in filename order. You don't need to do anything by hand after a `git pull` that adds a migration — just start the backend (`make reload` / `make dev`) and it applies itself. This exists because `Base.metadata.create_all()` (also run on startup) only creates tables that don't exist yet — it never `ALTER`s an existing one, so without this an existing database would crash the first time a query touched a column/table a migration added.
+
+This automatic runner **never touches migrations 002 through 010** — a few of them (`003`'s bare `RENAME`, `004`/`010`'s unconditional `DROP TABLE` before recreating) are not safe to run a second time, and `004`/`010` are outright destructive if they were. Only migrations from `011` onward — written to the idempotent convention below — are ever candidates to run unattended. This is never actually a gap in practice: any database that can run today's application code already reflects `002`-`010`'s cumulative effect one way or another, either because they were genuinely applied in order, or (the common case) because the database was created from a `db/init/01_schema.sql` snapshot that already baked their result in directly — that file is always a flat snapshot of the *current* schema, never a replay of history.
+
+**Adding a new migration:** write the new file as `NNN_description.sql`, following the `ADD COLUMN IF NOT EXISTS` / `CREATE TABLE IF NOT EXISTS` convention below so it's safe if the automatic runner ends up executing it more than once. Then update three places to match: this table, `db/init/01_schema.sql`'s table definitions (so a fresh database gets the same end state directly), and `db/init/01_schema.sql`'s `schema_migrations` baseline `INSERT` at the bottom of that file (so a fresh database doesn't also try to re-run it).
+
+If you have a genuinely ancient local database (created before the `ta` role was removed, i.e. before migration `002`), the automatic runner won't help — recreate it instead (`docker compose down -v && docker compose up`, or `make db-reset`).
 
 | Migration | Purpose |
 |-----------|---------|
