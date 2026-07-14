@@ -60,6 +60,21 @@ class ResolveMissingSubmissionsAction(BaseModel):
     # _run_resolve_missing_submissions_chain in services/chat.py).
     assignment_id: int | None = None
     assignment_reference: str | None = None
+    # "missing" (default): students who have not submitted at all.
+    # "late": students who DID submit, but after the due date — a
+    # separate, mutually exclusive category from "missing". See
+    # compute_submissions_by_status in services/resolved_set.py for the
+    # exact definitions.
+    status: Literal["missing", "late"] = "missing"
+
+
+class FindAssignmentBySubmissionRateAction(BaseModel):
+    action: Literal["find_assignment_by_submission_rate"] = "find_assignment_by_submission_rate"
+    local_course_id: int
+    # "below" for "fewer than X% submitted", "above" for "more than X%".
+    comparator: Literal["below", "above"] = "below"
+    # e.g. 30 for "30%" — never a fraction like 0.3.
+    threshold_percent: float
 
 
 class SetActiveCourseAction(BaseModel):
@@ -96,7 +111,17 @@ class UpdateAssignmentAction(BaseModel):
     # NOT the local Assignment.id. Every function this reuses (get_assignment,
     # update_course_assignment) already takes the Canvas ID, and the LLM already
     # sees this value as "id" in fetch_assignments/fetch_submissions results.
-    assignment_id: int
+    # Pass this directly only when it's already known from earlier in this
+    # conversation; otherwise leave it unset and use assignment_reference
+    # instead — the app resolves it server-side (see
+    # _run_update_assignment_chain in services/chat.py) before ever
+    # building a preview, the same way fetch_submissions resolves a
+    # natural-language reference, never guessed.
+    assignment_id: int | None = None
+    # The user's own words for which assignment they mean, e.g. "the final
+    # exam", "assignment 1" — copied verbatim, never invented. Ignored once
+    # assignment_id is set.
+    assignment_reference: str | None = None
     # All optional — natural-language updates are almost always partial
     # (e.g. "push the due date back a week"). None means "leave unchanged";
     # the dispatcher merges omitted fields in from the current Canvas state.
@@ -205,6 +230,7 @@ ACTION_SCHEMAS: dict[str, type[BaseModel]] = {
     "fetch_submissions": FetchSubmissionsAction,
     "fetch_students": FetchStudentsAction,
     "resolve_missing_submissions": ResolveMissingSubmissionsAction,
+    "find_assignment_by_submission_rate": FindAssignmentBySubmissionRateAction,
     "set_active_course": SetActiveCourseAction,
     "get_active_course": GetActiveCourseAction,
     "create_assignment": CreateAssignmentAction,
@@ -233,6 +259,7 @@ ACTION_CLASSIFICATION: dict[str, ActionClassification] = {
     "fetch_submissions": "read_only",
     "fetch_students": "read_only",
     "resolve_missing_submissions": "read_only",
+    "find_assignment_by_submission_rate": "read_only",
     "get_active_course": "read_only",
     # Writes a local UserPreference row only — no Canvas footprint, and not
     # gated by the preview/confirm flow at all (not in dispatcher.py's

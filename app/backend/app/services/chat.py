@@ -27,6 +27,7 @@ from app.mcp_tools.schemas import (
     FetchAssignmentsAction,
     FetchStudentsAction,
     FetchSubmissionsAction,
+    FindAssignmentBySubmissionRateAction,
     IntentPreviewAction,
     RecipientDirective,
     ResolveMissingSubmissionsAction,
@@ -42,11 +43,12 @@ from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
 from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
+from app.services.assignment_rate import find_assignments_by_submission_rate
 from app.services.canvas import sync_courses_if_stale
 from app.services.llm.json_extraction import extract_json_object
 from app.services.llm.llm_setting import get_llm_adapter
 from app.services.resolved_set import (
-    compute_missing_submissions,
+    compute_submissions_by_status,
     create_resolved_set,
     materialize_resolved_set,
 )
@@ -57,6 +59,26 @@ logger = logging.getLogger(__name__)
 
 LLM_TIMEOUT_SECONDS = 90.0
 HISTORY_WINDOW = 10
+
+# Hard cap on how many LLM decisions a single user turn may chain through
+# (see handle_chat_message's step loop) before giving up and asking the
+# user to continue. Local to one handle_chat_message call — since a new
+# HTTP request is a fresh call, and modify/confirm/cancel turns each go
+# through their own separate call (handle_chat_message /
+# handle_confirmed_action / handle_cancelled_action), this counter is
+# already reset on every new chat message and on every confirm/cancel/
+# modify by construction, with no persisted state needed.
+MAX_TURN_STEPS = 15
+
+# Read actions whose result is specifically meant to feed a follow-up
+# decision within the SAME turn (see their own docstrings —
+# resolve_missing_submissions produces a recipient_handle for send_message;
+# find_assignment_by_submission_rate produces an assignment_id for
+# update_assignment) — these always continue the step loop, asking the
+# model what to do next, rather than terminating the turn like an ordinary
+# read. Adding a future resolver here is the only wiring a new one needs
+# to get automatic multi-step chaining — no loop/dispatch changes required.
+_CHAINABLE_READ_ACTIONS = frozenset({"resolve_missing_submissions", "find_assignment_by_submission_rate"})
 # Failure paths (parse errors, timeouts, HTTP errors) log the full raw
 # diagnostic — for a "thinking" model that can mean the entire verbose
 # <think> block, hundreds to thousands of tokens — as the assistant message
@@ -623,15 +645,17 @@ async def _run_resolve_missing_submissions_chain(
     action: ResolveMissingSubmissionsAction,
     user_message: str,
 ) -> dict:
-    """Resolves "students missing submissions for <assignment>" entirely
-    server-side — never dumps the raw submission/roster lists into the
-    LLM's context or conversation history (unlike a plain fetch_submissions
-    call, whose full result is left as-is by
-    _summarize_assistant_history_content). Only a compact
+    """Resolves "students missing (or late on) submissions for
+    <assignment>" entirely server-side — never dumps the raw
+    submission/roster lists into the LLM's context or conversation
+    history (unlike a plain fetch_submissions call, whose full result is
+    left as-is by _summarize_assistant_history_content). Only a compact
     {count, sample, handle} summary is returned; the handle is later
     materialized by _run_send_message_chain when a send_message turn sets
     recipient_handle, scoped to this conversation
-    (see materialize_resolved_set)."""
+    (see materialize_resolved_set). action.status picks which category
+    (see compute_submissions_by_status) — "missing" and "late" are
+    mutually exclusive, so this always resolves exactly one at a time."""
     resolved = await _resolve_course_and_assignment(
         db, user, conversation, user_msg,
         action.local_course_id, action.assignment_id, action.assignment_reference, user_message,
@@ -640,30 +664,170 @@ async def _run_resolve_missing_submissions_chain(
         return resolved
     course, assignment_id = resolved
 
-    print(f"Checking {course.name} for missing submissions")
-    missing = await _run_tracked_read(
+    print(f"Checking {course.name} for {action.status} submissions")
+    matched = await _run_tracked_read(
         db, user, conversation, user_msg.id, "resolve_missing_submissions",
-        {"local_course_id": course.id, "assignment_id": assignment_id},
-        compute_missing_submissions(course, assignment_id, user, db),
+        {"local_course_id": course.id, "assignment_id": assignment_id, "status": action.status},
+        compute_submissions_by_status(course, assignment_id, user, db, action.status),
     )
 
     resolved_set = await create_resolved_set(
-        db, conversation, kind="missing_submissions",
-        query={"local_course_id": course.id, "assignment_id": assignment_id},
-        recipients=missing,
+        db, conversation, kind=f"{action.status}_submissions",
+        query={"local_course_id": course.id, "assignment_id": assignment_id, "status": action.status},
+        recipients=matched,
     )
 
-    sample = [r["name"] for r in missing[:_RESOLVED_SET_SAMPLE_SIZE]]
-    summary = f"{len(missing)} active student(s) in {course.name} are missing this assignment."
+    sample = [r["name"] for r in matched[:_RESOLVED_SET_SAMPLE_SIZE]]
+    if action.status == "missing":
+        summary = f"{len(matched)} active student(s) in {course.name} are missing this assignment."
+    else:
+        summary = f"{len(matched)} active student(s) in {course.name} submitted this assignment late."
     if sample:
         summary += f" Examples: {', '.join(sample)}."
 
     return {
         "action": "resolve_missing_submissions",
-        "count": len(missing),
+        "status": action.status,
+        "count": len(matched),
         "sample": sample,
         "handle": resolved_set.handle,
         "summary": summary,
+    }
+
+
+async def _run_find_assignment_by_submission_rate_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    action: FindAssignmentBySubmissionRateAction,
+    user_message: str,
+) -> dict:
+    """Resolves "the assignment with fewer/more than X% submissions" to a
+    single assignment — mirrors _resolve_assignment_reference's "resolve
+    server-side, never trust the model with a raw ID" shape, but the
+    criterion is a computed submission rate rather than a name/recency
+    reference, so it needs real Canvas data (not just the model's
+    judgment) to evaluate. Scans every assignment in the course
+    (find_assignments_by_submission_rate), then picks "the last" — the
+    matching assignment with the latest due date — the same "latest"
+    convention _resolve_assignment_reference already uses. Resolves to a
+    single ID, not a bulk recipient set, so this has no ResolvedSet/handle
+    involvement: the returned assignment_id is meant to be used directly in
+    a follow-up update_assignment turn, the same way a fetch_assignments
+    result's "id" field already is (see RESOLVING AN ASSIGNMENT FOR
+    update_assignment in build_system_prompt)."""
+    course = await resolve_course(db, user, action.local_course_id)
+
+    print(f"Gathering {course.name} data")
+    print(f"Collecting {course.name} assignments")
+    fetch_action = FetchAssignmentsAction(local_course_id=course.id)
+    assignments_result = await _run_tracked_read(
+        db, user, conversation, user_msg.id, "fetch_assignments",
+        fetch_action.model_dump(), execute_tool(db, user, fetch_action),
+    )
+    assignments = assignments_result["assignments"]
+    if not assignments:
+        return {
+            "action": "find_assignment_by_submission_rate",
+            "matched": False,
+            "assignment_id": None,
+            "assignment_name": None,
+            "due_date": None,
+            "submission_rate_percent": None,
+            "summary": f"{course.name} has no assignments yet.",
+        }
+
+    print(f"Checking {course.name} assignment submission rates")
+    matches = await _run_tracked_read(
+        db, user, conversation, user_msg.id, "find_assignment_by_submission_rate",
+        {
+            "local_course_id": course.id,
+            "comparator": action.comparator,
+            "threshold_percent": action.threshold_percent,
+        },
+        find_assignments_by_submission_rate(
+            course, assignments, action.comparator, action.threshold_percent, user, db,
+        ),
+    )
+
+    if not matches:
+        return {
+            "action": "find_assignment_by_submission_rate",
+            "matched": False,
+            "assignment_id": None,
+            "assignment_name": None,
+            "due_date": None,
+            "submission_rate_percent": None,
+            "summary": (
+                f"No assignment in {course.name} currently has a submission rate "
+                f"{action.comparator} {action.threshold_percent}%."
+            ),
+        }
+
+    best = max(matches, key=lambda m: m["due_at"] or datetime.min.replace(tzinfo=UTC))
+    due_date = best["due_at"].isoformat() if best["due_at"] else None
+    rate = round(best["rate_percent"], 1)
+    return {
+        "action": "find_assignment_by_submission_rate",
+        "matched": True,
+        "assignment_id": best["id"],
+        "assignment_name": best["name"],
+        "due_date": due_date,
+        "submission_rate_percent": rate,
+        "summary": (
+            f'"{best["name"]}" in {course.name} has a {rate}% submission rate '
+            f'(current due date: {due_date or "not set"}).'
+        ),
+    }
+
+
+_UPDATE_ASSIGNMENT_FIELDS = ("title", "description", "due_date", "points_possible")
+
+
+async def _run_update_assignment_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    action: Any,
+    user_message: str,
+) -> dict:
+    """update_assignment needs an exact Canvas assignment_id before a
+    preview can be built, but — like fetch_submissions,
+    resolve_missing_submissions, and find_assignment_by_submission_rate —
+    the model doesn't need to know it itself. Only reached when
+    assignment_id is unset and assignment_reference is given; resolves it
+    server-side via _resolve_course_and_assignment (the exact same shared
+    helper those other chains use) and builds the intent_preview directly
+    — one user turn, no loop needed — the same way
+    _build_grouped_send_message_result builds a preview without routing
+    back through execute_tool's own intent_preview case."""
+    resolved = await _resolve_course_and_assignment(
+        db, user, conversation, user_msg,
+        action.local_course_id, action.assignment_id, action.assignment_reference, user_message,
+    )
+    if isinstance(resolved, dict):
+        return resolved
+    course, assignment_id = resolved
+
+    proposed_action: dict[str, Any] = {
+        "action": "update_assignment",
+        "local_course_id": course.id,
+        "assignment_id": assignment_id,
+    }
+    for field_name in _UPDATE_ASSIGNMENT_FIELDS:
+        value = getattr(action, field_name)
+        if value is not None:
+            proposed_action[field_name] = value
+
+    preview_metadata = generate_write_preview(proposed_action, course)
+    return {
+        "action": "intent_preview",
+        "intent_preview": True,
+        "summary": preview_metadata["summary"],
+        "proposed_action": proposed_action,
+        "preview_metadata": preview_metadata,
     }
 
 
@@ -1047,6 +1211,7 @@ def _build_llm_message(
     course_names: list[CanvasCourseName],
     current_course_name: str | None,
     current_proposed_action: dict | None,
+    loop_steps: list[dict] | None = None,
 ) -> str:
     """Wraps the user's raw message with whatever structured context the
     model needs, rather than leaving it to re-derive that context from
@@ -1061,7 +1226,13 @@ def _build_llm_message(
     model resolves which course (if any) this message is about itself,
     from this list, and reports it back via the top-level course_name
     field (see build_system_prompt's COURSE RESOLUTION section); the app
-    resolves that name to a real ID afterward (handle_chat_message)."""
+    resolves that name to a real ID afterward (handle_chat_message).
+
+    loop_steps carries results already produced earlier IN THIS SAME turn
+    (see the step loop in handle_chat_message) — distinct from `history`,
+    which is prior TURNS only. Never populated for a modify turn (which
+    never loops); empty/None means "first step of this turn", identical to
+    every existing single-step request."""
     parts = []
 
     if course_names:
@@ -1083,6 +1254,21 @@ def _build_llm_message(
             "because this message doesn't repeat it."
         )
 
+    if loop_steps:
+        steps_text = "\n\n".join(
+            f'Step {i + 1} result ({step["action"]}):\n{json.dumps(step["result"])}'
+            for i, step in enumerate(loop_steps)
+        )
+        parts.append(
+            "You are mid-way through a multi-step turn — the steps below "
+            "already ran, in order, still for this same user request below "
+            "(not a new one). Decide the next action based on their "
+            "results: propose another read/resolver to gather more, a "
+            "write (via intent_preview) once you have everything it needs, "
+            "or respond/clarify if you're done or stuck. Do not repeat a "
+            "step you already have a result for below.\n\n" + steps_text
+        )
+
     parts.append(f"User request: {message}")
     return "\n\n".join(parts)
 
@@ -1100,6 +1286,23 @@ def _plain_text_response(raw_output: str) -> dict | None:
     if stripped and "{" not in stripped and "}" not in stripped:
         return {"action": "respond", "message": stripped}
     return None
+
+
+def _step_budget_exhausted_response(loop_steps: list[dict]) -> dict:
+    """Terminal fallback when MAX_TURN_STEPS is reached mid-chain without
+    the model ever reaching a write/respond/clarify — surfaces whatever
+    the last step already found (its "summary", if it has one) rather
+    than silently discarding it, and asks the user to narrow the request
+    instead of erroring outright (nothing failed — the turn just needed
+    more steps than the budget allows)."""
+    message = "I wasn't able to finish this request within the allowed number of steps."
+    if loop_steps:
+        last_result = loop_steps[-1]["result"]
+        last_summary = last_result.get("summary") if isinstance(last_result, dict) else None
+        if last_summary:
+            message += f" Here's what I found so far: {last_summary}"
+    message += " Could you narrow down what you'd like me to do next?"
+    return {"action": "respond", "message": message}
 
 
 async def log_message(
@@ -1388,11 +1591,24 @@ The user will confirm, modify, or cancel from here.
 
 READ ACTIONS — execute immediately, no preview:
 fetch_courses, fetch_assignments, fetch_students, fetch_submissions,
-resolve_missing_submissions, and get_active_course never change any data,
-so propose them directly and plainly — do NOT wrap them in intent_preview:
+resolve_missing_submissions, find_assignment_by_submission_rate, and
+get_active_course never change any data, so propose them directly and
+plainly — do NOT wrap them in intent_preview:
 {"action": "fetch_assignments", "course_name": "<course>"}
 They run right away and their result is shown to the user in this same
 response, not a separate confirm step.
+
+MULTI-STEP REQUESTS: some requests need more than one step to satisfy in
+a single message — e.g. "message students missing assignment 4" needs
+resolve_missing_submissions before send_message can even be proposed;
+"push back the last assignment under 30% submissions by 3 days" needs
+find_assignment_by_submission_rate before update_assignment. Propose the
+first step you need; if it's resolve_missing_submissions or
+find_assignment_by_submission_rate, you'll be asked again, in the same
+turn, what to do next once you have its result — use that next turn to
+propose the write (or another read) the original request actually needed,
+instead of stopping at the first step's raw result. Only stop early with
+clarify/respond if something is genuinely missing or ambiguous.
 
 CONVERSATION HISTORY:
 Previous messages in this conversation are provided below. If this is
@@ -1456,38 +1672,69 @@ intent_preview). The app resolves assignment_reference to a real ID for
 you, the same way course_name is resolved to a course — never invent or
 guess a numeric assignment_id yourself.
 
-FINDING STUDENTS MISSING A SUBMISSION:
+FINDING STUDENTS MISSING OR LATE ON A SUBMISSION:
 When the user wants to find or message students who have not submitted an
-assignment (e.g. "who's missing assignment 4", "remind students who
-haven't submitted the project"), do not propose fetch_submissions and read
-through the results yourself — for a large class that puts every student
-into your context when you only need a count. Instead propose
+assignment, or who submitted it LATE (e.g. "who's missing assignment 4",
+"remind students who haven't submitted the project", "who turned in
+assignment 2 late"), do not propose fetch_submissions and read through
+the results yourself — for a large class that puts every student into
+your context when you only need a count. Instead propose
 resolve_missing_submissions directly (same convention as
 fetch_submissions: not intent_preview, and assignment_id/
 assignment_reference resolve the assignment the same way):
-{"action": "resolve_missing_submissions", "course_name": "<course>", "assignment_reference": "<assignment>"}
-The result gives you a "count", a short "sample" of names, and a "handle"
-string — never the full list. To message everyone in that resolved set,
-propose send_message with recipient_handle set to that exact handle
-string, copied verbatim from the result — never invent one, and never
-build recipient_directives out of the "sample" names instead, that's only
-a preview excerpt, not the full set.
+{"action": "resolve_missing_submissions", "course_name": "<course>", "assignment_reference": "<assignment>", "status": "missing"}
+Set status to "missing" (the default — not submitted at all) or "late"
+(submitted, but after the due date) — these are separate, mutually
+exclusive groups; never guess which one the user means if it's ambiguous
+("students behind on assignment 4" usually means missing; "students who
+turned it in late" means late). The result gives you a "count", a short
+"sample" of names, and a "handle" string — never the full list. To
+message everyone in that resolved set, propose send_message with
+recipient_handle set to that exact handle string, copied verbatim from
+the result — never invent one, and never build recipient_directives out
+of the "sample" names instead, that's only a preview excerpt, not the
+full set.
+
+FINDING AN ASSIGNMENT BY SUBMISSION RATE:
+When the user describes an assignment by a submission-rate criterion
+instead of by name (e.g. "the last assignment with fewer than 30%
+submissions", "the assignment more than half the class has turned in"),
+do not propose fetch_submissions per assignment and compute this yourself
+— that dumps every student's data into your context once per assignment.
+Instead propose find_assignment_by_submission_rate directly (same
+convention as resolve_missing_submissions: not intent_preview):
+{"action": "find_assignment_by_submission_rate", "course_name": "<course>", "comparator": "below", "threshold_percent": 30}
+comparator is "below" for "fewer than X%" or "above" for "more than X%";
+threshold_percent is a plain number like 30, never a fraction like 0.3.
+The app scans every assignment's real submission data server-side and
+picks the one with the latest due date among matches — "matched" is false
+with no assignment_id when nothing qualifies, in which case say so plainly
+rather than guessing. When it matches, the result's "assignment_id" and
+"due_date" are real values from this course, safe to use directly in a
+follow-up update_assignment turn — the same as any other id you already
+have from earlier in this conversation.
 
 RESOLVING AN ASSIGNMENT FOR update_assignment:
-update_assignment is a write action, so unlike fetch_submissions it needs
-an exact Canvas assignment_id before you can propose it — the preview must
-show precisely what will change, and this action has no
-assignment_reference field. If you do not already have the ID from this
-conversation's history, propose fetch_assignments first — that's a
-complete, valid read action on its own (see READ ACTIONS above), executed
-immediately; once its result is in history, a follow-up message naming
-the assignment can resolve it. Do not respond with clarify to ask the user
-for an ID — clarify is only for information the user themselves would know
-(e.g. which course, or which student). Once you do have the assignment
-data, its Canvas ID is the "id" field, not "local_id". Only include the
-fields the user actually wants changed — leave every other field out of
-proposed_action entirely, since anything omitted is preserved
-automatically.
+update_assignment needs an exact Canvas assignment_id, but — like
+fetch_submissions — you do not need to know it yourself. If you already
+have it from earlier in this conversation (the "id" field from a
+previous fetch_assignments/fetch_submissions result, or "assignment_id"
+from find_assignment_by_submission_rate), pass it directly as
+assignment_id and propose intent_preview wrapping update_assignment as
+usual — the preview must show precisely what will change. Otherwise leave
+assignment_id unset and instead set assignment_reference to the user's
+own words for which assignment they mean — e.g. "the final exam",
+"assignment 1", "the midterm" — and propose update_assignment directly
+(not fetch_assignments, and not intent_preview), together with whichever
+fields the user wants changed. The app resolves assignment_reference to a
+real ID for you and builds the preview in this same turn — never invent
+or guess a numeric assignment_id yourself. Do not respond with clarify to
+ask the user for an ID — clarify is only for information the user
+themselves would know (e.g. which course, or which student); an
+unresolvable assignment_reference is handled for you automatically. Only
+include the fields the user actually wants changed — leave every other
+field out of proposed_action entirely, since anything omitted is
+preserved automatically.
 
 MESSAGING STUDENTS:
 send_message can post a public class announcement, send a private Canvas
@@ -1523,13 +1770,14 @@ If you already have a student's exact Canvas ID from earlier in this
 conversation, you may set recipient_canvas_user_ids directly instead
 (skips resolution) — but never mix a guessed ID into that list.
 
-MESSAGING STUDENTS MISSING A SUBMISSION: if the user wants to message
-students missing a specific assignment, use recipient_handle (see FINDING
-STUDENTS MISSING A SUBMISSION above) — first propose
-resolve_missing_submissions to get a handle, then once you have it from
-that turn's result, propose send_message with recipient_handle set to
-that handle. Never guess how many people are in the set or build
-recipient_directives from its "sample" names.
+MESSAGING STUDENTS MISSING OR LATE ON A SUBMISSION: if the user wants to
+message students missing or late on a specific assignment, use
+recipient_handle (see FINDING STUDENTS MISSING OR LATE ON A SUBMISSION
+above) — first propose resolve_missing_submissions (with the right
+status) to get a handle, then once you have it from that turn's result,
+propose send_message with recipient_handle set to that handle. Never
+guess how many people are in the set or build recipient_directives from
+its "sample" names.
 
 BROADCASTING PRIVATELY TO THE WHOLE CLASS: if the user wants a private
 message sent to every student — not a public announcement — set
@@ -1589,6 +1837,18 @@ async def handle_chat_message(
     needed (see _run_fetch_submissions_chain) — still all within this one
     request, so a question like "show me submissions for the latest
     assignment" never needs a second user turn.
+
+    Multi-step turns: an ordinary single read (fetch_assignments,
+    fetch_students, ...) still terminates the turn on its own first
+    result, exactly as always. But a _CHAINABLE_READ_ACTIONS result
+    (resolve_missing_submissions, find_assignment_by_submission_rate) is
+    fed back for another LLM decision within the SAME turn — see the step
+    loop below — bounded by MAX_TURN_STEPS, so e.g. "message students
+    missing assignment 4" can resolve the recipient set AND propose the
+    send_message in one turn instead of needing a follow-up message. Once
+    genuinely mid-chain (past the first step), any further read continues
+    the same way. A modify turn never enters this loop at all — revising
+    an already-proposed write is a single edit, not a multi-step plan.
 
     Course resolution: local_course_id here is only ever an explicit
     client-supplied value (the "set active course" button). Every other
@@ -1650,107 +1910,128 @@ async def handle_chat_message(
     system_prompt = build_system_prompt()
     adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
 
-    try:
-        raw_output = await asyncio.wait_for(
-            adapter.generate(
-                system_prompt,
-                _build_llm_message(message, course_names, conversation.course_name, current_proposed_action),
-                history=history,
+    # Step loop: lets the model chain a bounded sequence of read/resolver
+    # decisions within this ONE user turn, instead of every read
+    # terminating the turn immediately. Only a _CHAINABLE_READ_ACTIONS
+    # result (or, once already mid-chain at step > 1, any read result)
+    # continues the loop — an ordinary single read at step 1 (e.g. "show
+    # me my assignments") breaks immediately below exactly as it always
+    # has, so every existing single-step/two-step (chain) case is
+    # unaffected: this is a strict superset of prior behavior, not a
+    # replacement for it. A modify turn (pending_message_id set) never
+    # loops at all — is_chainable_step is unconditionally False for one —
+    # since revising an already-proposed write is a single edit, not a
+    # multi-step plan. loop_steps accumulates each step's result so later
+    # steps' prompts (_build_llm_message) can see everything gathered so
+    # far in this same turn, distinct from `history` (prior turns only).
+    loop_steps: list[dict] = []
+    result: dict = {}
+
+    for step in range(1, MAX_TURN_STEPS + 1):
+        try:
+            raw_output = await asyncio.wait_for(
+                adapter.generate(
+                    system_prompt,
+                    _build_llm_message(
+                        message, course_names, conversation.course_name,
+                        current_proposed_action, loop_steps,
+                    ),
+                    history=history,
+                    timeout=LLM_TIMEOUT_SECONDS,
+                ),
                 timeout=LLM_TIMEOUT_SECONDS,
-            ),
-            timeout=LLM_TIMEOUT_SECONDS,
-        )
-    except TimeoutError:
-        log_detail = f"LLM request timed out after {LLM_TIMEOUT_SECONDS}s"
-        await log_message(db, conversation, role="assistant", content=log_detail)
-        await db.commit()
-        return (
-            conversation,
-            {"error": "The assistant took too long to respond. Please try again."},
-            True,
-        )
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 429:
-            log_detail = "LLM provider rate limit hit"
-            user_message = "The assistant is temporarily rate-limited. Please wait a moment and try again."
-        else:
-            log_detail = f"LLM API error: {e.response.status_code}"
-            user_message = "The assistant service returned an error. Please try again shortly."
-        await log_message(db, conversation, role="assistant", content=log_detail)
-        await db.commit()
-        return conversation, {"error": user_message}, True
-    except Exception as e:
-        log_detail = f"LLM request failed: {type(e).__name__}: {e}"
-        await log_message(db, conversation, role="assistant", content=log_detail)
-        await db.commit()
-        return (
-            conversation,
-            {"error": "The assistant is currently unavailable. Please try again shortly."},
-            True,
-        )
-
-    # Course resolution: pull the model's own course_name call-out out of
-    # the raw response (same <think>-stripping + brace-scanning helper
-    # dispatcher.py's parse_action uses, so this works uniformly whether
-    # the model answered with clarify/intent_preview/a raw action, or
-    # plain prose with no JSON at all — in which case there's nothing to
-    # extract and course_name_from_llm stays None). This never touches an
-    # ID: it matches the model's name against canvas_course_names and
-    # only reads the local_course_id that lookup already carries.
-    try:
-        parsed_envelope = json.loads(extract_json_object(raw_output))
-    except json.JSONDecodeError:
-        parsed_envelope = None
-    course_name_from_llm = parsed_envelope.get("course_name") if isinstance(parsed_envelope, dict) else None
-
-    resolved_local_course_id = conversation.course_id
-    matched = _match_course_name(course_names, course_name_from_llm)
-    if matched is not None:
-        matched_local_course_id = matched.local_course_id
-        if matched_local_course_id is None:
-            # Defensive fallback — shouldn't happen, sync_courses_if_stale
-            # always populates this from the Course row it upserts in the
-            # same transaction, but don't let a null here silently break
-            # course resolution.
-            matched_local_course_id = await db.scalar(
-                select(Course.id).where(
-                    Course.canvas_course_id == matched.canvas_course_id,
-                    Course.instructor_id == user.id,
-                )
             )
-        if matched_local_course_id is not None:
-            if conversation.course_id is None:
-                # This conversation's first course resolution — same
-                # conversation, no fork, user_msg already belongs to it.
-                conversation.course_id = matched_local_course_id
-                conversation.course_name = matched.name
-            elif matched_local_course_id != conversation.course_id:
-                # Switching away from a course this conversation already
-                # had — route to a different conversation (reused or
-                # forked) instead of mutating this one, and re-parent
-                # this turn's user message onto it.
-                target = await _find_or_fork_conversation_for_course(
-                    db, user, matched_local_course_id, matched.name
+        except TimeoutError:
+            log_detail = f"LLM request timed out after {LLM_TIMEOUT_SECONDS}s"
+            await log_message(db, conversation, role="assistant", content=log_detail)
+            await db.commit()
+            return (
+                conversation,
+                {"error": "The assistant took too long to respond. Please try again."},
+                True,
+            )
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429:
+                log_detail = "LLM provider rate limit hit"
+                user_message = "The assistant is temporarily rate-limited. Please wait a moment and try again."
+            else:
+                log_detail = f"LLM API error: {e.response.status_code}"
+                user_message = "The assistant service returned an error. Please try again shortly."
+            await log_message(db, conversation, role="assistant", content=log_detail)
+            await db.commit()
+            return conversation, {"error": user_message}, True
+        except Exception as e:
+            log_detail = f"LLM request failed: {type(e).__name__}: {e}"
+            await log_message(db, conversation, role="assistant", content=log_detail)
+            await db.commit()
+            return (
+                conversation,
+                {"error": "The assistant is currently unavailable. Please try again shortly."},
+                True,
+            )
+
+        # Course resolution: pull the model's own course_name call-out out of
+        # the raw response (same <think>-stripping + brace-scanning helper
+        # dispatcher.py's parse_action uses, so this works uniformly whether
+        # the model answered with clarify/intent_preview/a raw action, or
+        # plain prose with no JSON at all — in which case there's nothing to
+        # extract and course_name_from_llm stays None). This never touches an
+        # ID: it matches the model's name against canvas_course_names and
+        # only reads the local_course_id that lookup already carries.
+        try:
+            parsed_envelope = json.loads(extract_json_object(raw_output))
+        except json.JSONDecodeError:
+            parsed_envelope = None
+        course_name_from_llm = parsed_envelope.get("course_name") if isinstance(parsed_envelope, dict) else None
+
+        resolved_local_course_id = conversation.course_id
+        matched = _match_course_name(course_names, course_name_from_llm)
+        if matched is not None:
+            matched_local_course_id = matched.local_course_id
+            if matched_local_course_id is None:
+                # Defensive fallback — shouldn't happen, sync_courses_if_stale
+                # always populates this from the Course row it upserts in the
+                # same transaction, but don't let a null here silently break
+                # course resolution.
+                matched_local_course_id = await db.scalar(
+                    select(Course.id).where(
+                        Course.canvas_course_id == matched.canvas_course_id,
+                        Course.instructor_id == user.id,
+                    )
                 )
-                user_msg.conversation_id = target.id
-                conversation = target
-            resolved_local_course_id = matched_local_course_id
+            if matched_local_course_id is not None:
+                if conversation.course_id is None:
+                    # This conversation's first course resolution — same
+                    # conversation, no fork, user_msg already belongs to it.
+                    conversation.course_id = matched_local_course_id
+                    conversation.course_name = matched.name
+                elif matched_local_course_id != conversation.course_id:
+                    # Switching away from a course this conversation already
+                    # had — route to a different conversation (reused or
+                    # forked) instead of mutating this one, and re-parent
+                    # this turn's user message onto it.
+                    target = await _find_or_fork_conversation_for_course(
+                        db, user, matched_local_course_id, matched.name
+                    )
+                    user_msg.conversation_id = target.id
+                    conversation = target
+                resolved_local_course_id = matched_local_course_id
 
-    # Inject the resolved course id (or downgrade to a clarify envelope)
-    # directly into the parsed JSON, before parse_action's strict schema
-    # validation ever sees it — see _inject_course_into_envelope. Only
-    # when parsing succeeded as a dict; a plain-text/malformed reply has
-    # nothing to inject into and falls through to the existing
-    # _plain_text_response/parse_action handling on the original raw_output.
-    if isinstance(parsed_envelope, dict):
-        parsed_envelope = _inject_course_into_envelope(parsed_envelope, resolved_local_course_id)
-        raw_output = json.dumps(parsed_envelope)
+        # Inject the resolved course id (or downgrade to a clarify envelope)
+        # directly into the parsed JSON, before parse_action's strict schema
+        # validation ever sees it — see _inject_course_into_envelope. Only
+        # when parsing succeeded as a dict; a plain-text/malformed reply has
+        # nothing to inject into and falls through to the existing
+        # _plain_text_response/parse_action handling on the original raw_output.
+        if isinstance(parsed_envelope, dict):
+            parsed_envelope = _inject_course_into_envelope(parsed_envelope, resolved_local_course_id)
+            raw_output = json.dumps(parsed_envelope)
 
-    try:
-        text_reply = _plain_text_response(raw_output)
-        if text_reply is not None:
-            result = text_reply
-        else:
+        try:
+            text_reply = _plain_text_response(raw_output)
+            if text_reply is not None:
+                result = text_reply
+                break
             action = parse_action(raw_output)
             needs_unwrap = False
             if action.action == "intent_preview":
@@ -1763,16 +2044,22 @@ async def handle_chat_message(
                         or proposed.get("broadcast_to_all_students")
                         or proposed.get("recipient_handle")
                     )
+                ) or (
+                    proposed_name == "update_assignment"
+                    and proposed.get("assignment_id") is None
+                    and bool(proposed.get("assignment_reference"))
                 )
             if needs_unwrap:
-                # Defensive: the model wrapped a read, or a send_message
-                # that still needs server-side recipient resolution, in
-                # intent_preview despite the system prompt saying not to —
-                # both produce their own intent_preview internally (a read
-                # never does at all; a directive-/handle-bearing
-                # send_message does, via _run_send_message_chain below) —
-                # so unwrap and dispatch directly instead of showing a
-                # pointless double preview.
+                # Defensive: the model wrapped a read, a send_message that
+                # still needs server-side recipient resolution, or an
+                # update_assignment that still needs server-side
+                # assignment resolution, in intent_preview despite the
+                # system prompt saying not to — each produces its own
+                # intent_preview internally (a read never does at all; a
+                # directive-/handle-bearing send_message and a
+                # reference-bearing update_assignment do, via their own
+                # chains below) — so unwrap and dispatch directly instead
+                # of showing a pointless double preview.
                 action = parse_action(json.dumps(action.proposed_action))
 
             if action.action == "fetch_submissions":
@@ -1788,6 +2075,22 @@ async def handle_chat_message(
                 # plus server-side filtering down to a compact
                 # {count, sample, handle} summary — never the raw list.
                 result = await _run_resolve_missing_submissions_chain(
+                    db, user, conversation, user_msg, action, message
+                )
+            elif action.action == "find_assignment_by_submission_rate":
+                # Scans every assignment's real submission data server-side
+                # to resolve a single assignment by a computed criterion
+                # (e.g. "fewer than 30% submitted") — never trusts the
+                # model's own judgment over raw data it was never shown.
+                result = await _run_find_assignment_by_submission_rate_chain(
+                    db, user, conversation, user_msg, action, message
+                )
+            elif action.action == "update_assignment" and action.assignment_id is None and action.assignment_reference:
+                # Same assignment-resolution need as fetch_submissions —
+                # resolve the reference server-side and build the preview
+                # directly, in this same turn, rather than making the user
+                # ask again once a fetch_assignments result is in history.
+                result = await _run_update_assignment_chain(
                     db, user, conversation, user_msg, action, message
                 )
             elif action.action == "send_message" and (
@@ -1832,16 +2135,37 @@ async def handle_chat_message(
                 result = await execute_tool(db, user, action)
             else:
                 result = await execute_tool(db, user, action)
-    except ToolExecutionError as e:
-        await log_message(db, conversation, role="assistant", content=e.log_detail)
-        await db.commit()
-        return conversation, {"error": e.user_message}, True
-    except HTTPException as e:
-        detail = e.detail if isinstance(e.detail, str) else str(e.detail)
-        error_detail = f"HTTPException {e.status_code}: {detail}"
-        await log_message(db, conversation, role="assistant", content=error_detail)
-        await db.commit()
-        return conversation, {"error": detail}, True
+        except ToolExecutionError as e:
+            await log_message(db, conversation, role="assistant", content=e.log_detail)
+            await db.commit()
+            return conversation, {"error": e.user_message}, True
+        except HTTPException as e:
+            detail = e.detail if isinstance(e.detail, str) else str(e.detail)
+            error_detail = f"HTTPException {e.status_code}: {detail}"
+            await log_message(db, conversation, role="assistant", content=error_detail)
+            await db.commit()
+            return conversation, {"error": detail}, True
+
+        # A clarify result is always terminal regardless of action name —
+        # it means the model needs the USER to answer something, so
+        # calling the LLM again immediately would be pointless. Otherwise,
+        # a _CHAINABLE_READ_ACTIONS result always continues (that's the
+        # entire point of those actions — see MAX_TURN_STEPS' docstring);
+        # any other read only continues once already mid-chain (step > 1),
+        # so a lone ordinary read at step 1 is untouched from before this
+        # loop existed.
+        is_chainable_step = (
+            pending_message_id is None
+            and action.action in READ_ACTIONS
+            and not result.get("clarify")
+            and (action.action in _CHAINABLE_READ_ACTIONS or step > 1)
+        )
+        if not is_chainable_step:
+            break
+        loop_steps.append({"action": action.action, "result": result})
+        if step >= MAX_TURN_STEPS:
+            result = _step_budget_exhausted_response(loop_steps)
+            break
 
     # Log the assistant result — if this is a modify turn superseding a
     # previous intent_preview, overwrite that message in place rather than

@@ -61,7 +61,7 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     return headers, local_course_id
 
 
-def _chat(client, headers, message, llm_output, conversation_id=None) -> dict:
+def _chat(client, headers, message, llm_output, conversation_id=None) -> tuple[dict, AsyncMock]:
     mock_adapter = AsyncMock()
     if isinstance(llm_output, list):
         mock_adapter.generate.side_effect = llm_output
@@ -73,7 +73,7 @@ def _chat(client, headers, message, llm_output, conversation_id=None) -> dict:
             json={"message": message, "conversation_id": conversation_id},
             headers=headers,
         )
-    return response.json()
+    return response.json(), mock_adapter
 
 
 def _two_assignments() -> list[dict]:
@@ -199,9 +199,11 @@ def _tool_call_log_actions(conversation_id: int) -> list[str]:
 
 # Verifies: resolve_missing_submissions filters to Canvas-"missing" +
 # actively-enrolled students only (graded/excused submissions and inactive
-# enrollments are excluded), returns a compact count/sample/handle — never
-# the raw list — and persists a matching ResolvedSet row.
-def test_resolve_missing_submissions_filters_and_persists_handle(client):
+# enrollments are excluded), persists a matching ResolvedSet row, and —
+# since it's a _CHAINABLE_READ_ACTIONS action — the loop asks the model
+# what to do next in the SAME turn, correctly threading the compact
+# count/sample/handle (never the raw list) into that follow-up prompt.
+def test_resolve_missing_submissions_filters_persists_and_chains(client):
     headers, local_course_id = _register_with_canvas(client)
     students = [
         _student("501", local_course_id, "Alice"),
@@ -220,6 +222,7 @@ def test_resolve_missing_submissions_filters_and_persists_handle(client):
         '{"action": "resolve_missing_submissions", "course_name": "CPSC 310", '
         '"assignment_reference": "assignment 4"}',
         '{"assignment_id": 222}',
+        '{"action": "respond", "course_name": "CPSC 310", "message": "1 student is missing: Alice."}',
     ]
 
     with (
@@ -227,24 +230,151 @@ def test_resolve_missing_submissions_filters_and_persists_handle(client):
         patch("app.services.resolved_set.get_submissions", new=AsyncMock(return_value=submissions)),
         patch("app.services.resolved_set.get_students", new=AsyncMock(return_value=students)),
     ):
-        body = _chat(client, headers, "who's missing assignment 4?", llm_outputs)
+        body, mock_adapter = _chat(client, headers, "who's missing assignment 4?", llm_outputs)
 
     assert body["is_error"] is False, body
-    reply = body["reply"]
-    assert reply["action"] == "resolve_missing_submissions"
-    assert reply["count"] == 1
-    assert reply["sample"] == ["Alice"]
-    assert reply["handle"].startswith("rs_")
+    assert mock_adapter.generate.await_count == 3
 
     rows = _resolved_sets(body["conversation_id"])
     assert len(rows) == 1
-    assert rows[0]["handle"] == reply["handle"]
+    assert rows[0]["handle"].startswith("rs_")
     assert rows[0]["kind"] == "missing_submissions"
-    assert rows[0]["query"] == {"local_course_id": local_course_id, "assignment_id": 222}
+    assert rows[0]["query"] == {"local_course_id": local_course_id, "assignment_id": 222, "status": "missing"}
     assert rows[0]["snapshot_recipients"] == [{"user_id": 501, "name": "Alice"}]
+
+    # Call 0: the main action call. Call 1: the internal assignment
+    # resolver (inside _resolve_course_and_assignment). Call 2: the loop's
+    # follow-up, whose prompt must carry the compact resolved result.
+    followup_prompt = mock_adapter.generate.call_args_list[2].args[1]
+    assert '"count": 1' in followup_prompt
+    assert '"sample": ["Alice"]' in followup_prompt
+    assert f'"handle": "{rows[0]["handle"]}"' in followup_prompt
 
     logs = _tool_call_log_actions(body["conversation_id"])
     assert logs == ["fetch_assignments", "resolve_missing_submissions"]
+
+
+# Verifies: "missing" also covers assignments that AREN'T past due yet.
+# Canvas's own "missing" flag only ever applies once an assignment is
+# overdue (see _parse_submission_status in services/canvas.py) — a
+# not-yet-due assignment reports "missing": false for everyone no matter
+# how few students have started it, which made a same-day/reminder-style
+# request like "message students missing the final exam" (due weeks from
+# now) always report zero, even though nobody had submitted. "unsubmitted"
+# (not yet due, nothing turned in) must be included alongside Canvas's own
+# "missing" status.
+def test_missing_submissions_includes_not_yet_due_unsubmitted_work(client):
+    headers, local_course_id = _register_with_canvas(client)
+    students = [
+        _student("501", local_course_id, "Alice"),
+        _student("502", local_course_id, "Bob"),
+    ]
+    submissions = [
+        _submission(501, SubmissionStatus.unsubmitted, "Alice"),  # not yet due, nothing turned in
+        _submission(502, SubmissionStatus.submitted, "Bob"),  # already turned something in
+    ]
+
+    llm_outputs = [
+        '{"action": "resolve_missing_submissions", "course_name": "CPSC 310", '
+        '"assignment_reference": "final exam"}',
+        '{"assignment_id": 222}',
+        '{"action": "respond", "course_name": "CPSC 310", "message": "1 student is missing: Alice."}',
+    ]
+
+    with (
+        patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=_two_assignments())),
+        patch("app.services.resolved_set.get_submissions", new=AsyncMock(return_value=submissions)),
+        patch("app.services.resolved_set.get_students", new=AsyncMock(return_value=students)),
+    ):
+        body, _mock_adapter = _chat(client, headers, "who's missing the final exam?", llm_outputs)
+
+    assert body["is_error"] is False, body
+    rows = _resolved_sets(body["conversation_id"])
+    assert rows[0]["snapshot_recipients"] == [{"user_id": 501, "name": "Alice"}]
+
+
+# Verifies: status="late" resolves a completely different, mutually
+# exclusive group from the default "missing" — a late submission is, by
+# definition, not missing (it was submitted, just after the due date),
+# and vice versa.
+def test_resolve_late_submissions_is_a_separate_category_from_missing(client):
+    headers, local_course_id = _register_with_canvas(client)
+    students = [
+        _student("501", local_course_id, "Alice"),
+        _student("502", local_course_id, "Bob"),
+        _student("503", local_course_id, "Charlie"),
+    ]
+    submissions = [
+        _submission(501, SubmissionStatus.late, "Alice"),  # submitted, but late
+        _submission(502, SubmissionStatus.missing, "Bob"),  # never submitted — not late
+        _submission(503, SubmissionStatus.submitted, "Charlie"),  # on time — neither
+    ]
+
+    llm_outputs = [
+        '{"action": "resolve_missing_submissions", "course_name": "CPSC 310", '
+        '"assignment_reference": "assignment 4", "status": "late"}',
+        '{"assignment_id": 222}',
+        '{"action": "respond", "course_name": "CPSC 310", "message": "1 student submitted late: Alice."}',
+    ]
+
+    with (
+        patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=_two_assignments())),
+        patch("app.services.resolved_set.get_submissions", new=AsyncMock(return_value=submissions)),
+        patch("app.services.resolved_set.get_students", new=AsyncMock(return_value=students)),
+    ):
+        body, mock_adapter = _chat(client, headers, "who submitted assignment 4 late?", llm_outputs)
+
+    assert body["is_error"] is False, body
+    rows = _resolved_sets(body["conversation_id"])
+    assert len(rows) == 1
+    assert rows[0]["kind"] == "late_submissions"
+    assert rows[0]["query"]["status"] == "late"
+    # Only Alice (late) — Bob (missing, never submitted) and Charlie (on
+    # time) are both correctly excluded from the "late" category.
+    assert rows[0]["snapshot_recipients"] == [{"user_id": 501, "name": "Alice"}]
+
+    followup_prompt = mock_adapter.generate.call_args_list[2].args[1]
+    assert '"status": "late"' in followup_prompt
+    assert '"count": 1' in followup_prompt
+
+
+# Verifies: a resolved "late" handle materializes into send_message
+# recipients the same way a "missing" handle does — the messaging side is
+# fully shared, only the resolution criterion differs.
+def test_send_message_recipient_handle_works_for_late_submissions_too(client):
+    headers, local_course_id = _register_with_canvas(client)
+    students = [_student("501", local_course_id, "Alice")]
+    submissions = [_submission(501, SubmissionStatus.late, "Alice")]
+
+    resolve_outputs = [
+        '{"action": "resolve_missing_submissions", "course_name": "CPSC 310", '
+        '"assignment_reference": "assignment 4", "status": "late"}',
+        '{"assignment_id": 222}',
+        '{"action": "respond", "course_name": "CPSC 310", "message": "1 student submitted late: Alice."}',
+    ]
+    with (
+        patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=_two_assignments())),
+        patch("app.services.resolved_set.get_submissions", new=AsyncMock(return_value=submissions)),
+        patch("app.services.resolved_set.get_students", new=AsyncMock(return_value=students)),
+    ):
+        first, _mock_adapter = _chat(client, headers, "who submitted assignment 4 late?", resolve_outputs)
+    assert first["is_error"] is False, first
+    conversation_id = first["conversation_id"]
+    handle = _resolved_sets(conversation_id)[0]["handle"]
+
+    send_outputs = [
+        '{"switched_to": null}',
+        '{"action": "send_message", "course_name": "CPSC 310", "subject": "Heads up", '
+        f'"body": "Please submit on time going forward.", "recipient_handle": "{handle}"}}',
+    ]
+    second, _mock_adapter = _chat(
+        client, headers, "message them about it", send_outputs, conversation_id=conversation_id,
+    )
+
+    assert second["is_error"] is False, second
+    reply = second["reply"]
+    assert reply["action"] == "intent_preview"
+    assert reply["proposed_action"]["recipient_canvas_user_ids"] == [501]
 
 
 # Verifies: a course with no assignments yet still returns clarify (shared
@@ -254,7 +384,7 @@ def test_resolve_missing_submissions_no_assignments_returns_clarify(client):
     headers, _ = _register_with_canvas(client)
 
     with patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=[])):
-        body = _chat(
+        body, _mock_adapter = _chat(
             client, headers, "who's missing assignment 4?",
             '{"action": "resolve_missing_submissions", "course_name": "CPSC 310", '
             '"assignment_reference": "assignment 4"}',
@@ -265,6 +395,34 @@ def test_resolve_missing_submissions_no_assignments_returns_clarify(client):
     assert "no assignments yet" in body["reply"]["question"]
 
 
+def _resolve_missing_submissions_first_turn(
+    client, headers, local_course_id, students, submissions,
+) -> tuple[dict, str]:
+    """Shared first turn for the recipient_handle tests below: resolves
+    missing submissions (2 internal calls: main + assignment resolver),
+    then a 3rd continuation call — since resolve_missing_submissions is a
+    _CHAINABLE_READ_ACTIONS action, the loop always asks the model what to
+    do next in this same turn, even when nothing further was requested.
+    Returns (chat body, the persisted handle — read from resolved_sets,
+    since it's no longer on body["reply"] once a continuation runs)."""
+    resolve_outputs = [
+        '{"action": "resolve_missing_submissions", "course_name": "CPSC 310", '
+        '"assignment_reference": "assignment 4"}',
+        '{"assignment_id": 222}',
+        '{"action": "respond", "course_name": "CPSC 310", "message": "1 student is missing: Alice."}',
+    ]
+    with (
+        patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=_two_assignments())),
+        patch("app.services.resolved_set.get_submissions", new=AsyncMock(return_value=submissions)),
+        patch("app.services.resolved_set.get_students", new=AsyncMock(return_value=students)),
+    ):
+        first, _mock_adapter = _chat(client, headers, "who's missing assignment 4?", resolve_outputs)
+    assert first["is_error"] is False, first
+    rows = _resolved_sets(first["conversation_id"])
+    assert len(rows) == 1
+    return first, rows[0]["handle"]
+
+
 # Verifies: a later send_message turn can materialize a resolve_missing_submissions
 # handle into real recipients, scoped to the conversation that created it.
 def test_send_message_recipient_handle_materializes_recipients(client):
@@ -272,20 +430,10 @@ def test_send_message_recipient_handle_materializes_recipients(client):
     students = [_student("501", local_course_id, "Alice")]
     submissions = [_submission(501, SubmissionStatus.missing, "Alice")]
 
-    resolve_outputs = [
-        '{"action": "resolve_missing_submissions", "course_name": "CPSC 310", '
-        '"assignment_reference": "assignment 4"}',
-        '{"assignment_id": 222}',
-    ]
-    with (
-        patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=_two_assignments())),
-        patch("app.services.resolved_set.get_submissions", new=AsyncMock(return_value=submissions)),
-        patch("app.services.resolved_set.get_students", new=AsyncMock(return_value=students)),
-    ):
-        first = _chat(client, headers, "who's missing assignment 4?", resolve_outputs)
-    assert first["is_error"] is False, first
+    first, handle = _resolve_missing_submissions_first_turn(
+        client, headers, local_course_id, students, submissions,
+    )
     conversation_id = first["conversation_id"]
-    handle = first["reply"]["handle"]
 
     send_outputs = [
         # Real prior history now exists, so _resolve_course_switch fires
@@ -295,7 +443,7 @@ def test_send_message_recipient_handle_materializes_recipients(client):
         '{"action": "send_message", "course_name": "CPSC 310", "subject": "Reminder", '
         f'"body": "Please submit assignment 4.", "recipient_handle": "{handle}"}}',
     ]
-    second = _chat(
+    second, _mock_adapter = _chat(
         client, headers, "remind them", send_outputs, conversation_id=conversation_id,
     )
 
@@ -314,22 +462,12 @@ def test_recipient_handle_from_other_conversation_is_rejected(client):
     students = [_student("501", local_course_id, "Alice")]
     submissions = [_submission(501, SubmissionStatus.missing, "Alice")]
 
-    resolve_outputs = [
-        '{"action": "resolve_missing_submissions", "course_name": "CPSC 310", '
-        '"assignment_reference": "assignment 4"}',
-        '{"assignment_id": 222}',
-    ]
-    with (
-        patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=_two_assignments())),
-        patch("app.services.resolved_set.get_submissions", new=AsyncMock(return_value=submissions)),
-        patch("app.services.resolved_set.get_students", new=AsyncMock(return_value=students)),
-    ):
-        first = _chat(client, headers, "who's missing assignment 4?", resolve_outputs)
-    assert first["is_error"] is False, first
-    handle = first["reply"]["handle"]
+    first, handle = _resolve_missing_submissions_first_turn(
+        client, headers, local_course_id, students, submissions,
+    )
 
     # A brand-new, unrelated conversation for the same user/course.
-    other = _chat(
+    other, _mock_adapter = _chat(
         client, headers, "message them",
         '{"action": "send_message", "course_name": "CPSC 310", "subject": "Reminder", '
         f'"body": "Please submit.", "recipient_handle": "{handle}"}}',
@@ -347,20 +485,10 @@ def test_expired_recipient_handle_returns_clarify(client):
     students = [_student("501", local_course_id, "Alice")]
     submissions = [_submission(501, SubmissionStatus.missing, "Alice")]
 
-    resolve_outputs = [
-        '{"action": "resolve_missing_submissions", "course_name": "CPSC 310", '
-        '"assignment_reference": "assignment 4"}',
-        '{"assignment_id": 222}',
-    ]
-    with (
-        patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=_two_assignments())),
-        patch("app.services.resolved_set.get_submissions", new=AsyncMock(return_value=submissions)),
-        patch("app.services.resolved_set.get_students", new=AsyncMock(return_value=students)),
-    ):
-        first = _chat(client, headers, "who's missing assignment 4?", resolve_outputs)
-    assert first["is_error"] is False, first
+    first, handle = _resolve_missing_submissions_first_turn(
+        client, headers, local_course_id, students, submissions,
+    )
     conversation_id = first["conversation_id"]
-    handle = first["reply"]["handle"]
     _expire_resolved_set(handle)
 
     send_outputs = [
@@ -368,7 +496,7 @@ def test_expired_recipient_handle_returns_clarify(client):
         '{"action": "send_message", "course_name": "CPSC 310", "subject": "Reminder", '
         f'"body": "Please submit.", "recipient_handle": "{handle}"}}',
     ]
-    second = _chat(
+    second, _mock_adapter = _chat(
         client, headers, "remind them", send_outputs, conversation_id=conversation_id,
     )
 
