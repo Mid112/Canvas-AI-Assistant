@@ -259,6 +259,8 @@ jobs:
           CI: "true"
           ADMIN_EMAIL: admin@example.com
           ADMIN_PASSWORD: AdminPass123!
+          SECRET_KEY: ci-e2e-secret
+          CANVAS_TOKEN_ENCRYPTION_KEY: ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=
         run: |
           export DATABASE_URL="postgresql+asyncpg://appuser:localdev@127.0.0.1:${E2E_DB_PORT}/appdb"
           npm test
