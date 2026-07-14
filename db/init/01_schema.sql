@@ -68,6 +68,11 @@ CREATE TABLE courses (
     -- workflow_state above has never been confirmed against Canvas and
     -- set_active_course must refuse to select it (see db/migrations/013).
     synced_at        TIMESTAMPTZ,
+    -- Canvas's course_code (e.g. "COSC 111") and enrollment count — cached
+    -- locally so get_cached_courses() can render a full course card without
+    -- a live Canvas call (see db/migrations/020).
+    course_code      TEXT,
+    total_students   INTEGER,
     instructor_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     created_at       TIMESTAMPTZ DEFAULT NOW(),
     -- composite unique: the same Canvas course can exist once per instructor (co-instructors allowed)
@@ -438,4 +443,5 @@ INSERT INTO schema_migrations (filename) VALUES
     ('016_assignment_published.sql'),
     ('017_course_synced_at.sql'),
     ('018_workflow_undo.sql'),
-    ('019_audit_logs_allow_delete_operation.sql');
+    ('019_audit_logs_allow_delete_operation.sql'),
+    ('020_course_cache_columns.sql');

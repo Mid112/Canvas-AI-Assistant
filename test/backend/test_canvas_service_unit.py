@@ -15,6 +15,7 @@ from app.services.canvas import (
     get_active_course,
     get_assignment,
     get_assignments,
+    get_cached_courses,
     get_courses,
     get_owned_course,
     get_submissions,
@@ -129,8 +130,8 @@ async def test_get_courses_inserts_new_and_updates_existing():
     db.flush = AsyncMock(side_effect=_refresh_flush)
 
     fetched = [
-        {"id": 100, "name": "COSC 111 Updated", "course_code": "COSC111", "workflow_state": "available"},
-        {"id": 200, "name": "COSC 499", "course_code": "COSC499", "workflow_state": "available"},
+        {"id": 100, "name": "COSC 111 Updated", "course_code": "COSC111", "workflow_state": "available", "total_students": 42},
+        {"id": 200, "name": "COSC 499", "course_code": "COSC499", "workflow_state": "available", "total_students": 10},
     ]
 
     with (
@@ -148,6 +149,14 @@ async def test_get_courses_inserts_new_and_updates_existing():
         result = await get_courses(user, "https://canvas.ubc.ca", db)
 
     assert existing_course.name == "COSC 111 Updated"
+    assert existing_course.course_code == "COSC111"
+    assert existing_course.total_students == 42
+    new_course = next(
+        obj.args[0] for obj in db.add.call_args_list
+        if getattr(obj.args[0], "canvas_course_id", None) == "200"
+    )
+    assert new_course.course_code == "COSC499"
+    assert new_course.total_students == 10
     assert len(result) == 2
     assert {c.canvas_id for c in result} == {100, 200}
     db.commit.assert_awaited_once()
@@ -170,6 +179,80 @@ async def test_get_courses_empty_response_returns_empty_list():
 
     assert result == []
     db.scalars.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# get_cached_courses
+# ---------------------------------------------------------------------------
+
+def _cached_course_row(
+    id: int, canvas_course_id: str, canvas_url: str = "https://canvas.ubc.ca",
+    workflow_state: str = "available", course_code: str | None = "COSC111",
+    total_students: int | None = 42, name: str = "COSC 111", term: str | None = "2025W",
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=id, canvas_course_id=canvas_course_id, canvas_url=canvas_url,
+        name=name, term=term, workflow_state=workflow_state,
+        course_code=course_code, total_students=total_students,
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_cached_courses_returns_local_rows_without_calling_canvas():
+    db = AsyncMock()
+    db.scalars = AsyncMock(return_value=[_cached_course_row(5, "100")])
+    user = SimpleNamespace(id=1)
+
+    with patch("app.services.canvas.fetch_courses", new=AsyncMock()) as fetch_mock:
+        result = await get_cached_courses(user, "https://canvas.ubc.ca", db)
+
+    fetch_mock.assert_not_awaited()
+    assert len(result) == 1
+    assert result[0].canvas_id == 100
+    assert result[0].local_id == 5
+    assert result[0].course_code == "COSC111"
+    assert result[0].total_students == 42
+    assert result[0].term_name == "2025W"
+
+
+@pytest.mark.asyncio
+async def test_get_cached_courses_excludes_deleted_and_filters_by_canvas_url():
+    db = AsyncMock()
+    db.scalars = AsyncMock(return_value=[
+        _cached_course_row(1, "100", workflow_state="deleted"),
+        _cached_course_row(2, "200", canvas_url="https://other.instructure.com"),
+        _cached_course_row(3, "300"),
+    ])
+    user = SimpleNamespace(id=1)
+
+    result = await get_cached_courses(user, "https://canvas.ubc.ca", db)
+
+    assert [c.canvas_id for c in result] == [300]
+
+
+@pytest.mark.asyncio
+async def test_get_cached_courses_empty_when_nothing_synced():
+    db = AsyncMock()
+    db.scalars = AsyncMock(return_value=[])
+    user = SimpleNamespace(id=1)
+
+    result = await get_cached_courses(user, "https://canvas.ubc.ca", db)
+
+    assert result == []
+
+
+@pytest.mark.asyncio
+async def test_get_cached_courses_coalesces_null_course_code_to_empty_string():
+    db = AsyncMock()
+    db.scalars = AsyncMock(return_value=[
+        _cached_course_row(5, "100", course_code=None, total_students=None),
+    ])
+    user = SimpleNamespace(id=1)
+
+    result = await get_cached_courses(user, "https://canvas.ubc.ca", db)
+
+    assert result[0].course_code == ""
+    assert result[0].total_students is None
 
 
 # ---------------------------------------------------------------------------

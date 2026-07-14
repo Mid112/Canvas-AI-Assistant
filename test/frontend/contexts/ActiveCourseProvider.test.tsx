@@ -9,6 +9,7 @@ import { getInstitutionData } from "@/data/institutionCourseData";
 import { setStoredActiveCourseSelection } from "@/lib/active-course-storage";
 import {
   fetchActiveCourse,
+  fetchCachedCourses,
   fetchCourses,
   setActiveCourse,
 } from "@/services/canvas";
@@ -23,12 +24,14 @@ vi.mock("@/services/canvas", () => ({
     }
   },
   fetchCourses: vi.fn(),
+  fetchCachedCourses: vi.fn(),
   fetchActiveCourse: vi.fn(),
   setActiveCourse: vi.fn(),
 }));
 
 const mockUseAuth = vi.fn();
 const mockedFetchCourses = vi.mocked(fetchCourses);
+const mockedFetchCachedCourses = vi.mocked(fetchCachedCourses);
 const mockedFetchActiveCourse = vi.mocked(fetchActiveCourse);
 const mockedSetActiveCourse = vi.mocked(setActiveCourse);
 
@@ -102,6 +105,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockUseAuth.mockReturnValue(authWithCanvas);
   mockedFetchCourses.mockResolvedValue(canvasCourses);
+  // Default: nothing cached yet, so every existing test below (written before
+  // the cache-paint step existed) falls straight through to the live fetch —
+  // today's exact original behavior.
+  mockedFetchCachedCourses.mockResolvedValue([]);
   mockedFetchActiveCourse.mockResolvedValue(null);
   mockedSetActiveCourse.mockResolvedValue({
     local_id: 1,
@@ -383,5 +390,108 @@ describe("ActiveCourseProvider", () => {
       localId: 1,
       displayName: "CS 101: Introduction to Programming",
     });
+  });
+
+  // ---------------------------------------------------------------------
+  // Stale-while-revalidate: cache paint + background live revalidation
+  // ---------------------------------------------------------------------
+
+  it("paints available courses from the cache before the live fetch resolves", async () => {
+    mockedFetchCachedCourses.mockResolvedValue(canvasCourses);
+    mockedFetchCourses.mockReturnValue(new Promise(() => undefined));
+
+    const { result } = renderHook(() => useActiveCourse(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.isLoaded).toBe(true);
+    expect(result.current.availableCourses).toHaveLength(1);
+    expect(result.current.availableCourses[0]?.code).toBe("CS 101");
+  });
+
+  it("replaces cached course data once the live revalidation resolves", async () => {
+    const cachedCourse = { ...canvasCourses[0]!, name: "Stale Cached Name" };
+    const liveCourse = { ...canvasCourses[0]!, name: "Fresh Live Name" };
+    mockedFetchCachedCourses.mockResolvedValue([cachedCourse]);
+    let resolveLiveFetch: (courses: typeof canvasCourses) => void = () => undefined;
+    mockedFetchCourses.mockReturnValue(
+      new Promise((resolve) => {
+        resolveLiveFetch = resolve;
+      }),
+    );
+
+    const { result } = renderHook(() => useActiveCourse(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.availableCourses[0]?.name).toBe("Stale Cached Name");
+    });
+    expect(result.current.isLoading).toBe(false);
+
+    await act(async () => {
+      resolveLiveFetch([liveCourse]);
+    });
+
+    await waitFor(() => {
+      expect(result.current.availableCourses[0]?.name).toBe("Fresh Live Name");
+    });
+  });
+
+  it("blocks on the live fetch exactly as before when nothing is cached yet", async () => {
+    mockedFetchCachedCourses.mockResolvedValue([]);
+    let resolveLiveFetch: (courses: typeof canvasCourses) => void = () => undefined;
+    mockedFetchCourses.mockReturnValue(
+      new Promise((resolve) => {
+        resolveLiveFetch = resolve;
+      }),
+    );
+
+    const { result } = renderHook(() => useActiveCourse(), { wrapper });
+
+    await waitFor(() => {
+      expect(mockedFetchCachedCourses).toHaveBeenCalled();
+    });
+    expect(result.current.isLoading).toBe(true);
+    expect(result.current.availableCourses).toEqual([]);
+
+    await act(async () => {
+      resolveLiveFetch(canvasCourses);
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+    expect(result.current.availableCourses).toHaveLength(1);
+  });
+
+  it("keeps last-known cached data on screen when the live revalidation fails after a successful cache paint", async () => {
+    const { CanvasApiError } = await import("@/services/canvas");
+    mockedFetchCachedCourses.mockResolvedValue(canvasCourses);
+    mockedFetchCourses.mockRejectedValue(
+      new CanvasApiError("Canvas unavailable", 503),
+    );
+
+    const { result } = renderHook(() => useActiveCourse(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.availableCourses).toHaveLength(1);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("falls through to the live fetch when the cache read itself fails", async () => {
+    mockedFetchCachedCourses.mockRejectedValue(new Error("cache read failed"));
+
+    const { result } = renderHook(() => useActiveCourse(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.availableCourses).toHaveLength(1);
+    });
+
+    expect(result.current.availableCourses[0]?.code).toBe("CS 101");
+    expect(result.current.error).toBeNull();
   });
 });

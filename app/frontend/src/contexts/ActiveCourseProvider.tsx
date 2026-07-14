@@ -22,6 +22,7 @@ import { mapCanvasCourseToInstructorCourse } from "@/pages/Instructor/Instructor
 import {
   CanvasApiError,
   fetchActiveCourse,
+  fetchCachedCourses,
   fetchCourses,
   setActiveCourse as persistActiveCourse,
 } from "@/services/canvas";
@@ -64,6 +65,15 @@ function toActiveCourseSelectionFromResponse(
     localId: course.local_id,
     displayName: course.name,
   };
+}
+
+function mapCoursesList(
+  canvasCourses: CanvasCourse[],
+  canvasUrl: string,
+): InstructorCourse[] {
+  return canvasCourses
+    .map((canvasCourse) => mapCanvasCourseToInstructorCourse(canvasCourse, canvasUrl))
+    .filter((course): course is InstructorCourse => course !== null);
 }
 
 function fetchCoursesWithTimeout(
@@ -161,6 +171,7 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
       setActiveCourseState(getStoredActiveCourseSelection(persistenceScope));
     }
 
+    let cachePainted = false;
     try {
       if (usesCanvasCourses && accessToken) {
         const serverActive = await fetchActiveCourse(accessToken).catch(() => null);
@@ -179,13 +190,33 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        // Paint from whatever was last synced to the local DB before making
+        // the user wait on a live Canvas round-trip — the live fetch below
+        // still runs afterward to revalidate in the background. A cache-read
+        // failure, or an instructor with nothing synced yet, is treated the
+        // same as "nothing to paint" and falls straight through to today's
+        // behavior of blocking on the live fetch.
+        const cached = await fetchCachedCourses(accessToken, canvasUrl).catch(() => []);
+        if (cached.length > 0) {
+          const cachedCourses = mapCoursesList(cached, canvasUrl);
+          const selectedFromCache = applyActiveCourseFromList(
+            cachedCourses,
+            serverActive?.local_id ?? getStoredActiveCourseId(persistenceScope),
+          );
+          if (isMountedRef.current) {
+            setAvailableCourses(cachedCourses);
+            setActiveCourseState(
+              selectedFromCache ?? getStoredActiveCourseSelection(persistenceScope),
+            );
+            setIsLoading(false);
+            setIsLoaded(true);
+            cachePainted = true;
+          }
+        }
+
         const coursesData = await fetchCoursesWithTimeout(accessToken, canvasUrl);
 
-        const courses = coursesData
-          .map((canvasCourse) =>
-            mapCanvasCourseToInstructorCourse(canvasCourse, canvasUrl),
-          )
-          .filter((course): course is InstructorCourse => course !== null);
+        const courses = mapCoursesList(coursesData, canvasUrl);
         const selectedFromList = applyActiveCourseFromList(
           courses,
           serverActive?.local_id ?? getStoredActiveCourseId(persistenceScope),
@@ -231,6 +262,13 @@ export function ActiveCourseProvider({ children }: { children: ReactNode }) {
 
       if (err instanceof CanvasApiError && err.status === 401) {
         logout();
+        return;
+      }
+
+      // A cache paint already succeeded above, so this is a failed background
+      // revalidation, not an initial load failure — leave the last-known
+      // (cached) data on screen instead of clearing it or showing an error.
+      if (cachePainted) {
         return;
       }
 

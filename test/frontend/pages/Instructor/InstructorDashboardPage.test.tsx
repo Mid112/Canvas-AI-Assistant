@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InstructorDashboardPage } from "@/pages/Instructor/InstructorDashboardPage";
 import { paths } from "@/routes/paths";
 import { fetchCourseAssignments } from "@/services/assignments";
-import { fetchActiveCourse, fetchCourses } from "@/services/canvas";
+import { fetchActiveCourse, fetchCachedCourses, fetchCourses } from "@/services/canvas";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 const mockNavigate = vi.fn();
@@ -29,6 +29,7 @@ vi.mock("@/services/canvas", () => ({
     }
   },
   fetchCourses: vi.fn(),
+  fetchCachedCourses: vi.fn(),
   fetchActiveCourse: vi.fn(),
   setActiveCourse: vi.fn(),
 }));
@@ -52,6 +53,7 @@ vi.mock("@/contexts/AuthContext", async () => {
 });
 
 const mockedFetchCourses = vi.mocked(fetchCourses);
+const mockedFetchCachedCourses = vi.mocked(fetchCachedCourses);
 const mockedFetchActiveCourse = vi.mocked(fetchActiveCourse);
 const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
 
@@ -111,6 +113,7 @@ beforeEach(() => {
   mockUseAuth.mockReturnValue(authWithCanvas);
   mockedFetchActiveCourse.mockResolvedValue(null);
   mockedFetchCourses.mockResolvedValue(canvasCourses);
+  mockedFetchCachedCourses.mockResolvedValue([]);
   mockedFetchCourseAssignments.mockResolvedValue([
     { id: 1, name: "Assignment 1", course_id: 101 },
   ]);

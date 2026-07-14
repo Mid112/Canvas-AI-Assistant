@@ -281,6 +281,70 @@ def test_list_courses_selects_correct_school(client):
 
 
 # ---------------------------------------------------------------------------
+# GET /canvas/courses/cached
+# ---------------------------------------------------------------------------
+
+
+# Verifies: List cached courses unauthenticated.
+def test_list_cached_courses_unauthenticated(client):
+    response = client.get("/api/v1/canvas/courses/cached")
+    assert response.status_code == 401
+
+
+# Verifies: List cached courses before any sync returns empty list.
+def test_list_cached_courses_empty_before_any_sync(client):
+    headers = _register_with_canvas(client)
+    response = client.get(
+        f"/api/v1/canvas/courses/cached?canvas_url={CANVAS_URL}", headers=headers
+    )
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+# Verifies: List cached courses returns a previously-synced course without calling Canvas.
+def test_list_cached_courses_returns_previously_synced_course(client):
+    headers = _register_with_canvas(client)
+    courses = [_unique_course()]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.side_effect = AssertionError("get_cached_courses must not call Canvas")
+        response = client.get(
+            f"/api/v1/canvas/courses/cached?canvas_url={CANVAS_URL}", headers=headers
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 1
+    assert data[0]["name"] == "CPSC 310"
+    assert data[0]["course_code"] == "CPSC310"
+    assert data[0]["local_id"] is not None
+
+
+# Verifies: List cached courses excludes a course Canvas no longer returns (reconciled to deleted).
+def test_list_cached_courses_excludes_deleted_course(client):
+    headers = _register_with_canvas(client)
+    canvas_id = _unique_course()["id"]
+    courses = [_unique_course(canvas_id)]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+
+    # Next live sync no longer returns this course — get_courses() reconciles it to "deleted".
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = []
+        client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+
+    response = client.get(
+        f"/api/v1/canvas/courses/cached?canvas_url={CANVAS_URL}", headers=headers
+    )
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+# ---------------------------------------------------------------------------
 # GET /canvas/courses/{id}/assignments
 # ---------------------------------------------------------------------------
 

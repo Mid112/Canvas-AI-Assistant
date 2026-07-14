@@ -240,6 +240,32 @@ export async function fetchCourses(
   return response.json() as Promise<CanvasCourse[]>;
 }
 
+export async function fetchCachedCourses(
+  accessToken: string,
+  canvasUrl?: string,
+): Promise<CanvasCourse[]> {
+  const params = new URLSearchParams();
+  if (canvasUrl) {
+    params.set("canvas_url", canvasUrl);
+  }
+
+  const query = params.toString();
+  const response = await fetch(
+    `${API_BASE_URL}/canvas/courses/cached${query ? `?${query}` : ""}`,
+    {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new CanvasApiError(await parseError(response), response.status);
+  }
+
+  return response.json() as Promise<CanvasCourse[]>;
+}
+
 export async function fetchActiveCourse(
   accessToken: string,
 ): Promise<ActiveCourseResponse | null> {

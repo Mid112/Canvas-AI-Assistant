@@ -169,6 +169,8 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
             course.term = term_name
             course.canvas_url = normalized_sync_url
             course.workflow_state = workflow_state
+            course.course_code = item.get("course_code")
+            course.total_students = item.get("total_students")
             course.synced_at = datetime.now(UTC)
         else:
             course = Course(
@@ -177,6 +179,8 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
                 name=item["name"],
                 term=term_name,
                 workflow_state=workflow_state,
+                course_code=item.get("course_code"),
+                total_students=item.get("total_students"),
                 instructor_id=user.id,
                 synced_at=datetime.now(UTC),
             )
@@ -213,6 +217,35 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
             }
         )
         for item in data
+    ]
+
+
+async def get_cached_courses(user: User, canvas_url: str, db: AsyncSession) -> list[CourseResponse]:
+    """Returns this instructor's last-synced courses straight from the local
+    DB — no Canvas call. Lets the dashboard paint instantly from whatever
+    get_courses() persisted on a previous sync, instead of always blocking
+    on a live Canvas round-trip; callers are expected to also call
+    get_courses() in the background to revalidate.
+
+    Rows with workflow_state == "deleted" are excluded, matching
+    get_courses()'s reconciliation. A course that has never been synced has
+    no local row at all, so this simply returns fewer/no entries — never an
+    error — and the caller falls back to a live get_courses() call."""
+    normalized_sync_url = normalize_canvas_url(canvas_url)
+    rows = await db.scalars(select(Course).where(Course.instructor_id == user.id))
+    return [
+        CourseResponse(
+            canvas_id=int(course.canvas_course_id),
+            local_id=course.id,
+            name=course.name,
+            course_code=course.course_code or "",
+            workflow_state=course.workflow_state,
+            term_name=course.term,
+            total_students=course.total_students,
+        )
+        for course in rows
+        if course.workflow_state != "deleted"
+        and canvas_urls_equivalent(course.canvas_url, normalized_sync_url)
     ]
 
 

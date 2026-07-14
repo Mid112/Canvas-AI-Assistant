@@ -5,7 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useInstitution } from "@/contexts/useInstitution";
 import { InstructorCoursesPage } from "@/pages/Instructor/InstructorCoursesPage";
 import { fetchCourseAssignments } from "@/services/assignments";
-import { fetchActiveCourse, fetchCourses, setActiveCourse } from "@/services/canvas";
+import {
+  fetchActiveCourse,
+  fetchCachedCourses,
+  fetchCourses,
+  setActiveCourse,
+} from "@/services/canvas";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 vi.mock("@/services/canvas", () => ({
@@ -18,6 +23,7 @@ vi.mock("@/services/canvas", () => ({
     }
   },
   fetchCourses: vi.fn(),
+  fetchCachedCourses: vi.fn(),
   fetchActiveCourse: vi.fn(),
   setActiveCourse: vi.fn(),
 }));
@@ -31,6 +37,7 @@ vi.mock("@/services/assignments", () => ({
 
 const mockUseAuth = vi.fn();
 const mockedFetchCourses = vi.mocked(fetchCourses);
+const mockedFetchCachedCourses = vi.mocked(fetchCachedCourses);
 const mockedFetchActiveCourse = vi.mocked(fetchActiveCourse);
 const mockedSetActiveCourse = vi.mocked(setActiveCourse);
 const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
@@ -125,6 +132,7 @@ beforeEach(() => {
   vi.unstubAllEnvs();
   mockUseAuth.mockReturnValue(authWithCanvas);
   mockedFetchCourses.mockResolvedValue(canvasCourses);
+  mockedFetchCachedCourses.mockResolvedValue([]);
   mockedFetchActiveCourse.mockResolvedValue(null);
   mockedSetActiveCourse.mockResolvedValue({
     local_id: 1,
