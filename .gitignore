@@ -25,5 +25,11 @@ test/backend/coverage/
 test/frontend/coverage/
 htmlcov/
 
+# Playwright / e2e artifacts
+test/e2e/test-results/
+test/e2e/playwright-report/
+test/e2e/blob-report/
+test/e2e/playwright/.cache/
+
 # Vite / Vitest cache
 **/.vite/
