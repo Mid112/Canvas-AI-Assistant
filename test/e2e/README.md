@@ -15,7 +15,7 @@ Covers full-app UI flows for Integration Testing (#687):
 1. Postgres on `:5433` (started by `make e2e-up` / `docker compose -f docker-compose.dev.yml up -d postgres`)
 2. Backend Python venv at `app/backend/.venv`
 3. Frontend deps installed (`cd app/frontend && npm ci`)
-4. Default admin seed available: `admin@example.com` / `AdminPass123!`  
+4. Default admin seed available: `admin@example.com` / `AdminPass123!`
    (created on first backend boot when no admin exists)
 
 Canvas sandbox is **not** required for this suite — instructor flows use “Continue without connecting”. Real Canvas token flows remain covered by API integration tests.

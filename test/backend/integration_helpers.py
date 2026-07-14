@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from unittest.mock import AsyncMock, patch
 
@@ -71,14 +72,19 @@ def register_with_canvas(client: TestClient, *, prefix: str = "canvas") -> tuple
 
 
 def create_assignment_preview_llm(local_course_id: int, title: str = "Midterm Exam") -> str:
-    return (
-        '{"action": "intent_preview", "summary": "Create '
-        + title
-        + '", '
-        + '"proposed_action": {"action": "create_assignment", '
-        + f'"local_course_id": {local_course_id}, "title": "{title}", '
-        + '"description": "Covers chapters 1-5", "due_date": "2030-01-01T00:00:00", '
-        + '"points_possible": 100}}'
+    return json.dumps(
+        {
+            "action": "intent_preview",
+            "summary": f"Create {title}",
+            "proposed_action": {
+                "action": "create_assignment",
+                "local_course_id": local_course_id,
+                "title": title,
+                "description": "Covers chapters 1-5",
+                "due_date": "2030-01-01T00:00:00",
+                "points_possible": 100,
+            },
+        }
     )
 
 

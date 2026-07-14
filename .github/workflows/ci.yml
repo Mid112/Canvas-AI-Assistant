@@ -195,17 +195,30 @@ jobs:
     if: needs.changes.outputs.e2e == 'true'
     steps:
       - uses: actions/checkout@v4
-      - name: Ensure Postgres is running
+      - name: Start isolated PostgreSQL
         run: |
-          docker compose -f docker-compose.dev.yml up -d postgres
+          CONTAINER="ci-e2e-postgres-${{ github.run_id }}-${{ github.run_attempt }}"
+          docker rm -f "$CONTAINER" 2>/dev/null || true
+          docker run -d \
+            --name "$CONTAINER" \
+            -p 127.0.0.1::5432 \
+            -e POSTGRES_USER=appuser \
+            -e POSTGRES_PASSWORD=localdev \
+            -e POSTGRES_DB=appdb \
+            postgres:16-alpine
+
           for i in $(seq 1 30); do
-            if docker compose -f docker-compose.dev.yml exec -T postgres pg_isready -U appuser -d appdb >/dev/null 2>&1; then
+            if docker exec "$CONTAINER" pg_isready -U appuser -d appdb >/dev/null 2>&1; then
               echo "PostgreSQL is ready"
+              E2E_DB_PORT="$(docker port "$CONTAINER" 5432/tcp | sed 's/.*://')"
+              echo "E2E_DB_CONTAINER=$CONTAINER" >> "$GITHUB_ENV"
+              echo "E2E_DB_PORT=$E2E_DB_PORT" >> "$GITHUB_ENV"
               exit 0
             fi
             sleep 1
           done
           echo "PostgreSQL failed to start"
+          docker logs "$CONTAINER"
           exit 1
       - name: Set up Python venv + backend deps
         run: |
@@ -231,10 +244,14 @@ jobs:
         working-directory: ./test/e2e
         env:
           CI: "true"
-          DATABASE_URL: postgresql+asyncpg://appuser:localdev@localhost:5433/appdb
           ADMIN_EMAIL: admin@example.com
           ADMIN_PASSWORD: AdminPass123!
-        run: npm test
+        run: |
+          export DATABASE_URL="postgresql+asyncpg://appuser:localdev@127.0.0.1:${E2E_DB_PORT}/appdb"
+          npm test
+      - name: Stop isolated PostgreSQL
+        if: always()
+        run: docker rm -f "${E2E_DB_CONTAINER:-ci-e2e-postgres-${{ github.run_id }}-${{ github.run_attempt }}}" 2>/dev/null || true
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4
