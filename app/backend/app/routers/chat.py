@@ -5,7 +5,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
-from app.schemas.chat import ChatRequest, ChatResponse, ConfirmActionRequest, ConversationResponse
+from app.schemas.chat import (
+    ChatRequest,
+    ChatResponse,
+    ConfirmActionRequest,
+    ConversationResponse,
+    MessageResponse,
+    WorkflowStatus,
+)
 from app.services.chat import (
     get_conversation_with_messages,
     handle_cancelled_action,
@@ -68,4 +75,20 @@ async def get_conversation(
     conversation = await get_conversation_with_messages(db, current_user, conversation_id)
     if not conversation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found.")
-    return conversation
+    workflow_statuses = {
+        workflow.preview_message_id: WorkflowStatus(
+            workflow_id=workflow.id,
+            status=workflow.status,
+            action_name=workflow.action_name,
+            result_message_id=workflow.result_message_id,
+        )
+        for workflow in conversation.workflows
+    }
+    return ConversationResponse(
+        id=conversation.id,
+        course_id=conversation.course_id,
+        course_name=conversation.course_name,
+        created_at=conversation.created_at,
+        messages=[MessageResponse.model_validate(m) for m in conversation.messages],
+        workflow_statuses=workflow_statuses,
+    )

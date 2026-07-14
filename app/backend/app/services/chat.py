@@ -617,7 +617,19 @@ async def _run_fetch_submissions_chain(
     in build_system_prompt). When it isn't already known, _resolve_course_and_assignment
     resolves it server-side, all inside the single request handling the
     user's one message, instead of making the user ask a second time once
-    the assignment list is in history."""
+    the assignment list is in history.
+
+    Attaches the resolved assignment's own id/name/due date to the result
+    (under "assignment") and rewrites "summary" to name it explicitly
+    (e.g. "For Final Project, 3 students have not submitted...") — without
+    this, a plain submissions list/count is ambiguous about which
+    assignment it's even about once "latest assignment" or a name
+    resolved server-side, especially once the result is scrollback in
+    conversation history. The local Assignment row read here is always
+    already populated with the real Canvas title/due_date by the time
+    _resolve_course_and_assignment returns — either freshly upserted by
+    its own internal fetch_assignments call, or by an earlier one that
+    let the model already know this assignment_id."""
     resolved = await _resolve_course_and_assignment(
         db, user, conversation, user_msg,
         action.local_course_id, action.assignment_id, action.assignment_reference, user_message,
@@ -626,12 +638,58 @@ async def _run_fetch_submissions_chain(
         return resolved
     course, assignment_id = resolved
 
+    assignment_row = await db.scalar(
+        select(Assignment).where(
+            Assignment.course_id == course.id,
+            Assignment.canvas_assignment_id == str(assignment_id),
+        )
+    )
+    assignment_name = assignment_row.title if assignment_row else f"Assignment {assignment_id}"
+    due_at = assignment_row.due_date if assignment_row else None
+
     print(f"Combing through {course.name} submissions")
     submit_action = FetchSubmissionsAction(local_course_id=course.id, assignment_id=assignment_id)
-    return await _run_tracked_read(
+    result = await _run_tracked_read(
         db, user, conversation, user_msg.id, "fetch_submissions",
         submit_action.model_dump(), execute_tool(db, user, submit_action),
     )
+    result["assignment"] = {
+        "assignment_id": assignment_id,
+        "assignment_name": assignment_name,
+        "due_at": due_at.isoformat() if due_at else None,
+    }
+    result["summary"] = _build_fetch_submissions_summary(
+        assignment_name, due_at, result["counts"], result["pending_students"],
+    )
+    return result
+
+
+def _build_fetch_submissions_summary(
+    assignment_name: str,
+    due_at: datetime | None,
+    counts: dict[str, int],
+    pending_students: list[dict],
+) -> str:
+    """Names the resolved assignment explicitly and leads with the
+    instructor-relevant question ("who's pending?") rather than a bare
+    count — mirrors the "For Final Project, these students have not
+    submitted..." shape, plus late/graded/excused counts so those aren't
+    left buried in the raw per-submission list either."""
+    due_part = f" (due {due_at.strftime('%B %d, %Y at %I:%M %p')})" if due_at else ""
+    if pending_students:
+        names = [p["name"] for p in pending_students]
+        sample = ", ".join(names[:10])
+        more = f", and {len(names) - 10} more" if len(names) > 10 else ""
+        lines = [f"For {assignment_name}{due_part}, {len(names)} student(s) have not submitted: {sample}{more}."]
+    else:
+        lines = [f"For {assignment_name}{due_part}, every student has submitted."]
+    if counts.get("late"):
+        lines.append(f"{counts['late']} submitted late.")
+    if counts.get("graded"):
+        lines.append(f"{counts['graded']} have been graded.")
+    if counts.get("excused"):
+        lines.append(f"{counts['excused']} are excused.")
+    return " ".join(lines)
 
 
 _RESOLVED_SET_SAMPLE_SIZE = 5
@@ -1672,6 +1730,16 @@ intent_preview). The app resolves assignment_reference to a real ID for
 you, the same way course_name is resolved to a course — never invent or
 guess a numeric assignment_id yourself.
 
+The result carries "assignment" (the resolved assignment's own
+assignment_id/assignment_name/due_at — always name it explicitly when you
+answer, e.g. "For Final Project, ..."), "counts" (submitted/missing/
+unsubmitted/late/graded/excused), and "pending_students" (missing +
+unsubmitted combined — this app's definition of "who hasn't submitted",
+matching resolve_missing_submissions). When answering "who hasn't
+submitted" or similar from a fetch_submissions result already in history,
+read pending_students/counts directly — do not recompute it yourself by
+scanning the raw "submissions" list.
+
 FINDING STUDENTS MISSING OR LATE ON A SUBMISSION:
 When the user wants to find or message students who have not submitted an
 assignment, or who submitted it LATE (e.g. "who's missing assignment 4",
@@ -2521,11 +2589,15 @@ async def handle_cancelled_action(
 async def get_conversation_with_messages(
     db: AsyncSession, user: User, conversation_id: int
 ) -> Conversation | None:
+    """Eager-loads workflows alongside messages — see WorkflowStatus in
+    schemas/chat.py for why: the router builds an authoritative
+    preview-status map from conversation.workflows for the frontend,
+    instead of leaving it to reconstruct status from transcript text."""
     return await db.scalar(
         select(Conversation)
         .where(
             Conversation.id == conversation_id,
             Conversation.user_id == user.id,
         )
-        .options(selectinload(Conversation.messages))
+        .options(selectinload(Conversation.messages), selectinload(Conversation.workflows))
     )

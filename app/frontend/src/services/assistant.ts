@@ -39,11 +39,23 @@ export interface ConversationMessage {
   created_at: string;
 }
 
+/** Mirrors WorkflowStatus in app/backend/app/schemas/chat.py — the
+ * authoritative lifecycle state of one proposed action, independent of
+ * transcript text. */
+export interface WorkflowStatusEntry {
+  workflow_id: number;
+  status: string;
+  action_name: string;
+  result_message_id: number | null;
+}
+
 export interface ConversationResponse {
   id: number;
   course_id: number | null;
   created_at: string;
   messages: ConversationMessage[];
+  /** Keyed by preview_message_id — see WorkflowStatusEntry. */
+  workflow_statuses: Record<number, WorkflowStatusEntry>;
 }
 
 function toAssistantMessageResult(

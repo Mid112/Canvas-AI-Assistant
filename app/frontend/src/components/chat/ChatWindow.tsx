@@ -20,6 +20,7 @@ import {
 } from "@/services/assistant";
 import type { AssistantMessageResult } from "@/services/assistant";
 import type { ChatMessage } from "@/types/chat";
+import { mapWorkflowStatus } from "@/types/chat";
 
 function createMessageId(): string {
   return crypto.randomUUID();
@@ -120,39 +121,16 @@ export function ChatWindow({
           return;
         }
 
-        const pendingStatuses = new Map<number, ChatMessage["pendingActionStatus"]>();
-        // More than one preview can be simultaneously open (a grouped
-        // send_message batch), so this tracks every still-open preview
-        // message id in creation order, not just the single latest one.
-        // "[confirmed action]"/"[cancelled action]" marker messages don't
-        // record which specific preview they settled, so replaying history
-        // resolves the oldest still-open one first (FIFO) — an
-        // approximation that matches the common case (previews from one
-        // batch resolved in the order they were shown) but can mislabel
-        // status if a user resolved them out of order in a since-reloaded
-        // session. Live, in-session confirm/cancel (resolvePendingAction)
-        // is unaffected — it always matches by exact message id.
-        const openPendingMessageIds: number[] = [];
-
-        for (const storedMessage of conversation.messages) {
-          const parsed =
-            storedMessage.role === "assistant"
-              ? parseStoredAssistantReply(storedMessage.content)
-              : null;
-
-          if (parsed?.intent_preview) {
-            pendingStatuses.set(storedMessage.id, "pending");
-            openPendingMessageIds.push(storedMessage.id);
-          }
-
-          if (storedMessage.role === "user" && openPendingMessageIds.length > 0) {
-            if (storedMessage.content === "[cancelled action]") {
-              pendingStatuses.set(openPendingMessageIds.shift()!, "cancelled");
-            } else if (storedMessage.content === "[confirmed action]") {
-              pendingStatuses.set(openPendingMessageIds.shift()!, "confirmed");
-            }
-          }
-        }
+        // Authoritative per-preview status, keyed by preview_message_id —
+        // see WorkflowStatus in app/backend/app/schemas/chat.py. Replaces
+        // the old FIFO reconstruction (matching "[confirmed action]"/
+        // "[cancelled action]" marker text to the oldest still-open
+        // preview in transcript order), which mislabeled cards whenever
+        // more than one preview existed and they were resolved out of
+        // order. Live, in-session confirm/cancel (resolvePendingAction)
+        // was always unaffected by that bug — it matches by exact message
+        // id — this only fixes the post-reload reconstruction.
+        const workflowStatuses = conversation.workflow_statuses ?? {};
 
         const restoredMessages = conversation.messages.flatMap<ChatMessage>((storedMessage) => {
           const timestamp = new Date(storedMessage.created_at);
@@ -195,7 +173,7 @@ export function ChatWindow({
             conversationId: conversation.id,
             pendingMessageId: mapped.pendingMessageId,
             pendingActionStatus: mapped.pendingMessageId
-              ? pendingStatuses.get(mapped.pendingMessageId) ?? "pending"
+              ? mapWorkflowStatus(workflowStatuses[mapped.pendingMessageId]?.status)
               : undefined,
             explanation: mapped.explanation,
             interpretedAction: mapped.interpretedAction,
@@ -204,12 +182,10 @@ export function ChatWindow({
           }];
         });
 
-        const nextActivePendingMessageIds: number[] = [];
-        for (const [messageId, status] of pendingStatuses) {
-          if (status === "pending") {
-            nextActivePendingMessageIds.push(messageId);
-          }
-        }
+        const nextActivePendingMessageIds = restoredMessages
+          .filter((entry) => entry.pendingActionStatus === "pending")
+          .map((entry) => entry.pendingMessageId)
+          .filter((id): id is number => id !== undefined);
 
         setMessages(restoredMessages.length > 0 ? restoredMessages : seedChatMessages);
         setConversationId(conversation.id);

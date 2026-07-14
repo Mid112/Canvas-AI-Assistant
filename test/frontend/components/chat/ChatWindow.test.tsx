@@ -441,6 +441,14 @@ describe("ChatWindow", () => {
           created_at: "2026-06-24T10:02:00.000Z",
         },
       ],
+      workflow_statuses: {
+        42: {
+          workflow_id: 1,
+          status: "pending",
+          action_name: "create_assignment",
+          result_message_id: null,
+        },
+      },
     });
 
     renderWithInstitution(
@@ -456,5 +464,111 @@ describe("ChatWindow", () => {
       "/instructor/actions/preview?conversation=7&pending=42",
     );
     expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();
+  });
+
+  // Verifies: the E2E-reported bug — a preview that was already confirmed
+  // in an earlier session shows as confirmed (no Confirm/Cancel buttons)
+  // on reload, using the authoritative workflow_statuses map rather than
+  // defaulting every intent_preview message to "pending".
+  it("shows an already-confirmed preview as confirmed on reload, not pending", async () => {
+    mockedFetchConversation.mockResolvedValueOnce({
+      id: 7,
+      course_id: 3,
+      created_at: "2026-06-24T10:00:00.000Z",
+      messages: [
+        {
+          id: 42,
+          role: "assistant",
+          content: JSON.stringify({
+            intent_preview: true,
+            summary: "I prepared a midterm exam for review.",
+            proposed_action: { action: "create_assignment" },
+            preview_metadata: { course_name: "CPSC 310", audience: { label: "Entire class" } },
+          }),
+          created_at: "2026-06-24T10:02:00.000Z",
+        },
+      ],
+      workflow_statuses: {
+        42: {
+          workflow_id: 1,
+          status: "executed",
+          action_name: "create_assignment",
+          result_message_id: 43,
+        },
+      },
+    });
+
+    renderWithInstitution(<ChatWindow initialConversationId={7} />);
+
+    expect(
+      await screen.findByText("This action was confirmed."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirm" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+  });
+
+  // Verifies: two previews resolved OUT OF ORDER (the second one confirmed
+  // before the first is cancelled) each still show their own correct
+  // status on reload — the old FIFO-from-transcript-order reconstruction
+  // would have mislabeled these by resolving markers against the oldest
+  // still-open preview regardless of which one they actually settled.
+  it("keeps each preview's correct status on reload when resolved out of order", async () => {
+    mockedFetchConversation.mockResolvedValueOnce({
+      id: 9,
+      course_id: 3,
+      created_at: "2026-06-24T10:00:00.000Z",
+      messages: [
+        {
+          id: 50,
+          role: "assistant",
+          content: JSON.stringify({
+            intent_preview: true,
+            summary: "Message Alice about the quiz.",
+            proposed_action: { action: "send_message" },
+            preview_metadata: { course_name: "CPSC 310", audience: { label: "Alice" } },
+          }),
+          created_at: "2026-06-24T10:01:00.000Z",
+        },
+        {
+          id: 51,
+          role: "assistant",
+          content: JSON.stringify({
+            intent_preview: true,
+            summary: "Message Bob about the quiz.",
+            proposed_action: { action: "send_message" },
+            preview_metadata: { course_name: "CPSC 310", audience: { label: "Bob" } },
+          }),
+          created_at: "2026-06-24T10:01:05.000Z",
+        },
+      ],
+      // Bob's (later) preview was confirmed; Alice's (earlier) preview was
+      // cancelled — the reverse of creation order.
+      workflow_statuses: {
+        50: {
+          workflow_id: 5,
+          status: "cancelled",
+          action_name: "send_message",
+          result_message_id: null,
+        },
+        51: {
+          workflow_id: 6,
+          status: "executed",
+          action_name: "send_message",
+          result_message_id: 52,
+        },
+      },
+    });
+
+    renderWithInstitution(<ChatWindow initialConversationId={9} />);
+
+    expect(
+      await screen.findByText("Message Alice about the quiz."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Message Bob about the quiz.")).toBeInTheDocument();
+
+    expect(screen.getByText("This action was cancelled.")).toBeInTheDocument();
+    expect(screen.getByText("This action was confirmed.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirm" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
   });
 });

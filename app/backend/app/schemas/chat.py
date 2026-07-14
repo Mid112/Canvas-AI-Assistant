@@ -45,11 +45,30 @@ class MessageResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class WorkflowStatus(BaseModel):
+    """Authoritative preview lifecycle state for one Workflow row, keyed
+    by preview_message_id on ConversationResponse. Lets a preview card
+    render its real pending/executing/executed/failed/cancelled/superseded
+    status directly, instead of the frontend reconstructing it from
+    transcript marker text ("[confirmed action]"/"[cancelled action]")
+    and FIFO-guessing which pending preview a marker belongs to — a guess
+    that silently mislabels cards once more than one preview exists in a
+    conversation or they're resolved out of order."""
+
+    workflow_id: int
+    status: str
+    action_name: str
+    result_message_id: int | None = None
+
+    model_config = {"from_attributes": True}
+
+
 class ConversationResponse(BaseModel):
     id: int
     course_id: int | None
     course_name: str | None = None
     created_at: datetime
     messages: list[MessageResponse] = []
+    workflow_statuses: dict[int, WorkflowStatus] = {}
 
     model_config = {"from_attributes": True}
