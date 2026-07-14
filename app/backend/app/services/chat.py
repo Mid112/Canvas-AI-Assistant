@@ -18,6 +18,7 @@ from sqlalchemy.orm import selectinload
 
 from app.config import settings
 from app.core.canvas_url import canvas_urls_equivalent
+from app.core.database import AsyncSessionLocal
 from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_action
 from app.mcp_tools.dispatcher import _resolve_course as resolve_course
 from app.mcp_tools.schemas import (
@@ -257,20 +258,66 @@ async def _get_course_names_for_user(db: AsyncSession, user: User) -> list[Canva
     )
 
 
+_COURSE_NAME_FUZZY_MATCH_MIN_LENGTH = 4
+
+
+def _resolve_duplicate_course_name_matches(
+    matches: list[CanvasCourseName],
+) -> CanvasCourseName | None:
+    """canvas_course_names is write-once and fetch_courses deliberately
+    includes completed (past-term) courses alongside active ones (so a
+    Canvas rename mid-conversation can never retroactively change what an
+    in-progress conversation has been calling a course) — so an instructor
+    who has taught the same course code more than once accumulates
+    multiple rows with an identical name. That's the normal steady state
+    for a returning instructor, not a rare edge case, so a same-name
+    collision shouldn't immediately give up: narrow to whichever match(es)
+    aren't a known-completed term first. Still returns None (ambiguous) if
+    that doesn't narrow to exactly one — e.g. two genuinely active
+    sections, or a legacy row with no workflow_state recorded at all
+    sitting alongside another candidate."""
+    still_relevant = [cn for cn in matches if cn.workflow_state != "completed"]
+    return still_relevant[0] if len(still_relevant) == 1 else None
+
+
 def _match_course_name(course_names: list[CanvasCourseName], course_name: str | None) -> CanvasCourseName | None:
-    """Exact (normalized) match only — not substring-in-message like the
-    deterministic resolver this replaced. The model is given the literal
-    course name strings in YOUR COURSES and told to copy one verbatim, so
-    an exact match is both correct and safe; zero or multiple matches
-    (the model should have avoided both via the COURSE RESOLUTION prompt
-    rules) are treated as "couldn't resolve" and left to the caller's
-    sticky-course fallback — same belt-and-suspenders philosophy as
-    dispatcher.py's _create_assignment_missing_field."""
+    """Exact (normalized) match first; a normalized substring match only
+    if that finds nothing, since the model is given the literal course
+    name strings in YOUR COURSES and told to copy one verbatim, so exact
+    is both the expected and the safest case. The substring fallback
+    exists only for a smaller/weaker model paraphrasing or abbreviating
+    despite that instruction — restricted to a single unambiguous
+    candidate (in either substring direction) and a minimum normalized
+    length, so a short/generic fragment can't spuriously match half the
+    course list. Either stage can still hit a same-name collision across
+    terms (see _resolve_duplicate_course_name_matches); if that's also
+    ambiguous, this returns None either way — no match is ever guessed,
+    only ever resolved to something already unambiguous — and the caller
+    falls back to its existing sticky-course behavior, same
+    belt-and-suspenders philosophy as dispatcher.py's
+    _create_assignment_missing_field."""
     if not course_name:
         return None
     normalized_target = _normalize_course_text(course_name)
-    matches = [cn for cn in course_names if _normalize_course_text(cn.name) == normalized_target]
-    return matches[0] if len(matches) == 1 else None
+
+    exact_matches = [cn for cn in course_names if _normalize_course_text(cn.name) == normalized_target]
+    if len(exact_matches) == 1:
+        return exact_matches[0]
+    if len(exact_matches) > 1:
+        return _resolve_duplicate_course_name_matches(exact_matches)
+
+    if len(normalized_target) < _COURSE_NAME_FUZZY_MATCH_MIN_LENGTH:
+        return None
+    substring_matches = [
+        cn for cn in course_names
+        if normalized_target in _normalize_course_text(cn.name)
+        or _normalize_course_text(cn.name) in normalized_target
+    ]
+    if len(substring_matches) == 1:
+        return substring_matches[0]
+    if len(substring_matches) > 1:
+        return _resolve_duplicate_course_name_matches(substring_matches)
+    return None
 
 
 async def _find_or_fork_conversation_for_course(
@@ -1993,8 +2040,18 @@ async def handle_chat_message(
     # no stale framing/history to leak and nothing worth paying an extra
     # call for. Also skipped for a modify turn (pending_message_id set —
     # that's revising an existing proposed action tied to this
-    # conversation, not a fresh request).
-    if pending_message_id is None and conversation.course_id is not None and history:
+    # conversation, not a fresh request). Also skipped when local_course_id
+    # is explicitly given (the "set active course" button, sent alongside
+    # this same message) — that explicit selection is a stronger,
+    # deliberate signal than a course name the message happens to mention,
+    # and wins outright for this turn rather than being silently
+    # overridden by this resolver.
+    if (
+        pending_message_id is None
+        and local_course_id is None
+        and conversation.course_id is not None
+        and history
+    ):
         switched = await _resolve_course_switch(course_names, conversation.course_name, message)
         if (
             switched is not None
@@ -2110,22 +2167,60 @@ async def handle_chat_message(
                     )
                 )
             if matched_local_course_id is not None:
-                if conversation.course_id is None:
-                    # This conversation's first course resolution — same
-                    # conversation, no fork, user_msg already belongs to it.
+                if conversation.course_id is None or not history:
+                    # This conversation's first course resolution, OR a
+                    # preference-seeded new conversation
+                    # (get_or_create_conversation) that hasn't accumulated
+                    # any real prior-turn history yet — either way there's
+                    # nothing to preserve by forking, so mutate in place.
+                    # Without the `not history` half: a brand-new
+                    # conversation gets course_id seeded from the user's
+                    # active-course preference immediately, even before
+                    # anything is said in it; if its first message then
+                    # named a DIFFERENT course, the fork below would
+                    # re-parent that only message away, leaving the
+                    # preference-seeded conversation permanently empty and
+                    # orphaned.
                     conversation.course_id = matched_local_course_id
                     conversation.course_name = matched.name
-                elif matched_local_course_id != conversation.course_id:
-                    # Switching away from a course this conversation already
-                    # had — route to a different conversation (reused or
-                    # forked) instead of mutating this one, and re-parent
-                    # this turn's user message onto it.
+                    resolved_local_course_id = matched_local_course_id
+                elif (
+                    pending_message_id is None
+                    and local_course_id is None
+                    and matched_local_course_id != conversation.course_id
+                ):
+                    # Switching away from a course this conversation
+                    # already had, with real prior activity — route to a
+                    # different conversation (reused or forked) instead of
+                    # mutating this one, and re-parent this turn's user
+                    # message onto it.
+                    #
+                    # Never on a modify turn (pending_message_id set):
+                    # update_message_content further below looks that
+                    # message up scoped to conversation.id, so forking
+                    # here would silently break "revise this pending
+                    # action" — the message no longer exists in the new
+                    # conversation.id, raising an unhandled
+                    # ToolExecutionError instead of applying the revision.
+                    #
+                    # Never when the client just explicitly set the active
+                    # course this same turn either (local_course_id set,
+                    # the "set active course" button) — an explicit click
+                    # is a stronger, more deliberate signal than a course
+                    # name the model merely echoed from message text, and
+                    # wins outright rather than being silently overridden.
                     target = await _find_or_fork_conversation_for_course(
                         db, user, matched_local_course_id, matched.name
                     )
                     user_msg.conversation_id = target.id
                     conversation = target
-                resolved_local_course_id = matched_local_course_id
+                    history = await _get_recent_messages(db, conversation.id)
+                    resolved_local_course_id = matched_local_course_id
+                # else: either the model just confirmed the conversation's
+                # own course (nothing to do), or one of the guards above
+                # blocked a would-be switch — resolved_local_course_id
+                # stays pinned to conversation.course_id (its default,
+                # set above) either way.
 
         # Inject the resolved course id (or downgrade to a clarify envelope)
         # directly into the parsed JSON, before parse_action's strict schema
@@ -2517,25 +2612,37 @@ async def handle_confirmed_action(
     # a natural moment to also refresh canvas_course_names for the
     # connection it touched (the other trigger is the periodic sweep in
     # app.main's lifespan — chat turns themselves never call Canvas for
-    # this, see handle_chat_message). Best-effort and after the write's
-    # own commit above, so a Canvas hiccup here can never roll back or
-    # fail the write that already succeeded.
+    # this, see handle_chat_message). Best-effort, and run in an ISOLATED
+    # session — never the shared `db` this function returns objects from
+    # (mirrors run_course_sync_sweep's own fix for the identical bug, see
+    # its docstring in services/canvas.py). AsyncSession.rollback() always
+    # expires every object already loaded in that session, not just the
+    # ones touched by the failed operation, regardless of
+    # expire_on_commit. Rolling back the shared `db` here would expire
+    # `conversation` right before this function returns it, and the
+    # caller's very next plain attribute read (routers/chat.py's
+    # `conversation.id`) would raise MissingGreenlet — turning an
+    # already-successful confirmed write into a 500.
     if workflow.action_name in WRITE_ACTIONS and workflow.course_id is not None:
-        course = await db.scalar(select(Course).where(Course.id == workflow.course_id))
-        if course is not None:
-            connection = next(
-                (c for c in user.canvas_connections if canvas_urls_equivalent(c.canvas_url, course.canvas_url)),
-                None,
+        async with AsyncSessionLocal() as sync_db:
+            course = await sync_db.scalar(select(Course).where(Course.id == workflow.course_id))
+            sync_user = await sync_db.scalar(
+                select(User).where(User.id == user.id).options(selectinload(User.canvas_connections))
             )
-            if connection is not None:
-                try:
-                    await sync_courses_if_stale(user, connection, db)
-                except Exception:
-                    logger.warning(
-                        "post-write sync_courses_if_stale failed for canvas_connection_id=%s user_id=%s",
-                        connection.id, user.id, exc_info=True,
-                    )
-                    await db.rollback()
+            if course is not None and sync_user is not None:
+                connection = next(
+                    (c for c in sync_user.canvas_connections if canvas_urls_equivalent(c.canvas_url, course.canvas_url)),
+                    None,
+                )
+                if connection is not None:
+                    try:
+                        await sync_courses_if_stale(sync_user, connection, sync_db)
+                    except Exception:
+                        logger.warning(
+                            "post-write sync_courses_if_stale failed for canvas_connection_id=%s user_id=%s",
+                            connection.id, user.id, exc_info=True,
+                        )
+                        await sync_db.rollback()
 
     return conversation, result, False
 

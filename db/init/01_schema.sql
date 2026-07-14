@@ -89,6 +89,11 @@ CREATE TABLE canvas_course_names (
     -- execute against, no extra query.
     local_course_id         INTEGER REFERENCES courses(id) ON DELETE SET NULL,
     name                    VARCHAR NOT NULL,
+    -- Canvas's own workflow_state at insert time ("available",
+    -- "unpublished", "completed") -- lets _match_course_name narrow a
+    -- duplicate-name match (same course code taught in multiple terms) to
+    -- the still-active offering instead of giving up outright.
+    workflow_state          VARCHAR,
     created_at              TIMESTAMPTZ DEFAULT NOW(),
     CONSTRAINT uq_connection_canvas_course UNIQUE (canvas_connection_id, canvas_course_id)
 );
@@ -408,4 +413,5 @@ INSERT INTO schema_migrations (filename) VALUES
     ('010_workflow_schema_repair.sql'),
     ('011_course_name_tracking.sql'),
     ('012_tool_call_logs.sql'),
-    ('013_resolved_sets.sql');
+    ('013_resolved_sets.sql'),
+    ('014_canvas_course_names_workflow_state.sql');

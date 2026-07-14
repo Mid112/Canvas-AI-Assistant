@@ -49,6 +49,13 @@ class CanvasCourseName(Base):
         Integer, ForeignKey("courses.id", ondelete="SET NULL"), nullable=True
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
+    # Canvas's own workflow_state at insert time ("available", "unpublished",
+    # "completed") — lets _match_course_name (services/chat.py) narrow a
+    # duplicate-name match (same course code across multiple terms) to the
+    # still-active offering instead of giving up outright. Nullable: rows
+    # written before this column existed have no value, treated as "not
+    # known to be completed" rather than excluded.
+    workflow_state: Mapped[str | None] = mapped_column(String, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

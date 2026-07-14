@@ -510,6 +510,7 @@ async def sync_courses_if_stale(user: User, connection: CanvasConnection, db: As
                         "canvas_course_id": str(course.canvas_id),
                         "local_course_id": course.local_id,
                         "name": course.name,
+                        "workflow_state": course.workflow_state,
                     }
                     for course in courses
                 ]
@@ -603,13 +604,50 @@ async def set_active_course(user: User, local_course_id: int, db: AsyncSession) 
     # the just-activated course too, not just on chat messages — queried
     # directly rather than via user.canvas_connections to avoid depending
     # on that relationship being eager-loaded in this session context.
+    # Best-effort, run in an ISOLATED session (mirrors
+    # run_course_sync_sweep/handle_confirmed_action's post-write refresh —
+    # see either docstring for why): this used to be a pure local
+    # preference write, so a Canvas timeout or a revoked token must never
+    # turn "click to set active course" into a 502/504/403, and a partial
+    # failure inside sync_courses_if_stale must never touch the `db`
+    # session this function still needs for the UserPreference write below.
     connections = await db.scalars(select(CanvasConnection).where(CanvasConnection.user_id == user.id))
     connection = next(
         (c for c in connections if canvas_urls_equivalent(c.canvas_url, course.canvas_url)),
         None,
     )
     if connection is not None:
-        await sync_courses_if_stale(user, connection, db)
+        async with AsyncSessionLocal() as sync_db:
+            sync_connection = await sync_db.scalar(
+                select(CanvasConnection).where(CanvasConnection.id == connection.id)
+            )
+            # require_canvas_token (called via get_courses, inside
+            # sync_courses_if_stale) synchronously reads
+            # user.canvas_connections — without eager-loading it here,
+            # that's an un-awaited lazy load on an AsyncSession, which
+            # SQLAlchemy always raises MissingGreenlet on (see
+            # run_course_sync_sweep's identical note above).
+            sync_user = await sync_db.scalar(
+                select(User).where(User.id == user.id).options(selectinload(User.canvas_connections))
+            )
+            if sync_connection is not None and sync_user is not None:
+                try:
+                    await sync_courses_if_stale(sync_user, sync_connection, sync_db)
+                except Exception:
+                    logger.warning(
+                        "set_active_course sync_courses_if_stale failed for canvas_connection_id=%s user_id=%s",
+                        connection.id, user.id, exc_info=True,
+                    )
+                    await sync_db.rollback()
+        # The isolated session above may have just committed a Canvas
+        # rename onto this same Course row (get_courses upserts Course.name,
+        # not just canvas_course_names) — `course`, loaded earlier on `db`,
+        # has no way to know that happened (separate session, separate
+        # identity map), so without this refresh the response below would
+        # return whatever stale name `course` already had in memory.
+        # Read-only and always safe on `db` — never touched by the
+        # isolated session's rollback, unlike the sync attempt itself.
+        await db.refresh(course)
 
     # Upsert: update if a preference row already exists, otherwise insert a new one
     pref = await db.scalar(select(UserPreference).where(UserPreference.user_id == user.id))
