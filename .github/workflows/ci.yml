@@ -240,6 +240,19 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
+      - name: Free E2E ports
+        # Self-hosted runners can retain stale backend/frontend processes from
+        # prior runs; Playwright sets reuseExistingServer=false in CI.
+        run: |
+          for port in 8000 5173; do
+            pids=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
+            if [ -n "$pids" ]; then
+              echo "Killing stale listener(s) on :$port: $pids"
+              kill $pids 2>/dev/null || true
+              sleep 1
+              kill -9 $pids 2>/dev/null || true
+            fi
+          done
       - name: Run browser E2E tests
         working-directory: ./test/e2e
         env:
