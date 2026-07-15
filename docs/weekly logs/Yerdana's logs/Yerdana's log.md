@@ -1008,3 +1008,83 @@ The biggest lesson this cycle was that manual, live tracing of the assistant flo
 
 
 
+# Cycle 16 Report: 07/10 – 07/13 (July 10 – July 13)
+
+## Timesheet
+
+### Clockify Report
+- **07/10 (Friday):** Using Clockify – Logged 11:02:52 hours
+- **07/11 (Saturday):** Using Clockify – Logged 05:33:54 hours
+- **07/12 (Sunday):** Using Clockify – Logged 0 hours
+- **07/13 (Monday):** Using Clockify – Logged 16:20:00 hours
+
+
+---
+_[insert Clockify screenshot here]_
+
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Land the course-resolution redesign and direct-read-execution into `develop` (feature/llm-read-bugfix)
+- Continued `feature/llm-thinking`'s work directly on `feature/llm-read-bugfix` rather than merging the two branches separately — the thinking-model reintroduction and name-only course resolution work (`changed the model prompting, and workflow design`, `removed intent preview from read instructions`) landed as commits on this branch instead, since `llm-read-bugfix` had branched from `llm-thinking` and carried its history forward.
+- Merged `develop` into the branch to reconcile with concurrent team work, then merged in `origin/Feature--Automated-Test-Coverage` and `origin/Feature--Integration-Testing` (18 new API integration tests, additional backend unit tests, Playwright e2e setup hardening, isolated CI ports) to bring the branch's test coverage up before review.
+- Resolved deletion conflicts surfaced during the `develop` merge, reordered the numbered database migration files back into strict numeric order, and wired LLM model selection through to the backend.
+
+
+### #2: Fix `update_assignment`, message-recipient resolution, and course-context bugs surfaced by continued testing
+- Fixed `update_assignment`, which had been broken since the course-resolution redesign changed how course context is threaded through.
+- Added the missing recipient-resolution function needed for `resolve_missing_submissions` to hand off into `send_message`.
+- Addressed reviewer comments on how assignment context is resolved and added exception-handling cases for course resolution flagged in review.
+
+### #3: Begin live e2e verification against the Canvas sandbox (Goal 2, carried into this cycle)
+- Fixed the course-name sync sweep (background job) and a bug where `course_id` failed to resolve within a chat window unless the user hard-reset it.
+- Fixed database table creation/migration ordering bugs that surfaced while reconciling schema changes from multiple merged branches.
+- Enabled sending personalized messages (per-recipient content, not just a shared template).
+
+
+
+---
+
+## Progress Update (since 10/07/2026)
+
+
+| TASK/ISSUE #                                                              | STATUS      |
+| --------------------------------------------------------------------------- | ----------- |
+| Fix chat page preview-rendering issue                                     | Completed   |
+| Fix "show me assignments" not rendering in chat replies                    | Completed   |
+| Fix past-date resolution, preview-panel diff, assignment-detail inquiry gap | Completed   |
+| Fix assignment-by-name dependency-chain gap in dispatcher/schemas          | Completed   |
+| Resolve merge conflicts and close review comments on PR #1030             | Completed   |
+| Merge feature/frontend-backend-int into develop                            | Completed   |
+| Reintroduce thinking model with higher token limit                         | Completed   |
+| Remove deterministic course-name substring matching                        | Completed   |
+| Name-only, model-driven course resolution via canvas_course_names          | Completed   |
+| Find-or-fork conversation routing on course switch                         | Completed   |
+| Decouple Canvas course sync from chat request path (periodic + post-write) | Completed   |
+| Remove intent-preview gating for read actions                              | Completed   |
+| Chained natural-language assignment resolution for fetch_submissions       | Completed   |
+| tool_call_logs tracking table                                              | Completed   |
+| Fix MissingGreenlet crash in background course-sync sweep                  | Completed   |
+| Get feature/llm-thinking and feature/llm-read-bugfix reviewed and merged   | Completed |
+| Extend natural-language resolution to `update_assignment`; dev-DB noise cleanup (Goal 3) | Not Started |
+| Enable personalized (per-recipient) messages                                  | Completed   |
+| Reorder numeric migrations; wire model selection to backend                   | Completed   |
+---
+
+## Cycle 16 Goal Review
+
+### Reflection:
+Goal 1 was completed, though not in the shape planned at the end of Cycle 15: rather than merging `feature/llm-thinking` and `feature/llm-read-bugfix` into `develop` separately, the thinking-model and course-resolution work ended up landing entirely through `feature/llm-read-bugfix`'s PR #1065, since that branch had built directly on top of `llm-thinking`'s commits. Reconciling with two other teams' concurrently-merged testing branches (`Feature--Automated-Test-Coverage`, `Feature--Integration-Testing`) added real scope deletion conflicts and migration-ordering bugs had to be fixed before the PR was mergeable. However, it resulted in a much better-tested branch than originally planned. Goal 2 (live e2e verification) is in progress: the first attempt at it surfaced a scare (I couldn't sign in right after the merge) that took real investigation to rule out as a code issue, which is exactly the kind of gap this goal exists to catch, even though it delayed actually starting the sandbox verification itself. In general, I would do the integration as I am developing a backend feature, or for the frontend team previously as they are developing their feature, end-to-end testing against a real backend is important.
+
+### Retrospective:
+The sign-in investigation was a useful reminder that "just merged" doesn't mean "behaves the same everywhere" — two developers can have the identical merged code and still see different symptoms because of divergent local state (an already-seeded admin row, a database that never got the latest migrations, a stale Docker image). Checking `git merge-base --is-ancestor` and diffing the specific files involved (`auth.py`, `user.py`) before touching anything destructive (like reverting the merge) avoided a wasted, disruptive fix for a problem that wasn't actually in the code. Separately, discovering that the Canvas sandbox image ships with a usable default API token turned what looked like a browser-click-through chore (creating a teacher account, a course, an enrollment) into something scriptable — worth documenting so the next person doing sandbox setup doesn't have to rediscover it.
+
+## Next Cycle 17 Goals
+- **Goal 1:** Finish the live e2e verification against the Canvas sandbox — multi-course switching, ambiguous course/assignment names, and the `fetch_submissions` chain — and fix whatever it surfaces.
+- **Goal 2:** Decide whether to extend natural-language assignment resolution to `update_assignment`.
+- **Goal 3:** Separate tasks among the team members more efficiently such that last minute bug resolutions don't take place, and that everyone in the team has an understanding of how system works before any of us raises complaints
+
+
+
+
+
