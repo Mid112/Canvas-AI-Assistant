@@ -141,14 +141,21 @@ The burn-up chart for **Cycle 16 (Jul 10 – Jul 13)** shows completed work incr
 
 Time was tracked using Clockify for **Cycle 16 (Jul 10, 2026 – Jul 13, 2026)**.
 
+### Team Summary
+
 | Team Member | Clockify Username | Logged Time |
 |---|---|---:|
-| Mridul | mridulnohria21 | Add time |
-| Bao | thanhvoiban | Add time |
-| Jessica | jessica goel | Add time |
-| Rhythm | trivedirhythm | Add time |
-| Yerdana | yerdana | Add time |
-| **Total** |  | **Add total** |
+| Mridul | mridulnohria21 | 20:42:00 |
+| Yerdana | yerdana | 16:36:46 |
+| Jessica | jessica goel | 08:17:18 |
+| Rhythm | trivedirhythm | 14:13:13 |
+| Bao | thanhvoiban | 00:00:00 |
+| **Total** |  | **59:49:17** |
+
+> Clockify shows a total of **59:49:17** logged for this cycle.
+
+<img width="2048" height="1235" alt="image" src="https://github.com/user-attachments/assets/429315af-f4ff-4d02-8e43-66d86b39609a" />
+
 
 ---
 
