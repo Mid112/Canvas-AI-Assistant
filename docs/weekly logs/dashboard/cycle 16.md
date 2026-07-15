@@ -141,8 +141,8 @@ Time was tracked using Clockify for **Cycle 16 (Jul 10, 2026 – Jul 13, 2026)**
 | Yerdana | yerdana | 16:36:46 |
 | Jessica | jessica goel | 08:17:18 |
 | Rhythm | trivedirhythm | 14:13:13 |
-| Bao | thanhvoiban | 00:00:00 |
-| **Total** |  | **59:49:17** |
+| Bao | thanhvoiban | 13:25:15 |
+| **Total** |  | **73:14:32** |
 
 <img width="2402" height="1518" alt="image" src="https://github.com/user-attachments/assets/0ff65e7d-78de-49e0-91cc-a355e7a977f9" />
 <img width="2436" height="1492" alt="image" src="https://github.com/user-attachments/assets/2a837204-441d-4235-8aff-36968af1fc1a" />
