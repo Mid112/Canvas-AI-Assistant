@@ -120,6 +120,28 @@ There are no active tasks remaining in Ready, In Progress, or In Review for the 
 
 ---
 
+## Upcoming Tasks / Next Cycle
+
+The next cycle will begin work on the **Testing Event 2** milestone. The current Testing Event 2 board has **13 Ready items**, with no tasks currently In Progress or In Review.
+
+| Task ID | Description | Owner | Status |
+|---|---|---|---|
+| 959 | Feature: Session cache | Team / Assigned member | Ready |
+| 718 | Feature: Quiz Management UI (UR2.16) | Team / Frontend owner | Ready |
+| 719 | Feature: Feedback Workflow UI (UR2.20, UR2.21) | Team / Frontend owner | Ready |
+| 720 | Feature: Grade Management UI (UR2.22) | Team / Frontend owner | Ready |
+| 721 | Feature: Action Reversal UI (UR2.28) | Team / Frontend owner | Ready |
+| 741 | Feature: Quiz Management Service (UR2.16, FR4.3–FR4.5) | Team / Backend owner | Ready |
+| 742 | Feature: Feedback Comment Service (UR2.20, UR2.21) | Team / Backend owner | Ready |
+| 743 | Feature: Grade Modification Service (UR2.22) | Team / Backend owner | Ready |
+| 744 | Feature: Action Reversal Service (UR2.28) | Team / Backend owner | Ready |
+| 764 | Feature: Quiz Workflow Integration | Team / Integration owner | Ready |
+| 765 | Feature: Feedback Workflow Integration | Team / Integration owner | Ready |
+| 766 | Feature: Grade Workflow Integration | Team / Integration owner | Ready |
+| 767 | Feature: Action Reversal Integration | Team / Integration owner | Ready |
+
+---
+
 ## Burn-up Chart / Velocity
 
 <img width="1712" height="1080" alt="image" src="https://github.com/user-attachments/assets/0fe17c16-b680-41e6-8994-04e94b497da0" />
@@ -243,6 +265,6 @@ Overall, the project has moved from feature completion into final validation and
 
 ## Overall Summary
 
-Cycle 16 completed the Testing Event 1 milestone work. The project board now shows all active Testing Event 1 tasks moved to Done, with no remaining active items in Ready, In Progress, or In Review. The team completed workflow validation, frontend testing, backend testing, automated coverage, integration testing, live testing fixes, chat history retrieval, course visibility support, UI filter improvements, and message inbox reply support.
+Cycle 16 completed the Testing Event 1 milestone work. The project board now shows all active Testing Event 1 tasks moved to Done, with no remaining active items in Ready, In Progress, or In Review. The team completed workflow validation, frontend testing, backend testing, automated coverage, integration testing, live testing fixes, chat history retrieval, course visibility support, UI filter improvements, and message inbox reply support. The next cycle will shift from Testing Event 1 completion into Testing Event 2 planning and implementation. The upcoming work is organized around session caching, quiz management, feedback workflows, grade management, action reversal, and the related backend services and integration tasks.
 
 The grey Done-column tasks remain closed/out of scope and should not be counted as completed/resolved deliverables for this project scope. With the main Testing Event 1 work complete, the next step is final demo review, documentation cleanup, and any last fixes found during final validation.
