@@ -1130,6 +1130,93 @@ Overall, this cycle balanced testing, UI improvements, presentation updates, and
 * Prepare for upcoming testing milestones
 * Maintain consistent Clockify tracking
 
+# **Cycle 16: Friday (10/7) ~ Monday (13/7)**
+
+### **Friday (10/7)**
+<img width="1335" height="156" alt="Screenshot 2026-07-14 at 10 56 21 PM" src="https://github.com/user-attachments/assets/23f75615-6921-43c0-9b92-fc83dd68b65a" />
+
+**Timesheet**  
+**Clockify Report:** 4:31:53
+
+**Current Tasks**
+- Participated in the weekly team meeting
+- Reviewed Testing Event 1 requirements and team readiness
+- Worked on frontend bug fixes identified during internal testing
+- Improved UI behavior and resolved frontend issues
+- Verified completed fixes through local testing
+- Prepared the application for Testing Event 1
+
+---
+
+### **Saturday (11/7)**
+
+**Timesheet**  
+**Clockify Report:** 0:00:00
+
+**Current Tasks**
+- No Clockify hours recorded
+
+---
+
+### **Sunday (12/7)**
+<img width="1330" height="105" alt="Screenshot 2026-07-14 at 10 56 29 PM" src="https://github.com/user-attachments/assets/e61e8a6c-c4dd-45ab-a159-115a896e3dff" />
+
+**Timesheet**  
+**Clockify Report:** 1:23:01
+
+**Current Tasks**
+- Worked on project tasks and GitHub issues related to Testing Event 1
+- Reviewed outstanding bugs and testing tasks
+- Updated project board to reflect testing readiness
+- Verified feature completion prior to testing
+
+---
+
+### **Monday (13/7)**
+<img width="1333" height="285" alt="Screenshot 2026-07-14 at 11 06 16 PM" src="https://github.com/user-attachments/assets/5a495c10-c59c-41ec-bf20-688d24f84deb" />
+
+
+**Timesheet**  
+**Clockify Report:** 2:22:24
+
+**Current Tasks**
+- Reviewed teammate pull requests and provided feedback
+- Added missing backend HTTP tests for authentication, Canvas preview, administrator functionality, and draft messaging
+- Performed integration testing across completed frontend and backend features
+- Verified backend endpoints after adding automated tests
+- Completed the Testing Event questionnaire
+- Performed final verification to ensure the application was ready for Testing Event 1
+
+---
+
+## **Cycle 16 – Goal Review**
+
+### **Reflection**
+
+This cycle focused on quality assurance and preparation for **Testing Event 1**. Since the MVP implementation had already been completed, efforts shifted toward improving application stability through frontend bug fixes, expanding automated backend test coverage, performing integration testing, and verifying that completed functionality behaved as expected. Documentation and testing materials were also finalized in preparation for the testing event.
+
+### **Retrospective**
+
+Following MVP completion, the team's focus shifted toward stabilization and validation. Frontend fixes resolved issues discovered during internal testing, while backend work concentrated on increasing automated HTTP test coverage for key application functionality, including authentication, Canvas preview, administrator features, and draft messaging.
+
+Integration testing was performed to verify that completed frontend and backend components worked correctly together. Pull request reviews continued to maintain code quality, and the Testing Event questionnaire and supporting documentation were completed to prepare for the upcoming evaluation.
+
+Overall, this cycle emphasized software quality, testing readiness, and application stability, ensuring the project was well prepared for **Testing Event 1** on **July 14**.
+
+---
+
+## **Next Cycle Goals (Cycle 17: Tuesday 14/7 ~ Thursday 16/7)**
+
+* Participate in Testing Event 1
+* Collect and analyze testing feedback
+* Resolve defects identified during testing
+* Improve application stability based on tester feedback
+* Expand automated test coverage where necessary
+* Review and merge outstanding pull requests
+* Update project documentation based on testing results
+* Plan work for Testing Event 2
+* Continue project board maintenance
+* Maintain consistent Clockify tracking
 
 
 
