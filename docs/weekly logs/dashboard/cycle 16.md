@@ -238,17 +238,17 @@ There are no active tasks remaining in Ready, In Progress, or In Review for the 
 
 | Risk / Gap | Impact | Next Step |
 |---|---|---|
-| Grey Done tasks are not completed/resolved for project scope | Could make progress look overstated | Keep them clearly marked as closed/out of scope |
-| Many validation tasks closed in one cycle | Regression risk may still exist | Run one final full-app walkthrough |
-| New live testing fixes may affect existing flows | Could introduce small regressions | Re-test affected frontend/backend workflows |
-| Published/unpublished course logic may affect Canvas course lists | Course visibility bugs may appear | Test both published and unpublished course scenarios |
-| Message inbox replies may need extra user-flow testing | Messaging behavior could be inconsistent | Test message reply workflow end to end |
-| Final report depends on accurate Clockify data | Time reporting may be incomplete | Add final Clockify screenshots and totals |
+| Testing Event 1 work is complete, but Testing Event 2 has not started | Next milestone work may need quick assignment and planning | Assign owners for the 13 Ready Testing Event 2 tasks |
+| Quiz, feedback, grade, and action reversal workflows each require UI, backend, and integration work | Work may become blocked if frontend/backend contracts are unclear | Define API expectations before implementation |
+| Session cache remains ready but not started | Workflow performance and state persistence may still need improvement | Prioritize #959 early in the next cycle |
+| Action reversal has higher safety risk | Incorrect reversal behavior could affect Canvas data | Treat #721, #744, and #767 as high-validation tasks |
+| Multiple workflow integrations are ready at once | Integration complexity may increase | Sequence integration after service and UI work are stable |
+| Final Clockify/reporting accuracy depends on screenshots | Time reporting may be incomplete if filters differ | Use one final Clockify export per cycle |
 
 ---
 
 ## Overall Summary
 
-Cycle 16 completed the active Testing Event 1 milestone work. The project board now shows all active tasks moved into Done, with no remaining Ready, In Progress, or In Review items for the filtered milestone. The team completed workflow validation, frontend testing, backend testing, automated coverage, integration testing, live testing fixes, chat history retrieval, course visibility support, UI filter improvements, and message inbox reply support.
+Cycle 16 completed the active Testing Event 1 milestone work. The project board now shows all active tasks moved into Done, with no remaining Ready, In Progress, or In Review items for the filtered milestone. The team completed workflow validation, frontend testing, backend testing, automated coverage, integration testing, live testing fixes, chat history retrieval, course visibility support, UI filter improvements, and message inbox reply support. The next cycle will shift from Testing Event 1 completion into Testing Event 2 planning and implementation. The upcoming work is organized around session caching, quiz management, feedback workflows, grade management, action reversal, and the related backend services and integration tasks.
 
 The grey Done-column tasks remain closed/out of scope and should not be counted as completed or resolved deliverables for this project scope. With Testing Event 1 work complete, the next step is final demo review, documentation cleanup, and any last fixes found during final validation.
