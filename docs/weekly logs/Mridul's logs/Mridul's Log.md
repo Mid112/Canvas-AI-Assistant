@@ -1291,3 +1291,148 @@ review.
 * **Goal 3:** Continue documenting team progress and completed work
 * **Goal 4:** Continue active development and testing toward MVP completion
 
+
+---
+
+<br>
+
+
+# Cycle 16 Report: 10/07 – 13/07 (July 10 – July 13)
+
+## Timesheet
+
+### Clockify Report
+
+* **10/07 (Friday):** Using Clockify – Logged 6.12 hours
+  *(3 hours, 12 minutes, and 54 seconds for team meeting, time log, and PR work)*
+  *(2 hours, 54 minutes, and 19 seconds for reviewing and testing UI fixes)*
+
+* **11/07 (Saturday):** Using Clockify – Logged 1.24 hours
+  *(1 hour, 14 minutes, and 33 seconds for reviewing PR work and E2E testing)*
+
+* **12/07 (Sunday):** Using Clockify – Logged 5.56 hours
+  *(5 hours, 33 minutes, and 22 seconds for reviewing PRs)*
+
+* **13/07 (Monday):** Using Clockify – Logged 7.78 hours
+  *(7 hours, 46 minutes, and 52 seconds for peer testing preparation, preparing scripts, reviewing PRs, and implementation work)*
+
+**Cycle Total:** 20 hours and 42 minutes
+
+<img width="2442" height="1184" alt="image" src="https://github.com/user-attachments/assets/5763d1e3-e335-47a0-95f3-66cd59a1f955" />
+
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Team meeting, time logs, and PR work (July 10)
+
+* Worked for 3 hours, 12 minutes, and 54 seconds on team meeting activities, time logs, and PR-related work.
+* Helped coordinate current project priorities and review progress toward the MVP testing phase.
+* Updated project logs and reviewed PR work to support the team’s development workflow.
+
+### #2: Reviewing and testing UI fixes (July 10)
+
+* Worked for 2 hours, 54 minutes, and 19 seconds reviewing and testing UI fixes.
+* Checked UI-related changes for correctness and consistency.
+* Helped validate whether frontend fixes were ready to support the MVP workflow and testing event preparation.
+
+### #3: PR review and E2E testing (July 11)
+
+* Worked for 1 hour, 14 minutes, and 33 seconds reviewing PR work and performing E2E testing.
+* Tested connected workflows across the application to help identify bugs or integration gaps.
+* Continued supporting validation of frontend, backend, Canvas, and workflow-related features.
+
+### #4: Reviewing PRs (July 12)
+
+* Worked for 5 hours, 33 minutes, and 22 seconds reviewing PRs.
+* Reviewed feature branches and implementation changes related to MVP readiness.
+* Helped identify issues, regressions, and remaining fixes needed before testing and validation.
+
+### #5: Peer testing preparation, scripts, PR review, and implementation work (July 13)
+
+* Worked for 7 hours, 46 minutes, and 52 seconds on peer testing preparation, preparing scripts, reviewing PRs, and implementation work.
+* Helped prepare for peer/live testing by organizing test flows and reviewing the feature set.
+* Continued implementation and fixes based on issues found during testing and validation.
+* Supported Testing Event 1 readiness by helping prepare workflows, scripts, and final feature validation.
+
+---
+
+## Completed Tasks This Cycle
+
+| Task ID | Description                                     | Status    | Notes                                                                                         |
+| ------- | ----------------------------------------------- | --------- | --------------------------------------------------------------------------------------------- |
+| 683     | Feature: Workflow Validation                    | Completed | Helped validate supported MVP workflows for Testing Event 1                                   |
+| 686     | Feature: Bug Fixes                              | Completed | Helped resolve final issues found during validation/testing                                   |
+| 687     | Feature: Integration Testing                    | Completed | Tested connected frontend, backend, Canvas, LLM, preview, confirmation, and history workflows |
+| 688     | Feature: Testing Event 1 Preparation            | Completed | Helped prepare final Testing Event 1 workflow/demo readiness                                  |
+| 1077    | Feature/live testing fixes                      | Completed | Contributed fixes found during live testing                                                   |
+| 1066    | Feature/sync data published unpublished courses | Completed | Helped with syncing published/unpublished Canvas course data                                  |
+
+---
+
+## Progress Update (since 10/07/2026)
+
+| TASK/ISSUE #                             | STATUS    |
+| ---------------------------------------- | --------- |
+| Team meeting and time logs               | Completed |
+| PR reviews                               | Completed |
+| UI fixes review and testing              | Completed |
+| E2E testing                              | Completed |
+| Workflow validation                      | Completed |
+| Integration testing                      | Completed |
+| Testing Event 1 preparation              | Completed |
+| Live testing fixes                       | Completed |
+| Published/unpublished Canvas course sync | Completed |
+| MVP validation readiness                 | Completed |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle focused heavily on MVP validation, integration testing, PR review,
+peer testing preparation, and final fixes for Testing Event 1. On July 10, I
+worked on team meeting tasks, time logs, PR work, and reviewing/testing UI
+fixes. This helped keep the team organized while also supporting the quality of
+the user-facing application.
+
+On July 11, I worked on PR review and E2E testing. This helped validate that
+connected workflows were working across the frontend, backend, Canvas, LLM,
+preview, confirmation, and history flows.
+
+On July 12, I spent a significant amount of time reviewing PRs. This was
+important for identifying issues before they affected testing readiness and for
+helping the team move toward a stable MVP.
+
+On July 13, I worked on peer testing preparation, preparing scripts, reviewing
+PRs, and implementation work. This helped prepare the team for live/peer testing
+and supported final fixes found during validation.
+
+Overall, this was one of the most active cycles, with 20 hours and 42 minutes
+logged. The work directly supported Testing Event 1 readiness and helped move
+the project closer to a validated MVP.
+
+### Retrospective:
+
+This cycle was productive because the focus shifted from general implementation
+to validation, testing, and readiness. PR reviews, E2E testing, UI fix testing,
+and live testing preparation helped identify and resolve issues before they
+became larger blockers.
+
+The completed tasks show strong progress across workflow validation, bug fixes,
+integration testing, testing preparation, live testing fixes, and Canvas course
+sync work. The main area to continue improving is maintaining stability after
+testing by addressing any remaining bugs quickly and ensuring the MVP workflows
+stay consistent across the full stack.
+
+---
+
+## Next Cycle Goals
+
+* **Goal 1:** Continue fixing bugs found during peer/live testing
+* **Goal 2:** Continue validating MVP workflows across frontend, backend, Canvas, LLM, preview, confirmation, and history flows
+* **Goal 3:** Support remaining PR reviews and integration fixes
+* **Goal 4:** Continue preparing the project for final MVP/demo readiness
+
