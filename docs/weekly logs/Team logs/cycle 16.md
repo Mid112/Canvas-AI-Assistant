@@ -154,7 +154,6 @@ Time was tracked using Clockify for **Cycle 16 (Jul 10, 2026 – Jul 13, 2026)**
 
 > Clockify shows a total of **59:49:17** logged for this cycle.
 
-<img width="2048" height="1235" alt="image" src="https://github.com/user-attachments/assets/429315af-f4ff-4d02-8e43-66d86b39609a" />
 
 
 ---
