@@ -89,6 +89,28 @@ The following grey Done-column tasks were closed or moved to Done, but they shou
 
 ---
 
+## Upcoming Tasks / Next Cycle
+
+The next cycle will begin work on the **Testing Event 2** milestone. The current Testing Event 2 board has **13 Ready items**, with no tasks currently In Progress or In Review.
+
+| Task ID | Description | Owner | Status |
+|---|---|---|---|
+| 959 | Feature: Session cache | Team / Assigned member | Ready |
+| 718 | Feature: Quiz Management UI (UR2.16) | Team / Frontend owner | Ready |
+| 719 | Feature: Feedback Workflow UI (UR2.20, UR2.21) | Team / Frontend owner | Ready |
+| 720 | Feature: Grade Management UI (UR2.22) | Team / Frontend owner | Ready |
+| 721 | Feature: Action Reversal UI (UR2.28) | Team / Frontend owner | Ready |
+| 741 | Feature: Quiz Management Service (UR2.16, FR4.3–FR4.5) | Team / Backend owner | Ready |
+| 742 | Feature: Feedback Comment Service (UR2.20, UR2.21) | Team / Backend owner | Ready |
+| 743 | Feature: Grade Modification Service (UR2.22) | Team / Backend owner | Ready |
+| 744 | Feature: Action Reversal Service (UR2.28) | Team / Backend owner | Ready |
+| 764 | Feature: Quiz Workflow Integration | Team / Integration owner | Ready |
+| 765 | Feature: Feedback Workflow Integration | Team / Integration owner | Ready |
+| 766 | Feature: Grade Workflow Integration | Team / Integration owner | Ready |
+| 767 | Feature: Action Reversal Integration | Team / Integration owner | Ready |
+
+---
+
 ## Tasks
 
 <img width="2048" height="1193" alt="image" src="https://github.com/user-attachments/assets/6e546f19-fbee-4843-b2e5-c2e4b2158046" />
