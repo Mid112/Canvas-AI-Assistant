@@ -806,3 +806,65 @@ Total: 9 hours
 - Give the dev Postgres DB a clean reset (or isolate pytest onto its own DB) so `seed_admin()` and manual QA aren't blocked by leftover test fixtures (carried over from Cycle 14)
 - Revisit `make e2e-up` for Windows compatibility
 
+---
+
+# Cycle 16 Report: July 10 – July 13
+
+## Timesheet
+
+### Clockify Report
+
+- 10/7 (Friday): meeting – 2h 31m
+- 11/7 (Saturday): live testing feature fixes – 3h 25m
+- 12/7 (Sunday): PR reviews + feature adds – 1h 13m
+- 13/7 (Monday): PR reviews, fix PRs before live testing event – 6h 16m (2 entries, 5:35AM–11:33PM)
+
+**Total (clocked): ~13h 25m**
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting (Friday, 10/7)
+- Synced with the team on priorities heading into the live-testing push later in the cycle
+- Wrapped up and pushed the Cycle 15 write-up (`update cycle 15 for bao's log`, `update`) — the dashboard stale-data/published-unpublished work itself was finished and logged under Cycle 15, not repeated here
+
+### 2: Course-Sync Review Findings + Assignment Publish Status (Saturday, 11/7)
+- `Fix course sync review findings; extend published/unpublished to assignments`: addressed PR review feedback on the Cycle 15 dashboard work, then extended the published/unpublished distinction from courses to assignments
+- Added migration `011_course_workflow_state_and_assignment_active.sql` (`courses.workflow_state`, `assignments.is_active`, both self-healing via next Canvas sync) and `012_assignment_published.sql` (`assignments.published`, defaulting `true` so existing rows aren't miscounted as "missing" until their next sync)
+- Reworked `useResolvedInstructorCourse.ts`, `useCanvasInstructorCourses.ts`, `mapCanvasCourse.ts`, `InstructorCoursesSection.tsx`, and the assignment creation/list pages to surface the new published state
+- Large accompanying test push: `test_assignment_published.py` (409 lines), `test_instructor_dashboard.py` (+294), `test_canvas.py` (+265), `test_course_overview.py` (+90), plus new `ActiveCourseProvider.test.tsx`, `InstitutionProvider.test.tsx`, and `mapCanvasCourse.test.ts` on the frontend
+- 42 files changed, ~1,740 insertions
+
+### 3: PR Reviews + Course Reconciliation Scoping (Sunday, 12/7)
+- `Scope course reconciliation to synced Canvas instance, exclude deleted courses from dashboard, guard active-course selection on real sync`
+- Added migration `013_course_synced_at.sql` (`courses.synced_at`) so `set_active_course()` can distinguish a course actually confirmed against a live Canvas response from one merely trusting migration 011's `workflow_state` backfill default — a course with `synced_at IS NULL` is now refused as an active-course selection until a real sync runs
+- Tightened `services/canvas.py`'s reconciliation logic so it only reconciles courses belonging to the Canvas instance actually being synced (a multi-institution instructor's sync against one school can no longer mark another school's courses stale) and `services/dashboard.py` to exclude deleted courses from the aggregate stats
+- Added matching backend test coverage in `test_canvas.py` and `test_instructor_dashboard.py`
+
+### 4: Backend Unit Test Push + PR Merges Before Live Testing (Monday, 13/7)
+- `adding more backend unit tests`: added 10 new unit-test files (~3,000 lines) covering the `admin`, `auth`, `canvas`, `dashboard`, `dispatcher`, `integrations/canvas`, `message_template`, `messages`, and `student` services — closing out service-layer coverage gaps ahead of the live-testing session
+- Resolved a merge conflict in `ChatWindow.tsx` and merged `develop` into `feature/sync-data-published-unpublished-courses` (`resolve merge conflict`, `Merge branch 'develop' into feature/sync-data-published-unpublished-courses`), pulling in the chat-history/intent-preview work teammates had landed on `develop`
+- Opened and merged **PR #1066** (`feature/sync-data-published-unpublished-courses`), landing Saturday's and Sunday's course/assignment-publish-status and reconciliation-scoping work on `develop`
+- Immediately followed up with **PR #1077** (`feature/live-testing-fixes`): `add fix`, `Remove redundant`, `fix lint check error`, `remove unused router/test and banner` — cleanup and lint fixes to get the branch demo-ready, merged in the early hours of 14/7 as part of the same continuous session (same late-session-past-midnight pattern as Cycles 14 and 15)
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- This cycle closed out the last real gap in the published/unpublished-status feature (extending it from courses to assignments) and the review pass on that PR caught a genuine scoping bug — course reconciliation wasn't accounting for multi-institution instructors, which the new `synced_at` guard and instance-scoped reconciliation in Sunday's commit fixes directly.
+- Monday's ~3,000-line unit test push was a deliberate pre-live-testing hardening pass rather than tied to one feature — closing out service-layer coverage before a live/demo session is a pattern worth repeating ahead of future milestones.
+- Two PRs (#1066, #1077) went from open to merged within the same Monday session, both landing before the live-testing event the timesheet references — the "fix PRs before live testing event" label matches the commit history closely.
+
+### Retrospective:
+- The Monday session again ran past midnight before the branch was demo-ready (PR #1077 merged 01:19 on 14/7) — same pattern flagged in Cycle 15's retro. Worth revisiting whether smaller, more frequent PRs earlier in the week would avoid the recurring late-session crunch before demo/testing events.
+- The dev Postgres DB reset / isolated test-DB goal is now carried over a third straight cycle without being picked up — it isn't blocking feature work directly, but the growing pile of test-fixture users is exactly the kind of thing that silently breaks manual QA and admin seeding when someone least expects it.
+- `make e2e-up` Windows compatibility also remains untouched — worth prioritizing now that the team is running actual live-testing sessions.
+
+## Next Cycle Goals
+- Decide on `last_synced_at`/`synced_at`-based caching now that `courses.synced_at` exists for a related purpose (active-course validity) — reconsider whether it can double as the caching signal from Cycle 15's carried-over goal
+- Give the dev Postgres DB a clean reset (or isolate pytest onto its own DB) — carried over a fourth cycle now (Cycles 14, 15, 16)
+- Revisit `make e2e-up` for Windows compatibility — carried over from Cycles 14 and 15
+- Follow up on any issues surfaced by the live-testing event itself once it happens
+
