@@ -2,34 +2,54 @@
 
 ---
 
-## Burn-up Chart (Velocity)
-<img width="1069" height="634" alt="Burn up" src="https://github.com/user-attachments/assets/00626000-c6d4-4b48-b039-6b7f7c5c6140" />
+## Weekly Team Log
 
-### Burn-up Summary
+This cycle served as a strategic pause and transition period between our MVP presentation and the active Testing Event phases. Rather than pushing new code, the team focused on Testing Event 1 preparation, setting up workstations, verifying environments, and prepping the test script. 
 
-The burn-up chart for **Cycle 17 (Jul 14 – Jul 16)** shows a completely flat trajectory for both completed work (34) and open work (233). This reflects the team's intentional pivot away from active feature implementation this cycle, choosing instead to take a step back to focus on Testing Event 2 preparation, reviewing MVP client feedback, and planning the next phase of development.
+A major focus was also placed on conducting a comprehensive review of the client feedback received from the MVP demo. The team collaboratively drafted a prioritized list of new features and improvements for Testing Event 2, ensuring our next sprint is perfectly aligned with client expectations. Additionally, significant effort was placed on updating project documentation, mapping out individual contributions, and finalizing the scope for the next testing phase.
 
-| Date Range | Trend |
-|---|---|
-| Jul 14 – Jul 16 | Completed work remained flat |
-| Jul 14 – Jul 16 | Open work remained flat |
-| Current focus | Testing Event 2 execution, client feedback review, and feature documentation |
+The board also contains grey Done-column tasks related to UI polish and reliability improvements. As established, these are documented but separated so they do not overstate completed project-scope deliverables.
+
+## Date Range:
+
+- [14-07] - [16-07]
 
 ---
 
-## Project Board Summary
+## Features in the Project Plan Cycle:
 
-The project board for **Testing Event 2** shows that active implementation has not yet begun, as there are 0 items in Progress or In Review. The board currently shows **13 Ready items** queued for the next phase, alongside **23 Done items** (primarily focused on UI polish, reliability, and performance testing).
+- Testing Event 1 preparation (workstations, environments, scripts)
+- MVP Client Feedback review and analysis
+- Testing Event 2 feature planning and prioritization
+- Feature and individual contribution documentation updates
+---
 
-### Current Testing Event 2 Board Status
+## Project Board Status
+
+The project board for **Testing Event 2** shows that active implementation has not yet begun, as the team focuses on preparation and planning. 
 
 | Status | Count / Notes |
 |---|---|
-| Backlog | 0 / 5 active items |
+| Backlog | 0 active items |
 | Ready | 13 active items |
-| In Progress | 0 / 6 active items |
-| In Review | 0 / 5 active items |
+| In Progress | 0 active items |
+| In Review | 0 active items |
 | Done | 23 items |
+
+<img width="903" height="816" alt="project board 1" src="https://github.com/user-attachments/assets/4d7c4865-e8bb-447e-a3ea-e19d93ae04f7" />
+<img width="899" height="806" alt="project board 2" src="https://github.com/user-attachments/assets/8bd71dc4-1b91-47e8-9d6f-5e1b12eb94ed" />
+
+---
+
+## Completed Tasks
+
+> Note: Cycle report, team log, and personal log documentation tickets are intentionally excluded from this table.
+
+| Task ID | Description | Completed By |
+|---|---|---|
+| N/A | Feature: Testing Event 1 Preparation & Workstation Setup | Team |
+| N/A | Feature: MVP Client Feedback Review & Planning | Team |
+| N/A | Feature: Feature & Contribution Documentation | Team  |
 
 ---
 
@@ -65,6 +85,12 @@ The following grey Done-column tasks were closed or moved to Done, but they shou
 
 ---
 
+## In Progress Tasks / To Do
+
+There are no active tasks remaining in Ready, In Progress, or In Review for the currently filtered active sprint, as the team prepares to pull from the Testing Event 2 Ready queue.
+
+---
+
 ## Upcoming Tasks / Next Cycle
 
 The next cycle will begin active implementation for the **Testing Event 2** milestone. The board currently has **13 Ready items** prioritized based on our recent client feedback review.
@@ -87,6 +113,22 @@ The next cycle will begin active implementation for the **Testing Event 2** mile
 
 ---
 
+## Burn-up Chart / Velocity
+
+<img width="1069" height="634" alt="Burn up" src="https://github.com/user-attachments/assets/10a70c08-1dc6-4f6f-bd7b-986485b6af70" />
+
+### Burn-up Summary
+
+The burn-up chart for **Cycle 17 (Jul 14 – Jul 16)** shows a completely flat trajectory for both completed work (34) and open work (233). This reflects the team's intentional pivot away from active feature implementation this cycle to focus on Testing Event 1 preparation, reviewing MVP client feedback, and planning.
+
+| Date Range | Trend |
+|---|---|
+| Jul 14 – Jul 16 | Completed work remained flat |
+| Jul 14 – Jul 16 | Open work remained flat |
+| Current focus | Testing Event 2 feature set |
+
+---
+
 ## Clockify Summary
 
 Time was tracked using Clockify for **Cycle 17 (Jul 14, 2026 – Jul 16, 2026)**.
@@ -102,7 +144,16 @@ Time was tracked using Clockify for **Cycle 17 (Jul 14, 2026 – Jul 16, 2026)**
 | Yerdana | yerdana | 00:59:55 |
 | **Total** | | **25:19:38** |
 
-<img width="1343" height="394" alt="Team hours" src="https://github.com/user-attachments/assets/9ead9971-6603-4153-aa04-08371f16b97a" />
+> Clockify shows a total of **25:19:38** logged for this cycle.
+<img width="1343" height="394" alt="Team hours" src="https://github.com/user-attachments/assets/4a50d70c-a5a3-4e7e-bdb3-d3a864d9764b" />
+<img width="1342" height="416" alt="team hours 2" src="https://github.com/user-attachments/assets/dd50979f-42b1-4835-88f0-849dec836dff" />
+
+---
+
+## Test Report / Testing Status
+
+- Testing Event 1 workstations, environments, and test scripts were successfully prepared and verified.
+- Grey Done-column tasks remain excluded from completed/resolved project-scope deliverables.
 
 ---
 
@@ -110,34 +161,25 @@ Time was tracked using Clockify for **Cycle 17 (Jul 14, 2026 – Jul 16, 2026)**
 
 ### Current State
 
-This cycle served as a strategic pause between our MVP presentation and active Testing Event phases. Rather than pushing new code, the team focused on Testing Event 1 preparation (setting up workstations, verifying environments, and prepping test scripts) and conducting a comprehensive review of the client feedback received from the MVP demo.
+This cycle served as a necessary step back to prepare for Testing Event 2 and properly process the MVP client presentation feedback. The project board reflects this planning phase, with 0 items currently In Progress and 13 targeted tasks in the Ready column for Testing Event 2.
 
-The burn-up chart accurately reflects this "step back," with flat lines across open and completed tasks. During this time, the team collaboratively drafted a prioritized list of new features and improvements for Testing Event 2, ensuring our next sprint is perfectly aligned with client expectations. 
+The main focus of this cycle was planning, documentation, and environment stabilization rather than new feature development. The team successfully completed Testing Event 1 setup, mapped out a comprehensive feature and contribution document, and locked in the scope for the next development sprint.
 
-Additionally, significant effort was placed on updating project documentation. A comprehensive feature and contribution document was mapped out to ensure accurate tracking of individual contributions to date.
+Baseline UI polish, reliability improvements, and performance testing tasks were moved to Done but are tracked separately to avoid overstating major feature completion. 
 
-Overall, the project is stable and well-positioned. The team used this cycle effectively to pivot from MVP delivery to rigorous testing and feature planning.
+Overall, the project is stable and well-positioned. The team used this cycle effectively to pivot from MVP delivery to rigorous testing and targeted feature planning. The next focus will be executing Testing Event 1 and beginning implementation on the newly prioritized Ready tasks.
 
 ---
 
-## In Progress / To Do
+## Completed and Merged to `develop`
 
-There are currently no active tasks in the In Progress or In Review columns, as the team prepares to pull from the Ready queue.
-
-| Area | Description |
+| Layer | What's Done |
 |---|---|
-| Testing Event 2 Dev | Begin active implementation of the 13 Ready items (Quiz, Grade, Feedback workflows) |
-| Post-Test UI Fixes | Schedule and implement UI/UX improvements identified during live testing |
-
----
-
-## Test Report / Testing Status
-
-- Testing Event 1 was successfully prepared and completed.
-- Initial Performance Testing (dashboard load times, API response, LLM response) was completed.
-- Security and Reliability Reviews (timeout handling, API/LLM failure handling) were completed.
-- All primary workflows remain validated from the previous cycle.
-- Grey Done-column tasks remain excluded from completed/resolved project-scope deliverables.
+| **Testing Event Preparation** | Workstations, test environments, scripts, and feedback forms fully prepared for Testing Event 1 |
+| **Client Feedback Review** | MVP feedback reviewed; Testing Event 2 scope finalized |
+| **Documentation** | Feature and individual contribution documentation updated |
+| **UI Polish & Reliability** | Baseline fixes for visual bugs, layouts, error messages, and mobile responsiveness merged (Done column) |
+| **Performance Testing** | Baseline load times, LLM response, and endpoint optimization testing completed |
 
 ---
 
@@ -147,10 +189,6 @@ There are currently no active tasks in the In Progress or In Review columns, as 
 |---|---|
 | Testing Event 1 Preparation | All |
 | MVP Client Feedback Review & Planning | All |
-| Feature & Contribution Documentation | Rhythm / Team |
-| UI Polish & Layout Improvements | Jessica / Rhythm |
-| API / LLM Reliability & Error Handling | Bao / Yerdana |
-| Testing Event 2 Workflow Integrations | Mridul / All |
 
 ---
 
@@ -158,14 +196,15 @@ There are currently no active tasks in the In Progress or In Review columns, as 
 
 | Risk / Gap | Impact | Next Step |
 |---|---|---|
-| Testing Event 2 implementation has not started | Reduced timeline for complex backend/frontend integrations (Quiz, Grades) | Immediately assign and pull the 13 Ready tasks into In Progress at the start of Cycle 18 |
+| Testing Event 2 implementation has not started | Reduced timeline for complex backend/frontend integrations | Assign and pull the 13 Ready tasks into In Progress at the start of Cycle 18 |
 | Client feedback may require structural changes | New UI/UX requests could conflict with existing backend contracts | Ensure backend API models are updated to reflect the new feature requirements before frontend implementation |
 | Action reversal has higher safety risk | Incorrect reversal behavior could affect Canvas data | Treat #721, #744, and #767 as high-validation tasks |
+| Final report depends on accurate Clockify data | Time reporting may be incomplete | Add final Clockify screenshots and totals |
 
 ---
 
 ## Overall Summary
 
-Cycle 17 was a highly necessary and productive planning cycle. Taking a step back from actively building new features provided the team with the breathing room needed to thoroughly prepare for Testing Event 1, analyze crucial MVP client feedback, and update our contribution documentation. By pausing to align our goals, the team successfully scoped the priorities for Testing Event 2, specifically identifying the Quiz, Feedback, Grade Management, and Action Reversal workflows as the next primary targets.
+Cycle 17 was a highly necessary and productive planning cycle. Taking a step back from actively building new features provided the team with the breathing room needed to thoroughly prepare for Testing Event 1, analyze crucial MVP client feedback, and update contribution documentation. By pausing to align our goals, the team successfully scoped the priorities for Testing Event 2, specifically identifying the Quiz, Feedback, Grade Management, and Action Reversal workflows as the next primary targets.
 
 With 25.3 team hours logged entirely toward planning, prep, and stabilization, the project board is now clean, with 0 items In Progress and 13 targeted tasks in the Ready column. The next step is to execute Testing Event 1, triage any resulting bugs, and begin active development on the Testing Event 2 feature set.
