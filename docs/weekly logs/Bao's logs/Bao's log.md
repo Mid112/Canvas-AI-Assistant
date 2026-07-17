@@ -828,41 +828,36 @@ Total: 9 hours
 ### 1: Team Meeting (Friday, 10/7)
 - Synced with the team on priorities heading into the live-testing push later in the cycle
 - Wrapped up and pushed the Cycle 15 write-up (`update cycle 15 for bao's log`, `update`) — the dashboard stale-data/published-unpublished work itself was finished and logged under Cycle 15
-<img width="1109" height="71" alt="Screenshot 2026-07-15 141343" src="https://github.com/user-attachments/assets/6ea39950-36cc-44fb-88fb-ccba6ceba9d9" />
 
 ### 2: Course-Sync Review Findings + Assignment Publish Status (Saturday, 11/7)
 - `Fix course sync review findings; extend published/unpublished to assignments`: addressed PR review feedback on the Cycle 15 dashboard work, then extended the published/unpublished distinction from courses to assignments
 - Added migration `011_course_workflow_state_and_assignment_active.sql` (`courses.workflow_state`, `assignments.is_active`, both self-healing via next Canvas sync) and `012_assignment_published.sql` (`assignments.published`, defaulting `true` so existing rows aren't miscounted as "missing" until their next sync)
 - Reworked `useResolvedInstructorCourse.ts`, `useCanvasInstructorCourses.ts`, `mapCanvasCourse.ts`, `InstructorCoursesSection.tsx`, and the assignment creation/list pages to surface the new published state
-- Large accompanying test push: `test_assignment_published.py` (409 lines), `test_instructor_dashboard.py` (+294), `test_canvas.py` (+265), `test_course_overview.py` (+90).
-<img width="1112" height="65" alt="Screenshot 2026-07-15 141349" src="https://github.com/user-attachments/assets/96d39dc7-efd2-4450-84f5-457814af6be8" />
+
 
 ### 3: PR Reviews + Course Reconciliation Scoping (Sunday, 12/7)
 - Added migration `013_course_synced_at.sql` (`courses.synced_at`) so `set_active_course()` can distinguish a course actually confirmed against a live Canvas response from one merely trusting migration 011's `workflow_state` backfill default — a course with `synced_at IS NULL` is now refused as an active-course selection until a real sync runs
 - Tightened `services/canvas.py`'s reconciliation logic so it only reconciles courses belonging to the Canvas instance actually being synced (a multi-institution instructor's sync against one school can no longer mark another school's courses stale) and `services/dashboard.py` to exclude deleted courses from the aggregate stats
 - Added matching backend test coverage in `test_canvas.py` and `test_instructor_dashboard.py`
-<img width="1115" height="68" alt="Screenshot 2026-07-15 141354" src="https://github.com/user-attachments/assets/bb7fb35e-6b89-46ea-a1c4-73b3f7b8a52a" />
 
 ### 4: Backend Unit Test Push + PR Merges Before Live Testing (Monday, 13/7)
 - `adding more backend unit tests`: added 10 new unit-test files (~3,000 lines) covering the `admin`, `auth`, `canvas`, `dashboard`, `dispatcher`, `integrations/canvas`, `message_template`, `messages`, and `student` services — closing out service-layer coverage gaps ahead of the live-testing session
 - Resolved a merge conflict in `ChatWindow.tsx` and merged `develop` into `feature/sync-data-published-unpublished-courses` (`resolve merge conflict`, `Merge branch 'develop' into feature/sync-data-published-unpublished-courses`), pulling in the chat-history/intent-preview work teammates had landed on `develop`
 - Opened and merged **PR #1066** (`feature/sync-data-published-unpublished-courses`), landing Saturday's and Sunday's course/assignment-publish-status and reconciliation-scoping work on `develop`
-- Immediately followed up with **PR #1077** (`feature/live-testing-fixes`): `add fix`, `Remove redundant`, `fix lint check error`, `remove unused router/test and banner` — cleanup and lint fixes to get the branch demo-ready, merged in the early hours of 14/7 as part of the same continuous session 
-<img width="1114" height="68" alt="Screenshot 2026-07-15 141357" src="https://github.com/user-attachments/assets/52b10b57-77e7-4206-a3c0-bec8e9c51b0f" />
-
+- Immediately followed up with **PR #1077** (`feature/live-testing-fixes`): `add fix`, `Remove redundant`, `fix lint check error`, `remove unused router/test and banner` — cleanup and lint fixes to get the branch demo-ready
 ---
 
 ## Cycle Goal Review
 
 ### Reflection:
 - This cycle closed out the last real gap in the published/unpublished-status feature (extending it from courses to assignments) and the review pass on that PR caught a genuine scoping bug — course reconciliation wasn't accounting for multi-institution instructors, which the new `synced_at` guard and instance-scoped reconciliation in Sunday's commit fixes directly.
-- Monday — closing out service-layer coverage before a live/demo session is a pattern worth repeating ahead of future milestones.
-- Two PRs (#1066, #1077) went from open to merged within the same Monday session, both landing before the live-testing event the timesheet references — the "fix PRs before live testing event" label matches the commit history closely.
+- Monday's ~3,000-line unit test push was a deliberate pre-live-testing hardening pass rather than tied to one feature — closing out service-layer coverage before a live/demo session is a pattern worth repeating ahead of future milestones.
+- Two PRs (#1066, #1077) went from open to merged within the same Monday session, both landing before the live-testing event the timesheet references — the "fix PRs before live testing event" 
 
 ### Retrospective:
 - The Monday session again ran past midnight before the branch was demo-ready (PR #1077 merged 01:19 on 14/7) — same pattern flagged in Cycle 15's retro. Worth revisiting whether smaller, more frequent PRs earlier in the week would avoid the recurring late-session crunch before demo/testing events.
 - The dev Postgres DB reset / isolated test-DB goal is now carried over a third straight cycle without being picked up — it isn't blocking feature work directly, but the growing pile of test-fixture users is exactly the kind of thing that silently breaks manual QA and admin seeding when someone least expects it.
-- `make e2e-up` Windows compatibility also remains untouched 
+
 
 ## Next Cycle Goals
 - Decide on `last_synced_at`/`synced_at`-based caching now that `courses.synced_at` exists for a related purpose (active-course validity) — reconsider whether it can double as the caching signal from Cycle 15's carried-over goal
@@ -878,22 +873,20 @@ Total: 9 hours
 
 ### Clockify Report
 
-- 14/7 (Tuesday): meeting for live testing – 4h 10m 35s (8:10AM–12:20PM)
-- 15/7 (Wednesday): Refactor + Figuring out next todo features – 2h 25m 55s (10:41AM–1:07PM)
+- 14/7 (Tuesday): meeting for live testing – 4h 10m 35s 
+- 15/7 (Wednesday): Refactor + Figuring out next todo features – 2h 25m 55s 
 
 **Total (clocked): ~6h 36m**
-
-> No Clockify entry or commit activity found for 16/7 in this pass — see Retrospective below rather than an invented entry.
 
 ---
 
 ## Completed Tasks
 
-### 1: PR #1077 Wrap-up, CI Fix, and Live-Testing Meeting (Tuesday, 14/7)
+### 1: Wrap-up, CI Fix, and Live-Testing Meeting (Tuesday, 14/7)
 - Closed out the overnight tail of Monday's session: the `feature/live-testing-fixes` commits (`add fix`, `Remove redundant`, `fix lint check error`, `remove unused router/test and banner`) merged as **PR #1077** at 01:19 — same continuous session flagged in Cycle 16
 - `add CI fixes`: mounted `db/init` into both CI Postgres containers in `.github/workflows/ci.yml` so the schema actually loads before tests run, and reordered `main.py`'s `lifespan()` so `Base.metadata.create_all()` runs **before** `run_pending_migrations()` — previously backwards, which meant a genuinely fresh database (no tables at all) would fail outright on the first `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` migration instead of just getting the columns for free from `create_all()`
 - Attended the team's live-testing meeting, 8:10AM–12:20PM (4h10m) — the event PRs #1066 and #1077 were both racing to land before, per Cycle 16
-- Evening: updated the team-level Cycle 16 rollup with corrected hours (`Update cycle 16 log with new total hours`, `Update logged time for Bao and total time` — `docs/weekly logs/Team logs/cycle 16.md`, `docs/weekly logs/dashboard/cycle 16.md`)
+- Evening: updated the team-level Cycle 16 rollup with corrected hours 
 
 ### 2: Log Cleanup + Cycle 16 Write-Up Merge (Wednesday, 15/7)
 - `Update Bao's log.md` and `Add screenshots`: backfilled real GitHub-hosted screenshot links into the Cycle 16 entries (replacing the placeholder gap flagged when Cycle 16 was first drafted) and finalized wording
@@ -910,7 +903,6 @@ Total: 9 hours
 - A meaningful chunk of tracked time this cycle (all of Wednesday, part of Tuesday evening) went to log/documentation upkeep rather than feature work — reasonable after a demo push, but worth naming explicitly rather than folding into feature-shaped cycle language.
 
 ### Retrospective:
-- No commits or Clockify entries exist for 16/7 — rather than backfill a plausible-sounding entry, this report leaves it blank; worth confirming whether that day had real work that just didn't get logged (a repeat of Cycle 3's "forgot to use clockify" pattern) or whether it was genuinely a day off.
 - The dev Postgres DB reset / isolated test-DB goal is now carried over a fourth straight cycle. The CI-side version of the same class of bug got fixed this cycle almost incidentally (via the migration-ordering fix) — the shared dev DB deserves the same deliberate attention rather than another carryover.
 - `make e2e-up` Windows compatibility remains untouched for the fourth cycle running.
 
@@ -918,6 +910,6 @@ Total: 9 hours
 - Confirm whether 14/7's live-testing event surfaced anything requiring follow-up from PR #1066 or #1077
 - Give the dev Postgres DB a clean reset (or isolate pytest onto its own DB) — carried over a fifth cycle now (Cycles 14–17)
 - Revisit `make e2e-up` for Windows compatibility — carried over from Cycles 14–16
-- Decide on `last_synced_at`/`synced_at`-based caching — carried over from Cycles 15–16
-- Confirm and, if needed, backfill 16/7's activity
+
+
 
