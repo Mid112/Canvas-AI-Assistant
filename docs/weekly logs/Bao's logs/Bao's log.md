@@ -870,3 +870,54 @@ Total: 9 hours
 - Revisit `make e2e-up` for Windows compatibility — carried over from Cycles 14 and 15
 - Follow up on any issues surfaced by the live-testing event itself once it happens
 
+---
+
+# Cycle 17 Report: July 14 – July 16
+
+## Timesheet
+
+### Clockify Report
+
+- 14/7 (Tuesday): meeting for live testing – 4h 10m 35s (8:10AM–12:20PM)
+- 15/7 (Wednesday): Refactor + Figuring out next todo features – 2h 25m 55s (10:41AM–1:07PM)
+
+**Total (clocked): ~6h 36m**
+
+> No Clockify entry or commit activity found for 16/7 in this pass — see Retrospective below rather than an invented entry.
+
+---
+
+## Completed Tasks
+
+### 1: PR #1077 Wrap-up, CI Fix, and Live-Testing Meeting (Tuesday, 14/7)
+- Closed out the overnight tail of Monday's session: the `feature/live-testing-fixes` commits (`add fix`, `Remove redundant`, `fix lint check error`, `remove unused router/test and banner`) merged as **PR #1077** at 01:19 — same continuous session flagged in Cycle 16
+- `add CI fixes`: mounted `db/init` into both CI Postgres containers in `.github/workflows/ci.yml` so the schema actually loads before tests run, and reordered `main.py`'s `lifespan()` so `Base.metadata.create_all()` runs **before** `run_pending_migrations()` — previously backwards, which meant a genuinely fresh database (no tables at all) would fail outright on the first `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` migration instead of just getting the columns for free from `create_all()`
+- Attended the team's live-testing meeting, 8:10AM–12:20PM (4h10m) — the event PRs #1066 and #1077 were both racing to land before, per Cycle 16
+- Evening: updated the team-level Cycle 16 rollup with corrected hours (`Update cycle 16 log with new total hours`, `Update logged time for Bao and total time` — `docs/weekly logs/Team logs/cycle 16.md`, `docs/weekly logs/dashboard/cycle 16.md`)
+
+### 2: Log Cleanup + Cycle 16 Write-Up Merge (Wednesday, 15/7)
+- `Update Bao's log.md` and `Add screenshots`: backfilled real GitHub-hosted screenshot links into the Cycle 16 entries (replacing the placeholder gap flagged when Cycle 16 was first drafted) and finalized wording
+- Opened and merged **PR #1087** (`logs-bao`) into `develop`, landing the Cycle 16 report
+- The "figuring out next todo features" half of this entry isn't reflected in any commit in this window — only the log-documentation work is visible in git history, so that's all that's captured here
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- The CI fix is a direct, concrete win: the migration-ordering bug it fixes (`run_pending_migrations()` before `create_all()`) is the same category of problem as the still-outstanding dev-DB-reset goal from Cycle 14 — a fresh database with no tables should never be a special case that breaks startup, and now it isn't, at least in CI.
+- Tuesday's live-testing meeting was the actual event Cycles 15 and 16's "before live testing" timesheet entries were racing toward — worth checking next cycle whether anything it surfaced needs follow-up work.
+- A meaningful chunk of tracked time this cycle (all of Wednesday, part of Tuesday evening) went to log/documentation upkeep rather than feature work — reasonable after a demo push, but worth naming explicitly rather than folding into feature-shaped cycle language.
+
+### Retrospective:
+- No commits or Clockify entries exist for 16/7 — rather than backfill a plausible-sounding entry, this report leaves it blank; worth confirming whether that day had real work that just didn't get logged (a repeat of Cycle 3's "forgot to use clockify" pattern) or whether it was genuinely a day off.
+- The dev Postgres DB reset / isolated test-DB goal is now carried over a fourth straight cycle. The CI-side version of the same class of bug got fixed this cycle almost incidentally (via the migration-ordering fix) — the shared dev DB deserves the same deliberate attention rather than another carryover.
+- `make e2e-up` Windows compatibility remains untouched for the fourth cycle running.
+
+## Next Cycle Goals
+- Confirm whether 14/7's live-testing event surfaced anything requiring follow-up from PR #1066 or #1077
+- Give the dev Postgres DB a clean reset (or isolate pytest onto its own DB) — carried over a fifth cycle now (Cycles 14–17)
+- Revisit `make e2e-up` for Windows compatibility — carried over from Cycles 14–16
+- Decide on `last_synced_at`/`synced_at`-based caching — carried over from Cycles 15–16
+- Confirm and, if needed, backfill 16/7's activity
+
