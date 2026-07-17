@@ -887,11 +887,13 @@ Total: 9 hours
 - `add CI fixes`: mounted `db/init` into both CI Postgres containers in `.github/workflows/ci.yml` so the schema actually loads before tests run, and reordered `main.py`'s `lifespan()` so `Base.metadata.create_all()` runs **before** `run_pending_migrations()` — previously backwards, which meant a genuinely fresh database (no tables at all) would fail outright on the first `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` migration instead of just getting the columns for free from `create_all()`
 - Attended the team's live-testing meeting, 8:10AM–12:20PM (4h10m) — the event PRs #1066 and #1077 were both racing to land before, per Cycle 16
 - Evening: updated the team-level Cycle 16 rollup with corrected hours 
+<img width="1120" height="62" alt="Screenshot 2026-07-17 105523" src="https://github.com/user-attachments/assets/104d549b-e874-4d6b-8043-448e617be04d" />
 
 ### 2: Log Cleanup + Cycle 16 Write-Up Merge (Wednesday, 15/7)
 - `Update Bao's log.md` and `Add screenshots`: backfilled real GitHub-hosted screenshot links into the Cycle 16 entries (replacing the placeholder gap flagged when Cycle 16 was first drafted) and finalized wording
 - Opened and merged **PR #1087** (`logs-bao`) into `develop`, landing the Cycle 16 report
 - The "figuring out next todo features" half of this entry isn't reflected in any commit in this window — only the log-documentation work is visible in git history, so that's all that's captured here
+<img width="1123" height="67" alt="Screenshot 2026-07-17 105528" src="https://github.com/user-attachments/assets/061e527e-8082-4528-bf2d-3ddd4062f1e7" />
 
 ---
 
