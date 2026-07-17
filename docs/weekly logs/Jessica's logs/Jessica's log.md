@@ -1218,6 +1218,81 @@ Overall, this cycle emphasized software quality, testing readiness, and applicat
 * Continue project board maintenance
 * Maintain consistent Clockify tracking
 
+# **Cycle 17: Tuesday (14/7) ~ Thursday (16/7)**
+
+### **Tuesday (14/7)**
+<img width="1196" height="277" alt="Screenshot 2026-07-17 at 11 28 28 AM" src="https://github.com/user-attachments/assets/984efa3f-983e-4626-8f15-70a855c1232a" />
+
+**Timesheet**  
+**Clockify Report:** 5:50:17
+
+**Current Tasks**
+- Participated in **Testing Event 1**
+- Attended the weekly team meeting and discussed testing outcomes
+- Performed integration testing during the testing event
+- Reviewed and updated personal pull requests based on feedback
+- Recorded tester observations and identified improvement areas
+- Created a testing to-do list to prioritize issues discovered during Testing Event 1
+
+---
+
+### **Wednesday (15/7)**
+<img width="1330" height="156" alt="Screenshot 2026-07-17 at 11 29 44 AM" src="https://github.com/user-attachments/assets/5e702f2a-4b48-4615-afe1-ac336b872cc7" />
+
+**Timesheet**  
+**Clockify Report:** 1:34:15
+
+**Current Tasks**
+- Reviewed Testing Event 1 feedback
+- Created a summary of testing findings and user feedback
+- Organized identified bugs and usability improvements
+- Updated the team's implementation to-do list based on tester recommendations
+- Prioritized issues for the next development cycle
+
+---
+
+### **Thursday (16/7)**
+
+**Timesheet**  
+**Clockify Report:** 0:00:00
+
+**Current Tasks**
+- No Clockify hours recorded
+
+---
+
+## **Cycle 17 – Goal Review**
+
+### **Reflection**
+
+This cycle centered on **Testing Event 1**, where the application was evaluated by external users and feedback was collected for future improvements. Time was spent participating in the testing session, reviewing pull requests, performing integration testing, documenting findings, and organizing follow-up tasks. The focus shifted from implementation to evaluating the completed MVP and preparing for post-testing improvements.
+
+### **Retrospective**
+
+Testing Event 1 provided valuable insight into both the strengths of the application and areas requiring refinement. During the event, integration testing helped verify that the completed frontend and backend components functioned correctly together while reviewers evaluated the overall user experience.
+
+Following the testing session, feedback was consolidated into a structured findings summary, highlighting usability improvements, interface enhancements, and bug fixes that should be addressed before the next milestone. A prioritized to-do list was created to organize future development work and ensure that tester recommendations could be incorporated efficiently.
+
+Pull request reviews also continued during the cycle to maintain code quality and verify that completed changes remained stable after testing.
+
+Overall, this cycle focused on evaluating the completed MVP, documenting testing outcomes, and preparing a clear roadmap for addressing issues identified during Testing Event 1.
+
+---
+
+## **Next Cycle Goals (Cycle 18: Friday 17/7 ~ Monday 20/7)**
+
+* Review all Testing Event 1 feedback
+* Prioritize and resolve reported bugs
+* Implement UI and usability improvements based on tester feedback
+* Improve error handling and confirmation workflows
+* Continue integration and regression testing
+* Review and merge outstanding pull requests
+* Update project documentation and testing reports
+* Prepare development plan for Testing Event 2
+* Maintain project board and sprint planning
+* Continue consistent Clockify tracking
+
+
 
 
 
