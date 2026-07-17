@@ -910,6 +910,9 @@ Total: 9 hours
 - Confirm whether 14/7's live-testing event surfaced anything requiring follow-up from PR #1066 or #1077
 - Give the dev Postgres DB a clean reset (or isolate pytest onto its own DB) — carried over a fifth cycle now (Cycles 14–17)
 - Revisit `make e2e-up` for Windows compatibility — carried over from Cycles 14–16
+- Begin **Feature 9: System Health Monitoring**
+- Begin **Feature 10: Audit Logging**
+- Begin **Feature 12: Secure Troubleshooting**
 
 
 
