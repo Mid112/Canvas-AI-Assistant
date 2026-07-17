@@ -1087,4 +1087,69 @@ The sign-in investigation was a useful reminder that "just merged" doesn't mean 
 
 
 
+# Cycle 17 Report: 07/14 – 07/16 (July 14 – July 16)
+
+## Timesheet
+
+### Clockify Report
+- **07/14 (Tuesday):** Using Clockify – Logged 0 hours
+- **07/15 (Wednesday):** Using Clockify – Logged 00:59:00 hours
+- **07/16 (Thursday):** Using Clockify – Logged 0 hours
+
+---
+<img width="1219" height="171" alt="Screenshot 2026-07-17 at 11 49 04 AM" src="https://github.com/user-attachments/assets/3e7f47f9-ab93-4eee-baa6-ce99a9ec689f" />
+
+
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Guide and participate in Testing Event 2
+- Walked other testers through the assistant workflow before their sessions (connecting a course, driving the chat-based actions, using preview/confirm) so they weren't blocked by setup friction and could spend their time actually testing.
+- Tested other teams' applications and submitted feedback on their workflows.
+- Carried observations from both sides of the testing event — as a guide watching where our own testers got stuck, and as a tester on other teams' apps — into the feature-consolidation work below rather than letting them sit in scattered notes.
+
+### #2: Consolidate the team's proposed features into one dependency graph, for Testing Event 2 and the final deliverable
+- Pulled together the separately-written proposals — Mridul's updated feature backlog, Jessica's Feature Set #2 plan, and my own client-feedback-driven backlog — against the official User and Functional Requirements list and what's already implemented.
+- Built a single dependency graph grouping proposed work by what it actually depends on rather than by who proposed it, surfacing that several items (risk-based confirmation, in particular) had been proposed independently by three different people and only needed building once.
+- Flagged the highest schema-risk item in the combined list (Canvas-connectionless assistant mode) as a spike rather than committed work, and merged the two features that both amounted to "richer per-step workflow state tracking" into one line item instead of two.
+- Trimmed the full proposal set down to the feature list the team actually settled on for this round, renumbered it, and stripped it down to name, brief description, and the specific UR/FR codes each feature touches — so it reads as a clean planning artifact rather than a working draft.
+
+### #3: Consolidate client feedback into a revised feature backlog
+- Went through Dr. Mohamed's UX feedback (confirmation-preview clutter, risk levels not matching action type, missing structured review forms, no persistent course indicator, unclear AI clarification messages) alongside the team's internal response to it.
+- Turned that into six scoped features with an explicit relevance/difficulty rating and dependency notes for each — flagging the persistent active-course indicator as the most urgent (pending a design-direction confirmation with the client) and the step-by-step AI guidance feature as the highest-risk, deliberately deferred item.
+
+---
+
+## Progress Update (since 14/07/2026)
+
+| TASK/ISSUE #                                                                 | STATUS      |
+| ----------------------------------------------------------------------------- | ----------- |
+| Guide other testers through the assistant workflow ahead of Testing Event 2   | Completed   |
+| Test other teams' applications and submit feedback                            | Completed   |
+| Consolidate Mridul's, Jessica's, and my own feature proposals into one dependency graph | Completed   |
+| Cross-reference proposed features against official UR/FR list and current implementation | Completed   |
+| Flag high-risk/high-effort items (Canvas-free mode, step-by-step guidance) separately from the settled list | Completed   |
+| Trim and renumber the settled feature list for team use                       | Completed   |
+| Revise client (Dr. Mohamed) UX feedback into a scoped 6-feature backlog with relevance/difficulty ratings | Completed   |
+| Finish live e2e verification against Canvas sandbox (Goal 1 carryover)        | Not Started |
+| Decide whether to extend resolution to `update_assignment` (Goal 2 carryover) | Not Started |
+| Separate tasks among the team more efficiently (Goal 3 carryover)             | In Progress |
+
+---
+
+## Cycle 17 Goal Review
+
+### Reflection:
+None of the three goals set at the end of Cycle 16 got direct attention this cycle — Testing Event 2 preparation and the feature-consolidation work took priority instead, which wasn't the plan going in but was the right call given the event's timing. The silver lining is that Goal 3 (separating tasks among the team more efficiently, and making sure everyone understands how the system works before raising complaints) is genuinely served by the consolidation work: turning three separately-written, overlapping feature proposals into one dependency graph with clear "depends on" relationships is exactly the kind of shared understanding that goal was asking for, even though it wasn't originally scoped as the way to get there.
+
+### Retrospective:
+Guiding other testers through the workflow before testing other teams' apps myself was a useful pairing — seeing where our own testers hesitated (which screen, which button, which unclear message) sharpened what to look for when testing elsewhere, and made the client-feedback consolidation afterward faster since I'd already seen several of the same friction points firsthand rather than only reading about them secondhand. Separately, merging three people's independently-written feature backlogs made it obvious how much duplicated effort happens when proposals aren't cross-referenced early — three of us had each proposed some version of risk-based confirmation without knowing the others had too. Doing that reconciliation explicitly, as a graph, rather than leaving it as three separate documents, is worth doing earlier in future cycles rather than after the proposals are already fully written.
+
+## Next Cycle 18 Goals
+- **Goal 1:** Finish the live e2e verification against the Canvas sandbox — multi-course switching, ambiguous course/assignment names, and the `fetch_submissions` chain — carried over from Cycle 16.
+- **Goal 2:** Decide whether to extend natural-language assignment resolution to `update_assignment` — carried over from Cycle 16.
+- **Goal 3:** Start implementation on the highest-priority settled feature (Risk-Based Confirmation Service), since it's a shared dependency for four of the other settled features and unblocks the rest of the list.
+
+
+
 
