@@ -1384,8 +1384,6 @@ review.
 | Testing Event 1 preparation              | Completed |
 | Live testing fixes                       | Completed |
 | Published/unpublished Canvas course sync | Completed |
-| MVP validation readiness                 | Completed |
-
 ---
 
 ## Cycle Goal Review
@@ -1436,3 +1434,110 @@ stay consistent across the full stack.
 * **Goal 3:** Support remaining PR reviews and integration fixes
 * **Goal 4:** Continue preparing the project for final MVP/demo readiness
 
+---
+
+<br> 
+
+# Cycle 17 Report: 14/07 – 16/07 (July 14 – July 16)
+
+## Timesheet
+
+### Clockify Report
+
+* **14/07 (Tuesday):** Using Clockify – Logged 6.38 hours
+  *(4 hours, 44 minutes, and 46 seconds for Peer Testing 1 and meeting)*
+  *(1 hour, 37 minutes, and 44 seconds for cycle logs and team logs)*
+
+<img width="2430" height="352" alt="image" src="https://github.com/user-attachments/assets/3aa9466a-b7d8-481a-824d-0ecb9d7daa63" />
+
+* **15/07 (Wednesday):** Using Clockify – Logged 1.52 hours
+  *(51 minutes and 36 seconds for feature decision and clarifications)*
+  *(39 minutes and 35 seconds for feature selection and current system testing)*
+
+<img width="2420" height="330" alt="image" src="https://github.com/user-attachments/assets/ea9e799e-1ff6-4682-b354-de5260feed75" />
+
+
+**Cycle Total:** 7 hours, 53 minutes, and 41 seconds
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Peer Testing 1 and meeting (July 14)
+
+* Worked for 4 hours, 44 minutes, and 46 seconds on Peer Testing 1 and meeting-related work.
+* Participated in testing and validation activities for the current MVP feature set.
+* Helped review workflows, identify issues, and support feedback collection during the testing process.
+* Contributed to making sure the application was ready for continued validation and improvement.
+
+### #2: Cycle logs and team logs (July 14)
+
+* Worked for 1 hour, 37 minutes, and 44 seconds on cycle logs and team logs.
+* Updated documentation for completed work and team progress.
+* Helped keep the project records organized and aligned with the team’s current development cycle.
+
+### #3: Feature decision and clarifications (July 15)
+
+* Worked for 51 minutes and 36 seconds on feature decisions and clarifications.
+* Reviewed current feature priorities and clarified which features should be included or focused on next.
+* Helped support planning decisions for the remaining MVP and testing work.
+
+### #4: Feature selection and current system testing (July 15)
+
+* Worked for 39 minutes and 35 seconds on feature selection and current system testing.
+* Reviewed the current state of the system and tested existing functionality.
+* Helped identify what features were working, what needed improvement, and what should be prioritized moving forward.
+
+---
+
+## Progress Update (since 14/07/2026)
+
+| TASK/ISSUE #                       | STATUS      |
+| ---------------------------------- | ----------- |
+| Peer Testing 1                     | Completed   |
+| Team meeting                       | Completed   |
+| Cycle logs                         | Completed   |
+| Team logs                          | Completed   |
+| Feature decision and clarification | Completed   |
+| Feature selection                  | Completed   |
+| Current system testing             | In Progress |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle focused on peer testing, documentation, feature planning, and current
+system validation. On July 14, I worked on Peer Testing 1 and meeting-related
+tasks for 4 hours, 44 minutes, and 46 seconds. This helped validate the MVP
+feature set, collect feedback, and identify areas that still needed refinement.
+
+Also on July 14, I worked on cycle logs and team logs for 1 hour, 37 minutes,
+and 44 seconds. This helped keep the project documentation up to date and made
+sure the team’s progress was properly recorded.
+
+On July 15, I worked on feature decisions, clarifications, feature selection,
+and current system testing. This helped clarify the next priorities for the
+project and supported the team’s continued effort to stabilize and improve the
+MVP.
+
+### Retrospective:
+
+This was a useful cycle because it combined testing, planning, and
+documentation. Peer Testing 1 helped reveal how the system performs in a more
+realistic validation setting, while the feature decision and clarification work
+helped narrow the team’s focus for upcoming development.
+
+The main area to continue improving is system stability after testing. The team
+should continue using feedback from peer testing and current system checks to
+prioritize fixes and polish the remaining MVP workflows.
+
+---
+
+## Next Cycle Goals
+
+* **Goal 1:** Continue testing and validating the current MVP feature set
+* **Goal 2:** Address issues found during peer testing and current system testing
+* **Goal 3:** Continue refining selected features based on team decisions and clarifications
+* **Goal 4:** Continue updating team logs and documentation as work progresses
