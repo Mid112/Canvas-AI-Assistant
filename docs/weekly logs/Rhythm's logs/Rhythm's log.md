@@ -549,3 +549,36 @@ Managing team pull requests proved to be an essential exercise in maintaining ve
 * Document, triage, and address any UI/UX issues or bugs reported by users during the live testing event.
 * Continue maintaining a clean `develop` branch with zero test regressions as we merge post-testing fixes.
 * Begin scoping out final polish features and performance optimizations required for the final project release.
+
+# **Cycle 17: Tuesday (07/14) ~ Thursday (07/16)**
+
+**Timesheet**
+
+**Clockify Report**
+
+**07/14 (Tuesday):** 00:56:52
+<img width="1343" height="111" alt="Untitled" src="https://github.com/user-attachments/assets/55b000c1-fd3e-4942-bb8d-f00341f7ba14" />
+
+**07/16 (Thursday):** 01:28:08
+<img width="1339" height="107" alt="Untitled 2" src="https://github.com/user-attachments/assets/4c3ff859-0514-44ad-acc2-2b15bf21d1f3" />
+
+
+**Current Tasks (Provide sufficient detail)**
+
+* **#1: Testing Event 1 Preparation:** Participated in a team meeting on Tuesday prior to Testing Event 1. We focused on setting up our workstations, verifying that all systems and environments were functioning correctly, and ensuring our script and feedback forms were fully prepared for the users.
+
+* **#2: MVP Client Feedback & Planning:** Reviewed the client feedback received from the MVP presentation. We discussed these insights and collaboratively drafted a targeted list of new features and improvements required for Testing Event 2.
+
+* **#3: Feature & Contribution Documentation:** Dedicated time to compiling a comprehensive document detailing all features completed to date. This included mapping out individual team member contributions to ensure accurate project tracking and clear visibility into our development progress.
+
+**Cycle Goal Review**
+
+* **Reflection:** This cycle acted as a critical bridge between our MVP presentation and the active testing phases. Shifting our focus to environment preparation and direct client feedback analysis ensures that the application is not only stable but also evolving in the exact direction the client expects.
+
+* **Retrospective:** Taking a step back from actively building new features this cycle was highly beneficial. It gave us the necessary breathing room to focus entirely on reviewing client feedback, refining our testing processes, and strategically planning our final steps to ensure our remaining time is spent effectively.
+
+**Next Cycle Goals**
+
+* Begin active development on the newly scoped features prioritized for Testing Event 2.
+* Analyze the user feedback and bug reports gathered during Testing Event 1 and schedule necessary UI fixes.
+* Continue to update the feature and contribution documentation as new code is merged.
