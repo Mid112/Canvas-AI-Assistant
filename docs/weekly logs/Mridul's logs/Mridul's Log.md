@@ -1539,5 +1539,7 @@ prioritize fixes and polish the remaining MVP workflows.
 
 * **Goal 1:** Continue testing and validating the current MVP feature set
 * **Goal 2:** Address issues found during peer testing and current system testing
-* **Goal 3:** Continue refining selected features based on team decisions and clarifications
-* **Goal 4:** Continue updating team logs and documentation as work progresses
+* **Goal 3:** Begin work on **Feature 3: Grade Management** — Mridul
+* **Goal 4:** Begin work on **Feature 4: Action Reversal** — Mridul
+* **Goal 5:** Begin work on **Feature 5: Risk-Based Confirmation Workflow** — Mridul
+* **Goal 6:** Continue updating team logs and documentation as work progresses
