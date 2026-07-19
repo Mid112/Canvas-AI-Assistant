@@ -16,7 +16,6 @@ from app.services.canvas import (
     require_writable_course,
 )
 
-
 IRREVERSIBLE_GRADE_WARNING = (
     "Grade changes are high risk because Canvas updates the student's official record immediately."
 )
