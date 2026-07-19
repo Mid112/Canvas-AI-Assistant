@@ -53,6 +53,7 @@ export function QuizReviewApproveStep({
     register,
     handleSubmit,
     control,
+    setValue,
     trigger,
     formState: { errors, isValid },
   } = useForm<QuizReviewFormInput, unknown, QuizReviewFormSchema>({
@@ -245,6 +246,51 @@ export function QuizReviewApproveStep({
               <p className="text-xs text-amber-700">
                 {capabilities.newQuizzesUnavailableReason}
               </p>
+            ) : null}
+            {quizEngine === "new_quizzes" &&
+            bankGroupFields.length > 0 ? (
+              <div
+                role="alert"
+                className="space-y-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-950"
+              >
+                <div>
+                  <p className="text-sm font-medium">
+                    Question-bank links require a Classic Quiz
+                  </p>
+                  <p className="mt-1 text-xs">
+                    Canvas does not allow New Quizzes to link item banks
+                    through its API. Keep the linked banks with Classic, or
+                    continue with New Quizzes without them.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      setValue("quizEngine", "classic", {
+                        shouldDirty: true,
+                        shouldValidate: true,
+                      })
+                    }
+                  >
+                    Keep banks and use Classic
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      removeBankGroup(
+                        bankGroupFields.map((_, index) => index),
+                      )
+                    }
+                  >
+                    Continue with New Quiz without banks
+                  </Button>
+                </div>
+              </div>
             ) : null}
           </div>
 
