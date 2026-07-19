@@ -15,12 +15,16 @@ from app.core.security import decrypt_canvas_token
 from app.integrations.canvas import (
     create_announcement,
     create_assignment,
+    create_quiz,
+    create_quiz_question,
     delete_assignment,
+    delete_quiz,
     fetch_assignment,
     fetch_assignments,
     fetch_courses,
     fetch_submissions,
     fetch_user_profile,
+    list_quizzes,
     send_conversation,
     update_assignment,
 )
@@ -37,6 +41,8 @@ from app.schemas.canvas import (
     AssignmentUpdate,
     CourseResponse,
     MessageSendResult,
+    QuizCreate,
+    QuizResponse,
     SubmissionResponse,
     SubmissionStatus,
 )
@@ -356,6 +362,126 @@ async def create_course_assignment(
         canvas_url,
     )
     return AssignmentResponse(**data)
+
+
+def _quiz_payload_for_canvas(payload: QuizCreate) -> dict:
+    """Map our QuizCreate schema to Canvas's quiz object (no questions —
+    questions are created via a separate endpoint after the quiz exists)."""
+    body = {
+        "title": payload.title,
+        "description": payload.description,
+        "quiz_type": payload.quiz_type,
+        "due_at": payload.due_at.isoformat() if payload.due_at else None,
+        "points_possible": payload.points_possible,
+        "allowed_attempts": payload.allowed_attempts,
+        "time_limit": payload.time_limit,
+        "published": payload.published,
+    }
+    return {key: value for key, value in body.items() if value is not None or key in ("description", "published")}
+
+
+async def get_course_quizzes(
+    local_course_id: int,
+    user: User,
+    canvas_url: str | None,
+    db: AsyncSession,
+) -> list[QuizResponse]:
+    token = require_canvas_token(user, canvas_url or settings.CANVAS_API_URL)
+    course = await get_owned_course(local_course_id, user, canvas_url or settings.CANVAS_API_URL, db)
+    resolved = course.canvas_url
+    raw = await list_quizzes(int(course.canvas_course_id), token, resolved)
+    quizzes: list[QuizResponse] = []
+    for item in raw:
+        quizzes.append(
+            QuizResponse(
+                id=item["id"],
+                title=item.get("title") or "Untitled Quiz",
+                description=item.get("description"),
+                due_at=item.get("due_at"),
+                points_possible=item.get("points_possible"),
+                course_id=int(course.canvas_course_id),
+                quiz_type=item.get("quiz_type"),
+                allowed_attempts=item.get("allowed_attempts"),
+                time_limit=item.get("time_limit"),
+                published=bool(item.get("published", False)),
+                question_count=item.get("question_count"),
+                html_url=item.get("html_url"),
+            )
+        )
+    return quizzes
+
+
+async def create_course_quiz(
+    local_course_id: int,
+    payload: QuizCreate,
+    user: User,
+    canvas_url: str,
+    db: AsyncSession,
+) -> QuizResponse:
+    token = require_canvas_token(user, canvas_url)
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    require_writable_course(course)
+    canvas_course_id = int(course.canvas_course_id)
+    data = await create_quiz(
+        canvas_course_id,
+        _quiz_payload_for_canvas(payload),
+        token,
+        canvas_url,
+    )
+    quiz_id = int(data["id"])
+    for question in payload.questions:
+        question_body = {
+            "question_name": question.question_text[:255],
+            "question_text": question.question_text,
+            "question_type": question.question_type,
+            "points_possible": question.points_possible,
+        }
+        if question.answers:
+            question_body["answers"] = [
+                {
+                    "answer_text": str(answer.get("text") or answer.get("answer_text") or ""),
+                    "answer_weight": float(answer.get("weight", answer.get("answer_weight", 0))),
+                }
+                for answer in question.answers
+                if str(answer.get("text") or answer.get("answer_text") or "").strip()
+            ]
+        await create_quiz_question(
+            canvas_course_id,
+            quiz_id,
+            question_body,
+            token,
+            canvas_url,
+        )
+    return QuizResponse(
+        id=quiz_id,
+        title=data.get("title") or payload.title,
+        description=data.get("description") or payload.description,
+        due_at=data.get("due_at") or payload.due_at,
+        points_possible=data.get("points_possible") or payload.points_possible,
+        course_id=canvas_course_id,
+        quiz_type=data.get("quiz_type") or payload.quiz_type,
+        allowed_attempts=data.get("allowed_attempts")
+        if data.get("allowed_attempts") is not None
+        else payload.allowed_attempts,
+        time_limit=data.get("time_limit") if data.get("time_limit") is not None else payload.time_limit,
+        published=bool(data.get("published", payload.published)),
+        question_count=len(payload.questions) or data.get("question_count"),
+        html_url=data.get("html_url"),
+    )
+
+
+async def delete_course_quiz(
+    local_course_id: int,
+    quiz_id: int,
+    user: User,
+    canvas_url: str,
+    db: AsyncSession,
+) -> None:
+    """Only ever called from undo_workflow to revert create_quiz."""
+    token = require_canvas_token(user, canvas_url)
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    require_writable_course(course)
+    await delete_quiz(int(course.canvas_course_id), quiz_id, token, canvas_url)
 
 
 async def update_course_assignment(

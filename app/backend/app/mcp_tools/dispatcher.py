@@ -11,16 +11,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS, is_reversible
 from app.models.course import Course
 from app.models.user import User
-from app.schemas.canvas import AssignmentCreate, AssignmentResponse, AssignmentUpdate, SubmissionResponse, SubmissionStatus
+from app.schemas.canvas import (
+    AssignmentCreate,
+    AssignmentResponse,
+    AssignmentUpdate,
+    QuizCreate,
+    QuizQuestionCreate,
+    SubmissionResponse,
+    SubmissionStatus,
+)
 from app.services.assignment_validation import (
     validate_assignment_for_create,
     validate_assignment_for_update,
 )
 from app.services.canvas import (
     create_course_assignment,
+    create_course_quiz,
     get_active_course,
     get_assignment,
     get_assignments,
+    get_course_quizzes,
     get_courses,
     get_submissions,
     send_course_message,
@@ -31,6 +41,7 @@ from app.services.canvas_status import CanvasWriteResult
 from app.services.course_access import get_owned_course_or_404
 from app.services.llm.json_extraction import extract_json_object as _extract_json
 from app.services.message_validation import validate_message_for_send
+from app.services.quiz_validation import validate_quiz_for_create
 from app.services.student import get_students
 from app.services.write_preview import generate_write_preview
 
@@ -95,6 +106,13 @@ _CREATE_ASSIGNMENT_FIELD_QUESTIONS = {
     "points_possible": "How many points is this assignment worth?",
 }
 
+_CREATE_QUIZ_FIELD_QUESTIONS = {
+    "title": "What should this quiz be called?",
+    "description": "What should the quiz description or instructions say?",
+    "due_date": "When is this quiz due?",
+    "points_possible": "How many points is this quiz worth?",
+}
+
 
 def _create_assignment_missing_field(proposed: dict) -> str | None:
     """Returns the name of the first required create_assignment field
@@ -110,6 +128,17 @@ def _create_assignment_missing_field(proposed: dict) -> str | None:
     practice with the instruct model). Checking here is a server-side
     guarantee that doesn't depend on the model reliably following that
     prompt instruction."""
+    for field in ("title", "description", "due_date"):
+        value = proposed.get(field)
+        if not isinstance(value, str) or not value.strip():
+            return field
+    if proposed.get("points_possible") is None:
+        return "points_possible"
+    return None
+
+
+def _create_quiz_missing_field(proposed: dict) -> str | None:
+    """Same guarantee as _create_assignment_missing_field for create_quiz."""
     for field in ("title", "description", "due_date"):
         value = proposed.get(field)
         if not isinstance(value, str) or not value.strip():
@@ -265,6 +294,17 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 ),
             }
 
+        case "fetch_quizzes":
+            course = await _resolve_course(db, user, action.local_course_id)
+            quizzes = await get_course_quizzes(
+                course.id, user, course.canvas_url, db
+            )
+            return {
+                "quizzes": [quiz.model_dump(mode="json") for quiz in quizzes],
+                "count": len(quizzes),
+                "summary": f"{course.name} has {len(quizzes)} quiz(zes).",
+            }
+
         case "set_active_course":
             result = await set_active_course(user, action.local_course_id, db)
             return {"active_course": result.model_dump()}
@@ -312,6 +352,50 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 affected_resources=[
                     {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
                     {"type": "assignment", "id": assignment.id, "name": assignment.name, "status": "created"},
+                ],
+            )
+            return result.to_dict()
+
+        case "create_quiz":
+            course = await _resolve_course(db, user, action.local_course_id)
+            questions = [
+                q.model_dump() if hasattr(q, "model_dump") else q
+                for q in (action.questions or [])
+            ]
+            await validate_quiz_for_create(
+                action.local_course_id,
+                user,
+                action.title,
+                action.description,
+                action.due_date,
+                action.points_possible,
+                db,
+                allowed_attempts=action.allowed_attempts,
+                time_limit=action.time_limit,
+                questions=questions,
+            )
+            payload = QuizCreate(
+                title=action.title,
+                description=action.description,
+                due_at=action.due_date,
+                points_possible=action.points_possible,
+                allowed_attempts=action.allowed_attempts,
+                time_limit=action.time_limit,
+                questions=[
+                    QuizQuestionCreate(**question) if isinstance(question, dict) else question
+                    for question in questions
+                ],
+            )
+            quiz = await create_course_quiz(
+                course.id, payload, user, course.canvas_url, db
+            )
+            result = CanvasWriteResult(
+                action="create_quiz",
+                data=quiz,
+                reversible=is_reversible("create_quiz"),
+                affected_resources=[
+                    {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
+                    {"type": "quiz", "id": quiz.id, "name": quiz.title, "status": "created"},
                 ],
             )
             return result.to_dict()
@@ -470,6 +554,35 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                         "action": "clarify",
                         "clarify": True,
                         "question": _CREATE_ASSIGNMENT_FIELD_QUESTIONS[missing_field],
+                        "partial_plan": partial_plan,
+                    }
+
+                if _create_assignment_due_date_in_past(proposed["due_date"]):
+                    partial_plan = {
+                        key: value for key, value in proposed.items() if key not in ("action", "due_date")
+                    }
+                    return {
+                        "action": "clarify",
+                        "clarify": True,
+                        "question": (
+                            f"The due date you gave ({proposed['due_date']}) has already "
+                            "passed — what date would you like instead?"
+                        ),
+                        "partial_plan": partial_plan,
+                    }
+
+            if proposed.get("action") == "create_quiz":
+                missing_field = _create_quiz_missing_field(proposed)
+                if missing_field:
+                    partial_plan = {
+                        key: value
+                        for key, value in proposed.items()
+                        if key not in ("action", missing_field)
+                    }
+                    return {
+                        "action": "clarify",
+                        "clarify": True,
+                        "question": _CREATE_QUIZ_FIELD_QUESTIONS[missing_field],
                         "partial_plan": partial_plan,
                     }
 

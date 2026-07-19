@@ -65,6 +65,47 @@ class AssignmentUpdate(BaseModel):
     points_possible: float | None = None
 
 
+class QuizQuestionCreate(BaseModel):
+    question_text: str
+    question_type: Literal[
+        "multiple_choice_question",
+        "true_false_question",
+        "short_answer_question",
+        "essay_question",
+    ] = "essay_question"
+    points_possible: float = 1.0
+    answers: list[dict] = Field(default_factory=list)
+
+
+class QuizCreate(BaseModel):
+    title: str
+    description: str | None = None
+    due_at: datetime | None = None
+    points_possible: float | None = None
+    quiz_type: Literal["assignment", "practice_quiz", "graded_survey", "survey"] = "assignment"
+    allowed_attempts: int | None = 1
+    time_limit: int | None = None
+    published: bool = False
+    questions: list[QuizQuestionCreate] = Field(default_factory=list)
+
+
+class QuizResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    id: int
+    title: str
+    description: str | None = None
+    due_at: datetime | None = None
+    points_possible: float | None = None
+    course_id: int
+    quiz_type: str | None = None
+    allowed_attempts: int | None = None
+    time_limit: int | None = None
+    published: bool = False
+    question_count: int | None = None
+    html_url: str | None = None
+
+
 class MessageSendResult(BaseModel):
     course_id: int         # Canvas course ID — matches AssignmentResponse.course_id convention, not the local DB id
     subject: str

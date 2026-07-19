@@ -19,6 +19,7 @@ export const paths = {
     assignmentUpdate:
       "/instructor/courses/:localCourseId/assignments/:assignmentId/edit",
     assignmentCreate: "/instructor/assignments/create",
+    quizCreate: "/instructor/quizzes/create",
     courseAnalytics: "/instructor/courses/:courseId/analytics",
     assistant: "/instructor/assistant",
     dryRunPreview: "/instructor/actions/preview",

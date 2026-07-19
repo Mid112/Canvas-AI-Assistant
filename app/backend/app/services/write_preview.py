@@ -1,7 +1,7 @@
 # app/backend/app/services/write_preview.py
 from datetime import datetime
 
-from app.mcp_tools.schemas import is_reversible
+from app.mcp_tools.schemas import get_risk_level, is_reversible
 from app.models.course import Course
 
 
@@ -22,6 +22,8 @@ def generate_write_preview(proposed_action: dict, course: Course) -> dict:
     match action_type:
         case "create_assignment":
             return _preview_create_assignment(course, proposed_action)
+        case "create_quiz":
+            return _preview_create_quiz(course, proposed_action)
         case "update_assignment":
             return _preview_update_assignment(course, proposed_action)
         case "send_message":
@@ -43,7 +45,10 @@ def _reversibility_fields(action_type: str) -> dict:
     """Shared #581 metadata every write preview carries — single source
     of truth is is_reversible(), never hand-duplicated per builder."""
     reversible = is_reversible(action_type)
-    fields = {"reversible": reversible}
+    fields = {
+        "reversible": reversible,
+        "risk_level": get_risk_level(action_type),
+    }
     if not reversible:
         fields["reversibility_note"] = "This action cannot be undone once submitted."
     return fields
@@ -77,6 +82,49 @@ def _preview_create_assignment(course: Course, params: dict) -> dict:
             {"type": "assignment", "id": None, "name": title.strip(), "status": "created"},
         ],
         **_reversibility_fields("create_assignment"),
+    }
+
+
+def _preview_create_quiz(course: Course, params: dict) -> dict:
+    title = params.get("title", "Untitled Quiz")
+    description = params.get("description", "")
+    due_date = params.get("due_date")
+    points_possible = params.get("points_possible")
+    questions = params.get("questions") or []
+    allowed_attempts = params.get("allowed_attempts")
+    time_limit = params.get("time_limit")
+
+    due_display = _format_due_date(due_date)
+    points_display = f"{points_possible} points" if points_possible else "Ungraded"
+    desc_preview = description[:200] + ("..." if len(description) > 200 else "")
+    question_count = len(questions) if isinstance(questions, list) else 0
+
+    summary = (
+        f"Create quiz '{str(title).strip()}' in {course.name}, "
+        f"due {due_display}, worth {points_display}"
+    )
+    if question_count:
+        summary += f", with {question_count} question{'s' if question_count != 1 else ''}"
+    summary += "."
+
+    return {
+        "action": "create_quiz",
+        "course": course.name,
+        "metadata": {
+            "title": str(title).strip(),
+            "description_preview": desc_preview,
+            "due_date": due_display,
+            "points_possible": points_display,
+            "question_count": question_count,
+            "allowed_attempts": allowed_attempts,
+            "time_limit": time_limit,
+        },
+        "summary": summary,
+        "affected_resources": [
+            {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
+            {"type": "quiz", "id": None, "name": str(title).strip(), "status": "created"},
+        ],
+        **_reversibility_fields("create_quiz"),
     }
 
 

@@ -6,6 +6,7 @@ import { ActionTypeSection } from "@/components/preview/ActionTypeSection";
 import { AffectedResourcesCard } from "@/components/preview/AffectedResourcesCard";
 import { PreviewActions } from "@/components/preview/PreviewActions";
 import { ReversibilityStatus } from "@/components/preview/ReversibilityStatus";
+import { RiskLevelIndicator } from "@/components/preview/RiskLevelIndicator";
 import type { DryRunPreviewData } from "@/types/dryRunPreview";
 
 interface PreviewPanelProps {
@@ -39,10 +40,15 @@ export function PreviewPanel({
         <p className="text-sm text-muted-foreground">{preview.subtitle}</p>
       </header>
 
-      <ReversibilityStatus
-        reversibility={preview.reversibility}
-        explanation={preview.reversibilityExplanation}
-      />
+      <div className="space-y-3">
+        {preview.riskLevel ? (
+          <RiskLevelIndicator riskLevel={preview.riskLevel} />
+        ) : null}
+        <ReversibilityStatus
+          reversibility={preview.reversibility}
+          explanation={preview.reversibilityExplanation}
+        />
+      </div>
 
       <ActionSummaryCard
         originalRequest={preview.originalRequest}

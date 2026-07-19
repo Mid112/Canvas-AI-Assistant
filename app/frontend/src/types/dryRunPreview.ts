@@ -69,6 +69,7 @@ export interface DryRunPreviewData {
   affectedResources: DryRunAffectedResources;
   reversibility: ReversibilityLevel;
   reversibilityExplanation: string;
+  riskLevel?: "low" | "medium" | "high";
   /** Field-level diff against the immediately preceding modify round, if
    * this preview was revised at least once. Only one step of history is
    * kept — see previous_proposed_action in chat.py. */

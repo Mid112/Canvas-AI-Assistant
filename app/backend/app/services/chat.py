@@ -130,6 +130,7 @@ NORMAL_TURN_ALLOWED_ACTIONS = {"intent_preview", "clarify", "out_of_scope", "res
 # from the write result below rather than assumed from action_name alone.
 _AUDIT_RESOURCE_MAP = {
     "create_assignment": ("assignment", "create"),
+    "create_quiz": ("quiz", "create"),
     "update_assignment": ("assignment", "update"),
     "send_message": ("announcement", "create"),
 }
@@ -606,6 +607,58 @@ async def _resolve_assignment_reference(
         # a JSON string ("4821"), which would otherwise silently fail this
         # membership check even though it's the semantically correct answer.
         valid_ids = {_coerce_int(a.get("id")) for a in assignments}
+        valid_ids.discard(None)
+        return candidate if candidate in valid_ids else None
+    except Exception:
+        return None
+
+
+_QUIZ_RESOLVER_SYSTEM_PROMPT = """You resolve which Canvas quiz an instructor is
+referring to. You are given a list of real quizzes (with their Canvas ids
+and titles) and the instructor's own words.
+
+Respond with JSON only:
+{"quiz_id": <integer from QUIZZES> | null}
+
+Use the "id" value from the matching quiz in QUIZZES — never a value that
+isn't in that list. If the reference is "latest"/"most recent"/"newest",
+pick the quiz with the latest due_at (if none have a due_at, treat it as
+no confident match). If the reference names or closely matches one quiz's
+title, pick that one. If you cannot confidently pick exactly one, respond
+with {"quiz_id": null} instead of guessing."""
+
+
+async def _resolve_quiz_reference(
+    quizzes: list[dict], reference: str | None, user_message: str, adapter: LLMAdapter,
+) -> int | None:
+    """Resolves a natural-language quiz reference to a real Canvas quiz ID
+    against a candidate list the app already fetched — never invents an ID.
+    Same contract as _resolve_assignment_reference: returns None on any
+    failure so the caller can clarify instead of crashing the chat turn."""
+    try:
+        if len(quizzes) == 1:
+            return _coerce_int(quizzes[0].get("id"))
+
+        listing = "\n".join(
+            f"- id={q.get('id')}, title={q.get('title')!r}, due_at={q.get('due_at')}, "
+            f"points_possible={q.get('points_possible')}"
+            for q in quizzes
+        )
+        prompt = (
+            f"QUIZZES:\n{listing}\n\n"
+            f"User's reference to a quiz: {reference or '(not given)'}\n"
+            f"User's full message: {user_message}"
+        )
+        raw = await asyncio.wait_for(
+            adapter.generate(
+                _QUIZ_RESOLVER_SYSTEM_PROMPT, prompt, history=[],
+                timeout=ASSIGNMENT_RESOLVER_TIMEOUT_SECONDS,
+            ),
+            timeout=ASSIGNMENT_RESOLVER_TIMEOUT_SECONDS,
+        )
+        parsed = json.loads(extract_json_object(raw))
+        candidate = _coerce_int(parsed.get("quiz_id")) if isinstance(parsed, dict) else None
+        valid_ids = {_coerce_int(q.get("id")) for q in quizzes}
         valid_ids.discard(None)
         return candidate if candidate in valid_ids else None
     except Exception:
@@ -1765,22 +1818,22 @@ Put every field you already do have into partial_plan so the next turn
 doesn't lose it once the user answers. Only ask ONE question per turn.
 
 REQUIRED FIELDS — before proposing any write action (create_assignment,
-update_assignment, send_message), check every field listed as "required"
+create_quiz, update_assignment, send_message), check every field listed as "required"
 in that action's schema below. This includes the action/task type itself
 (e.g. don't guess whether the user wants create_assignment vs
-update_assignment), and fields like title, description, and due_date.
+create_quiz vs update_assignment), and fields like title, description, and due_date.
 If any required field is missing or was not stated by the user, use the
 AMBIGUITY CHECK format to ask for it. Never invent a placeholder value
 and never silently omit a required field from proposed_action.
 
 INTENT PREVIEW — before executing a WRITE action:
-create_assignment, update_assignment, and send_message change real Canvas
+create_assignment, create_quiz, update_assignment, and send_message change real Canvas
 data, so the user must see and confirm exactly what will happen first:
 {"action": "intent_preview", "summary": "<plain English description>", "proposed_action": <dict>}
 The user will confirm, modify, or cancel from here.
 
 READ ACTIONS — execute immediately, no preview:
-fetch_courses, fetch_assignments, fetch_students, fetch_submissions,
+fetch_courses, fetch_assignments, fetch_quizzes, fetch_students, fetch_submissions,
 resolve_missing_submissions, find_assignment_by_submission_rate, and
 get_active_course never change any data, so propose them directly and
 plainly — do NOT wrap them in intent_preview:

@@ -106,6 +106,13 @@ function buildInterpretedAction(
     };
   }
 
+  if (actionName === "create_quiz") {
+    interpretedAction.secondaryLink = {
+      label: "Open quiz creator",
+      href: paths.instructor.quizCreate,
+    };
+  }
+
   if (courseId != null && actionName.includes("submission")) {
     interpretedAction.primaryLink = {
       label: "Open course analytics",

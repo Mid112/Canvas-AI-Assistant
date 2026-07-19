@@ -104,6 +104,40 @@ class CreateAssignmentAction(BaseModel):
         return _normalize_due_date_str(value)
 
 
+class QuizQuestionSpec(BaseModel):
+    question_text: str
+    question_type: Literal[
+        "multiple_choice_question",
+        "true_false_question",
+        "short_answer_question",
+        "essay_question",
+    ] = "essay_question"
+    points_possible: float = 1.0
+    answers: list[dict] | None = None
+
+
+class CreateQuizAction(BaseModel):
+    action: Literal["create_quiz"] = "create_quiz"
+    local_course_id: int
+    title: str
+    description: str
+    due_date: str
+    points_possible: float | None = None
+    allowed_attempts: int | None = 1
+    time_limit: int | None = None
+    questions: list[QuizQuestionSpec] | None = None
+
+    @field_validator("due_date")
+    @classmethod
+    def _normalize_due_date(cls, value: str) -> str:
+        return _normalize_due_date_str(value)
+
+
+class FetchQuizzesAction(BaseModel):
+    action: Literal["fetch_quizzes"] = "fetch_quizzes"
+    local_course_id: int
+
+
 class UpdateAssignmentAction(BaseModel):
     action: Literal["update_assignment"] = "update_assignment"
     local_course_id: int
@@ -229,11 +263,13 @@ ACTION_SCHEMAS: dict[str, type[BaseModel]] = {
     "fetch_assignments": FetchAssignmentsAction,
     "fetch_submissions": FetchSubmissionsAction,
     "fetch_students": FetchStudentsAction,
+    "fetch_quizzes": FetchQuizzesAction,
     "resolve_missing_submissions": ResolveMissingSubmissionsAction,
     "find_assignment_by_submission_rate": FindAssignmentBySubmissionRateAction,
     "set_active_course": SetActiveCourseAction,
     "get_active_course": GetActiveCourseAction,
     "create_assignment": CreateAssignmentAction,
+    "create_quiz": CreateQuizAction,
     "update_assignment": UpdateAssignmentAction,
     "send_message": SendMessageAction,
     "out_of_scope": OutOfScopeAction,
@@ -258,6 +294,7 @@ ACTION_CLASSIFICATION: dict[str, ActionClassification] = {
     "fetch_assignments": "read_only",
     "fetch_submissions": "read_only",
     "fetch_students": "read_only",
+    "fetch_quizzes": "read_only",
     "resolve_missing_submissions": "read_only",
     "find_assignment_by_submission_rate": "read_only",
     "get_active_course": "read_only",
@@ -267,6 +304,7 @@ ACTION_CLASSIFICATION: dict[str, ActionClassification] = {
     # #863-865 metadata completeness, not because it goes through preview/confirm.
     "set_active_course": "modifying",
     "create_assignment": "modifying",
+    "create_quiz": "modifying",
     "update_assignment": "modifying",
     # Dangling pre-existing action: previewable (write_preview.py has a
     # builder for it) but never confirmable (no schema in ACTION_SCHEMAS,
@@ -291,11 +329,21 @@ def is_reversible(action: str) -> bool:
 # "irreversible" above (a sent Canvas announcement/message can't be un-sent),
 # and is deliberately not extended to a standalone user-facing "delete
 # assignment" action — delete_course_assignment exists only for undo to call.
-UNDOABLE_ACTIONS = frozenset({"update_assignment", "create_assignment"})
+UNDOABLE_ACTIONS = frozenset({"update_assignment", "create_assignment", "create_quiz"})
 
 
 def is_undoable(action_name: str) -> bool:
     return action_name in UNDOABLE_ACTIONS
+
+
+def get_risk_level(action: str) -> Literal["low", "medium", "high"]:
+    """Maps ACTION_CLASSIFICATION into a UI-facing risk indicator."""
+    kind = ACTION_CLASSIFICATION.get(action)
+    if kind == "read_only":
+        return "low"
+    if kind == "irreversible":
+        return "high"
+    return "medium"
 
 
 # Canvas-mutating actions that must never execute except via the
@@ -307,7 +355,9 @@ def is_undoable(action_name: str) -> bool:
 # and named the write action outright. set_active_course is deliberately
 # excluded: it only writes a local UserPreference row, has no Canvas
 # footprint, and always executes immediately regardless of provider.
-WRITE_ACTIONS = frozenset({"create_assignment", "update_assignment", "send_message", "update_grade"})
+WRITE_ACTIONS = frozenset(
+    {"create_assignment", "create_quiz", "update_assignment", "send_message", "update_grade"}
+)
 
 # Every read-only Canvas action, derived from ACTION_CLASSIFICATION rather
 # than hand-listed a second time. services/chat.py's handle_chat_message

@@ -545,6 +545,97 @@ async def fetch_conversation(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
 
 
+async def list_quizzes(
+    course_id: int,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> list[dict]:
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.get(
+                f"{canvas_url}/api/v1/courses/{course_id}/quizzes",
+                headers=_headers(token),
+            )
+            _raise_for_canvas_error(response)
+            return response.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
+async def create_quiz(
+    course_id: int,
+    payload: dict,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> dict:
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.post(
+                f"{canvas_url}/api/v1/courses/{course_id}/quizzes",
+                headers=_headers(token),
+                json={"quiz": payload},
+            )
+            _raise_for_canvas_error(response)
+            return response.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
+async def create_quiz_question(
+    course_id: int,
+    quiz_id: int,
+    payload: dict,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> dict:
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.post(
+                f"{canvas_url}/api/v1/courses/{course_id}/quizzes/{quiz_id}/questions",
+                headers=_headers(token),
+                json={"question": payload},
+            )
+            _raise_for_canvas_error(response)
+            return response.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
+async def delete_quiz(
+    course_id: int,
+    quiz_id: int,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> dict:
+    # Only ever called from undo_workflow to revert create_quiz.
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.delete(
+                f"{canvas_url}/api/v1/courses/{course_id}/quizzes/{quiz_id}",
+                headers=_headers(token),
+            )
+            _raise_for_canvas_error(response)
+            return response.json() if response.content else {}
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
 async def add_conversation_message(
     conversation_id: int,
     body: str,

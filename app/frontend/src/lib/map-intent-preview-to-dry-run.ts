@@ -137,6 +137,7 @@ function parseIntentPreviewContent(content: string): IntentPreviewPayload | null
 function mapActionType(actionName: string): DryRunActionType {
   switch (actionName) {
     case "create_assignment":
+    case "create_quiz":
       return "Create";
     case "update_assignment":
     case "update_grade":
@@ -183,6 +184,11 @@ function mapApiOperations(actionName: string): DryRunApiOperation[] {
   switch (actionName) {
     case "create_assignment":
       return [{ method: "POST", endpoint: "/courses/:course_id/assignments" }];
+    case "create_quiz":
+      return [
+        { method: "POST", endpoint: "/courses/:course_id/quizzes" },
+        { method: "POST", endpoint: "/courses/:course_id/quizzes/:id/questions" },
+      ];
     case "update_assignment":
       return [
         { method: "GET", endpoint: "/courses/:course_id/assignments/:id" },
@@ -234,6 +240,18 @@ function mapAffectedResources(
           typeof metadata?.due_date === "string" ? metadata.due_date : undefined,
       };
     }
+
+    if (type === "quiz") {
+      const metadata = previewMetadata.metadata as
+        | Record<string, unknown>
+        | undefined;
+      affected.assignment = {
+        name: name ?? "Quiz",
+        id: id ?? "quiz",
+        dueDate:
+          typeof metadata?.due_date === "string" ? metadata.due_date : undefined,
+      };
+    }
   }
 
   const audience = previewMetadata.audience as Record<string, unknown> | undefined;
@@ -262,6 +280,10 @@ function buildAiExplanation(
     case "create_assignment":
       return [
         `Create assignment "${String(metadata?.title ?? "Untitled")}" in ${String(previewMetadata.course ?? "the selected course")}.`,
+      ];
+    case "create_quiz":
+      return [
+        `Create quiz "${String(metadata?.title ?? "Untitled Quiz")}" in ${String(previewMetadata.course ?? "the selected course")}.`,
       ];
     case "update_assignment":
       return [
@@ -365,6 +387,12 @@ export function mapIntentPreviewToDryRun(
   );
   const previewMetadata = payload.preview_metadata ?? {};
   const { reversibility, explanation } = mapReversibility(previewMetadata);
+  const riskLevel =
+    previewMetadata.risk_level === "low" ||
+    previewMetadata.risk_level === "medium" ||
+    previewMetadata.risk_level === "high"
+      ? previewMetadata.risk_level
+      : undefined;
 
   return {
     id: `chat-${conversationId}-${pendingMessageId}`,
@@ -384,6 +412,7 @@ export function mapIntentPreviewToDryRun(
     affectedResources: mapAffectedResources(previewMetadata),
     reversibility,
     reversibilityExplanation: explanation,
+    riskLevel,
     changesFromPreviousRequest: computeProposedActionChanges(
       payload.previous_proposed_action,
       payload.proposed_action,
