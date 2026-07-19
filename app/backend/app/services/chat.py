@@ -49,12 +49,12 @@ from app.services.canvas import CanvasTokenRequiredError, sync_courses_if_stale
 from app.services.llm.base import LLMAdapter
 from app.services.llm.json_extraction import extract_json_object
 from app.services.llm.llm_setting import get_llm_adapter
+from app.services.quiz_validation import validate_quiz_for_create
 from app.services.resolved_set import (
     compute_submissions_by_status,
     create_resolved_set,
     materialize_resolved_set,
 )
-from app.services.quiz_validation import validate_quiz_for_create
 from app.services.student import get_submission_derived_students
 from app.services.write_preview import generate_write_preview
 

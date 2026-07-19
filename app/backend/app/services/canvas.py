@@ -1,6 +1,6 @@
 import logging
-from html import escape
 from datetime import UTC, datetime
+from html import escape
 from uuid import uuid4
 
 from cryptography.fernet import InvalidToken
