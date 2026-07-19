@@ -54,6 +54,7 @@ from app.services.resolved_set import (
     create_resolved_set,
     materialize_resolved_set,
 )
+from app.services.quiz_validation import validate_quiz_for_create
 from app.services.student import get_submission_derived_students
 from app.services.write_preview import generate_write_preview
 
@@ -1940,6 +1941,14 @@ data, so the user must see and confirm exactly what will happen first:
 {"action": "intent_preview", "summary": "<plain English description>", "proposed_action": <dict>}
 The user will confirm, modify, or cancel from here.
 
+QUIZ ENGINES:
+For create_quiz, use quiz_engine="classic" unless the instructor explicitly
+asks for a New Quiz. Use quiz_engine="new_quizzes" only for that explicit
+request; the app verifies whether their Canvas course supports it. Classic
+question-bank groups require real bank IDs selected by the instructor in
+the quiz review form. Never invent bank_id values or add question_bank_groups
+from natural-language guesses.
+
 READ ACTIONS — execute immediately, no preview:
 fetch_courses, fetch_assignments, fetch_quizzes, fetch_students, fetch_submissions,
 resolve_missing_submissions, find_assignment_by_submission_rate, and
@@ -2731,7 +2740,9 @@ _EDITABLE_PREVIEW_FIELDS: dict[str, frozenset[str]] = {
             "points_possible",
             "allowed_attempts",
             "time_limit",
+            "quiz_engine",
             "questions",
+            "question_bank_groups",
         }
     ),
     "update_assignment": frozenset(
@@ -2818,6 +2829,22 @@ async def handle_modified_action(
         course = await resolve_course(db, user, int(local_course_id))
     except ToolExecutionError as exc:
         raise HTTPException(status_code=422, detail=exc.user_message) from exc
+
+    if action_name == "create_quiz":
+        await validate_quiz_for_create(
+            int(local_course_id),
+            user,
+            str(proposed.get("title") or ""),
+            proposed.get("description"),
+            proposed.get("due_date"),
+            proposed.get("points_possible"),
+            db,
+            allowed_attempts=proposed.get("allowed_attempts"),
+            time_limit=proposed.get("time_limit"),
+            questions=proposed.get("questions"),
+            quiz_engine=str(proposed.get("quiz_engine") or "classic"),
+            question_bank_groups=proposed.get("question_bank_groups"),
+        )
 
     preview_metadata = generate_write_preview(proposed, course)
     result = {

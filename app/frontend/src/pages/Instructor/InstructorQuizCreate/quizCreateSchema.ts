@@ -44,7 +44,27 @@ export const quizReviewSchema = z.object({
     .positive("Points possible must be greater than 0"),
   allowedAttempts: z.number().int().positive().nullable(),
   timeLimit: z.number().int().positive().nullable(),
+  quizEngine: z.enum(["classic", "new_quizzes"]).default("classic"),
   questions: z.array(quizQuestionSchema),
+  questionBankGroups: z.array(
+    z.object({
+      bankId: z.number().int().positive(),
+      bankName: z.string().min(1),
+      pickCount: z.number().int().positive("Pick count must be positive"),
+      questionPoints: z.number().positive("Question points must be positive"),
+    }),
+  ).default([]),
+}).superRefine((value, context) => {
+  if (
+    value.quizEngine === "new_quizzes" &&
+    value.questionBankGroups.length > 0
+  ) {
+    context.addIssue({
+      code: "custom",
+      path: ["questionBankGroups"],
+      message: "Classic question banks cannot be used with New Quizzes",
+    });
+  }
 });
 
 export type QuizReviewFormSchema = z.output<typeof quizReviewSchema>;

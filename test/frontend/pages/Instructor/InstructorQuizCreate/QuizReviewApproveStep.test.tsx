@@ -63,4 +63,64 @@ describe("QuizReviewApproveStep", () => {
       expect.anything(),
     );
   });
+
+  it("lets Classic quizzes link a randomized Canvas question bank", async () => {
+    const user = userEvent.setup();
+    const onApprove = vi.fn();
+    render(
+      <QuizReviewApproveStep
+        courseLabel="CPSC 310"
+        draft={{
+          name: "Bank Quiz",
+          description: "Uses the recursion bank",
+          dueDate: "2030-12-15T23:59",
+          pointsPossible: 10,
+          allowedAttempts: 1,
+          timeLimit: null,
+          quizEngine: "classic",
+          questions: [],
+          questionBankGroups: [],
+        }}
+        capabilities={{
+          classicQuizzes: true,
+          newQuizzes: true,
+          questionBanks: true,
+          preferredEngine: "new_quizzes",
+        }}
+        questionBanks={[
+          { id: 31, title: "Recursion Bank", questionCount: 12 },
+        ]}
+        isApproving={false}
+        onApprove={onApprove}
+        onBack={vi.fn()}
+      />,
+    );
+
+    await user.click(
+      screen.getByRole("button", { name: "Use Recursion Bank (12)" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Preview & Approve Quiz" }),
+      ).toBeEnabled(),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Preview & Approve Quiz" }),
+    );
+
+    expect(onApprove).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quizEngine: "classic",
+        questionBankGroups: [
+          {
+            bankId: 31,
+            bankName: "Recursion Bank",
+            pickCount: 5,
+            questionPoints: 1,
+          },
+        ],
+      }),
+      expect.anything(),
+    );
+  });
 });

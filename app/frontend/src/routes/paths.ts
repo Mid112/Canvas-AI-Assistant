@@ -129,6 +129,13 @@ export interface AiActionDraftLocationState {
     pointsPossible?: unknown;
     allowedAttempts?: unknown;
     timeLimit?: unknown;
+    quizEngine?: "classic" | "new_quizzes";
+    questionBankGroups?: Array<{
+      bankId: number;
+      bankName: string;
+      pickCount: number;
+      questionPoints: number;
+    }>;
     questions?: Array<{
       questionText: string;
       questionType:

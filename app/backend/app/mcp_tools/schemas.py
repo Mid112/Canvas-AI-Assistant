@@ -116,6 +116,13 @@ class QuizQuestionSpec(BaseModel):
     answers: list[dict] | None = None
 
 
+class QuizQuestionBankGroupSpec(BaseModel):
+    bank_id: int
+    bank_name: str | None = None
+    pick_count: int
+    question_points: float
+
+
 class CreateQuizAction(BaseModel):
     action: Literal["create_quiz"] = "create_quiz"
     local_course_id: int
@@ -125,7 +132,9 @@ class CreateQuizAction(BaseModel):
     points_possible: float | None = None
     allowed_attempts: int | None = 1
     time_limit: int | None = None
+    quiz_engine: Literal["classic", "new_quizzes"] = "classic"
     questions: list[QuizQuestionSpec] | None = None
+    question_bank_groups: list[QuizQuestionBankGroupSpec] | None = None
 
     @field_validator("due_date")
     @classmethod

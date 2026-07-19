@@ -4,7 +4,9 @@ import { formatDueDateForApi, formatDueDateForInput } from "@/lib/assignment-uti
 import type {
   GeneratedQuizDraft,
   QuizApprovePayload,
+  QuizCapabilities,
   QuizPreviewSummary,
+  QuizQuestionBank,
   QuizQuestionDraft,
   QuizRiskLevel,
 } from "@/types/quizCreate";
@@ -83,6 +85,7 @@ export async function generateQuizDraft(
     pointsPossible: data.points_possible ?? 100,
     allowedAttempts: data.allowed_attempts,
     timeLimit: data.time_limit,
+    quizEngine: "classic",
     questions: (data.questions ?? []).map((question) => ({
       questionText: question.question_text,
       questionType: question.question_type,
@@ -92,6 +95,7 @@ export async function generateQuizDraft(
         weight: Number(answer.weight ?? 0),
       })),
     })),
+    questionBankGroups: [],
   };
 }
 
@@ -110,6 +114,7 @@ function toQuizCreateBody(payload: QuizApprovePayload) {
       points_possible: payload.pointsPossible,
       allowed_attempts: payload.allowedAttempts,
       time_limit: payload.timeLimit,
+      quiz_engine: payload.quizEngine ?? "classic",
       published: false,
       questions: payload.questions.map((question) => ({
         question_text: question.questionText,
@@ -119,6 +124,12 @@ function toQuizCreateBody(payload: QuizApprovePayload) {
           text: answer.text,
           weight: answer.weight,
         })),
+      })),
+      question_bank_groups: (payload.questionBankGroups ?? []).map((group) => ({
+        bank_id: group.bankId,
+        bank_name: group.bankName,
+        pick_count: group.pickCount,
+        question_points: group.questionPoints,
       })),
     },
   };
@@ -199,4 +210,65 @@ export async function approveQuizDraft(
   if (!response.ok) {
     throw new QuizCreatorApiError(await parseApiError(response));
   }
+}
+
+export async function fetchQuizCapabilities(
+  courseId: number,
+  options: GenerateQuizDraftOptions,
+): Promise<QuizCapabilities> {
+  const response = await fetch(
+    appendCanvasUrl(
+      `${API_BASE_URL}/canvas/courses/${courseId}/quizzes/capabilities`,
+      options.canvasUrl,
+    ),
+    {
+      headers: { Authorization: `Bearer ${options.accessToken}` },
+    },
+  );
+  if (!response.ok) {
+    throw new QuizCreatorApiError(await parseApiError(response));
+  }
+  const data = (await response.json()) as {
+    classic_quizzes: boolean;
+    new_quizzes: boolean;
+    question_banks: boolean;
+    preferred_engine: QuizCapabilities["preferredEngine"];
+    new_quizzes_unavailable_reason?: string | null;
+  };
+  return {
+    classicQuizzes: data.classic_quizzes,
+    newQuizzes: data.new_quizzes,
+    questionBanks: data.question_banks,
+    preferredEngine: data.preferred_engine,
+    newQuizzesUnavailableReason:
+      data.new_quizzes_unavailable_reason ?? undefined,
+  };
+}
+
+export async function fetchQuestionBanks(
+  courseId: number,
+  options: GenerateQuizDraftOptions,
+): Promise<QuizQuestionBank[]> {
+  const response = await fetch(
+    appendCanvasUrl(
+      `${API_BASE_URL}/canvas/courses/${courseId}/quizzes/question-banks`,
+      options.canvasUrl,
+    ),
+    {
+      headers: { Authorization: `Bearer ${options.accessToken}` },
+    },
+  );
+  if (!response.ok) {
+    throw new QuizCreatorApiError(await parseApiError(response));
+  }
+  const data = (await response.json()) as Array<{
+    id: number;
+    title: string;
+    question_count: number;
+  }>;
+  return data.map((bank) => ({
+    id: bank.id,
+    title: bank.title,
+    questionCount: bank.question_count,
+  }));
 }

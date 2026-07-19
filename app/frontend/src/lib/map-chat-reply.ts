@@ -129,6 +129,17 @@ function buildInterpretedAction(
             },
           ]
         : []),
+      ...(actionName === "create_quiz"
+        ? [
+            {
+              label: "Quiz engine",
+              value:
+                proposed.quiz_engine === "new_quizzes"
+                  ? "New Quizzes"
+                  : "Classic Quizzes",
+            },
+          ]
+        : []),
     ],
   };
 
@@ -203,6 +214,21 @@ function buildInterpretedAction(
           pointsPossible: proposed.points_possible,
           allowedAttempts: proposed.allowed_attempts,
           timeLimit: proposed.time_limit,
+          quizEngine:
+            proposed.quiz_engine === "new_quizzes"
+              ? "new_quizzes"
+              : "classic",
+          questionBankGroups: Array.isArray(proposed.question_bank_groups)
+            ? proposed.question_bank_groups.map((group) => {
+                const record = group as Record<string, unknown>;
+                return {
+                  bankId: Number(record.bank_id),
+                  bankName: readString(record.bank_name) ?? "Question bank",
+                  pickCount: Number(record.pick_count),
+                  questionPoints: Number(record.question_points),
+                };
+              })
+            : [],
           questions,
         },
       },

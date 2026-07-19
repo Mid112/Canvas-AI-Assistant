@@ -1,5 +1,7 @@
 import logging
+from html import escape
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from cryptography.fernet import InvalidToken
 from fastapi import HTTPException, status
@@ -15,16 +17,22 @@ from app.core.security import decrypt_canvas_token
 from app.integrations.canvas import (
     create_announcement,
     create_assignment,
+    create_new_quiz,
+    create_new_quiz_item,
     create_quiz,
     create_quiz_question,
+    create_quiz_question_group,
     delete_assignment,
+    delete_new_quiz,
     delete_quiz,
     fetch_assignment,
     fetch_assignments,
     fetch_courses,
     fetch_submissions,
     fetch_user_profile,
+    list_question_banks,
     list_quizzes,
+    probe_new_quizzes,
     send_conversation,
     update_assignment,
     update_submission_grade,
@@ -42,6 +50,8 @@ from app.schemas.canvas import (
     AssignmentUpdate,
     CourseResponse,
     MessageSendResult,
+    QuestionBankSummary,
+    QuizCapabilities,
     QuizCreate,
     QuizResponse,
     SubmissionResponse,
@@ -381,6 +391,153 @@ def _quiz_payload_for_canvas(payload: QuizCreate) -> dict:
     return {key: value for key, value in body.items() if value is not None or key in ("description", "published")}
 
 
+def _new_quiz_payload_for_canvas(payload: QuizCreate) -> dict:
+    attempts_enabled = payload.allowed_attempts is None or payload.allowed_attempts > 1
+    body = {
+        "title": payload.title,
+        "instructions": payload.description or "",
+        "due_at": payload.due_at.isoformat() if payload.due_at else None,
+        "points_possible": payload.points_possible,
+        "grading_type": "points",
+        "quiz_settings": {
+            "multiple_attempts": {
+                "multiple_attempts_enabled": attempts_enabled,
+                "attempt_limit": payload.allowed_attempts is not None,
+                "max_attempts": payload.allowed_attempts,
+                "score_to_keep": "highest",
+            },
+            "has_time_limit": payload.time_limit is not None,
+            "session_time_limit_in_seconds": (
+                payload.time_limit * 60 if payload.time_limit is not None else None
+            ),
+        },
+    }
+    return {key: value for key, value in body.items() if value is not None}
+
+
+def _new_quiz_item_payload(question, position: int) -> dict:
+    question_type = question.question_type
+    answers = list(question.answers or [])
+    entry: dict = {
+        "title": question.question_text[:255],
+        "item_body": f"<p>{escape(question.question_text)}</p>",
+        "calculator_type": "none",
+    }
+
+    if question_type == "multiple_choice_question":
+        choices = []
+        weighted_choices: list[tuple[float, str]] = []
+        for answer_position, answer in enumerate(answers, start=1):
+            choice_id = str(uuid4())
+            text = str(answer.get("text") or answer.get("answer_text") or "")
+            choices.append(
+                {
+                    "id": choice_id,
+                    "position": answer_position,
+                    "itemBody": f"<p>{escape(text)}</p>",
+                }
+            )
+            weighted_choices.append(
+                (
+                    float(answer.get("weight", answer.get("answer_weight", 0))),
+                    choice_id,
+                )
+            )
+        correct_id = (
+            max(weighted_choices, default=(0, ""), key=lambda item: item[0])[1]
+        )
+        entry.update(
+            {
+                "interaction_type_slug": "choice",
+                "interaction_data": {"choices": choices},
+                "scoring_data": {"value": correct_id},
+                "scoring_algorithm": "Equivalence",
+            }
+        )
+    elif question_type == "true_false_question":
+        correct_answer = max(
+            answers,
+            default={"text": "True", "weight": 100},
+            key=lambda answer: float(
+                answer.get("weight", answer.get("answer_weight", 0))
+            ),
+        )
+        correct_value = str(
+            correct_answer.get("text")
+            or correct_answer.get("answer_text")
+            or "True"
+        ).strip().lower() == "true"
+        entry.update(
+            {
+                "interaction_type_slug": "true-false",
+                "interaction_data": {
+                    "true_choice": "True",
+                    "false_choice": "False",
+                },
+                "scoring_data": {"value": correct_value},
+                "scoring_algorithm": "Equivalence",
+            }
+        )
+    else:
+        # Canvas New Quizzes has no direct Classic short-answer equivalent.
+        # Preserve the prompt as an instructor-scored essay instead of
+        # inventing a brittle rich-fill-blank expression.
+        entry.update(
+            {
+                "interaction_type_slug": "essay",
+                "interaction_data": {"word_limit_enabled": False},
+                "scoring_data": {"value": ""},
+                "scoring_algorithm": "None",
+            }
+        )
+
+    return {
+        "position": position,
+        "points_possible": question.points_possible,
+        "entry_type": "Item",
+        "entry": entry,
+    }
+
+
+async def get_course_quiz_capabilities(
+    local_course_id: int,
+    user: User,
+    canvas_url: str,
+    db: AsyncSession,
+) -> QuizCapabilities:
+    token = require_canvas_token(user, canvas_url)
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    available, reason = await probe_new_quizzes(
+        int(course.canvas_course_id), token, canvas_url
+    )
+    return QuizCapabilities(
+        new_quizzes=available,
+        preferred_engine="new_quizzes" if available else "classic",
+        new_quizzes_unavailable_reason=reason,
+    )
+
+
+async def get_course_question_banks(
+    local_course_id: int,
+    user: User,
+    canvas_url: str,
+    db: AsyncSession,
+) -> list[QuestionBankSummary]:
+    token = require_canvas_token(user, canvas_url)
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    banks = await list_question_banks(
+        int(course.canvas_course_id), token, canvas_url
+    )
+    return [
+        QuestionBankSummary(
+            id=int(bank["id"]),
+            title=bank.get("title") or bank.get("name") or "Untitled bank",
+            question_count=int(bank.get("assessment_question_count") or 0),
+        )
+        for bank in banks
+    ]
+
+
 async def get_course_quizzes(
     local_course_id: int,
     user: User,
@@ -407,6 +564,7 @@ async def get_course_quizzes(
                 published=bool(item.get("published", False)),
                 question_count=item.get("question_count"),
                 html_url=item.get("html_url"),
+                quiz_engine="classic",
             )
         )
     return quizzes
@@ -423,6 +581,67 @@ async def create_course_quiz(
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     require_writable_course(course)
     canvas_course_id = int(course.canvas_course_id)
+
+    if payload.quiz_engine == "new_quizzes":
+        if payload.question_bank_groups:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "Classic question banks cannot be linked to New Quizzes. "
+                    "Choose Classic Quiz or remove the bank groups."
+                ),
+            )
+        new_quizzes_available, reason = await probe_new_quizzes(
+            canvas_course_id, token, canvas_url
+        )
+        if not new_quizzes_available:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=reason or "New Quizzes is not available for this course.",
+            )
+        data = await create_new_quiz(
+            canvas_course_id,
+            _new_quiz_payload_for_canvas(payload),
+            token,
+            canvas_url,
+        )
+        assignment_id = int(data.get("assignment_id") or data["id"])
+        try:
+            for position, question in enumerate(payload.questions, start=1):
+                await create_new_quiz_item(
+                    canvas_course_id,
+                    assignment_id,
+                    _new_quiz_item_payload(question, position),
+                    token,
+                    canvas_url,
+                )
+        except Exception:
+            try:
+                await delete_new_quiz(
+                    canvas_course_id, assignment_id, token, canvas_url
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to clean up incomplete New Quiz assignment_id=%s",
+                    assignment_id,
+                )
+            raise
+        return QuizResponse(
+            id=assignment_id,
+            title=data.get("title") or payload.title,
+            description=data.get("instructions") or payload.description,
+            due_at=data.get("due_at") or payload.due_at,
+            points_possible=data.get("points_possible") or payload.points_possible,
+            course_id=canvas_course_id,
+            quiz_type="new_quizzes",
+            allowed_attempts=payload.allowed_attempts,
+            time_limit=payload.time_limit,
+            published=bool(data.get("published", False)),
+            question_count=len(payload.questions),
+            html_url=data.get("html_url"),
+            quiz_engine="new_quizzes",
+        )
+
     data = await create_quiz(
         canvas_course_id,
         _quiz_payload_for_canvas(payload),
@@ -431,6 +650,19 @@ async def create_course_quiz(
     )
     quiz_id = int(data["id"])
     try:
+        for group in payload.question_bank_groups:
+            await create_quiz_question_group(
+                canvas_course_id,
+                quiz_id,
+                {
+                    "name": group.bank_name or "Question bank",
+                    "pick_count": group.pick_count,
+                    "question_points": group.question_points,
+                    "assessment_question_bank_id": group.bank_id,
+                },
+                token,
+                canvas_url,
+            )
         for question in payload.questions:
             question_body = {
                 "question_name": question.question_text[:255],
@@ -491,8 +723,13 @@ async def create_course_quiz(
         else payload.allowed_attempts,
         time_limit=data.get("time_limit") if data.get("time_limit") is not None else payload.time_limit,
         published=bool(data.get("published", payload.published)),
-        question_count=len(payload.questions) or data.get("question_count"),
+        question_count=(
+            len(payload.questions)
+            + sum(group.pick_count for group in payload.question_bank_groups)
+        )
+        or data.get("question_count"),
         html_url=data.get("html_url"),
+        quiz_engine="classic",
     )
 
 
@@ -502,12 +739,19 @@ async def delete_course_quiz(
     user: User,
     canvas_url: str,
     db: AsyncSession,
+    *,
+    quiz_engine: str = "classic",
 ) -> None:
     """Only ever called from undo_workflow to revert create_quiz."""
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     require_writable_course(course)
-    await delete_quiz(int(course.canvas_course_id), quiz_id, token, canvas_url)
+    if quiz_engine == "new_quizzes":
+        await delete_new_quiz(
+            int(course.canvas_course_id), quiz_id, token, canvas_url
+        )
+    else:
+        await delete_quiz(int(course.canvas_course_id), quiz_id, token, canvas_url)
 
 
 async def update_course_assignment(

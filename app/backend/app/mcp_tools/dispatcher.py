@@ -16,6 +16,7 @@ from app.schemas.canvas import (
     AssignmentResponse,
     AssignmentUpdate,
     QuizCreate,
+    QuizQuestionBankGroupCreate,
     QuizQuestionCreate,
     SubmissionResponse,
     SubmissionStatus,
@@ -371,6 +372,10 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 q.model_dump() if hasattr(q, "model_dump") else q
                 for q in (action.questions or [])
             ]
+            question_bank_groups = [
+                group.model_dump() if hasattr(group, "model_dump") else group
+                for group in (action.question_bank_groups or [])
+            ]
             await validate_quiz_for_create(
                 action.local_course_id,
                 user,
@@ -382,6 +387,8 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 allowed_attempts=action.allowed_attempts,
                 time_limit=action.time_limit,
                 questions=questions,
+                quiz_engine=action.quiz_engine,
+                question_bank_groups=question_bank_groups,
             )
             payload = QuizCreate(
                 title=action.title,
@@ -390,9 +397,14 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 points_possible=action.points_possible,
                 allowed_attempts=action.allowed_attempts,
                 time_limit=action.time_limit,
+                quiz_engine=action.quiz_engine,
                 questions=[
                     QuizQuestionCreate(**question) if isinstance(question, dict) else question
                     for question in questions
+                ],
+                question_bank_groups=[
+                    QuizQuestionBankGroupCreate(**group)
+                    for group in question_bank_groups
                 ],
             )
             quiz = await create_course_quiz(

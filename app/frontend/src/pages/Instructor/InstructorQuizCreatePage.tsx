@@ -1,5 +1,5 @@
 import { CheckCircle2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
@@ -15,6 +15,8 @@ import { pageShellNarrow } from "@/lib/page-shell";
 import type { AiActionDraftLocationState } from "@/routes/paths";
 import {
   approveQuizDraft,
+  fetchQuestionBanks,
+  fetchQuizCapabilities,
   generateQuizDraft,
   previewQuizDraft,
 } from "@/services/quizCreator";
@@ -22,8 +24,10 @@ import type {
   GeneratedQuizDraft,
   QuizCreateCourseOption,
   QuizCreateStep,
+  QuizCapabilities,
   QuizDescribeValues,
   QuizPreviewSummary,
+  QuizQuestionBank,
 } from "@/types/quizCreate";
 
 import { QuizCreateStepper } from "./InstructorQuizCreate/QuizCreateStepper";
@@ -72,7 +76,9 @@ export function InstructorQuizCreatePage() {
             typeof seededDraft.timeLimit === "number"
               ? seededDraft.timeLimit
               : null,
+          quizEngine: seededDraft.quizEngine ?? "classic",
           questions: seededDraft.questions ?? [],
+          questionBankGroups: seededDraft.questionBankGroups ?? [],
         }
       : null,
   );
@@ -87,6 +93,10 @@ export function InstructorQuizCreatePage() {
   const [preview, setPreview] = useState<QuizPreviewSummary | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [capabilities, setCapabilities] =
+    useState<QuizCapabilities | null>(null);
+  const [questionBanks, setQuestionBanks] = useState<QuizQuestionBank[]>([]);
+  const [isLoadingQuestionBanks, setIsLoadingQuestionBanks] = useState(false);
 
   const canvasUrl = useCanvasConnectionUrl();
   const {
@@ -121,6 +131,62 @@ export function InstructorQuizCreatePage() {
   const effectiveCourseLoadError = needsCanvasConnection
     ? "Connect your Canvas account to load courses."
     : courseLoadError;
+
+  useEffect(() => {
+    const courseId = Number(describeValues.courseId);
+    if (
+      step !== "review" ||
+      !accessToken ||
+      !Number.isInteger(courseId) ||
+      courseId <= 0
+    ) {
+      return;
+    }
+    let cancelled = false;
+    void fetchQuizCapabilities(courseId, { accessToken, canvasUrl })
+      .then((result) => {
+        if (!cancelled) {
+          setCapabilities(result);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCapabilities({
+            classicQuizzes: true,
+            newQuizzes: false,
+            questionBanks: true,
+            preferredEngine: "classic",
+            newQuizzesUnavailableReason:
+              "New Quizzes availability could not be verified. Classic Quiz remains available.",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, canvasUrl, describeValues.courseId, step]);
+
+  const handleLoadQuestionBanks = async () => {
+    if (!accessToken) {
+      return;
+    }
+    const courseId = Number(describeValues.courseId);
+    setIsLoadingQuestionBanks(true);
+    setApproveError(null);
+    try {
+      setQuestionBanks(
+        await fetchQuestionBanks(courseId, { accessToken, canvasUrl }),
+      );
+    } catch (error) {
+      setApproveError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load Canvas question banks.",
+      );
+    } finally {
+      setIsLoadingQuestionBanks(false);
+    }
+  };
 
   const handleGenerate = async (values: QuizDescribeValues) => {
     if (!accessToken) {
@@ -170,7 +236,9 @@ export function InstructorQuizCreatePage() {
       pointsPossible: values.pointsPossible,
       allowedAttempts: values.allowedAttempts,
       timeLimit: values.timeLimit,
+      quizEngine: values.quizEngine,
       questions: values.questions,
+      questionBankGroups: values.questionBankGroups,
     };
 
     setApproveError(null);
@@ -214,7 +282,9 @@ export function InstructorQuizCreatePage() {
           pointsPossible: pendingApproval.pointsPossible,
           allowedAttempts: pendingApproval.allowedAttempts,
           timeLimit: pendingApproval.timeLimit,
+          quizEngine: pendingApproval.quizEngine,
           questions: pendingApproval.questions,
+          questionBankGroups: pendingApproval.questionBankGroups,
         },
         { accessToken, canvasUrl },
       );
@@ -257,6 +327,8 @@ export function InstructorQuizCreatePage() {
     setPendingApproval(null);
     setPreview(null);
     setIsPreviewOpen(false);
+    setCapabilities(null);
+    setQuestionBanks([]);
   };
 
   if (approvedValues) {
@@ -336,6 +408,10 @@ export function InstructorQuizCreatePage() {
           draft={draft}
           approveError={approveError}
           isApproving={isPreviewLoading}
+          capabilities={capabilities}
+          questionBanks={questionBanks}
+          isLoadingQuestionBanks={isLoadingQuestionBanks}
+          onLoadQuestionBanks={() => void handleLoadQuestionBanks()}
           onApprove={handleRequestApproval}
           onBack={handleBack}
         />

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -13,6 +13,8 @@ from app.schemas.canvas import (
     AssignmentResponse,
     AssignmentUpdate,
     CourseResponse,
+    QuestionBankSummary,
+    QuizCapabilities,
     QuizCreate,
     QuizResponse,
     SubmissionResponse,
@@ -36,6 +38,8 @@ from app.services.canvas import (
     get_assignment,
     get_assignments,
     get_cached_courses,
+    get_course_question_banks,
+    get_course_quiz_capabilities,
     get_course_quizzes,
     get_courses,
     get_submissions,
@@ -151,6 +155,36 @@ async def list_quizzes_endpoint(
     return await get_course_quizzes(course_id, current_user, canvas_url, db)
 
 
+@router.get(
+    "/courses/{course_id}/quizzes/capabilities",
+    response_model=QuizCapabilities,
+)
+async def quiz_capabilities_endpoint(
+    course_id: int,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_course_quiz_capabilities(
+        course_id, current_user, canvas_url, db
+    )
+
+
+@router.get(
+    "/courses/{course_id}/quizzes/question-banks",
+    response_model=list[QuestionBankSummary],
+)
+async def list_question_banks_endpoint(
+    course_id: int,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_course_question_banks(
+        course_id, current_user, canvas_url, db
+    )
+
+
 @router.post("/courses/{course_id}/quizzes/generate-draft", response_model=QuizDraftResponse)
 async def generate_quiz_draft_endpoint(
     course_id: int,
@@ -182,17 +216,39 @@ async def preview_quiz_endpoint(
         allowed_attempts=body.allowed_attempts,
         time_limit=body.time_limit,
         questions=[q.model_dump() for q in body.questions],
+        quiz_engine=body.quiz_engine,
+        question_bank_groups=[
+            group.model_dump() for group in body.question_bank_groups
+        ],
     )
+    if body.quiz_engine == "new_quizzes":
+        capabilities = await get_course_quiz_capabilities(
+            course_id, current_user, canvas_url, db
+        )
+        if not capabilities.new_quizzes:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    capabilities.new_quizzes_unavailable_reason
+                    or "New Quizzes is not available for this course."
+                ),
+            )
     course = await get_owned_course(course_id, current_user, canvas_url, db)
     require_writable_course(course)
+    question_total = len(body.questions) + sum(
+        group.pick_count for group in body.question_bank_groups
+    )
     question_note = (
-        f" with {len(body.questions)} question{'s' if len(body.questions) != 1 else ''}"
-        if body.questions
+        f" with {question_total} question{'s' if question_total != 1 else ''}"
+        if question_total
         else ""
     )
     preview = build_action_preview(
         "create_quiz",
-        f"Create quiz '{body.title}' in {course.name}{question_note}",
+        (
+            f"Create {'New' if body.quiz_engine == 'new_quizzes' else 'Classic'} "
+            f"Quiz '{body.title}' in {course.name}{question_note}"
+        ),
         body.model_dump(mode="json"),
         course_name=course.name,
     )
@@ -220,6 +276,10 @@ async def create_quiz_endpoint(
         allowed_attempts=body.allowed_attempts,
         time_limit=body.time_limit,
         questions=[q.model_dump() for q in body.questions],
+        quiz_engine=body.quiz_engine,
+        question_bank_groups=[
+            group.model_dump() for group in body.question_bank_groups
+        ],
     )
     return await create_course_quiz(course_id, body, current_user, canvas_url, db)
 

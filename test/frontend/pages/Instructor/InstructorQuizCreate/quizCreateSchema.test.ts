@@ -53,4 +53,27 @@ describe("quizCreateSchema", () => {
 
     expect(result.success).toBe(false);
   });
+
+  it("keeps Classic question banks out of New Quizzes", () => {
+    const result = quizReviewSchema.safeParse({
+      name: "Recursion Quiz",
+      description: "Covers base cases",
+      dueDate: "2030-12-15T23:59",
+      pointsPossible: 20,
+      allowedAttempts: 1,
+      timeLimit: null,
+      quizEngine: "new_quizzes",
+      questions: [],
+      questionBankGroups: [
+        {
+          bankId: 31,
+          bankName: "Recursion Bank",
+          pickCount: 5,
+          questionPoints: 2,
+        },
+      ],
+    });
+
+    expect(result.success).toBe(false);
+  });
 });

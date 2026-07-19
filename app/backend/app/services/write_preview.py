@@ -91,6 +91,8 @@ def _preview_create_quiz(course: Course, params: dict) -> dict:
     due_date = params.get("due_date")
     points_possible = params.get("points_possible")
     questions = params.get("questions") or []
+    bank_groups = params.get("question_bank_groups") or []
+    quiz_engine = params.get("quiz_engine", "classic")
     allowed_attempts = params.get("allowed_attempts")
     time_limit = params.get("time_limit")
 
@@ -98,9 +100,16 @@ def _preview_create_quiz(course: Course, params: dict) -> dict:
     points_display = f"{points_possible} points" if points_possible else "Ungraded"
     desc_preview = description[:200] + ("..." if len(description) > 200 else "")
     question_count = len(questions) if isinstance(questions, list) else 0
+    if isinstance(bank_groups, list):
+        question_count += sum(
+            int(group.get("pick_count") or 0)
+            for group in bank_groups
+            if isinstance(group, dict)
+        )
+    engine_label = "New Quiz" if quiz_engine == "new_quizzes" else "Classic Quiz"
 
     summary = (
-        f"Create quiz '{str(title).strip()}' in {course.name}, "
+        f"Create {engine_label} '{str(title).strip()}' in {course.name}, "
         f"due {due_display}, worth {points_display}"
     )
     if question_count:
@@ -118,6 +127,10 @@ def _preview_create_quiz(course: Course, params: dict) -> dict:
             "question_count": question_count,
             "allowed_attempts": allowed_attempts,
             "time_limit": time_limit,
+            "quiz_engine": quiz_engine,
+            "question_bank_group_count": (
+                len(bank_groups) if isinstance(bank_groups, list) else 0
+            ),
         },
         "summary": summary,
         "affected_resources": [

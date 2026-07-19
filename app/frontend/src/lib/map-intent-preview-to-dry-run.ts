@@ -131,7 +131,9 @@ function buildProposedPlanFields(
       "points_possible",
       "allowed_attempts",
       "time_limit",
+      "quiz_engine",
       "questions",
+      "question_bank_groups",
     ]),
     update_assignment: new Set([
       "title",
@@ -226,14 +228,36 @@ function mapReversibility(
   };
 }
 
-function mapApiOperations(actionName: string): DryRunApiOperation[] {
+function mapApiOperations(
+  actionName: string,
+  proposed?: Record<string, unknown>,
+): DryRunApiOperation[] {
   switch (actionName) {
     case "create_assignment":
       return [{ method: "POST", endpoint: "/courses/:course_id/assignments" }];
     case "create_quiz":
+      if (proposed?.quiz_engine === "new_quizzes") {
+        return [
+          { method: "POST", endpoint: "/api/quiz/v1/courses/:course_id/quizzes" },
+          {
+            method: "POST",
+            endpoint:
+              "/api/quiz/v1/courses/:course_id/quizzes/:assignment_id/items",
+          },
+        ];
+      }
       return [
         { method: "POST", endpoint: "/courses/:course_id/quizzes" },
         { method: "POST", endpoint: "/courses/:course_id/quizzes/:id/questions" },
+        ...(Array.isArray(proposed?.question_bank_groups) &&
+        proposed.question_bank_groups.length > 0
+          ? [
+              {
+                method: "POST" as const,
+                endpoint: "/courses/:course_id/quizzes/:id/groups",
+              },
+            ]
+          : []),
       ];
     case "update_assignment":
       return [
@@ -455,7 +479,7 @@ export function mapIntentPreviewToDryRun(
         : "Review the proposed action before confirming."),
     actionType: mapActionType(actionName),
     aiExplanation: buildAiExplanation(actionName, previewMetadata),
-    apiOperations: mapApiOperations(actionName),
+    apiOperations: mapApiOperations(actionName, payload.proposed_action),
     affectedResources: mapAffectedResources(previewMetadata),
     reversibility,
     reversibilityExplanation: explanation,

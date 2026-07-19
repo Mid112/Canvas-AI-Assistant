@@ -97,9 +97,13 @@ export function QuizPreviewDialog({
             {JSON.stringify(
               {
                 action: "create_quiz",
+                quiz_engine: preview.metadata.quiz_engine ?? "classic",
                 risk_level: preview.riskLevel,
                 reversible: preview.reversible,
-                api: "POST /api/v1/canvas/courses/:course_id/quizzes",
+                api:
+                  preview.metadata.quiz_engine === "new_quizzes"
+                    ? "POST /api/quiz/v1/courses/:course_id/quizzes"
+                    : "POST /api/v1/canvas/courses/:course_id/quizzes",
                 metadata: preview.metadata,
               },
               null,

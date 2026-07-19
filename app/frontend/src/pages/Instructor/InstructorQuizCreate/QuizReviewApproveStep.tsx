@@ -12,7 +12,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
 import { cn } from "@/lib/utils";
 import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
-import type { GeneratedQuizDraft } from "@/types/quizCreate";
+import type {
+  GeneratedQuizDraft,
+  QuizCapabilities,
+  QuizQuestionBank,
+} from "@/types/quizCreate";
 
 import {
   quizReviewSchema,
@@ -27,6 +31,10 @@ interface QuizReviewApproveStepProps {
   isApproving: boolean;
   onApprove: (values: QuizReviewFormSchema) => void;
   onBack: () => void;
+  capabilities?: QuizCapabilities | null;
+  questionBanks?: QuizQuestionBank[];
+  isLoadingQuestionBanks?: boolean;
+  onLoadQuestionBanks?: () => void;
 }
 
 export function QuizReviewApproveStep({
@@ -36,6 +44,10 @@ export function QuizReviewApproveStep({
   isApproving,
   onApprove,
   onBack,
+  capabilities,
+  questionBanks = [],
+  isLoadingQuestionBanks = false,
+  onLoadQuestionBanks,
 }: QuizReviewApproveStepProps) {
   const {
     register,
@@ -52,17 +64,29 @@ export function QuizReviewApproveStep({
       pointsPossible: draft.pointsPossible,
       allowedAttempts: draft.allowedAttempts,
       timeLimit: draft.timeLimit,
+      quizEngine: draft.quizEngine ?? "classic",
       questions: draft.questions,
+      questionBankGroups: draft.questionBankGroups ?? [],
     },
     mode: "onChange",
   });
 
   const { fields } = useFieldArray({ control, name: "questions" });
+  const {
+    fields: bankGroupFields,
+    append: appendBankGroup,
+    remove: removeBankGroup,
+  } = useFieldArray({ control, name: "questionBankGroups" });
 
   const dueDateValue = useWatch({
     control,
     name: "dueDate",
     defaultValue: draft.dueDate,
+  });
+  const quizEngine = useWatch({
+    control,
+    name: "quizEngine",
+    defaultValue: draft.quizEngine ?? "classic",
   });
 
   useEffect(() => {
@@ -183,6 +207,169 @@ export function QuizReviewApproveStep({
               />
             </div>
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="quiz-review-engine">Canvas quiz engine</Label>
+            <select
+              id="quiz-review-engine"
+              className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
+              {...register("quizEngine")}
+            >
+              <option value="classic">Classic Quiz</option>
+              <option
+                value="new_quizzes"
+                disabled={!capabilities?.newQuizzes}
+              >
+                New Quiz
+                {!capabilities?.newQuizzes ? " (unavailable)" : ""}
+              </option>
+            </select>
+            <p className="text-sm text-muted-foreground">
+              {quizEngine === "new_quizzes"
+                ? "Uses Canvas New Quizzes and creates items through the New Quizzes API."
+                : "Uses Canvas Classic Quizzes and supports linked question-bank groups."}
+            </p>
+            {quizEngine === "new_quizzes" &&
+            fields.some(
+              (question) =>
+                question.questionType === "short_answer_question",
+            ) ? (
+              <p className="text-xs text-amber-700">
+                Canvas New Quizzes has no direct Classic short-answer type;
+                those prompts will be created as instructor-scored essay
+                items.
+              </p>
+            ) : null}
+            {!capabilities?.newQuizzes &&
+            capabilities?.newQuizzesUnavailableReason ? (
+              <p className="text-xs text-amber-700">
+                {capabilities.newQuizzesUnavailableReason}
+              </p>
+            ) : null}
+          </div>
+
+          {quizEngine === "classic" ? (
+            <div className="space-y-3 rounded-lg border border-border/70 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium">Classic question banks</p>
+                  <p className="text-xs text-muted-foreground">
+                    Link a randomized group from an existing Canvas bank.
+                  </p>
+                </div>
+                {onLoadQuestionBanks && questionBanks.length === 0 ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={isLoadingQuestionBanks}
+                    onClick={onLoadQuestionBanks}
+                  >
+                    {isLoadingQuestionBanks
+                      ? "Loading banks..."
+                      : "Load question banks"}
+                  </Button>
+                ) : null}
+              </div>
+
+              {questionBanks.length > 0 ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {questionBanks.map((bank) => (
+                    <Button
+                      key={bank.id}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={bankGroupFields.some(
+                        (group) => group.bankId === bank.id,
+                      )}
+                      onClick={() =>
+                        appendBankGroup({
+                          bankId: bank.id,
+                          bankName: bank.title,
+                          pickCount: Math.max(
+                            1,
+                            Math.min(5, bank.questionCount || 5),
+                          ),
+                          questionPoints: 1,
+                        })
+                      }
+                    >
+                      Use {bank.title} ({bank.questionCount})
+                    </Button>
+                  ))}
+                </div>
+              ) : null}
+
+              {bankGroupFields.map((field, index) => (
+                <div
+                  key={field.id}
+                  className="grid gap-3 rounded-md bg-muted/30 p-3 sm:grid-cols-[1fr_110px_110px_auto]"
+                >
+                  <div>
+                    <p className="text-sm font-medium">{field.bankName}</p>
+                    <input
+                      type="hidden"
+                      {...register(`questionBankGroups.${index}.bankId`, {
+                        valueAsNumber: true,
+                      })}
+                    />
+                    <input
+                      type="hidden"
+                      {...register(`questionBankGroups.${index}.bankName`)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor={`quiz-bank-pick-${index}`}
+                      className="text-xs"
+                    >
+                      Pick
+                    </Label>
+                    <Input
+                      id={`quiz-bank-pick-${index}`}
+                      type="number"
+                      min="1"
+                      {...register(`questionBankGroups.${index}.pickCount`, {
+                        valueAsNumber: true,
+                      })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label
+                      htmlFor={`quiz-bank-points-${index}`}
+                      className="text-xs"
+                    >
+                      Points each
+                    </Label>
+                    <Input
+                      id={`quiz-bank-points-${index}`}
+                      type="number"
+                      min="0.1"
+                      step="0.1"
+                      {...register(
+                        `questionBankGroups.${index}.questionPoints`,
+                        { valueAsNumber: true },
+                      )}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => removeBankGroup(index)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))}
+              {errors.questionBankGroups ? (
+                <p role="alert" className="text-sm text-destructive">
+                  {errors.questionBankGroups.message}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="space-y-3">
             <div>

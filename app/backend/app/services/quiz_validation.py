@@ -88,6 +88,39 @@ def _check_questions(questions: list[dict] | None) -> None:
                 )
 
 
+def _check_question_bank_groups(
+    quiz_engine: str, groups: list[dict] | None
+) -> None:
+    if not groups:
+        return
+    if quiz_engine != "classic":
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Question-bank groups are supported only for Classic Quizzes.",
+        )
+    for index, group in enumerate(groups):
+        bank_id = group.get("bank_id") if isinstance(group, dict) else None
+        pick_count = group.get("pick_count") if isinstance(group, dict) else None
+        question_points = (
+            group.get("question_points") if isinstance(group, dict) else None
+        )
+        if not isinstance(bank_id, int) or bank_id <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Question bank group {index + 1} has an invalid bank_id.",
+            )
+        if not isinstance(pick_count, int) or pick_count <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Question bank group {index + 1} pick_count must be positive.",
+            )
+        if not isinstance(question_points, int | float) or question_points <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Question bank group {index + 1} question_points must be positive.",
+            )
+
+
 async def validate_quiz_for_create(
     local_course_id: int,
     user: User,
@@ -100,6 +133,8 @@ async def validate_quiz_for_create(
     allowed_attempts: int | None = None,
     time_limit: int | None = None,
     questions: list[dict] | None = None,
+    quiz_engine: str = "classic",
+    question_bank_groups: list[dict] | None = None,
 ) -> Course:
     """Semantic validation before creating a Canvas quiz. Mirrors
     validate_assignment_for_create so the quiz preview/confirm path
@@ -123,5 +158,6 @@ async def validate_quiz_for_create(
     _check_allowed_attempts(allowed_attempts)
     _check_time_limit(time_limit)
     _check_questions(questions)
+    _check_question_bank_groups(quiz_engine, question_bank_groups)
 
     return course

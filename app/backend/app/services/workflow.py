@@ -153,7 +153,16 @@ async def undo_workflow(db: AsyncSession, user: User, workflow_id: int) -> Workf
             )
         )
     elif workflow.action_name == "create_quiz":
-        await delete_course_quiz(workflow.course_id, assignment_id, user, course.canvas_url, db)
+        await delete_course_quiz(
+            workflow.course_id,
+            assignment_id,
+            user,
+            course.canvas_url,
+            db,
+            quiz_engine=(audit_row.after_data or {}).get(
+                "quiz_engine", "classic"
+            ),
+        )
         db.add(
             AuditLog(
                 user_id=user.id,

@@ -101,7 +101,22 @@ export function EditableReviewForm({
                 <Label htmlFor={`preview-edit-${field.field}`}>
                   {field.label}
                 </Label>
-                {isLongText ? (
+                {field.field === "quiz_engine" ? (
+                  <select
+                    id={`preview-edit-${field.field}`}
+                    className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
+                    value={values[field.field] ?? "classic"}
+                    onChange={(event) =>
+                      setValues((current) => ({
+                        ...current,
+                        [field.field]: event.target.value,
+                      }))
+                    }
+                  >
+                    <option value="classic">Classic Quiz</option>
+                    <option value="new_quizzes">New Quiz</option>
+                  </select>
+                ) : isLongText ? (
                   <Textarea
                     id={`preview-edit-${field.field}`}
                     rows={4}

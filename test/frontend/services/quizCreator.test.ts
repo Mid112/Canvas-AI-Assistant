@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   approveQuizDraft,
+  fetchQuestionBanks,
+  fetchQuizCapabilities,
   generateQuizDraft,
   previewQuizDraft,
 } from "@/services/quizCreator";
@@ -94,5 +96,45 @@ describe("quizCreator", () => {
     expect(previewBody).toEqual(createBody);
     expect(preview.riskLevel).toBe("medium");
     expect(preview.affectedResources[0].type).toBe("quiz");
+  });
+
+  it("maps Canvas quiz capabilities", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          classic_quizzes: true,
+          new_quizzes: true,
+          question_banks: true,
+          preferred_engine: "new_quizzes",
+          new_quizzes_unavailable_reason: null,
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await expect(
+      fetchQuizCapabilities(3, { accessToken: "token" }),
+    ).resolves.toMatchObject({
+      classicQuizzes: true,
+      newQuizzes: true,
+      preferredEngine: "new_quizzes",
+    });
+  });
+
+  it("loads Classic question banks on demand", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          { id: 31, title: "Recursion Bank", question_count: 12 },
+        ]),
+        { status: 200 },
+      ),
+    );
+
+    await expect(
+      fetchQuestionBanks(3, { accessToken: "token" }),
+    ).resolves.toEqual([
+      { id: 31, title: "Recursion Bank", questionCount: 12 },
+    ]);
   });
 });
