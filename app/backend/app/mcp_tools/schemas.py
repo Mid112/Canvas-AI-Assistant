@@ -170,6 +170,22 @@ class UpdateAssignmentAction(BaseModel):
         return value if value is None else _normalize_due_date_str(value)
 
 
+class UpdateGradeAction(BaseModel):
+    action: Literal["update_grade"] = "update_grade"
+    local_course_id: int
+    assignment_id: int | None = None
+    assignment_reference: str | None = None
+    student_id: int | None = None
+    student_reference: str | None = None
+    new_grade: str
+    feedback: str | None = None
+
+    @field_validator("new_grade", mode="before")
+    @classmethod
+    def _normalize_grade(cls, value: object) -> str:
+        return str(value).strip()
+
+
 class RecipientDirective(BaseModel):
     # The user's own words for ONE intended recipient, e.g. "Yerdana" —
     # never a numeric ID. Resolved server-side against the course roster
@@ -271,6 +287,7 @@ ACTION_SCHEMAS: dict[str, type[BaseModel]] = {
     "create_assignment": CreateAssignmentAction,
     "create_quiz": CreateQuizAction,
     "update_assignment": UpdateAssignmentAction,
+    "update_grade": UpdateGradeAction,
     "send_message": SendMessageAction,
     "out_of_scope": OutOfScopeAction,
     "clarify": ClarifyAction,
@@ -306,10 +323,6 @@ ACTION_CLASSIFICATION: dict[str, ActionClassification] = {
     "create_assignment": "modifying",
     "create_quiz": "modifying",
     "update_assignment": "modifying",
-    # Dangling pre-existing action: previewable (write_preview.py has a
-    # builder for it) but never confirmable (no schema in ACTION_SCHEMAS,
-    # no execute case in dispatcher.py). Classified for consistency, not
-    # newly wired up here.
     "update_grade": "modifying",
     "send_message": "irreversible",
 }

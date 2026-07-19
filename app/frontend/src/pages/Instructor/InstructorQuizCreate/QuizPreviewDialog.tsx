@@ -99,7 +99,7 @@ export function QuizPreviewDialog({
                 action: "create_quiz",
                 risk_level: preview.riskLevel,
                 reversible: preview.reversible,
-                api: "POST /api/v1/courses/:course_id/quizzes",
+                api: "POST /api/v1/canvas/courses/:course_id/quizzes",
                 metadata: preview.metadata,
               },
               null,

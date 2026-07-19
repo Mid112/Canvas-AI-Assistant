@@ -19,7 +19,14 @@ interface IntentPreviewPayload {
 // Not meaningful to surface as a "change": the action type switching would
 // be a different preview entirely, and local_course_id is an internal id
 // the user never typed.
-const DIFF_IGNORED_FIELDS = new Set(["action", "local_course_id"]);
+const DIFF_IGNORED_FIELDS = new Set([
+  "action",
+  "local_course_id",
+  "assignment_id",
+  "student_id",
+  "recipient_canvas_user_ids",
+  "recipient_handle",
+]);
 
 function formatFieldLabel(field: string): string {
   return field
@@ -32,7 +39,16 @@ function formatFieldValue(value: unknown): string {
   if (value === null || value === undefined) {
     return "";
   }
-  return typeof value === "string" ? value : JSON.stringify(value);
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return `${value.length} item${value.length === 1 ? "" : "s"}`;
+  }
+  return "";
 }
 
 function computeProposedActionChanges(
@@ -100,10 +116,40 @@ function buildProposedPlanFields(
     return indexA - indexB;
   });
 
+  const actionName = String(proposed.action ?? "");
+  const editableByAction: Record<string, Set<string>> = {
+    create_assignment: new Set([
+      "title",
+      "description",
+      "due_date",
+      "points_possible",
+    ]),
+    create_quiz: new Set([
+      "title",
+      "description",
+      "due_date",
+      "points_possible",
+      "allowed_attempts",
+      "time_limit",
+      "questions",
+    ]),
+    update_assignment: new Set([
+      "title",
+      "description",
+      "due_date",
+      "points_possible",
+    ]),
+    send_message: new Set(["subject", "body"]),
+    update_grade: new Set(["new_grade", "feedback"]),
+  };
+  const editable = editableByAction[actionName] ?? new Set<string>();
+
   return fields.map((field) => ({
     field,
     label: formatFieldLabel(field),
     value: formatFieldValue(proposed[field]) || "—",
+    rawValue: proposed[field],
+    editable: editable.has(field),
   }));
 }
 
@@ -396,6 +442,7 @@ export function mapIntentPreviewToDryRun(
 
   return {
     id: `chat-${conversationId}-${pendingMessageId}`,
+    actionName,
     title: "Workflow Preview",
     subtitle: "Review AI-generated actions before execution",
     originalRequest: findOriginalRequest(messages, pendingMessageId),

@@ -188,6 +188,48 @@ def test_modify_updates_pending_preview_then_confirm(client):
     mock_create.assert_called_once()
 
 
+# Verifies: Structured review-form edits regenerate and replace the exact
+# server-stored preview without allowing internal IDs to be overwritten.
+def test_structured_preview_edit_regenerates_metadata(client):
+    headers, local_course_id = register_with_canvas(client, prefix="formedit")
+    conversation_id, pending_message_id = propose_create_assignment(
+        client, headers, local_course_id, title="Editable Exam"
+    )
+
+    edited = client.patch(
+        "/api/v1/chat/preview",
+        json={
+            "conversation_id": conversation_id,
+            "pending_message_id": pending_message_id,
+            "changes": {
+                "title": "Edited Exam",
+                "points_possible": 75,
+            },
+        },
+        headers=headers,
+    )
+
+    assert edited.status_code == 200, edited.json()
+    reply = edited.json()["reply"]
+    assert reply["pending_message_id"] == pending_message_id
+    assert reply["proposed_action"]["title"] == "Edited Exam"
+    assert reply["proposed_action"]["points_possible"] == 75
+    assert reply["proposed_action"]["local_course_id"] == local_course_id
+    assert reply["previous_proposed_action"]["title"] == "Editable Exam"
+    assert "Edited Exam" in reply["preview_metadata"]["summary"]
+
+    forbidden = client.patch(
+        "/api/v1/chat/preview",
+        json={
+            "conversation_id": conversation_id,
+            "pending_message_id": pending_message_id,
+            "changes": {"local_course_id": local_course_id + 1},
+        },
+        headers=headers,
+    )
+    assert forbidden.status_code == 422
+
+
 # Verifies: Non-chat assignment preview returns dry-run metadata without writing.
 def test_non_chat_assignment_preview_does_not_write(client):
     headers, local_course_id = register_with_canvas(client, prefix="asnprev")

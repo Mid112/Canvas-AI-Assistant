@@ -49,6 +49,7 @@ export interface InterpretedAction {
   action: string;
   course: string;
   affectedStudents: string;
+  technicalDetails?: Array<{ label: string; value: string }>;
   previewId?: string;
   primaryLink?: ActionLink;
   secondaryLink?: ActionLink;
@@ -63,6 +64,7 @@ export interface ChatMessage {
   pendingMessageId?: number;
   pendingActionStatus?: PendingActionStatus;
   explanation?: string;
+  acknowledgedFields?: Array<{ label: string; value: string }>;
   interpretedAction?: InterpretedAction;
   safetyBlocked?: boolean;
   safetyMessage?: string;
@@ -78,6 +80,7 @@ export interface AssistantResponse {
   conversationId?: number;
   pendingMessageId?: number;
   explanation?: string;
+  acknowledgedFields?: Array<{ label: string; value: string }>;
   interpretedAction?: InterpretedAction;
   safetyBlocked?: boolean;
   safetyMessage?: string;

@@ -132,6 +132,7 @@ _AUDIT_RESOURCE_MAP = {
     "create_assignment": ("assignment", "create"),
     "create_quiz": ("quiz", "create"),
     "update_assignment": ("assignment", "update"),
+    "update_grade": ("submission", "update"),
     "send_message": ("announcement", "create"),
 }
 
@@ -1123,6 +1124,113 @@ async def _resolve_students_via_llm(
         return result
 
 
+async def _run_update_grade_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    action: Any,
+    user_message: str,
+    adapter: LLMAdapter,
+) -> dict:
+    """Resolve natural assignment/student references before grade preview.
+
+    Numeric Canvas IDs are selected only from real assignment and roster
+    data returned by existing backend fetches; they are never requested from
+    the instructor or invented by the general chat model.
+    """
+    resolved_assignment = await _resolve_course_and_assignment(
+        db,
+        user,
+        conversation,
+        user_msg,
+        action.local_course_id,
+        action.assignment_id,
+        action.assignment_reference,
+        user_message,
+        adapter,
+    )
+    if isinstance(resolved_assignment, dict):
+        return resolved_assignment
+    course, assignment_id = resolved_assignment
+
+    student_id = action.student_id
+    if student_id is None:
+        if not action.student_reference:
+            return {
+                "action": "clarify",
+                "clarify": True,
+                "question": "Which student should receive this grade?",
+                "partial_plan": {
+                    "assignment_reference": action.assignment_reference,
+                    "new_grade": action.new_grade,
+                    "feedback": action.feedback,
+                },
+            }
+        fetch_action = FetchStudentsAction(local_course_id=course.id)
+        roster_result = await _run_tracked_read(
+            db,
+            user,
+            conversation,
+            user_msg.id,
+            "fetch_students",
+            fetch_action.model_dump(),
+            execute_tool(db, user, fetch_action),
+        )
+        roster = roster_result.get("students", [])
+        candidates = [
+            {
+                "user_id": int(student["canvas_user_id"]),
+                "name": student.get("name"),
+                "login_id": student.get("login_id"),
+                "email": None,
+            }
+            for student in roster
+        ]
+        student_id = (
+            await _resolve_students_via_llm(
+                candidates, [action.student_reference], user_message, adapter
+            )
+        ).get(action.student_reference)
+        if student_id is None:
+            return {
+                "action": "clarify",
+                "clarify": True,
+                "question": (
+                    f'I could not confidently match "{action.student_reference}" '
+                    "to one student in this course. What is their full name or email?"
+                ),
+                "partial_plan": {
+                    "assignment_reference": action.assignment_reference,
+                    "student_reference": action.student_reference,
+                    "new_grade": action.new_grade,
+                    "feedback": action.feedback,
+                },
+            }
+
+    proposed_action = {
+        "action": "update_grade",
+        "local_course_id": course.id,
+        "assignment_id": assignment_id,
+        "assignment_reference": action.assignment_reference,
+        "student_id": student_id,
+        "student_reference": action.student_reference,
+        "new_grade": action.new_grade,
+        "feedback": action.feedback,
+    }
+    proposed_action = {
+        key: value for key, value in proposed_action.items() if value is not None
+    }
+    preview_metadata = generate_write_preview(proposed_action, course)
+    return {
+        "action": "intent_preview",
+        "intent_preview": True,
+        "summary": preview_metadata["summary"],
+        "proposed_action": proposed_action,
+        "preview_metadata": preview_metadata,
+    }
+
+
 async def _resolve_recipient_directives(
     db: AsyncSession,
     user: User,
@@ -1818,7 +1926,7 @@ Put every field you already do have into partial_plan so the next turn
 doesn't lose it once the user answers. Only ask ONE question per turn.
 
 REQUIRED FIELDS — before proposing any write action (create_assignment,
-create_quiz, update_assignment, send_message), check every field listed as "required"
+create_quiz, update_assignment, update_grade, send_message), check every field listed as "required"
 in that action's schema below. This includes the action/task type itself
 (e.g. don't guess whether the user wants create_assignment vs
 create_quiz vs update_assignment), and fields like title, description, and due_date.
@@ -1827,7 +1935,7 @@ AMBIGUITY CHECK format to ask for it. Never invent a placeholder value
 and never silently omit a required field from proposed_action.
 
 INTENT PREVIEW — before executing a WRITE action:
-create_assignment, create_quiz, update_assignment, and send_message change real Canvas
+create_assignment, create_quiz, update_assignment, update_grade, and send_message change real Canvas
 data, so the user must see and confirm exactly what will happen first:
 {"action": "intent_preview", "summary": "<plain English description>", "proposed_action": <dict>}
 The user will confirm, modify, or cancel from here.
@@ -1988,6 +2096,16 @@ unresolvable assignment_reference is handled for you automatically. Only
 include the fields the user actually wants changed — leave every other
 field out of proposed_action entirely, since anything omitted is
 preserved automatically.
+
+RESOLVING A GRADE UPDATE:
+update_grade needs one assignment and one student, but never ask the user
+for Canvas IDs. Set assignment_reference and student_reference to the
+user's own words, together with new_grade and optional feedback, and
+propose update_grade directly (not intent_preview). Dedicated resolver
+functions match both references against real course data and build the
+preview in the same turn. If exact IDs were already returned earlier in
+this conversation, assignment_id/student_id may be passed directly. Never
+invent either numeric ID.
 
 MESSAGING STUDENTS:
 send_message can post a public class announcement, send a private Canvas
@@ -2369,6 +2487,12 @@ async def handle_chat_message(
                     proposed_name == "update_assignment"
                     and proposed.get("assignment_id") is None
                     and bool(proposed.get("assignment_reference"))
+                ) or (
+                    proposed_name == "update_grade"
+                    and (
+                        proposed.get("assignment_id") is None
+                        or proposed.get("student_id") is None
+                    )
                 )
             if needs_unwrap:
                 # Defensive: the model wrapped a read, a send_message that
@@ -2413,6 +2537,18 @@ async def handle_chat_message(
                 # ask again once a fetch_assignments result is in history.
                 result = await _run_update_assignment_chain(
                     db, user, conversation, user_msg, action, message, adapter
+                )
+            elif action.action == "update_grade" and (
+                action.assignment_id is None or action.student_id is None
+            ):
+                result = await _run_update_grade_chain(
+                    db,
+                    user,
+                    conversation,
+                    user_msg,
+                    action,
+                    message,
+                    adapter,
                 )
             elif action.action == "send_message" and (
                 action.recipient_directives or action.broadcast_to_all_students or action.recipient_handle
@@ -2581,6 +2717,127 @@ async def _claim_pending_workflow(db: AsyncSession, workflow: Workflow, new_stat
     # — an async lazy-load on that would fail outside a greenlet context.
     await db.refresh(workflow, attribute_names=["status"])
     return False
+
+
+_EDITABLE_PREVIEW_FIELDS: dict[str, frozenset[str]] = {
+    "create_assignment": frozenset(
+        {"title", "description", "due_date", "points_possible"}
+    ),
+    "create_quiz": frozenset(
+        {
+            "title",
+            "description",
+            "due_date",
+            "points_possible",
+            "allowed_attempts",
+            "time_limit",
+            "questions",
+        }
+    ),
+    "update_assignment": frozenset(
+        {"title", "description", "due_date", "points_possible"}
+    ),
+    # Feedback is represented by the message body for targeted Canvas
+    # messages, so this same form covers both messages and feedback drafts.
+    "send_message": frozenset({"subject", "body"}),
+    "update_grade": frozenset({"new_grade", "feedback"}),
+}
+
+
+async def handle_modified_action(
+    db: AsyncSession,
+    user: User,
+    conversation_id: int,
+    pending_message_id: int,
+    changes: dict,
+) -> tuple[Conversation, dict, bool]:
+    """Apply validated structured edits to a pending preview.
+
+    Resolved Canvas identifiers are copied from the server-stored workflow
+    and cannot be replaced by the client. The refreshed metadata is generated
+    by the same preview builder used for the original proposal, so the form,
+    in-chat card, and confirmation payload stay synchronized.
+    """
+    conversation = await db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == user.id,
+        )
+    )
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+
+    workflow = await db.scalar(
+        select(Workflow).where(
+            Workflow.preview_message_id == pending_message_id,
+            Workflow.conversation_id == conversation_id,
+        )
+    )
+    if not workflow:
+        raise HTTPException(
+            status_code=404, detail="Preview not found in this conversation."
+        )
+    if workflow.status != "pending":
+        raise HTTPException(
+            status_code=409,
+            detail=f"This action is no longer pending (status: {workflow.status}).",
+        )
+
+    current = dict(workflow.proposed_action or {})
+    action_name = current.get("action")
+    editable = _EDITABLE_PREVIEW_FIELDS.get(str(action_name))
+    if not editable:
+        raise HTTPException(
+            status_code=422,
+            detail="This action does not have editable preview fields.",
+        )
+
+    disallowed = set(changes) - editable
+    if disallowed:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "These fields cannot be edited from the preview: "
+                + ", ".join(sorted(disallowed))
+            ),
+        )
+
+    proposed = {**current, **changes}
+    try:
+        # Full schema validation prevents a form edit from producing a
+        # proposal that could fail only after the instructor confirms it.
+        validated_action = parse_action(_json_dumps(proposed))
+        proposed = validated_action.model_dump(exclude_none=True)
+    except ToolExecutionError as exc:
+        raise HTTPException(status_code=422, detail=exc.user_message) from exc
+
+    local_course_id = proposed.get("local_course_id")
+    if local_course_id is None:
+        raise HTTPException(status_code=422, detail="The preview has no course.")
+    try:
+        course = await resolve_course(db, user, int(local_course_id))
+    except ToolExecutionError as exc:
+        raise HTTPException(status_code=422, detail=exc.user_message) from exc
+
+    preview_metadata = generate_write_preview(proposed, course)
+    result = {
+        "action": "intent_preview",
+        "intent_preview": True,
+        "summary": preview_metadata["summary"],
+        "proposed_action": proposed,
+        "preview_metadata": preview_metadata,
+        "previous_proposed_action": current,
+    }
+    await update_message_content(
+        db, conversation.id, pending_message_id, _json_dumps(result)
+    )
+    workflow.proposed_action = proposed
+    workflow.user_prompt = "Edited in review form"
+    workflow.affected_resources = preview_metadata.get("affected_resources", [])
+    workflow.error_detail = None
+    await db.commit()
+    result["pending_message_id"] = pending_message_id
+    return conversation, result, False
 
 
 async def handle_confirmed_action(

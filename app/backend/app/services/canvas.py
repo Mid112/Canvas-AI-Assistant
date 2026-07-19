@@ -27,6 +27,7 @@ from app.integrations.canvas import (
     list_quizzes,
     send_conversation,
     update_assignment,
+    update_submission_grade,
 )
 from app.models.assignment import Assignment
 from app.models.canvas_connection import CanvasConnection
@@ -429,29 +430,54 @@ async def create_course_quiz(
         canvas_url,
     )
     quiz_id = int(data["id"])
-    for question in payload.questions:
-        question_body = {
-            "question_name": question.question_text[:255],
-            "question_text": question.question_text,
-            "question_type": question.question_type,
-            "points_possible": question.points_possible,
-        }
-        if question.answers:
-            question_body["answers"] = [
-                {
-                    "answer_text": str(answer.get("text") or answer.get("answer_text") or ""),
-                    "answer_weight": float(answer.get("weight", answer.get("answer_weight", 0))),
-                }
-                for answer in question.answers
-                if str(answer.get("text") or answer.get("answer_text") or "").strip()
-            ]
-        await create_quiz_question(
-            canvas_course_id,
-            quiz_id,
-            question_body,
-            token,
-            canvas_url,
-        )
+    try:
+        for question in payload.questions:
+            question_body = {
+                "question_name": question.question_text[:255],
+                "question_text": question.question_text,
+                "question_type": question.question_type,
+                "points_possible": question.points_possible,
+            }
+            if question.answers:
+                question_body["answers"] = [
+                    {
+                        "answer_text": str(
+                            answer.get("text")
+                            or answer.get("answer_text")
+                            or ""
+                        ),
+                        "answer_weight": float(
+                            answer.get("weight", answer.get("answer_weight", 0))
+                        ),
+                    }
+                    for answer in question.answers
+                    if str(
+                        answer.get("text")
+                        or answer.get("answer_text")
+                        or ""
+                    ).strip()
+                ]
+            await create_quiz_question(
+                canvas_course_id,
+                quiz_id,
+                question_body,
+                token,
+                canvas_url,
+            )
+    except Exception:
+        # Canvas creates the quiz before its questions. If any question
+        # fails, remove the incomplete draft so the instructor is not left
+        # with an orphan that the failed request claimed was never created.
+        try:
+            await delete_quiz(
+                canvas_course_id, quiz_id, token, canvas_url
+            )
+        except Exception:
+            logger.exception(
+                "Failed to clean up incomplete quiz_id=%s after question error",
+                quiz_id,
+            )
+        raise
     return QuizResponse(
         id=quiz_id,
         title=data.get("title") or payload.title,
@@ -503,6 +529,31 @@ async def update_course_assignment(
         canvas_url,
     )
     return AssignmentResponse(**data)
+
+
+async def update_course_grade(
+    local_course_id: int,
+    assignment_id: int,
+    student_id: int,
+    posted_grade: str,
+    user: User,
+    canvas_url: str,
+    db: AsyncSession,
+    *,
+    feedback: str | None = None,
+) -> dict:
+    token = require_canvas_token(user, canvas_url)
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    require_writable_course(course)
+    return await update_submission_grade(
+        int(course.canvas_course_id),
+        assignment_id,
+        student_id,
+        posted_grade,
+        token,
+        canvas_url,
+        feedback=feedback,
+    )
 
 
 async def delete_course_assignment(

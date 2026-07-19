@@ -52,10 +52,13 @@ export interface PlanField {
   field: string;
   label: string;
   value: string;
+  rawValue?: unknown;
+  editable?: boolean;
 }
 
 export interface DryRunPreviewData {
   id: string;
+  actionName?: string;
   title: string;
   subtitle: string;
   originalRequest: string;

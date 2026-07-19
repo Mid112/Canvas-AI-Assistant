@@ -36,6 +36,7 @@ from app.services.canvas import (
     send_course_message,
     set_active_course,
     update_course_assignment,
+    update_course_grade,
 )
 from app.services.canvas_status import CanvasWriteResult
 from app.services.course_access import get_owned_course_or_404
@@ -145,6 +146,14 @@ def _create_quiz_missing_field(proposed: dict) -> str | None:
             return field
     if proposed.get("points_possible") is None:
         return "points_possible"
+    return None
+
+
+def _send_message_missing_field(proposed: dict) -> str | None:
+    for field in ("subject", "body"):
+        value = proposed.get(field)
+        if not isinstance(value, str) or not value.strip():
+            return field
     return None
 
 
@@ -452,6 +461,50 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             )
             return result.to_dict()
 
+        case "update_grade":
+            course = await _resolve_course(db, user, action.local_course_id)
+            if action.assignment_id is None or action.student_id is None:
+                raise ToolExecutionError(
+                    "The assignment and student must be resolved before updating a grade."
+                )
+            if not action.new_grade.strip():
+                raise ToolExecutionError("The new grade cannot be empty.")
+
+            submission = await update_course_grade(
+                course.id,
+                action.assignment_id,
+                action.student_id,
+                action.new_grade.strip(),
+                user,
+                course.canvas_url,
+                db,
+                feedback=action.feedback,
+            )
+            result = CanvasWriteResult(
+                action="update_grade",
+                data=submission,
+                reversible=is_reversible("update_grade"),
+                affected_resources=[
+                    {
+                        "type": "course",
+                        "id": course.id,
+                        "name": course.name,
+                        "status": "unchanged",
+                    },
+                    {
+                        "type": "submission",
+                        "id": submission.get("id"),
+                        "name": action.student_reference or "Student grade",
+                        "status": "modified",
+                        "changed_fields": [
+                            "grade",
+                            *(["feedback"] if action.feedback else []),
+                        ],
+                    },
+                ],
+            )
+            return result.to_dict()
+
         case "send_message":
             course = await _resolve_course(db, user, action.local_course_id)
 
@@ -599,6 +652,80 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                         ),
                         "partial_plan": partial_plan,
                     }
+
+            if proposed.get("action") == "send_message":
+                missing_field = _send_message_missing_field(proposed)
+                if missing_field:
+                    partial_plan = {
+                        key: value
+                        for key, value in proposed.items()
+                        if key not in ("action", missing_field)
+                    }
+                    question = (
+                        "What should the message subject be?"
+                        if missing_field == "subject"
+                        else "What should the message say?"
+                    )
+                    return {
+                        "action": "clarify",
+                        "clarify": True,
+                        "question": question,
+                        "partial_plan": partial_plan,
+                    }
+
+            if proposed.get("action") == "update_assignment":
+                changed_fields = (
+                    "title",
+                    "description",
+                    "due_date",
+                    "points_possible",
+                )
+                if not any(proposed.get(field) is not None for field in changed_fields):
+                    return {
+                        "action": "clarify",
+                        "clarify": True,
+                        "question": "What would you like to change about this assignment?",
+                        "partial_plan": {
+                            key: value
+                            for key, value in proposed.items()
+                            if key != "action"
+                        },
+                    }
+
+            if proposed.get("action") == "update_grade":
+                required_grade_fields = (
+                    (
+                        "assignment",
+                        proposed.get("assignment_id")
+                        or proposed.get("assignment_reference"),
+                        "Which assignment should I update the grade for?",
+                    ),
+                    (
+                        "student",
+                        proposed.get("student_id")
+                        or proposed.get("student_reference"),
+                        "Which student should receive this grade?",
+                    ),
+                    (
+                        "new_grade",
+                        proposed.get("new_grade"),
+                        "What grade should I enter?",
+                    ),
+                )
+                for field_name, value, question in required_grade_fields:
+                    if value is None or (
+                        isinstance(value, str) and not value.strip()
+                    ):
+                        return {
+                            "action": "clarify",
+                            "clarify": True,
+                            "question": question,
+                            "partial_plan": {
+                                key: item
+                                for key, item in proposed.items()
+                                if key not in ("action", field_name)
+                            },
+                        }
 
             if proposed.get("action") in WRITE_ACTIONS:
                 # proposed_action is a raw, unvalidated dict from the LLM's

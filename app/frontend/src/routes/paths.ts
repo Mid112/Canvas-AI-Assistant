@@ -110,6 +110,38 @@ export interface AiMessageDraftLocationState {
   };
 }
 
+/** Structured action drafts passed from an assistant preview into the
+ * dedicated validated review forms. */
+export interface AiActionDraftLocationState {
+  returnTo?: string;
+  aiAssignmentDraft?: {
+    courseId?: number;
+    name?: string;
+    description?: string;
+    dueDate?: string;
+    pointsPossible?: unknown;
+  };
+  aiQuizDraft?: {
+    courseId?: number;
+    name?: string;
+    description?: string;
+    dueDate?: string;
+    pointsPossible?: unknown;
+    allowedAttempts?: unknown;
+    timeLimit?: unknown;
+    questions?: Array<{
+      questionText: string;
+      questionType:
+        | "multiple_choice_question"
+        | "true_false_question"
+        | "short_answer_question"
+        | "essay_question";
+      pointsPossible: number;
+      answers: Array<{ text: string; weight: number }>;
+    }>;
+  };
+}
+
 export function instructorChatPreviewPath(
   conversationId: number,
   pendingMessageId: number,

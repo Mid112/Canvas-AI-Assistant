@@ -241,19 +241,24 @@ def _preview_send_message(course: Course, params: dict) -> dict:
 def _preview_update_grade(course: Course, params: dict) -> dict:
     assignment_id = params.get("assignment_id", "?")
     student_id = params.get("student_id", "?")
+    assignment_label = params.get("assignment_reference") or "the selected assignment"
+    student_label = params.get("student_reference") or "the selected student"
     new_grade = params.get("new_grade", "?")
+    feedback = params.get("feedback")
 
     return {
         "action": "update_grade",
         "course": course.name,
         "metadata": {
-            "assignment_id": assignment_id,
-            "student_id": student_id,
+            "assignment": assignment_label,
+            "student": student_label,
             "new_grade": new_grade,
+            "includes_feedback": bool(feedback),
         },
         "summary": (
-            f"Update grade for student {student_id} on assignment "
-            f"{assignment_id} to {new_grade} in {course.name}."
+            f"Update {student_label}'s grade on {assignment_label} "
+            f"to {new_grade} in {course.name}"
+            f"{' and add feedback' if feedback else ''}."
         ),
         "affected_resources": [
             {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
@@ -263,7 +268,7 @@ def _preview_update_grade(course: Course, params: dict) -> dict:
                 "id": student_id if student_id != "?" else None,
                 "name": None,
                 "status": "modified",
-                "changed_fields": ["grade"],
+                "changed_fields": ["grade", *(["feedback"] if feedback else [])],
             },
         ],
         **_reversibility_fields("update_grade"),

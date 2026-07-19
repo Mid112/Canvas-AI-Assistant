@@ -284,6 +284,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
               ? mapWorkflowStatus(workflowStatuses[mapped.pendingMessageId]?.status)
               : undefined,
             explanation: mapped.explanation,
+            acknowledgedFields: mapped.acknowledgedFields,
             interpretedAction: mapped.interpretedAction,
             safetyBlocked: mapped.safetyBlocked,
             safetyMessage: mapped.safetyMessage,
@@ -337,6 +338,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
         pendingMessageId: entry.pendingMessageId,
         pendingActionStatus: entry.pendingMessageId ? "pending" : undefined,
         explanation: entry.explanation,
+        acknowledgedFields: entry.acknowledgedFields,
         interpretedAction: entry.interpretedAction,
         safetyBlocked: entry.safetyBlocked,
         safetyMessage: entry.safetyMessage,
@@ -503,7 +505,6 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       appendAssistantMessage,
       conversationId,
       notifyCoursesChanged,
-      onConversationChange,
       refreshActiveCourse,
       refreshDashboard,
     ],

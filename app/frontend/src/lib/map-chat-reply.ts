@@ -1,4 +1,7 @@
-import { formatDueDateForDisplay } from "@/lib/assignment-utils";
+import {
+  formatDueDateForDisplay,
+  formatDueDateForInput,
+} from "@/lib/assignment-utils";
 import {
   instructorChatPreviewPath,
   instructorCourseAnalyticsPath,
@@ -24,6 +27,53 @@ function formatActionLabel(actionName: string): string {
 
 function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+const INTERNAL_FIELDS = new Set([
+  "action",
+  "local_course_id",
+  "assignment_id",
+  "student_id",
+  "recipient_canvas_user_ids",
+  "recipient_handle",
+  "preview_id",
+]);
+
+function formatFieldLabel(field: string): string {
+  return field
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatSafeValue(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim()) {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return `${value.length} item${value.length === 1 ? "" : "s"}`;
+  }
+  return undefined;
+}
+
+function readableFields(
+  value: unknown,
+): Array<{ label: string; value: string }> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return [];
+  }
+
+  return Object.entries(value as Record<string, unknown>)
+    .filter(([field]) => !INTERNAL_FIELDS.has(field))
+    .flatMap(([field, fieldValue]) => {
+      const formatted = formatSafeValue(fieldValue);
+      return formatted
+        ? [{ label: formatFieldLabel(field), value: formatted }]
+        : [];
+    });
 }
 
 function buildInterpretedAction(
@@ -66,6 +116,20 @@ function buildInterpretedAction(
     action: formatActionLabel(actionName),
     course: courseLabel,
     affectedStudents,
+    technicalDetails: [
+      { label: "Action type", value: formatActionLabel(actionName) },
+      ...(readString(previewMetadata?.risk_level)
+        ? [{ label: "Risk level", value: readString(previewMetadata?.risk_level)! }]
+        : []),
+      ...(typeof previewMetadata?.reversible === "boolean"
+        ? [
+            {
+              label: "Reversible",
+              value: previewMetadata.reversible ? "Yes" : "No",
+            },
+          ]
+        : []),
+    ],
   };
 
   if (conversationId !== undefined && pendingMessageId !== undefined) {
@@ -107,9 +171,60 @@ function buildInterpretedAction(
   }
 
   if (actionName === "create_quiz") {
+    const questions = Array.isArray(proposed.questions)
+      ? proposed.questions.map((question) => {
+          const record = question as Record<string, unknown>;
+          return {
+            questionText: readString(record.question_text) ?? "",
+            questionType:
+              readString(record.question_type) ?? "essay_question",
+            pointsPossible:
+              typeof record.points_possible === "number"
+                ? record.points_possible
+                : 1,
+            answers: Array.isArray(record.answers)
+              ? record.answers
+              : [],
+          };
+        })
+      : [];
     interpretedAction.secondaryLink = {
-      label: "Open quiz creator",
+      label: "Edit quiz details",
       href: paths.instructor.quizCreate,
+      state: {
+        returnTo: paths.instructor.assistant,
+        aiQuizDraft: {
+          courseId,
+          name: readString(proposed.title),
+          description: readString(proposed.description),
+          dueDate: readString(proposed.due_date)
+            ? formatDueDateForInput(readString(proposed.due_date)!)
+            : undefined,
+          pointsPossible: proposed.points_possible,
+          allowedAttempts: proposed.allowed_attempts,
+          timeLimit: proposed.time_limit,
+          questions,
+        },
+      },
+    };
+  }
+
+  if (actionName === "create_assignment") {
+    interpretedAction.secondaryLink = {
+      label: "Edit assignment details",
+      href: paths.instructor.assignmentCreate,
+      state: {
+        returnTo: paths.instructor.assistant,
+        aiAssignmentDraft: {
+          courseId,
+          name: readString(proposed.title),
+          description: readString(proposed.description),
+          dueDate: readString(proposed.due_date)
+            ? formatDueDateForInput(readString(proposed.due_date)!)
+            : undefined,
+          pointsPossible: proposed.points_possible,
+        },
+      },
     };
   }
 
@@ -182,10 +297,19 @@ export function mapChatReplyToAssistantResponse(
   }
 
   if (reply.action === "clarify" || reply.clarify) {
+    const acknowledgedFields = readableFields(reply.partial_plan);
+    const acknowledgement =
+      acknowledgedFields.length > 0
+        ? `I have ${acknowledgedFields
+            .map((field) => `${field.label.toLowerCase()}: ${field.value}`)
+            .join(", ")}. `
+        : "";
+    const question =
+      readString(reply.question) ??
+      "Could you share a bit more detail so I can help?";
     return {
-      content:
-        readString(reply.question) ??
-        "Could you share a bit more detail so I can help?",
+      content: `${acknowledgement}${question}`,
+      acknowledgedFields,
     };
   }
 
@@ -311,7 +435,6 @@ export function mapChatReplyToAssistantResponse(
   if (reply.data) {
     return {
       content: "The action completed successfully.",
-      explanation: JSON.stringify(reply.data, null, 2),
     };
   }
 
@@ -320,8 +443,8 @@ export function mapChatReplyToAssistantResponse(
   }
 
   return {
-    content: "I processed your request.",
-    explanation: JSON.stringify(reply, null, 2),
+    content:
+      "I completed the request, but no additional details were returned.",
   };
 }
 

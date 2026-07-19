@@ -363,6 +363,45 @@ async def fetch_submissions(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
 
 
+async def update_submission_grade(
+    course_id: int,
+    assignment_id: int,
+    student_id: int,
+    posted_grade: str,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+    *,
+    feedback: str | None = None,
+) -> dict:
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    payload: dict = {"submission": {"posted_grade": posted_grade}}
+    if feedback and feedback.strip():
+        payload["comment"] = {"text_comment": feedback.strip()}
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.put(
+                (
+                    f"{canvas_url}/api/v1/courses/{course_id}/assignments/"
+                    f"{assignment_id}/submissions/{student_id}"
+                ),
+                headers=_headers(token),
+                json=payload,
+            )
+            _raise_for_canvas_error(response)
+            return response.json()
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Canvas API timed out",
+        )
+    except httpx.RequestError as exc:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach Canvas",
+        ) from exc
+
+
 async def fetch_user_profile(
     user_id: int,
     token: str,

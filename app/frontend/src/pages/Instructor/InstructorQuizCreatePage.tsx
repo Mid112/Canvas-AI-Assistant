@@ -1,5 +1,6 @@
 import { CheckCircle2 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import { Button } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
 import { disambiguateCourseLabels } from "@/lib/disambiguate-course-labels";
 import { pageShellNarrow } from "@/lib/page-shell";
+import type { AiActionDraftLocationState } from "@/routes/paths";
 import {
   approveQuizDraft,
   generateQuizDraft,
@@ -36,11 +38,44 @@ const initialDescribeValues: QuizDescribeValues = {
 };
 
 export function InstructorQuizCreatePage() {
+  const location = useLocation();
+  const seededDraft = (location.state as AiActionDraftLocationState | null)
+    ?.aiQuizDraft;
   const { accessToken, user } = useAuth();
-  const [step, setStep] = useState<QuizCreateStep>("describe");
+  const [step, setStep] = useState<QuizCreateStep>(
+    seededDraft ? "review" : "describe",
+  );
   const [describeValues, setDescribeValues] =
-    useState<QuizDescribeValues>(initialDescribeValues);
-  const [draft, setDraft] = useState<GeneratedQuizDraft | null>(null);
+    useState<QuizDescribeValues>(
+      seededDraft
+        ? {
+            courseId: String(seededDraft.courseId ?? ""),
+            prompt: "Drafted in the AI Assistant",
+          }
+        : initialDescribeValues,
+    );
+  const [draft, setDraft] = useState<GeneratedQuizDraft | null>(
+    seededDraft
+      ? {
+          name: seededDraft.name ?? "",
+          description: seededDraft.description ?? "",
+          dueDate: seededDraft.dueDate ?? "",
+          pointsPossible:
+            typeof seededDraft.pointsPossible === "number"
+              ? seededDraft.pointsPossible
+              : 100,
+          allowedAttempts:
+            typeof seededDraft.allowedAttempts === "number"
+              ? seededDraft.allowedAttempts
+              : null,
+          timeLimit:
+            typeof seededDraft.timeLimit === "number"
+              ? seededDraft.timeLimit
+              : null,
+          questions: seededDraft.questions ?? [],
+        }
+      : null,
+  );
   const [approvedValues, setApprovedValues] =
     useState<QuizReviewFormSchema | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);

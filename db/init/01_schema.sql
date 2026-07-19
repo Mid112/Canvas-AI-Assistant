@@ -296,7 +296,7 @@ CREATE TABLE audit_logs (
     workflow_id       INTEGER NOT NULL REFERENCES workflows(id) ON DELETE CASCADE,
     course_id         INTEGER REFERENCES courses(id) ON DELETE SET NULL,
     action            VARCHAR NOT NULL,
-    resource_type     VARCHAR NOT NULL CHECK (resource_type IN ('assignment', 'announcement', 'conversation', 'quiz')),
+    resource_type     VARCHAR NOT NULL CHECK (resource_type IN ('assignment', 'announcement', 'conversation', 'quiz', 'submission')),
     resource_id       VARCHAR,
     operation         VARCHAR NOT NULL CHECK (operation IN ('create', 'update', 'delete')),
     status            VARCHAR NOT NULL DEFAULT 'success' CHECK (status IN ('success', 'failed')),
@@ -445,4 +445,5 @@ INSERT INTO schema_migrations (filename) VALUES
     ('018_workflow_undo.sql'),
     ('019_audit_logs_allow_delete_operation.sql'),
     ('020_course_cache_columns.sql'),
-    ('021_audit_logs_allow_quiz_resource_type.sql');
+    ('021_audit_logs_allow_quiz_resource_type.sql'),
+    ('022_audit_logs_allow_submission_resource_type.sql');

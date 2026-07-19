@@ -33,3 +33,4 @@ If you have a genuinely ancient local database (created before the `ta` role was
 | `019_audit_logs_allow_delete_operation.sql` | Allows `'delete'` as a valid `audit_logs.operation`, alongside `'create'`/`'update'` — undoing a `create_assignment` action deletes the Canvas assignment, which needs its own audit row |
 | `020_course_cache_columns.sql` | Adds `courses.course_code` and `courses.total_students`, so `get_cached_courses()` can render a full course card straight from the local DB — no live Canvas call needed just to paint the dashboard |
 | `021_audit_logs_allow_quiz_resource_type.sql` | Allows `'quiz'` as an `audit_logs.resource_type` for `create_quiz` / undo |
+| `022_audit_logs_allow_submission_resource_type.sql` | Allows `'submission'` as an `audit_logs.resource_type` for reviewed grade and feedback updates |

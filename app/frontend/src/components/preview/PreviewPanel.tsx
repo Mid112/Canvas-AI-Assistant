@@ -4,6 +4,7 @@ import { PreviewBanner } from "@/components/brand/PreviewBanner";
 import { ActionSummaryCard } from "@/components/preview/ActionSummaryCard";
 import { ActionTypeSection } from "@/components/preview/ActionTypeSection";
 import { AffectedResourcesCard } from "@/components/preview/AffectedResourcesCard";
+import { EditableReviewForm } from "@/components/preview/EditableReviewForm";
 import { PreviewActions } from "@/components/preview/PreviewActions";
 import { ReversibilityStatus } from "@/components/preview/ReversibilityStatus";
 import { RiskLevelIndicator } from "@/components/preview/RiskLevelIndicator";
@@ -13,6 +14,8 @@ interface PreviewPanelProps {
   preview: DryRunPreviewData;
   isConfirming?: boolean;
   confirmError?: string | null;
+  isSavingEdits?: boolean;
+  onSaveEdits?: (changes: Record<string, unknown>) => void;
   onReject: () => void;
   onModify: () => void;
   onConfirm: () => void;
@@ -22,6 +25,8 @@ export function PreviewPanel({
   preview,
   isConfirming = false,
   confirmError,
+  isSavingEdits = false,
+  onSaveEdits,
   onReject,
   onModify,
   onConfirm,
@@ -60,6 +65,20 @@ export function PreviewPanel({
         changesFromPreviousRequest={preview.changesFromPreviousRequest}
         proposedPlan={preview.proposedPlan}
       />
+
+      {onSaveEdits && preview.proposedPlan ? (
+        <EditableReviewForm
+          key={JSON.stringify(
+            preview.proposedPlan.map((field) => [
+              field.field,
+              field.rawValue,
+            ]),
+          )}
+          fields={preview.proposedPlan}
+          isSaving={isSavingEdits}
+          onSave={onSaveEdits}
+        />
+      ) : null}
 
       <ActionTypeSection
         actionType={preview.actionType}

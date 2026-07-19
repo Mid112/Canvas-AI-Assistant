@@ -14,6 +14,7 @@ import {
   AssistantApiError,
   cancelAssistantAction,
   confirmAssistantAction,
+  modifyAssistantAction,
 } from "@/services/assistant";
 import {
   confirmDryRunPreview,
@@ -69,6 +70,7 @@ function DryRunPreviewContent({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
+  const [isSavingEdits, setIsSavingEdits] = useState(false);
   const [confirmedMessage, setConfirmedMessage] = useState<string | null>(null);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
 
@@ -240,6 +242,39 @@ function DryRunPreviewContent({
     }
   };
 
+  const handleSaveEdits = async (changes: Record<string, unknown>) => {
+    if (
+      !isChatPreview ||
+      !accessToken ||
+      conversationId === undefined ||
+      pendingMessageId === undefined
+    ) {
+      setConfirmError("This preview cannot be edited here.");
+      return;
+    }
+
+    setIsSavingEdits(true);
+    setConfirmError(null);
+    try {
+      await modifyAssistantAction(
+        accessToken,
+        conversationId,
+        pendingMessageId,
+        changes,
+      );
+      const refreshed = await loadPreview();
+      setPreview(refreshed);
+    } catch (error) {
+      setConfirmError(
+        error instanceof AssistantApiError
+          ? error.message
+          : "Unable to regenerate this preview.",
+      );
+    } finally {
+      setIsSavingEdits(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center gap-3 p-4 md:p-6 lg:p-8">
@@ -316,6 +351,8 @@ function DryRunPreviewContent({
         preview={preview}
         isConfirming={isConfirming}
         confirmError={confirmError}
+        isSavingEdits={isSavingEdits}
+        onSaveEdits={isChatPreview ? handleSaveEdits : undefined}
         onReject={() => void handleReject()}
         onModify={handleModify}
         onConfirm={() => void handleConfirm()}
