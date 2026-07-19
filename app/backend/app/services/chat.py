@@ -131,6 +131,7 @@ NORMAL_TURN_ALLOWED_ACTIONS = {"intent_preview", "clarify", "out_of_scope", "res
 _AUDIT_RESOURCE_MAP = {
     "create_assignment": ("assignment", "create"),
     "update_assignment": ("assignment", "update"),
+    "update_grade": ("submission", "update"),
     "send_message": ("announcement", "create"),
 }
 
@@ -321,6 +322,28 @@ def _match_course_name(course_names: list[CanvasCourseName], course_name: str | 
         return substring_matches[0]
     if len(substring_matches) > 1:
         return _resolve_duplicate_course_name_matches(substring_matches)
+    return None
+
+
+_COURSE_CONTEXT_PATTERNS = (
+    re.compile(r"^\s*(?:course|couse|class)\s*(?:is|=|:)\s*(?P<name>.+?)\s*$", re.IGNORECASE),
+    re.compile(r"^\s*(?:use|switch(?:\s+to)?|set)\s+(?:course|class)\s+(?:to\s+)?(?P<name>.+?)\s*$", re.IGNORECASE),
+)
+
+
+def _resolve_course_context_statement(
+    course_names: list[CanvasCourseName],
+    user_message: str,
+) -> CanvasCourseName | None:
+    """Fast path for terse course-selection replies such as "course is
+    COSC 777" (and the common typo "couse is ..."). These are not really
+    Canvas tasks; they are context-setting utterances. Resolving them
+    deterministically keeps the main LLM from replaying the previous task
+    with stale context."""
+    for pattern in _COURSE_CONTEXT_PATTERNS:
+        match = pattern.match(user_message)
+        if match:
+            return _match_course_name(course_names, match.group("name"))
     return None
 
 
@@ -977,6 +1000,202 @@ async def _run_update_assignment_chain(
         "proposed_action": proposed_action,
         "preview_metadata": preview_metadata,
     }
+
+
+async def _resolve_grade_target(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    action: Any,
+    user_message: str,
+    adapter: LLMAdapter,
+) -> dict:
+    """Resolves the assignment and student for update_grade before any
+    preview is shown. Mirrors _resolve_assignment_reference and
+    _resolve_students_via_llm: the LLM may describe a target naturally,
+    but it only gets to choose from real assignments/submissions the app
+    fetched from Canvas and cached locally through the normal read paths."""
+    resolved = await _resolve_course_and_assignment(
+        db, user, conversation, user_msg,
+        action.local_course_id, action.assignment_id, action.assignment_reference,
+        user_message, adapter,
+    )
+    if isinstance(resolved, dict):
+        return resolved
+    course, assignment_id = resolved
+
+    print(f"Collecting {course.name} submissions for grade target resolution")
+    fetch_action = FetchSubmissionsAction(
+        local_course_id=course.id,
+        assignment_id=assignment_id,
+    )
+    submissions_result = await _run_tracked_read(
+        db, user, conversation, user_msg.id, "fetch_submissions",
+        fetch_action.model_dump(), execute_tool(db, user, fetch_action),
+    )
+    submissions = submissions_result["submissions"]
+    if not submissions:
+        return {
+            "action": "clarify",
+            "clarify": True,
+            "question": f"I couldn't find submissions for that assignment in {course.name}.",
+            "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
+        }
+
+    student_id = action.student_id
+    bulk_update = bool(action.student_reference and _is_bulk_student_reference(action.student_reference))
+    if student_id is not None:
+        valid_ids = {_coerce_int(s.get("user_id")) for s in submissions}
+        valid_ids.discard(None)
+        if student_id not in valid_ids:
+            student_id = None
+
+    if bulk_update:
+        return _build_grouped_grade_update_result(
+            course,
+            assignment_id,
+            submissions,
+            action.new_grade,
+            action.reason,
+        )
+
+    if student_id is None and action.student_reference:
+        candidates = [
+            {
+                "user_id": s.get("user_id"),
+                "name": s.get("student_name") or f"Student {s.get('user_id')}",
+                "login_id": s.get("student_login_id"),
+                "email": s.get("student_email"),
+            }
+            for s in submissions
+        ]
+        resolved_students = await _resolve_students_via_llm(
+            candidates, [action.student_reference], user_message, adapter
+        )
+        student_id = resolved_students.get(action.student_reference)
+
+    if student_id is None:
+        names = ", ".join(
+            sorted(
+                {
+                    s.get("student_name") or f"Student {s.get('user_id')}"
+                    for s in submissions
+                }
+            )
+        )
+        return {
+            "action": "clarify",
+            "clarify": True,
+            "question": f"Which student in {course.name} did you mean? Options: {names}.",
+            "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
+        }
+
+    selected = next(s for s in submissions if _coerce_int(s.get("user_id")) == student_id)
+    selected_snapshot = json.loads(_json_dumps(selected))
+    proposed_action = {
+        "action": "update_grade",
+        "local_course_id": course.id,
+        "assignment_id": assignment_id,
+        "student_id": student_id,
+        "new_grade": action.new_grade,
+        "reason": action.reason,
+        "current_submission": selected_snapshot,
+    }
+    preview_metadata = generate_write_preview(proposed_action, course)
+    return {
+        "action": "intent_preview",
+        "intent_preview": True,
+        "summary": preview_metadata["summary"],
+        "proposed_action": proposed_action,
+        "preview_metadata": preview_metadata,
+    }
+
+
+def _build_grouped_grade_update_result(
+    course: Course,
+    assignment_id: int,
+    submissions: list[dict],
+    new_grade: str,
+    reason: str | None,
+) -> dict:
+    entries = []
+    for index, submission in enumerate(submissions):
+        student_id = _coerce_int(submission.get("user_id"))
+        if student_id is None:
+            continue
+        proposed_action = {
+            "action": "update_grade",
+            "local_course_id": course.id,
+            "assignment_id": assignment_id,
+            "student_id": student_id,
+            "new_grade": new_grade,
+            "reason": reason,
+            "current_submission": json.loads(_json_dumps(submission)),
+        }
+        preview_metadata = generate_write_preview(proposed_action, course)
+        preview_metadata["grade_index"] = index + 1
+        preview_metadata["grade_count"] = len(submissions)
+        entries.append({"proposed_action": proposed_action, "preview_metadata": preview_metadata})
+
+    if not entries:
+        return {
+            "action": "clarify",
+            "clarify": True,
+            "question": f"I couldn't find any students to grade for that assignment in {course.name}.",
+            "partial_plan": {
+                "action": "update_grade",
+                "local_course_id": course.id,
+                "assignment_id": assignment_id,
+                "student_reference": "all students",
+                "new_grade": new_grade,
+                "reason": reason,
+            },
+        }
+
+    primary = entries[0]
+    result = {
+        "action": "intent_preview",
+        "intent_preview": True,
+        "summary": primary["preview_metadata"]["summary"],
+        "proposed_action": primary["proposed_action"],
+        "preview_metadata": primary["preview_metadata"],
+    }
+    if len(entries) > 1:
+        result["_extra_groups"] = entries[1:]
+    return result
+
+
+def _grade_partial_plan(action: Any, local_course_id: int, assignment_id: int | None) -> dict:
+    """Keep grade clarification turns resumable after short user replies."""
+    plan = {
+        "action": "update_grade",
+        "local_course_id": local_course_id,
+        "assignment_id": assignment_id,
+        "assignment_reference": getattr(action, "assignment_reference", None),
+        "student_id": getattr(action, "student_id", None),
+        "student_reference": getattr(action, "student_reference", None),
+        "new_grade": getattr(action, "new_grade", None),
+        "reason": getattr(action, "reason", None),
+    }
+    return {key: value for key, value in plan.items() if value is not None}
+
+
+def _is_bulk_student_reference(reference: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", " ", reference.lower()).strip()
+    if normalized.startswith("all ") and "student" in normalized:
+        return True
+    bulk_terms = {
+        "all",
+        "all students",
+        "everyone",
+        "every student",
+        "everybody",
+        "the class",
+        "whole class",
+        "entire class",
+    }
+    return normalized in bulk_terms
 
 
 @dataclass
@@ -1675,6 +1894,14 @@ def _summarize_assistant_history_content(role: str, content: str) -> str:
         return content
     if not isinstance(data, dict) or data.get("intent_preview"):
         return content
+    if data.get("action") == "clarify" and isinstance(data.get("partial_plan"), dict) and data["partial_plan"]:
+        return _json_dumps(
+            {
+                "action": "clarify",
+                "question": data.get("question"),
+                "partial_plan": data.get("partial_plan"),
+            }
+        )
     return data.get("message") or data.get("question") or data.get("error") or content
 
 
@@ -1765,7 +1992,7 @@ Put every field you already do have into partial_plan so the next turn
 doesn't lose it once the user answers. Only ask ONE question per turn.
 
 REQUIRED FIELDS — before proposing any write action (create_assignment,
-update_assignment, send_message), check every field listed as "required"
+update_assignment, send_message, update_grade), check every field listed as "required"
 in that action's schema below. This includes the action/task type itself
 (e.g. don't guess whether the user wants create_assignment vs
 update_assignment), and fields like title, description, and due_date.
@@ -1774,7 +2001,7 @@ AMBIGUITY CHECK format to ask for it. Never invent a placeholder value
 and never silently omit a required field from proposed_action.
 
 INTENT PREVIEW — before executing a WRITE action:
-create_assignment, update_assignment, and send_message change real Canvas
+create_assignment, update_assignment, send_message, and update_grade change real Canvas
 data, so the user must see and confirm exactly what will happen first:
 {"action": "intent_preview", "summary": "<plain English description>", "proposed_action": <dict>}
 The user will confirm, modify, or cancel from here.
@@ -1936,6 +2163,22 @@ include the fields the user actually wants changed — leave every other
 field out of proposed_action entirely, since anything omitted is
 preserved automatically.
 
+RESOLVING A STUDENT AND ASSIGNMENT FOR update_grade:
+update_grade is high risk and must go through preview/approval. If you
+already have both real IDs from earlier in the conversation, propose
+intent_preview wrapping update_grade with assignment_id, student_id, and
+new_grade. Otherwise leave unknown IDs unset and provide the user's own
+words as assignment_reference and/or student_reference, then propose
+update_grade directly (not fetch_assignments, not fetch_submissions, and
+not intent_preview). The app resolves the assignment and student from real
+Canvas assignments/submissions server-side and builds the approval preview
+in this same turn. Never invent or guess numeric assignment_id or
+student_id values, and never ask the user for raw Canvas IDs. If the user
+asks to update grades for "everyone", "all students", or "the whole
+class", set student_reference to that exact phrase; the app will resolve
+the real submission list and create one approval preview per student.
+Never call fetch_students for grade updates.
+
 MESSAGING STUDENTS:
 send_message can post a public class announcement, send a private Canvas
 message to specific students, or both in the same turn — these have very
@@ -2092,6 +2335,38 @@ async def handle_chat_message(
         return conversation, {
             "error": "The selected AI model isn't available right now. Try a different one in Settings.",
         }, True
+
+    if pending_message_id is None and local_course_id is None:
+        selected_course = _resolve_course_context_statement(course_names, message)
+        if selected_course is not None and selected_course.local_course_id is not None:
+            if conversation.course_id is None:
+                conversation.course_id = selected_course.local_course_id
+                conversation.course_name = await _stable_course_name(
+                    db, selected_course.local_course_id, selected_course.name
+                )
+            elif selected_course.local_course_id != conversation.course_id:
+                target = await _find_or_fork_conversation_for_course(
+                    db, user, selected_course.local_course_id, selected_course.name
+                )
+                user_msg.conversation_id = target.id
+                conversation = target
+            history = await _get_recent_messages(db, conversation.id)
+            await log_message(
+                db,
+                conversation,
+                role="assistant",
+                content=json.dumps(
+                    {
+                        "action": "respond",
+                        "message": f"Using {conversation.course_name} for this chat.",
+                    }
+                ),
+            )
+            await db.commit()
+            return conversation, {
+                "action": "respond",
+                "message": f"Using {conversation.course_name} for this chat.",
+            }, False
 
     # Pre-resolve a course switch from the raw message alone, before the
     # main prompt is built for this turn — see _resolve_course_switch's
@@ -2316,6 +2591,16 @@ async def handle_chat_message(
                     proposed_name == "update_assignment"
                     and proposed.get("assignment_id") is None
                     and bool(proposed.get("assignment_reference"))
+                ) or (
+                    proposed_name == "update_grade"
+                    and (
+                        proposed.get("assignment_id") is None
+                        or proposed.get("student_id") is None
+                    )
+                    and (
+                        bool(proposed.get("assignment_reference"))
+                        or bool(proposed.get("student_reference"))
+                    )
                 )
             if needs_unwrap:
                 # Defensive: the model wrapped a read, a send_message that
@@ -2325,7 +2610,7 @@ async def handle_chat_message(
                 # system prompt saying not to — each produces its own
                 # intent_preview internally (a read never does at all; a
                 # directive-/handle-bearing send_message and a
-                # reference-bearing update_assignment do, via their own
+                # reference-bearing update_assignment/update_grade do, via their own
                 # chains below) — so unwrap and dispatch directly instead
                 # of showing a pointless double preview.
                 action = parse_action(json.dumps(action.proposed_action))
@@ -2359,6 +2644,15 @@ async def handle_chat_message(
                 # directly, in this same turn, rather than making the user
                 # ask again once a fetch_assignments result is in history.
                 result = await _run_update_assignment_chain(
+                    db, user, conversation, user_msg, action, message, adapter
+                )
+            elif action.action == "update_grade" and (
+                action.assignment_id is None
+                or action.student_id is None
+                or action.assignment_reference
+                or action.student_reference
+            ):
+                result = await _resolve_grade_target(
                     db, user, conversation, user_msg, action, message, adapter
                 )
             elif action.action == "send_message" and (

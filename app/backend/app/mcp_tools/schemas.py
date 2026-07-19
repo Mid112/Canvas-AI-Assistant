@@ -136,6 +136,22 @@ class UpdateAssignmentAction(BaseModel):
         return value if value is None else _normalize_due_date_str(value)
 
 
+class UpdateGradeAction(BaseModel):
+    action: Literal["update_grade"] = "update_grade"
+    local_course_id: int
+    assignment_id: int | None = None
+    assignment_reference: str | None = None
+    student_id: int | None = None
+    student_reference: str | None = None
+    new_grade: str
+    reason: str | None = None
+
+    @field_validator("new_grade", mode="before")
+    @classmethod
+    def _coerce_grade(cls, value) -> str:
+        return str(value)
+
+
 class RecipientDirective(BaseModel):
     # The user's own words for ONE intended recipient, e.g. "Yerdana" —
     # never a numeric ID. Resolved server-side against the course roster
@@ -235,6 +251,7 @@ ACTION_SCHEMAS: dict[str, type[BaseModel]] = {
     "get_active_course": GetActiveCourseAction,
     "create_assignment": CreateAssignmentAction,
     "update_assignment": UpdateAssignmentAction,
+    "update_grade": UpdateGradeAction,
     "send_message": SendMessageAction,
     "out_of_scope": OutOfScopeAction,
     "clarify": ClarifyAction,

@@ -537,8 +537,6 @@ async def get_submissions(
     canvas_url: str,
     db: AsyncSession,
 ) -> list[SubmissionResponse]:
-    from app.models.submission import Submission
-
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     data = await fetch_submissions(
@@ -549,27 +547,58 @@ async def get_submissions(
     )
     parsed = [_parse_submission(raw) for raw in data]
     await _fill_submission_contact_fields(parsed, token, canvas_url)
+    await _cache_submissions_safely(course.id, assignment_id, parsed)
+
+    return parsed
+
+
+async def _cache_submissions_safely(
+    local_course_id: int,
+    assignment_id: int,
+    submissions: list[SubmissionResponse],
+) -> None:
+    """Persist analytics cache rows without touching the caller's session."""
+    try:
+        async with AsyncSessionLocal() as cache_db:
+            await _cache_submissions(cache_db, local_course_id, assignment_id, submissions)
+    except Exception as error:
+        logger.warning(
+            "Could not cache Canvas submissions for course %s assignment %s: %s",
+            local_course_id,
+            assignment_id,
+            error,
+            exc_info=True,
+        )
+
+
+async def _cache_submissions(
+    db: AsyncSession,
+    local_course_id: int,
+    assignment_id: int,
+    submissions: list[SubmissionResponse],
+) -> None:
+    from app.models.submission import Submission
 
     try:
-        # The API response is authoritative even if the local analytics cache
-        # write fails below, so keep cache persistence isolated from the return
-        # value. This prevents a DB cache hiccup from breaking the live Canvas view.
+        # The API response is authoritative; this write only refreshes the
+        # local analytics cache and runs in its own session so failures cannot
+        # rollback chat/workflow state owned by the caller.
         assignment = await db.scalar(
             select(Assignment).where(
                 Assignment.canvas_assignment_id == str(assignment_id),
-                Assignment.course_id == course.id,
+                Assignment.course_id == local_course_id,
             )
         )
         if not assignment:
             assignment = Assignment(
                 canvas_assignment_id=str(assignment_id),
-                course_id=course.id,
+                course_id=local_course_id,
                 title=f"Assignment {assignment_id}",
             )
             db.add(assignment)
             await db.flush()
 
-        canvas_ids = [str(item.id) for item in parsed]
+        canvas_ids = [str(item.id) for item in submissions]
         # Canvas submission ids are unique in our schema, but scoping by the
         # local assignment makes the intent explicit and protects this upsert if
         # the uniqueness model changes later.
@@ -581,7 +610,7 @@ async def get_submissions(
         )
         submission_map = {s.canvas_submission_id: s for s in existing_rows}
 
-        for item in parsed:
+        for item in submissions:
             cid = str(item.id)
             if cid in submission_map:
                 row = submission_map[cid]
@@ -607,17 +636,9 @@ async def get_submissions(
                 )
 
         await db.commit()
-    except Exception as error:
+    except Exception:
         await db.rollback()
-        logger.warning(
-            "Could not cache Canvas submissions for course %s assignment %s: %s",
-            local_course_id,
-            assignment_id,
-            error,
-            exc_info=True,
-        )
-
-    return parsed
+        raise
 
 
 async def sync_courses_if_stale(user: User, connection: CanvasConnection, db: AsyncSession) -> None:

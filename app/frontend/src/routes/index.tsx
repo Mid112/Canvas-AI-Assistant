@@ -18,6 +18,7 @@ import { InstructorCourseMessagesPage } from "@/pages/Instructor/InstructorCours
 import { InstructorCourseOverviewPage } from "@/pages/Instructor/InstructorCourse/InstructorCourseOverviewPage";
 import { InstructorCourseAssignmentsPage } from "@/pages/Instructor/InstructorCourseAssignmentsPage";
 import { InstructorCourseStudentsPage } from "@/pages/Instructor/InstructorCourseStudentsPage";
+import { InstructorCourseGradesPage } from "@/pages/Instructor/InstructorCourseGradesPage";
 import { InstructorCourseSubmissionsPage } from "@/pages/Instructor/InstructorCourseSubmissionsPage";
 import { InstructorAssignmentCreatePage } from "@/pages/Instructor/InstructorAssignmentCreatePage";
 import { InstructorAssignmentUpdatePage } from "@/pages/Instructor/InstructorAssignmentUpdatePage";
@@ -101,6 +102,10 @@ export const router = createBrowserRouter([
                       {
                         path: "students",
                         element: <InstructorCourseStudentsPage />,
+                      },
+                      {
+                        path: "grades",
+                        element: <InstructorCourseGradesPage />,
                       },
                       {
                         path: "analytics",

@@ -13,6 +13,9 @@ from app.schemas.canvas import (
     AssignmentResponse,
     AssignmentUpdate,
     CourseResponse,
+    GradePreviewResponse,
+    GradeUpdateRequest,
+    GradeUpdateResponse,
     SubmissionResponse,
 )
 from app.schemas.course_overview import CourseOverviewResponse
@@ -34,6 +37,7 @@ from app.services.canvas import (
 )
 from app.services.course_overview import get_course_overview
 from app.services.dashboard import get_instructor_dashboard
+from app.services.grade_management import preview_grade_update, submit_grade_update
 from app.services.preview import build_action_preview
 from app.services.student import get_students
 
@@ -178,6 +182,34 @@ async def list_submissions(
         canvas_url,
         db,
     )
+
+
+@router.post(
+    "/courses/{course_id}/grades/preview",
+    response_model=GradePreviewResponse,
+)
+async def preview_grade_update_endpoint(
+    course_id: int,
+    body: GradeUpdateRequest,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await preview_grade_update(course_id, body, current_user, canvas_url, db)
+
+
+@router.post(
+    "/courses/{course_id}/grades/submit",
+    response_model=GradeUpdateResponse,
+)
+async def submit_grade_update_endpoint(
+    course_id: int,
+    body: GradeUpdateRequest,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await submit_grade_update(course_id, body, current_user, canvas_url, db)
 
 
 # Missing submission analysis (#550–#553) — compares the enrolled roster against

@@ -6,6 +6,7 @@ from app.models.canvas_connection import CanvasConnection
 from app.models.canvas_course_name import CanvasCourseName
 from app.models.conversation import Conversation
 from app.models.course import Course
+from app.models.grade_history import GradeHistory
 from app.models.message import Message
 from app.models.message_draft import MessageDraft
 from app.models.message_template import MessageTemplate

@@ -32,3 +32,6 @@ If you have a genuinely ancient local database (created before the `ta` role was
 | `018_workflow_undo.sql` | Adds `workflows.undone_at`, marking a reversible action (e.g. `update_assignment`) as unambiguously reverted without overloading the existing `status` lifecycle column |
 | `019_audit_logs_allow_delete_operation.sql` | Allows `'delete'` as a valid `audit_logs.operation`, alongside `'create'`/`'update'` — undoing a `create_assignment` action deletes the Canvas assignment, which needs its own audit row |
 | `020_course_cache_columns.sql` | Adds `courses.course_code` and `courses.total_students`, so `get_cached_courses()` can render a full course card straight from the local DB — no live Canvas call needed just to paint the dashboard |
+| `021_grade_history.sql` | Creates `grade_history` for high-risk Canvas grade updates, including previous grade/score, reason, rollback metadata, and the Canvas response snapshot |
+| `022_submission_cache_key.sql` | Changes submission cache uniqueness from global `canvas_submission_id` to `(assignment_id, canvas_submission_id)`, matching Canvas IDs that can repeat across assignments/courses |
+| `023_audit_logs_allow_submission_resource_type.sql` | Allows `submission` audit resources so confirmed `update_grade` workflows can record successful Canvas submission mutations |
