@@ -11,7 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS, is_reversible
 from app.models.course import Course
 from app.models.user import User
-from app.schemas.canvas import AssignmentCreate, AssignmentResponse, AssignmentUpdate, GradeUpdateRequest, SubmissionResponse, SubmissionStatus
+from app.schemas.canvas import (
+    AssignmentCreate,
+    AssignmentResponse,
+    AssignmentUpdate,
+    GradeUpdateRequest,
+    SubmissionResponse,
+    SubmissionStatus,
+)
 from app.services.assignment_validation import (
     validate_assignment_for_create,
     validate_assignment_for_update,
