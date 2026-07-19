@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -14,9 +14,18 @@ if TYPE_CHECKING:
 
 class Submission(Base):
     __tablename__ = "submissions"
+    __table_args__ = (
+        # Canvas submission ids are only stable inside their assignment in
+        # local/dev Canvas data, so the cache key must include assignment_id.
+        UniqueConstraint(
+            "assignment_id",
+            "canvas_submission_id",
+            name="uq_submission_per_assignment",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    canvas_submission_id: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    canvas_submission_id: Mapped[str] = mapped_column(String, nullable=False)
 
     assignment_id: Mapped[int] = mapped_column(Integer, ForeignKey("assignments.id"), nullable=False)
 

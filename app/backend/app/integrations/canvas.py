@@ -372,11 +372,13 @@ async def update_submission_grade(
     canvas_url: str = settings.CANVAS_API_URL,
     *,
     feedback: str | None = None,
+    comment: str | None = None,
 ) -> dict:
     canvas_url = resolve_server_canvas_url(canvas_url)
     payload: dict = {"submission": {"posted_grade": posted_grade}}
-    if feedback and feedback.strip():
-        payload["comment"] = {"text_comment": feedback.strip()}
+    feedback_text = feedback if feedback is not None else comment
+    if feedback_text and feedback_text.strip():
+        payload["comment"] = {"text_comment": feedback_text.strip()}
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.put(

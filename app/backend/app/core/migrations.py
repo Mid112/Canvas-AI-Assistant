@@ -6,8 +6,20 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 logger = logging.getLogger(__name__)
 
-# app/backend/app/core/migrations.py -> repo root is four parents up
-MIGRATIONS_DIR = Path(__file__).resolve().parents[4] / "db" / "migrations"
+def _resolve_migrations_dir() -> Path:
+    """Find db/migrations from local checkout or the dev Docker mount."""
+    module_path = Path(__file__).resolve()
+    for parent in module_path.parents:
+        candidate = parent / "db" / "migrations"
+        if candidate.exists():
+            return candidate
+
+    # docker-compose.dev.yml mounts ./db/migrations here so the backend
+    # container can run the same startup migrations as local tests.
+    return Path("/db/migrations")
+
+
+MIGRATIONS_DIR = _resolve_migrations_dir()
 
 # Migrations from before db/migrations/README.md's "ADD COLUMN IF NOT
 # EXISTS / CREATE TABLE IF NOT EXISTS" convention (established at 011) are

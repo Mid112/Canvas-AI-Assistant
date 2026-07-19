@@ -196,6 +196,7 @@ class UpdateGradeAction(BaseModel):
     student_reference: str | None = None
     new_grade: str
     feedback: str | None = None
+    reason: str | None = None
 
     @field_validator("new_grade", mode="before")
     @classmethod

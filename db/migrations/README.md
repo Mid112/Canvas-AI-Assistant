@@ -35,3 +35,5 @@ If you have a genuinely ancient local database (created before the `ta` role was
 | `021_audit_logs_allow_quiz_resource_type.sql` | Allows `'quiz'` as an `audit_logs.resource_type` for `create_quiz` / undo |
 | `022_audit_logs_allow_submission_resource_type.sql` | Allows `'submission'` as an `audit_logs.resource_type` for `update_grade` audit rows (grade/feedback workflows that write submission resources) |
 | `023_workflow_nullable_preview.sql` | Makes `workflows.conversation_id`, `source_user_message_id`, and `preview_message_id` nullable so form-created writes (quiz creation form) can be audited without a chat preview message |
+| `024_grade_history.sql` | Creates `grade_history` for high-risk Canvas grade updates, including previous grade/score, reason, rollback metadata, and the Canvas response snapshot |
+| `025_submission_cache_key.sql` | Changes submission cache uniqueness from global `canvas_submission_id` to `(assignment_id, canvas_submission_id)`, matching Canvas IDs that can repeat across assignments/courses |

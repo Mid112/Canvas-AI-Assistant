@@ -164,6 +164,33 @@ class SubmissionResponse(BaseModel):
     graded_at: datetime | None = None
 
 
+class GradeUpdateRequest(BaseModel):
+    assignment_id: int
+    user_id: int
+    posted_grade: str = Field(min_length=1, max_length=32)
+    reason: str | None = Field(default=None, max_length=500)
+    current_submission: dict | None = None
+
+
+class GradePreviewResponse(BaseModel):
+    action: Literal["update_grade"] = "update_grade"
+    risk_level: Literal["high"] = "high"
+    requires_approval: bool = True
+    irreversible_warning: str
+    rollback_available: bool
+    rollback_message: str
+    summary: str
+    current: dict
+    proposed: dict
+    affected_resources: list[dict]
+
+
+class GradeUpdateResponse(GradePreviewResponse):
+    submitted: bool
+    history_id: int | None = None
+    canvas_submission: SubmissionResponse
+
+
 class ActiveCourseSet(BaseModel):
     local_course_id: int
 
