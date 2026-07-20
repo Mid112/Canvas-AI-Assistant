@@ -113,6 +113,10 @@ _CREATE_QUIZ_FIELD_QUESTIONS = {
     "description": "What should the quiz description or instructions say?",
     "due_date": "When is this quiz due?",
     "points_possible": "How many points is this quiz worth?",
+    "questions": (
+        "What questions should be on this quiz "
+        "(or which question bank should it use)?"
+    ),
 }
 
 
@@ -147,6 +151,10 @@ def _create_quiz_missing_field(proposed: dict) -> str | None:
             return field
     if proposed.get("points_possible") is None:
         return "points_possible"
+    questions = proposed.get("questions") or []
+    banks = proposed.get("question_bank_groups") or []
+    if not questions and not banks:
+        return "questions"
     return None
 
 
@@ -399,7 +407,14 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 time_limit=action.time_limit,
                 quiz_engine=action.quiz_engine,
                 questions=[
-                    QuizQuestionCreate(**question) if isinstance(question, dict) else question
+                    QuizQuestionCreate(
+                        **{
+                            **question,
+                            "answers": question.get("answers") or [],
+                        }
+                    )
+                    if isinstance(question, dict)
+                    else question
                     for question in questions
                 ],
                 question_bank_groups=[

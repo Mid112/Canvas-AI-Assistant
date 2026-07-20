@@ -384,7 +384,7 @@ def test_new_message_batch_supersedes_only_stale_send_message_previews(client):
         '{"action": "intent_preview", "summary": "Create Quiz", '
         '"proposed_action": {"action": "create_assignment", '
         f'"local_course_id": {local_course_id}, "title": "Quiz", '
-        '"description": "Short quiz", "due_date": "2030-01-01T00:00:00", '
+        '"description": "A short quiz on course topics.", "due_date": "2030-01-01T00:00:00", '
         '"points_possible": 10}}'
     )
     create = _chat(client, headers, "create a quiz", create_output, conversation_id=conversation_id)
@@ -423,7 +423,7 @@ def test_new_message_batch_supersedes_only_stale_send_message_previews(client):
     with patch(
         "app.mcp_tools.dispatcher.create_course_assignment",
         new=AsyncMock(return_value=AssignmentResponse(
-            id=1, course_id=local_course_id, name="Quiz", description="Short quiz",
+            id=1, course_id=local_course_id, name="Quiz", description="A short quiz on course topics.",
             due_at="2030-01-01T00:00:00", points_possible=10,
         )),
     ):

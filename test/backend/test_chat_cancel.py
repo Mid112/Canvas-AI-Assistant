@@ -80,7 +80,7 @@ def _create_assignment_preview_output(local_course_id: int, title: str = "Midter
         f'{{"action": "intent_preview", "summary": "Create {title}", '
         f'"proposed_action": {{"action": "create_assignment", '
         f'"local_course_id": {local_course_id}, "title": "{title}", '
-        '"description": "Covers chapters 1-5", "due_date": "2030-01-01T00:00:00", '
+        '"description": "Covers chapters 1 through 5", "due_date": "2030-01-01T00:00:00", '
         '"points_possible": 100}}'
     )
 

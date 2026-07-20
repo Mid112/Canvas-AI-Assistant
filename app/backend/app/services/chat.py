@@ -2681,11 +2681,22 @@ async def handle_chat_message(
     # resolved to more than one distinct message — group 0 was just
     # persisted above through the ordinary single-preview path unchanged;
     # every remaining group still needs its own Message + Workflow row.
+    # Only persist extras when the primary result is an intent_preview;
+    # otherwise log and discard so a clarify/error path cannot silently
+    # drop (or incorrectly keep) orphaned group payloads.
     extra_groups = result.pop("_extra_groups", None)
     if extra_groups:
-        result["additional_previews"] = await _persist_additional_message_previews(
-            db, conversation, user, user_msg, message, extra_groups,
-        )
+        if result.get("intent_preview"):
+            result["additional_previews"] = await _persist_additional_message_previews(
+                db, conversation, user, user_msg, message, extra_groups,
+            )
+        else:
+            logger.error(
+                "Discarding %s _extra_groups because primary chat result "
+                "is not an intent_preview (action=%s)",
+                len(extra_groups),
+                result.get("action"),
+            )
 
     await db.commit()
 
@@ -2791,7 +2802,12 @@ async def handle_modified_action(
     if workflow.status != "pending":
         raise HTTPException(
             status_code=409,
-            detail=f"This action is no longer pending (status: {workflow.status}).",
+            detail=(
+                "This action is no longer pending "
+                f"(status: {workflow.status}). "
+                "It may already have been confirmed or cancelled "
+                "in another tab."
+            ),
         )
 
     current = dict(workflow.proposed_action or {})
@@ -2835,7 +2851,7 @@ async def handle_modified_action(
             int(local_course_id),
             user,
             str(proposed.get("title") or ""),
-            proposed.get("description"),
+            str(proposed.get("description") or ""),
             proposed.get("due_date"),
             proposed.get("points_possible"),
             db,
@@ -2919,7 +2935,12 @@ async def handle_confirmed_action(
     if not await _claim_pending_workflow(db, workflow, "executing"):
         raise HTTPException(
             status_code=409,
-            detail=f"This action is no longer pending (status: {workflow.status}).",
+            detail=(
+                "This action is no longer pending "
+                f"(status: {workflow.status}). "
+                "It may already have been confirmed or cancelled "
+                "in another tab."
+            ),
         )
     await db.commit()
     workflow.status = "executing"
@@ -3115,7 +3136,12 @@ async def handle_cancelled_action(
     if not await _claim_pending_workflow(db, workflow, "cancelled"):
         raise HTTPException(
             status_code=409,
-            detail=f"This action is no longer pending (status: {workflow.status}).",
+            detail=(
+                "This action is no longer pending "
+                f"(status: {workflow.status}). "
+                "It may already have been confirmed or cancelled "
+                "in another tab."
+            ),
         )
     await db.commit()
     workflow.status = "cancelled"

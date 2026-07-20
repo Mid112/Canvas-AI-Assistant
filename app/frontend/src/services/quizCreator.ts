@@ -190,25 +190,112 @@ interface ApproveQuizDraftOptions {
 export async function approveQuizDraft(
   payload: QuizApprovePayload,
   options: ApproveQuizDraftOptions,
-): Promise<void> {
+): Promise<{ id: number; title: string; warnings: string[] }> {
   const request = toQuizCreateBody(payload);
-  const response = await fetch(
-    appendCanvasUrl(
-      `${API_BASE_URL}/canvas/courses/${request.courseId}/quizzes`,
-      options.canvasUrl,
-    ),
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${options.accessToken}`,
-      },
-      body: JSON.stringify(request.quiz),
-    },
+  const createUrl = appendCanvasUrl(
+    `${API_BASE_URL}/canvas/courses/${request.courseId}/quizzes`,
+    options.canvasUrl,
   );
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${options.accessToken}`,
+  };
 
-  if (!response.ok) {
-    throw new QuizCreatorApiError(await parseApiError(response));
+  let response: Response;
+  try {
+    response = await fetch(createUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(request.quiz),
+    });
+  } catch {
+    const recovered = await recoverCreatedQuiz(payload, options);
+    if (recovered) {
+      return recovered;
+    }
+    throw new QuizCreatorApiError(
+      "Network error while creating the quiz. Check Canvas for a duplicate before retrying.",
+    );
+  }
+
+  if (response.ok) {
+    const data = (await response.json()) as {
+      id: number;
+      title: string;
+      warnings?: string[];
+    };
+    return {
+      id: data.id,
+      title: data.title,
+      warnings: data.warnings ?? [],
+    };
+  }
+
+  // 5xx / transport-ish failures may mean Canvas created the quiz but the
+  // response never arrived. Look for a matching quiz before surfacing failure.
+  if (response.status >= 500 || response.status === 0) {
+    const recovered = await recoverCreatedQuiz(payload, options);
+    if (recovered) {
+      return recovered;
+    }
+  }
+
+  throw new QuizCreatorApiError(await parseApiError(response));
+}
+
+async function recoverCreatedQuiz(
+  payload: QuizApprovePayload,
+  options: ApproveQuizDraftOptions,
+): Promise<{ id: number; title: string; warnings: string[] } | null> {
+  try {
+    const listResponse = await fetch(
+      appendCanvasUrl(
+        `${API_BASE_URL}/canvas/courses/${payload.courseId}/quizzes`,
+        options.canvasUrl,
+      ),
+      {
+        headers: { Authorization: `Bearer ${options.accessToken}` },
+      },
+    );
+    if (!listResponse.ok) {
+      return null;
+    }
+    const quizzes = (await listResponse.json()) as Array<{
+      id: number;
+      title: string;
+      due_at?: string | null;
+      points_possible?: number | null;
+      warnings?: string[];
+    }>;
+    const duePrefix = payload.dueDate.slice(0, 10);
+    const match = quizzes.find((quiz) => {
+      if (quiz.title !== payload.name) {
+        return false;
+      }
+      if (
+        payload.pointsPossible != null &&
+        quiz.points_possible != null &&
+        Math.abs(Number(quiz.points_possible) - payload.pointsPossible) > 0.01
+      ) {
+        return false;
+      }
+      if (!quiz.due_at) {
+        return true;
+      }
+      return quiz.due_at.slice(0, 10) === duePrefix;
+    });
+    if (!match) {
+      return null;
+    }
+    return {
+      id: match.id,
+      title: match.title,
+      warnings: match.warnings ?? [
+        "Recovered an existing Canvas quiz that matched this draft after a failed create response.",
+      ],
+    };
+  } catch {
+    return null;
   }
 }
 

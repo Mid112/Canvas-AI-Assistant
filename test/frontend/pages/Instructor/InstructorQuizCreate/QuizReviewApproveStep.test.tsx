@@ -13,7 +13,7 @@ describe("QuizReviewApproveStep", () => {
         courseLabel="CPSC 310"
         draft={{
           name: "Recursion Quiz",
-          description: "Covers base cases",
+          description: "Covers base cases and recursive definitions.",
           dueDate: "2030-12-15T23:59",
           pointsPossible: 10,
           allowedAttempts: 1,
@@ -72,9 +72,9 @@ describe("QuizReviewApproveStep", () => {
         courseLabel="CPSC 310"
         draft={{
           name: "Bank Quiz",
-          description: "Uses the recursion bank",
+          description: "Uses the recursion bank for randomized practice.",
           dueDate: "2030-12-15T23:59",
-          pointsPossible: 10,
+          pointsPossible: 5,
           allowedAttempts: 1,
           timeLimit: null,
           quizEngine: "classic",
@@ -132,13 +132,20 @@ describe("QuizReviewApproveStep", () => {
         courseLabel="CPSC 310"
         draft={{
           name: "Bank Quiz",
-          description: "Uses the recursion bank",
+          description: "Uses the recursion bank for randomized practice.",
           dueDate: "2030-12-15T23:59",
           pointsPossible: 10,
           allowedAttempts: 1,
           timeLimit: null,
           quizEngine: "classic",
-          questions: [],
+          questions: [
+            {
+              questionText: "What is a base case?",
+              questionType: "essay_question",
+              pointsPossible: 5,
+              answers: [],
+            },
+          ],
           questionBankGroups: [
             {
               bankId: 31,

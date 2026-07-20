@@ -50,6 +50,7 @@ from app.services.course_overview import get_course_overview
 from app.services.dashboard import get_instructor_dashboard
 from app.services.preview import build_action_preview
 from app.services.quiz_draft import generate_quiz_draft
+from app.services.quiz_validation import short_answer_new_quiz_warnings
 from app.services.student import get_students
 
 router = APIRouter(prefix="/canvas", tags=["canvas"])
@@ -243,13 +244,20 @@ async def preview_quiz_endpoint(
         if question_total
         else ""
     )
+    metadata = body.model_dump(mode="json")
+    warnings = short_answer_new_quiz_warnings(
+        body.quiz_engine,
+        [question.model_dump() for question in body.questions],
+    )
+    if warnings:
+        metadata["warnings"] = warnings
     preview = build_action_preview(
         "create_quiz",
         (
             f"Create {'New' if body.quiz_engine == 'new_quizzes' else 'Classic'} "
             f"Quiz '{body.title}' in {course.name}{question_note}"
         ),
-        body.model_dump(mode="json"),
+        metadata,
         course_name=course.name,
     )
     return ActionPreviewResponse(**preview)

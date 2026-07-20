@@ -54,6 +54,7 @@ export function QuizReviewApproveStep({
     handleSubmit,
     control,
     setValue,
+    getValues,
     trigger,
     formState: { errors, isValid },
   } = useForm<QuizReviewFormInput, unknown, QuizReviewFormSchema>({
@@ -281,11 +282,21 @@ export function QuizReviewApproveStep({
                     type="button"
                     size="sm"
                     variant="outline"
-                    onClick={() =>
+                    onClick={() => {
                       removeBankGroup(
                         bankGroupFields.map((_, index) => index),
-                      )
-                    }
+                      );
+                      const questionTotal = getValues("questions").reduce(
+                        (sum, question) =>
+                          sum + Number(question.pointsPossible || 0),
+                        0,
+                      );
+                      setValue("pointsPossible", questionTotal || 1, {
+                        shouldValidate: true,
+                        shouldDirty: true,
+                      });
+                      void trigger();
+                    }}
                   >
                     Continue with New Quiz without banks
                   </Button>
@@ -329,17 +340,35 @@ export function QuizReviewApproveStep({
                       disabled={bankGroupFields.some(
                         (group) => group.bankId === bank.id,
                       )}
-                      onClick={() =>
+                      onClick={() => {
+                        const nextPick = Math.max(
+                          1,
+                          Math.min(5, bank.questionCount || 5),
+                        );
                         appendBankGroup({
                           bankId: bank.id,
                           bankName: bank.title,
-                          pickCount: Math.max(
-                            1,
-                            Math.min(5, bank.questionCount || 5),
-                          ),
+                          pickCount: nextPick,
                           questionPoints: 1,
-                        })
-                      }
+                        });
+                        const questionTotal = getValues("questions").reduce(
+                          (sum, question) =>
+                            sum + Number(question.pointsPossible || 0),
+                          0,
+                        );
+                        const bankTotal = getValues("questionBankGroups").reduce(
+                          (sum, group) =>
+                            sum +
+                            Number(group.pickCount || 0) *
+                              Number(group.questionPoints || 0),
+                          0,
+                        );
+                        setValue("pointsPossible", questionTotal + bankTotal, {
+                          shouldValidate: true,
+                          shouldDirty: true,
+                        });
+                        void trigger();
+                      }}
                     >
                       Use {bank.title} ({bank.questionCount})
                     </Button>

@@ -35,7 +35,7 @@ class QuizQuestionDraft(BaseModel):
 
 
 class QuizDraftRequest(BaseModel):
-    prompt: str = Field(min_length=1)
+    prompt: str = Field(min_length=20)
 
 
 class QuizDraftResponse(BaseModel):

@@ -116,6 +116,7 @@ class QuizResponse(BaseModel):
     question_count: int | None = None
     html_url: str | None = None
     quiz_engine: Literal["classic", "new_quizzes"] = "classic"
+    warnings: list[str] = Field(default_factory=list)
 
 
 class QuizCapabilities(BaseModel):

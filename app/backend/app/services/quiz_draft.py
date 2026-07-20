@@ -97,6 +97,13 @@ async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
                     weight_value = 0.0
                 answers.append({"text": answer_text, "weight": weight_value})
             q_type = str(item.get("question_type") or "essay_question")
+            if q_type not in {
+                "multiple_choice_question",
+                "true_false_question",
+                "short_answer_question",
+                "essay_question",
+            }:
+                q_type = "essay_question"
             points = item.get("points_possible")
             try:
                 points_value = float(points) if points is not None else 1.0
@@ -105,7 +112,7 @@ async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
             questions.append(
                 QuizQuestionDraft(
                     question_text=text,
-                    question_type=q_type,  # type: ignore[arg-type]
+                    question_type=q_type,  # validated against the allowed set above
                     points_possible=points_value,
                     answers=answers,
                 )

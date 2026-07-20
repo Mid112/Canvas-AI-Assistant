@@ -1,16 +1,24 @@
 # app/backend/app/mcp_tools/schemas.py
+import re
 from typing import Literal
 
 from dateutil import parser as date_parser
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
+
+# Numeric slash/dash dates like 07/08/2026 are ambiguous (MDY vs DMY).
+# Leave them untouched so downstream validation asks for an ISO date.
+_AMBIGUOUS_NUMERIC_DATE = re.compile(r"^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$")
 
 
 def _normalize_due_date_str(value: str) -> str:
     """The LLM sometimes emits natural-language dates (e.g. "July 30
     2026") instead of ISO 8601. Normalize anything dateutil can parse
     to ISO so validate_assignment_for_create/_update's fromisoformat
-    check succeeds; leave unparseable input as-is so that check still
-    produces a clean user-facing error instead of this one."""
+    check succeeds; leave unparseable or ambiguous input as-is so that
+    check still produces a clean user-facing error instead of this one."""
+    raw = value.strip() if isinstance(value, str) else value
+    if isinstance(raw, str) and _AMBIGUOUS_NUMERIC_DATE.match(raw):
+        return value
     try:
         return date_parser.parse(value).isoformat()
     except (date_parser.ParserError, ValueError, OverflowError, TypeError):
@@ -127,7 +135,7 @@ class CreateQuizAction(BaseModel):
     action: Literal["create_quiz"] = "create_quiz"
     local_course_id: int
     title: str
-    description: str
+    description: str = Field(min_length=20)
     due_date: str
     points_possible: float | None = None
     allowed_attempts: int | None = 1

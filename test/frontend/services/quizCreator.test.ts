@@ -11,9 +11,9 @@ import {
 const payload = {
   courseId: "3",
   name: "Recursion Quiz",
-  description: "Covers base cases",
+  description: "Covers base cases and recursive definitions.",
   dueDate: "2030-12-15T23:59",
-  pointsPossible: 20,
+  pointsPossible: 5,
   allowedAttempts: 2,
   timeLimit: 30,
   questions: [
@@ -40,7 +40,7 @@ describe("quizCreator", () => {
       new Response(
         JSON.stringify({
           title: "Recursion Quiz",
-          description: "Covers base cases",
+          description: "Covers base cases and recursive definitions.",
           due_at: "2030-12-15T23:59:00Z",
           points_possible: 20,
           allowed_attempts: 2,
@@ -81,7 +81,10 @@ describe("quizCreator", () => {
         ),
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ id: 10 }), { status: 200 }),
+        new Response(
+          JSON.stringify({ id: 10, title: "Recursion Quiz", warnings: [] }),
+          { status: 200 },
+        ),
       );
 
     const preview = await previewQuizDraft(payload, { accessToken: "token" });
@@ -96,6 +99,31 @@ describe("quizCreator", () => {
     expect(previewBody).toEqual(createBody);
     expect(preview.riskLevel).toBe("medium");
     expect(preview.affectedResources[0].type).toBe("quiz");
+  });
+
+  it("recovers a matching quiz when create fails after Canvas may have written", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response("upstream timeout", { status: 502 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: 88,
+              title: "Recursion Quiz",
+              due_at: "2030-12-15T23:59:00Z",
+              points_possible: 5,
+            },
+          ]),
+          { status: 200 },
+        ),
+      );
+
+    await expect(
+      approveQuizDraft(payload, { accessToken: "token" }),
+    ).resolves.toMatchObject({
+      id: 88,
+      title: "Recursion Quiz",
+    });
   });
 
   it("maps Canvas quiz capabilities", async () => {

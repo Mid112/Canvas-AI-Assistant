@@ -10,7 +10,7 @@ def test_create_quiz_preview_reversible_risk_and_resources():
         {
             "action": "create_quiz",
             "title": "Recursion Quiz",
-            "description": "Cover base cases",
+            "description": "Cover base cases and recursive thinking.",
             "due_date": "2030-01-01T00:00:00",
             "points_possible": 25,
             "questions": [

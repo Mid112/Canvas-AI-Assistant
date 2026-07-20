@@ -209,7 +209,7 @@ def test_modify_turn_skips_the_pre_resolver(client):
         '{"action": "intent_preview", "summary": "Create Quiz", '
         '"proposed_action": {"action": "create_assignment", '
         f'"local_course_id": {local_ids["CPSC 310"]}, "title": "Quiz", '
-        '"description": "Short quiz", "due_date": "2030-01-01T00:00:00", '
+        '"description": "A short quiz on course topics.", "due_date": "2030-01-01T00:00:00", '
         '"points_possible": 10}}'
     )
     first, _ = _chat(client, headers, "create a quiz", llm_output)
@@ -222,7 +222,7 @@ def test_modify_turn_skips_the_pre_resolver(client):
         '{"action": "intent_preview", "summary": "Create Quiz (renamed)", '
         '"proposed_action": {"action": "create_assignment", '
         f'"local_course_id": {local_ids["CPSC 310"]}, "title": "Quiz 2", '
-        '"description": "Short quiz", "due_date": "2030-01-01T00:00:00", '
+        '"description": "A short quiz on course topics.", "due_date": "2030-01-01T00:00:00", '
         '"points_possible": 10}}'
     )
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):

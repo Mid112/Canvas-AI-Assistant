@@ -19,11 +19,12 @@ def client():
 
 
 def _quiz_payload(question_count: int = 2) -> dict:
+    question_points = 10
     return {
         "title": "Recursion Quiz",
         "description": "Check understanding of recursive functions.",
         "due_at": "2030-09-01T23:59:00Z",
-        "points_possible": 20,
+        "points_possible": question_points * question_count if question_count else 20,
         "allowed_attempts": 2,
         "time_limit": 30,
         "published": False,
@@ -31,7 +32,7 @@ def _quiz_payload(question_count: int = 2) -> dict:
             {
                 "question_text": f"Question {index + 1}",
                 "question_type": "essay_question",
-                "points_possible": 10,
+                "points_possible": question_points,
                 "answers": [],
             }
             for index in range(question_count)
@@ -58,6 +59,24 @@ def test_new_quiz_multiple_choice_item_preserves_correct_answer():
     assert item["entry"]["scoring_data"]["value"] == (
         item["entry"]["interaction_data"]["choices"][0]["id"]
     )
+
+
+def test_new_quiz_true_false_rejects_ambiguous_weights():
+    with pytest.raises(HTTPException) as exc:
+        _new_quiz_item_payload(
+            QuizQuestionCreate(
+                question_text="Recursion needs a base case?",
+                question_type="true_false_question",
+                points_possible=1,
+                answers=[
+                    {"text": "True", "weight": 0},
+                    {"text": "False", "weight": 0},
+                ],
+            ),
+            1,
+        )
+    assert exc.value.status_code == 422
+    assert "exactly one correct answer" in exc.value.detail
 
 
 def test_quiz_capabilities_reports_new_quizzes_availability(client):
@@ -179,6 +198,7 @@ def test_classic_quiz_can_link_question_bank_group(client):
     headers, local_course_id = register_with_canvas(client, prefix="quizbankgroup")
     payload = {
         **_quiz_payload(question_count=0),
+        "points_possible": 10,
         "quiz_engine": "classic",
         "question_bank_groups": [
             {

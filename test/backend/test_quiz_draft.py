@@ -28,7 +28,7 @@ def test_generate_quiz_draft_success(client):
 
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = (
-        '{"title": "Recursion Quiz", "description": "Cover base cases.", '
+        '{"title": "Recursion Quiz", "description": "Cover base cases and recursion.", '
         '"due_at": null, "points_possible": 20, "allowed_attempts": 2, '
         '"time_limit": 30, "questions": ['
         '{"question_text": "What is a base case?", "question_type": "essay_question", '

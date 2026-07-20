@@ -249,7 +249,7 @@ describe("mapChatReply", () => {
           action: "create_quiz",
           local_course_id: 5,
           title: "Recursion Quiz",
-          description: "Covers base cases",
+          description: "Covers base cases and recursive definitions.",
           due_date: "2030-08-01T12:00:00Z",
           points_possible: 20,
           questions: [],
@@ -276,7 +276,7 @@ describe("mapChatReply", () => {
     ).toMatchObject({
       courseId: 5,
       name: "Recursion Quiz",
-      description: "Covers base cases",
+      description: "Covers base cases and recursive definitions.",
       pointsPossible: 20,
     });
   });

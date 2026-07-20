@@ -193,10 +193,16 @@ async def test_execute_create_quiz_writes_only_after_confirm_path():
     action = CreateQuizAction(
         local_course_id=1,
         title="Recursion Quiz",
-        description="Covers base cases",
+        description="Covers base cases and recursive definitions.",
         due_date="2030-01-01T00:00:00",
         points_possible=10,
-        questions=[],
+        questions=[
+            {
+                "question_text": "What is a base case?",
+                "question_type": "essay_question",
+                "points_possible": 10,
+            }
+        ],
     )
     quiz = SimpleNamespace(id=77, title="Recursion Quiz")
 
@@ -499,7 +505,7 @@ async def test_execute_intent_preview_create_quiz_missing_field_clarifies_once()
             "action": "create_quiz",
             "local_course_id": 1,
             "title": "Quiz 1",
-            "description": "Covers recursion",
+            "description": "Covers recursion concepts in depth.",
             "due_date": "2030-01-01T00:00:00",
         },
     )
@@ -509,7 +515,7 @@ async def test_execute_intent_preview_create_quiz_missing_field_clarifies_once()
     assert result["action"] == "clarify"
     assert "points" in result["question"].lower()
     assert result["partial_plan"]["title"] == "Quiz 1"
-    assert result["partial_plan"]["description"] == "Covers recursion"
+    assert result["partial_plan"]["description"] == "Covers recursion concepts in depth."
 
 
 @pytest.mark.asyncio
@@ -522,9 +528,16 @@ async def test_execute_intent_preview_create_quiz_past_date_clarifies():
             "action": "create_quiz",
             "local_course_id": 1,
             "title": "Quiz 1",
-            "description": "Covers recursion",
+            "description": "Covers recursion concepts in depth.",
             "due_date": "2020-01-01T00:00:00",
             "points_possible": 10,
+            "questions": [
+                {
+                    "question_text": "What is recursion?",
+                    "question_type": "essay_question",
+                    "points_possible": 10,
+                }
+            ],
         },
     )
 

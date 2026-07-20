@@ -57,6 +57,7 @@ from app.schemas.canvas import (
     SubmissionResponse,
     SubmissionStatus,
 )
+from app.services.quiz_validation import short_answer_new_quiz_warnings
 
 logger = logging.getLogger(__name__)
 
@@ -388,7 +389,31 @@ def _quiz_payload_for_canvas(payload: QuizCreate) -> dict:
         "time_limit": payload.time_limit,
         "published": payload.published,
     }
-    return {key: value for key, value in body.items() if value is not None or key in ("description", "published")}
+    # Keep published=False, but never send description:null — Canvas treats
+    # an omitted description as "leave unset", while null can 400 or clear it.
+    return {
+        key: value
+        for key, value in body.items()
+        if value is not None or key == "published"
+    }
+
+
+def _unique_correct_answer(answers: list[dict], *, label: str) -> dict:
+    correct = [
+        answer
+        for answer in answers
+        if float(answer.get("weight", answer.get("answer_weight", 0)) or 0)
+        == 100.0
+    ]
+    if len(correct) != 1:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"{label} must mark exactly one correct answer "
+                "(weight 100) before creating a New Quiz item."
+            ),
+        )
+    return correct[0]
 
 
 def _new_quiz_payload_for_canvas(payload: QuizCreate) -> dict:
@@ -425,8 +450,16 @@ def _new_quiz_item_payload(question, position: int) -> dict:
     }
 
     if question_type == "multiple_choice_question":
+        if len(answers) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"Question {position} multiple-choice items need at least "
+                    "2 answers."
+                ),
+            )
         choices = []
-        weighted_choices: list[tuple[float, str]] = []
+        choice_ids_by_answer: list[str] = []
         for answer_position, answer in enumerate(answers, start=1):
             choice_id = str(uuid4())
             text = str(answer.get("text") or answer.get("answer_text") or "")
@@ -437,30 +470,33 @@ def _new_quiz_item_payload(question, position: int) -> dict:
                     "itemBody": f"<p>{escape(text)}</p>",
                 }
             )
-            weighted_choices.append(
-                (
-                    float(answer.get("weight", answer.get("answer_weight", 0))),
-                    choice_id,
-                )
-            )
-        correct_id = (
-            max(weighted_choices, default=(0, ""), key=lambda item: item[0])[1]
+            choice_ids_by_answer.append(choice_id)
+        _unique_correct_answer(answers, label=f"Question {position}")
+        correct_index = next(
+            index
+            for index, answer in enumerate(answers)
+            if float(answer.get("weight", answer.get("answer_weight", 0)) or 0)
+            == 100.0
         )
         entry.update(
             {
                 "interaction_type_slug": "choice",
                 "interaction_data": {"choices": choices},
-                "scoring_data": {"value": correct_id},
+                "scoring_data": {"value": choice_ids_by_answer[correct_index]},
                 "scoring_algorithm": "Equivalence",
             }
         )
     elif question_type == "true_false_question":
-        correct_answer = max(
-            answers,
-            default={"text": "True", "weight": 100},
-            key=lambda answer: float(
-                answer.get("weight", answer.get("answer_weight", 0))
-            ),
+        if len(answers) != 2:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"Question {position} true/false items must have exactly "
+                    "2 answers."
+                ),
+            )
+        correct_answer = _unique_correct_answer(
+            answers, label=f"Question {position}"
         )
         correct_value = str(
             correct_answer.get("text")
@@ -481,7 +517,8 @@ def _new_quiz_item_payload(question, position: int) -> dict:
     else:
         # Canvas New Quizzes has no direct Classic short-answer equivalent.
         # Preserve the prompt as an instructor-scored essay instead of
-        # inventing a brittle rich-fill-blank expression.
+        # inventing a brittle rich-fill-blank expression. The review UI
+        # warns instructors when short_answer_question is remapped this way.
         entry.update(
             {
                 "interaction_type_slug": "essay",
@@ -615,16 +652,28 @@ async def create_course_quiz(
                     token,
                     canvas_url,
                 )
-        except Exception:
+        except Exception as item_error:
+            cleanup_failed = False
             try:
                 await delete_new_quiz(
                     canvas_course_id, assignment_id, token, canvas_url
                 )
             except Exception:
+                cleanup_failed = True
                 logger.exception(
                     "Failed to clean up incomplete New Quiz assignment_id=%s",
                     assignment_id,
                 )
+            if cleanup_failed:
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=(
+                        "Quiz item creation failed after the New Quiz shell "
+                        f"was created (Canvas assignment id {assignment_id}). "
+                        "Automatic cleanup also failed; delete the incomplete "
+                        "quiz in Canvas, then try again."
+                    ),
+                ) from item_error
             raise
         return QuizResponse(
             id=assignment_id,
@@ -640,6 +689,10 @@ async def create_course_quiz(
             question_count=len(payload.questions),
             html_url=data.get("html_url"),
             quiz_engine="new_quizzes",
+            warnings=short_answer_new_quiz_warnings(
+                "new_quizzes",
+                [question.model_dump() for question in payload.questions],
+            ),
         )
 
     data = await create_quiz(
@@ -696,19 +749,31 @@ async def create_course_quiz(
                 token,
                 canvas_url,
             )
-    except Exception:
+    except Exception as question_error:
         # Canvas creates the quiz before its questions. If any question
         # fails, remove the incomplete draft so the instructor is not left
         # with an orphan that the failed request claimed was never created.
+        cleanup_failed = False
         try:
             await delete_quiz(
                 canvas_course_id, quiz_id, token, canvas_url
             )
         except Exception:
+            cleanup_failed = True
             logger.exception(
                 "Failed to clean up incomplete quiz_id=%s after question error",
                 quiz_id,
             )
+        if cleanup_failed:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=(
+                    "Question creation failed after the quiz shell was created "
+                    f"(Canvas quiz id {quiz_id}). Automatic cleanup also "
+                    "failed; delete the incomplete quiz in Canvas, then try "
+                    "again."
+                ),
+            ) from question_error
         raise
     return QuizResponse(
         id=quiz_id,

@@ -160,7 +160,7 @@ def test_modify_updates_pending_preview_then_confirm(client):
             '{"action": "intent_preview", "summary": "Create Modifiable Exam worth 50", '
             '"proposed_action": {"action": "create_assignment", '
             f'"local_course_id": {local_course_id}, "title": "Modifiable Exam", '
-            '"description": "Covers chapters 1-5", "due_date": "2030-01-01T00:00:00", '
+            '"description": "Covers chapters 1 through 5", "due_date": "2030-01-01T00:00:00", '
             '"points_possible": 50}}'
         ),
         conversation_id=conversation_id,
@@ -265,7 +265,7 @@ def test_assignment_generate_draft_preview(client):
     headers, _ = register_with_canvas(client, prefix="draftprev")
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = (
-        '{"title": "Draft Quiz", "description": "Cover recursion.", '
+        '{"title": "Draft Quiz", "description": "Cover recursion concepts clearly.", '
         '"due_at": null, "points_possible": 20}'
     )
 
