@@ -1,4 +1,5 @@
 import { MessageReplyComposer } from "@/components/messages/MessageReplyComposer";
+import type { MessageReplyPreviewSummary } from "@/components/messages/MessageReplyComposer";
 import { formatAuditTimestamp } from "@/lib/format-audit-timestamp";
 import { cn } from "@/lib/utils";
 import type { MessageThread } from "@/types/messageThread";
@@ -6,9 +7,16 @@ import type { MessageThread } from "@/types/messageThread";
 interface MessageThreadViewProps {
   thread: MessageThread;
   onReply: (body: string) => Promise<void>;
+  onGenerateDraft?: () => Promise<string>;
+  onPreview?: (body: string) => Promise<MessageReplyPreviewSummary>;
 }
 
-export function MessageThreadView({ thread, onReply }: MessageThreadViewProps) {
+export function MessageThreadView({
+  thread,
+  onReply,
+  onGenerateDraft,
+  onPreview,
+}: MessageThreadViewProps) {
   return (
     <div className="space-y-6 rounded-xl border bg-card p-4 md:p-5">
       <header className="space-y-1 border-b border-border/60 pb-4">
@@ -58,7 +66,11 @@ export function MessageThreadView({ thread, onReply }: MessageThreadViewProps) {
         </ul>
       </section>
 
-      <MessageReplyComposer onSend={onReply} />
+      <MessageReplyComposer
+        onSend={onReply}
+        onGenerateDraft={onGenerateDraft}
+        onPreview={onPreview}
+      />
     </div>
   );
 }

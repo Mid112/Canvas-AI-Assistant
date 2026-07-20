@@ -280,4 +280,49 @@ describe("mapChatReply", () => {
       pointsPossible: 20,
     });
   });
+
+  it("seeds the feedback editor from an update_grade preview", () => {
+    const result = mapChatReply(
+      {
+        intent_preview: true,
+        summary: "Update grade for Alex Chen on Recursion Homework.",
+        proposed_action: {
+          action: "update_grade",
+          local_course_id: 5,
+          assignment_id: 44,
+          student_id: 77,
+          assignment_reference: "Recursion Homework",
+          student_reference: "Alex Chen",
+          new_grade: "85",
+          feedback: "Strong work on the base case explanation.",
+        },
+        preview_metadata: {
+          course: "CPSC 310",
+          risk_level: "medium",
+          reversible: true,
+        },
+        pending_message_id: 11,
+      },
+      false,
+      3,
+    );
+
+    expect(result.interpretedAction?.secondaryLink?.label).toBe(
+      "Edit feedback details",
+    );
+    expect(result.interpretedAction?.secondaryLink?.href).toBe(
+      "/instructor/feedback/create",
+    );
+    expect(
+      result.interpretedAction?.secondaryLink?.state?.aiFeedbackDraft,
+    ).toMatchObject({
+      courseId: 5,
+      assignmentId: 44,
+      studentId: 77,
+      assignmentName: "Recursion Homework",
+      studentName: "Alex Chen",
+      newGrade: "85",
+      feedback: "Strong work on the base case explanation.",
+    });
+  });
 });

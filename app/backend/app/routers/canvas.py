@@ -52,6 +52,7 @@ from app.services.canvas import (
 )
 from app.services.course_overview import get_course_overview
 from app.services.dashboard import get_instructor_dashboard
+from app.services.feedback_audit import record_feedback_post_history
 from app.services.feedback_draft import generate_feedback_draft
 from app.services.feedback_validation import validate_feedback_for_post
 from app.services.preview import build_action_preview
@@ -216,7 +217,7 @@ async def post_feedback_endpoint(
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
     db: AsyncSession = Depends(get_db),
 ):
-    await validate_feedback_for_post(
+    course = await validate_feedback_for_post(
         course_id,
         body.assignment_id,
         body.student_id,
@@ -236,6 +237,28 @@ async def post_feedback_endpoint(
         db,
         feedback=body.feedback.strip(),
     )
+    proposed_action = {
+        "action": "update_grade",
+        "local_course_id": course_id,
+        "assignment_id": body.assignment_id,
+        "student_id": body.student_id,
+        "assignment_reference": body.assignment_name,
+        "student_reference": body.student_name,
+        "new_grade": body.new_grade,
+        "feedback": body.feedback,
+    }
+    await record_feedback_post_history(
+        db,
+        current_user,
+        course_id=course_id,
+        course_name=course.name,
+        proposed_action=proposed_action,
+        submission_result=submission,
+        user_prompt=(
+            f"Post feedback for {body.student_name} on {body.assignment_name}"
+        ),
+    )
+    await db.commit()
     return {
         "assignment_id": body.assignment_id,
         "student_id": body.student_id,

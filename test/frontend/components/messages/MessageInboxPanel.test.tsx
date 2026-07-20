@@ -25,6 +25,8 @@ vi.mock("@/services/messageThreads", async (importOriginal) => {
     ...actual,
     fetchMessageThreads: vi.fn(),
     fetchMessageThread: vi.fn(),
+    generateInboxReplyDraft: vi.fn(),
+    previewInboxReply: vi.fn(),
     replyToMessageThread: vi.fn(),
   };
 });
@@ -58,6 +60,14 @@ describe("MessageInboxPanel", () => {
       threads: [summaryThread],
     });
     vi.mocked(messageThreads.fetchMessageThread).mockResolvedValue(baseThread);
+    vi.mocked(messageThreads.generateInboxReplyDraft).mockResolvedValue(
+      "Thanks for checking in.",
+    );
+    vi.mocked(messageThreads.previewInboxReply).mockResolvedValue({
+      summary: "Send a reply to 1 student in the thread.",
+      recipientCount: 1,
+      bodyPreview: "Glad you submitted on time.",
+    });
     vi.mocked(messageThreads.replyToMessageThread).mockImplementation(
       async (_token, _threadId, body) => ({
         ...baseThread,
@@ -90,11 +100,23 @@ describe("MessageInboxPanel", () => {
 
     const replyInput = screen.getByLabelText("Reply to students");
     await user.type(replyInput, "Glad you submitted on time.");
-    await user.click(screen.getByRole("button", { name: "Send reply" }));
+    await user.click(screen.getByRole("button", { name: "Review & send" }));
+
+    expect(
+      await screen.findByRole("dialog", { name: "Send this reply?" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Confirm & Send" }));
 
     expect(
       await screen.findAllByText("Glad you submitted on time."),
     ).not.toHaveLength(0);
+    expect(messageThreads.previewInboxReply).toHaveBeenCalledWith(
+      "token",
+      summaryThread.id,
+      "Glad you submitted on time.",
+      1,
+      "http://localhost:3000",
+    );
     expect(messageThreads.replyToMessageThread).toHaveBeenCalledWith(
       "token",
       summaryThread.id,
@@ -102,6 +124,47 @@ describe("MessageInboxPanel", () => {
       1,
       "http://localhost:3000",
     );
+  });
+
+  it("generates an AI reply draft for the selected thread", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <MessageInboxPanel courseId={1} />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Reminder: Programming Assignment 3 Due Friday");
+    await user.click(screen.getByRole("button", { name: "Generate draft" }));
+
+    expect(
+      await screen.findByDisplayValue("Thanks for checking in."),
+    ).toBeInTheDocument();
+    expect(messageThreads.generateInboxReplyDraft).toHaveBeenCalledWith(
+      "token",
+      summaryThread.id,
+      1,
+      "http://localhost:3000",
+    );
+  });
+
+  it("filters inbox threads by search query", async () => {
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter>
+        <MessageInboxPanel courseId={1} />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Reminder: Programming Assignment 3 Due Friday");
+    await user.type(
+      screen.getByPlaceholderText("Search subject, preview, or student..."),
+      "does-not-match",
+    );
+
+    expect(
+      await screen.findByText("No messages match your search or filters."),
+    ).toBeInTheDocument();
   });
 
   it("switches scope to all courses and reloads", async () => {
