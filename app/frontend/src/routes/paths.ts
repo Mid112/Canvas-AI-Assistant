@@ -20,6 +20,7 @@ export const paths = {
       "/instructor/courses/:localCourseId/assignments/:assignmentId/edit",
     assignmentCreate: "/instructor/assignments/create",
     quizCreate: "/instructor/quizzes/create",
+    feedbackCreate: "/instructor/feedback/create",
     courseAnalytics: "/instructor/courses/:courseId/analytics",
     assistant: "/instructor/assistant",
     dryRunPreview: "/instructor/actions/preview",
@@ -146,6 +147,15 @@ export interface AiActionDraftLocationState {
       pointsPossible: number;
       answers: Array<{ text: string; weight: number }>;
     }>;
+  };
+  aiFeedbackDraft?: {
+    courseId?: number;
+    assignmentId?: number;
+    studentId?: number;
+    assignmentName?: string;
+    studentName?: string;
+    newGrade?: string;
+    feedback?: string;
   };
 }
 

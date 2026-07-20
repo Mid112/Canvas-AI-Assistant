@@ -49,6 +49,10 @@ from app.services.canvas import CanvasTokenRequiredError, sync_courses_if_stale
 from app.services.llm.base import LLMAdapter
 from app.services.llm.json_extraction import extract_json_object
 from app.services.llm.llm_setting import get_llm_adapter
+from app.services.llm.student_context import (
+    format_llm_student_listing,
+    llm_student_candidates,
+)
 from app.services.quiz_validation import validate_quiz_for_create
 from app.services.resolved_set import (
     compute_submissions_by_status,
@@ -1085,11 +1089,7 @@ async def _resolve_students_via_llm(
         return {}
     result: dict[str, int | None] = dict.fromkeys(references)
     try:
-        listing = "\n".join(
-            f"- canvas_user_id={c.get('user_id')}, name={c.get('name')!r}, "
-            f"login_id={c.get('login_id')!r}, email={c.get('email')!r}"
-            for c in candidates
-        )
+        listing = format_llm_student_listing(candidates)
         prompt = (
             f"CANDIDATES:\n{listing}\n\n"
             f"References to resolve: {references}\n"
@@ -1179,15 +1179,7 @@ async def _run_update_grade_chain(
             execute_tool(db, user, fetch_action),
         )
         roster = roster_result.get("students", [])
-        candidates = [
-            {
-                "user_id": int(student["canvas_user_id"]),
-                "name": student.get("name"),
-                "login_id": student.get("login_id"),
-                "email": None,
-            }
-            for student in roster
-        ]
+        candidates = llm_student_candidates(roster)
         student_id = (
             await _resolve_students_via_llm(
                 candidates, [action.student_reference], user_message, adapter
@@ -1255,15 +1247,13 @@ async def _resolve_recipient_directives(
     can't be confidently resolved after both passes."""
     references = [d.student_reference for d in directives]
     known: dict[int, dict] = {
-        int(s["canvas_user_id"]): {
-            "user_id": int(s["canvas_user_id"]),
-            "name": s.get("name"),
-            "login_id": s.get("login_id"),
-            "email": None,
-        }
-        for s in roster
+        int(student["canvas_user_id"]): candidate
+        for student in roster
+        for candidate in llm_student_candidates([student])
     }
-    resolved = await _resolve_students_via_llm(list(known.values()), references, user_message, adapter)
+    resolved = await _resolve_students_via_llm(
+        list(known.values()), references, user_message, adapter
+    )
 
     unresolved = [ref for ref in references if resolved.get(ref) is None]
     if unresolved:
@@ -1273,11 +1263,15 @@ async def _resolve_recipient_directives(
             {"local_course_id": course.id, "scope": "all_assignments"},
             get_submission_derived_students(course, user, course.canvas_url),
         )
-        new_candidates = [s for s in fallback_students if s["user_id"] not in known]
+        new_candidates = llm_student_candidates(
+            [student for student in fallback_students if student["user_id"] not in known]
+        )
         for student in new_candidates:
             known[student["user_id"]] = student
         if new_candidates:
-            fallback_resolved = await _resolve_students_via_llm(new_candidates, unresolved, user_message, adapter)
+            fallback_resolved = await _resolve_students_via_llm(
+                new_candidates, unresolved, user_message, adapter
+            )
             for ref, candidate_id in fallback_resolved.items():
                 if candidate_id is not None:
                     resolved[ref] = candidate_id

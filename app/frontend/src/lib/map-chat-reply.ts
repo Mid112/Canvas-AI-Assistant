@@ -254,6 +254,31 @@ function buildInterpretedAction(
     };
   }
 
+  if (actionName === "update_grade") {
+    interpretedAction.secondaryLink = {
+      label: "Edit feedback details",
+      href: paths.instructor.feedbackCreate,
+      state: {
+        returnTo: paths.instructor.assistant,
+        aiFeedbackDraft: {
+          courseId,
+          assignmentId:
+            typeof proposed.assignment_id === "number"
+              ? proposed.assignment_id
+              : undefined,
+          studentId:
+            typeof proposed.student_id === "number"
+              ? proposed.student_id
+              : undefined,
+          assignmentName: readString(proposed.assignment_reference) ?? undefined,
+          studentName: readString(proposed.student_reference) ?? undefined,
+          newGrade: readString(proposed.new_grade) ?? undefined,
+          feedback: readString(proposed.feedback) ?? undefined,
+        },
+      },
+    };
+  }
+
   if (courseId != null && actionName.includes("submission")) {
     interpretedAction.primaryLink = {
       label: "Open course analytics",
