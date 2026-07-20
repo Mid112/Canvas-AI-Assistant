@@ -286,7 +286,9 @@ export function QuizReviewApproveStep({
                       removeBankGroup(
                         bankGroupFields.map((_, index) => index),
                       );
-                      const questionTotal = getValues("questions").reduce(
+                      const questionTotal = (
+                        getValues("questions") ?? []
+                      ).reduce(
                         (sum, question) =>
                           sum + Number(question.pointsPossible || 0),
                         0,
@@ -351,12 +353,16 @@ export function QuizReviewApproveStep({
                           pickCount: nextPick,
                           questionPoints: 1,
                         });
-                        const questionTotal = getValues("questions").reduce(
+                        const questionTotal = (
+                          getValues("questions") ?? []
+                        ).reduce(
                           (sum, question) =>
                             sum + Number(question.pointsPossible || 0),
                           0,
                         );
-                        const bankTotal = getValues("questionBankGroups").reduce(
+                        const bankTotal = (
+                          getValues("questionBankGroups") ?? []
+                        ).reduce(
                           (sum, group) =>
                             sum +
                             Number(group.pickCount || 0) *
