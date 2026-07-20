@@ -64,6 +64,7 @@ export function AssistantMessage({
         {showPendingControls ? (
           <PendingActionControls
             status={message.pendingActionStatus}
+            risk={message.interpretedAction?.risk}
             isLoading={isResolvingPendingAction}
             error={pendingActionError}
             onConfirm={

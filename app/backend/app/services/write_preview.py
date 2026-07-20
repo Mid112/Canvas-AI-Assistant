@@ -3,6 +3,7 @@ from datetime import datetime
 
 from app.mcp_tools.schemas import is_reversible
 from app.models.course import Course
+from app.services.risk import classify_action_risk
 
 
 def generate_write_preview(proposed_action: dict, course: Course) -> dict:
@@ -43,7 +44,10 @@ def _reversibility_fields(action_type: str) -> dict:
     """Shared #581 metadata every write preview carries — single source
     of truth is is_reversible(), never hand-duplicated per builder."""
     reversible = is_reversible(action_type)
-    fields = {"reversible": reversible}
+    fields = {
+        "reversible": reversible,
+        "risk_metadata": classify_action_risk(action_type),
+    }
     if not reversible:
         fields["reversibility_note"] = "This action cannot be undone once submitted."
     return fields
@@ -76,7 +80,7 @@ def _preview_create_assignment(course: Course, params: dict) -> dict:
             {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
             {"type": "assignment", "id": None, "name": title.strip(), "status": "created"},
         ],
-        **_reversibility_fields("create_assignment"),
+        **_preview_safety_fields("create_assignment", params),
     }
 
 
@@ -135,7 +139,7 @@ def _preview_update_assignment(course: Course, params: dict) -> dict:
                 "changed_fields": list(changes.keys()),
             },
         ],
-        **_reversibility_fields("update_assignment"),
+        **_preview_safety_fields("update_assignment", params),
     }
 
 
@@ -182,7 +186,7 @@ def _preview_send_message(course: Course, params: dict) -> dict:
             {"type": resource_type, "id": None, "name": subject.strip(), "status": "created"},
         ],
         "audience": audience,
-        **_reversibility_fields("send_message"),
+        **_preview_safety_fields("send_message", params),
     }
     # message_index/message_count are attached separately by the caller
     # (services/chat.py's _build_grouped_send_message_result) once it knows
@@ -218,7 +222,7 @@ def _preview_update_grade(course: Course, params: dict) -> dict:
                 "changed_fields": ["grade"],
             },
         ],
-        **_reversibility_fields("update_grade"),
+        **_preview_safety_fields("update_grade", params),
     }
 
 
@@ -230,7 +234,7 @@ def _preview_generic(course: Course, params: dict) -> dict:
         "metadata": {k: v for k, v in params.items() if k != "action"},
         "summary": f"Perform '{action_type}' on {course.name}.",
         "affected_resources": [],
-        **_reversibility_fields(action_type),
+        **_preview_safety_fields(action_type, params),
     }
 
 
@@ -241,3 +245,11 @@ def _format_due_date(due_date: str | None) -> str:
         return datetime.fromisoformat(due_date).strftime("%B %d, %Y at %I:%M %p")
     except ValueError:
         return due_date
+
+
+def _preview_safety_fields(action_type: str, params: dict) -> dict:
+    # Keep legacy reversibility fields stable while enriching the same
+    # preview payload with the risk workflow metadata consumed by chat UI.
+    fields = _reversibility_fields(action_type)
+    fields["risk_metadata"] = classify_action_risk(action_type, params)
+    return fields

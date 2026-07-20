@@ -36,6 +36,45 @@ describe("PendingActionControls", () => {
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
+  it("requires typed confirmation for high-risk proposals", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+
+    render(
+      <PendingActionControls
+        risk={{
+          risk_level: "high",
+          classification: "irreversible",
+          requires_confirmation: true,
+          confirmation_requirement: {
+            type: "strong",
+            label: "Strong confirmation",
+            description: "Type CONFIRM before executing this high-risk action.",
+            confirmation_phrase: "CONFIRM",
+          },
+          destructive: true,
+          reversible: false,
+          undoable: false,
+          can_undo: false,
+          reversibility: "This action cannot be undone once submitted.",
+          warnings: [],
+          technical_details: {},
+        }}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    const confirmButton = screen.getByRole("button", { name: "Confirm" });
+    expect(confirmButton).toBeDisabled();
+
+    await user.type(screen.getByLabelText("Type CONFIRM to confirm"), "CONFIRM");
+    expect(confirmButton).toBeEnabled();
+    await user.click(confirmButton);
+
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
   // Verifies: Shows status text after the proposal is resolved.
   it("shows status text after the proposal is resolved", () => {
     const { rerender } = render(

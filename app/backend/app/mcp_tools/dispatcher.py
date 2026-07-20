@@ -31,6 +31,7 @@ from app.services.canvas_status import CanvasWriteResult
 from app.services.course_access import get_owned_course_or_404
 from app.services.llm.json_extraction import extract_json_object as _extract_json
 from app.services.message_validation import validate_message_for_send
+from app.services.risk import classify_action_risk
 from app.services.student import get_students
 from app.services.write_preview import generate_write_preview
 
@@ -512,6 +513,10 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 # action is course-scoped — otherwise the UI has nothing to
                 # show but a generic "Active course" placeholder.
                 preview_metadata = {"action": proposed.get("action")}
+                if nested_action_name:
+                    preview_metadata["risk_metadata"] = classify_action_risk(
+                        nested_action_name, proposed
+                    )
                 try:
                     read_local_course_id = int(proposed.get("local_course_id", 0))
                 except (TypeError, ValueError):
