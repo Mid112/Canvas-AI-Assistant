@@ -53,8 +53,11 @@ export function FeedbackDescribeStep({
   isLoadingCourses = false,
   onGenerate,
 }: FeedbackDescribeStepProps) {
-  const [assignments, setAssignments] = useState<FeedbackAssignmentOption[]>([]);
-  const [students, setStudents] = useState<FeedbackStudentOption[]>([]);
+  const [loadedContext, setLoadedContext] = useState<{
+    courseId: number;
+    assignments: FeedbackAssignmentOption[];
+    students: FeedbackStudentOption[];
+  } | null>(null);
   const [contextError, setContextError] = useState<string | null>(null);
   const [isLoadingContext, setIsLoadingContext] = useState(false);
 
@@ -72,15 +75,23 @@ export function FeedbackDescribeStep({
 
   const courseId = useWatch({ control, name: "courseId", defaultValue: defaultValues.courseId });
   const promptValue = useWatch({ control, name: "prompt", defaultValue: defaultValues.prompt });
+  const numericCourseId = courseId ? Number(courseId) : null;
+  const assignments =
+    numericCourseId != null && loadedContext?.courseId === numericCourseId
+      ? loadedContext.assignments
+      : [];
+  const students =
+    numericCourseId != null && loadedContext?.courseId === numericCourseId
+      ? loadedContext.students
+      : [];
 
   useEffect(() => {
     if (!courseId || !accessToken) {
-      setAssignments([]);
-      setStudents([]);
       return;
     }
 
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- kick off async course context load
     setIsLoadingContext(true);
     setContextError(null);
 
@@ -92,18 +103,17 @@ export function FeedbackDescribeStep({
         if (cancelled) {
           return;
         }
-        setAssignments(
-          assignmentRows.map((assignment) => ({
+        setLoadedContext({
+          courseId: Number(courseId),
+          assignments: assignmentRows.map((assignment) => ({
             id: assignment.id,
             name: assignment.name,
           })),
-        );
-        setStudents(
-          studentRows.map((student) => ({
+          students: studentRows.map((student) => ({
             id: Number(student.canvas_user_id),
             name: student.name,
           })),
-        );
+        });
       })
       .catch((error: unknown) => {
         if (cancelled) {
