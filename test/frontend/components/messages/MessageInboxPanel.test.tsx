@@ -135,6 +135,7 @@ describe("MessageInboxPanel", () => {
     );
 
     await screen.findByText("Reminder: Programming Assignment 3 Due Friday");
+    expect(await screen.findByLabelText("Conversation")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Generate draft" }));
 
     expect(
