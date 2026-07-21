@@ -2178,10 +2178,15 @@ field out of proposed_action entirely, since anything omitted is
 preserved automatically.
 
 RESOLVING A STUDENT AND ASSIGNMENT FOR update_grade:
-update_grade is high risk and must go through preview/approval. If you
-already have both real IDs from earlier in the conversation, propose
-update_grade with assignment_id, student_id, and new_grade. Otherwise
-leave unknown IDs unset and provide the user's own words as
+update_grade handles both grade changes and assignment-specific submission
+feedback. A feedback-only request such as "leave feedback on ggg for Coin:
+work changes" should use update_grade with the feedback in reason and an
+empty new_grade; do not use send_message for feedback tied to a specific
+assignment/submission. Grade changes are high risk; feedback-only is low
+risk but still previews in the Grades tab. If you already have both real
+IDs from earlier in the conversation, propose update_grade with
+assignment_id, student_id, and new_grade (blank for feedback-only).
+Otherwise leave unknown IDs unset and provide the user's own words as
 assignment_reference and/or student_reference, then propose update_grade
 directly (not fetch_assignments, not fetch_submissions, and not
 intent_preview). The app resolves the assignment and student from real
@@ -2198,6 +2203,8 @@ MESSAGING STUDENTS:
 send_message can post a public class announcement, send a private Canvas
 message to specific students, or both in the same turn — these have very
 different audiences, so never guess which one the user means.
+Use send_message for general communication that is not tied to a specific
+assignment submission or gradebook feedback.
 
 If it's genuinely unclear whether the user wants a private message to
 specific people or a public announcement (e.g. "message my students" with
