@@ -523,7 +523,6 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       appendAssistantMessage,
       conversationId,
       notifyCoursesChanged,
-      onConversationChange,
       refreshActiveCourse,
       refreshDashboard,
     ],

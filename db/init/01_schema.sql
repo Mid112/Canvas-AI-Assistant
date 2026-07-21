@@ -411,12 +411,13 @@ CREATE TABLE system_settings (
 CREATE TABLE llm_response_cache (
     id          SERIAL PRIMARY KEY,
     user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    cache_key   VARCHAR(64) NOT NULL UNIQUE,
+    cache_key   VARCHAR(64) NOT NULL,
     provider    VARCHAR(64) NOT NULL,
     model       VARCHAR(255) NOT NULL,
     response    TEXT NOT NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    expires_at  TIMESTAMPTZ NOT NULL
+    expires_at  TIMESTAMPTZ NOT NULL,
+    CONSTRAINT uq_llm_response_cache_key UNIQUE (cache_key)
 );
 
 CREATE INDEX idx_llm_response_cache_user_id ON llm_response_cache(user_id);
@@ -491,4 +492,5 @@ INSERT INTO schema_migrations (filename) VALUES
     ('020_course_cache_columns.sql'),
     ('021_llm_response_cache.sql'),
     ('022_instructor_llm_connections.sql'),
-    ('023_deferred_assistant_requests.sql');
+    ('023_deferred_assistant_requests.sql'),
+    ('024_llm_response_cache_constraint_name.sql');

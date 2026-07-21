@@ -95,8 +95,11 @@ async def store_cached_response(
             created_at=now,
             expires_at=expires_at,
         )
+        # Prefer column inference over a named constraint so this works when the
+        # table was created from db/init (UNIQUE without CONSTRAINT name) or from
+        # SQLAlchemy metadata (named uq_llm_response_cache_key).
         .on_conflict_do_update(
-            constraint="uq_llm_response_cache_key",
+            index_elements=["cache_key"],
             set_={
                 "provider": provider,
                 "model": model,

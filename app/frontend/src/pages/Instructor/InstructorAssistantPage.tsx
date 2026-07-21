@@ -198,17 +198,22 @@ export function InstructorAssistantPage() {
   }, [accessToken, user]);
 
   // After Canvas is connected, restore any locally cached deferred draft into
-  // the composer so the instructor can resume without retyping.
+  // the composer so the instructor can resume without retyping. Schedule
+  // setState asynchronously — synchronous setState in an effect body trips
+  // react-hooks/set-state-in-effect.
   useEffect(() => {
     if (!user?.has_canvas_token) return;
     const draft = getStoredDeferredDraft(user.id);
     if (!draft?.message) return;
-    setPendingDraft(draft.message);
-    if (draft.conversationId !== undefined) {
-      setPendingConversationId(draft.conversationId);
-    }
     clearStoredDeferredDraft(user.id);
-    setChatSessionKey((current) => current + 1);
+    const timer = window.setTimeout(() => {
+      setPendingDraft(draft.message);
+      if (draft.conversationId !== undefined) {
+        setPendingConversationId(draft.conversationId);
+      }
+      setChatSessionKey((current) => current + 1);
+    }, 0);
+    return () => window.clearTimeout(timer);
   }, [user?.has_canvas_token, user?.id]);
 
   const handleModelProviderChange = useCallback(
