@@ -10,6 +10,10 @@
 - **23/5 (Saturday):** Not yet using Clockify – Estimated 1.5 hours
 - **24/5 (Sunday):** Not yet using Clockify – Estimated 3.5 hours
 
+
+<img width="1220" height="558" alt="Screenshot 2026-07-21 at 10 34 13 AM" src="https://github.com/user-attachments/assets/6117d000-e5a9-4ee6-83d9-07b9997a7ae0" />
+
+
 ## Current Tasks (Provide sufficient detail)
 
 ### #1: Attended team meeting on Thursday
