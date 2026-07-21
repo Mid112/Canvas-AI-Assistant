@@ -937,10 +937,12 @@ Total: 9 hours
 ### 1: Team Meeting + Cycle 17 Write-Up Merge (Friday, 17/7)
 - Attended the team meeting, 9:44AM–12:25PM (2h41m)
 - Same morning: closed out the Cycle 17 report (`add Cycle 17 Bao's log`, `update`, `Update Bao's log`) and opened/merged **PR #1089** (`logs-bao` → `develop`) at 11:35, landing the Cycle 17 write-up
+<img width="1124" height="66" alt="Screenshot 2026-07-21 113530" src="https://github.com/user-attachments/assets/cd2eaeaf-f469-40c1-9001-4fb7508d5fa6" />
 
 ### 2: Feature 9 — System Health Monitoring (Sunday, 19/7)
 - Started implementation on `feature/system-health-monitoring`: new `services/health.py`, `services/ai_health.py`, models `health_check.py` and `ai_call_health.py`, schema `schemas/health.py`, and admin router wiring for surfacing system/AI-call health to admins
 - The work landed as a single commit, `Add new system health monitoring for admin`, the morning of 21/7 rather than within this window — same gap Cycle 17 flagged for its own Wednesday entry: Sunday's clocked time isn't matched 1:1 by a same-day commit, only by the follow-through the following session
+<img width="1121" height="62" alt="Screenshot 2026-07-21 113534" src="https://github.com/user-attachments/assets/5f3ed0d8-e85d-463e-a5da-5ccdd772e7fa" />
 
 ### 3: PR Review — Quiz, Feedback Workflow, and LLM Provider Switching (Monday night, 20/7)
 - Reviewed three open PRs against `develop` using the branch-diff review pipeline (diffing each against its true merge-base, not a stale copy of `develop`):
@@ -949,6 +951,7 @@ Total: 9 hours
   - **PR #1252** (`feature/llm-provider-switching-cache`) — admin LLM provider defaults with failover, per-instructor encrypted connections, response caching, and limited-mode Canvas gating. Flagged an unhandled `ValueError` on an invalid provider ID and a "Resume N requests" button that only resumes one
 - Each review went through a find → draft-checklist → double-check pipeline, verifying every cited file/line against the actual code before treating it as final
 - Note: the saved review checklists (`docs/reviews/pr-1249-review.md`, `pr-1251-review.md`, `pr-1252-review.md`) aren't present in this branch's working tree as of writing this entry — worth re-saving or re-generating from this session if the team wants them on record
+<img width="1126" height="63" alt="Screenshot 2026-07-21 113539" src="https://github.com/user-attachments/assets/09396241-b5cb-4068-b708-0222a4f99e25" />
 
 ---
 
