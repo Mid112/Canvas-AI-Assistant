@@ -1052,7 +1052,7 @@ async def _resolve_grade_target(
             student_id = None
 
     if bulk_update:
-        return _build_grouped_grade_update_result(
+        return _build_grade_handoff_result(
             course,
             assignment_id,
             submissions,
@@ -1092,53 +1092,38 @@ async def _resolve_grade_target(
         }
 
     selected = next(s for s in submissions if _coerce_int(s.get("user_id")) == student_id)
-    selected_snapshot = json.loads(_json_dumps(selected))
-    proposed_action = {
-        "action": "update_grade",
-        "local_course_id": course.id,
-        "assignment_id": assignment_id,
-        "student_id": student_id,
-        "new_grade": action.new_grade,
-        "reason": action.reason,
-        "current_submission": selected_snapshot,
-    }
-    preview_metadata = generate_write_preview(proposed_action, course)
-    return {
-        "action": "intent_preview",
-        "intent_preview": True,
-        "summary": preview_metadata["summary"],
-        "proposed_action": proposed_action,
-        "preview_metadata": preview_metadata,
-    }
+    return _build_grade_handoff_result(
+        course,
+        assignment_id,
+        [selected],
+        action.new_grade,
+        action.reason,
+    )
 
 
-def _build_grouped_grade_update_result(
+def _build_grade_handoff_result(
     course: Course,
     assignment_id: int,
     submissions: list[dict],
     new_grade: str,
     reason: str | None,
 ) -> dict:
-    entries = []
-    for index, submission in enumerate(submissions):
-        student_id = _coerce_int(submission.get("user_id"))
-        if student_id is None:
-            continue
-        proposed_action = {
-            "action": "update_grade",
-            "local_course_id": course.id,
-            "assignment_id": assignment_id,
-            "student_id": student_id,
-            "new_grade": new_grade,
-            "reason": reason,
-            "current_submission": json.loads(_json_dumps(submission)),
-        }
-        preview_metadata = generate_write_preview(proposed_action, course)
-        preview_metadata["grade_index"] = index + 1
-        preview_metadata["grade_count"] = len(submissions)
-        entries.append({"proposed_action": proposed_action, "preview_metadata": preview_metadata})
+    """Return a chat response that opens the dedicated Grades tab.
 
-    if not entries:
+    The resolver has already fetched submissions through the normal Canvas read
+    path, so this function only serializes the resolved ids and draft grade.
+    The frontend then previews/submits from the Grades tab, reusing the same
+    high-risk approval workflow for single-student and bulk changes.
+    """
+    student_ids = []
+    for submission in submissions:
+        # Canvas submissions should have user_id, but keep the handoff robust
+        # around malformed rows so one bad snapshot does not break all targets.
+        student_id = _coerce_int(submission.get("user_id"))
+        if student_id is not None:
+            student_ids.append(student_id)
+
+    if not student_ids:
         return {
             "action": "clarify",
             "clarify": True,
@@ -1153,17 +1138,46 @@ def _build_grouped_grade_update_result(
             },
         }
 
-    primary = entries[0]
-    result = {
-        "action": "intent_preview",
-        "intent_preview": True,
-        "summary": primary["preview_metadata"]["summary"],
-        "proposed_action": primary["proposed_action"],
-        "preview_metadata": primary["preview_metadata"],
+    student_count = len(student_ids)
+    assignment_label = f'assignment "{assignment_id}"'
+    # Keep the assistant bubble brief; the action card carries the actual link
+    # and the Grades tab carries the detailed warnings/confirmation state.
+    message = (
+        f"I found {student_count} student{'s' if student_count != 1 else ''} for "
+        f"{course.name}. Open the Grades tab to review the Canvas preview, warnings, "
+        "and approval step before anything is submitted."
+    )
+    return {
+        "action": "respond",
+        "message": message,
+        # Grade updates all use the dedicated Grades tab approval flow. That
+        # keeps chat from creating many independent preview cards while still
+        # preserving the resolver work already done from Canvas-fetched data.
+        "grade_handoff": {
+            "local_course_id": course.id,
+            "course_name": course.name,
+            "assignment_id": assignment_id,
+            "assignment_label": assignment_label,
+            "student_ids": student_ids,
+            "student_count": student_count,
+            "new_grade": new_grade,
+            "reason": reason,
+        },
     }
-    if len(entries) > 1:
-        result["_extra_groups"] = entries[1:]
-    return result
+
+
+def _build_grouped_grade_update_result(
+    course: Course,
+    assignment_id: int,
+    submissions: list[dict],
+    new_grade: str,
+    reason: str | None,
+) -> dict:
+    # Compatibility wrapper for older tests/imports. Bulk grade updates now use
+    # the same handoff shape as single-student updates.
+    return _build_grade_handoff_result(
+        course, assignment_id, submissions, new_grade, reason
+    )
 
 
 def _grade_partial_plan(action: Any, local_course_id: int, assignment_id: int | None) -> dict:
@@ -2166,18 +2180,19 @@ preserved automatically.
 RESOLVING A STUDENT AND ASSIGNMENT FOR update_grade:
 update_grade is high risk and must go through preview/approval. If you
 already have both real IDs from earlier in the conversation, propose
-intent_preview wrapping update_grade with assignment_id, student_id, and
-new_grade. Otherwise leave unknown IDs unset and provide the user's own
-words as assignment_reference and/or student_reference, then propose
-update_grade directly (not fetch_assignments, not fetch_submissions, and
-not intent_preview). The app resolves the assignment and student from real
-Canvas assignments/submissions server-side and builds the approval preview
-in this same turn. Never invent or guess numeric assignment_id or
-student_id values, and never ask the user for raw Canvas IDs. If the user
-asks to update grades for "everyone", "all students", or "the whole
-class", set student_reference to that exact phrase; the app will resolve
-the real submission list and create one approval preview per student.
-Never call fetch_students for grade updates.
+update_grade with assignment_id, student_id, and new_grade. Otherwise
+leave unknown IDs unset and provide the user's own words as
+assignment_reference and/or student_reference, then propose update_grade
+directly (not fetch_assignments, not fetch_submissions, and not
+intent_preview). The app resolves the assignment and student from real
+Canvas assignments/submissions server-side, then opens the dedicated
+Grades tab with those details prefilled so the instructor can preview and
+approve there. Never invent or guess numeric assignment_id or student_id
+values, and never ask the user for raw Canvas IDs. If the user asks to
+update grades for "everyone", "all students", or "the whole class", set
+student_reference to that exact phrase; the app will resolve the real
+submission list and hand off the full target set to the Grades tab. Never
+call fetch_students for grade updates.
 
 MESSAGING STUDENTS:
 send_message can post a public class announcement, send a private Canvas

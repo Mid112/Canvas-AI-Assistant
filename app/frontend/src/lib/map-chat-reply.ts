@@ -2,6 +2,7 @@ import { formatDueDateForDisplay } from "@/lib/assignment-utils";
 import {
   instructorChatPreviewPath,
   instructorCourseAnalyticsPath,
+  instructorCourseGradesPrefillPath,
   instructorDryRunPreviewPath,
   instructorMessagesPath,
   paths,
@@ -24,6 +25,63 @@ function formatActionLabel(actionName: string): string {
 
 function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function readNumberArray(value: unknown): number[] | undefined {
+  // Backend JSON can arrive from persisted transcripts too, so tolerate
+  // numeric strings while still dropping malformed ids before building links.
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const numbers = value
+    .map((entry) => (typeof entry === "number" ? entry : Number(entry)))
+    .filter((entry) => Number.isFinite(entry));
+  return numbers.length > 0 ? numbers : undefined;
+}
+
+function buildGradeHandoffAction(
+  handoff: Record<string, unknown> | undefined,
+): AssistantResponse["interpretedAction"] | undefined {
+  // update_grade no longer renders as a chat approval card. The resolver still
+  // does the hard work, but the action card opens the dedicated Grades tab so
+  // instructors see the same preview, warnings, and typed approval every time.
+  if (!handoff) {
+    return undefined;
+  }
+
+  const courseId =
+    typeof handoff.local_course_id === "number"
+      ? handoff.local_course_id
+      : undefined;
+  const assignmentId =
+    typeof handoff.assignment_id === "number" ? handoff.assignment_id : undefined;
+  if (courseId === undefined || assignmentId === undefined) {
+    // A half-shaped handoff is safer as plain assistant text than as a broken
+    // navigation button to the wrong course or assignment.
+    return undefined;
+  }
+
+  const studentIds = readNumberArray(handoff.student_ids);
+  return {
+    action: "Update Grade",
+    course: readString(handoff.course_name) ?? "Active course",
+    affectedStudents:
+      typeof handoff.student_count === "number"
+        ? `${handoff.student_count} student${handoff.student_count === 1 ? "" : "s"}`
+        : studentIds
+          ? `${studentIds.length} student${studentIds.length === 1 ? "" : "s"}`
+          : "Selected students",
+    primaryLink: {
+      label: "Open Grades tab",
+      href: instructorCourseGradesPrefillPath(courseId, {
+        assignmentId,
+        studentIds,
+        grade: readString(handoff.new_grade),
+        reason: readString(handoff.reason),
+      }),
+    },
+  };
 }
 
 function buildInterpretedAction(
@@ -196,6 +254,9 @@ export function mapChatReplyToAssistantResponse(
   if (reply.action === "respond") {
     return {
       content: readString(reply.message) ?? "Here's what I found.",
+      interpretedAction: buildGradeHandoffAction(
+        reply.grade_handoff as Record<string, unknown> | undefined,
+      ),
     };
   }
 
