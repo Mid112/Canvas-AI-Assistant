@@ -389,7 +389,10 @@ export function InstructorCourseGradesPage() {
       setPreviews([]);
       setConfirmation("");
       if (!isFeedbackOnly) {
+        // Avoid leaving feedback text behind after a grade write; otherwise the
+        // panel can reclassify the empty grade draft as feedback-only.
         setPostedGrade("");
+        setReason("");
       }
       if (assignmentId) {
         const refreshedSubmissions = await fetchAssignmentSubmissions(

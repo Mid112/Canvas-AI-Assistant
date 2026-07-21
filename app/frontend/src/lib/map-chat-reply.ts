@@ -502,11 +502,12 @@ export function mapChatReplyToAssistantResponse(
 
   if (reply.action === "clarify" || reply.clarify) {
     const acknowledgedFields = readableFields(reply.partial_plan);
+    const acknowledgedText = acknowledgedFields
+      .map((field) => `${field.label.toLowerCase()}: ${field.value}`)
+      .join(", ");
     const acknowledgement =
       acknowledgedFields.length > 0
-        ? `I have ${acknowledgedFields
-            .map((field) => `${field.label.toLowerCase()}: ${field.value}`)
-            .join(", ")}. `
+        ? `I have ${acknowledgedText}${/[.!?]$/.test(acknowledgedText) ? " " : ". "}`
         : "";
     const question =
       readString(reply.question) ??
