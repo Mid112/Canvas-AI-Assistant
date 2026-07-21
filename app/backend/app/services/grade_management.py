@@ -22,6 +22,12 @@ IRREVERSIBLE_GRADE_WARNING = (
 ROLLBACK_MESSAGE = (
     "Rollback is available while the previous grade is recorded in history; restore it manually if needed."
 )
+FEEDBACK_ONLY_WARNING = (
+    "Feedback only is low risk because it adds a Canvas comment without changing the official grade."
+)
+FEEDBACK_ONLY_ROLLBACK_MESSAGE = (
+    "No grade rollback is needed because this action does not change the student's grade."
+)
 
 
 async def _find_submission(
@@ -103,21 +109,31 @@ def _coerce_int(value) -> int | None:
 
 def _build_grade_preview(course, body: GradeUpdateRequest, submission) -> GradePreviewResponse:
     proposed_grade = body.posted_grade.strip()
-    if not proposed_grade:
+    feedback = (body.reason or "").strip()
+    feedback_only = not proposed_grade and bool(feedback)
+    if not proposed_grade and not feedback:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Grade cannot be blank.",
+            detail="Enter a new grade or feedback before previewing.",
         )
     current_grade = submission.grade if submission.grade is not None else "ungraded"
     student_name = submission.student_name or f"Canvas user {submission.user_id}"
-    return GradePreviewResponse(
-        irreversible_warning=IRREVERSIBLE_GRADE_WARNING,
-        rollback_available=True,
-        rollback_message=ROLLBACK_MESSAGE,
-        summary=(
+    summary = (
+        f"Send feedback to {student_name} on assignment {body.assignment_id} "
+        "without changing the grade."
+        if feedback_only
+        else (
             f"Update {student_name}'s grade on assignment {body.assignment_id} "
             f"from {current_grade} to {proposed_grade}."
-        ),
+        )
+    )
+    return GradePreviewResponse(
+        risk_level="low" if feedback_only else "high",
+        requires_approval=not feedback_only,
+        irreversible_warning=FEEDBACK_ONLY_WARNING if feedback_only else IRREVERSIBLE_GRADE_WARNING,
+        rollback_available=not feedback_only,
+        rollback_message=FEEDBACK_ONLY_ROLLBACK_MESSAGE if feedback_only else ROLLBACK_MESSAGE,
+        summary=summary,
         current={
             "grade": submission.grade,
             "score": submission.score,
@@ -127,7 +143,7 @@ def _build_grade_preview(course, body: GradeUpdateRequest, submission) -> GradeP
         },
         proposed={
             "posted_grade": proposed_grade,
-            "reason": body.reason,
+            "reason": feedback or None,
         },
         affected_resources=[
             {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
@@ -136,7 +152,7 @@ def _build_grade_preview(course, body: GradeUpdateRequest, submission) -> GradeP
                 "id": submission.id,
                 "name": student_name,
                 "status": "modified",
-                "changed_fields": ["grade"],
+                "changed_fields": ["feedback"] if feedback_only else ["grade", *([] if not feedback else ["feedback"])],
             },
         ],
     )
@@ -178,13 +194,16 @@ async def submit_grade_update(
         db=db,
     )
     preview = _build_grade_preview(course, body, submission)
+    proposed_grade = body.posted_grade.strip()
+    feedback = (body.reason or "").strip()
+    feedback_only = not proposed_grade and bool(feedback)
     raw = await update_submission_grade(
         int(course.canvas_course_id),
         body.assignment_id,
         body.user_id,
-        body.posted_grade.strip(),
+        proposed_grade or None,
         token,
-        body.reason,
+        feedback or None,
         course.canvas_url,
     )
     updated = _parse_submission(raw)
@@ -195,10 +214,10 @@ async def submit_grade_update(
         student_canvas_id=str(body.user_id),
         previous_grade=submission.grade,
         previous_score=submission.score,
-        new_grade=body.posted_grade.strip(),
-        reason=body.reason,
-        risk_level="high",
-        rollback_available=True,
+        new_grade=proposed_grade or submission.grade or "unchanged",
+        reason=feedback or None,
+        risk_level="low" if feedback_only else "high",
+        rollback_available=not feedback_only,
         canvas_response=json.loads(json.dumps(raw, default=_json_default)),
     )
     db.add(history)
