@@ -290,7 +290,49 @@ describe("mapChatReply", () => {
     });
   });
 
-  it("seeds the feedback editor from an update_grade preview", () => {
+  it("auto-redirects send_message to the Messages compose tab", () => {
+    const result = mapChatReply(
+      {
+        intent_preview: true,
+        summary: "Send deadline reminder to 2 students.",
+        proposed_action: {
+          action: "send_message",
+          local_course_id: 5,
+          subject: "Deadline Reminder",
+          body: "Please submit by Friday.",
+          recipient_canvas_user_ids: [11, 22],
+        },
+        preview_metadata: {
+          course: "CPSC 310",
+          summary: "Deadline reminder",
+          risk_level: "high",
+          reversible: false,
+        },
+        pending_message_id: 12,
+      },
+      false,
+      3,
+    );
+
+    expect(result.pendingMessageId).toBeUndefined();
+    expect(result.navigateTo?.path).toBe("/instructor/messages?tab=compose");
+    expect(result.navigateTo?.state).toMatchObject({
+      returnTo: "/instructor/assistant",
+      aiMessageDraft: {
+        subject: "Deadline Reminder",
+        body: "Please submit by Friday.",
+        courseId: 5,
+        recipientIds: ["11", "22"],
+        conversationId: 3,
+      },
+    });
+    expect(result.interpretedAction?.primaryLink?.label).toBe(
+      "Open message draft",
+    );
+    expect(result.interpretedAction?.secondaryLink).toBeUndefined();
+  });
+
+  it("auto-redirects update_grade to the feedback form", () => {
     const result = mapChatReply(
       {
         intent_preview: true,
@@ -316,22 +358,21 @@ describe("mapChatReply", () => {
       3,
     );
 
-    expect(result.interpretedAction?.secondaryLink?.label).toBe(
-      "Edit feedback details",
-    );
-    expect(result.interpretedAction?.secondaryLink?.href).toBe(
-      "/instructor/feedback/create",
-    );
-    expect(
-      result.interpretedAction?.secondaryLink?.state?.aiFeedbackDraft,
-    ).toMatchObject({
-      courseId: 5,
-      assignmentId: 44,
-      studentId: 77,
-      assignmentName: "Recursion Homework",
-      studentName: "Alex Chen",
-      newGrade: "85",
-      feedback: "Strong work on the base case explanation.",
+    expect(result.pendingMessageId).toBeUndefined();
+    expect(result.navigateTo?.path).toBe("/instructor/feedback/create");
+    expect(result.navigateTo?.state).toMatchObject({
+      returnTo: "/instructor/assistant",
+      aiFeedbackDraft: {
+        courseId: 5,
+        assignmentId: 44,
+        studentId: 77,
+        assignmentName: "Recursion Homework",
+        studentName: "Alex Chen",
+        newGrade: "85",
+        feedback: "Strong work on the base case explanation.",
+        conversationId: 3,
+      },
     });
+    expect(result.interpretedAction).toBeUndefined();
   });
 });

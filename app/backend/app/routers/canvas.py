@@ -215,6 +215,7 @@ async def post_feedback_endpoint(
     body: FeedbackPostRequest,
     current_user: User = Depends(get_instructor_user),
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    conversation_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     course = await validate_feedback_for_post(
@@ -257,6 +258,7 @@ async def post_feedback_endpoint(
         user_prompt=(
             f"Post feedback for {body.student_name} on {body.assignment_name}"
         ),
+        conversation_id=conversation_id,
     )
     await db.commit()
     return {

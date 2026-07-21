@@ -2,11 +2,15 @@ import json
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.models.audit_log import AuditLog
+from app.models.conversation import Conversation
 from app.models.message_draft import MessageDraft
 from app.models.user import User
+from app.models.workflow import Workflow
 from app.schemas.messages import MessageDraftCreate, MessageDraftUpdate
 from app.services.llm.llm_setting import get_llm_adapter
 from app.services.message_validation import validate_message_for_send
@@ -86,6 +90,8 @@ async def send_message_draft(
     user: User,
     draft_id: int,
     canvas_url: str,
+    *,
+    conversation_id: int | None = None,
 ) -> MessageDraft:
     draft = await get_message_draft(db, user, draft_id)
     if draft.status != "draft":
@@ -126,6 +132,66 @@ async def send_message_draft(
         canvas_url,
         db,
         recipient_canvas_user_ids=recipient_canvas_user_ids,
+    )
+
+    linked_conversation_id: int | None = None
+    if conversation_id is not None:
+        conversation = await db.scalar(
+            select(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.user_id == user.id,
+            )
+        )
+        if conversation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found.",
+            )
+        linked_conversation_id = conversation.id
+
+    proposed_action = {
+        "action": "send_message",
+        "local_course_id": draft.course_id,
+        "subject": draft.subject,
+        "body": draft.body,
+        "recipient_canvas_user_ids": recipient_canvas_user_ids,
+    }
+    workflow = Workflow(
+        conversation_id=linked_conversation_id,
+        user_id=user.id,
+        course_id=draft.course_id,
+        source_user_message_id=None,
+        preview_message_id=None,
+        action_name="send_message",
+        user_prompt=draft.subject,
+        proposed_action=proposed_action,
+        affected_resources=[
+            {"type": "course", "id": draft.course_id, "status": "unchanged"},
+            {
+                "type": result.delivery_mode,
+                "id": None,
+                "name": draft.subject,
+                "status": "created",
+            },
+        ],
+        status="executed",
+        executed_at=datetime.now(UTC),
+    )
+    db.add(workflow)
+    await db.flush()
+
+    db.add(
+        AuditLog(
+            user_id=user.id,
+            workflow_id=workflow.id,
+            course_id=draft.course_id,
+            action="send_message",
+            resource_type=result.delivery_mode,
+            resource_id=None,
+            operation="create",
+            status="success",
+            request_payload=proposed_action,
+        )
     )
 
     draft.status = "sent"

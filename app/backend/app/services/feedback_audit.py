@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.audit_log import AuditLog
@@ -22,15 +23,26 @@ async def record_feedback_post_history(
     proposed_action: dict,
     submission_result: dict,
     user_prompt: str,
+    conversation_id: int | None = None,
 ) -> Workflow:
     """Persist an executed update_grade workflow for direct feedback posts."""
-    conversation = Conversation(
-        user_id=user.id,
-        course_id=course_id,
-        course_name=course_name,
-    )
-    db.add(conversation)
-    await db.flush()
+    conversation: Conversation | None = None
+    if conversation_id is not None:
+        conversation = await db.scalar(
+            select(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.user_id == user.id,
+            )
+        )
+
+    if conversation is None:
+        conversation = Conversation(
+            user_id=user.id,
+            course_id=course_id,
+            course_name=course_name,
+        )
+        db.add(conversation)
+        await db.flush()
 
     source_msg = await log_message(db, conversation, "user", user_prompt)
     preview_msg = await log_message(

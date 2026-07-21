@@ -13,18 +13,18 @@ def client():
         yield c
 
 
-def _register(client) -> dict:
+def _register(client) -> tuple[dict, str]:
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
         json={"name": "Test User", "email": email, "password": "secret123"},
     )
     token = reg.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    return {"Authorization": f"Bearer {token}"}, email
 
 
 def test_generate_quiz_draft_success(client):
-    headers = _register(client)
+    headers, _ = _register(client)
 
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = (
@@ -59,7 +59,7 @@ def test_generate_quiz_draft_success(client):
 
 
 def test_generate_quiz_draft_rejects_unowned_course(client):
-    headers = _register(client)
+    headers, _ = _register(client)
 
     response = client.post(
         "/api/v1/canvas/courses/999999/quizzes/generate-draft",
@@ -69,3 +69,37 @@ def test_generate_quiz_draft_rejects_unowned_course(client):
 
     assert response.status_code == 404
     assert "belong" in response.json()["detail"].lower()
+
+
+def test_generate_quiz_draft_rejects_non_instructor_role(client):
+    headers, email = _register(client)
+
+    import asyncio
+
+    from sqlalchemy import select
+
+    from app.config import settings
+    from app.models.user import User
+
+    async def _demote():
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        engine = create_async_engine(settings.DATABASE_URL)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+                user = await db.scalar(select(User).where(User.email == email))
+                assert user is not None
+                user.role = "admin"
+                await db.commit()
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_demote())
+
+    response = client.post(
+        "/api/v1/canvas/courses/1/quizzes/generate-draft",
+        json={"prompt": "Create a quiz on recursion with essay questions"},
+        headers=headers,
+    )
+
+    assert response.status_code == 403

@@ -210,7 +210,11 @@ export function InstructorFeedbackCreatePage() {
           newGrade: pendingApproval.newGrade,
           feedback: pendingApproval.feedback,
         },
-        { accessToken, canvasUrl },
+        {
+          accessToken,
+          canvasUrl,
+          conversationId: seededDraft?.conversationId,
+        },
       );
       setApprovedValues(pendingApproval);
       setIsPreviewOpen(false);

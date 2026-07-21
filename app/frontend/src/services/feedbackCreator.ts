@@ -146,6 +146,7 @@ export async function previewFeedbackDraft(
 interface ApproveFeedbackDraftOptions {
   accessToken: string;
   canvasUrl?: string;
+  conversationId?: number;
 }
 
 export async function approveFeedbackDraft(
@@ -153,20 +154,22 @@ export async function approveFeedbackDraft(
   options: ApproveFeedbackDraftOptions,
 ): Promise<void> {
   const request = toFeedbackPostBody(payload);
-  const response = await fetch(
-    appendCanvasUrl(
-      `${API_BASE_URL}/canvas/courses/${request.courseId}/feedback`,
-      options.canvasUrl,
-    ),
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${options.accessToken}`,
-      },
-      body: JSON.stringify(request.body),
-    },
+  let postUrl = appendCanvasUrl(
+    `${API_BASE_URL}/canvas/courses/${request.courseId}/feedback`,
+    options.canvasUrl,
   );
+  if (options.conversationId != null) {
+    const separator = postUrl.includes("?") ? "&" : "?";
+    postUrl += `${separator}conversation_id=${options.conversationId}`;
+  }
+  const response = await fetch(postUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${options.accessToken}`,
+    },
+    body: JSON.stringify(request.body),
+  });
 
   if (!response.ok) {
     throw new FeedbackCreatorApiError(await parseApiError(response));

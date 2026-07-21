@@ -1,4 +1,6 @@
 # app/backend/app/services/message_validation.py
+import re
+
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,6 +8,17 @@ from app.models.course import Course
 from app.models.user import User
 from app.services.course_access import get_owned_course_or_404
 from app.services.student import get_students, get_submission_derived_students
+
+# Small blocklist for clearly inappropriate language in instructor-to-student
+# messages. Kept intentionally short — this is a safety net, not a content
+# moderation product.
+_PROFANITY_PATTERN = re.compile(
+    r"\b("
+    r"fuck(?:ing|ed|er)?|shit(?:ty|s)?|asshole|bitch(?:es)?|cunt|"
+    r"dick(?:head)?|bastard|slut|whore"
+    r")\b",
+    re.IGNORECASE,
+)
 
 
 def _check_subject(subject: str) -> None:
@@ -21,6 +34,19 @@ def _check_body(body: str) -> None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Message body cannot be empty.",
+        )
+
+
+def _check_profanity(*parts: str) -> None:
+    combined = " ".join(part for part in parts if part)
+    match = _PROFANITY_PATTERN.search(combined)
+    if match:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Message contains language that is not appropriate for "
+                "student communication. Please revise and try again."
+            ),
         )
 
 
@@ -93,6 +119,7 @@ async def validate_message_for_send(
 
     _check_subject(subject)
     _check_body(body)
+    _check_profanity(subject, body)
 
     if recipient_canvas_user_ids:
         await _validate_recipients_in_course(

@@ -108,6 +108,7 @@ export interface AiMessageDraftLocationState {
     prompt?: string;
     courseId?: number;
     recipientIds?: string[];
+    conversationId?: number;
   };
 }
 
@@ -157,6 +158,7 @@ export interface AiActionDraftLocationState {
     studentName?: string;
     newGrade?: string;
     feedback?: string;
+    conversationId?: number;
   };
 }
 

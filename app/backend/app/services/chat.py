@@ -2722,9 +2722,13 @@ async def handle_chat_message(
 
     if result.get("intent_preview"):
         proposed_action = result.get("proposed_action", {})
-        # create_quiz redirects to the dedicated form — skip creating a
-        # pending Workflow since the form records audit on approve.
-        if proposed_action.get("action") != "create_quiz":
+        # Form-handoff actions redirect to dedicated UIs that record audit on
+        # approve — skip creating a pending Workflow here.
+        if proposed_action.get("action") not in {
+            "create_quiz",
+            "send_message",
+            "update_grade",
+        }:
             preview_metadata = result.get("preview_metadata") or {}
             await _sync_workflow_for_preview(
                 db, conversation, user,
@@ -2766,10 +2770,10 @@ async def handle_chat_message(
     await db.commit()
 
     # attach the stored message ID so the client can confirm by ID.
-    # create_quiz is handed off to the form and is not confirmable in chat.
+    # Form-handoff actions are not confirmable in chat.
     if result.get("intent_preview") and (
         result.get("proposed_action") or {}
-    ).get("action") != "create_quiz":
+    ).get("action") not in {"create_quiz", "send_message", "update_grade"}:
         result["pending_message_id"] = assistant_msg.id
 
     return conversation, result, False

@@ -75,9 +75,16 @@ async def send_draft(
     draft_id: int,
     current_user: User = Depends(get_current_user),
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    conversation_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    draft = await send_message_draft(db, current_user, draft_id, canvas_url)
+    draft = await send_message_draft(
+        db,
+        current_user,
+        draft_id,
+        canvas_url,
+        conversation_id=conversation_id,
+    )
     return MessageSendResponse(
         draft_id=draft.id,
         status=draft.status,
