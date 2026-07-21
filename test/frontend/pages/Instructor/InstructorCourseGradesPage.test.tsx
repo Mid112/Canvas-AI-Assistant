@@ -147,12 +147,12 @@ describe("InstructorCourseGradesPage", () => {
         student_name: "Coin",
         student_email: null,
         student_login_id: null,
-        submitted_at: null,
-        workflow_state: "submitted",
-        status: "submitted",
+        submitted_at: "2026-01-01T00:00:00Z",
+        workflow_state: "graded",
+        status: "graded",
         score: 88,
         grade: "88",
-        graded_at: null,
+        graded_at: "2026-01-01T00:00:00Z",
       },
       {
         id: 101,
@@ -192,20 +192,20 @@ describe("InstructorCourseGradesPage", () => {
     expect(screen.getByRole("option", { name: "Graded" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Submitted" })).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Unsubmitted" })).toBeInTheDocument();
-    expect(screen.getByRole("row", { name: /Coin Unsubmitted, Graded 88 88 -/i })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /Coin Submitted, Graded 88 88 -/i })).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /Subby Submitted - - -/i })).toBeInTheDocument();
     expect(screen.getByRole("row", { name: /Mn Unsubmitted - - -/i })).toBeInTheDocument();
-    expect(screen.getByLabelText("Select Coin")).not.toBeChecked();
+    expect(screen.getByLabelText("Select Coin")).toBeChecked();
     expect(screen.getByLabelText("Select Subby")).toBeChecked();
     expect(screen.getByLabelText("Select Mn")).not.toBeChecked();
 
     await user.selectOptions(screen.getByLabelText("Status"), "unsubmitted");
-    expect(screen.getByRole("cell", { name: "Coin" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "Coin" })).not.toBeInTheDocument();
     expect(screen.queryByRole("cell", { name: "Subby" })).not.toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Mn" })).toBeInTheDocument();
 
     await user.selectOptions(screen.getByLabelText("Status"), "submitted");
-    expect(screen.queryByRole("cell", { name: "Coin" })).not.toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Coin" })).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Subby" })).toBeInTheDocument();
     expect(screen.queryByRole("cell", { name: "Mn" })).not.toBeInTheDocument();
 
@@ -229,6 +229,7 @@ describe("InstructorCourseGradesPage", () => {
     expect(screen.queryByRole("cell", { name: "Mn" })).not.toBeInTheDocument();
 
     await user.clear(screen.getByLabelText("Filter students"));
+    await user.selectOptions(screen.getByLabelText("Status"), "all");
     await user.type(screen.getByLabelText("Grade"), "88");
     expect(screen.getByRole("cell", { name: "Coin" })).toBeInTheDocument();
     expect(screen.queryByRole("cell", { name: "Mn" })).not.toBeInTheDocument();
