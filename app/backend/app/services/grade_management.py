@@ -1,5 +1,6 @@
 import json
 from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,14 +21,16 @@ IRREVERSIBLE_GRADE_WARNING = (
     "Grade changes are high risk because Canvas updates the student's official record immediately."
 )
 ROLLBACK_MESSAGE = (
-    "Rollback is available while the previous grade is recorded in history; restore it manually if needed."
+    "History is recorded for this grade change; restore a prior grade manually if needed."
 )
 FEEDBACK_ONLY_WARNING = (
     "Feedback only is low risk because it adds a Canvas comment without changing the official grade."
 )
 FEEDBACK_ONLY_ROLLBACK_MESSAGE = (
-    "No grade rollback is needed because this action does not change the student's grade."
+    "History is recorded; no grade correction is needed because this action does not change the student's grade."
 )
+MAX_REASONABLE_NUMERIC_GRADE = Decimal("10000")
+CANVAS_TEXT_GRADE_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 +-./_%")
 
 
 async def _find_submission(
@@ -74,6 +77,7 @@ def _submission_from_snapshot(body: GradeUpdateRequest):
         score=snapshot.get("score"),
         grade=snapshot.get("grade"),
         status=str(snapshot.get("status") or "unknown"),
+        points_possible=snapshot.get("assignment_points_possible"),
     )
 
 
@@ -88,6 +92,7 @@ class _SnapshotSubmission:
         score,
         grade: str | None,
         status: str,
+        points_possible=None,
     ):
         self.id = id
         self.assignment_id = assignment_id
@@ -96,6 +101,7 @@ class _SnapshotSubmission:
         self.score = score
         self.grade = grade
         self.status = status
+        self.points_possible = points_possible
 
 
 def _coerce_int(value) -> int | None:
@@ -107,15 +113,89 @@ def _coerce_int(value) -> int | None:
         return None
 
 
-def _build_grade_preview(course, body: GradeUpdateRequest, submission) -> GradePreviewResponse:
-    proposed_grade = body.posted_grade.strip()
+def _coerce_decimal(value) -> Decimal | None:
+    if value in (None, "") or isinstance(value, bool):
+        return None
+    try:
+        return Decimal(str(value).strip())
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _format_decimal(value: Decimal) -> str:
+    return format(value.normalize(), "f")
+
+
+def _validate_grade_payload(body: GradeUpdateRequest) -> str:
+    posted_grade = body.posted_grade.strip()
     feedback = (body.reason or "").strip()
-    feedback_only = not proposed_grade and bool(feedback)
-    if not proposed_grade and not feedback:
+    if not posted_grade and not feedback:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Enter a new grade or feedback before previewing.",
         )
+    if not posted_grade:
+        return posted_grade
+
+    if any(ord(char) < 32 for char in posted_grade):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Grade cannot contain line breaks or control characters.",
+        )
+
+    numeric_grade = _coerce_decimal(posted_grade)
+    if numeric_grade is not None:
+        if not numeric_grade.is_finite():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Grade must be a finite value.",
+            )
+        if numeric_grade < 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Grade cannot be negative.",
+            )
+        if numeric_grade > MAX_REASONABLE_NUMERIC_GRADE:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Grade is outside the supported range.",
+            )
+        return posted_grade
+
+    if not all(char in CANVAS_TEXT_GRADE_CHARS for char in posted_grade):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Grade contains unsupported characters.",
+        )
+    return posted_grade
+
+
+def _grade_warnings(body: GradeUpdateRequest, submission) -> list[str]:
+    warnings: list[str] = []
+    status_value = submission.status.value if hasattr(submission.status, "value") else str(submission.status)
+    if status_value == "unsubmitted":
+        warnings.append(
+            "This student has no Canvas submission timestamp; only submit if offline, paper, or in-person work should be graded."
+        )
+
+    proposed_grade = body.posted_grade.strip()
+    numeric_grade = _coerce_decimal(proposed_grade)
+    points_possible = _coerce_decimal(getattr(submission, "points_possible", None))
+    if points_possible is None and isinstance(body.current_submission, dict):
+        points_possible = _coerce_decimal(body.current_submission.get("assignment_points_possible"))
+    if numeric_grade is not None and points_possible is not None and numeric_grade > points_possible:
+        points_label = _format_decimal(points_possible)
+        warnings.append(
+            f"This grade is above the assignment's {points_label} possible points; "
+            "submit only if this is intentional bonus or adjusted grading."
+        )
+    return warnings
+
+
+def _build_grade_preview(course, body: GradeUpdateRequest, submission) -> GradePreviewResponse:
+    proposed_grade = _validate_grade_payload(body)
+    feedback = (body.reason or "").strip()
+    feedback_only = not proposed_grade and bool(feedback)
     current_grade = submission.grade if submission.grade is not None else "ungraded"
     student_name = submission.student_name or f"Canvas user {submission.user_id}"
     summary = (
@@ -144,6 +224,7 @@ def _build_grade_preview(course, body: GradeUpdateRequest, submission) -> GradeP
         proposed={
             "posted_grade": proposed_grade,
             "reason": feedback or None,
+            "warnings": _grade_warnings(body, submission),
         },
         affected_resources=[
             {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},

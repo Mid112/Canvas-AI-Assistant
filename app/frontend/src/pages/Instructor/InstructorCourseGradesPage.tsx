@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, History, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
@@ -294,10 +294,13 @@ export function InstructorCourseGradesPage() {
           reason: reason || null,
           // Reuse the row the page already fetched from Canvas so preview
           // can render the before/after diff without another submissions read.
-          current_submission: submission,
+          current_submission: {
+            ...submission,
+            assignment_points_possible: selectedAssignment?.points_possible ?? null,
+          },
         }))
         : [],
-    [assignmentId, postedGrade, reason, selectedSubmissions],
+    [assignmentId, postedGrade, reason, selectedAssignment?.points_possible, selectedSubmissions],
   );
 
   const allDisplayedSelected =
@@ -305,6 +308,10 @@ export function InstructorCourseGradesPage() {
     displayedSubmissions.every((item) => selectedUserIds.includes(item.user_id));
   const previewByUserId = useMemo(
     () => new Map(previews.map((preview) => [preview.current.student_canvas_id, preview])),
+    [previews],
+  );
+  const previewWarnings = useMemo(
+    () => Array.from(new Set(previews.flatMap((preview) => preview.proposed.warnings ?? []))),
     [previews],
   );
   const previewMatchesSelection =
@@ -618,10 +625,10 @@ export function InstructorCourseGradesPage() {
                   : "Preview the change before submitting. Grade updates affect official Canvas records.")}
             </div>
             <div className="flex items-start gap-2 rounded-md border p-3 text-sm">
-              <RotateCcw className="mt-0.5 size-4 text-primary" aria-hidden="true" />
+              <History className="mt-0.5 size-4 text-primary" aria-hidden="true" />
               <span>
                 {previews[0]?.rollback_message ??
-                  "Rollback availability will be shown after preview."}
+                  "History details will be shown after preview."}
               </span>
             </div>
             {selectedUnsubmittedCount > 0 && (
@@ -675,6 +682,13 @@ export function InstructorCourseGradesPage() {
                 ) : (
                   <p>Feedback only: no grade change.</p>
                 )}
+              </div>
+            )}
+            {previewWarnings.length > 0 && (
+              <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                {previewWarnings.map((warning) => (
+                  <p key={warning}>{warning}</p>
+                ))}
               </div>
             )}
             {!previewMatchesSelection && (

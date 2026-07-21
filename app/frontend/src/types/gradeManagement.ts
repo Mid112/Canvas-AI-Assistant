@@ -5,7 +5,7 @@ export interface GradeUpdatePayload {
   user_id: number;
   posted_grade: string;
   reason?: string | null;
-  current_submission?: ApiSubmission;
+  current_submission?: ApiSubmission & { assignment_points_possible?: number | null };
 }
 
 export interface GradePreview {
@@ -26,6 +26,7 @@ export interface GradePreview {
   proposed: {
     posted_grade: string;
     reason: string | null;
+    warnings?: string[];
   };
   affected_resources: Array<{
     type: string;

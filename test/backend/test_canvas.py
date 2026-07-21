@@ -626,6 +626,60 @@ def test_list_submissions_no_canvas_token(client):
     assert response.status_code == 403
 
 
+# Verifies: #872 — An instructor cannot read another instructor's submission data.
+def test_list_submissions_rejects_course_owned_by_another_instructor(client, auth_headers):
+    local_course_id = _sync_local_course(client, auth_headers, canvas_id=90125)
+    other_headers = _register_with_canvas(client)
+
+    with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
+        response = client.get(
+            f"/api/v1/canvas/courses/{local_course_id}/assignments/10/submissions?canvas_url={CANVAS_URL}",
+            headers=other_headers,
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Course not found or does not belong to you."
+    mock.assert_not_awaited()
+
+
+# Verifies: #872 — Grade preview cannot expose another instructor's submission data.
+def test_grade_preview_rejects_course_owned_by_another_instructor(client, auth_headers):
+    local_course_id = _sync_local_course(client, auth_headers, canvas_id=90126)
+    other_headers = _register_with_canvas(client)
+
+    with patch("app.services.grade_management.fetch_submissions", new_callable=AsyncMock) as mock:
+        response = client.post(
+            f"/api/v1/canvas/courses/{local_course_id}/grades/preview?canvas_url={CANVAS_URL}",
+            json={"assignment_id": 10, "user_id": 5, "posted_grade": "95"},
+            headers=other_headers,
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Course not found or does not belong to you."
+    mock.assert_not_awaited()
+
+
+# Verifies: #872 — Grade submit cannot mutate another instructor's course.
+def test_grade_submit_rejects_course_owned_by_another_instructor(client, auth_headers):
+    local_course_id = _sync_local_course(client, auth_headers, canvas_id=90127)
+    other_headers = _register_with_canvas(client)
+
+    with (
+        patch("app.services.grade_management.fetch_submissions", new_callable=AsyncMock) as mock_submissions,
+        patch("app.services.grade_management.update_submission_grade", new_callable=AsyncMock) as mock_update,
+    ):
+        response = client.post(
+            f"/api/v1/canvas/courses/{local_course_id}/grades/submit?canvas_url={CANVAS_URL}",
+            json={"assignment_id": 10, "user_id": 5, "posted_grade": "95"},
+            headers=other_headers,
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Course not found or does not belong to you."
+    mock_submissions.assert_not_awaited()
+    mock_update.assert_not_awaited()
+
+
 # ---------------------------------------------------------------------------
 # #547 — Submission status parsing
 # ---------------------------------------------------------------------------
