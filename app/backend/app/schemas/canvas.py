@@ -99,14 +99,14 @@ class SubmissionResponse(BaseModel):
 class GradeUpdateRequest(BaseModel):
     assignment_id: int
     user_id: int
-    posted_grade: str = Field(min_length=1, max_length=32)
+    posted_grade: str = Field(default="", max_length=32)
     reason: str | None = Field(default=None, max_length=500)
     current_submission: dict | None = None
 
 
 class GradePreviewResponse(BaseModel):
     action: Literal["update_grade"] = "update_grade"
-    risk_level: Literal["high"] = "high"
+    risk_level: Literal["high", "low"] = "high"
     requires_approval: bool = True
     irreversible_warning: str
     rollback_available: bool

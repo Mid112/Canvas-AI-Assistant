@@ -183,6 +183,35 @@ async def test_update_submission_grade_sends_grade_and_comment():
     assert result == {"id": 11, "grade": "88"}
 
 
+@pytest.mark.asyncio
+async def test_update_submission_grade_can_send_comment_without_grade():
+    response = httpx.Response(
+        200,
+        json={"id": 11, "grade": "88"},
+        request=httpx.Request("PUT", "https://canvas.test/api/v1/submissions/3"),
+    )
+    client_cm = _client_returning(response, method="put")
+
+    with patch("app.integrations.canvas.httpx.AsyncClient", return_value=client_cm):
+        result = await update_submission_grade(
+            1,
+            2,
+            3,
+            None,
+            "tok",
+            comment="Work changes. You can do it.",
+            canvas_url="https://canvas.test",
+        )
+
+    client = await client_cm.__aenter__()
+    client.put.assert_awaited_once_with(
+        "https://canvas.test/api/v1/courses/1/assignments/2/submissions/3",
+        headers={"Authorization": "Bearer tok"},
+        json={"comment": {"text_comment": "Work changes. You can do it."}},
+    )
+    assert result == {"id": 11, "grade": "88"}
+
+
 # ---------------------------------------------------------------------------
 # check_token_status — returns a status string rather than raising
 # ---------------------------------------------------------------------------

@@ -188,8 +188,11 @@ export function InstructorCourseGradesPage() {
     (submission) => submission.status === "unsubmitted",
   ).length;
   const numericPostedGrade = Number(postedGrade);
+  const hasGradeChange = postedGrade.trim().length > 0;
+  const hasFeedback = reason.trim().length > 0;
+  const isFeedbackOnly = !hasGradeChange && hasFeedback;
   const exceedsPointsPossible =
-    postedGrade.trim().length > 0 &&
+    hasGradeChange &&
     Number.isFinite(numericPostedGrade) &&
     typeof selectedAssignment?.points_possible === "number" &&
     numericPostedGrade > selectedAssignment.points_possible;
@@ -221,7 +224,7 @@ export function InstructorCourseGradesPage() {
     previews.length === payloads.length &&
     payloads.every((payload) => {
       const preview = previewByUserId.get(payload.user_id);
-      return preview?.proposed.posted_grade === payload.posted_grade;
+      return preview?.proposed.posted_grade === payload.posted_grade.trim();
     });
 
   function toggleStudent(userId: number) {
@@ -235,6 +238,18 @@ export function InstructorCourseGradesPage() {
 
   function toggleAllStudents() {
     setSelectedUserIds(allSelected ? [] : submissions.map((item) => item.user_id));
+    setPreviews([]);
+  }
+
+  function selectStudentsBySubmissionStatus(status: "submitted" | "unsubmitted") {
+    const ids = submissions
+      .filter((item) =>
+        status === "submitted"
+          ? item.status !== "unsubmitted"
+          : item.status === "unsubmitted",
+      )
+      .map((item) => item.user_id);
+    setSelectedUserIds(ids);
     setPreviews([]);
   }
 
@@ -264,7 +279,11 @@ export function InstructorCourseGradesPage() {
       setError("Preview the selected grade changes before submitting.");
       return;
     }
-    if (payloads.length === 0 || !accessToken || confirmation !== "UPDATE") {
+    if (
+      payloads.length === 0 ||
+      !accessToken ||
+      (!isFeedbackOnly && confirmation !== "UPDATE")
+    ) {
       return;
     }
     setIsSubmitting(true);
@@ -276,12 +295,14 @@ export function InstructorCourseGradesPage() {
       );
       setNotice(
         results.length === 1
-          ? `Grade updated. History record #${results[0].history_id ?? "created"}.`
-          : `${results.length} grades updated. History records created.`,
+          ? `${isFeedbackOnly ? "Feedback sent" : "Grade updated"}. History record #${results[0].history_id ?? "created"}.`
+          : `${results.length} ${isFeedbackOnly ? "feedback notes sent" : "grades updated"}. History records created.`,
       );
       setPreviews([]);
       setConfirmation("");
-      setPostedGrade("");
+      if (!isFeedbackOnly) {
+        setPostedGrade("");
+      }
       if (assignmentId) {
         setSubmissions(
           await fetchAssignmentSubmissions(
@@ -318,9 +339,9 @@ export function InstructorCourseGradesPage() {
             {course?.name ?? "Select a course"} grade changes require preview and approval.
           </p>
         </div>
-        <Badge variant="destructive" className="gap-1">
+        <Badge variant={isFeedbackOnly ? "secondary" : "destructive"} className="gap-1">
           <AlertTriangle className="size-3.5" aria-hidden="true" />
-          High Risk
+          {isFeedbackOnly ? "Low Risk" : "High Risk"}
         </Badge>
       </div>
 
@@ -388,15 +409,31 @@ export function InstructorCourseGradesPage() {
                     <TableHead>Score</TableHead>
                     <TableHead>Grade</TableHead>
                     <TableHead>New</TableHead>
-                    <TableHead className="w-28">
-                      <label className="flex items-center gap-2 text-xs font-medium">
-                        <input
-                          type="checkbox"
-                          checked={allSelected}
-                          onChange={toggleAllStudents}
-                        />
-                        All
-                      </label>
+                    <TableHead className="w-48">
+                      <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={allSelected}
+                            onChange={toggleAllStudents}
+                          />
+                          All
+                        </label>
+                        <button
+                          type="button"
+                          className="text-primary underline-offset-2 hover:underline"
+                          onClick={() => selectStudentsBySubmissionStatus("submitted")}
+                        >
+                          Submitted
+                        </button>
+                        <button
+                          type="button"
+                          className="text-primary underline-offset-2 hover:underline"
+                          onClick={() => selectStudentsBySubmissionStatus("unsubmitted")}
+                        >
+                          Unsubmitted
+                        </button>
+                      </div>
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -417,7 +454,7 @@ export function InstructorCourseGradesPage() {
                             {submission.status === "unsubmitted" ? (
                               // Keep unsubmitted students visible and selectable,
                               // but make them easy to spot before preview/submit.
-                              <Badge variant="outline">No online submission</Badge>
+                              <Badge variant="outline">Unsubmitted</Badge>
                             ) : null}
                           </span>
                         </TableCell>
@@ -452,10 +489,12 @@ export function InstructorCourseGradesPage() {
           <CardHeader>
             <CardTitle>Approval</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-5">
             <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
               {previews[0]?.irreversible_warning ??
-                "Preview the change before submitting. Grade updates affect official Canvas records."}
+                (isFeedbackOnly
+                  ? "Preview the feedback before sending. This will add a Canvas comment without changing the grade."
+                  : "Preview the change before submitting. Grade updates affect official Canvas records.")}
             </div>
             <div className="flex items-start gap-2 rounded-md border p-3 text-sm">
               <RotateCcw className="mt-0.5 size-4 text-primary" aria-hidden="true" />
@@ -484,7 +523,7 @@ export function InstructorCourseGradesPage() {
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="reason">Reason</Label>
+              <Label htmlFor="reason">Feedback</Label>
               <Textarea
                 id="reason"
                 value={reason}
@@ -492,7 +531,7 @@ export function InstructorCourseGradesPage() {
                   setReason(event.target.value);
                   setPreviews([]);
                 }}
-                placeholder="Optional note for grade history"
+                placeholder="Feedback shown as a Canvas comment"
               />
             </div>
             {selectedSubmissions.length > 0 && (
@@ -508,41 +547,53 @@ export function InstructorCourseGradesPage() {
                     ? previews[0].summary
                     : `Previewing ${previews.length} grade updates.`}
                 </p>
-                <p>
-                  Proposed grade: {previews[0].proposed.posted_grade}
-                </p>
+                {previews[0].proposed.posted_grade ? (
+                  <p>
+                    Proposed grade: {previews[0].proposed.posted_grade}
+                  </p>
+                ) : (
+                  <p>Feedback only: no grade change.</p>
+                )}
               </div>
             )}
             {!previewMatchesSelection && (
               <p className="text-sm font-medium text-muted-foreground">
-                Submit unlocks only after you preview the selected changes and type
-                UPDATE. Refresh the preview after changing the grade, reason,
-                assignment, or selected students.
+                {isFeedbackOnly
+                  ? "Send feedback unlocks after you preview the selected feedback."
+                  : "Submit unlocks only after you preview the selected changes and type UPDATE."}
+                {" "}Refresh the preview after changing the grade, feedback, assignment, or selected students.
               </p>
             )}
             <Button
               type="button"
               variant="outline"
               onClick={handlePreview}
-              disabled={payloads.length === 0 || !postedGrade.trim() || isSubmitting}
+              disabled={payloads.length === 0 || (!hasGradeChange && !hasFeedback) || isSubmitting}
             >
-              Preview change
+              {isFeedbackOnly ? "Preview feedback" : "Preview change"}
             </Button>
-            <div className="space-y-2">
-              <Label htmlFor="confirmation">Type UPDATE to approve</Label>
-              <Input
-                id="confirmation"
-                value={confirmation}
-                onChange={(event) => setConfirmation(event.target.value)}
-              />
-            </div>
+            {!isFeedbackOnly && (
+              <div className="space-y-2">
+                <Label htmlFor="confirmation">Type UPDATE to approve</Label>
+                <Input
+                  id="confirmation"
+                  value={confirmation}
+                  onChange={(event) => setConfirmation(event.target.value)}
+                />
+              </div>
+            )}
             <Button
+              className="mt-3"
               type="button"
-              variant="destructive"
+              variant={isFeedbackOnly ? "default" : "destructive"}
               onClick={handleSubmit}
-              disabled={!previewMatchesSelection || confirmation !== "UPDATE" || isSubmitting}
+              disabled={!previewMatchesSelection || (!isFeedbackOnly && confirmation !== "UPDATE") || isSubmitting}
             >
-              {isSubmitting ? "Submitting..." : "Submit grade change"}
+              {isSubmitting
+                ? "Submitting..."
+                : isFeedbackOnly
+                  ? "Send feedback"
+                  : "Submit grade change"}
             </Button>
           </CardContent>
         </Card>

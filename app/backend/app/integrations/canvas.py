@@ -367,7 +367,7 @@ async def update_submission_grade(
     course_id: int,
     assignment_id: int,
     user_id: int,
-    posted_grade: str,
+    posted_grade: str | None,
     token: str,
     comment: str | None = None,
     canvas_url: str = settings.CANVAS_API_URL,
@@ -376,7 +376,9 @@ async def update_submission_grade(
     # Canvas accepts grade and comment together on the submission update
     # endpoint. Keeping them in one request prevents a grade from being
     # changed without the instructor's audit note appearing beside it.
-    payload: dict = {"submission": {"posted_grade": posted_grade}}
+    payload: dict = {}
+    if posted_grade and posted_grade.strip():
+        payload["submission"] = {"posted_grade": posted_grade.strip()}
     if comment and comment.strip():
         payload["comment"] = {"text_comment": comment.strip()}
     try:
