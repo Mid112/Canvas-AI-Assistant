@@ -20,6 +20,7 @@ import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useInstitution } from "@/contexts/useInstitution";
 import { seedChatMessages } from "@/data/assistantSeedData";
 import { isCancellationPhrase } from "@/lib/chat-cancellation";
+import { setStoredDeferredDraft } from "@/lib/deferred-assistant-storage";
 import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
 import {
   AssistantApiError,
@@ -105,6 +106,7 @@ interface ChatWindowProps {
   onInitialPromptConsumed?: () => void;
   onModifyContextConsumed?: () => void;
   onConversationChange?: (conversationId: number) => void;
+  onDeferredRequest?: () => void;
   onLoadingChange?: (isLoading: boolean) => void;
   onStartNewChat?: () => void;
   modelSettings?: LlmProviderSettings | null;
@@ -125,13 +127,14 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   onInitialPromptConsumed,
   onModifyContextConsumed,
   onConversationChange,
+  onDeferredRequest,
   onLoadingChange,
   onStartNewChat,
   modelSettings = null,
   llmProviders = [],
   onModelProviderChange,
 }, ref) {
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const { activeCourse, refreshActiveCourse, notifyCoursesChanged } =
     useActiveCourse();
   const { refreshDashboard } = useInstitution();
@@ -290,6 +293,8 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
             interpretedAction: mapped.interpretedAction,
             safetyBlocked: mapped.safetyBlocked,
             safetyMessage: mapped.safetyMessage,
+            requiresCanvasToken: mapped.requiresCanvasToken,
+            deferredRequestId: mapped.deferredRequestId,
           }];
         });
 
@@ -343,6 +348,8 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
         interpretedAction: entry.interpretedAction,
         safetyBlocked: entry.safetyBlocked,
         safetyMessage: entry.safetyMessage,
+        requiresCanvasToken: entry.requiresCanvasToken,
+        deferredRequestId: entry.deferredRequestId,
       }));
 
       setMessages((current) => [...current, ...newMessages]);
@@ -407,6 +414,14 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
 
         setConversationId(response.conversationId);
         onConversationChange?.(response.conversationId);
+        if (response.requiresCanvasToken && user?.id) {
+          setStoredDeferredDraft(user.id, {
+            message: userText,
+            conversationId: response.conversationId,
+            deferredRequestId: response.deferredRequestId,
+          });
+          onDeferredRequest?.();
+        }
         appendAssistantMessage(response);
         setRetryMessage(null);
       } catch (requestError) {
@@ -428,7 +443,9 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       conversationId,
       modelSettings,
       onConversationChange,
+      onDeferredRequest,
       onModifyContextConsumed,
+      user?.id,
     ],
   );
 

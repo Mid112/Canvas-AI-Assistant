@@ -436,6 +436,20 @@ CREATE TABLE instructor_llm_connections (
 
 CREATE INDEX idx_instructor_llm_connections_user_id ON instructor_llm_connections(user_id);
 
+CREATE TABLE deferred_assistant_requests (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    conversation_id INTEGER REFERENCES conversations(id) ON DELETE SET NULL,
+    message         TEXT NOT NULL,
+    proposed_action JSONB,
+    status          VARCHAR NOT NULL DEFAULT 'deferred',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resumed_at      TIMESTAMPTZ
+);
+
+CREATE INDEX idx_deferred_assistant_requests_user_status
+    ON deferred_assistant_requests(user_id, status);
+
 -- ─────────────────────────────────────────────
 -- Schema Migrations
 -- Tracks which db/migrations/*.sql files have been applied — read and
@@ -476,4 +490,5 @@ INSERT INTO schema_migrations (filename) VALUES
     ('019_audit_logs_allow_delete_operation.sql'),
     ('020_course_cache_columns.sql'),
     ('021_llm_response_cache.sql'),
-    ('022_instructor_llm_connections.sql');
+    ('022_instructor_llm_connections.sql'),
+    ('023_deferred_assistant_requests.sql');

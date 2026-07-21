@@ -46,6 +46,11 @@ from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
 from app.services.assignment_rate import find_assignments_by_submission_rate
 from app.services.canvas import CanvasTokenRequiredError, sync_courses_if_stale
+from app.services.canvas_assistant_gate import (
+    classify_action_for_limited_mode,
+    user_has_canvas_credentials,
+)
+from app.services.deferred_assistant import defer_assistant_request
 from app.services.llm.base import LLMAdapter
 from app.services.llm.json_extraction import extract_json_object
 from app.services.llm.llm_connections import resolve_instructor_llm_request
@@ -74,7 +79,19 @@ logger = logging.getLogger(__name__)
 LLM_TIMEOUT_SECONDS = 90.0
 HISTORY_WINDOW = 10
 CANVAS_TOKEN_REQUIRED_MESSAGE = (
-    "This action needs a connected Canvas account. Connect Canvas in Settings, then try again."
+    "This action needs a connected Canvas account. Connect Canvas in Settings, "
+    "then resume this request from the assistant."
+)
+
+LIMITED_MODE_PROMPT = (
+    "\nLIMITED MODE — the current user has NOT connected a Canvas account. "
+    "You are in limited mode: answer general teaching/Canvas-process questions "
+    "with {\"action\": \"respond\", ...} only. Do not propose or execute any "
+    "Canvas-touching action (fetch/create/update/send/grade). If the request "
+    "needs Canvas data or would change Canvas, respond with "
+    '{"action": "respond", "message": "..."} telling them they are in limited '
+    "mode and must connect Canvas in Settings to continue — the app will save "
+    "the request so they can resume after connecting.\n"
 )
 
 # Hard cap on how many LLM decisions a single user turn may chain through
@@ -1491,6 +1508,50 @@ async def log_message(
     return message
 
 
+async def _defer_canvas_limited_mode_reply(
+    db: AsyncSession,
+    *,
+    user: User,
+    conversation: Conversation,
+    message: str,
+    action,
+) -> dict | None:
+    """Classify before tool execution; defer Canvas work in limited mode.
+
+    Returns an error reply dict when blocked, or None when the action may proceed.
+    """
+    if user_has_canvas_credentials(user):
+        return None
+
+    proposed = getattr(action, "proposed_action", None)
+    proposed_dict = proposed if isinstance(proposed, dict) else None
+    if classify_action_for_limited_mode(action.action, proposed_dict) == "allow":
+        return None
+
+    deferred = await defer_assistant_request(
+        db,
+        user=user,
+        conversation_id=conversation.id,
+        message=message,
+        proposed_action=action.model_dump(),
+    )
+    reply = {
+        "error": CANVAS_TOKEN_REQUIRED_MESSAGE,
+        "requires_canvas_token": True,
+        "limited_mode": True,
+        "deferred_request_id": deferred.id,
+        "deferred_message": message,
+    }
+    await log_message(
+        db,
+        conversation,
+        role="assistant",
+        content=json.dumps(reply),
+    )
+    await db.commit()
+    return reply
+
+
 async def update_message_content(
     db: AsyncSession,
     conversation_id: int,
@@ -1736,18 +1797,9 @@ def build_system_prompt(has_canvas_token: bool = True) -> str:
         '"in two weeks") against this date — never against a year from your\n'
         "training data. A resolved date must always fall on or after today.\n"
     )
-    # The backend already fails safely without this (CanvasTokenRequiredError
-    # is caught and turned into a friendly message), so this is purely an
-    # optimization to skip a doomed-to-fail LLM round-trip for the common
-    # case of a user who hasn't connected Canvas yet asking a Canvas question.
-    canvas_gate_line = "" if has_canvas_token else (
-        "\nThe current user has NOT connected a Canvas account yet. Do not "
-        "propose any Canvas-touching action (fetch/create/update/send) — it "
-        "will fail. If the request needs Canvas data, respond with "
-        '{"action": "respond", "message": "..."} telling them to connect '
-        "Canvas in Settings first. Still answer general, non-Canvas "
-        "questions normally.\n"
-    )
+    # Soft guidance only — hard enforcement is classify_action_for_limited_mode
+    # before any Canvas tool execution (issue #1245).
+    canvas_gate_line = "" if has_canvas_token else LIMITED_MODE_PROMPT
 
     return """You are a Canvas LMS assistant for instructors. You help
 with course management, assignments, student submissions, and
@@ -2411,6 +2463,16 @@ async def handle_chat_message(
                 # of showing a pointless double preview.
                 action = parse_action(json.dumps(action.proposed_action))
 
+            limited_reply = await _defer_canvas_limited_mode_reply(
+                db,
+                user=user,
+                conversation=conversation,
+                message=message,
+                action=action,
+            )
+            if limited_reply is not None:
+                return conversation, limited_reply, True
+
             if action.action == "fetch_submissions":
                 # Needs a real Canvas assignment_id, which the model is
                 # never allowed to invent — resolve it server-side (chains
@@ -2707,6 +2769,24 @@ async def handle_confirmed_action(
 
     try:
         action = parse_action(json.dumps(workflow.proposed_action))
+        if not user_has_canvas_credentials(user) and classify_action_for_limited_mode(
+            action.action,
+            action.proposed_action if isinstance(getattr(action, "proposed_action", None), dict) else None,
+        ) == "block":
+            # Preserve the pending preview so confirm can resume after Canvas
+            # is connected (issue #1245).
+            workflow.status = "pending"
+            reply = {
+                "error": CANVAS_TOKEN_REQUIRED_MESSAGE,
+                "requires_canvas_token": True,
+                "limited_mode": True,
+                "pending_message_id": pending_message_id,
+            }
+            await log_message(
+                db, conversation, role="assistant", content=json.dumps(reply)
+            )
+            await db.commit()
+            return conversation, reply, True
         result = await execute_tool(db, user, action)
     except ToolExecutionError as e:
         safe_detail = redact_secrets(e.log_detail)

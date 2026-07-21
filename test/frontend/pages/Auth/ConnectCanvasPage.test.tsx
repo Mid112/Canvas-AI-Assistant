@@ -174,7 +174,7 @@ describe("ConnectCanvasPage", () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  // Verifies: Skips canvas connection and opens the query assistant.
+  // Verifies: Skips canvas connection and opens the assistant in limited mode.
   it("skips canvas connection and opens the query assistant", async () => {
     const user = userEvent.setup();
 

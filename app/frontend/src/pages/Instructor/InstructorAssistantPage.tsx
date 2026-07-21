@@ -2,6 +2,7 @@ import { History, Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 
+import { AssistantLimitedModeBanner } from "@/components/chat/AssistantLimitedModeBanner";
 import { ChatWindow, type ChatWindowHandle } from "@/components/chat/ChatWindow";
 import { ActiveCourseContextBar } from "@/components/courses/ActiveCourseContextBar";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,10 @@ import {
   InstructorAssistantSuggestedActions,
 } from "@/pages/Instructor/InstructorAssistant/InstructorAssistantHeader";
 import { buildSuggestedActions } from "@/data/assistantSeedData";
-import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
+import {
+  clearStoredDeferredDraft,
+  getStoredDeferredDraft,
+} from "@/lib/deferred-assistant-storage";
 import {
   getStoredLlmProviderSettings,
   setStoredLlmProviderSettings,
@@ -26,8 +30,11 @@ import {
   AssistantApiError,
   fetchConversation,
   listAssistantConversations,
+  listDeferredAssistantRequests,
+  resumeDeferredAssistantRequest,
   type ConversationResponse,
   type ConversationSummary,
+  type DeferredAssistantRequest,
 } from "@/services/assistant";
 import type { LlmProviderId, LlmProviderSettings } from "@/types/llmProvider";
 
@@ -113,10 +120,15 @@ export function InstructorAssistantPage() {
   const [loadingConversationId, setLoadingConversationId] = useState<
     number | null
   >(null);
+  const [deferredRequests, setDeferredRequests] = useState<
+    DeferredAssistantRequest[]
+  >([]);
+  const [isResumingDeferred, setIsResumingDeferred] = useState(false);
   const chatWindowRef = useRef<ChatWindowHandle>(null);
+  const limitedMode = Boolean(user && !user.has_canvas_token);
 
   const loadConversationList = useCallback(async () => {
-    if (!accessToken || !user?.has_canvas_token) {
+    if (!accessToken) {
       return;
     }
 
@@ -137,12 +149,30 @@ export function InstructorAssistantPage() {
     } finally {
       setIsHistoryLoading(false);
     }
-  }, [accessToken, user?.has_canvas_token]);
+  }, [accessToken]);
+
+  const loadDeferredRequests = useCallback(async () => {
+    if (!accessToken) {
+      return;
+    }
+
+    try {
+      const response = await listDeferredAssistantRequests(accessToken);
+      setDeferredRequests(response.items);
+    } catch {
+      // Banner still works without the count; chat remains usable.
+    }
+  }, [accessToken]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- async history load on mount/auth changes
     void loadConversationList();
   }, [loadConversationList]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async deferred load on mount/auth changes
+    void loadDeferredRequests();
+  }, [loadDeferredRequests]);
 
   useEffect(() => {
     if (!accessToken || !user) return;
@@ -166,6 +196,20 @@ export function InstructorAssistantPage() {
       cancelled = true;
     };
   }, [accessToken, user]);
+
+  // After Canvas is connected, restore any locally cached deferred draft into
+  // the composer so the instructor can resume without retyping.
+  useEffect(() => {
+    if (!user?.has_canvas_token) return;
+    const draft = getStoredDeferredDraft(user.id);
+    if (!draft?.message) return;
+    setPendingDraft(draft.message);
+    if (draft.conversationId !== undefined) {
+      setPendingConversationId(draft.conversationId);
+    }
+    clearStoredDeferredDraft(user.id);
+    setChatSessionKey((current) => current + 1);
+  }, [user?.has_canvas_token, user?.id]);
 
   const handleModelProviderChange = useCallback(
     (providerId: LlmProviderId) => {
@@ -229,15 +273,52 @@ export function InstructorAssistantPage() {
     void loadConversationList();
   };
 
+  const handleResumeDeferred = async () => {
+    if (!accessToken || deferredRequests.length === 0) {
+      return;
+    }
+
+    setIsResumingDeferred(true);
+    try {
+      const [first, ...rest] = deferredRequests;
+      const resumed = await resumeDeferredAssistantRequest(accessToken, first.id);
+      setPendingPrompt(resumed.message);
+      if (resumed.conversation_id != null) {
+        setPendingConversationId(resumed.conversation_id);
+      }
+      setSelectedConversation(null);
+      setChatSessionKey((current) => current + 1);
+      setDeferredRequests(rest);
+      if (user) {
+        clearStoredDeferredDraft(user.id);
+      }
+    } catch (requestError) {
+      setHistoryError(
+        requestError instanceof AssistantApiError
+          ? requestError.message
+          : "Unable to resume the saved request. Connect Canvas and try again.",
+      );
+    } finally {
+      setIsResumingDeferred(false);
+    }
+  };
+
   return (
     <div className="flex min-h-full flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-5 lg:p-6">
       <InstructorAssistantHeader />
 
-      {!user?.has_canvas_token ? (
-        <CanvasConnectionRequired description="Connect Canvas to use the AI assistant with your courses and assignments." />
-      ) : (
-        <>
-      <ActiveCourseContextBar />
+      {limitedMode ? (
+        <AssistantLimitedModeBanner deferredCount={deferredRequests.length} />
+      ) : deferredRequests.length > 0 ? (
+        <AssistantLimitedModeBanner
+          resumeOnly
+          deferredCount={deferredRequests.length}
+          onResumeAll={() => void handleResumeDeferred()}
+          isResuming={isResumingDeferred}
+        />
+      ) : null}
+
+      {user?.has_canvas_token ? <ActiveCourseContextBar /> : null}
 
       <InstructorAssistantSuggestedActions
         actions={suggestedActions}
@@ -261,6 +342,7 @@ export function InstructorAssistantPage() {
             setPendingMessageId(undefined);
           }}
           onConversationChange={handleConversationChange}
+          onDeferredRequest={() => void loadDeferredRequests()}
           onLoadingChange={setIsLoading}
           onStartNewChat={handleStartNewChat}
           modelSettings={llmSettings}
@@ -356,8 +438,6 @@ export function InstructorAssistantPage() {
           </div>
         </section>
       </div>
-        </>
-      )}
     </div>
   );
 }

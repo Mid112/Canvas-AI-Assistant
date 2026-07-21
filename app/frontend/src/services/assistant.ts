@@ -322,3 +322,45 @@ export async function fetchConversation(
     wrapRequestError(error);
   }
 }
+
+export interface DeferredAssistantRequest {
+  id: number;
+  conversation_id: number | null;
+  message: string;
+  proposed_action: Record<string, unknown> | null;
+  status: string;
+  created_at: string;
+  resumed_at: string | null;
+}
+
+export interface DeferredAssistantRequestList {
+  items: DeferredAssistantRequest[];
+}
+
+export async function listDeferredAssistantRequests(
+  accessToken: string,
+): Promise<DeferredAssistantRequestList> {
+  try {
+    return await apiRequest<DeferredAssistantRequestList>(
+      "/chat/deferred",
+      accessToken,
+    );
+  } catch (error) {
+    wrapRequestError(error);
+  }
+}
+
+export async function resumeDeferredAssistantRequest(
+  accessToken: string,
+  deferredId: number,
+): Promise<DeferredAssistantRequest> {
+  try {
+    return await apiRequest<DeferredAssistantRequest>(
+      `/chat/deferred/${deferredId}/resume`,
+      accessToken,
+      { method: "POST" },
+    );
+  } catch (error) {
+    wrapRequestError(error);
+  }
+}

@@ -33,10 +33,16 @@ connects them or the server is configured.
 
 The server validates every instructor-selected provider against a known provider
 id and resolves credentials from stored instructor keys or deployment secrets.
-Client-supplied base URLs and API keys in chat requests are ignored.
+Client-supplied API keys in chat requests are rejected. Client-supplied
+`base_url` values in chat are unused; URLs come from server config or the
+instructor's stored connection.
 
 Assignment and message drafting use the admin default because those workflows do
 not currently expose an instructor model picker.
+
+The in-chat switcher selects among **connected providers** (model is configured
+in Settings; the switcher shows `models[0]` as a subtitle). Disconnect applies
+when a personal API key is stored (`has_api_key`).
 
 Failover is disabled by default. An administrator may explicitly select a
 different configured fallback. Failover only handles provider transport,
@@ -64,7 +70,8 @@ across backend workers.
 ## Deployment
 
 1. Configure at least one provider in the backend environment.
-2. Start the backend so migrations `021_llm_response_cache.sql` and
-   `022_instructor_llm_connections.sql` are applied.
+2. Start the backend so migrations `021_llm_response_cache.sql`,
+   `022_instructor_llm_connections.sql`, and
+   `023_deferred_assistant_requests.sql` are applied.
 3. Optionally sign in as an administrator and set the institution default.
 4. Instructors connect providers and choose a model in Settings or chat.

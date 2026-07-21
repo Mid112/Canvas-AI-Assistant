@@ -15,12 +15,20 @@ from app.schemas.chat import (
     MessageResponse,
     WorkflowStatus,
 )
+from app.schemas.deferred_assistant import (
+    DeferredAssistantRequestListResponse,
+    DeferredAssistantRequestResponse,
+)
 from app.services.chat import (
     get_conversation_with_messages,
     handle_cancelled_action,
     handle_chat_message,
     handle_confirmed_action,
     list_conversations,
+)
+from app.services.deferred_assistant import (
+    list_deferred_assistant_requests,
+    mark_deferred_request_resumed,
 )
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -50,8 +58,6 @@ async def cancel_action(
     return ChatResponse(conversation_id=conversation.id, reply=reply, is_error=is_error)
 
 
-
-
 @router.post("/", response_model=ChatResponse)
 async def chat(
     body: ChatRequest,
@@ -68,6 +74,31 @@ async def chat(
         body.model_settings.model_dump(exclude_none=True) if body.model_settings else None,
     )
     return ChatResponse(conversation_id=conversation.id, reply=reply, is_error=is_error)
+
+
+@router.get("/deferred", response_model=DeferredAssistantRequestListResponse)
+async def get_deferred_requests(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    rows = await list_deferred_assistant_requests(db, current_user)
+    return DeferredAssistantRequestListResponse(
+        items=[DeferredAssistantRequestResponse.model_validate(row) for row in rows],
+    )
+
+
+@router.post(
+    "/deferred/{deferred_id}/resume",
+    response_model=DeferredAssistantRequestResponse,
+)
+async def resume_deferred_request(
+    deferred_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    row = await mark_deferred_request_resumed(db, current_user, deferred_id)
+    await db.commit()
+    return DeferredAssistantRequestResponse.model_validate(row)
 
 
 @router.get("/conversations", response_model=ConversationListResponse)

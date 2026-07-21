@@ -9,6 +9,7 @@ const mockUseAuth = vi.fn();
 const mockListAssistantConversations = vi.hoisted(() => vi.fn());
 const mockFetchConversation = vi.hoisted(() => vi.fn());
 const mockFetchProviders = vi.hoisted(() => vi.fn());
+const mockListDeferred = vi.hoisted(() => vi.fn());
 
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
@@ -30,6 +31,7 @@ vi.mock("@/services/assistant", async () => {
     ...actual,
     fetchConversation: mockFetchConversation,
     listAssistantConversations: mockListAssistantConversations,
+    listDeferredAssistantRequests: mockListDeferred,
     sendAssistantMessage: vi.fn(),
   };
 });
@@ -74,6 +76,7 @@ beforeEach(() => {
     items: [],
     total: 0,
   });
+  mockListDeferred.mockResolvedValue({ items: [] });
   mockFetchProviders.mockResolvedValue({
     default_provider: "ollama",
     default_model: "llama3.2",
@@ -115,6 +118,37 @@ describe("InstructorAssistantPage", () => {
     expect(
       screen.getByRole("textbox", { name: "Chat message" }),
     ).toBeInTheDocument();
+  });
+
+  it("shows limited mode when Canvas is not connected", async () => {
+    mockUseAuth.mockReturnValue({
+      user: {
+        id: 1,
+        email: "jane.doe@example.com",
+        name: "Dr. Jane Doe",
+        role: "instructor",
+        is_active: true,
+        has_canvas_token: false,
+        canvas_connections: [],
+      },
+      accessToken: "token",
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    });
+
+    renderWithInstitution(<InstructorAssistantPage />);
+
+    expect(await screen.findByText("Limited mode")).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "Chat message" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Connect Canvas to continue" }),
+    ).not.toBeInTheDocument();
   });
 
   it("starts a fresh chat from a loaded conversation", async () => {

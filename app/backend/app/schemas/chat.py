@@ -120,8 +120,9 @@ class ModelSettings(BaseModel):
 
     provider: str
     model: str | None = None
-    # Accepted for backwards compatibility with older clients, but ignored:
-    # base URLs and API keys always come from server config / stored connections.
+    # Accepted for backwards compatibility with older clients:
+    # - api_key is rejected (hard failure via reject_client_credentials)
+    # - base_url from chat is unused; URLs come from server config / connections
     base_url: str | None = None
 
     @model_validator(mode="before")

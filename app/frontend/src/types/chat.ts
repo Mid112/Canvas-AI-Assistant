@@ -66,6 +66,8 @@ export interface ChatMessage {
   interpretedAction?: InterpretedAction;
   safetyBlocked?: boolean;
   safetyMessage?: string;
+  requiresCanvasToken?: boolean;
+  deferredRequestId?: number;
 }
 
 export interface AssistantContext {
@@ -81,6 +83,8 @@ export interface AssistantResponse {
   interpretedAction?: InterpretedAction;
   safetyBlocked?: boolean;
   safetyMessage?: string;
+  requiresCanvasToken?: boolean;
+  deferredRequestId?: number;
   /** A single send_message turn can resolve to more than one distinct
    * message (different text per recipient, or an announcement plus
    * targeted messages) — the primary preview is this response itself;
