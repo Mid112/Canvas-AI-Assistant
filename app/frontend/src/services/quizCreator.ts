@@ -268,11 +268,19 @@ async function recoverCreatedQuiz(
     const quizzes = (await listResponse.json()) as Array<{
       id: number;
       title: string;
+      description?: string | null;
       due_at?: string | null;
       points_possible?: number | null;
+      question_count?: number | null;
       warnings?: string[];
     }>;
     const duePrefix = payload.dueDate.slice(0, 10);
+    const expectedQuestionCount =
+      payload.questions.length +
+      (payload.questionBankGroups ?? []).reduce(
+        (total, group) => total + group.pickCount,
+        0,
+      );
     const match = quizzes.find((quiz) => {
       if (quiz.title !== payload.name) {
         return false;
@@ -281,6 +289,19 @@ async function recoverCreatedQuiz(
         payload.pointsPossible != null &&
         quiz.points_possible != null &&
         Math.abs(Number(quiz.points_possible) - payload.pointsPossible) > 0.01
+      ) {
+        return false;
+      }
+      if (
+        quiz.description != null &&
+        quiz.description.trim() !== "" &&
+        quiz.description.trim() !== payload.description.trim()
+      ) {
+        return false;
+      }
+      if (
+        quiz.question_count != null &&
+        quiz.question_count !== expectedQuestionCount
       ) {
         return false;
       }

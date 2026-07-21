@@ -116,8 +116,10 @@ describe("quizCreator", () => {
             {
               id: 88,
               title: "Recursion Quiz",
+              description: payload.description,
               due_at: "2030-12-15T23:59:00Z",
               points_possible: 5,
+              question_count: payload.questions.length,
             },
           ]),
           { status: 200 },
@@ -130,6 +132,30 @@ describe("quizCreator", () => {
       id: 88,
       title: "Recursion Quiz",
     });
+  });
+
+  it("does not recover a quiz when description or question count diverge", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response("upstream timeout", { status: 502 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: 88,
+              title: "Recursion Quiz",
+              description: "A different quiz description entirely.",
+              due_at: "2030-12-15T23:59:00Z",
+              points_possible: 5,
+              question_count: 99,
+            },
+          ]),
+          { status: 200 },
+        ),
+      );
+
+    await expect(
+      approveQuizDraft(payload, { accessToken: "token" }),
+    ).rejects.toThrow();
   });
 
   it("maps Canvas quiz capabilities", async () => {

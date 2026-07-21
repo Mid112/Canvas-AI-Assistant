@@ -135,6 +135,41 @@ def test_canvas_route_rejects_admin_token(client, admin_credentials):
     assert "instructor" in resp.json()["detail"].lower()
 
 
+# Verifies: Quiz draft/preview endpoints reject admin tokens (instructor-only).
+def test_quiz_draft_and_preview_reject_admin_token(client, admin_credentials):
+    login = client.post("/api/v1/auth/admin/login", json=admin_credentials)
+    admin_headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    draft = client.post(
+        "/api/v1/canvas/courses/1/quizzes/generate-draft",
+        json={"prompt": "Create a quiz on recursion"},
+        headers=admin_headers,
+    )
+    assert draft.status_code == 403
+    assert "instructor" in draft.json()["detail"].lower()
+
+    preview = client.post(
+        f"/api/v1/canvas/courses/1/quizzes/preview?canvas_url={CANVAS_URL}",
+        json={
+            "title": "Quiz",
+            "description": "Enough characters for a quiz description.",
+            "due_at": "2030-09-01T23:59:00Z",
+            "points_possible": 10,
+            "questions": [
+                {
+                    "question_text": "Explain recursion.",
+                    "question_type": "essay_question",
+                    "points_possible": 10,
+                    "answers": [],
+                }
+            ],
+        },
+        headers=admin_headers,
+    )
+    assert preview.status_code == 403
+    assert "instructor" in preview.json()["detail"].lower()
+
+
 # Verifies: Canvas route rejects disabled instructor token.
 def test_canvas_route_rejects_disabled_instructor_token(client):
     reg = _register(client)

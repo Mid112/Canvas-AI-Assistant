@@ -108,12 +108,9 @@ _CREATE_ASSIGNMENT_FIELD_QUESTIONS = {
     "points_possible": "How many points is this assignment worth?",
 }
 
-_CREATE_QUIZ_FIELD_QUESTIONS = {
-    "title": "What should this quiz be called?",
-    "description": "What should the quiz description or instructions say?",
-    "due_date": "When is this quiz due?",
-    "points_possible": "How many points is this quiz worth?",
-}
+# Kept for call-site compatibility; quiz field gathering happens in the
+# dedicated quiz creation form, not via chat clarify turns.
+_CREATE_QUIZ_FIELD_QUESTIONS: dict[str, str] = {}
 
 
 def _create_assignment_missing_field(proposed: dict) -> str | None:
@@ -140,18 +137,13 @@ def _create_assignment_missing_field(proposed: dict) -> str | None:
 
 
 def _create_quiz_missing_field(proposed: dict) -> str | None:
-    """Same guarantee as _create_assignment_missing_field for create_quiz.
+    """Always None — quiz creation routes to the dedicated form.
 
-    Questions are checked by the quiz creation form's validation
-    (validate_quiz_for_create → _check_has_scorable_content), not at
-    preview time. Chat routes to the form where the instructor adds them.
+    Title, description, due date, points, and questions are validated by
+    the form (quizReviewSchema / validate_quiz_for_create), not via chat
+    clarify turns. Returning a missing field here would block navigateTo.
     """
-    for field in ("title", "description", "due_date"):
-        value = proposed.get(field)
-        if not isinstance(value, str) or not value.strip():
-            return field
-    if proposed.get("points_possible") is None:
-        return "points_possible"
+    del proposed  # kept for call-site signature compatibility
     return None
 
 
@@ -649,33 +641,15 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                     }
 
             if proposed.get("action") == "create_quiz":
-                missing_field = _create_quiz_missing_field(proposed)
-                if missing_field:
-                    partial_plan = {
-                        key: value
-                        for key, value in proposed.items()
-                        if key not in ("action", missing_field)
-                    }
-                    return {
-                        "action": "clarify",
-                        "clarify": True,
-                        "question": _CREATE_QUIZ_FIELD_QUESTIONS[missing_field],
-                        "partial_plan": partial_plan,
-                    }
-
-                if _create_assignment_due_date_in_past(proposed["due_date"]):
-                    partial_plan = {
-                        key: value for key, value in proposed.items() if key not in ("action", "due_date")
-                    }
-                    return {
-                        "action": "clarify",
-                        "clarify": True,
-                        "question": (
-                            f"The due date you gave ({proposed['due_date']}) has already "
-                            "passed — what date would you like instead?"
-                        ),
-                        "partial_plan": partial_plan,
-                    }
+                # Always hand off to the quiz creation form — do not clarify
+                # for missing fields or past due dates here. The form's
+                # review schema and validate_quiz_for_create own that.
+                # Helpers retained (always-empty / always-None) so call sites
+                # and docs stay stable if clarification is reintroduced later.
+                _ = (
+                    _create_quiz_missing_field(proposed),
+                    _CREATE_QUIZ_FIELD_QUESTIONS,
+                )
 
             if proposed.get("action") == "send_message":
                 missing_field = _send_message_missing_field(proposed)

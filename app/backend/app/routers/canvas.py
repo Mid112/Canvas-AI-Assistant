@@ -190,8 +190,13 @@ async def list_question_banks_endpoint(
 async def generate_quiz_draft_endpoint(
     course_id: int,
     body: QuizDraftRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_instructor_user),
+    db: AsyncSession = Depends(get_db),
 ):
+    # Require instructor role AND course ownership before spending an LLM call.
+    from app.services.course_access import get_owned_course_or_404
+
+    await get_owned_course_or_404(course_id, current_user, db)
     return await generate_quiz_draft(body)
 
 
@@ -199,7 +204,7 @@ async def generate_quiz_draft_endpoint(
 async def preview_quiz_endpoint(
     course_id: int,
     body: QuizCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_instructor_user),
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
     db: AsyncSession = Depends(get_db),
 ):
