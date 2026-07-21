@@ -1543,3 +1543,139 @@ prioritize fixes and polish the remaining MVP workflows.
 * **Goal 4:** Begin work on **Feature 4: Action Reversal** — Mridul
 * **Goal 5:** Begin work on **Feature 5: Risk-Based Confirmation Workflow** — Mridul
 * **Goal 6:** Continue updating team logs and documentation as work progresses
+
+---
+
+<br> 
+
+# Cycle 18 Report: 17/07 – 20/07 (July 17 – July 20)
+
+## Timesheet
+
+### Clockify Report
+
+* **17/07 (Friday):** Using Clockify – Logged 3.65 hours
+  *(3 hours and 39 minutes for role assignment, feature assignment, and Theme #3 meeting)*
+
+<img width="2414" height="218" alt="image" src="https://github.com/user-attachments/assets/8666d57b-6bfd-4703-bee6-ca68aca9ad7d" />
+
+
+* **20/07 (Monday):** Using Clockify – Logged 6.31 hours
+  *(6 hours, 18 minutes, and 36 seconds for Feature 3 and Feature 5 work)*
+
+<img width="2416" height="222" alt="image" src="https://github.com/user-attachments/assets/7e805b04-1b65-40b2-a2c3-50df75648302" />
+
+
+**Cycle Total:** 9 hours, 57 minutes, and 36 seconds
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Role assignment, feature assignment, and Theme #3 meeting (July 17)
+
+* Worked for 3 hours and 39 minutes on role assignment, feature assignment, and the Theme #3 meeting.
+* Reviewed upcoming feature responsibilities and clarified which tasks I would be responsible for during the next stage of the project.
+* Confirmed my focus areas for the upcoming cycle, including **Feature 3: Grade Management** and **Feature 5: Risk-Based Confirmation Workflow**.
+* Helped align the team on feature ownership, priorities, and implementation expectations.
+
+### #2: Feature 3 — Grade Management work (July 20)
+
+* Worked as part of a 6 hour, 18 minute, and 36 second development session focused on Feature 3 and Feature 5.
+* Began working on **Feature 3: Grade Management**, including reviewing the related issue set and planning implementation needs.
+* Reviewed Grade Management-related tasks, including:
+
+  * Grade Management UI
+  * Grade modification page
+  * Displaying student grades
+  * Allowing grade updates
+  * Displaying grade previews
+  * Adding approval workflow support
+  * Grade modification service
+  * Grade workflow integration
+  * High-risk badge and irreversible warning behavior
+* Focused on understanding how grade-related frontend, backend, and workflow pieces need to connect together.
+
+### #3: Feature 5 — Risk-Based Confirmation Workflow work (July 20)
+
+* Continued work during the same 6 hour, 18 minute, and 36 second session on **Feature 5: Risk-Based Confirmation Workflow**.
+* Reviewed and started planning the risk-based confirmation feature set.
+* Looked at related areas including:
+
+  * Risk-Based Confirmation UI
+  * Risk Classification Service
+  * Risk Confirmation Integration
+  * Low, medium, and high risk badge display
+  * Stronger confirmation for high-risk actions
+  * Warning display for destructive actions
+  * Reversibility and undo information
+  * Confirmation behavior across read-only, edit, delete, and rollback workflows
+* Worked on understanding how risk metadata should connect to the confirmation workflow and user-facing UI.
+
+---
+
+## Progress Update (since 17/07/2026)
+
+| TASK/ISSUE #                                | STATUS      |
+| ------------------------------------------- | ----------- |
+| Role assignment                             | Completed   |
+| Feature assignment                          | Completed   |
+| Theme #3 meeting                            | Completed   |
+| Feature 3: Grade Management                 | In Progress |
+| Feature 4: Action Reversal                  | Planned     |
+| Feature 5: Risk-Based Confirmation Workflow | In Progress |
+| Grade Management UI                         | In Progress |
+| Grade Modification Service                  | In Progress |
+| Grade Workflow Integration                  | In Progress |
+| Risk-Based Confirmation UI                  | In Progress |
+| Risk Classification Service                 | In Progress |
+| Risk Confirmation Integration               | In Progress |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle focused on transitioning from previous MVP validation work into the
+next major feature set. On July 17, I worked on role assignment, feature
+assignment, and the Theme #3 meeting. This helped clarify my responsibilities
+for the upcoming work and confirmed that I would be focusing on **Feature 3:
+Grade Management**, **Feature 4: Action Reversal**, and **Feature 5:
+Risk-Based Confirmation Workflow**.
+
+On July 20, I worked for 6 hours, 18 minutes, and 36 seconds on Feature 3 and
+Feature 5. This included reviewing the related tickets, understanding the
+required frontend/backend work, and planning how the grade management and
+risk-based confirmation workflows should connect into the existing system.
+
+This cycle helped establish a clear direction for my next development tasks.
+The work moved from general testing and validation into new feature planning and
+implementation, especially around grade modification and risk-aware confirmation
+behavior.
+
+### Retrospective:
+
+This was a useful cycle because it clarified my feature ownership and allowed
+me to begin focused work on the next set of project features. The Theme #3
+meeting and feature assignment work helped make the upcoming responsibilities
+more concrete, while the development session on July 20 helped me begin
+breaking down the technical requirements for Grade Management and Risk-Based
+Confirmation.
+
+The main area to continue improving is turning the feature planning into
+working implementation. Feature 3 and Feature 5 both involve multiple connected
+parts, so the next cycle should focus on building, testing, and integrating
+these workflows carefully across the frontend, backend, and confirmation
+system.
+
+---
+
+## Next Cycle Goals
+
+* **Goal 1:** Continue implementing **Feature 3: Grade Management** — Mridul
+* **Goal 2:** Continue implementing **Feature 5: Risk-Based Confirmation Workflow** — Mridul
+* **Goal 3:** Begin or continue planning **Feature 4: Action Reversal** — Mridul
+* **Goal 4:** Test grade preview, grade update, and approval workflow behavior
+* **Goal 5:** Test risk badge, confirmation warning, and reversibility display behavior
+* **Goal 6:** Continue documenting progress and updating team logs
