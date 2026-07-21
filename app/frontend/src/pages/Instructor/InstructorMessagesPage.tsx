@@ -75,6 +75,12 @@ export function InstructorMessagesPage() {
     aiDraft?.body ?? "",
     aiDraft?.prompt ?? "",
   ].join("|");
+  const effectiveFetchOptions = activeFetchOptions ?? fallbackFetchOptions ?? undefined;
+  const draftOptionsKey = [
+    activeCourse?.localId ?? "no-course",
+    activeFetchOptions ? "roster" : "fallback",
+    draftSeedKey || "default-draft",
+  ].join("|");
 
   useEffect(() => {
     const tabParam = searchParams.get("tab");
@@ -257,8 +263,8 @@ export function InstructorMessagesPage() {
         <TabsContent value="compose" className="mt-4 space-y-6">
           <MessageDraftPageHeader />
           <MessageDraftPage
-            key={draftSeedKey || "default-draft"}
-            fetchOptions={activeFetchOptions ?? fallbackFetchOptions ?? undefined}
+            key={draftOptionsKey}
+            fetchOptions={effectiveFetchOptions}
           />
         </TabsContent>
       </Tabs>
