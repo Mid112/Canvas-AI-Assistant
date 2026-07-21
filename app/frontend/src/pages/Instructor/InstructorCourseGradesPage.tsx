@@ -1,6 +1,6 @@
 import { AlertTriangle, CheckCircle2, Loader2, RotateCcw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,7 @@ import type { ApiSubmission } from "@/types/submission";
 
 export function InstructorCourseGradesPage() {
   const { localCourseId } = useParams();
+  const [searchParams] = useSearchParams();
   const parsedLocalCourseId = Number(localCourseId);
   const { accessToken, user } = useAuth();
   const {
@@ -54,6 +55,23 @@ export function InstructorCourseGradesPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const prefill = useMemo(() => {
+    // The AI assistant links here with real ids it resolved from Canvas-backed
+    // data. Keep the contract URL-based so refresh/back/forward preserve the
+    // draft target without adding another global state store.
+    const studentIds = (searchParams.get("studentIds") ?? "")
+      .split(",")
+      .map((value) => Number(value))
+      .filter((value) => Number.isFinite(value));
+    const assignmentIdParam = Number(searchParams.get("assignmentId"));
+    return {
+      assignmentId: Number.isFinite(assignmentIdParam) ? assignmentIdParam : null,
+      studentIds,
+      grade: searchParams.get("grade") ?? "",
+      reason: searchParams.get("reason") ?? "",
+    };
+  }, [searchParams]);
+
   useEffect(() => {
     if (!accessToken || !user?.has_canvas_token || !course || !canvasUrl) {
       return;
@@ -65,7 +83,22 @@ export function InstructorCourseGradesPage() {
       .then((items) => {
         if (!cancelled) {
           setAssignments(items);
-          setAssignmentId(items[0]?.id ?? "");
+          // Prefer the assistant-provided assignment when it still exists in
+          // the freshly fetched Canvas list; otherwise fall back to the first
+          // assignment so the page remains usable after stale/deleted links.
+          setAssignmentId(
+            prefill.assignmentId && items.some((item) => item.id === prefill.assignmentId)
+              ? prefill.assignmentId
+              : items[0]?.id ?? "",
+          );
+          if (prefill.grade) {
+            setPostedGrade(prefill.grade);
+          }
+          // Reason is optional but included in the same prefill path so grade
+          // history and Canvas comments can share the instructor's rationale.
+          if (prefill.reason) {
+            setReason(prefill.reason);
+          }
           setError(null);
         }
       })
@@ -82,7 +115,16 @@ export function InstructorCourseGradesPage() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, canvasUrl, course, parsedLocalCourseId, user?.has_canvas_token]);
+  }, [
+    accessToken,
+    canvasUrl,
+    course,
+    parsedLocalCourseId,
+    prefill.assignmentId,
+    prefill.grade,
+    prefill.reason,
+    user?.has_canvas_token,
+  ]);
 
   useEffect(() => {
     if (!accessToken || !assignmentId || !canvasUrl) {
@@ -100,7 +142,18 @@ export function InstructorCourseGradesPage() {
       .then((items) => {
         if (!cancelled) {
           setSubmissions(items);
-          setSelectedUserIds(items.map((item) => item.user_id));
+          // Default manual visits away from unsubmitted rows, but preserve the
+          // AI handoff's explicit target list when the instructor asked for it.
+          const prefilledSelection = prefill.studentIds.filter((id) =>
+            items.some((item) => item.user_id === id),
+          );
+          setSelectedUserIds(
+            prefilledSelection.length > 0
+              ? prefilledSelection
+              : items
+                  .filter((item) => item.status !== "unsubmitted")
+                  .map((item) => item.user_id),
+          );
           setPreviews([]);
           setNotice(null);
           setError(null);
@@ -119,12 +172,27 @@ export function InstructorCourseGradesPage() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, assignmentId, canvasUrl, parsedLocalCourseId]);
+  }, [accessToken, assignmentId, canvasUrl, parsedLocalCourseId, prefill.studentIds]);
 
   const selectedSubmissions = useMemo(
     () => submissions.filter((item) => selectedUserIds.includes(item.user_id)),
     [selectedUserIds, submissions],
   );
+  const selectedAssignment = useMemo(
+    () => assignments.find((assignment) => assignment.id === assignmentId),
+    [assignmentId, assignments],
+  );
+  // Warnings are advisory rather than blockers: paper/in-person assignments
+  // and bonus grading both make these states valid instructor choices.
+  const selectedUnsubmittedCount = selectedSubmissions.filter(
+    (submission) => submission.status === "unsubmitted",
+  ).length;
+  const numericPostedGrade = Number(postedGrade);
+  const exceedsPointsPossible =
+    postedGrade.trim().length > 0 &&
+    Number.isFinite(numericPostedGrade) &&
+    typeof selectedAssignment?.points_possible === "number" &&
+    numericPostedGrade > selectedAssignment.points_possible;
 
   const payloads = useMemo(
     () =>
@@ -336,11 +404,23 @@ export function InstructorCourseGradesPage() {
                   {submissions.map((submission) => {
                     const preview = previewByUserId.get(submission.user_id);
                     return (
-                      <TableRow key={submission.id}>
+                      <TableRow
+                        key={submission.id}
+                        className={cn(submission.status === "unsubmitted" && "bg-muted/30")}
+                      >
                         <TableCell className="font-medium">
                           {submission.student_name ?? `User ${submission.user_id}`}
                         </TableCell>
-                        <TableCell className="capitalize">{submission.status}</TableCell>
+                        <TableCell className="capitalize">
+                          <span className="inline-flex items-center gap-2">
+                            {submission.status}
+                            {submission.status === "unsubmitted" ? (
+                              // Keep unsubmitted students visible and selectable,
+                              // but make them easy to spot before preview/submit.
+                              <Badge variant="outline">No online submission</Badge>
+                            ) : null}
+                          </span>
+                        </TableCell>
                         <TableCell>{submission.score ?? "-"}</TableCell>
                         <TableCell>{submission.grade ?? "-"}</TableCell>
                         <TableCell
@@ -384,6 +464,25 @@ export function InstructorCourseGradesPage() {
                   "Rollback availability will be shown after preview."}
               </span>
             </div>
+            {selectedUnsubmittedCount > 0 && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                {/* This warning intentionally does not disable preview: Canvas
+                supports grading without an online upload for some assignments. */}
+                {selectedUnsubmittedCount} selected student
+                {selectedUnsubmittedCount === 1 ? " has" : "s have"} no online
+                submission. You can still preview and submit if this assignment is
+                paper-based, in-person, or otherwise gradeable without a Canvas upload.
+              </div>
+            )}
+            {exceedsPointsPossible && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                {/* Over-max scores can be legitimate bonus/curve grades, so the
+                typed confirmation remains the enforcement point. */}
+                The proposed grade exceeds this assignment&apos;s{" "}
+                {selectedAssignment?.points_possible} possible points. This is allowed
+                for bonus or adjusted grading, but review carefully before approval.
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="reason">Reason</Label>
               <Textarea
@@ -416,8 +515,9 @@ export function InstructorCourseGradesPage() {
             )}
             {!previewMatchesSelection && (
               <p className="text-sm font-medium text-muted-foreground">
-                Preview is required before submit, and must be refreshed after changing
-                the grade, reason, assignment, or selected students.
+                Submit unlocks only after you preview the selected changes and type
+                UPDATE. Refresh the preview after changing the grade, reason,
+                assignment, or selected students.
               </p>
             )}
             <Button

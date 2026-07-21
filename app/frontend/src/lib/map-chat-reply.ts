@@ -5,6 +5,7 @@ import {
 import {
   instructorChatPreviewPath,
   instructorCourseAnalyticsPath,
+  instructorCourseGradesPrefillPath,
   instructorDryRunPreviewPath,
   instructorMessagesPath,
   paths,
@@ -74,6 +75,115 @@ function readableFields(
         ? [{ label: formatFieldLabel(field), value: formatted }]
         : [];
     });
+}
+
+function readNumberArray(value: unknown): number[] | undefined {
+  // Backend JSON can arrive from persisted transcripts too, so tolerate
+  // numeric strings while still dropping malformed ids before building links.
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const numbers = value
+    .map((entry) => (typeof entry === "number" ? entry : Number(entry)))
+    .filter((entry) => Number.isFinite(entry));
+  return numbers.length > 0 ? numbers : undefined;
+}
+
+function readNumber(value: unknown): number | undefined {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
+function buildGradeHandoffAction(
+  handoff: Record<string, unknown> | undefined,
+): AssistantResponse["interpretedAction"] | undefined {
+  // update_grade no longer renders as a chat approval card. The resolver still
+  // does the hard work, but the action card opens the dedicated Grades tab so
+  // instructors see the same preview, warnings, and typed approval every time.
+  if (!handoff) {
+    return undefined;
+  }
+
+  const courseId =
+    typeof handoff.local_course_id === "number"
+      ? handoff.local_course_id
+      : undefined;
+  const assignmentId =
+    typeof handoff.assignment_id === "number" ? handoff.assignment_id : undefined;
+  if (courseId === undefined || assignmentId === undefined) {
+    // A half-shaped handoff is safer as plain assistant text than as a broken
+    // navigation button to the wrong course or assignment.
+    return undefined;
+  }
+
+  const studentIds = readNumberArray(handoff.student_ids);
+  return {
+    action: "Update Grade",
+    course: readString(handoff.course_name) ?? "Active course",
+    affectedStudents:
+      typeof handoff.student_count === "number"
+        ? `${handoff.student_count} student${handoff.student_count === 1 ? "" : "s"}`
+        : studentIds
+          ? `${studentIds.length} student${studentIds.length === 1 ? "" : "s"}`
+          : "Selected students",
+    primaryLink: {
+      label: "Open Grades tab",
+      href: instructorCourseGradesPrefillPath(courseId, {
+        assignmentId,
+        studentIds,
+        grade: readString(handoff.new_grade),
+        reason: readString(handoff.reason),
+      }),
+    },
+  };
+}
+
+function buildGradeClarifyHandoffAction(
+  partialPlan: Record<string, unknown> | undefined,
+): AssistantResponse["interpretedAction"] | undefined {
+  if (!partialPlan || partialPlan.action !== "update_grade") {
+    return undefined;
+  }
+
+  const courseId = readNumber(partialPlan.local_course_id);
+  if (courseId === undefined) {
+    return undefined;
+  }
+
+  const hasGradeManagementSignal =
+    readString(partialPlan.new_grade) !== undefined ||
+    readNumber(partialPlan.assignment_id) !== undefined ||
+    readString(partialPlan.assignment_reference) !== undefined ||
+    readString(partialPlan.submission_reference) !== undefined;
+
+  if (!hasGradeManagementSignal) {
+    // "Feedback" alone can mean assignment feedback or a private message.
+    // Keep those turns as clarify text until the user picks the surface.
+    return undefined;
+  }
+
+  const studentId = readNumber(partialPlan.student_id);
+  const studentIds =
+    readNumberArray(partialPlan.student_ids) ??
+    (studentId !== undefined ? [studentId] : undefined);
+
+  return {
+    action: "Update Grade",
+    course: readString(partialPlan.course_name) ?? "Active course",
+    affectedStudents: studentIds
+      ? `${studentIds.length} student${studentIds.length === 1 ? "" : "s"}`
+      : "Course-wide",
+    primaryLink: {
+      label: "Open Grades tab",
+      href: instructorCourseGradesPrefillPath(courseId, {
+        assignmentId: readNumber(partialPlan.assignment_id),
+        studentIds,
+        grade: readString(partialPlan.new_grade),
+        reason: readString(partialPlan.reason),
+      }),
+    },
+  };
 }
 
 function buildInterpretedAction(
@@ -401,6 +511,16 @@ export function mapChatReplyToAssistantResponse(
     const question =
       readString(reply.question) ??
       "Could you share a bit more detail so I can help?";
+    const interpretedAction = buildGradeClarifyHandoffAction(
+      reply.partial_plan as Record<string, unknown> | undefined,
+    );
+    if (interpretedAction) {
+      return {
+        content: `${acknowledgement}${question}`,
+        acknowledgedFields,
+        interpretedAction,
+      };
+    }
     return {
       content: `${acknowledgement}${question}`,
       acknowledgedFields,
@@ -421,6 +541,9 @@ export function mapChatReplyToAssistantResponse(
   if (reply.action === "respond") {
     return {
       content: readString(reply.message) ?? "Here's what I found.",
+      interpretedAction: buildGradeHandoffAction(
+        reply.grade_handoff as Record<string, unknown> | undefined,
+      ),
     };
   }
 

@@ -149,6 +149,40 @@ describe("mapChatReply", () => {
     });
   });
 
+  it("maps grade handoff replies to the Grades tab prefill action", () => {
+    // The backend sends a normal respond envelope; the mapper is responsible
+    // for turning the grade_handoff payload into the existing action-card link.
+    expect(
+      mapChatReply(
+        {
+          action: "respond",
+          message: "Open the Grades tab to review and approve.",
+          grade_handoff: {
+            local_course_id: 7,
+            course_name: "COSC 777",
+            assignment_id: 10,
+            student_ids: [42, 43],
+            student_count: 2,
+            new_grade: "110",
+            reason: "Bonus adjustment",
+          },
+        },
+        false,
+      ),
+    ).toEqual({
+      content: "Open the Grades tab to review and approve.",
+      interpretedAction: {
+        action: "Update Grade",
+        course: "COSC 777",
+        affectedStudents: "2 students",
+        primaryLink: {
+          label: "Open Grades tab",
+          href: "/instructor/courses/7/grades?assignmentId=10&studentIds=42%2C43&grade=110&reason=Bonus+adjustment",
+        },
+      },
+    });
+  });
+
   // Verifies: Maps fetch_courses results.
   it("maps fetch_courses results", () => {
     expect(

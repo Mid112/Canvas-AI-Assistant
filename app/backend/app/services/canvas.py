@@ -104,6 +104,8 @@ class CanvasTokenRequiredError(HTTPException):
 
 
 def require_canvas_token(user: User, canvas_url: str) -> str:
+    """Return the decrypted token for one Canvas URL, or raise a user-facing
+    403 that tells the caller whether the token is missing or unreadable."""
     canvas_url = normalize_canvas_url(canvas_url)
     conn = next(
         (c for c in user.canvas_connections if canvas_urls_equivalent(c.canvas_url, canvas_url)),
@@ -118,6 +120,22 @@ def require_canvas_token(user: User, canvas_url: str) -> str:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Canvas token is corrupted — please reconnect Canvas.",
         )
+
+
+def _is_expected_canvas_token_sync_error(exc: Exception) -> bool:
+    """Background sync treats missing/corrupted Canvas tokens as expected
+    account state, not infrastructure failure. Interactive endpoints still
+    raise the original 403, but sweeps should only log a concise reconnect
+    warning so stack startup is not flooded with tracebacks."""
+    return (
+        isinstance(exc, HTTPException)
+        and exc.status_code == status.HTTP_403_FORBIDDEN
+        and isinstance(exc.detail, str)
+        and (
+            exc.detail.startswith("No Canvas token")
+            or exc.detail.startswith("Canvas token is corrupted")
+        )
+    )
 
 
 async def get_owned_course(
@@ -1223,11 +1241,17 @@ async def run_course_sync_sweep(db: AsyncSession) -> None:
                 continue
             try:
                 await sync_courses_if_stale(user, connection, conn_db)
-            except Exception:
-                logger.warning(
-                    "course sync sweep failed for canvas_connection_id=%s user_id=%s",
-                    connection_id, user_id, exc_info=True,
-                )
+            except Exception as exc:
+                if _is_expected_canvas_token_sync_error(exc):
+                    logger.warning(
+                        "course sync sweep skipped canvas_connection_id=%s user_id=%s: %s",
+                        connection_id, user_id, exc.detail,
+                    )
+                else:
+                    logger.warning(
+                        "course sync sweep failed for canvas_connection_id=%s user_id=%s",
+                        connection_id, user_id, exc_info=True,
+                    )
                 await conn_db.rollback()
 
 
@@ -1289,11 +1313,17 @@ async def set_active_course(user: User, local_course_id: int, db: AsyncSession) 
             if sync_connection is not None and sync_user is not None:
                 try:
                     await sync_courses_if_stale(sync_user, sync_connection, sync_db)
-                except Exception:
-                    logger.warning(
-                        "set_active_course sync_courses_if_stale failed for canvas_connection_id=%s user_id=%s",
-                        connection.id, user.id, exc_info=True,
-                    )
+                except Exception as exc:
+                    if _is_expected_canvas_token_sync_error(exc):
+                        logger.warning(
+                            "set_active_course sync skipped canvas_connection_id=%s user_id=%s: %s",
+                            connection.id, user.id, exc.detail,
+                        )
+                    else:
+                        logger.warning(
+                            "set_active_course sync_courses_if_stale failed for canvas_connection_id=%s user_id=%s",
+                            connection.id, user.id, exc_info=True,
+                        )
                     await sync_db.rollback()
         # The isolated session above may have just committed a Canvas
         # rename onto this same Course row (get_courses upserts Course.name,

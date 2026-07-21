@@ -3,6 +3,7 @@ import json
 from app.mcp_tools.schemas import UpdateGradeAction
 from app.models.course import Course
 from app.services.chat import (
+    _build_grade_handoff_result,
     _build_grouped_grade_update_result,
     _grade_partial_plan,
     _is_bulk_student_reference,
@@ -23,9 +24,14 @@ def test_update_grade_action_accepts_numeric_grade():
     assert action.new_grade == "100"
 
 
-def test_bulk_grade_update_builds_additional_previews():
+def test_bulk_grade_update_builds_grades_tab_handoff():
+    """Bulk grade requests should redirect to the shared Grades tab flow.
+
+    This replaces the older one-chat-preview-per-student behavior, which was
+    harder to review and easier to desynchronize from the manual Grades page.
+    """
     course = Course(id=7, name="COSC 777", canvas_course_id="77", instructor_id=1)
-    result = _build_grouped_grade_update_result(
+    result = _build_grade_handoff_result(
         course,
         assignment_id=10,
         submissions=[
@@ -36,16 +42,38 @@ def test_bulk_grade_update_builds_additional_previews():
         reason="Curve applied",
     )
 
-    assert result["intent_preview"] is True
-    assert result["proposed_action"]["student_id"] == 101
-    assert result["proposed_action"]["new_grade"] == "100"
-    assert result["proposed_action"]["reason"] == "Curve applied"
-    assert len(result["_extra_groups"]) == 1
-    assert result["_extra_groups"][0]["proposed_action"]["student_id"] == 102
+    assert result["action"] == "respond"
+    assert result["grade_handoff"] == {
+        "local_course_id": 7,
+        "course_name": "COSC 777",
+        "assignment_id": 10,
+        "assignment_label": 'assignment "10"',
+        "student_ids": [101, 102],
+        "student_count": 2,
+        "new_grade": "100",
+        "reason": "Curve applied",
+    }
 
-    # The snapshot is stored as JSON-safe data so Workflow.proposed_action
-    # can persist it directly when the preview is created.
-    json.dumps(result["proposed_action"]["current_submission"])
+    # The handoff stays JSON-safe because the assistant transcript persists
+    # the full reply envelope before the frontend opens the Grades tab.
+    json.dumps(result["grade_handoff"])
+
+
+def test_grouped_grade_update_wrapper_uses_grades_tab_handoff():
+    """The legacy helper name remains a thin wrapper for local callers/tests."""
+    course = Course(id=7, name="COSC 777", canvas_course_id="77", instructor_id=1)
+    result = _build_grouped_grade_update_result(
+        course,
+        assignment_id=10,
+        submissions=[
+            {"id": 1, "assignment_id": 10, "user_id": 101, "student_name": "Coin"},
+        ],
+        new_grade="100",
+        reason=None,
+    )
+
+    assert result["action"] == "respond"
+    assert result["grade_handoff"]["student_ids"] == [101]
 
 
 def test_grade_clarification_partial_plan_preserves_target_context():
