@@ -1292,6 +1292,96 @@ Overall, this cycle focused on evaluating the completed MVP, documenting testing
 * Maintain project board and sprint planning
 * Continue consistent Clockify tracking
 
+# **Cycle 18: Friday (17/7) ~ Monday (20/7)**
+
+### **Friday (17/7)**
+<img width="1327" height="160" alt="Screenshot 2026-07-21 at 10 58 21 AM" src="https://github.com/user-attachments/assets/bddb5402-5f27-40da-987e-051294c42f26" />
+
+
+**Timesheet**  
+**Clockify Report:** 4:27:10
+
+**Current Tasks**
+- Participated in the weekly team meeting
+- Reviewed Testing Event 1 feedback and discussed next development priorities
+- Refactored and reorganized the project board
+- Updated issue dependencies and sprint planning
+- Coordinated remaining development work with the team
+
+---
+
+### **Saturday (18/7)**
+<img width="1326" height="163" alt="Screenshot 2026-07-21 at 10 58 29 AM" src="https://github.com/user-attachments/assets/ddc6d72f-370a-4268-924b-d6bed376a804" />
+
+**Timesheet**  
+**Clockify Report:** 4:20:30
+
+**Current Tasks**
+- Continued refactoring the project board
+- Implemented **Feature 1: Quiz Management**
+- Developed frontend and backend changes required for the feature
+- Tested the implemented functionality
+- Opened a pull request for Feature 1 and prepared it for review
+
+---
+
+### **Sunday (19/7)**
+<img width="1329" height="225" alt="Screenshot 2026-07-21 at 10 58 36 AM" src="https://github.com/user-attachments/assets/f296fdb2-17c4-4b93-bf67-932b2bcb5f43" />
+
+**Timesheet**  
+**Clockify Report:** 1:38:27
+
+**Current Tasks**
+- Continued implementing **Feature 2: Feedback Workflow**
+- Completed feature implementation and verified functionality
+- Fixed issues identified in personal pull requests
+- Addressed reviewer feedback and updated the implementation
+- Opened a pull request for Feature 2
+
+---
+
+### **Monday (20/7)**
+<img width="1328" height="216" alt="Screenshot 2026-07-21 at 10 58 44 AM" src="https://github.com/user-attachments/assets/df745daa-8d47-4787-a6dd-c41a8810a2ec" />
+
+**Timesheet**  
+**Clockify Report:** 1:14:49
+
+**Current Tasks**
+- Created a summary of completed project features
+- Documented completed functionality and implementation progress
+- Fixed remaining issues identified in personal pull requests
+- Reviewed teammate pull requests and provided feedback
+
+---
+
+## **Cycle 18 – Goal Review**
+
+### **Reflection**
+
+This cycle focused on implementing new functionality following Testing Event 1 while continuing to improve project organization and code quality. Feature implementation, pull request preparation, project board refactoring, and documentation updates were completed alongside regular code reviews. These activities helped transition the project into the next stage of development while maintaining a stable and organized workflow.
+
+### **Retrospective**
+
+Development resumed after Testing Event 1 with the implementation of **Feature 1 (Quiz Management)** and **Feature 2 (Feedback Workflow)**. Both features were developed, tested, and submitted through pull requests, allowing the team to continue expanding application functionality while following the established review process.
+
+In parallel, the project board was refactored to improve issue organization, sprint planning, and task tracking. Pull request feedback was addressed promptly, ensuring that completed work met the project's quality standards before integration. Documentation was also updated to summarize completed functionality and provide a clear overview of project progress.
+
+Overall, this cycle balanced feature implementation, code review, project organization, and documentation, contributing to steady progress toward the remaining project milestones.
+
+---
+
+## **Next Cycle Goals (Cycle 19: Tuesday 21/7 ~ Thursday 23/7)**
+
+* Continue implementing remaining project features
+* Address feedback from Feature 1 and Feature 2 pull requests
+* Resolve outstanding bugs identified during implementation
+* Continue frontend and backend enhancements
+* Perform integration and regression testing
+* Review and merge outstanding pull requests
+* Update project documentation
+* Maintain the project board and sprint planning
+* Continue consistent Clockify tracking
+
 
 
 
