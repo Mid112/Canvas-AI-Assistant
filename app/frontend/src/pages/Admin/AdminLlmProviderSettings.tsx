@@ -85,7 +85,7 @@ export function AdminLlmProviderSettings() {
       : provider?.default_model
         ? [provider.default_model]
         : [];
-  }, [config?.fallback_provider, data?.providers]);
+  }, [config, data?.providers]);
 
   async function handleSave() {
     if (!accessToken || !config) return;

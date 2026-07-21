@@ -191,7 +191,7 @@ export function AiModelsSettingsTab() {
     });
   }
 
-  function useAsPreferred(provider: MergedProvider) {
+  function setAsPreferred(provider: MergedProvider) {
     if (!userId || !provider.connected) return;
     const draft = drafts[provider.id] ?? draftForProvider(provider);
     const next: LlmProviderSettings = {
@@ -563,7 +563,7 @@ export function AiModelsSettingsTab() {
                               type="button"
                               size="sm"
                               variant="outline"
-                              onClick={() => useAsPreferred(provider)}
+                              onClick={() => setAsPreferred(provider)}
                               disabled={isSaving}
                             >
                               Use as preferred

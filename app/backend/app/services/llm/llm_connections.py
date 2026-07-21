@@ -101,10 +101,12 @@ async def build_instructor_provider_catalog(
     ]
 
     catalog: list[dict] = []
-    for definition, status in zip(definitions, health, strict=True):
+    for definition, health_info in zip(definitions, health, strict=True):
         connection = connections.get(definition.id)
-        connected = is_provider_connected(definition, connection, status["status"])
-        models = list(status["models"])
+        connected = is_provider_connected(
+            definition, connection, health_info["status"]
+        )
+        models = list(health_info["models"])
         saved_model = connection.model if connection and connection.model else None
         if saved_model and saved_model not in models:
             models.insert(0, saved_model)
@@ -118,9 +120,9 @@ async def build_instructor_provider_catalog(
                 "hosting": definition.hosting,
                 "default_model": definition.default_model,
                 "configured": definition.configured,
-                "status": status["status"],
+                "status": health_info["status"],
                 "models": models,
-                "detail": status["detail"],
+                "detail": health_info["detail"],
                 "connected": connected,
                 "requires_api_key": provider_requires_user_key(definition),
                 "accepts_api_key": provider_accepts_user_key(definition),
