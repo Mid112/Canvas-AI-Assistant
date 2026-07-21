@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FileText, Users } from "lucide-react";
+import { Activity, FileText, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -112,10 +112,14 @@ export function AdminDashboardPage() {
           <CardHeader>
             <CardTitle>System status</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>Canvas integrations: operational</p>
-            <p>Workflow engine: operational</p>
-            <p>Audit logging: collecting events</p>
+          <CardContent>
+            <Link
+              to={paths.admin.systemHealth}
+              className={cn(buttonVariants({ variant: "outline" }))}
+            >
+              <Activity data-icon="inline-start" />
+              View system health
+            </Link>
           </CardContent>
         </Card>
       </div>

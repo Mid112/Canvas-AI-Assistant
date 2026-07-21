@@ -1,0 +1,56 @@
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel
+
+HealthStatus = Literal["healthy", "degraded", "down"]
+
+
+class ServiceHealth(BaseModel):
+    status: HealthStatus
+    latency_ms: int | None = None
+    error_detail: str | None = None
+    uptime_seconds: int | None = None  # backend only
+
+
+class FailingCanvasConnection(BaseModel):
+    user_name: str
+    user_email: str
+    canvas_url: str
+    error_detail: str | None = None
+
+
+class InstructorCanvasSummary(BaseModel):
+    total: int
+    healthy: int
+    failing: int
+    failing_connections: list[FailingCanvasConnection]
+
+
+class InstructorAiSummary(BaseModel):
+    total: int
+    failing_recent: int
+
+
+class HealthCheckResponse(BaseModel):
+    overall_status: HealthStatus
+    checked_at: datetime
+    services: dict[str, ServiceHealth]
+    instructor_canvas: InstructorCanvasSummary
+    instructor_ai: InstructorAiSummary
+
+
+class LatestHealthResponse(BaseModel):
+    overall_status: HealthStatus
+    checked_at: datetime | None
+    services: dict[str, ServiceHealth]
+
+
+class HealthHistoryEntry(BaseModel):
+    status: HealthStatus
+    latency_ms: int | None = None
+    checked_at: datetime
+
+
+class HealthHistoryResponse(BaseModel):
+    services: dict[str, list[HealthHistoryEntry]]

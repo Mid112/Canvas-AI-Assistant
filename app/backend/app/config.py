@@ -112,6 +112,12 @@ class Settings(BaseSettings):
     # button) last populated.
     CANVAS_COURSE_SYNC_COOLDOWN_SECONDS: int = 60
 
+    # System Health Monitoring (Feature 9) — timeouts for GET /admin/health's
+    # per-service checks. AI gets a longer budget since a real chat-completion
+    # round trip is inherently slower than a DB ping or a Canvas GET.
+    HEALTH_CHECK_TIMEOUT_SECONDS: float = 5.0
+    HEALTH_CHECK_AI_TIMEOUT_SECONDS: float = 8.0
+
     @field_validator("CANVAS_TOKEN_ENCRYPTION_KEY", mode="before")
     @classmethod
     def _validate_encryption_key(cls, v: str) -> str:

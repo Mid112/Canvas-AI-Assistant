@@ -1,4 +1,5 @@
 import {
+  Activity,
   BookOpen,
   Bot,
   FileText,
@@ -30,6 +31,7 @@ export const adminNavItems: NavItem[] = [
   { title: "Dashboard", href: paths.admin.dashboard, icon: LayoutDashboard },
   { title: "Users", href: paths.admin.users, icon: Users },
   { title: "Audit Logs", href: paths.admin.audit, icon: FileText },
+  { title: "System Health", href: paths.admin.systemHealth, icon: Activity },
   { title: "Settings", href: paths.admin.settings, icon: Settings },
 ];
 
@@ -76,4 +78,21 @@ export function getAssistantPath(role: UserRole): string {
     case "admin":
       return paths.admin.dashboard;
   }
+}
+
+/** Returns a copy of `navItems` with the System Health entry's `badge` set
+ * from the latest known overall status — only that one entry is touched,
+ * and only when there's something to flag (a healthy status renders no
+ * badge, matching Sidebar's calm-by-default treatment). */
+export function decorateNavItemsWithHealth(
+  navItems: NavItem[],
+  overallStatus: "healthy" | "degraded" | "down" | undefined,
+): NavItem[] {
+  if (!overallStatus || overallStatus === "healthy") {
+    return navItems;
+  }
+
+  return navItems.map((item) =>
+    item.href === paths.admin.systemHealth ? { ...item, badge: overallStatus } : item,
+  );
 }

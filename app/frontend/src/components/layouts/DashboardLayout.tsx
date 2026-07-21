@@ -4,13 +4,16 @@ import { Outlet, useLocation } from "react-router-dom";
 import { Header } from "@/components/layouts/Header";
 import { Sidebar } from "@/components/layouts/Sidebar";
 import { ActiveCourseProvider } from "@/contexts/ActiveCourseProvider";
+import { useAuth } from "@/contexts/AuthContext";
 import { InstitutionProvider } from "@/contexts/InstitutionProvider";
 import {
   getStoredSidebarOpen,
   setStoredSidebarOpen,
 } from "@/lib/sidebar-storage";
 import { cn } from "@/lib/utils";
+import { fetchLatestSystemHealth, type HealthStatus } from "@/services/systemHealth";
 import {
+  decorateNavItemsWithHealth,
   getNavItemsForRole,
   getProfilePath,
   getRoleLabel,
@@ -66,14 +69,43 @@ function getPageTitle(pathname: string, role: UserRole): string {
 
 function DashboardShell({ role }: DashboardLayoutProps) {
   const { pathname } = useLocation();
-  const navItems = getNavItemsForRole(role);
+  const { accessToken } = useAuth();
   const roleLabel = getRoleLabel(role);
   const title = getPageTitle(pathname, role);
   const [sidebarOpen, setSidebarOpen] = useState(() => getStoredSidebarOpen());
+  const [healthStatus, setHealthStatus] = useState<HealthStatus | undefined>();
 
   useEffect(() => {
     setStoredSidebarOpen(sidebarOpen);
   }, [sidebarOpen]);
+
+  useEffect(() => {
+    if (role !== "admin" || !accessToken) {
+      return;
+    }
+
+    let cancelled = false;
+
+    // Cheap, no live checks — just a nice-to-have nav indicator, so a
+    // failed fetch is silently ignored (falls back to the undecorated
+    // static nav list) rather than showing an error banner on every page.
+    void (async () => {
+      try {
+        const data = await fetchLatestSystemHealth(accessToken);
+        if (!cancelled) {
+          setHealthStatus(data.overall_status);
+        }
+      } catch {
+        // Nice-to-have only — ignore.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [role, accessToken]);
+
+  const navItems = decorateNavItemsWithHealth(getNavItemsForRole(role), healthStatus);
 
   const toggleSidebar = () => {
     setSidebarOpen((open) => !open);

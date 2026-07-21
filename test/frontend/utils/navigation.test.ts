@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { paths } from "@/routes/paths";
 import {
   adminNavItems,
+  decorateNavItemsWithHealth,
   getAssistantPath,
   getDashboardPath,
   getNavItemsForRole,
@@ -26,5 +27,47 @@ describe("navigation helpers", () => {
     expect(getProfilePath("admin")).toBe(paths.admin.profile);
     expect(getDashboardPath("admin")).toBe(paths.admin.dashboard);
     expect(getAssistantPath("admin")).toBe(paths.admin.dashboard);
+  });
+
+  it("includes a System Health nav entry pointing at the health dashboard", () => {
+    const systemHealthItem = adminNavItems.find(
+      (item) => item.title === "System Health",
+    );
+    expect(systemHealthItem).toBeDefined();
+    expect(systemHealthItem?.href).toBe(paths.admin.systemHealth);
+  });
+});
+
+describe("decorateNavItemsWithHealth", () => {
+  it("returns the items unchanged when status is healthy", () => {
+    const result = decorateNavItemsWithHealth(adminNavItems, "healthy");
+    expect(result).toEqual(adminNavItems);
+  });
+
+  it("returns the items unchanged when status is undefined", () => {
+    const result = decorateNavItemsWithHealth(adminNavItems, undefined);
+    expect(result).toEqual(adminNavItems);
+  });
+
+  it("sets the badge only on the System Health entry when degraded", () => {
+    const result = decorateNavItemsWithHealth(adminNavItems, "degraded");
+
+    const systemHealthItem = result.find((item) => item.href === paths.admin.systemHealth);
+    expect(systemHealthItem?.badge).toBe("degraded");
+
+    const otherItems = result.filter((item) => item.href !== paths.admin.systemHealth);
+    expect(otherItems.every((item) => item.badge === undefined)).toBe(true);
+  });
+
+  it("sets the badge to down", () => {
+    const result = decorateNavItemsWithHealth(adminNavItems, "down");
+    const systemHealthItem = result.find((item) => item.href === paths.admin.systemHealth);
+    expect(systemHealthItem?.badge).toBe("down");
+  });
+
+  it("does not mutate the original array", () => {
+    const original = [...adminNavItems];
+    decorateNavItemsWithHealth(adminNavItems, "down");
+    expect(adminNavItems).toEqual(original);
   });
 });

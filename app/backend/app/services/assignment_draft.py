@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.schemas.preview import AssignmentDraftRequest, AssignmentDraftResponse
+from app.services.ai_health import record_ai_call_outcome
 from app.services.llm.json_extraction import loads_llm_json
 from app.services.llm.llm_setting import get_llm_adapter
 from app.services.llm.provider_registry import get_active_llm_config
@@ -34,8 +35,7 @@ def _plain_text_description(value: str) -> str:
 
 
 async def generate_assignment_draft(
-    body: AssignmentDraftRequest,
-    db: AsyncSession | None = None,
+    body: AssignmentDraftRequest, db: AsyncSession, user_id: int
 ) -> AssignmentDraftResponse:
     system = (
         "You help instructors draft Canvas assignments. "
@@ -44,19 +44,19 @@ async def generate_assignment_draft(
         "The description must be plain text only: no HTML tags and no markdown formatting. "
         'Separate paragraphs with a blank line and start list items with "- ".'
     )
-    if db is None:
-        adapter_settings = {"provider": settings.DEFAULT_LLM_PROVIDER}
-    else:
-        llm_config = await get_active_llm_config(db)
-        adapter_settings = {
-            "provider": llm_config.provider,
-            "model": llm_config.model,
-        }
+    llm_config = await get_active_llm_config(db)
+    adapter_settings = {
+        "provider": llm_config.provider,
+        "model": llm_config.model,
+    }
     adapter = get_llm_adapter(adapter_settings)
 
     try:
         raw = await adapter.generate(system, body.prompt)
     except httpx.HTTPStatusError as e:
+        await record_ai_call_outcome(
+            db, user_id, settings.DEFAULT_LLM_PROVIDER, error_detail=f"HTTP {e.response.status_code}"
+        )
         if e.response.status_code == 429:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -67,10 +67,13 @@ async def generate_assignment_draft(
             detail="The assignment generator is temporarily unavailable. Please try again.",
         ) from e
     except httpx.RequestError as e:
+        await record_ai_call_outcome(db, user_id, settings.DEFAULT_LLM_PROVIDER, error_detail=str(e)[:500])
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="The assignment generator is temporarily unavailable. Please try again.",
         ) from e
+    else:
+        await record_ai_call_outcome(db, user_id, settings.DEFAULT_LLM_PROVIDER)
 
     try:
         data = loads_llm_json(raw)

@@ -124,7 +124,7 @@ async def generate_assignment_draft_endpoint(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await generate_assignment_draft(body, db)
+    return await generate_assignment_draft(body, db, current_user.id)
 
 
 @router.post("/courses/{course_id}/assignments/preview", response_model=ActionPreviewResponse)

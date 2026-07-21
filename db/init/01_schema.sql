@@ -31,6 +31,11 @@ CREATE TABLE canvas_connections (
     -- Canvas for this connection's course list, not just checked the
     -- cooldown. Null until the first sync ever runs.
     courses_synced_at   TIMESTAMPTZ,
+    -- Set by run_course_sync_sweep whenever the periodic sync fails for
+    -- this connection; cleared back to null the next time it succeeds.
+    -- Backs the admin System Health page's per-instructor Canvas
+    -- connectivity summary (see db/migrations/029).
+    last_sync_error     TEXT,
     CONSTRAINT uq_user_canvas_url UNIQUE (user_id, canvas_url)
 );
 
@@ -484,6 +489,42 @@ CREATE INDEX idx_deferred_assistant_requests_user_status
     ON deferred_assistant_requests(user_id, status);
 
 -- ─────────────────────────────────────────────
+-- Health Checks
+-- One row per service per GET /admin/health run (backend/database/canvas/ai).
+-- Audit trail for the system-health dashboard's "Verify monitoring"
+-- requirement and (Phase 2) the /admin/health/history sparkline. Rows
+-- older than 30 days are pruned on each live-check run (see
+-- run_health_checks in services/health.py).
+-- ─────────────────────────────────────────────
+CREATE TABLE health_checks (
+    id            SERIAL PRIMARY KEY,
+    service       VARCHAR NOT NULL
+                  CHECK (service IN ('backend', 'database', 'canvas', 'ai')),
+    status        VARCHAR NOT NULL
+                  CHECK (status IN ('healthy', 'degraded', 'down')),
+    latency_ms    INTEGER,
+    error_detail  TEXT,
+    checked_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_health_checks_service_checked_at ON health_checks(service, checked_at DESC);
+
+-- ─────────────────────────────────────────────
+-- AI Call Health
+-- One row per user holding only their most recent observed AI call outcome
+-- (message-draft / assignment-draft generation) -- not a log/history
+-- table. Backs the admin System Health page's per-instructor AI usage
+-- summary (see db/migrations/030).
+-- ─────────────────────────────────────────────
+CREATE TABLE ai_call_health (
+    user_id        INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    provider       VARCHAR NOT NULL,
+    status         VARCHAR NOT NULL CHECK (status IN ('ok', 'failed')),
+    error_detail   TEXT,
+    last_called_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ─────────────────────────────────────────────
 -- Schema Migrations
 -- Tracks which db/migrations/*.sql files have been applied — read and
 -- written by app/backend/app/core/migrations.py on every backend startup,
@@ -530,4 +571,7 @@ INSERT INTO schema_migrations (filename) VALUES
     ('025_instructor_llm_connections.sql'),
     ('025_submission_cache_key.sql'),
     ('026_deferred_assistant_requests.sql'),
-    ('027_llm_response_cache_constraint_name.sql');
+    ('027_llm_response_cache_constraint_name.sql'),
+    ('028_health_checks.sql'),
+    ('029_canvas_connection_last_sync_error.sql'),
+    ('030_ai_call_health.sql');
