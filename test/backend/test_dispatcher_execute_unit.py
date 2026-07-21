@@ -519,6 +519,36 @@ async def test_execute_intent_preview_create_quiz_missing_field_clarifies_once()
 
 
 @pytest.mark.asyncio
+async def test_execute_intent_preview_create_quiz_without_questions_routes_to_form():
+    """Questions are added in the quiz form — preview must not clarify for them."""
+    course = _course()
+    db = _db_with_course(course)
+    user = MagicMock(id=1)
+    action = IntentPreviewAction(
+        summary="create a quiz",
+        proposed_action={
+            "action": "create_quiz",
+            "local_course_id": 1,
+            "title": "Quiz 1",
+            "description": "Covers recursion concepts in depth.",
+            "due_date": "2030-01-01T00:00:00",
+            "points_possible": 10,
+        },
+    )
+
+    with patch(
+        "app.mcp_tools.dispatcher.validate_quiz_for_create",
+        new=AsyncMock(),
+    ):
+        result = await execute_tool(db, user, action)
+
+    assert result.get("intent_preview") is True
+    assert result["proposed_action"]["action"] == "create_quiz"
+    assert result["proposed_action"]["title"] == "Quiz 1"
+    assert result["action"] != "clarify"
+
+
+@pytest.mark.asyncio
 async def test_execute_intent_preview_create_quiz_past_date_clarifies():
     db = AsyncMock()
     user = MagicMock(id=1)

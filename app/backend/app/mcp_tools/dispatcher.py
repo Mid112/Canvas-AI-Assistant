@@ -113,10 +113,6 @@ _CREATE_QUIZ_FIELD_QUESTIONS = {
     "description": "What should the quiz description or instructions say?",
     "due_date": "When is this quiz due?",
     "points_possible": "How many points is this quiz worth?",
-    "questions": (
-        "What questions should be on this quiz "
-        "(or which question bank should it use)?"
-    ),
 }
 
 
@@ -144,17 +140,18 @@ def _create_assignment_missing_field(proposed: dict) -> str | None:
 
 
 def _create_quiz_missing_field(proposed: dict) -> str | None:
-    """Same guarantee as _create_assignment_missing_field for create_quiz."""
+    """Same guarantee as _create_assignment_missing_field for create_quiz.
+
+    Questions are checked by the quiz creation form's validation
+    (validate_quiz_for_create → _check_has_scorable_content), not at
+    preview time. Chat routes to the form where the instructor adds them.
+    """
     for field in ("title", "description", "due_date"):
         value = proposed.get(field)
         if not isinstance(value, str) or not value.strip():
             return field
     if proposed.get("points_possible") is None:
         return "points_possible"
-    questions = proposed.get("questions") or []
-    banks = proposed.get("question_bank_groups") or []
-    if not questions and not banks:
-        return "questions"
     return None
 
 
