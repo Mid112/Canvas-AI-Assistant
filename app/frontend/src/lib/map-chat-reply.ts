@@ -40,6 +40,11 @@ function readNumberArray(value: unknown): number[] | undefined {
   return numbers.length > 0 ? numbers : undefined;
 }
 
+function readNumber(value: unknown): number | undefined {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
+
 function buildGradeHandoffAction(
   handoff: Record<string, unknown> | undefined,
 ): AssistantResponse["interpretedAction"] | undefined {
@@ -79,6 +84,54 @@ function buildGradeHandoffAction(
         studentIds,
         grade: readString(handoff.new_grade),
         reason: readString(handoff.reason),
+      }),
+    },
+  };
+}
+
+function buildGradeClarifyHandoffAction(
+  partialPlan: Record<string, unknown> | undefined,
+): AssistantResponse["interpretedAction"] | undefined {
+  if (!partialPlan || partialPlan.action !== "update_grade") {
+    return undefined;
+  }
+
+  const courseId = readNumber(partialPlan.local_course_id);
+  if (courseId === undefined) {
+    return undefined;
+  }
+
+  const hasGradeManagementSignal =
+    readString(partialPlan.new_grade) !== undefined ||
+    readNumber(partialPlan.assignment_id) !== undefined ||
+    readString(partialPlan.assignment_reference) !== undefined ||
+    readString(partialPlan.submission_reference) !== undefined;
+
+  if (!hasGradeManagementSignal) {
+    // "Feedback" alone can mean assignment feedback or a private message.
+    // Keep those turns as clarify text until the user picks the surface.
+    return undefined;
+  }
+
+  const studentIds =
+    readNumberArray(partialPlan.student_ids) ??
+    (readNumber(partialPlan.student_id) !== undefined
+      ? [readNumber(partialPlan.student_id)!]
+      : undefined);
+
+  return {
+    action: "Update Grade",
+    course: readString(partialPlan.course_name) ?? "Active course",
+    affectedStudents: studentIds
+      ? `${studentIds.length} student${studentIds.length === 1 ? "" : "s"}`
+      : "Course-wide",
+    primaryLink: {
+      label: "Open Grades tab",
+      href: instructorCourseGradesPrefillPath(courseId, {
+        assignmentId: readNumber(partialPlan.assignment_id),
+        studentIds,
+        grade: readString(partialPlan.new_grade),
+        reason: readString(partialPlan.reason),
       }),
     },
   };
@@ -233,10 +286,19 @@ export function mapChatReplyToAssistantResponse(
   }
 
   if (reply.action === "clarify" || reply.clarify) {
+    const partialPlan = reply.partial_plan as Record<string, unknown> | undefined;
+    const interpretedAction = buildGradeClarifyHandoffAction(partialPlan);
+    const content =
+      readString(reply.question) ??
+      "Could you share a bit more detail so I can help?";
+    if (interpretedAction) {
+      return {
+        content,
+        interpretedAction,
+      };
+    }
     return {
-      content:
-        readString(reply.question) ??
-        "Could you share a bit more detail so I can help?",
+      content,
     };
   }
 

@@ -290,12 +290,16 @@ describe("InstructorCourseGradesPage", () => {
 
     await screen.findByRole("cell", { name: "Coin" });
     await user.type(screen.getByLabelText("New grade"), "110");
+    await user.type(screen.getByLabelText("Feedback"), "Bonus adjustment");
     await user.click(screen.getByRole("button", { name: "Preview change" }));
     await screen.findByText("Proposed grade: 110");
     await user.type(screen.getByLabelText("Type UPDATE to approve"), "UPDATE");
     await user.click(screen.getByRole("button", { name: "Submit grade change" }));
 
     expect(await screen.findByText(/Grade updated. History record #12./)).toBeInTheDocument();
+    expect(screen.getByLabelText("Feedback")).toHaveValue("");
+    expect(screen.getByText("High Risk")).toBeInTheDocument();
+    expect(screen.queryByText("Low Risk")).not.toBeInTheDocument();
     const coinRow = screen.getByRole("row", { name: /Coin Unsubmitted, Graded 110 110 -/i });
     expect(coinRow).toBeInTheDocument();
   });
