@@ -2182,8 +2182,11 @@ update_grade handles both grade changes and assignment-specific submission
 feedback. A feedback-only request such as "leave feedback on ggg for Coin:
 work changes" should use update_grade with the feedback in reason and an
 empty new_grade; do not use send_message for feedback tied to a specific
-assignment/submission. Grade changes are high risk; feedback-only is low
-risk but still previews in the Grades tab. If you already have both real
+assignment/submission. Treat words like feedback, submission comment,
+rubric note, or comment on assignment as gradebook feedback when an
+assignment is named; use send_message only when the user asks to contact
+students outside the gradebook. Grade changes are high risk; feedback-only
+is low risk but still previews in the Grades tab. If you already have both real
 IDs from earlier in the conversation, propose update_grade with
 assignment_id, student_id, and new_grade (blank for feedback-only).
 Otherwise leave unknown IDs unset and provide the user's own words as

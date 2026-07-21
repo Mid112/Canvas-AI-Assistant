@@ -74,7 +74,7 @@ describe("InstructorCourseGradesPage", () => {
         student_name: "Coin",
         student_email: null,
         student_login_id: null,
-        submitted_at: null,
+        submitted_at: "2026-01-01T00:00:00Z",
         workflow_state: "submitted",
         status: "submitted",
         score: null,
@@ -135,7 +135,8 @@ describe("InstructorCourseGradesPage", () => {
     expect(screen.getByRole("button", { name: "Preview change" })).toBeEnabled();
   });
 
-  it("differentiates unsubmitted students and selects only submitted rows by default", async () => {
+  it("filters grade rows and selects all visible students", async () => {
+    const user = userEvent.setup();
     // Manual visits start conservatively, while still showing unsubmitted rows
     // so instructors can opt into paper/in-person grading when appropriate.
     mockedFetchSubmissions.mockResolvedValue([
@@ -147,6 +148,20 @@ describe("InstructorCourseGradesPage", () => {
         student_email: null,
         student_login_id: null,
         submitted_at: null,
+        workflow_state: "submitted",
+        status: "submitted",
+        score: 88,
+        grade: "88",
+        graded_at: null,
+      },
+      {
+        id: 101,
+        assignment_id: 10,
+        user_id: 44,
+        student_name: "Subby",
+        student_email: null,
+        student_login_id: null,
+        submitted_at: "2026-01-01T00:00:00Z",
         workflow_state: "submitted",
         status: "submitted",
         score: null,
@@ -162,7 +177,7 @@ describe("InstructorCourseGradesPage", () => {
         student_login_id: null,
         submitted_at: null,
         workflow_state: "unsubmitted",
-        status: "unsubmitted",
+        status: "missing",
         score: null,
         grade: null,
         graded_at: null,
@@ -173,17 +188,100 @@ describe("InstructorCourseGradesPage", () => {
 
     await screen.findByRole("cell", { name: "Mn" });
 
-    expect(screen.getByText("Unsubmitted")).toBeInTheDocument();
-    expect(screen.getByLabelText("Select Coin")).toBeChecked();
+    expect(screen.getByRole("option", { name: "All Statuses" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Graded" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Submitted" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Unsubmitted" })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /Coin Unsubmitted, Graded 88 88 -/i })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /Subby Submitted - - -/i })).toBeInTheDocument();
+    expect(screen.getByRole("row", { name: /Mn Unsubmitted - - -/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("Select Coin")).not.toBeChecked();
+    expect(screen.getByLabelText("Select Subby")).toBeChecked();
     expect(screen.getByLabelText("Select Mn")).not.toBeChecked();
 
-    await userEvent.click(screen.getByRole("button", { name: "Unsubmitted" }));
-    expect(screen.getByLabelText("Select Coin")).not.toBeChecked();
+    await user.selectOptions(screen.getByLabelText("Status"), "unsubmitted");
+    expect(screen.getByRole("cell", { name: "Coin" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "Subby" })).not.toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Mn" })).toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Status"), "submitted");
+    expect(screen.queryByRole("cell", { name: "Coin" })).not.toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Subby" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "Mn" })).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Status"), "graded");
+    expect(screen.getByRole("cell", { name: "Coin" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "Subby" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "Mn" })).not.toBeInTheDocument();
+
+    await user.selectOptions(screen.getByLabelText("Status"), "unsubmitted");
+    expect(screen.getByRole("cell", { name: "Mn" })).toBeInTheDocument();
+
+    await user.click(screen.getByLabelText("All"));
     expect(screen.getByLabelText("Select Mn")).toBeChecked();
 
-    await userEvent.click(screen.getByRole("button", { name: "Submitted" }));
+    await user.selectOptions(screen.getByLabelText("Status"), "all");
     expect(screen.getByLabelText("Select Coin")).toBeChecked();
-    expect(screen.getByLabelText("Select Mn")).not.toBeChecked();
+    expect(screen.getByLabelText("Select Mn")).toBeChecked();
+
+    await user.type(screen.getByLabelText("Filter students"), "coin");
+    expect(screen.getByRole("cell", { name: "Coin" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "Mn" })).not.toBeInTheDocument();
+
+    await user.clear(screen.getByLabelText("Filter students"));
+    await user.type(screen.getByLabelText("Grade"), "88");
+    expect(screen.getByRole("cell", { name: "Coin" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "Mn" })).not.toBeInTheDocument();
+  });
+
+  it("refreshes displayed grades from submit results even when Canvas refetch is stale", async () => {
+    const user = userEvent.setup();
+    mockedSubmitGradeUpdate.mockResolvedValueOnce({
+      action: "update_grade",
+      risk_level: "high",
+      requires_approval: true,
+      irreversible_warning: "This grade update is irreversible.",
+      rollback_available: true,
+      rollback_message: "A previous grade is available for rollback.",
+      summary: "Update Coin to 110.",
+      current: {
+        grade: null,
+        score: null,
+        status: "submitted",
+        student_name: "Coin",
+        student_canvas_id: 42,
+      },
+      proposed: { posted_grade: "110", reason: null },
+      affected_resources: [],
+      submitted: true,
+      history_id: 12,
+      canvas_submission: {
+        id: 99,
+        assignment_id: 10,
+        user_id: 42,
+        student_name: "Coin",
+        student_email: null,
+        student_login_id: null,
+        submitted_at: null,
+        workflow_state: "graded",
+        status: "graded",
+        score: 110,
+        grade: "110",
+        graded_at: "2026-01-01T00:00:00Z",
+      },
+    });
+    renderPage();
+
+    await screen.findByRole("cell", { name: "Coin" });
+    await user.type(screen.getByLabelText("New grade"), "110");
+    await user.click(screen.getByRole("button", { name: "Preview change" }));
+    await screen.findByText("Proposed grade: 110");
+    await user.type(screen.getByLabelText("Type UPDATE to approve"), "UPDATE");
+    await user.click(screen.getByRole("button", { name: "Submit grade change" }));
+
+    expect(await screen.findByText(/Grade updated. History record #12./)).toBeInTheDocument();
+    const coinRow = screen.getByRole("row", { name: /Coin Unsubmitted, Graded 110 110 -/i });
+    expect(coinRow).toBeInTheDocument();
   });
 
   it("allows feedback-only submissions without typed grade approval", async () => {

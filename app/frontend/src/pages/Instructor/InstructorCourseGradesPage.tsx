@@ -31,6 +31,62 @@ import type { Assignment } from "@/types/assignment";
 import type { GradePreview } from "@/types/gradeManagement";
 import type { ApiSubmission } from "@/types/submission";
 
+type GradeStatusFilter = "all" | "graded" | "submitted" | "unsubmitted";
+
+function normalizeSubmissionStatus(submission: ApiSubmission) {
+  return String(submission.status || submission.workflow_state || "")
+    .trim()
+    .toLowerCase();
+}
+
+function hasGrade(submission: ApiSubmission) {
+  return (
+    submission.score !== null ||
+    (submission.grade !== null && submission.grade.trim() !== "" && submission.grade !== "-")
+  );
+}
+
+function hasSubmittedAt(submission: ApiSubmission) {
+  return Boolean(submission.submitted_at);
+}
+
+function isUnsubmitted(submission: ApiSubmission) {
+  return !hasSubmittedAt(submission);
+}
+
+function getDisplayStatuses(submission: ApiSubmission): Array<Exclude<GradeStatusFilter, "all">> {
+  // Status labels are independent: a row can be both "Unsubmitted" and "Graded"
+  // when an instructor entered a score for work that had no Canvas submit date.
+  const statuses: Array<Exclude<GradeStatusFilter, "all">> = [
+    hasSubmittedAt(submission) ? "submitted" : "unsubmitted",
+  ];
+  if (hasGrade(submission)) {
+    statuses.push("graded");
+  }
+  return statuses;
+}
+
+function matchesSubmissionStatusFilter(submission: ApiSubmission, filter: GradeStatusFilter) {
+  if (filter === "all") {
+    return true;
+  }
+  if (filter === "graded") {
+    return hasGrade(submission);
+  }
+  return filter === "submitted" ? hasSubmittedAt(submission) : isUnsubmitted(submission);
+}
+
+function formatSubmissionStatus(submission: ApiSubmission) {
+  const statuses = getDisplayStatuses(submission);
+  if (statuses.length === 0) {
+    const status = normalizeSubmissionStatus(submission);
+    return status ? status.charAt(0).toUpperCase() + status.slice(1) : "Unknown";
+  }
+  return statuses
+    .map((status) => status.charAt(0).toUpperCase() + status.slice(1))
+    .join(", ");
+}
+
 export function InstructorCourseGradesPage() {
   const { localCourseId } = useParams();
   const [searchParams] = useSearchParams();
@@ -49,6 +105,9 @@ export function InstructorCourseGradesPage() {
   const [postedGrade, setPostedGrade] = useState("");
   const [reason, setReason] = useState("");
   const [confirmation, setConfirmation] = useState("");
+  const [studentFilter, setStudentFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<GradeStatusFilter>("all");
+  const [gradeFilter, setGradeFilter] = useState("");
   const [previews, setPreviews] = useState<GradePreview[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -151,8 +210,8 @@ export function InstructorCourseGradesPage() {
             prefilledSelection.length > 0
               ? prefilledSelection
               : items
-                  .filter((item) => item.status !== "unsubmitted")
-                  .map((item) => item.user_id),
+                .filter((item) => !isUnsubmitted(item))
+                .map((item) => item.user_id),
           );
           setPreviews([]);
           setNotice(null);
@@ -182,10 +241,38 @@ export function InstructorCourseGradesPage() {
     () => assignments.find((assignment) => assignment.id === assignmentId),
     [assignmentId, assignments],
   );
+  const displayedSubmissions = useMemo(() => {
+    const normalizedStudentFilter = studentFilter.trim().toLowerCase();
+    const normalizedGradeFilter = gradeFilter.trim().toLowerCase();
+
+    // Filters work entirely from the submissions already shown on the page.
+    // They do not mutate selection, so instructors can filter, inspect, then
+    // explicitly choose all visible rows or individual students.
+    return submissions.filter((submission) => {
+      const studentText = [
+        submission.student_name,
+        submission.student_email,
+        submission.student_login_id,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const gradeText = [submission.grade, submission.score]
+        .filter((value) => value !== null && value !== undefined)
+        .join(" ")
+        .toLowerCase();
+
+      return (
+        (!normalizedStudentFilter || studentText.includes(normalizedStudentFilter)) &&
+        matchesSubmissionStatusFilter(submission, statusFilter) &&
+        (!normalizedGradeFilter || gradeText.includes(normalizedGradeFilter))
+      );
+    });
+  }, [gradeFilter, statusFilter, studentFilter, submissions]);
   // Warnings are advisory rather than blockers: paper/in-person assignments
   // and bonus grading both make these states valid instructor choices.
   const selectedUnsubmittedCount = selectedSubmissions.filter(
-    (submission) => submission.status === "unsubmitted",
+    (submission) => isUnsubmitted(submission),
   ).length;
   const numericPostedGrade = Number(postedGrade);
   const hasGradeChange = postedGrade.trim().length > 0;
@@ -213,8 +300,9 @@ export function InstructorCourseGradesPage() {
     [assignmentId, postedGrade, reason, selectedSubmissions],
   );
 
-  const allSelected =
-    submissions.length > 0 && selectedUserIds.length === submissions.length;
+  const allDisplayedSelected =
+    displayedSubmissions.length > 0 &&
+    displayedSubmissions.every((item) => selectedUserIds.includes(item.user_id));
   const previewByUserId = useMemo(
     () => new Map(previews.map((preview) => [preview.current.student_canvas_id, preview])),
     [previews],
@@ -237,19 +325,12 @@ export function InstructorCourseGradesPage() {
   }
 
   function toggleAllStudents() {
-    setSelectedUserIds(allSelected ? [] : submissions.map((item) => item.user_id));
-    setPreviews([]);
-  }
-
-  function selectStudentsBySubmissionStatus(status: "submitted" | "unsubmitted") {
-    const ids = submissions
-      .filter((item) =>
-        status === "submitted"
-          ? item.status !== "unsubmitted"
-          : item.status === "unsubmitted",
-      )
-      .map((item) => item.user_id);
-    setSelectedUserIds(ids);
+    const visibleIds = displayedSubmissions.map((item) => item.user_id);
+    setSelectedUserIds((current) =>
+      allDisplayedSelected
+        ? current.filter((id) => !visibleIds.includes(id))
+        : Array.from(new Set([...current, ...visibleIds])),
+    );
     setPreviews([]);
   }
 
@@ -304,12 +385,21 @@ export function InstructorCourseGradesPage() {
         setPostedGrade("");
       }
       if (assignmentId) {
+        const refreshedSubmissions = await fetchAssignmentSubmissions(
+          parsedLocalCourseId,
+          assignmentId,
+          accessToken,
+          canvasUrl,
+        );
+        const submittedByUserId = new Map(
+          results.map((result) => [result.canvas_submission.user_id, result.canvas_submission]),
+        );
+        // Canvas can briefly return stale submission rows after an update. Merge
+        // the submit response back into the refreshed roster so the current page
+        // reflects the write immediately while still preserving other Canvas rows.
         setSubmissions(
-          await fetchAssignmentSubmissions(
-            parsedLocalCourseId,
-            assignmentId,
-            accessToken,
-            canvasUrl,
+          refreshedSubmissions.map(
+            (submission) => submittedByUserId.get(submission.user_id) ?? submission,
           ),
         );
       }
@@ -339,10 +429,6 @@ export function InstructorCourseGradesPage() {
             {course?.name ?? "Select a course"} grade changes require preview and approval.
           </p>
         </div>
-        <Badge variant={isFeedbackOnly ? "secondary" : "destructive"} className="gap-1">
-          <AlertTriangle className="size-3.5" aria-hidden="true" />
-          {isFeedbackOnly ? "Low Risk" : "High Risk"}
-        </Badge>
       </div>
 
       {error && <p className="text-sm font-medium text-destructive">{error}</p>}
@@ -393,6 +479,46 @@ export function InstructorCourseGradesPage() {
                 />
               </div>
             </div>
+            <div className="grid gap-3 border-t pt-4 md:grid-cols-[1fr_12rem_10rem]">
+              <div className="grid gap-2">
+                <Label htmlFor="student-filter" className="text-xs">
+                  Filter students
+                </Label>
+                <Input
+                  id="student-filter"
+                  value={studentFilter}
+                  onChange={(event) => setStudentFilter(event.target.value)}
+                  placeholder="Name, email, or login"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="status-filter" className="text-xs">
+                  Status
+                </Label>
+                <select
+                  id="status-filter"
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  value={statusFilter}
+                  onChange={(event) => setStatusFilter(event.target.value as GradeStatusFilter)}
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="graded">Graded</option>
+                  <option value="submitted">Submitted</option>
+                  <option value="unsubmitted">Unsubmitted</option>
+                </select>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="grade-filter" className="text-xs">
+                  Grade
+                </Label>
+                <Input
+                  id="grade-filter"
+                  value={gradeFilter}
+                  onChange={(event) => setGradeFilter(event.target.value)}
+                  placeholder="88, A-"
+                />
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             {isResolvingCourse || isLoading ? (
@@ -409,53 +535,36 @@ export function InstructorCourseGradesPage() {
                     <TableHead>Score</TableHead>
                     <TableHead>Grade</TableHead>
                     <TableHead>New</TableHead>
-                    <TableHead className="w-48">
-                      <div className="flex flex-wrap items-center gap-2 text-xs font-medium">
+                    <TableHead className="w-24">
+                      <div className="flex items-center gap-2 text-xs font-medium">
                         <label className="flex items-center gap-2">
                           <input
                             type="checkbox"
-                            checked={allSelected}
+                            checked={allDisplayedSelected}
                             onChange={toggleAllStudents}
                           />
                           All
                         </label>
-                        <button
-                          type="button"
-                          className="text-primary underline-offset-2 hover:underline"
-                          onClick={() => selectStudentsBySubmissionStatus("submitted")}
-                        >
-                          Submitted
-                        </button>
-                        <button
-                          type="button"
-                          className="text-primary underline-offset-2 hover:underline"
-                          onClick={() => selectStudentsBySubmissionStatus("unsubmitted")}
-                        >
-                          Unsubmitted
-                        </button>
                       </div>
                     </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {submissions.map((submission) => {
+                  {displayedSubmissions.map((submission) => {
                     const preview = previewByUserId.get(submission.user_id);
                     return (
                       <TableRow
                         key={submission.id}
-                        className={cn(submission.status === "unsubmitted" && "bg-muted/30")}
+                        className={cn(
+                          isUnsubmitted(submission) && "bg-muted/30",
+                        )}
                       >
                         <TableCell className="font-medium">
                           {submission.student_name ?? `User ${submission.user_id}`}
                         </TableCell>
                         <TableCell className="capitalize">
                           <span className="inline-flex items-center gap-2">
-                            {submission.status}
-                            {submission.status === "unsubmitted" ? (
-                              // Keep unsubmitted students visible and selectable,
-                              // but make them easy to spot before preview/submit.
-                              <Badge variant="outline">Unsubmitted</Badge>
-                            ) : null}
+                            {formatSubmissionStatus(submission)}
                           </span>
                         </TableCell>
                         <TableCell>{submission.score ?? "-"}</TableCell>
@@ -487,7 +596,19 @@ export function InstructorCourseGradesPage() {
 
         <Card className="shadow-sm ring-1 ring-border/60">
           <CardHeader>
-            <CardTitle>Approval</CardTitle>
+            <CardTitle className="flex flex-wrap items-center gap-3">
+              Approval
+              <Badge
+                variant={isFeedbackOnly ? "secondary" : "destructive"}
+                className={cn(
+                  "gap-1 px-3 py-1 text-sm font-semibold",
+                  isFeedbackOnly && "border-emerald-200 bg-emerald-50 text-emerald-800",
+                )}
+              >
+                <AlertTriangle className="size-4" aria-hidden="true" />
+                {isFeedbackOnly ? "Low Risk" : "High Risk"}
+              </Badge>
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
             <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
@@ -508,9 +629,9 @@ export function InstructorCourseGradesPage() {
                 {/* This warning intentionally does not disable preview: Canvas
                 supports grading without an online upload for some assignments. */}
                 {selectedUnsubmittedCount} selected student
-                {selectedUnsubmittedCount === 1 ? " has" : "s have"} no online
-                submission. You can still preview and submit if this assignment is
-                paper-based, in-person, or otherwise gradeable without a Canvas upload.
+                {selectedUnsubmittedCount === 1 ? " is" : "s are"} unsubmitted.
+                You can still preview and submit if this assignment is paper-based,
+                in-person, or otherwise gradeable without a Canvas upload.
               </div>
             )}
             {exceedsPointsPossible && (
