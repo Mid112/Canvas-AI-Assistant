@@ -31,7 +31,11 @@ def _reset_llm_system_settings() -> None:
     Chat resolution requires a connected provider. Admin tests that change the
     institution default must not leave ollama/other unconfigured providers
     sticky for later chat suites sharing the same database.
+
+    On a fresh CI database the tables do not exist until the first TestClient
+    lifespan runs create_all(), so missing-table errors are ignored here.
     """
+    from sqlalchemy import inspect
     from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     from app.config import settings as _settings
@@ -57,6 +61,13 @@ def _reset_llm_system_settings() -> None:
     async def _clear() -> None:
         engine = create_async_engine(_settings.DATABASE_URL)
         try:
+            async with engine.connect() as conn:
+                has_table = await conn.run_sync(
+                    lambda sync_conn: inspect(sync_conn).has_table("system_settings")
+                )
+            if not has_table:
+                return
+
             async with async_sessionmaker(engine, expire_on_commit=False)() as db:
                 for key in keys:
                     row = await db.get(SystemSetting, key)
@@ -71,13 +82,6 @@ def _reset_llm_system_settings() -> None:
         loop.run_until_complete(_clear())
     finally:
         loop.close()
-
-
-@pytest.fixture(scope="session", autouse=True)
-def reset_llm_system_settings_session():
-    _reset_llm_system_settings()
-    yield
-    _reset_llm_system_settings()
 
 
 @pytest.fixture(scope="module", autouse=True)
