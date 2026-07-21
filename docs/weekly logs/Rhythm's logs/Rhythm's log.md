@@ -582,3 +582,38 @@ Managing team pull requests proved to be an essential exercise in maintaining ve
 * Begin active development on the newly scoped features prioritized for Testing Event 2.
 * Analyze the user feedback and bug reports gathered during Testing Event 1 and schedule necessary UI fixes.
 * Continue to update the feature and contribution documentation as new code is merged.
+
+# **Cycle 18: Friday (07/17) ~ Monday (07/20)**
+
+**Timesheet**
+
+**Clockify Report**
+
+**07/17 (Friday):** 03:25:54
+<img width="1342" height="121" alt="Untitled" src="https://github.com/user-attachments/assets/7362e980-4a35-400b-986b-d76b6d8f3299" />
+
+**07/18 (Saturday):** 03:09:53
+<img width="1338" height="113" alt="Untitled 2" src="https://github.com/user-attachments/assets/e73d6721-6493-411c-8188-bd676285a3d8" />
+
+**07/19 (Sunday):** 03:10:17
+<img width="1338" height="109" alt="Untitled 3" src="https://github.com/user-attachments/assets/af2d5673-561b-48ea-a425-8b337b2e7f63" />
+
+**07/20 (Monday):** 03:51:59
+<img width="1338" height="104" alt="Untitled 4" src="https://github.com/user-attachments/assets/5596f687-100b-4b4b-b7b7-2cbe3b44a034" />
+
+**Current Tasks (Provide sufficient detail)**
+
+* **#1: Team Meeting & Testing Event 2 Planning:** Participated in a team meeting on Friday to discuss the upcoming features for Testing Event 2. We successfully divided the prioritized features among the team members and decided to map out a feature dependency graph to better coordinate our integration efforts moving forward.
+* **#2: LLM Provider Switching & Caching:** Dedicated the rest of the cycle to building the full LLM provider switching feature. Instructors can now connect providers (including personal API keys) in Settings → AI Models, and seamlessly switch among connected providers directly in the chat. Added PostgreSQL response caching for short conversational responses. Ensured instructor API keys are Fernet-encrypted at rest (using the same key as Canvas tokens) and implemented admin AI provider defaults for failover and cache policies.
+* **#3: Limited-Mode Assistant Gate (Canvas-Free Mode):** Implemented the removal of the old Canvas-Free Assistant Mode. The assistant now remains usable in a "limited mode" without a Canvas connection for general questions. Canvas reads/writes are intelligently classified, blocked before tool execution, and deferred for a resume action after the user connects, accompanied by clear UI labels. 
+
+**Cycle Goal Review**
+
+* **Reflection:** This cycle required a heavy technical lift, particularly with securely managing multiple API keys and routing chat requests dynamically. Replacing the old Canvas-free mode with a deferred-request system creates a much smoother onboarding experience, as we no longer falsely promise full query capabilities without a Canvas connection.
+* **Retrospective:** The Friday planning meeting was crucial for getting everyone on the same page before diving into heavy backend and integration work. Building the feature dependency graph will undoubtedly prevent blockers as we start working on the Quiz, Feedback, and Grade workflows simultaneously. 
+
+**Next Cycle Goals**
+
+* Monitor and address any bugs related to the new LLM provider switching and deferred assistant requests.
+* Continue active development on my assigned features for Testing Event 2.
+* Continue meeting with the team to stay aligned going into Testing Event 2
