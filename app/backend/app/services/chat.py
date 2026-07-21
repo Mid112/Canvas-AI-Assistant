@@ -18,6 +18,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.canvas_url import canvas_urls_equivalent
 from app.core.database import AsyncSessionLocal
+from app.core.secret_redaction import redact_secrets, safe_exception_text
 from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_action
 from app.mcp_tools.dispatcher import _resolve_course as resolve_course
 from app.mcp_tools.schemas import (
@@ -525,7 +526,7 @@ async def _run_tracked_read(
         result = await coro
     except Exception as e:
         call_log.status = "failed"
-        call_log.error_detail = str(e)
+        call_log.error_detail = safe_exception_text(e)
         await db.flush()
         raise
     call_log.status = "executed"
@@ -2125,7 +2126,12 @@ async def handle_chat_message(
                 fallback = None
         adapter = ObservableAdapter(primary, fallback)
     except (KeyError, ValueError) as e:
-        await log_message(db, conversation, role="assistant", content=f"LLM provider error: {e}")
+        await log_message(
+            db,
+            conversation,
+            role="assistant",
+            content=f"LLM provider error: {safe_exception_text(e)}",
+        )
         await db.commit()
         return conversation, {
             "error": (
@@ -2266,7 +2272,7 @@ async def handle_chat_message(
             await db.commit()
             return conversation, {"error": user_message}, True
         except Exception as e:
-            log_detail = f"LLM request failed: {type(e).__name__}: {e}"
+            log_detail = f"LLM request failed: {safe_exception_text(e)}"
             await log_message(db, conversation, role="assistant", content=log_detail)
             await db.commit()
             return (
@@ -2479,16 +2485,20 @@ async def handle_chat_message(
             else:
                 result = await execute_tool(db, user, action)
         except ToolExecutionError as e:
-            await log_message(db, conversation, role="assistant", content=e.log_detail)
+            await log_message(
+                db, conversation, role="assistant", content=redact_secrets(e.log_detail)
+            )
             await db.commit()
             return conversation, {"error": e.user_message}, True
         except CanvasTokenRequiredError as e:
-            await log_message(db, conversation, role="assistant", content=str(e.detail))
+            await log_message(
+                db, conversation, role="assistant", content=redact_secrets(str(e.detail))
+            )
             await db.commit()
             return conversation, {"error": CANVAS_TOKEN_REQUIRED_MESSAGE, "requires_canvas_token": True}, True
         except HTTPException as e:
             detail = e.detail if isinstance(e.detail, str) else str(e.detail)
-            error_detail = f"HTTPException {e.status_code}: {detail}"
+            error_detail = redact_secrets(f"HTTPException {e.status_code}: {detail}")
             await log_message(db, conversation, role="assistant", content=error_detail)
             await db.commit()
             return conversation, {"error": detail}, True
@@ -2699,15 +2709,17 @@ async def handle_confirmed_action(
         action = parse_action(json.dumps(workflow.proposed_action))
         result = await execute_tool(db, user, action)
     except ToolExecutionError as e:
-        await log_message(db, conversation, role="assistant", content=e.log_detail)
+        safe_detail = redact_secrets(e.log_detail)
+        await log_message(db, conversation, role="assistant", content=safe_detail)
         workflow.status = "failed"
-        workflow.error_detail = e.log_detail
+        workflow.error_detail = safe_detail
         await db.commit()
         return conversation, {"error": e.user_message}, True
     except CanvasTokenRequiredError as e:
-        await log_message(db, conversation, role="assistant", content=str(e.detail))
+        safe_detail = redact_secrets(str(e.detail))
+        await log_message(db, conversation, role="assistant", content=safe_detail)
         workflow.status = "failed"
-        workflow.error_detail = str(e.detail)
+        workflow.error_detail = safe_detail
         await db.commit()
         return conversation, {"error": CANVAS_TOKEN_REQUIRED_MESSAGE, "requires_canvas_token": True}, True
     except HTTPException as e:
@@ -2718,7 +2730,7 @@ async def handle_confirmed_action(
         # with no "reply" key. Fold it into the same error-reply shape
         # so the user actually sees why the confirmed action failed.
         detail = e.detail if isinstance(e.detail, str) else str(e.detail)
-        error_detail = f"HTTPException {e.status_code}: {detail}"
+        error_detail = redact_secrets(f"HTTPException {e.status_code}: {detail}")
         await log_message(db, conversation, role="assistant", content=error_detail)
         workflow.status = "failed"
         workflow.error_detail = error_detail

@@ -362,3 +362,39 @@ def test_corrupted_llm_api_key_asks_instructor_to_reconnect():
 
     assert error.value.status_code == 403
     assert "reconnect" in error.value.detail.lower()
+
+
+def test_redact_secrets_strips_common_api_key_shapes():
+    from app.core.secret_redaction import redact_secrets, safe_exception_text
+
+    raw = (
+        "Authorization: Bearer sk-ant-secret12345678 "
+        "api_key=gsk_abcdefghijklmnop "
+        "hf_abcdefghijklmnopqrstuv "
+        "x-api-key: top-secret-value"
+    )
+    cleaned = redact_secrets(raw)
+    assert "sk-ant-secret12345678" not in cleaned
+    assert "gsk_abcdefghijklmnop" not in cleaned
+    assert "hf_abcdefghijklmnopqrstuv" not in cleaned
+    assert "top-secret-value" not in cleaned
+    assert "[REDACTED" in cleaned
+
+    message = safe_exception_text(
+        RuntimeError("upstream failed with api_key=sk-live-abcdefghijklmnopqrst")
+    )
+    assert "sk-live-abcdefghijklmnopqrst" not in message
+    assert "RuntimeError" in message
+
+
+def test_chat_model_settings_reject_client_api_key():
+    from pydantic import ValidationError
+
+    from app.schemas.chat import ModelSettings
+
+    with pytest.raises(ValidationError):
+        ModelSettings(
+            provider="groq",
+            model="qwen/qwen3.6-27b",
+            api_key="sk-should-never-be-accepted",
+        )

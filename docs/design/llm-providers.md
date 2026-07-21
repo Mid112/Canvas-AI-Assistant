@@ -18,6 +18,10 @@ Hosted API keys can come from deployment secrets (`HF_TOKEN`, `GROQ_API_KEY`,
 Instructor keys are Fernet-encrypted at rest with the same
 `CANVAS_TOKEN_ENCRYPTION_KEY` used for Canvas tokens (`encrypt_llm_api_key` /
 `decrypt_llm_api_key` in `app.core.security`) and are never returned by the API.
+Chat requests that include a client `api_key` are rejected. Exception text that
+is logged or stored in conversation history is scrubbed by
+`app.core.secret_redaction` so bearer tokens and common API-key shapes cannot
+leak into logs or message rows.
 Local endpoint URLs and default models are configured in the backend environment.
 See `app/backend/.env.example`.
 
@@ -48,9 +52,11 @@ or disabled by an administrator. Cache entries:
 - are created only for short, first-turn conversational `respond` results;
 - bypass conversation history, course-scoped requests, Canvas reads/writes,
   previews, multi-step actions, and prompts with common sensitive-data
-  indicators; and
+  indicators;
 - expire automatically and are replaced when the provider, model, prompt, or
-  system safety instructions change.
+  system safety instructions change; and
+- are periodically deleted by the backend lifespan background loop
+  (`delete_expired_cache_entries`) in addition to on-read expiry cleanup.
 
 The cache uses PostgreSQL (`llm_response_cache`) so behavior is consistent
 across backend workers.

@@ -2,7 +2,7 @@
 import json
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from app.models.conversation import Conversation
 from app.models.message import Message
@@ -116,10 +116,23 @@ class ConfirmActionRequest(BaseModel):
 
 
 class ModelSettings(BaseModel):
-    """Instructor preference. Credentials are resolved server-side."""
+    """Instructor preference. Credentials are resolved server-side only."""
+
     provider: str
     model: str | None = None
+    # Accepted for backwards compatibility with older clients, but ignored:
+    # base URLs and API keys always come from server config / stored connections.
     base_url: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_client_credentials(cls, data: object) -> object:
+        if isinstance(data, dict) and data.get("api_key"):
+            raise ValueError(
+                "Client-supplied API keys are not accepted. "
+                "Connect providers in Settings instead."
+            )
+        return data
 
 
 class ChatRequest(BaseModel):

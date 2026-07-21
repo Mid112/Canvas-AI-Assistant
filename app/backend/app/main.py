@@ -30,11 +30,23 @@ async def _course_sync_loop() -> None:
     sync_courses_if_stale's own per-connection cooldown uses, so most
     ticks do real Canvas work for whichever connections are actually due.
     One sweep failing outright (e.g. the DB is briefly unreachable) is
-    logged and retried next tick, not fatal to the loop."""
+    logged and retried next tick, not fatal to the loop.
+
+    Also deletes expired LLM response-cache rows so the table does not
+    grow unbounded when keys are never looked up again.
+    """
+    from app.services.llm.response_cache import delete_expired_cache_entries
+
     while True:
         try:
             async with AsyncSessionLocal() as db:
                 await run_course_sync_sweep(db)
+                deleted = await delete_expired_cache_entries(db)
+                if deleted:
+                    await db.commit()
+                    logger.info("llm_cache outcome=expired_cleanup deleted=%s", deleted)
+                else:
+                    await db.commit()
         except asyncio.CancelledError:
             raise
         except Exception:
