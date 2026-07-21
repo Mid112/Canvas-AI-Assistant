@@ -65,6 +65,74 @@ class AssignmentUpdate(BaseModel):
     points_possible: float | None = None
 
 
+class QuizQuestionCreate(BaseModel):
+    question_text: str
+    question_type: Literal[
+        "multiple_choice_question",
+        "true_false_question",
+        "short_answer_question",
+        "essay_question",
+    ] = "essay_question"
+    points_possible: float = 1.0
+    answers: list[dict] = Field(default_factory=list)
+
+
+class QuizQuestionBankGroupCreate(BaseModel):
+    bank_id: int
+    bank_name: str | None = None
+    pick_count: int = Field(ge=1)
+    question_points: float = Field(gt=0)
+
+
+class QuizCreate(BaseModel):
+    title: str
+    description: str | None = None
+    due_at: datetime | None = None
+    points_possible: float | None = None
+    quiz_type: Literal["assignment", "practice_quiz", "graded_survey", "survey"] = "assignment"
+    allowed_attempts: int | None = 1
+    time_limit: int | None = None
+    published: bool = False
+    quiz_engine: Literal["classic", "new_quizzes"] = "classic"
+    questions: list[QuizQuestionCreate] = Field(default_factory=list)
+    question_bank_groups: list[QuizQuestionBankGroupCreate] = Field(
+        default_factory=list
+    )
+
+
+class QuizResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+
+    id: int
+    title: str
+    description: str | None = None
+    due_at: datetime | None = None
+    points_possible: float | None = None
+    course_id: int
+    quiz_type: str | None = None
+    allowed_attempts: int | None = None
+    time_limit: int | None = None
+    published: bool = False
+    question_count: int | None = None
+    html_url: str | None = None
+    quiz_engine: Literal["classic", "new_quizzes"] = "classic"
+    warnings: list[str] = Field(default_factory=list)
+
+
+class QuizCapabilities(BaseModel):
+    classic_quizzes: bool = True
+    new_quizzes: bool = False
+    question_banks: bool = True
+    preferred_engine: Literal["classic", "new_quizzes"] = "classic"
+    new_quizzes_unavailable_reason: str | None = None
+
+
+class QuestionBankSummary(BaseModel):
+    id: int
+    title: str
+    question_count: int = 0
+
+
 class MessageSendResult(BaseModel):
     course_id: int         # Canvas course ID — matches AssignmentResponse.course_id convention, not the local DB id
     subject: str

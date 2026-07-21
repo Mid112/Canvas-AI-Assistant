@@ -4,14 +4,18 @@ import { PreviewBanner } from "@/components/brand/PreviewBanner";
 import { ActionSummaryCard } from "@/components/preview/ActionSummaryCard";
 import { ActionTypeSection } from "@/components/preview/ActionTypeSection";
 import { AffectedResourcesCard } from "@/components/preview/AffectedResourcesCard";
+import { EditableReviewForm } from "@/components/preview/EditableReviewForm";
 import { PreviewActions } from "@/components/preview/PreviewActions";
 import { ReversibilityStatus } from "@/components/preview/ReversibilityStatus";
+import { RiskLevelIndicator } from "@/components/preview/RiskLevelIndicator";
 import type { DryRunPreviewData } from "@/types/dryRunPreview";
 
 interface PreviewPanelProps {
   preview: DryRunPreviewData;
   isConfirming?: boolean;
   confirmError?: string | null;
+  isSavingEdits?: boolean;
+  onSaveEdits?: (changes: Record<string, unknown>) => void;
   onReject: () => void;
   onModify: () => void;
   onConfirm: () => void;
@@ -21,6 +25,8 @@ export function PreviewPanel({
   preview,
   isConfirming = false,
   confirmError,
+  isSavingEdits = false,
+  onSaveEdits,
   onReject,
   onModify,
   onConfirm,
@@ -39,10 +45,15 @@ export function PreviewPanel({
         <p className="text-sm text-muted-foreground">{preview.subtitle}</p>
       </header>
 
-      <ReversibilityStatus
-        reversibility={preview.reversibility}
-        explanation={preview.reversibilityExplanation}
-      />
+      <div className="space-y-3">
+        {preview.riskLevel ? (
+          <RiskLevelIndicator riskLevel={preview.riskLevel} />
+        ) : null}
+        <ReversibilityStatus
+          reversibility={preview.reversibility}
+          explanation={preview.reversibilityExplanation}
+        />
+      </div>
 
       <ActionSummaryCard
         originalRequest={preview.originalRequest}
@@ -54,6 +65,20 @@ export function PreviewPanel({
         changesFromPreviousRequest={preview.changesFromPreviousRequest}
         proposedPlan={preview.proposedPlan}
       />
+
+      {onSaveEdits && preview.proposedPlan ? (
+        <EditableReviewForm
+          key={JSON.stringify(
+            preview.proposedPlan.map((field) => [
+              field.field,
+              field.rawValue,
+            ]),
+          )}
+          fields={preview.proposedPlan}
+          isSaving={isSavingEdits}
+          onSave={onSaveEdits}
+        />
+      ) : null}
 
       <ActionTypeSection
         actionType={preview.actionType}

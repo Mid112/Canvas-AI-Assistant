@@ -52,10 +52,13 @@ export interface PlanField {
   field: string;
   label: string;
   value: string;
+  rawValue?: unknown;
+  editable?: boolean;
 }
 
 export interface DryRunPreviewData {
   id: string;
+  actionName?: string;
   title: string;
   subtitle: string;
   originalRequest: string;
@@ -69,6 +72,7 @@ export interface DryRunPreviewData {
   affectedResources: DryRunAffectedResources;
   reversibility: ReversibilityLevel;
   reversibilityExplanation: string;
+  riskLevel?: "low" | "medium" | "high";
   /** Field-level diff against the immediately preceding modify round, if
    * this preview was revised at least once. Only one step of history is
    * kept — see previous_proposed_action in chat.py. */

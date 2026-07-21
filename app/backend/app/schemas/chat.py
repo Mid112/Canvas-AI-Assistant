@@ -115,6 +115,17 @@ class ConfirmActionRequest(BaseModel):
     pending_message_id: int
 
 
+class ModifyActionRequest(ConfirmActionRequest):
+    """Structured edits to an existing pending preview.
+
+    Only user-editable fields are accepted by the service; action names,
+    course IDs, resolved Canvas IDs, and recipient handles remain server
+    controlled.
+    """
+
+    changes: dict
+
+
 class ModelSettings(BaseModel):
     """Mirrors the frontend's LlmProviderSettings (types/llmProvider.ts) —
     which provider/model the AI Models settings page (or the in-chat

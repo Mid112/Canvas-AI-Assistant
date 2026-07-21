@@ -40,6 +40,9 @@ function getPageTitle(pathname: string, role: UserRole): string {
   if (pathname === paths.instructor.assignmentCreate) {
     return "AI Assignment Creator";
   }
+  if (pathname === paths.instructor.quizCreate) {
+    return "AI Quiz Creator";
+  }
   if (pathname === paths.instructor.dryRunPreview) {
     return "Workflow Preview";
   }

@@ -1,16 +1,24 @@
 # app/backend/app/mcp_tools/schemas.py
+import re
 from typing import Literal
 
 from dateutil import parser as date_parser
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
+
+# Numeric slash/dash dates like 07/08/2026 are ambiguous (MDY vs DMY).
+# Leave them untouched so downstream validation asks for an ISO date.
+_AMBIGUOUS_NUMERIC_DATE = re.compile(r"^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$")
 
 
 def _normalize_due_date_str(value: str) -> str:
     """The LLM sometimes emits natural-language dates (e.g. "July 30
     2026") instead of ISO 8601. Normalize anything dateutil can parse
     to ISO so validate_assignment_for_create/_update's fromisoformat
-    check succeeds; leave unparseable input as-is so that check still
-    produces a clean user-facing error instead of this one."""
+    check succeeds; leave unparseable or ambiguous input as-is so that
+    check still produces a clean user-facing error instead of this one."""
+    raw = value.strip() if isinstance(value, str) else value
+    if isinstance(raw, str) and _AMBIGUOUS_NUMERIC_DATE.match(raw):
+        return value
     try:
         return date_parser.parse(value).isoformat()
     except (date_parser.ParserError, ValueError, OverflowError, TypeError):
@@ -104,6 +112,49 @@ class CreateAssignmentAction(BaseModel):
         return _normalize_due_date_str(value)
 
 
+class QuizQuestionSpec(BaseModel):
+    question_text: str
+    question_type: Literal[
+        "multiple_choice_question",
+        "true_false_question",
+        "short_answer_question",
+        "essay_question",
+    ] = "essay_question"
+    points_possible: float = 1.0
+    answers: list[dict] | None = None
+
+
+class QuizQuestionBankGroupSpec(BaseModel):
+    bank_id: int
+    bank_name: str | None = None
+    pick_count: int
+    question_points: float
+
+
+class CreateQuizAction(BaseModel):
+    action: Literal["create_quiz"] = "create_quiz"
+    local_course_id: int
+    title: str
+    description: str = Field(min_length=20)
+    due_date: str
+    points_possible: float | None = None
+    allowed_attempts: int | None = 1
+    time_limit: int | None = None
+    quiz_engine: Literal["classic", "new_quizzes"] = "classic"
+    questions: list[QuizQuestionSpec] | None = None
+    question_bank_groups: list[QuizQuestionBankGroupSpec] | None = None
+
+    @field_validator("due_date")
+    @classmethod
+    def _normalize_due_date(cls, value: str) -> str:
+        return _normalize_due_date_str(value)
+
+
+class FetchQuizzesAction(BaseModel):
+    action: Literal["fetch_quizzes"] = "fetch_quizzes"
+    local_course_id: int
+
+
 class UpdateAssignmentAction(BaseModel):
     action: Literal["update_assignment"] = "update_assignment"
     local_course_id: int
@@ -134,6 +185,22 @@ class UpdateAssignmentAction(BaseModel):
     @classmethod
     def _normalize_due_date(cls, value: str | None) -> str | None:
         return value if value is None else _normalize_due_date_str(value)
+
+
+class UpdateGradeAction(BaseModel):
+    action: Literal["update_grade"] = "update_grade"
+    local_course_id: int
+    assignment_id: int | None = None
+    assignment_reference: str | None = None
+    student_id: int | None = None
+    student_reference: str | None = None
+    new_grade: str
+    feedback: str | None = None
+
+    @field_validator("new_grade", mode="before")
+    @classmethod
+    def _normalize_grade(cls, value: object) -> str:
+        return str(value).strip()
 
 
 class RecipientDirective(BaseModel):
@@ -229,12 +296,15 @@ ACTION_SCHEMAS: dict[str, type[BaseModel]] = {
     "fetch_assignments": FetchAssignmentsAction,
     "fetch_submissions": FetchSubmissionsAction,
     "fetch_students": FetchStudentsAction,
+    "fetch_quizzes": FetchQuizzesAction,
     "resolve_missing_submissions": ResolveMissingSubmissionsAction,
     "find_assignment_by_submission_rate": FindAssignmentBySubmissionRateAction,
     "set_active_course": SetActiveCourseAction,
     "get_active_course": GetActiveCourseAction,
     "create_assignment": CreateAssignmentAction,
+    "create_quiz": CreateQuizAction,
     "update_assignment": UpdateAssignmentAction,
+    "update_grade": UpdateGradeAction,
     "send_message": SendMessageAction,
     "out_of_scope": OutOfScopeAction,
     "clarify": ClarifyAction,
@@ -258,6 +328,7 @@ ACTION_CLASSIFICATION: dict[str, ActionClassification] = {
     "fetch_assignments": "read_only",
     "fetch_submissions": "read_only",
     "fetch_students": "read_only",
+    "fetch_quizzes": "read_only",
     "resolve_missing_submissions": "read_only",
     "find_assignment_by_submission_rate": "read_only",
     "get_active_course": "read_only",
@@ -267,11 +338,8 @@ ACTION_CLASSIFICATION: dict[str, ActionClassification] = {
     # #863-865 metadata completeness, not because it goes through preview/confirm.
     "set_active_course": "modifying",
     "create_assignment": "modifying",
+    "create_quiz": "modifying",
     "update_assignment": "modifying",
-    # Dangling pre-existing action: previewable (write_preview.py has a
-    # builder for it) but never confirmable (no schema in ACTION_SCHEMAS,
-    # no execute case in dispatcher.py). Classified for consistency, not
-    # newly wired up here.
     "update_grade": "modifying",
     "send_message": "irreversible",
 }
@@ -291,11 +359,21 @@ def is_reversible(action: str) -> bool:
 # "irreversible" above (a sent Canvas announcement/message can't be un-sent),
 # and is deliberately not extended to a standalone user-facing "delete
 # assignment" action — delete_course_assignment exists only for undo to call.
-UNDOABLE_ACTIONS = frozenset({"update_assignment", "create_assignment"})
+UNDOABLE_ACTIONS = frozenset({"update_assignment", "create_assignment", "create_quiz"})
 
 
 def is_undoable(action_name: str) -> bool:
     return action_name in UNDOABLE_ACTIONS
+
+
+def get_risk_level(action: str) -> Literal["low", "medium", "high"]:
+    """Maps ACTION_CLASSIFICATION into a UI-facing risk indicator."""
+    kind = ACTION_CLASSIFICATION.get(action)
+    if kind == "read_only":
+        return "low"
+    if kind == "irreversible":
+        return "high"
+    return "medium"
 
 
 # Canvas-mutating actions that must never execute except via the
@@ -307,7 +385,9 @@ def is_undoable(action_name: str) -> bool:
 # and named the write action outright. set_active_course is deliberately
 # excluded: it only writes a local UserPreference row, has no Canvas
 # footprint, and always executes immediately regardless of provider.
-WRITE_ACTIONS = frozenset({"create_assignment", "update_assignment", "send_message", "update_grade"})
+WRITE_ACTIONS = frozenset(
+    {"create_assignment", "create_quiz", "update_assignment", "send_message", "update_grade"}
+)
 
 # Every read-only Canvas action, derived from ACTION_CLASSIFICATION rather
 # than hand-listed a second time. services/chat.py's handle_chat_message

@@ -1,5 +1,6 @@
 import { CheckCircle2 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import { Button } from "@/components/ui/button";
@@ -29,6 +30,7 @@ import { AssignmentPreviewDialog } from "./InstructorAssignmentCreate/Assignment
 import { AssignmentReviewApproveStep } from "./InstructorAssignmentCreate/AssignmentReviewApproveStep";
 import type { AssignmentReviewFormSchema } from "./InstructorAssignmentCreate/assignmentCreateSchema";
 import { pageShellNarrow } from "@/lib/page-shell";
+import type { AiActionDraftLocationState } from "@/routes/paths";
 
 const initialDescribeValues: AssignmentDescribeValues = {
   courseId: "",
@@ -36,11 +38,35 @@ const initialDescribeValues: AssignmentDescribeValues = {
 };
 
 export function InstructorAssignmentCreatePage() {
+  const location = useLocation();
+  const seededDraft = (location.state as AiActionDraftLocationState | null)
+    ?.aiAssignmentDraft;
   const { accessToken, user } = useAuth();
-  const [step, setStep] = useState<AssignmentCreateStep>("describe");
+  const [step, setStep] = useState<AssignmentCreateStep>(
+    seededDraft ? "review" : "describe",
+  );
   const [describeValues, setDescribeValues] =
-    useState<AssignmentDescribeValues>(initialDescribeValues);
-  const [draft, setDraft] = useState<GeneratedAssignmentDraft | null>(null);
+    useState<AssignmentDescribeValues>(
+      seededDraft
+        ? {
+            courseId: String(seededDraft.courseId ?? ""),
+            prompt: "Drafted in the AI Assistant",
+          }
+        : initialDescribeValues,
+    );
+  const [draft, setDraft] = useState<GeneratedAssignmentDraft | null>(
+    seededDraft
+      ? {
+          name: seededDraft.name ?? "",
+          description: seededDraft.description ?? "",
+          dueDate: seededDraft.dueDate ?? "",
+          pointsPossible:
+            typeof seededDraft.pointsPossible === "number"
+              ? seededDraft.pointsPossible
+              : 100,
+        }
+      : null,
+  );
   const [approvedValues, setApprovedValues] =
     useState<AssignmentReviewFormSchema | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);

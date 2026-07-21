@@ -62,19 +62,24 @@ describe("mapChatReply", () => {
           action: "clarify",
           clarify: true,
           question: "Which assignment should I update?",
-          partial_plan: {},
+          partial_plan: {
+            title: "Midterm",
+            local_course_id: 123,
+            assignment_id: 456,
+          },
         },
         false,
       ),
     ).toEqual({
-      content: "Which assignment should I update?",
+      content:
+        "I have title: Midterm. Which assignment should I update?",
+      acknowledgedFields: [{ label: "Title", value: "Midterm" }],
     });
   });
 
   // Verifies: Maps intent_preview replies.
   it("maps intent_preview replies", () => {
-    expect(
-      mapChatReply(
+    const result = mapChatReply(
         {
           action: "intent_preview",
           intent_preview: true,
@@ -92,8 +97,8 @@ describe("mapChatReply", () => {
         },
         false,
         7,
-      ),
-    ).toEqual({
+      );
+    expect(result).toMatchObject({
       content: "Create assignment Midterm Exam in CPSC 310.",
       explanation:
         "Review the proposed action below. Destructive or write actions require your approval before anything is sent to Canvas.",
@@ -101,6 +106,9 @@ describe("mapChatReply", () => {
         action: "Create Assignment",
         course: "CPSC 310",
         affectedStudents: "Entire class",
+        technicalDetails: [
+          { label: "Action type", value: "Create Assignment" },
+        ],
         primaryLink: {
           label: "Review preview",
           href: "/instructor/actions/preview?conversation=7&pending=42",
@@ -108,6 +116,9 @@ describe("mapChatReply", () => {
       },
       pendingMessageId: 42,
     });
+    expect(result.interpretedAction?.secondaryLink?.label).toBe(
+      "Edit assignment details",
+    );
   });
 
   // Verifies: Maps cancelled replies.
@@ -209,6 +220,73 @@ describe("mapChatReply", () => {
       ),
     ).toEqual({
       content: "Successfully completed Create Assignment: Midterm Exam.",
+    });
+  });
+
+  it("never exposes raw payload JSON in fallback responses", () => {
+    const result = mapChatReply(
+      {
+        data: {
+          local_course_id: 123,
+          student_id: 456,
+          secret_internal_value: "hidden",
+        },
+      },
+      false,
+    );
+
+    expect(result.content).toBe("The action completed successfully.");
+    expect(result.explanation).toBeUndefined();
+    expect(JSON.stringify(result)).not.toContain("secret_internal_value");
+  });
+
+  it("auto-redirects create_quiz and keeps a form button for chat history", () => {
+    const result = mapChatReply(
+      {
+        intent_preview: true,
+        summary: "Create Recursion Quiz.",
+        proposed_action: {
+          action: "create_quiz",
+          local_course_id: 5,
+          title: "Recursion Quiz",
+          description: "Covers base cases and recursive definitions.",
+          due_date: "2030-08-01T12:00:00Z",
+          points_possible: 20,
+          questions: [],
+        },
+        preview_metadata: {
+          course: "CPSC 310",
+          risk_level: "medium",
+          reversible: true,
+        },
+        pending_message_id: 9,
+      },
+      false,
+      3,
+    );
+
+    expect(result.pendingMessageId).toBeUndefined();
+    expect(result.navigateTo?.path).toBe("/instructor/quizzes/create");
+    expect(result.navigateTo?.state).toMatchObject({
+      returnTo: "/instructor/assistant",
+      aiQuizDraft: {
+        courseId: 5,
+        name: "Recursion Quiz",
+        conversationId: 3,
+      },
+    });
+    expect(result.interpretedAction?.primaryLink?.label).toBe(
+      "Open quiz creation form",
+    );
+    expect(result.interpretedAction?.primaryLink?.href).toBe(
+      "/instructor/quizzes/create",
+    );
+    expect(result.interpretedAction?.primaryLink?.state).toMatchObject({
+      aiQuizDraft: {
+        courseId: 5,
+        name: "Recursion Quiz",
+        conversationId: 3,
+      },
     });
   });
 });

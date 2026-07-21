@@ -280,12 +280,58 @@ describe("mapIntentPreviewToDryRun", () => {
     // "action" and "local_course_id" are internal, not shown to the user.
     // Known fields (title, description, due_date, points_possible) come
     // first, in that order, regardless of the object's own key order.
-    expect(result.proposedPlan).toEqual([
+    expect(result.proposedPlan).toMatchObject([
       { field: "title", label: "Title", value: "Midterm Exam" },
       { field: "description", label: "Description", value: "Covers chapters 1-4" },
       { field: "due_date", label: "Due Date", value: "2026-08-01" },
       { field: "points_possible", label: "Points Possible", value: "20" },
     ]);
+  });
+
+  it("hides resolved internal ids from plans and diffs", () => {
+    const internalMessages: ConversationMessage[] = [
+      messages[0],
+      {
+        id: 42,
+        role: "assistant",
+        content: JSON.stringify({
+          intent_preview: true,
+          summary: "Update grade.",
+          proposed_action: {
+            action: "update_grade",
+            local_course_id: 1,
+            assignment_id: 42,
+            student_id: 99,
+            new_grade: "85",
+            feedback: "Good improvement",
+          },
+          previous_proposed_action: {
+            action: "update_grade",
+            local_course_id: 1,
+            assignment_id: 41,
+            student_id: 98,
+            new_grade: "80",
+          },
+          preview_metadata: { action: "update_grade", course: "CPSC 310" },
+        }),
+        created_at: "2026-07-05T00:01:00.000Z",
+      },
+    ];
+
+    const result = mapIntentPreviewToDryRun(
+      7,
+      42,
+      internalMessages,
+      "Dr. Jane Doe",
+    );
+
+    expect(result.proposedPlan?.map((field) => field.field)).toEqual([
+      "new_grade",
+      "feedback",
+    ]);
+    expect(
+      result.changesFromPreviousRequest?.map((change) => change.field),
+    ).not.toContain("student_id");
   });
 
   // Verifies: Renders a missing field as an em dash placeholder in the structured plan.

@@ -69,7 +69,7 @@ def _propose_create_assignment(client, headers, local_course_id) -> tuple[int, i
         '{"action": "intent_preview", "summary": "Create Midterm Exam", '
         '"proposed_action": {"action": "create_assignment", '
         f'"local_course_id": {local_course_id}, "title": "Midterm Exam", '
-        '"description": "Covers chapters 1-5", "due_date": "2030-01-01T00:00:00", '
+        '"description": "Covers chapters 1 through 5", "due_date": "2030-01-01T00:00:00", '
         '"points_possible": 100}}'
     )
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
@@ -94,7 +94,7 @@ def test_confirm_replay_is_rejected(client):
     fake_assignment = AssignmentResponse(
         id=42,
         name="Midterm Exam",
-        description="Covers chapters 1-5",
+        description="Covers chapters 1 through 5",
         due_at="2030-01-01T00:00:00",
         points_possible=100.0,
         course_id=9999,
@@ -194,7 +194,7 @@ def test_modify_snapshots_previous_proposed_action(client):
         '{"action": "intent_preview", "summary": "Create Midterm Exam, now worth 50 points", '
         '"proposed_action": {"action": "create_assignment", '
         f'"local_course_id": {local_course_id}, "title": "Midterm Exam", '
-        '"description": "Covers chapters 1-5", "due_date": "2030-01-01T00:00:00", '
+        '"description": "Covers chapters 1 through 5", "due_date": "2030-01-01T00:00:00", '
         '"points_possible": 50}}'
     )
     with patch("app.services.chat.get_llm_adapter", return_value=modify_adapter):
@@ -223,7 +223,7 @@ def test_modify_snapshots_previous_proposed_action(client):
         '{"action": "intent_preview", "summary": "Create Midterm Exam, now worth 75 points", '
         '"proposed_action": {"action": "create_assignment", '
         f'"local_course_id": {local_course_id}, "title": "Midterm Exam", '
-        '"description": "Covers chapters 1-5", "due_date": "2030-01-01T00:00:00", '
+        '"description": "Covers chapters 1 through 5", "due_date": "2030-01-01T00:00:00", '
         '"points_possible": 75}}'
     )
     with patch("app.services.chat.get_llm_adapter", return_value=second_modify_adapter):
@@ -385,7 +385,7 @@ def test_modify_turn_sends_current_plan_as_structured_context(client):
         '{"action": "intent_preview", "summary": "Create Midterm Exam, moved a week later", '
         '"proposed_action": {"action": "create_assignment", '
         f'"local_course_id": {local_course_id}, "title": "Midterm Exam", '
-        '"description": "Covers chapters 1-5", "due_date": "2030-01-08T00:00:00", '
+        '"description": "Covers chapters 1 through 5", "due_date": "2030-01-08T00:00:00", '
         '"points_possible": 100}}'
     )
     with patch("app.services.chat.get_llm_adapter", return_value=modify_adapter):
@@ -401,6 +401,6 @@ def test_modify_turn_sends_current_plan_as_structured_context(client):
 
     sent_message = modify_adapter.generate.call_args.args[1]
     assert "Current proposed plan" in sent_message
-    assert '"description": "Covers chapters 1-5"' in sent_message
+    assert '"description": "Covers chapters 1 through 5"' in sent_message
     assert '"points_possible": 100' in sent_message
     assert "User request: move it a week later" in sent_message
