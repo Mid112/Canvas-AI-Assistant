@@ -134,7 +134,13 @@ e2e-up:
 	@echo "Stopping Docker backend container; e2e uses the native backend..."
 	-docker compose -f docker-compose.dev.yml stop backend >/dev/null 2>&1
 	@echo "Freeing backend/frontend ports..."
-	@pids=$$(lsof -ti :8000 :5173 2>/dev/null); if [ -n "$$pids" ]; then kill $$pids; fi
+	@pids=$$(lsof -ti :8000 :5173 2>/dev/null); \
+	if [ -n "$$pids" ]; then \
+		kill $$pids 2>/dev/null || true; \
+		sleep 1; \
+		stuck=$$(lsof -ti :8000 :5173 2>/dev/null); \
+		if [ -n "$$stuck" ]; then kill -9 $$stuck 2>/dev/null || true; fi; \
+	fi
 	@echo "Starting backend on http://localhost:8000 and frontend on http://localhost:5173"
 	@echo "Default e2e admin seed: admin@example.com / AdminPass123!"
 	@trap 'kill 0' INT TERM EXIT; \
