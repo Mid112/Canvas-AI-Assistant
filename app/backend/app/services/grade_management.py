@@ -127,6 +127,8 @@ def _format_decimal(value: Decimal) -> str:
 
 
 def _validate_grade_payload(body: GradeUpdateRequest) -> str:
+    # Canvas accepts both numeric scores and grading-scheme text. Keep bonus
+    # scores possible while rejecting malformed payloads before any mutation.
     posted_grade = body.posted_grade.strip()
     feedback = (body.reason or "").strip()
     if not posted_grade and not feedback:
@@ -171,6 +173,8 @@ def _validate_grade_payload(body: GradeUpdateRequest) -> str:
 
 
 def _grade_warnings(body: GradeUpdateRequest, submission) -> list[str]:
+    # Warnings are advisory and use the already-fetched page snapshot when
+    # available, avoiding an extra Canvas call just to restate preview context.
     warnings: list[str] = []
     status_value = submission.status.value if hasattr(submission.status, "value") else str(submission.status)
     if status_value == "unsubmitted":
