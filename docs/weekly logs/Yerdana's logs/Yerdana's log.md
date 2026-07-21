@@ -11,7 +11,7 @@
 - **24/5 (Sunday):** Not yet using Clockify – Estimated 3.5 hours
 
 
-<img width="1220" height="558" alt="Screenshot 2026-07-21 at 10 34 13 AM" src="https://github.com/user-attachments/assets/6117d000-e5a9-4ee6-83d9-07b9997a7ae0" />
+
 
 
 ## Current Tasks (Provide sufficient detail)
@@ -1167,6 +1167,10 @@ Guiding other testers through the workflow before testing other teams' apps myse
 - **07/18 (Saturday):** Using Clockify – Logged 05:59;14 hours
 - **07/19 (Sunday):** Using Clockify – Logged 04:33:50 hours
 - **07/20 (Monday):** Using Clockify – Logged 02:54:18 hours
+
+
+
+<img width="1220" height="558" alt="Screenshot 2026-07-21 at 10 34 13 AM" src="https://github.com/user-attachments/assets/6117d000-e5a9-4ee6-83d9-07b9997a7ae0" />
 
 ---
 
