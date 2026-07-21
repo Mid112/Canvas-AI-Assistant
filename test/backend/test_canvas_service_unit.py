@@ -594,6 +594,23 @@ async def test_get_submissions_creates_assignment_cache_row_when_missing():
 
 
 @pytest.mark.asyncio
+async def test_get_submissions_authorization_stops_before_canvas_fetch():
+    db = AsyncMock()
+    db.scalar = AsyncMock(return_value=None)
+    user = SimpleNamespace(id=2, canvas_connections=[_connection("https://canvas.ubc.ca")])
+
+    with (
+        patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
+        patch("app.services.canvas.fetch_submissions", new=AsyncMock()) as fetch_mock,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await get_submissions(999, 10, user, "https://canvas.ubc.ca", db)
+
+    assert exc_info.value.status_code == 404
+    fetch_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_get_submissions_cache_failure_does_not_touch_caller_transaction():
     """A caching hiccup must not break the live Canvas view — the parsed
     submissions are still returned even if the local write fails."""

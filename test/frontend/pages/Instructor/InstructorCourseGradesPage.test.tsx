@@ -88,7 +88,7 @@ describe("InstructorCourseGradesPage", () => {
       requires_approval: true,
       irreversible_warning: "This grade update is irreversible.",
       rollback_available: true,
-      rollback_message: "A previous grade is available for rollback.",
+      rollback_message: "History is recorded for this grade change; restore a prior grade manually if needed.",
       summary: "Update Coin to 110.",
       current: {
         grade: null,
@@ -97,7 +97,11 @@ describe("InstructorCourseGradesPage", () => {
         student_name: "Coin",
         student_canvas_id: 42,
       },
-      proposed: { posted_grade: "110", reason: null },
+      proposed: {
+        posted_grade: "110",
+        reason: null,
+        warnings: ["This grade is above the assignment's 100 possible points; submit only if this is intentional bonus or adjusted grading."],
+      },
       affected_resources: [],
     });
   });
@@ -115,6 +119,17 @@ describe("InstructorCourseGradesPage", () => {
     await user.click(screen.getByRole("button", { name: "Preview change" }));
 
     await waitFor(() => expect(mockedPreviewGradeUpdate).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/above the assignment's 100 possible points/i)).toBeInTheDocument();
+    expect(mockedPreviewGradeUpdate).toHaveBeenCalledWith(
+      7,
+      expect.objectContaining({
+        current_submission: expect.objectContaining({
+          assignment_points_possible: 100,
+        }),
+      }),
+      "access-token",
+      "https://canvas.test",
+    );
     const coinRow = screen.getByRole("row", { name: /Coin Submitted - - 110/i });
     expect(within(coinRow).getByRole("cell", { name: "110" })).toBeInTheDocument();
 
@@ -243,7 +258,7 @@ describe("InstructorCourseGradesPage", () => {
       requires_approval: true,
       irreversible_warning: "This grade update is irreversible.",
       rollback_available: true,
-      rollback_message: "A previous grade is available for rollback.",
+      rollback_message: "History is recorded for this grade change; restore a prior grade manually if needed.",
       summary: "Update Coin to 110.",
       current: {
         grade: null,
@@ -293,7 +308,7 @@ describe("InstructorCourseGradesPage", () => {
       requires_approval: false,
       irreversible_warning: "Feedback only is low risk.",
       rollback_available: false,
-      rollback_message: "No grade rollback is needed.",
+      rollback_message: "History is recorded; no grade correction is needed.",
       summary: "Send feedback to Coin without changing the grade.",
       current: {
         grade: null,
@@ -314,7 +329,7 @@ describe("InstructorCourseGradesPage", () => {
       requires_approval: false,
       irreversible_warning: "Feedback only is low risk.",
       rollback_available: false,
-      rollback_message: "No grade rollback is needed.",
+      rollback_message: "History is recorded; no grade correction is needed.",
       summary: "Send feedback to Coin without changing the grade.",
       current: {
         grade: null,
