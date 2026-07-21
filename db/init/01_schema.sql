@@ -199,15 +199,17 @@ CREATE INDEX idx_messages_conversation_id ON messages(conversation_id);
 -- ─────────────────────────────────────────────
 CREATE TABLE workflows (
     id                       SERIAL PRIMARY KEY,
-    conversation_id          INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    -- Nullable for form-created writes that are not tied to a chat turn.
+    conversation_id          INTEGER REFERENCES conversations(id) ON DELETE CASCADE,
     user_id                  INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     course_id                INTEGER REFERENCES courses(id) ON DELETE SET NULL,
     -- The user message that originally started this preview chain — stays
-    -- pinned across "modify" revisions.
-    source_user_message_id   INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
-    -- The assistant message holding the current intent_preview. Unique —
-    -- this is the join key handle_confirmed_action looks the workflow up by.
-    preview_message_id       INTEGER NOT NULL UNIQUE REFERENCES messages(id) ON DELETE CASCADE,
+    -- pinned across "modify" revisions. Null for form-created workflows.
+    source_user_message_id   INTEGER REFERENCES messages(id) ON DELETE CASCADE,
+    -- The assistant message holding the current intent_preview. Unique when
+    -- set — this is the join key handle_confirmed_action looks the workflow
+    -- up by. Null for form-created workflows.
+    preview_message_id       INTEGER REFERENCES messages(id) ON DELETE CASCADE,
     result_message_id        INTEGER REFERENCES messages(id) ON DELETE SET NULL,
     action_name              VARCHAR NOT NULL,
     user_prompt              TEXT NOT NULL,
@@ -223,6 +225,10 @@ CREATE TABLE workflows (
     undone_at                TIMESTAMPTZ,
     created_at               TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE UNIQUE INDEX ix_workflows_preview_message_id
+    ON workflows (preview_message_id)
+    WHERE preview_message_id IS NOT NULL;
 
 CREATE INDEX idx_workflows_user_id ON workflows(user_id);
 CREATE INDEX idx_workflows_conversation_id ON workflows(conversation_id);
@@ -446,4 +452,5 @@ INSERT INTO schema_migrations (filename) VALUES
     ('019_audit_logs_allow_delete_operation.sql'),
     ('020_course_cache_columns.sql'),
     ('021_audit_logs_allow_quiz_resource_type.sql'),
-    ('022_audit_logs_allow_submission_resource_type.sql');
+    ('022_audit_logs_allow_submission_resource_type.sql'),
+    ('023_workflow_nullable_preview.sql');

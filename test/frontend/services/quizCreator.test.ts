@@ -88,13 +88,19 @@ describe("quizCreator", () => {
       );
 
     const preview = await previewQuizDraft(payload, { accessToken: "token" });
-    await approveQuizDraft(payload, { accessToken: "token" });
+    await approveQuizDraft(payload, {
+      accessToken: "token",
+      conversationId: 42,
+    });
 
     const previewBody = JSON.parse(
       String(vi.mocked(fetch).mock.calls[0][1]?.body),
     );
     const createBody = JSON.parse(
       String(vi.mocked(fetch).mock.calls[1][1]?.body),
+    );
+    expect(String(vi.mocked(fetch).mock.calls[1][0])).toContain(
+      "conversation_id=42",
     );
     expect(previewBody).toEqual(createBody);
     expect(preview.riskLevel).toBe("medium");
@@ -110,8 +116,10 @@ describe("quizCreator", () => {
             {
               id: 88,
               title: "Recursion Quiz",
+              description: payload.description,
               due_at: "2030-12-15T23:59:00Z",
               points_possible: 5,
+              question_count: payload.questions.length,
             },
           ]),
           { status: 200 },
@@ -124,6 +132,30 @@ describe("quizCreator", () => {
       id: 88,
       title: "Recursion Quiz",
     });
+  });
+
+  it("does not recover a quiz when description or question count diverge", async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(new Response("upstream timeout", { status: 502 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: 88,
+              title: "Recursion Quiz",
+              description: "A different quiz description entirely.",
+              due_at: "2030-12-15T23:59:00Z",
+              points_possible: 5,
+              question_count: 99,
+            },
+          ]),
+          { status: 200 },
+        ),
+      );
+
+    await expect(
+      approveQuizDraft(payload, { accessToken: "token" }),
+    ).rejects.toThrow();
   });
 
   it("maps Canvas quiz capabilities", async () => {

@@ -312,8 +312,13 @@ async def list_question_banks_endpoint(
 async def generate_quiz_draft_endpoint(
     course_id: int,
     body: QuizDraftRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_instructor_user),
+    db: AsyncSession = Depends(get_db),
 ):
+    # Require instructor role AND course ownership before spending an LLM call.
+    from app.services.course_access import get_owned_course_or_404
+
+    await get_owned_course_or_404(course_id, current_user, db)
     return await generate_quiz_draft(body)
 
 
@@ -321,7 +326,7 @@ async def generate_quiz_draft_endpoint(
 async def preview_quiz_endpoint(
     course_id: int,
     body: QuizCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_instructor_user),
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
     db: AsyncSession = Depends(get_db),
 ):
@@ -392,7 +397,16 @@ async def create_quiz_endpoint(
     current_user: User = Depends(get_instructor_user),
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
     db: AsyncSession = Depends(get_db),
+    conversation_id: int | None = Query(default=None),
 ):
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
+    from app.models.conversation import Conversation
+    from app.models.workflow import Workflow
+    from app.services.canvas import get_owned_course
+    from app.services.chat import record_write_audit
     from app.services.quiz_validation import validate_quiz_for_create
 
     await validate_quiz_for_create(
@@ -411,7 +425,68 @@ async def create_quiz_endpoint(
             group.model_dump() for group in body.question_bank_groups
         ],
     )
-    return await create_course_quiz(course_id, body, current_user, canvas_url, db)
+    quiz = await create_course_quiz(course_id, body, current_user, canvas_url, db)
+    course = await get_owned_course(course_id, current_user, canvas_url, db)
+
+    linked_conversation_id: int | None = None
+    if conversation_id is not None:
+        conversation = await db.scalar(
+            select(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.user_id == current_user.id,
+            )
+        )
+        if conversation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found.",
+            )
+        linked_conversation_id = conversation.id
+
+    workflow = Workflow(
+        conversation_id=linked_conversation_id,
+        user_id=current_user.id,
+        course_id=course.id,
+        source_user_message_id=None,
+        preview_message_id=None,
+        action_name="create_quiz",
+        user_prompt="Created via quiz creation form",
+        proposed_action={
+            "action": "create_quiz",
+            "local_course_id": course.id,
+            **body.model_dump(mode="json"),
+        },
+        affected_resources=[
+            {
+                "type": "course",
+                "id": course.id,
+                "name": course.name,
+                "status": "unchanged",
+            },
+            {
+                "type": "quiz",
+                "id": quiz.id,
+                "name": quiz.title,
+                "status": "created",
+            },
+        ],
+        status="executed",
+        executed_at=datetime.now(UTC),
+    )
+    db.add(workflow)
+    await db.flush()
+
+    await record_write_audit(
+        db,
+        current_user,
+        workflow,
+        {
+            "data": quiz.model_dump(mode="json"),
+            "affected_resources": workflow.affected_resources,
+        },
+    )
+    await db.commit()
+    return quiz
 
 
 @router.get("/courses/{course_id}/assignments/{assignment_id}", response_model=AssignmentResponse)

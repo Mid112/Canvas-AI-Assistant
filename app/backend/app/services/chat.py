@@ -156,6 +156,63 @@ def _json_dumps(obj) -> str:
         raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
     return json.dumps(obj, default=default)
 
+
+async def record_write_audit(
+    db: AsyncSession,
+    user: User,
+    workflow: Workflow,
+    result: dict,
+) -> None:
+    """Write an AuditLog row for a successfully executed Canvas write.
+    Shared by handle_confirmed_action (chat confirm path) and form write
+    endpoints (e.g. create_quiz REST) that record Workflow rows directly.
+    """
+    if workflow.action_name not in WRITE_ACTIONS:
+        return
+
+    resource_type, operation = _AUDIT_RESOURCE_MAP.get(
+        workflow.action_name, (workflow.action_name, "create")
+    )
+    if workflow.action_name == "send_message":
+        created_resource = next(
+            (
+                resource
+                for resource in result.get("affected_resources", [])
+                if resource.get("status") == "created"
+            ),
+            None,
+        )
+        if created_resource and created_resource.get("type"):
+            resource_type = created_resource["type"]
+
+    raw_data = result.get("data") or {}
+    if hasattr(raw_data, "model_dump"):
+        raw_data = raw_data.model_dump(mode="json")
+    data = json.loads(_json_dumps(raw_data))
+    resource_id = (
+        str(data["id"]) if isinstance(data, dict) and data.get("id") is not None else None
+    )
+    before_data = (
+        json.loads(_json_dumps(result["previous_data"]))
+        if result.get("previous_data") is not None
+        else None
+    )
+    db.add(
+        AuditLog(
+            user_id=user.id,
+            workflow_id=workflow.id,
+            course_id=workflow.course_id,
+            action=workflow.action_name,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            operation=operation,
+            status="success",
+            before_data=before_data,
+            after_data=data,
+            request_payload=workflow.proposed_action,
+        )
+    )
+
 async def get_or_create_conversation(
     db: AsyncSession,
     user: User,
@@ -1921,13 +1978,15 @@ Put every field you already do have into partial_plan so the next turn
 doesn't lose it once the user answers. Only ask ONE question per turn.
 
 REQUIRED FIELDS — before proposing any write action (create_assignment,
-create_quiz, update_assignment, update_grade, send_message), check every field listed as "required"
+update_assignment, update_grade, send_message), check every field listed as "required"
 in that action's schema below. This includes the action/task type itself
 (e.g. don't guess whether the user wants create_assignment vs
 create_quiz vs update_assignment), and fields like title, description, and due_date.
 If any required field is missing or was not stated by the user, use the
 AMBIGUITY CHECK format to ask for it. Never invent a placeholder value
 and never silently omit a required field from proposed_action.
+(create_quiz is the exception — see QUIZ ENGINES below: always intent_preview,
+never clarify for missing quiz fields.)
 
 INTENT PREVIEW — before executing a WRITE action:
 create_assignment, create_quiz, update_assignment, update_grade, and send_message change real Canvas
@@ -1942,6 +2001,14 @@ request; the app verifies whether their Canvas course supports it. Classic
 question-bank groups require real bank IDs selected by the instructor in
 the quiz review form. Never invent bank_id values or add question_bank_groups
 from natural-language guesses.
+
+IMPORTANT — create_quiz ALWAYS skips the AMBIGUITY CHECK. Even when the
+user gives only a partial request (e.g. "create a quiz" with no title or
+description), propose intent_preview immediately with whatever details you
+have. The quiz creation form opens with pre-filled values and handles all
+missing-field validation. Never ask clarifying questions for create_quiz:
+propose {"action": "intent_preview", "proposed_action": {"action": "create_quiz",
+...}} right away.
 
 READ ACTIONS — execute immediately, no preview:
 fetch_courses, fetch_assignments, fetch_quizzes, fetch_students, fetch_submissions,
@@ -2654,16 +2721,20 @@ async def handle_chat_message(
         )
 
     if result.get("intent_preview"):
-        preview_metadata = result.get("preview_metadata") or {}
-        await _sync_workflow_for_preview(
-            db, conversation, user,
-            source_user_message_id=user_msg.id,
-            pending_message_id=pending_message_id,
-            preview_message_id=assistant_msg.id,
-            user_prompt=message,
-            proposed_action=result.get("proposed_action", {}),
-            affected_resources=preview_metadata.get("affected_resources", []),
-        )
+        proposed_action = result.get("proposed_action", {})
+        # create_quiz redirects to the dedicated form — skip creating a
+        # pending Workflow since the form records audit on approve.
+        if proposed_action.get("action") != "create_quiz":
+            preview_metadata = result.get("preview_metadata") or {}
+            await _sync_workflow_for_preview(
+                db, conversation, user,
+                source_user_message_id=user_msg.id,
+                pending_message_id=pending_message_id,
+                preview_message_id=assistant_msg.id,
+                user_prompt=message,
+                proposed_action=proposed_action,
+                affected_resources=preview_metadata.get("affected_resources", []),
+            )
     else:
         await _supersede_pending_workflow(
             db,
@@ -2694,8 +2765,11 @@ async def handle_chat_message(
 
     await db.commit()
 
-    # attach the stored message ID so the client can confirm by ID
-    if result.get("intent_preview"):
+    # attach the stored message ID so the client can confirm by ID.
+    # create_quiz is handed off to the form and is not confirmable in chat.
+    if result.get("intent_preview") and (
+        result.get("proposed_action") or {}
+    ).get("action") != "create_quiz":
         result["pending_message_id"] = assistant_msg.id
 
     return conversation, result, False
@@ -2996,54 +3070,7 @@ async def handle_confirmed_action(
     # _sync_workflow_for_preview), but must NOT get an audit row: their
     # action_name isn't in _AUDIT_RESOURCE_MAP and would violate
     # audit_logs' resource_type/operation CHECK constraints if written.
-    if workflow.action_name in WRITE_ACTIONS:
-        resource_type, operation = _AUDIT_RESOURCE_MAP.get(
-            workflow.action_name, (workflow.action_name, "create")
-        )
-        if workflow.action_name == "send_message":
-            # Use the resource type the write actually produced (announcement
-            # vs. conversation) instead of the static default above, since
-            # the same action can go either way depending on whether
-            # recipient_canvas_user_ids was set.
-            created_resource = next(
-                (
-                    resource
-                    for resource in result.get("affected_resources", [])
-                    if resource.get("status") == "created"
-                ),
-                None,
-            )
-            if created_resource and created_resource.get("type"):
-                resource_type = created_resource["type"]
-        # result["data"] comes from CanvasWriteResult.to_dict()'s plain
-        # .model_dump() (not mode="json"), so it can still contain native
-        # datetime objects — JSONB needs JSON-safe values. Round-trip
-        # through the same _json_dumps used for Message.content to
-        # normalize them.
-        data = json.loads(_json_dumps(result.get("data") or {}))
-        resource_id = str(data["id"]) if isinstance(data, dict) and data.get("id") is not None else None
-        # Only set for update_assignment today (see CanvasWriteResult.previous_data) —
-        # the state undo_workflow re-applies to revert this action.
-        before_data = (
-            json.loads(_json_dumps(result["previous_data"]))
-            if result.get("previous_data") is not None
-            else None
-        )
-        db.add(
-            AuditLog(
-                user_id=user.id,
-                workflow_id=workflow.id,
-                course_id=workflow.course_id,
-                action=workflow.action_name,
-                resource_type=resource_type,
-                resource_id=resource_id,
-                operation=operation,
-                status="success",
-                before_data=before_data,
-                after_data=data,
-                request_payload=workflow.proposed_action,
-            )
-        )
+    await record_write_audit(db, user, workflow, result)
 
     await db.commit()
 

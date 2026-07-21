@@ -23,7 +23,7 @@ export interface WorkflowHistoryEntry {
  */
 export interface WorkflowHistoryApiItem {
   id: number;
-  conversation_id: number;
+  conversation_id: number | null;
   action_name: string;
   user_prompt: string;
   status: string;

@@ -29,8 +29,10 @@ class Workflow(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    conversation_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True
+    # Nullable so form-created writes (e.g. quiz creation form) can be
+    # audited without an assistant conversation/preview message.
+    conversation_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("conversations.id", ondelete="CASCADE"), nullable=True, index=True
     )
     user_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
@@ -42,14 +44,15 @@ class Workflow(Base):
     # The user message that originally started this preview chain — stays
     # pinned across any number of "modify" revisions, so it always answers
     # "what did the user originally ask for" even after the proposed_action
-    # itself has changed several times.
-    source_user_message_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("messages.id", ondelete="CASCADE"), nullable=False
+    # itself has changed several times. Null for form-created workflows.
+    source_user_message_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("messages.id", ondelete="CASCADE"), nullable=True
     )
-    # The assistant message holding the current intent_preview. Unique —
-    # this is the join key handle_confirmed_action looks the workflow up by.
-    preview_message_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("messages.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
+    # The assistant message holding the current intent_preview. Unique when
+    # set — this is the join key handle_confirmed_action looks the workflow
+    # up by. Null for form-created workflows (partial unique index in DB).
+    preview_message_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("messages.id", ondelete="CASCADE"), nullable=True, index=True
     )
     result_message_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
@@ -75,7 +78,7 @@ class Workflow(Base):
         default=lambda: datetime.now(UTC),
     )
 
-    conversation: Mapped[Conversation] = relationship("Conversation", back_populates="workflows")
+    conversation: Mapped[Conversation | None] = relationship("Conversation", back_populates="workflows")
     user: Mapped[User] = relationship("User", back_populates="workflows")
     course: Mapped[Course | None] = relationship("Course")
     audit_logs: Mapped[list[AuditLog]] = relationship("AuditLog", back_populates="workflow")

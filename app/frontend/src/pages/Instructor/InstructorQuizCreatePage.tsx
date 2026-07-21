@@ -286,7 +286,11 @@ export function InstructorQuizCreatePage() {
           questions: pendingApproval.questions,
           questionBankGroups: pendingApproval.questionBankGroups,
         },
-        { accessToken, canvasUrl },
+        {
+          accessToken,
+          canvasUrl,
+          conversationId: seededDraft?.conversationId,
+        },
       );
       setApprovedValues(pendingApproval);
       setIsPreviewOpen(false);

@@ -240,7 +240,7 @@ describe("mapChatReply", () => {
     expect(JSON.stringify(result)).not.toContain("secret_internal_value");
   });
 
-  it("seeds the validated quiz editor from a chat preview", () => {
+  it("auto-redirects create_quiz and keeps a form button for chat history", () => {
     const result = mapChatReply(
       {
         intent_preview: true,
@@ -265,19 +265,28 @@ describe("mapChatReply", () => {
       3,
     );
 
-    expect(result.interpretedAction?.secondaryLink?.label).toBe(
-      "Edit quiz details",
+    expect(result.pendingMessageId).toBeUndefined();
+    expect(result.navigateTo?.path).toBe("/instructor/quizzes/create");
+    expect(result.navigateTo?.state).toMatchObject({
+      returnTo: "/instructor/assistant",
+      aiQuizDraft: {
+        courseId: 5,
+        name: "Recursion Quiz",
+        conversationId: 3,
+      },
+    });
+    expect(result.interpretedAction?.primaryLink?.label).toBe(
+      "Open quiz creation form",
     );
-    expect(result.interpretedAction?.secondaryLink?.href).toBe(
+    expect(result.interpretedAction?.primaryLink?.href).toBe(
       "/instructor/quizzes/create",
     );
-    expect(
-      result.interpretedAction?.secondaryLink?.state?.aiQuizDraft,
-    ).toMatchObject({
-      courseId: 5,
-      name: "Recursion Quiz",
-      description: "Covers base cases and recursive definitions.",
-      pointsPossible: 20,
+    expect(result.interpretedAction?.primaryLink?.state).toMatchObject({
+      aiQuizDraft: {
+        courseId: 5,
+        name: "Recursion Quiz",
+        conversationId: 3,
+      },
     });
   });
 

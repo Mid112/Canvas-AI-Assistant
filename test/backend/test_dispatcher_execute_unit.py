@@ -496,8 +496,35 @@ async def test_execute_intent_preview_create_assignment_past_due_date_downgrades
 
 
 @pytest.mark.asyncio
-async def test_execute_intent_preview_create_quiz_missing_field_clarifies_once():
-    db = AsyncMock()
+async def test_execute_intent_preview_create_quiz_routes_with_empty_fields():
+    """Chat never clarifies quiz fields — the form owns validation."""
+    course = _course()
+    db = _db_with_course(course)
+    user = MagicMock(id=1)
+    action = IntentPreviewAction(
+        summary="I'll help you create a quiz...",
+        proposed_action={
+            "action": "create_quiz",
+            "local_course_id": 1,
+            "title": "",
+            "description": "",
+            "due_date": "",
+            "points_possible": None,
+        },
+    )
+
+    result = await execute_tool(db, user, action)
+
+    assert result.get("intent_preview") is True
+    assert result["proposed_action"]["action"] == "create_quiz"
+    assert result["action"] != "clarify"
+
+
+@pytest.mark.asyncio
+async def test_execute_intent_preview_create_quiz_without_questions_routes_to_form():
+    """Questions are added in the quiz form — preview must not clarify for them."""
+    course = _course()
+    db = _db_with_course(course)
     user = MagicMock(id=1)
     action = IntentPreviewAction(
         summary="create a quiz",
@@ -507,20 +534,23 @@ async def test_execute_intent_preview_create_quiz_missing_field_clarifies_once()
             "title": "Quiz 1",
             "description": "Covers recursion concepts in depth.",
             "due_date": "2030-01-01T00:00:00",
+            "points_possible": 10,
         },
     )
 
     result = await execute_tool(db, user, action)
 
-    assert result["action"] == "clarify"
-    assert "points" in result["question"].lower()
-    assert result["partial_plan"]["title"] == "Quiz 1"
-    assert result["partial_plan"]["description"] == "Covers recursion concepts in depth."
+    assert result.get("intent_preview") is True
+    assert result["proposed_action"]["action"] == "create_quiz"
+    assert result["proposed_action"]["title"] == "Quiz 1"
+    assert result["action"] != "clarify"
 
 
 @pytest.mark.asyncio
-async def test_execute_intent_preview_create_quiz_past_date_clarifies():
-    db = AsyncMock()
+async def test_execute_intent_preview_create_quiz_past_date_still_routes_to_form():
+    """Past due dates are validated in the form, not via chat clarify."""
+    course = _course()
+    db = _db_with_course(course)
     user = MagicMock(id=1)
     action = IntentPreviewAction(
         summary="create a quiz",
@@ -531,21 +561,14 @@ async def test_execute_intent_preview_create_quiz_past_date_clarifies():
             "description": "Covers recursion concepts in depth.",
             "due_date": "2020-01-01T00:00:00",
             "points_possible": 10,
-            "questions": [
-                {
-                    "question_text": "What is recursion?",
-                    "question_type": "essay_question",
-                    "points_possible": 10,
-                }
-            ],
         },
     )
 
     result = await execute_tool(db, user, action)
 
-    assert result["action"] == "clarify"
-    assert "already" in result["question"].lower()
-    assert "due_date" not in result["partial_plan"]
+    assert result.get("intent_preview") is True
+    assert result["proposed_action"]["action"] == "create_quiz"
+    assert result["action"] != "clarify"
 
 
 # ---------------------------------------------------------------------------

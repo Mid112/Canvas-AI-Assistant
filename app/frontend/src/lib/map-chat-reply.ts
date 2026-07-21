@@ -129,17 +129,6 @@ function buildInterpretedAction(
             },
           ]
         : []),
-      ...(actionName === "create_quiz"
-        ? [
-            {
-              label: "Quiz engine",
-              value:
-                proposed.quiz_engine === "new_quizzes"
-                  ? "New Quizzes"
-                  : "Classic Quizzes",
-            },
-          ]
-        : []),
     ],
   };
 
@@ -176,60 +165,6 @@ function buildInterpretedAction(
           prompt: readString(previewMetadata?.summary),
           courseId,
           recipientIds,
-        },
-      },
-    };
-  }
-
-  if (actionName === "create_quiz") {
-    const questions = Array.isArray(proposed.questions)
-      ? proposed.questions.map((question) => {
-          const record = question as Record<string, unknown>;
-          return {
-            questionText: readString(record.question_text) ?? "",
-            questionType:
-              readString(record.question_type) ?? "essay_question",
-            pointsPossible:
-              typeof record.points_possible === "number"
-                ? record.points_possible
-                : 1,
-            answers: Array.isArray(record.answers)
-              ? record.answers
-              : [],
-          };
-        })
-      : [];
-    interpretedAction.secondaryLink = {
-      label: "Edit quiz details",
-      href: paths.instructor.quizCreate,
-      state: {
-        returnTo: paths.instructor.assistant,
-        aiQuizDraft: {
-          courseId,
-          name: readString(proposed.title),
-          description: readString(proposed.description),
-          dueDate: readString(proposed.due_date)
-            ? formatDueDateForInput(readString(proposed.due_date)!)
-            : undefined,
-          pointsPossible: proposed.points_possible,
-          allowedAttempts: proposed.allowed_attempts,
-          timeLimit: proposed.time_limit,
-          quizEngine:
-            proposed.quiz_engine === "new_quizzes"
-              ? "new_quizzes"
-              : "classic",
-          questionBankGroups: Array.isArray(proposed.question_bank_groups)
-            ? proposed.question_bank_groups.map((group) => {
-                const record = group as Record<string, unknown>;
-                return {
-                  bankId: Number(record.bank_id),
-                  bankName: readString(record.bank_name) ?? "Question bank",
-                  pickCount: Number(record.pick_count),
-                  questionPoints: Number(record.question_points),
-                };
-              })
-            : [],
-          questions,
         },
       },
     };
@@ -289,6 +224,120 @@ function buildInterpretedAction(
   return interpretedAction;
 }
 
+function buildQuizCreateDraftState(
+  proposed: Record<string, unknown>,
+  conversationId?: number,
+): Record<string, unknown> {
+  const questions = Array.isArray(proposed.questions)
+    ? proposed.questions.map((question) => {
+        const record = question as Record<string, unknown>;
+        return {
+          questionText: readString(record.question_text) ?? "",
+          questionType:
+            (readString(record.question_type) as
+              | "multiple_choice_question"
+              | "true_false_question"
+              | "short_answer_question"
+              | "essay_question") ?? "essay_question",
+          pointsPossible:
+            typeof record.points_possible === "number"
+              ? record.points_possible
+              : 1,
+          answers: Array.isArray(record.answers)
+            ? (record.answers as Array<{ text: string; weight: number }>)
+            : [],
+        };
+      })
+    : [];
+
+  return {
+    returnTo: paths.instructor.assistant,
+    aiQuizDraft: {
+      courseId:
+        typeof proposed.local_course_id === "number"
+          ? proposed.local_course_id
+          : undefined,
+      name: readString(proposed.title),
+      description: readString(proposed.description),
+      dueDate: readString(proposed.due_date)
+        ? formatDueDateForInput(readString(proposed.due_date)!)
+        : undefined,
+      pointsPossible: proposed.points_possible,
+      allowedAttempts: proposed.allowed_attempts,
+      timeLimit: proposed.time_limit,
+      quizEngine:
+        proposed.quiz_engine === "new_quizzes" ? "new_quizzes" : "classic",
+      questionBankGroups: Array.isArray(proposed.question_bank_groups)
+        ? proposed.question_bank_groups.map((group) => {
+            const record = group as Record<string, unknown>;
+            return {
+              bankId: Number(record.bank_id),
+              bankName: readString(record.bank_name) ?? "Question bank",
+              pickCount: Number(record.pick_count),
+              questionPoints: Number(record.question_points),
+            };
+          })
+        : [],
+      questions,
+      conversationId,
+    },
+  };
+}
+
+function buildQuizCreateNavigateTo(
+  proposed: Record<string, unknown>,
+  conversationId?: number,
+): NonNullable<AssistantResponse["navigateTo"]> {
+  return {
+    path: paths.instructor.quizCreate,
+    state: buildQuizCreateDraftState(proposed, conversationId),
+  };
+}
+
+function buildQuizCreateFormAction(
+  proposed: Record<string, unknown>,
+  previewMetadata: Record<string, unknown> | undefined,
+  conversationId?: number,
+): NonNullable<AssistantResponse["interpretedAction"]> {
+  const courseLabel =
+    readString(previewMetadata?.course_name) ??
+    readString(previewMetadata?.course) ??
+    "Active course";
+  const draftState = buildQuizCreateDraftState(proposed, conversationId);
+
+  return {
+    action: "Create Quiz",
+    course: courseLabel,
+    affectedStudents: "Course-wide",
+    technicalDetails: [
+      { label: "Action type", value: "Create Quiz" },
+      ...(readString(previewMetadata?.risk_level)
+        ? [{ label: "Risk level", value: readString(previewMetadata?.risk_level)! }]
+        : []),
+      ...(typeof previewMetadata?.reversible === "boolean"
+        ? [
+            {
+              label: "Reversible",
+              value: previewMetadata.reversible ? "Yes" : "No",
+            },
+          ]
+        : []),
+      {
+        label: "Quiz engine",
+        value:
+          proposed.quiz_engine === "new_quizzes"
+            ? "New Quizzes"
+            : "Classic Quizzes",
+      },
+    ],
+    primaryLink: {
+      label: "Open quiz creation form",
+      href: paths.instructor.quizCreate,
+      state: draftState,
+    },
+  };
+}
+
 export function mapChatReplyToAssistantResponse(
   reply: Record<string, unknown>,
   isError: boolean,
@@ -311,6 +360,25 @@ export function mapChatReplyToAssistantResponse(
       typeof reply.pending_message_id === "number"
         ? reply.pending_message_id
         : undefined;
+
+    // Quiz creation redirects to the dedicated form on live turns, and also
+    // keeps an "Open quiz creation form" button so reopening chat history
+    // can return to the seeded form without a confirmable preview panel.
+    if (proposed?.action === "create_quiz") {
+      return {
+        content:
+          readString(reply.summary) ??
+          "Opening the quiz creation form with your draft…",
+        explanation:
+          "Quiz creation happens in the dedicated form so the write is reviewed once and recorded in workflow history.",
+        navigateTo: buildQuizCreateNavigateTo(proposed, conversationId),
+        interpretedAction: buildQuizCreateFormAction(
+          proposed,
+          previewMetadata,
+          conversationId,
+        ),
+      };
+    }
 
     // A grouped send_message turn can resolve to more than one distinct
     // message (see additional_previews in chat.py's
