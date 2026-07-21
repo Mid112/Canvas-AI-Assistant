@@ -150,6 +150,8 @@ jobs:
             -e ENVIRONMENT=test \
             -e SECRET_KEY=ci-test-secret \
             -e CANVAS_TOKEN_ENCRYPTION_KEY=cS_xtOdvX6UctctAErcx3JJC1e3YBBM-Kwh9WLY3ocI= \
+            -e HF_TOKEN=ci-test-hf-token \
+            -e DEFAULT_LLM_PROVIDER=huggingface \
             -e PYTHONPATH=/workspace/app/backend \
             python:3.12-slim-bookworm \
             bash -c "pip install --quiet -r app/backend/requirements.txt && cd app/backend && pytest ../../test/backend/ -v --cov --cov-report=term-missing"

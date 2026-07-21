@@ -308,10 +308,10 @@ def test_admin_can_update_llm_defaults(client, admin_credentials):
 
     current = client.get("/api/v1/admin/llm/providers", headers=headers)
     assert current.status_code == 200, current.json()
-    config = current.json()["config"]
+    original = current.json()["config"]
 
     payload = {
-        **config,
+        **original,
         "provider": "ollama",
         "model": "llama3.2",
         "fallback_provider": None,
@@ -319,11 +319,19 @@ def test_admin_can_update_llm_defaults(client, admin_credentials):
         "cache_enabled": True,
         "cache_ttl_seconds": 300,
     }
-    updated = client.put(
-        "/api/v1/admin/llm/providers",
-        headers=headers,
-        json=payload,
-    )
-    assert updated.status_code == 200, updated.json()
-    assert updated.json()["config"]["provider"] == "ollama"
-    assert updated.json()["config"]["model"] == "llama3.2"
+    try:
+        updated = client.put(
+            "/api/v1/admin/llm/providers",
+            headers=headers,
+            json=payload,
+        )
+        assert updated.status_code == 200, updated.json()
+        assert updated.json()["config"]["provider"] == "ollama"
+        assert updated.json()["config"]["model"] == "llama3.2"
+    finally:
+        # Restore so later chat tests keep a connected default provider.
+        client.put(
+            "/api/v1/admin/llm/providers",
+            headers=headers,
+            json=original,
+        )
