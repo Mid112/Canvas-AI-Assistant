@@ -84,6 +84,12 @@ export interface AssistantResponse {
   interpretedAction?: InterpretedAction;
   safetyBlocked?: boolean;
   safetyMessage?: string;
+  /** When set, navigate to this route instead of showing a preview
+   * card. The chat message content is still displayed. */
+  navigateTo?: {
+    path: string;
+    state: Record<string, unknown>;
+  };
   /** A single send_message turn can resolve to more than one distinct
    * message (different text per recipient, or an announcement plus
    * targeted messages) — the primary preview is this response itself;

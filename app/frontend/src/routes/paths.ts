@@ -130,6 +130,7 @@ export interface AiActionDraftLocationState {
     allowedAttempts?: unknown;
     timeLimit?: unknown;
     quizEngine?: "classic" | "new_quizzes";
+    conversationId?: number;
     questionBankGroups?: Array<{
       bankId: number;
       bankName: string;

@@ -193,6 +193,26 @@ def test_create_quiz_creates_quiz_and_questions(client):
     assert "questions" not in canvas_payload
     assert canvas_payload["published"] is False
 
+    history = client.get("/api/v1/history/workflows", headers=headers)
+    assert history.status_code == 200, history.json()
+    workflows = history.json()["items"]
+    assert any(
+        item["action_name"] == "create_quiz"
+        and item["status"] == "executed"
+        and item["user_prompt"] == "Created via quiz creation form"
+        for item in workflows
+    )
+
+    audit = client.get("/api/v1/audit/logs", headers=headers)
+    assert audit.status_code == 200, audit.json()
+    assert any(
+        item["action"] == "create_quiz"
+        and item["resource_type"] == "quiz"
+        and item["resource_id"] == "555"
+        and item["operation"] == "create"
+        for item in audit.json()
+    )
+
 
 def test_classic_quiz_can_link_question_bank_group(client):
     headers, local_course_id = register_with_canvas(client, prefix="quizbankgroup")

@@ -88,13 +88,19 @@ describe("quizCreator", () => {
       );
 
     const preview = await previewQuizDraft(payload, { accessToken: "token" });
-    await approveQuizDraft(payload, { accessToken: "token" });
+    await approveQuizDraft(payload, {
+      accessToken: "token",
+      conversationId: 42,
+    });
 
     const previewBody = JSON.parse(
       String(vi.mocked(fetch).mock.calls[0][1]?.body),
     );
     const createBody = JSON.parse(
       String(vi.mocked(fetch).mock.calls[1][1]?.body),
+    );
+    expect(String(vi.mocked(fetch).mock.calls[1][0])).toContain(
+      "conversation_id=42",
     );
     expect(previewBody).toEqual(createBody);
     expect(preview.riskLevel).toBe("medium");

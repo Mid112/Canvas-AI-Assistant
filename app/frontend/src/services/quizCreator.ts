@@ -185,6 +185,7 @@ export async function previewQuizDraft(
 interface ApproveQuizDraftOptions {
   accessToken: string;
   canvasUrl?: string;
+  conversationId?: number;
 }
 
 export async function approveQuizDraft(
@@ -192,10 +193,14 @@ export async function approveQuizDraft(
   options: ApproveQuizDraftOptions,
 ): Promise<{ id: number; title: string; warnings: string[] }> {
   const request = toQuizCreateBody(payload);
-  const createUrl = appendCanvasUrl(
+  let createUrl = appendCanvasUrl(
     `${API_BASE_URL}/canvas/courses/${request.courseId}/quizzes`,
     options.canvasUrl,
   );
+  if (options.conversationId != null) {
+    const separator = createUrl.includes("?") ? "&" : "?";
+    createUrl += `${separator}conversation_id=${options.conversationId}`;
+  }
   const headers = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${options.accessToken}`,
