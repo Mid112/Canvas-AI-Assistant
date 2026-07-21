@@ -916,5 +916,61 @@ Total: 9 hours
 - Begin **Feature 10: Audit Logging**
 - Begin **Feature 12: Secure Troubleshooting**
 
+---
+
+# Cycle 18 Report: July 17 – July 20
+
+## Timesheet
+
+### Clockify Report
+
+- 17/7 (Friday): meeting – 2h 41m 12s
+- 19/7 (Sunday): Feature 9 implementation, System Health Monitoring – 2h 30m 25s
+- 20/7 (Monday): PR review – 2h 45m 25s (10:30PM–1:15AM, spilling into 21/7)
+
+**Total (clocked): ~7h 57m**
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting + Cycle 17 Write-Up Merge (Friday, 17/7)
+- Attended the team meeting, 9:44AM–12:25PM (2h41m)
+- Same morning: closed out the Cycle 17 report (`add Cycle 17 Bao's log`, `update`, `Update Bao's log`) and opened/merged **PR #1089** (`logs-bao` → `develop`) at 11:35, landing the Cycle 17 write-up
+
+### 2: Feature 9 — System Health Monitoring (Sunday, 19/7)
+- Started implementation on `feature/system-health-monitoring`: new `services/health.py`, `services/ai_health.py`, models `health_check.py` and `ai_call_health.py`, schema `schemas/health.py`, and admin router wiring for surfacing system/AI-call health to admins
+- The work landed as a single commit, `Add new system health monitoring for admin`, the morning of 21/7 rather than within this window — same gap Cycle 17 flagged for its own Wednesday entry: Sunday's clocked time isn't matched 1:1 by a same-day commit, only by the follow-through the following session
+
+### 3: PR Review — Quiz, Feedback Workflow, and LLM Provider Switching (Monday night, 20/7)
+- Reviewed three open PRs against `develop` using the branch-diff review pipeline (diffing each against its true merge-base, not a stale copy of `develop`):
+  - **PR #1249** (`Feature-1--Quiz-Management`) — AI quiz creation (Classic + New Quizzes) via chat and form. Flagged an incomplete fix for a chat clarify-loop bug (a prior commit only dropped part of the required-fields check) and an auth-dependency inconsistency on two quiz endpoints
+  - **PR #1251** (`Feature-2--Feedback-Workflow`) — AI-assisted feedback/grade posting and inbox reply drafts. Cross-checked against a teammate's existing review comments to avoid duplicating feedback, then added findings on top (audit-log/session bloat, a full-roster fetch to check one student, inconsistent JSON parsing)
+  - **PR #1252** (`feature/llm-provider-switching-cache`) — admin LLM provider defaults with failover, per-instructor encrypted connections, response caching, and limited-mode Canvas gating. Flagged an unhandled `ValueError` on an invalid provider ID and a "Resume N requests" button that only resumes one
+- Each review went through a find → draft-checklist → double-check pipeline, verifying every cited file/line against the actual code before treating it as final
+- Note: the saved review checklists (`docs/reviews/pr-1249-review.md`, `pr-1251-review.md`, `pr-1252-review.md`) aren't present in this branch's working tree as of writing this entry — worth re-saving or re-generating from this session if the team wants them on record
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- Feature 9 is underway but its first real commit landed just outside this cycle's window (morning of 21/7) — worth being upfront that "started" is more accurate than "shipped" for this cycle.
+- PR review work this cycle went deeper than a skim: each of the three reviewed PRs got a verified, line-cited checklist rather than a general "looks good" pass, which is worth keeping as the default bar for reviewing teammates' branches going forward.
+- Two of the three reviewed PRs (quiz management, feedback workflow) share a lot of duplicated code from branching off each other before either merged — worth flagging to the team now, since whichever merges second will need conflict/migration-number cleanup (see Retrospective).
+
+### Retrospective:
+- The dev Postgres DB reset / isolated test-DB goal is now carried over a sixth straight cycle (Cycles 14–18) — still untouched.
+- `make e2e-up` Windows compatibility remains untouched for the fifth cycle running (Cycles 14–18).
+- Migration filenames collide across at least three in-flight feature branches (quiz management, feedback workflow, LLM provider switching all reuse migration numbers 021+ for unrelated tables) — flagged during this cycle's PR reviews; needs coordinating before merge, not left to whoever merges last to discover it.
+
+## Next Cycle Goals
+- Finish and open a PR for **Feature 9: System Health Monitoring**
+- Give the dev Postgres DB a clean reset (or isolate pytest onto its own DB) — carried over a sixth cycle now (Cycles 14–18)
+- Revisit `make e2e-up` for Windows compatibility — carried over from Cycles 14–17
+- Coordinate migration-number renumbering across the quiz/feedback/LLM-provider branches before they merge
+- Begin **Feature 10: Audit Logging**
+- Begin **Feature 12: Secure Troubleshooting**
+
 
 
