@@ -16,7 +16,6 @@ from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.config import settings
 from app.core.canvas_url import canvas_urls_equivalent
 from app.core.database import AsyncSessionLocal
 from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_action
@@ -48,7 +47,19 @@ from app.services.assignment_rate import find_assignments_by_submission_rate
 from app.services.canvas import CanvasTokenRequiredError, sync_courses_if_stale
 from app.services.llm.base import LLMAdapter
 from app.services.llm.json_extraction import extract_json_object
+from app.services.llm.llm_connections import resolve_instructor_llm_request
 from app.services.llm.llm_setting import get_llm_adapter
+from app.services.llm.provider_registry import (
+    ObservableAdapter,
+    get_active_llm_config,
+)
+from app.services.llm.response_cache import (
+    build_cache_key,
+    get_cached_response,
+    is_safe_cache_candidate,
+    is_safe_cache_response,
+    store_cached_response,
+)
 from app.services.resolved_set import (
     compute_submissions_by_status,
     create_resolved_set,
@@ -2073,24 +2084,53 @@ async def handle_chat_message(
     course_names = await _get_course_names_for_user(db, user)
     history = await _get_recent_messages(db, conversation.id)
 
-    # Built once per turn and threaded into every resolver call below
-    # (_resolve_course_switch, _resolve_assignment_reference via
-    # _resolve_course_and_assignment, _resolve_students_via_llm via
-    # _resolve_recipient_directives) so a user's chosen provider/model
-    # (AI Models settings page / in-chat switcher) governs the whole
-    # turn consistently, not just the main call. Falls back to
-    # settings.DEFAULT_LLM_PROVIDER when the client didn't send one.
+    # Instructors choose a connected provider/model. Credentials are resolved
+    # server-side from stored instructor keys or deployment secrets.
     try:
-        adapter = get_llm_adapter(model_settings or {"provider": settings.DEFAULT_LLM_PROVIDER})
+        llm_config = await get_active_llm_config(db)
+        selected_provider, selected_model, adapter_settings = (
+            await resolve_instructor_llm_request(
+                db,
+                user.id,
+                llm_config.provider,
+                llm_config.model,
+                model_settings,
+            )
+        )
+        primary = (
+            selected_provider,
+            get_llm_adapter(adapter_settings),
+        )
+        fallback = None
+        if (
+            llm_config.fallback_provider
+            and llm_config.fallback_model
+            and llm_config.fallback_provider != selected_provider
+        ):
+            try:
+                fallback_provider, _, fallback_settings = (
+                    await resolve_instructor_llm_request(
+                        db,
+                        user.id,
+                        llm_config.fallback_provider,
+                        llm_config.fallback_model,
+                        None,
+                    )
+                )
+                fallback = (
+                    fallback_provider,
+                    get_llm_adapter(fallback_settings),
+                )
+            except ValueError:
+                fallback = None
+        adapter = ObservableAdapter(primary, fallback)
     except (KeyError, ValueError) as e:
-        # An unknown provider id, or a provider (openai/anthropic/custom)
-        # that needs a key the server hasn't configured and the client
-        # never supplies — surface as a normal chat error rather than a
-        # raw 500, same as any other failure this function returns.
         await log_message(db, conversation, role="assistant", content=f"LLM provider error: {e}")
         await db.commit()
         return conversation, {
-            "error": "The selected AI model isn't available right now. Try a different one in Settings.",
+            "error": (
+                "That AI model is not connected. Connect it in Settings and try again."
+            ),
         }, True
 
     # Pre-resolve a course switch from the raw message alone, before the
@@ -2139,6 +2179,30 @@ async def handle_chat_message(
             current_proposed_action = stored_preview.get("proposed_action")
 
     system_prompt = build_system_prompt(has_canvas_token=bool(user.canvas_connections))
+    first_llm_message = _build_llm_message(
+        message,
+        course_names,
+        conversation.course_name,
+        current_proposed_action,
+        [],
+    )
+    cache_key: str | None = None
+    cached_raw_output: str | None = None
+    if llm_config.cache_enabled and is_safe_cache_candidate(
+        message,
+        has_history=bool(history),
+        local_course_id=local_course_id,
+        conversation_course_id=conversation.course_id,
+        pending_message_id=pending_message_id,
+    ):
+        cache_key = build_cache_key(
+            user_id=user.id,
+            provider=selected_provider,
+            model=selected_model,
+            system_prompt=system_prompt,
+            llm_message=first_llm_message,
+        )
+        cached_raw_output = await get_cached_response(db, cache_key)
 
     # Step loop: lets the model chain a bounded sequence of read/resolver
     # decisions within this ONE user turn, instead of every read
@@ -2159,18 +2223,29 @@ async def handle_chat_message(
 
     for step in range(1, MAX_TURN_STEPS + 1):
         try:
-            raw_output = await asyncio.wait_for(
-                adapter.generate(
-                    system_prompt,
-                    _build_llm_message(
-                        message, course_names, conversation.course_name,
-                        current_proposed_action, loop_steps,
+            if step == 1 and cached_raw_output is not None:
+                raw_output = cached_raw_output
+            else:
+                llm_message = (
+                    first_llm_message
+                    if step == 1
+                    else _build_llm_message(
+                        message,
+                        course_names,
+                        conversation.course_name,
+                        current_proposed_action,
+                        loop_steps,
+                    )
+                )
+                raw_output = await asyncio.wait_for(
+                    adapter.generate(
+                        system_prompt,
+                        llm_message,
+                        history=history,
+                        timeout=LLM_TIMEOUT_SECONDS,
                     ),
-                    history=history,
                     timeout=LLM_TIMEOUT_SECONDS,
-                ),
-                timeout=LLM_TIMEOUT_SECONDS,
-            )
+                )
         except TimeoutError:
             log_detail = f"LLM request timed out after {LLM_TIMEOUT_SECONDS}s"
             await log_message(db, conversation, role="assistant", content=log_detail)
@@ -2438,6 +2513,26 @@ async def handle_chat_message(
         if step >= MAX_TURN_STEPS:
             result = _step_budget_exhausted_response(loop_steps)
             break
+
+    # Only terminal conversational responses are cacheable. Canvas reads,
+    # writes, previews, clarification flows, and multi-step turns always bypass
+    # storage even if their initial wording looked harmless.
+    if (
+        cache_key
+        and cached_raw_output is None
+        and result.get("action") == "respond"
+        and not loop_steps
+        and is_safe_cache_response(raw_output)
+    ):
+        await store_cached_response(
+            db,
+            user_id=user.id,
+            cache_key=cache_key,
+            provider=adapter.last_provider,
+            model=selected_model,
+            response=raw_output,
+            ttl_seconds=llm_config.cache_ttl_seconds,
+        )
 
     # Log the assistant result — if this is a modify turn superseding a
     # previous intent_preview, overwrite that message in place rather than

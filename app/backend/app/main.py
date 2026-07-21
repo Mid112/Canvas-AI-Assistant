@@ -14,7 +14,7 @@ from app.core.database import AsyncSessionLocal, Base, engine
 from app.core.limiter import limiter
 from app.core.migrations import run_pending_migrations
 from app.core.seeder import seed_admin
-from app.routers import admin, audit, auth, canvas, chat, history, message_templates, messages
+from app.routers import admin, audit, auth, canvas, chat, history, llm, message_templates, messages
 from app.services.canvas import run_course_sync_sweep
 
 logger = logging.getLogger(__name__)
@@ -90,6 +90,7 @@ app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(canvas.router, prefix=settings.API_V1_PREFIX)
 app.include_router(admin.router, prefix=settings.API_V1_PREFIX)
 app.include_router(chat.router, prefix=settings.API_V1_PREFIX)
+app.include_router(llm.router, prefix=settings.API_V1_PREFIX)
 app.include_router(messages.router, prefix=settings.API_V1_PREFIX)
 app.include_router(history.router, prefix=settings.API_V1_PREFIX)
 app.include_router(audit.router, prefix=settings.API_V1_PREFIX)

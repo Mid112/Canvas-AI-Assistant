@@ -12,15 +12,16 @@ import {
   InstructorAssistantSuggestedActions,
 } from "@/pages/Instructor/InstructorAssistant/InstructorAssistantHeader";
 import { buildSuggestedActions } from "@/data/assistantSeedData";
-import {
-  createDefaultLlmProviderSettings,
-  getLlmProviderOption,
-} from "@/data/llmProviders";
+import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import {
   getStoredLlmProviderSettings,
   setStoredLlmProviderSettings,
 } from "@/lib/llm-provider-storage";
-import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
+import {
+  fetchInstructorLlmProviders,
+  resolveConnectedSettings,
+  type InstructorLlmProvider,
+} from "@/services/instructorLlmProviders";
 import {
   AssistantApiError,
   fetchConversation,
@@ -100,11 +101,10 @@ export function InstructorAssistantPage() {
   );
   const [chatSessionKey, setChatSessionKey] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [llmSettings, setLlmSettings] = useState<LlmProviderSettings>(() =>
-    user
-      ? getStoredLlmProviderSettings(user.id)
-      : createDefaultLlmProviderSettings(),
+  const [llmSettings, setLlmSettings] = useState<LlmProviderSettings | null>(
+    null,
   );
+  const [llmProviders, setLlmProviders] = useState<InstructorLlmProvider[]>([]);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selectedConversation, setSelectedConversation] =
     useState<ConversationResponse | null>(null);
@@ -114,23 +114,6 @@ export function InstructorAssistantPage() {
     number | null
   >(null);
   const chatWindowRef = useRef<ChatWindowHandle>(null);
-
-  const handleModelProviderChange = useCallback(
-    (providerId: LlmProviderId) => {
-      const option = getLlmProviderOption(providerId);
-      const next: LlmProviderSettings = {
-        provider: providerId,
-        model: option.defaultModel,
-        baseUrl:
-          providerId === "openai_compatible_custom" ? llmSettings.baseUrl : "",
-      };
-      setLlmSettings(next);
-      if (user) {
-        setStoredLlmProviderSettings(user.id, next);
-      }
-    },
-    [llmSettings.baseUrl, user],
-  );
 
   const loadConversationList = useCallback(async () => {
     if (!accessToken || !user?.has_canvas_token) {
@@ -160,6 +143,44 @@ export function InstructorAssistantPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- async history load on mount/auth changes
     void loadConversationList();
   }, [loadConversationList]);
+
+  useEffect(() => {
+    if (!accessToken || !user) return;
+    let cancelled = false;
+    void fetchInstructorLlmProviders(accessToken)
+      .then((policy) => {
+        if (cancelled) return;
+        const resolved = resolveConnectedSettings(
+          policy,
+          getStoredLlmProviderSettings(user.id),
+        );
+        setLlmProviders(policy.providers);
+        setLlmSettings(resolved);
+        setStoredLlmProviderSettings(user.id, resolved);
+      })
+      .catch(() => {
+        // The chat remains usable with the server default if policy metadata
+        // cannot be loaded; the picker simply stays hidden.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, user]);
+
+  const handleModelProviderChange = useCallback(
+    (providerId: LlmProviderId) => {
+      const provider = llmProviders.find((item) => item.id === providerId);
+      if (!provider?.connected || !user) return;
+      const next = {
+        provider: provider.id,
+        model: provider.saved_model ?? provider.models[0] ?? provider.default_model,
+        baseUrl: provider.saved_base_url ?? "",
+      };
+      setLlmSettings(next);
+      setStoredLlmProviderSettings(user.id, next);
+    },
+    [llmProviders, user],
+  );
 
   const handleSuggestedAction = (prompt: string) => {
     setSelectedConversation(null);
@@ -243,6 +264,7 @@ export function InstructorAssistantPage() {
           onLoadingChange={setIsLoading}
           onStartNewChat={handleStartNewChat}
           modelSettings={llmSettings}
+          llmProviders={llmProviders}
           onModelProviderChange={handleModelProviderChange}
         />
 

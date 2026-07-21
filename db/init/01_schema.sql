@@ -406,6 +406,36 @@ CREATE TABLE system_settings (
     updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Expiring, user-scoped cache for safe assistant responses. The cache_key is
+-- a SHA-256 digest; raw prompts are intentionally not stored.
+CREATE TABLE llm_response_cache (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    cache_key   VARCHAR(64) NOT NULL UNIQUE,
+    provider    VARCHAR(64) NOT NULL,
+    model       VARCHAR(255) NOT NULL,
+    response    TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at  TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX idx_llm_response_cache_user_id ON llm_response_cache(user_id);
+CREATE INDEX idx_llm_response_cache_expires_at ON llm_response_cache(expires_at);
+
+CREATE TABLE instructor_llm_connections (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider_id VARCHAR NOT NULL,
+    model VARCHAR,
+    base_url VARCHAR,
+    -- never store the raw key — always Fernet-encrypted before insert
+    -- (same CANVAS_TOKEN_ENCRYPTION_KEY as canvas_connections.encrypted_token)
+    encrypted_api_key TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, provider_id)
+);
+
+CREATE INDEX idx_instructor_llm_connections_user_id ON instructor_llm_connections(user_id);
+
 -- ─────────────────────────────────────────────
 -- Schema Migrations
 -- Tracks which db/migrations/*.sql files have been applied — read and
@@ -444,4 +474,6 @@ INSERT INTO schema_migrations (filename) VALUES
     ('017_course_synced_at.sql'),
     ('018_workflow_undo.sql'),
     ('019_audit_logs_allow_delete_operation.sql'),
-    ('020_course_cache_columns.sql');
+    ('020_course_cache_columns.sql'),
+    ('021_llm_response_cache.sql'),
+    ('022_instructor_llm_connections.sql');

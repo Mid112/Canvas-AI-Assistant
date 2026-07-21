@@ -8,6 +8,7 @@ import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 const mockUseAuth = vi.fn();
 const mockListAssistantConversations = vi.hoisted(() => vi.fn());
 const mockFetchConversation = vi.hoisted(() => vi.fn());
+const mockFetchProviders = vi.hoisted(() => vi.fn());
 
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
@@ -30,6 +31,16 @@ vi.mock("@/services/assistant", async () => {
     fetchConversation: mockFetchConversation,
     listAssistantConversations: mockListAssistantConversations,
     sendAssistantMessage: vi.fn(),
+  };
+});
+
+vi.mock("@/services/instructorLlmProviders", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/services/instructorLlmProviders")
+  >("@/services/instructorLlmProviders");
+  return {
+    ...actual,
+    fetchInstructorLlmProviders: mockFetchProviders,
   };
 });
 
@@ -62,6 +73,28 @@ beforeEach(() => {
   mockListAssistantConversations.mockResolvedValue({
     items: [],
     total: 0,
+  });
+  mockFetchProviders.mockResolvedValue({
+    default_provider: "ollama",
+    default_model: "llama3.2",
+    providers: [
+      {
+        id: "ollama",
+        name: "Ollama",
+        hosting: "local",
+        default_model: "llama3.2",
+        configured: true,
+        status: "available",
+        models: ["llama3.2"],
+        detail: null,
+        connected: true,
+        requires_api_key: false,
+        accepts_api_key: false,
+        has_api_key: false,
+        saved_model: null,
+        saved_base_url: null,
+      },
+    ],
   });
 });
 

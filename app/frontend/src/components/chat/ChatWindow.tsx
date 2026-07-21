@@ -31,6 +31,7 @@ import {
   type ConversationResponse,
 } from "@/services/assistant";
 import type { AssistantMessageResult } from "@/services/assistant";
+import type { InstructorLlmProvider } from "@/services/instructorLlmProviders";
 import type { ChatMessage } from "@/types/chat";
 import { mapWorkflowStatus } from "@/types/chat";
 import type { LlmProviderId, LlmProviderSettings } from "@/types/llmProvider";
@@ -107,6 +108,7 @@ interface ChatWindowProps {
   onLoadingChange?: (isLoading: boolean) => void;
   onStartNewChat?: () => void;
   modelSettings?: LlmProviderSettings | null;
+  llmProviders?: InstructorLlmProvider[];
   onModelProviderChange?: (providerId: LlmProviderId) => void;
 }
 
@@ -126,6 +128,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   onLoadingChange,
   onStartNewChat,
   modelSettings = null,
+  llmProviders = [],
   onModelProviderChange,
 }, ref) {
   const { accessToken } = useAuth();
@@ -680,6 +683,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           inputError={inputError}
           initialValue={initialDraft ?? ""}
           modelSettings={modelSettings}
+          llmProviders={llmProviders}
           onModelProviderChange={onModelProviderChange}
         />
       </CardContent>
