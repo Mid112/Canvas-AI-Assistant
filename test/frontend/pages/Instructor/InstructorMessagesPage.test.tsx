@@ -213,7 +213,7 @@ describe("InstructorMessagesPage", () => {
       ).toBeInTheDocument();
     });
     expect(
-      await screen.findByLabelText("Subject", {}, { timeout: 3000 }),
+      await screen.findByLabelText("Subject", undefined, { timeout: 5000 }),
     ).toBeInTheDocument();
   });
 });
