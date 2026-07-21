@@ -44,10 +44,7 @@ def _reversibility_fields(action_type: str) -> dict:
     """Shared #581 metadata every write preview carries — single source
     of truth is is_reversible(), never hand-duplicated per builder."""
     reversible = is_reversible(action_type)
-    fields = {
-        "reversible": reversible,
-        "risk_metadata": classify_action_risk(action_type),
-    }
+    fields = {"reversible": reversible}
     if not reversible:
         fields["reversibility_note"] = "This action cannot be undone once submitted."
     return fields

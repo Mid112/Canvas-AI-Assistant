@@ -326,7 +326,8 @@ async def test_execute_intent_preview_read_action_no_course_id_uses_generic_meta
 
     result = await execute_tool(db, user, action)
 
-    assert result["preview_metadata"] == {"action": "fetch_courses"}
+    assert result["preview_metadata"]["action"] == "fetch_courses"
+    assert result["preview_metadata"]["risk_metadata"]["risk_level"] == "low"
 
 
 @pytest.mark.asyncio
