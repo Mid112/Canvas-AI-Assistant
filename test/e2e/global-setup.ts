@@ -12,15 +12,27 @@ function envOr(key: string, fallback: string): string {
   return value ? value : fallback;
 }
 
+/** CI must supply DATABASE_URL (isolated Postgres). Never fall back to :5433. */
+function databaseUrl(): string {
+  const value = process.env.DATABASE_URL?.trim();
+  if (value) {
+    return value;
+  }
+  if (process.env.CI) {
+    throw new Error(
+      "DATABASE_URL must be set in CI (isolated e2e Postgres). " +
+        "Refusing to fall back to localhost:5433.",
+    );
+  }
+  return "postgresql+asyncpg://appuser:localdev@localhost:5433/appdb";
+}
+
 export default async function globalSetup() {
   execFileSync(python, [script], {
     stdio: "inherit",
     env: {
       ...process.env,
-      DATABASE_URL: envOr(
-        "DATABASE_URL",
-        "postgresql+asyncpg://appuser:localdev@localhost:5433/appdb",
-      ),
+      DATABASE_URL: databaseUrl(),
       SECRET_KEY: envOr("SECRET_KEY", "localdevsecret"),
       // Must match playwright.config.ts webServer defaults so Settings() loads
       // the same key the backend process uses in CI / local e2e.
