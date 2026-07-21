@@ -1153,3 +1153,67 @@ Guiding other testers through the workflow before testing other teams' apps myse
 
 
 
+
+# Cycle 18 Report: 07/17 – 07/20 (July 17 – July 20)
+
+## Timesheet
+
+### Clockify Report
+- **07/17 (Friday):** Using Clockify – Logged 04:29:40 hours
+- **07/18 (Saturday):** Using Clockify – Logged 05:59;14 hours
+- **07/19 (Sunday):** Using Clockify – Logged 04:33:50 hours
+- **07/20 (Monday):** Using Clockify – Logged 02:54:18 hours
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Integration and testing for Quiz Management
+- Ran the quiz-creation workflow end-to-end against a live Canvas sandbox, covering both the natural-language (AI assistant) path and the quick-action quiz-creation form.
+- Exercised the review/approve step for edge cases beyond the happy path — mismatched question types, boundary values on points/description length, and confirming what actually lands on Canvas versus what the preview showed.
+- Cross-checked question-type handling (multiple choice, true/false, short answer) against how each is actually translated into a Canvas quiz item, since Classic and New Quizzes don't map every question type the same way.
+
+### #2: Integration and testing for Feedback Workflow and Grade Management
+- Verified the grade-management preview, confirm path against real Canvas submissions: previewing a grade change, confirming it, and checking the resulting grade.
+- Tested the feedback workflow's submission-level resolution against courses with multiple assignments and multiple students, to confirm it resolves the right submission rather than the first plausible match.
+- Checked reversibility for both features together, since grade changes are the kind of action a reversal UI needs a reliable "before" value for.
+
+### #3: Integration and testing for the LLM provider-switching UI
+- Tested switching between configured LLM providers mid-session and confirmed the chat pipeline picks up the newly selected model without requiring a restart or losing conversation context.
+- Verified provider-specific failure handling (an unreachable or misconfigured provider) surfaces a clear error in the UI rather than a silent hang or a generic failure.
+- Checked that the selected provider persists correctly across page reloads and isn't silently reset to a default.
+
+---
+
+## Progress Update (since 07/17/2026)
+
+| TASK/ISSUE #                                                                 | STATUS      |
+| ----------------------------------------------------------------------------- | ----------- |
+| End-to-end test quiz creation (natural-language + quick-action paths)         | Completed   |
+| Test quiz review/approve edge cases and question-type mapping to Canvas       | Completed   |
+| Verify grade-management preview/confirm path against live Canvas submissions  | Completed   |
+| Test feedback workflow's submission-level resolution across courses/students  | Completed   |
+| Check reversibility dependency between grade management and action reversal   | In Progress |
+| Test LLM provider switching mid-session and provider persistence              | Completed   |
+| Verify provider-specific failure handling in the UI                           | Completed   |
+| Finish live e2e verification against Canvas sandbox (Goal 1 carryover)        | In Progress |
+| Decide whether to extend resolution to `update_assignment` (Goal 2 carryover) | Not Started |
+| Start implementation on Risk-Based Confirmation Service (Goal 3 carryover)    | Not Started |
+
+---
+
+## Cycle 18 Goal Review
+
+### Reflection:
+The three goals carried over from Cycle 17 didn't get direct attention this cycle either — but this time it was a deliberate call rather than something that just happened around it. With quiz management, feedback/grading, and the LLM provider-switching UI all reaching a state where they were plausibly done, integration testing them against a live Canvas sandbox felt like the higher-priority use of the cycle: better to find the gaps in features close to done now than to start new work (Risk-Based Confirmation Service) on top of an unverified foundation. That reasoning held up — testing surfaced real edge cases (question-type mapping inconsistencies, submission-resolution ambiguity across multiple students) that are cheaper to fix now than after more features are built on top of them.
+
+### Retrospective:
+Testing three fairly different features (quiz creation, grading, and an LLM-provider UI toggle) back to back was tough in terms separating bugs, and ordering those bugs to be resolved in terms of their importance and urgency. I would say the dependency graph came in clutch when I was giving feedback on my teammates PRs.
+
+## Next Cycle 19 Goals
+- **Goal 1:** Finish the live e2e verification against the Canvas sandbox — multi-course switching, ambiguous course/assignment names, and the `fetch_submissions` chain — carried over from Cycle 16/17.
+- **Goal 2:** Decide whether to extend natural-language assignment resolution to `update_assignment` — carried over from Cycle 16/17.
+- **Goal 3:** Start implementation on the Risk-Based Confirmation Service, informed by the edge cases found while testing quiz, grading, and provider-switching this cycle.
+
+
+
