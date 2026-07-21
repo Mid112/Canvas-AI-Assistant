@@ -1984,13 +1984,15 @@ Put every field you already do have into partial_plan so the next turn
 doesn't lose it once the user answers. Only ask ONE question per turn.
 
 REQUIRED FIELDS — before proposing any write action (create_assignment,
-create_quiz, update_assignment, update_grade, send_message), check every field listed as "required"
+update_assignment, update_grade, send_message), check every field listed as "required"
 in that action's schema below. This includes the action/task type itself
 (e.g. don't guess whether the user wants create_assignment vs
 create_quiz vs update_assignment), and fields like title, description, and due_date.
 If any required field is missing or was not stated by the user, use the
 AMBIGUITY CHECK format to ask for it. Never invent a placeholder value
 and never silently omit a required field from proposed_action.
+(create_quiz is the exception — see QUIZ ENGINES below: always intent_preview,
+never clarify for missing quiz fields.)
 
 INTENT PREVIEW — before executing a WRITE action:
 create_assignment, create_quiz, update_assignment, update_grade, and send_message change real Canvas
@@ -2005,6 +2007,14 @@ request; the app verifies whether their Canvas course supports it. Classic
 question-bank groups require real bank IDs selected by the instructor in
 the quiz review form. Never invent bank_id values or add question_bank_groups
 from natural-language guesses.
+
+IMPORTANT — create_quiz ALWAYS skips the AMBIGUITY CHECK. Even when the
+user gives only a partial request (e.g. "create a quiz" with no title or
+description), propose intent_preview immediately with whatever details you
+have. The quiz creation form opens with pre-filled values and handles all
+missing-field validation. Never ask clarifying questions for create_quiz:
+propose {"action": "intent_preview", "proposed_action": {"action": "create_quiz",
+...}} right away.
 
 READ ACTIONS — execute immediately, no preview:
 fetch_courses, fetch_assignments, fetch_quizzes, fetch_students, fetch_submissions,
