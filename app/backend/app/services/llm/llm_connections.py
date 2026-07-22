@@ -254,23 +254,25 @@ async def upsert_llm_connection(
             )
         normalized_base_url = validate_llm_base_url(effective_base_url)
         normalized_model = effective_model
-    elif definition.hosting == "local":
-        if normalized_api_key:
+    else:
+        # Non-custom providers always use server-configured endpoints. Never
+        # persist a client-supplied base_url that skipped SSRF validation.
+        if normalized_base_url:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Base URL is only supported for custom OpenAI-compatible providers.",
+            )
+        if definition.hosting == "local" and normalized_api_key:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="Local providers do not use API keys.",
             )
-        if normalized_base_url:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="Local providers use the server-configured endpoint.",
-            )
-    elif provider_requires_user_key(definition):
-        if not normalized_api_key and not _has_user_credentials(connection):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-                detail="An API key is required to connect this provider.",
-            )
+        if provider_requires_user_key(definition):
+            if not normalized_api_key and not _has_user_credentials(connection):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail="An API key is required to connect this provider.",
+                )
 
     if connection is None:
         connection = InstructorLlmConnection(

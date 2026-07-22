@@ -14,8 +14,10 @@ from app.models.llm_response_cache import LlmResponseCache
 logger = logging.getLogger(__name__)
 
 # Conservative indicators that a request may contain personal, credential, or
-# student-specific information. False negatives are further contained by
-# per-user cache keys; false positives merely bypass caching.
+# student-specific information. This is a best-effort defense-in-depth filter —
+# paraphrasing can bypass it — so caching also requires a fresh conversation
+# with no course/pending context, and cache keys remain per-user. Do not treat
+# these patterns as the sole safeguard against storing sensitive content.
 _SENSITIVE_PATTERNS = (
     re.compile(r"\b[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}\b"),
     re.compile(r"\b(?:password|token|api[\s_-]?key|secret|credential)\b", re.I),

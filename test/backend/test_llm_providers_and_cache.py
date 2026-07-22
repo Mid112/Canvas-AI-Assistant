@@ -383,6 +383,24 @@ def test_custom_base_url_rejects_private_and_loopback_targets():
     assert with_creds.value.status_code == 422
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://2130706433/v1",
+        "http://017700000001/v1",
+        "http://0x7f000001/v1",
+        "http://127.1/v1",
+        "http://0177.0.0.1/v1",
+    ],
+)
+def test_custom_base_url_rejects_alternate_ip_encodings(url):
+    from app.services.llm.base_url_validation import validate_llm_base_url
+
+    with pytest.raises(HTTPException) as error:
+        validate_llm_base_url(url)
+    assert error.value.status_code == 422
+
+
 def test_local_provider_upsert_rejects_api_keys():
     from app.services.llm.llm_connections import upsert_llm_connection
 
@@ -402,6 +420,28 @@ def test_local_provider_upsert_rejects_api_keys():
 
     assert error.value.status_code == 422
     assert "do not use API keys" in error.value.detail
+
+
+def test_non_custom_provider_upsert_rejects_base_url():
+    from app.services.llm.llm_connections import upsert_llm_connection
+
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=None)
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(
+            upsert_llm_connection(
+                db,
+                1,
+                "openai",
+                api_key="sk-test",
+                base_url="https://evil.example/v1",
+                model="gpt-4o-mini",
+            )
+        )
+
+    assert error.value.status_code == 422
+    assert "only supported for custom" in error.value.detail
 
 
 def test_redact_secrets_strips_common_api_key_shapes():

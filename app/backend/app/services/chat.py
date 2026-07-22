@@ -2941,10 +2941,21 @@ async def handle_chat_message(
                 result.get("action"),
             )
 
-    if deferred_request_id is not None:
-        await mark_deferred_request_resumed(db, user, deferred_request_id)
-
+    # Persist the chat turn first so a deferred-status update failure cannot
+    # roll back an already-generated assistant reply.
     await db.commit()
+
+    if deferred_request_id is not None:
+        try:
+            await mark_deferred_request_resumed(db, user, deferred_request_id)
+            await db.commit()
+        except HTTPException as exc:
+            await db.rollback()
+            logger.warning(
+                "Chat reply saved but deferred request %s was not marked resumed: %s",
+                deferred_request_id,
+                exc.detail,
+            )
 
     # attach the stored message ID so the client can confirm by ID.
     # create_quiz is handed off to the form and is not confirmable in chat.
