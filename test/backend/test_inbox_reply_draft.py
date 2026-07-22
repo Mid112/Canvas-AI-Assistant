@@ -83,6 +83,55 @@ def test_generate_inbox_reply_draft_success():
     assert "Student:" in prompt
 
 
+def test_generate_inbox_reply_draft_parses_fenced_llm_json():
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        "<think>drafting</think>\n"
+        "```json\n"
+        '{"body": "Happy to discuss options during office hours."}\n'
+        "```"
+    )
+
+    with (
+        patch(
+            "app.services.inbox_reply_draft.get_inbox_thread",
+            new_callable=AsyncMock,
+            return_value=_thread_detail(),
+        ),
+        patch(
+            "app.services.inbox_reply_draft.get_llm_adapter",
+            return_value=mock_adapter,
+        ),
+    ):
+        result = asyncio.run(
+            generate_inbox_reply_draft(
+                9,
+                InboxReplyDraftRequest(),
+                _instructor(),
+                "http://localhost:3000",
+                AsyncMock(),
+            )
+        )
+
+    assert "office hours" in result.body.lower()
+
+
+def test_preview_inbox_reply_rejects_profanity():
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            preview_inbox_reply(
+                9,
+                InboxReplyPreviewRequest(body="This is fucking unacceptable."),
+                _instructor(),
+                "http://localhost:3000",
+                AsyncMock(),
+            )
+        )
+
+    assert exc_info.value.status_code == 422
+    assert "appropriate" in exc_info.value.detail.lower()
+
+
 def test_generate_inbox_reply_draft_empty_thread_rejected():
     empty = _thread_detail()
     empty.messages = []

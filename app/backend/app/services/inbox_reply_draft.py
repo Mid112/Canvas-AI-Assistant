@@ -13,7 +13,9 @@ from app.schemas.inbox import (
     InboxReplyPreviewResponse,
 )
 from app.services.inbox import get_inbox_thread
+from app.services.llm.json_extraction import loads_llm_json
 from app.services.llm.llm_setting import get_llm_adapter
+from app.services.message_validation import check_message_profanity
 
 
 def _thread_context_for_llm(messages: list) -> str:
@@ -77,10 +79,8 @@ async def generate_inbox_reply_draft(
         ) from error
 
     try:
-        start = raw.find("{")
-        end = raw.rfind("}") + 1
-        data = json.loads(raw[start:end] if start >= 0 and end > start else raw)
-    except (json.JSONDecodeError, ValueError) as error:
+        data = loads_llm_json(raw)
+    except (ValueError, TypeError, json.JSONDecodeError) as error:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=(
@@ -117,6 +117,7 @@ async def preview_inbox_reply(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Reply body cannot be empty.",
         )
+    check_message_profanity(trimmed)
 
     thread = await get_inbox_thread(
         conversation_id, user, canvas_url, db, local_course_id=local_course_id

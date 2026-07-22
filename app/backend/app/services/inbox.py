@@ -19,6 +19,7 @@ from app.schemas.inbox import (
     InboxThreadSummary,
 )
 from app.services.canvas import get_owned_course, require_canvas_token
+from app.services.message_validation import check_message_profanity
 
 logger = logging.getLogger(__name__)
 
@@ -244,6 +245,7 @@ async def reply_to_inbox_thread(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Reply body cannot be empty.",
         )
+    check_message_profanity(trimmed)
 
     token = require_canvas_token(user, canvas_url)
     _, course_id, course_name = await _resolve_course_scope(

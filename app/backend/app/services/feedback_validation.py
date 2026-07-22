@@ -1,10 +1,11 @@
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.integrations.canvas import fetch_student_enrollment
 from app.models.course import Course
 from app.models.user import User
+from app.services.canvas import require_canvas_token
 from app.services.course_access import get_owned_course_or_404
-from app.services.student import get_students
 
 
 async def verify_canvas_student_in_course(
@@ -14,15 +15,20 @@ async def verify_canvas_student_in_course(
     canvas_url: str,
     db: AsyncSession,
 ) -> Course:
-    """Ensure the student belongs to the instructor-owned course roster."""
+    """Ensure the student belongs to the instructor-owned course roster.
+
+    Queries Canvas for this one user's enrollment instead of paging the full
+    course roster (which can be hundreds of students).
+    """
     course = await get_owned_course_or_404(local_course_id, user, db)
-    roster = await get_students(local_course_id, user, canvas_url, db)
-    allowed_ids = {
-        int(student.canvas_user_id)
-        for student in roster
-        if str(student.canvas_user_id).isdigit()
-    }
-    if canvas_student_id not in allowed_ids:
+    token = require_canvas_token(user, canvas_url)
+    enrollments = await fetch_student_enrollment(
+        int(course.canvas_course_id),
+        canvas_student_id,
+        token,
+        canvas_url,
+    )
+    if not enrollments:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Student is not enrolled in this course.",

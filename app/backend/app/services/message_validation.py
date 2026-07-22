@@ -50,6 +50,11 @@ def _check_profanity(*parts: str) -> None:
         )
 
 
+def check_message_profanity(*parts: str) -> None:
+    """Public wrapper so inbox replies reuse the same content filter."""
+    _check_profanity(*parts)
+
+
 async def _validate_recipients_in_course(
     course: Course,
     recipient_canvas_user_ids: list[int],
