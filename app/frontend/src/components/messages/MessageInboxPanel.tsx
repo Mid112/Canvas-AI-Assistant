@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertCircle, Loader2, Search } from "lucide-react";
 
 import { MessageInboxList } from "@/components/messages/MessageInboxList";
 import { MessageThreadView } from "@/components/messages/MessageThreadView";
@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 import {
   fetchMessageThread,
   fetchMessageThreads,
+  generateInboxReplyDraft,
+  previewInboxReply,
   replyToMessageThread,
 } from "@/services/messageThreads";
 import type { MessageThread } from "@/types/messageThread";
@@ -40,8 +42,31 @@ export function MessageInboxPanel({ courseId }: MessageInboxPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [isThreadLoading, setIsThreadLoading] = useState(false);
   const [threadError, setThreadError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [unreadOnly, setUnreadOnly] = useState(false);
 
   const effectiveCourseId = scope === "course" ? courseId : undefined;
+
+  const filteredThreads = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    return threads.filter((thread) => {
+      if (unreadOnly && thread.unreadCount === 0) {
+        return false;
+      }
+      if (!normalizedQuery) {
+        return true;
+      }
+      const haystack = [
+        thread.subject,
+        thread.preview,
+        thread.courseName,
+        ...thread.participants.map((participant) => participant.name),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(normalizedQuery);
+    });
+  }, [searchQuery, threads, unreadOnly]);
 
   const loadThreads = useCallback(async () => {
     if (!accessToken) {
@@ -192,6 +217,31 @@ export function MessageInboxPanel({ courseId }: MessageInboxPanelProps) {
     );
   };
 
+  const handleGenerateDraft = async () => {
+    if (!accessToken || !selectedThreadId) {
+      throw new Error("Select a conversation before generating a draft.");
+    }
+    return generateInboxReplyDraft(
+      accessToken,
+      selectedThreadId,
+      effectiveCourseId,
+      canvasUrl,
+    );
+  };
+
+  const handlePreviewReply = async (body: string) => {
+    if (!accessToken || !selectedThreadId) {
+      throw new Error("Select a conversation before previewing a reply.");
+    }
+    return previewInboxReply(
+      accessToken,
+      selectedThreadId,
+      body,
+      effectiveCourseId,
+      canvasUrl,
+    );
+  };
+
   const scopeToggle =
     courseId != null ? (
       <div
@@ -262,9 +312,40 @@ export function MessageInboxPanel({ courseId }: MessageInboxPanelProps) {
   return (
     <div className="space-y-4">
       {scopeToggle}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <label className="relative block min-w-0 flex-1">
+          <span className="sr-only">Search messages</span>
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search subject, preview, or student..."
+            className="h-10 w-full rounded-lg border bg-background pl-9 pr-3 text-sm"
+          />
+        </label>
+        <label className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={unreadOnly}
+            onChange={(event) => setUnreadOnly(event.target.checked)}
+            className="size-4 rounded border"
+          />
+          Unread only
+        </label>
+      </div>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+        {threads.length > 0 && filteredThreads.length === 0 ? (
+          <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground lg:col-span-2">
+            No messages match your search or filters.
+          </div>
+        ) : (
+          <>
         <MessageInboxList
-          threads={threads}
+          threads={filteredThreads}
           selectedThreadId={selectedThreadId}
           onSelectThread={setSelectedThreadId}
         />
@@ -282,11 +363,18 @@ export function MessageInboxPanel({ courseId }: MessageInboxPanelProps) {
             Loading conversation...
           </div>
         ) : selectedThread ? (
-          <MessageThreadView thread={selectedThread} onReply={handleReply} />
+          <MessageThreadView
+            thread={selectedThread}
+            onReply={handleReply}
+            onGenerateDraft={handleGenerateDraft}
+            onPreview={handlePreviewReply}
+          />
         ) : (
           <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
             Select a message to view the conversation.
           </div>
+        )}
+          </>
         )}
       </div>
     </div>

@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import logging
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -14,7 +15,7 @@ from app.core.database import AsyncSessionLocal, Base, engine
 from app.core.limiter import limiter
 from app.core.migrations import run_pending_migrations
 from app.core.seeder import seed_admin
-from app.routers import admin, audit, auth, canvas, chat, history, message_templates, messages
+from app.routers import admin, audit, auth, canvas, chat, history, llm, message_templates, messages
 from app.services.canvas import run_course_sync_sweep
 
 logger = logging.getLogger(__name__)
@@ -30,11 +31,23 @@ async def _course_sync_loop() -> None:
     sync_courses_if_stale's own per-connection cooldown uses, so most
     ticks do real Canvas work for whichever connections are actually due.
     One sweep failing outright (e.g. the DB is briefly unreachable) is
-    logged and retried next tick, not fatal to the loop."""
+    logged and retried next tick, not fatal to the loop.
+
+    Also deletes expired LLM response-cache rows so the table does not
+    grow unbounded when keys are never looked up again.
+    """
+    from app.services.llm.response_cache import delete_expired_cache_entries
+
     while True:
         try:
             async with AsyncSessionLocal() as db:
                 await run_course_sync_sweep(db)
+                deleted = await delete_expired_cache_entries(db)
+                if deleted:
+                    await db.commit()
+                    logger.info("llm_cache outcome=expired_cleanup deleted=%s", deleted)
+                else:
+                    await db.commit()
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -60,12 +73,21 @@ async def lifespan(app: FastAPI):
     await run_pending_migrations(engine)
     async with AsyncSessionLocal() as db:
         await seed_admin(db)
-    sync_task = asyncio.create_task(_course_sync_loop())
+    # The periodic sweep races TestClient request handling (shared event
+    # loop) and makes fetch_courses call-count assertions flaky — e.g.
+    # test_sync_courses_if_stale_respects_cooldown. Tests that need a
+    # sweep call run_course_sync_sweep directly.
+    sync_task = (
+        None
+        if "pytest" in sys.modules
+        else asyncio.create_task(_course_sync_loop())
+    )
     yield
     # Clean up DB connections and the background sync loop on shutdown
-    sync_task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await sync_task
+    if sync_task is not None:
+        sync_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await sync_task
     await engine.dispose()
 
 
@@ -90,6 +112,7 @@ app.include_router(auth.router, prefix=settings.API_V1_PREFIX)
 app.include_router(canvas.router, prefix=settings.API_V1_PREFIX)
 app.include_router(admin.router, prefix=settings.API_V1_PREFIX)
 app.include_router(chat.router, prefix=settings.API_V1_PREFIX)
+app.include_router(llm.router, prefix=settings.API_V1_PREFIX)
 app.include_router(messages.router, prefix=settings.API_V1_PREFIX)
 app.include_router(history.router, prefix=settings.API_V1_PREFIX)
 app.include_router(audit.router, prefix=settings.API_V1_PREFIX)

@@ -12,7 +12,7 @@ interface InstructorCoursesSearchProps {
 }
 
 const selectClassName = cn(
-  "h-9 rounded-lg border border-input bg-background pl-8 pr-3 text-sm outline-none",
+  "h-9 min-w-[11rem] rounded-lg border border-input bg-background px-2.5 text-sm outline-none",
   "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
 );
 
@@ -39,9 +39,9 @@ export function InstructorCoursesSearch({
         />
       </div>
 
-      <div className="relative">
+      <div className="flex items-center gap-2">
         <Filter
-          className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+          className="size-4 shrink-0 text-muted-foreground"
           aria-hidden="true"
         />
         <select

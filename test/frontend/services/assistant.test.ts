@@ -46,6 +46,22 @@ describe("mapChatReplyToAssistantResponse", () => {
     expect(response.content).toBe("LLM unavailable");
   });
 
+  it("maps limited-mode Canvas blocks with a connect action", () => {
+    const response = mapChatReplyToAssistantResponse(
+      {
+        error: "This action needs a connected Canvas account.",
+        requires_canvas_token: true,
+        deferred_request_id: 42,
+        limited_mode: true,
+      },
+      true,
+    );
+
+    expect(response.requiresCanvasToken).toBe(true);
+    expect(response.deferredRequestId).toBe(42);
+    expect(response.interpretedAction?.primaryLink?.label).toMatch(/Connect Canvas/i);
+  });
+
   // Verifies: Maps successful confirm replies.
   it("maps successful confirm replies", () => {
     const response = mapChatReplyToAssistantResponse(
@@ -334,6 +350,39 @@ describe("conversation history helpers", () => {
       role: "user",
       content: "[URGENT] Please help with grading",
     });
+  });
+
+  it("does not invent pending controls for create_quiz form handoffs", () => {
+    const messages = mapConversationToChatMessages({
+      id: 9,
+      course_id: 3,
+      created_at: "2026-07-01T12:00:00Z",
+      messages: [
+        {
+          id: 22,
+          role: "assistant",
+          content: JSON.stringify({
+            intent_preview: true,
+            summary: "Create Recursion Quiz.",
+            proposed_action: {
+              action: "create_quiz",
+              local_course_id: 3,
+              title: "Recursion Quiz",
+              questions: [],
+            },
+            preview_metadata: { course: "CPSC 310" },
+          }),
+          created_at: "2026-07-01T12:01:00Z",
+          pending_action_status: null,
+        },
+      ],
+    });
+
+    expect(messages[0].pendingMessageId).toBeUndefined();
+    expect(messages[0].pendingActionStatus).toBeUndefined();
+    expect(messages[0].interpretedAction?.primaryLink?.href).toBe(
+      "/instructor/quizzes/create",
+    );
   });
 });
 

@@ -13,13 +13,13 @@ def get_llm_adapter(llm_settings: dict) -> LLMAdapter:
     if provider == "vllm":
         return OpenAICompatibleAdapter(
             base_url=settings.VLLM_BASE_URL,
-            model=settings.VLLM_MODEL,
+            model=llm_settings.get("model", settings.VLLM_MODEL),
         )
 
     if provider == "ollama":
         return OpenAICompatibleAdapter(
             base_url=settings.OLLAMA_BASE_URL,
-            model=settings.OLLAMA_MODEL,
+            model=llm_settings.get("model", settings.OLLAMA_MODEL),
         )
 
     if provider == "groq":
@@ -43,8 +43,8 @@ def get_llm_adapter(llm_settings: dict) -> LLMAdapter:
     if provider == "openai":
         return OpenAICompatibleAdapter(
             base_url="https://api.openai.com/v1",
-            model=llm_settings["model"],
-            api_key=llm_settings["api_key"],
+            model=llm_settings.get("model", settings.OPENAI_MODEL),
+            api_key=llm_settings.get("api_key") or settings.OPENAI_API_KEY,
         )
 
     if provider == "openai_compatible_custom":
@@ -57,8 +57,8 @@ def get_llm_adapter(llm_settings: dict) -> LLMAdapter:
 
     if provider == "anthropic":
         return AnthropicAdapter(
-            api_key=llm_settings["api_key"],
-            model=llm_settings["model"],
+            api_key=llm_settings.get("api_key") or settings.ANTHROPIC_API_KEY,
+            model=llm_settings.get("model", settings.ANTHROPIC_MODEL),
         )
 
     raise ValueError(f"Unknown LLM provider: {provider}")

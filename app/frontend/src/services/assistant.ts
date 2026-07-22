@@ -22,6 +22,7 @@ export interface SendAssistantMessageOptions {
   conversationId?: number;
   localCourseId?: number;
   pendingMessageId?: number;
+  deferredRequestId?: number;
   context?: AssistantContext;
   modelSettings?: LlmProviderSettings;
 }
@@ -95,13 +96,19 @@ function toAssistantMessageResult(
     response.conversation_id,
   );
 
+  // Form-handoff actions (quiz / message / feedback) navigate away and are
+  // never confirmable in chat — never reattach a pending id from the raw
+  // reply after the mapper intentionally omitted it.
+  const pendingMessageId = mapped.navigateTo
+    ? undefined
+    : typeof response.reply.pending_message_id === "number"
+      ? response.reply.pending_message_id
+      : mapped.pendingMessageId;
+
   return {
     ...mapped,
     conversationId: response.conversation_id,
-    pendingMessageId:
-      typeof response.reply.pending_message_id === "number"
-        ? response.reply.pending_message_id
-        : mapped.pendingMessageId,
+    pendingMessageId,
   };
 }
 
@@ -152,6 +159,8 @@ function mapWorkflowStatus(
 export function mapConversationToChatMessages(
   conversation: ConversationResponse,
 ): ChatMessage[] {
+  const workflowStatuses = conversation.workflow_statuses ?? {};
+
   return conversation.messages.flatMap((message): ChatMessage[] => {
     const timestamp = new Date(message.created_at);
 
@@ -164,11 +173,23 @@ export function mapConversationToChatMessages(
       const mapped = reply
         ? mapChatReplyToAssistantResponse(reply, false, conversation.id)
         : { content: message.content };
-      const pendingActionStatus = mapWorkflowStatus(
-        message.pending_action_status,
-      ) ?? (reply?.intent_preview ? "pending" : undefined);
+
+      // Form-handoff previews (create_quiz / send_message / update_grade) are
+      // offered as dedicated forms — they have no pending Workflow to
+      // confirm/cancel, so never invent PendingActionControls for them.
+      const isFormHandoff = Boolean(
+        "navigateTo" in mapped && mapped.navigateTo,
+      );
+      const workflowStatus = workflowStatuses[message.id]?.status;
+      const pendingActionStatus = isFormHandoff
+        ? undefined
+        : mapWorkflowStatus(workflowStatus) ??
+          mapWorkflowStatus(message.pending_action_status) ??
+          (reply && "intent_preview" in reply && reply.intent_preview
+            ? "pending"
+            : undefined);
       const pendingMessageId =
-        pendingActionStatus ? message.id : undefined;
+        !isFormHandoff && pendingActionStatus ? message.id : undefined;
 
       return [{
         id: `stored-${message.id}`,
@@ -183,6 +204,12 @@ export function mapConversationToChatMessages(
         interpretedAction: mapped.interpretedAction,
         safetyBlocked: mapped.safetyBlocked,
         safetyMessage: mapped.safetyMessage,
+        requiresCanvasToken:
+          "requiresCanvasToken" in mapped
+            ? mapped.requiresCanvasToken
+            : undefined,
+        deferredRequestId:
+          "deferredRequestId" in mapped ? mapped.deferredRequestId : undefined,
       }];
     }
 
@@ -220,6 +247,7 @@ export async function sendAssistantMessage(
         conversation_id: options.conversationId,
         local_course_id: localCourseId,
         pending_message_id: options.pendingMessageId,
+        deferred_request_id: options.deferredRequestId,
         model_settings: modelSettings
           ? {
               provider: modelSettings.provider,
@@ -344,6 +372,63 @@ export async function fetchConversation(
     return await apiRequest<ConversationResponse>(
       `/chat/conversations/${conversationId}`,
       accessToken,
+    );
+  } catch (error) {
+    wrapRequestError(error);
+  }
+}
+
+export interface DeferredAssistantRequest {
+  id: number;
+  conversation_id: number | null;
+  message: string;
+  proposed_action: Record<string, unknown> | null;
+  status: string;
+  created_at: string;
+  resumed_at: string | null;
+}
+
+export interface DeferredAssistantRequestList {
+  items: DeferredAssistantRequest[];
+}
+
+export async function listDeferredAssistantRequests(
+  accessToken: string,
+): Promise<DeferredAssistantRequestList> {
+  try {
+    return await apiRequest<DeferredAssistantRequestList>(
+      "/chat/deferred",
+      accessToken,
+    );
+  } catch (error) {
+    wrapRequestError(error);
+  }
+}
+
+export async function resumeDeferredAssistantRequest(
+  accessToken: string,
+  deferredId: number,
+): Promise<DeferredAssistantRequest> {
+  try {
+    return await apiRequest<DeferredAssistantRequest>(
+      `/chat/deferred/${deferredId}/resume`,
+      accessToken,
+      { method: "POST" },
+    );
+  } catch (error) {
+    wrapRequestError(error);
+  }
+}
+
+export async function cancelDeferredAssistantRequest(
+  accessToken: string,
+  deferredId: number,
+): Promise<DeferredAssistantRequest> {
+  try {
+    return await apiRequest<DeferredAssistantRequest>(
+      `/chat/deferred/${deferredId}/cancel`,
+      accessToken,
+      { method: "POST" },
     );
   } catch (error) {
     wrapRequestError(error);

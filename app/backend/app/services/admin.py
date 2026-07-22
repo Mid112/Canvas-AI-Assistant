@@ -12,6 +12,19 @@ from app.models.system_setting import SystemSetting
 from app.models.user import User
 from app.models.workflow import Workflow
 from app.schemas.admin import CreateAdminRequest, CreateInstructorRequest, UpdateInstructorRequest
+from app.schemas.llm_provider import LlmProviderConfig
+from app.services.llm.provider_registry import (
+    ACTIVE_MODEL_KEY,
+    ACTIVE_PROVIDER_KEY,
+    CACHE_ENABLED_KEY,
+    CACHE_TTL_KEY,
+    FALLBACK_MODEL_KEY,
+    FALLBACK_PROVIDER_KEY,
+    KNOWN_PROVIDER_IDS,
+    LLM_SETTING_KEYS,
+    get_active_llm_config,
+    get_provider_definition,
+)
 
 DEFAULT_ADMIN_SETTINGS = {
     "organization_name": "Canvas Helper",
@@ -50,11 +63,18 @@ async def get_admin_settings(db: AsyncSession) -> dict:
         # key is the setting name and value is that setting's own value
         # (whatever JSON-compatible shape it is) — no wrapping needed, since
         # JSONB stores scalars natively.
-        settings[row.key] = row.value
+        if row.key not in LLM_SETTING_KEYS:
+            settings[row.key] = row.value
     return settings
 
 
 async def update_admin_settings(db: AsyncSession, new_settings: dict) -> dict:
+    protected_keys = LLM_SETTING_KEYS.intersection(new_settings)
+    if protected_keys:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="LLM settings must be updated through the provider configuration endpoint.",
+        )
     for key, value in new_settings.items():
         existing = await db.get(SystemSetting, key)
         if existing:
@@ -65,6 +85,75 @@ async def update_admin_settings(db: AsyncSession, new_settings: dict) -> dict:
 
     await db.commit()
     return await get_admin_settings(db)
+
+
+async def get_llm_provider_config(db: AsyncSession) -> LlmProviderConfig:
+    config = await get_active_llm_config(db)
+    return LlmProviderConfig(
+        provider=config.provider,
+        model=config.model,
+        fallback_provider=config.fallback_provider,
+        fallback_model=config.fallback_model,
+        cache_enabled=config.cache_enabled,
+        cache_ttl_seconds=config.cache_ttl_seconds,
+    )
+
+
+async def update_llm_provider_config(
+    db: AsyncSession,
+    config: LlmProviderConfig,
+    admin: User,
+) -> LlmProviderConfig:
+    if config.provider not in KNOWN_PROVIDER_IDS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Unknown LLM provider: {config.provider}",
+        )
+    if config.fallback_provider and config.fallback_provider not in KNOWN_PROVIDER_IDS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Unknown LLM provider: {config.fallback_provider}",
+        )
+
+    get_provider_definition(config.provider)
+    if config.fallback_provider:
+        get_provider_definition(config.fallback_provider)
+
+    values = {
+        ACTIVE_PROVIDER_KEY: config.provider,
+        ACTIVE_MODEL_KEY: config.model.strip(),
+        FALLBACK_PROVIDER_KEY: config.fallback_provider or "",
+        FALLBACK_MODEL_KEY: config.fallback_model or "",
+        CACHE_ENABLED_KEY: config.cache_enabled,
+        CACHE_TTL_KEY: config.cache_ttl_seconds,
+    }
+    if not values[ACTIVE_MODEL_KEY]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="A default model is required.",
+        )
+
+    for key, value in values.items():
+        existing = await db.get(SystemSetting, key)
+        if existing:
+            existing.value = value
+            existing.updated_at = datetime.now(UTC)
+        else:
+            db.add(SystemSetting(key=key, value=value))
+
+    db.add(AuditLogSession(
+        user_id=admin.id,
+        action="llm_provider_configuration_updated",
+        details={
+            "provider": config.provider,
+            "model": config.model,
+            "fallback_provider": config.fallback_provider,
+            "cache_enabled": config.cache_enabled,
+            "cache_ttl_seconds": config.cache_ttl_seconds,
+        },
+    ))
+    await db.commit()
+    return await get_llm_provider_config(db)
 
 
 async def list_instructors(db: AsyncSession) -> list[User]:

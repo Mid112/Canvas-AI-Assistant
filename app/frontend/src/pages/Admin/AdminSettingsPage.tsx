@@ -12,6 +12,7 @@ import {
 } from "@/services/adminSettings";
 import { createAdmin } from "@/services/adminUsers";
 import { pageShell, pageShellMedium } from "@/lib/page-shell";
+import { AdminLlmProviderSettings } from "@/pages/Admin/AdminLlmProviderSettings";
 
 const emptyAdminForm = { name: "", email: "", password: "" };
 
@@ -215,6 +216,8 @@ export function AdminSettingsPage() {
           ) : null}
         </CardFooter>
       </Card>
+
+      <AdminLlmProviderSettings />
 
       <Card className="max-w-2xl shadow-sm ring-1 ring-border/60">
         <CardHeader>

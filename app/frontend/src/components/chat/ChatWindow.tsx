@@ -21,6 +21,7 @@ import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useInstitution } from "@/contexts/useInstitution";
 import { seedChatMessages } from "@/data/assistantSeedData";
 import { isCancellationPhrase } from "@/lib/chat-cancellation";
+import { setStoredDeferredDraft } from "@/lib/deferred-assistant-storage";
 import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
 import {
   AssistantApiError,
@@ -32,6 +33,7 @@ import {
   type ConversationResponse,
 } from "@/services/assistant";
 import type { AssistantMessageResult } from "@/services/assistant";
+import type { InstructorLlmProvider } from "@/services/instructorLlmProviders";
 import type { ChatMessage } from "@/types/chat";
 import { mapWorkflowStatus } from "@/types/chat";
 import type { LlmProviderId, LlmProviderSettings } from "@/types/llmProvider";
@@ -101,13 +103,17 @@ interface ChatWindowProps {
   initialDraft?: string | null;
   initialConversationId?: number;
   initialPendingMessageId?: number;
+  initialDeferredRequestId?: number | null;
   loadedConversation?: ConversationResponse | null;
   onInitialPromptConsumed?: () => void;
   onModifyContextConsumed?: () => void;
   onConversationChange?: (conversationId: number) => void;
+  onDeferredRequest?: () => void;
+  onDeferredResumeComplete?: () => void;
   onLoadingChange?: (isLoading: boolean) => void;
   onStartNewChat?: () => void;
   modelSettings?: LlmProviderSettings | null;
+  llmProviders?: InstructorLlmProvider[];
   onModelProviderChange?: (providerId: LlmProviderId) => void;
 }
 
@@ -120,17 +126,21 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   initialDraft = null,
   initialConversationId,
   initialPendingMessageId,
+  initialDeferredRequestId = null,
   loadedConversation = null,
   onInitialPromptConsumed,
   onModifyContextConsumed,
   onConversationChange,
+  onDeferredRequest,
+  onDeferredResumeComplete,
   onLoadingChange,
   onStartNewChat,
   modelSettings = null,
+  llmProviders = [],
   onModelProviderChange,
 }, ref) {
   const navigate = useNavigate();
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
   const { activeCourse, refreshActiveCourse, notifyCoursesChanged } =
     useActiveCourse();
   const { refreshDashboard } = useInstitution();
@@ -187,6 +197,9 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
     initialChatState.hydratedConversationId,
   );
   const isDeliveringRef = useRef(false);
+  const deferredRequestIdRef = useRef<number | null>(
+    initialDeferredRequestId ?? null,
+  );
 
   const assistantContext = useMemo(
     () => ({
@@ -290,6 +303,8 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
             interpretedAction: mapped.interpretedAction,
             safetyBlocked: mapped.safetyBlocked,
             safetyMessage: mapped.safetyMessage,
+            requiresCanvasToken: mapped.requiresCanvasToken,
+            deferredRequestId: mapped.deferredRequestId,
           }];
         });
 
@@ -362,6 +377,8 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
         interpretedAction: entry.interpretedAction,
         safetyBlocked: entry.safetyBlocked,
         safetyMessage: entry.safetyMessage,
+        requiresCanvasToken: entry.requiresCanvasToken,
+        deferredRequestId: entry.deferredRequestId,
       }));
 
       setMessages((current) => [...current, ...newMessages]);
@@ -406,6 +423,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           context: assistantContext,
           conversationId,
           pendingMessageId: pendingMessageIdToSend,
+          deferredRequestId: deferredRequestIdRef.current ?? undefined,
           modelSettings: modelSettings ?? undefined,
         });
 
@@ -426,6 +444,17 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
 
         setConversationId(response.conversationId);
         onConversationChange?.(response.conversationId);
+        if (response.requiresCanvasToken && user?.id) {
+          setStoredDeferredDraft(user.id, {
+            message: userText,
+            conversationId: response.conversationId,
+            deferredRequestId: response.deferredRequestId,
+          });
+          onDeferredRequest?.();
+        } else if (deferredRequestIdRef.current != null) {
+          deferredRequestIdRef.current = null;
+          onDeferredResumeComplete?.();
+        }
         appendAssistantMessage(response);
         setRetryMessage(null);
       } catch (requestError) {
@@ -447,7 +476,10 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       conversationId,
       modelSettings,
       onConversationChange,
+      onDeferredRequest,
+      onDeferredResumeComplete,
       onModifyContextConsumed,
+      user?.id,
     ],
   );
 
@@ -494,6 +526,15 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
                   ...entry,
                   pendingActionStatus:
                     action === "confirm" ? "confirmed" : "cancelled",
+                  // Hide the offer cards after cancel so the proposal
+                  // disappears entirely (no leftover explanation/action UI).
+                  ...(action === "cancel"
+                    ? {
+                        handoffDismissed: true,
+                        explanation: undefined,
+                        interpretedAction: undefined,
+                      }
+                    : {}),
                 }
               : entry,
           ),
@@ -511,6 +552,30 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           void refreshDashboard();
         }
       } catch (requestError) {
+        // Cancelling a form-handoff leftover (no Workflow row) should still
+        // dismiss the UI locally — there is nothing to audit/cancel server-side.
+        if (action === "cancel") {
+          setActivePendingMessageIds((current) =>
+            current.filter((id) => id !== message.pendingMessageId),
+          );
+          setMessages((current) =>
+            current.map((entry) =>
+              entry.id === message.id
+                ? {
+                    ...entry,
+                    pendingActionStatus: "cancelled",
+                    handoffDismissed: true,
+                    explanation: undefined,
+                    interpretedAction: undefined,
+                    pendingMessageId: undefined,
+                  }
+                : entry,
+            ),
+          );
+          setPendingActionError(null);
+          return;
+        }
+
         const errorMessage =
           requestError instanceof AssistantApiError
             ? requestError.message
@@ -529,6 +594,21 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       refreshDashboard,
     ],
   );
+
+  const dismissHandoffOffer = useCallback((messageId: string) => {
+    setMessages((current) =>
+      current.map((entry) =>
+        entry.id === messageId
+          ? {
+              ...entry,
+              handoffDismissed: true,
+              explanation: undefined,
+              interpretedAction: undefined,
+            }
+          : entry,
+      ),
+    );
+  }, []);
 
   const handleSend = useCallback(
     (text: string) => {
@@ -661,6 +741,11 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
                     ? () => void resolvePendingAction(message, "cancel")
                     : undefined
                 }
+                onDismissHandoff={
+                  message.interpretedAction && !message.pendingMessageId
+                    ? () => dismissHandoffOffer(message.id)
+                    : undefined
+                }
               />
             ) : (
               <UserMessage key={message.id} message={message} />
@@ -701,6 +786,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           inputError={inputError}
           initialValue={initialDraft ?? ""}
           modelSettings={modelSettings}
+          llmProviders={llmProviders}
           onModelProviderChange={onModelProviderChange}
         />
       </CardContent>

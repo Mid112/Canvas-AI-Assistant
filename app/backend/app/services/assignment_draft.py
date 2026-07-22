@@ -5,11 +5,13 @@ from datetime import datetime
 
 import httpx
 from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.schemas.preview import AssignmentDraftRequest, AssignmentDraftResponse
 from app.services.llm.json_extraction import loads_llm_json
 from app.services.llm.llm_setting import get_llm_adapter
+from app.services.llm.provider_registry import get_active_llm_config
 
 _LIST_ITEM_RE = re.compile(r"<li[^>]*>", re.IGNORECASE)
 _BLOCK_BREAK_RE = re.compile(r"</(p|div|li|h[1-6])>|<br\s*/?>", re.IGNORECASE)
@@ -31,7 +33,10 @@ def _plain_text_description(value: str) -> str:
     return "\n".join(line for line in lines if line).strip()
 
 
-async def generate_assignment_draft(body: AssignmentDraftRequest) -> AssignmentDraftResponse:
+async def generate_assignment_draft(
+    body: AssignmentDraftRequest,
+    db: AsyncSession | None = None,
+) -> AssignmentDraftResponse:
     system = (
         "You help instructors draft Canvas assignments. "
         "Respond with JSON only: "
@@ -39,7 +44,15 @@ async def generate_assignment_draft(body: AssignmentDraftRequest) -> AssignmentD
         "The description must be plain text only: no HTML tags and no markdown formatting. "
         'Separate paragraphs with a blank line and start list items with "- ".'
     )
-    adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
+    if db is None:
+        adapter_settings = {"provider": settings.DEFAULT_LLM_PROVIDER}
+    else:
+        llm_config = await get_active_llm_config(db)
+        adapter_settings = {
+            "provider": llm_config.provider,
+            "model": llm_config.model,
+        }
+    adapter = get_llm_adapter(adapter_settings)
 
     try:
         raw = await adapter.generate(system, body.prompt)

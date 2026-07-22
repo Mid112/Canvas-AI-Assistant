@@ -165,6 +165,22 @@ def test_reply_empty_body_rejected():
     assert exc_info.value.status_code == 422
 
 
+# Verifies: Profanity in inbox replies is rejected before hitting Canvas.
+def test_reply_profanity_rejected():
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(
+            reply_to_inbox_thread(
+                9,
+                "This is fucking rude.",
+                _instructor(),
+                "http://localhost:3000",
+                AsyncMock(),
+            )
+        )
+    assert exc_info.value.status_code == 422
+    assert "appropriate" in exc_info.value.detail.lower()
+
+
 # Verifies: Reply posts to Canvas with participants (minus self) and returns updated thread.
 def test_reply_posts_and_returns_updated():
     before = {

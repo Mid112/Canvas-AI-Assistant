@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ActionCard } from "@/components/chat/ActionCard";
 import { RiskAlerts } from "@/components/chat/RiskAlerts";
@@ -73,6 +73,30 @@ describe("ActionCard", () => {
     expect(
       screen.queryByText("Review recipients and content carefully before confirming."),
     ).not.toBeInTheDocument();
+  });
+
+  it("calls onDismiss when Cancel is pressed", async () => {
+    const user = userEvent.setup();
+    const onDismiss = vi.fn();
+    render(
+      <MemoryRouter>
+        <ActionCard
+          action={{
+            action: "Create Quiz",
+            course: "CPSC 310",
+            affectedStudents: "Course-wide",
+            primaryLink: {
+              label: "Open quiz creation form",
+              href: "/instructor/quizzes/create",
+            },
+          }}
+          onDismiss={onDismiss}
+        />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onDismiss).toHaveBeenCalledOnce();
   });
 });
 

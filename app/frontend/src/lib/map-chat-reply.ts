@@ -7,6 +7,7 @@ import {
   instructorCourseAnalyticsPath,
   instructorDryRunPreviewPath,
   instructorMessagesPath,
+  instructorSettingsPath,
   paths,
 } from "@/routes/paths";
 import type { AssistantResponse, RiskMetadata } from "@/types/chat";
@@ -146,31 +147,6 @@ function buildInterpretedAction(
     };
   }
 
-  if (actionName === "send_message") {
-    const subject = readString(proposed.subject);
-    const body = readString(proposed.body);
-    const recipientIds = Array.isArray(proposed.recipient_canvas_user_ids)
-      ? proposed.recipient_canvas_user_ids
-          .map((id) => String(id))
-          .filter((id) => id.length > 0)
-      : undefined;
-
-    interpretedAction.secondaryLink = {
-      label: "Edit in message draft",
-      href: instructorMessagesPath({ tab: "compose" }),
-      state: {
-        returnTo: paths.instructor.assistant,
-        aiMessageDraft: {
-          subject,
-          body,
-          prompt: readString(previewMetadata?.summary),
-          courseId,
-          recipientIds,
-        },
-      },
-    };
-  }
-
   if (actionName === "create_assignment") {
     interpretedAction.secondaryLink = {
       label: "Edit assignment details",
@@ -287,6 +263,122 @@ function buildQuizCreateNavigateTo(
   };
 }
 
+function buildMessageDraftState(
+  proposed: Record<string, unknown>,
+  previewMetadata: Record<string, unknown> | undefined,
+  conversationId?: number,
+): Record<string, unknown> {
+  const recipientIds = Array.isArray(proposed.recipient_canvas_user_ids)
+    ? proposed.recipient_canvas_user_ids
+        .map((id) => String(id))
+        .filter((id) => id.length > 0)
+    : undefined;
+
+  return {
+    returnTo: paths.instructor.assistant,
+    aiMessageDraft: {
+      subject: readString(proposed.subject),
+      body: readString(proposed.body),
+      prompt: readString(previewMetadata?.summary),
+      courseId:
+        typeof proposed.local_course_id === "number"
+          ? proposed.local_course_id
+          : undefined,
+      recipientIds,
+      conversationId,
+    },
+  };
+}
+
+function buildMessageDraftNavigateTo(
+  proposed: Record<string, unknown>,
+  previewMetadata: Record<string, unknown> | undefined,
+  conversationId?: number,
+): NonNullable<AssistantResponse["navigateTo"]> {
+  return {
+    path: instructorMessagesPath({ tab: "compose" }),
+    state: buildMessageDraftState(proposed, previewMetadata, conversationId),
+  };
+}
+
+function buildMessageDraftFormAction(
+  proposed: Record<string, unknown>,
+  previewMetadata: Record<string, unknown> | undefined,
+  conversationId?: number,
+): NonNullable<AssistantResponse["interpretedAction"]> {
+  const courseLabel =
+    readString(previewMetadata?.course_name) ??
+    readString(previewMetadata?.course) ??
+    "Active course";
+  const draftState = buildMessageDraftState(
+    proposed,
+    previewMetadata,
+    conversationId,
+  );
+
+  return {
+    action: "Send Message",
+    course: courseLabel,
+    affectedStudents: Array.isArray(proposed.recipient_canvas_user_ids)
+      ? `${proposed.recipient_canvas_user_ids.length} students`
+      : "Course-wide",
+    technicalDetails: [
+      { label: "Action type", value: "Send Message" },
+      ...(readString(previewMetadata?.risk_level)
+        ? [{ label: "Risk level", value: readString(previewMetadata?.risk_level)! }]
+        : []),
+      ...(typeof previewMetadata?.reversible === "boolean"
+        ? [
+            {
+              label: "Reversible",
+              value: previewMetadata.reversible ? "Yes" : "No",
+            },
+          ]
+        : []),
+    ],
+    primaryLink: {
+      label: "Open message draft",
+      href: instructorMessagesPath({ tab: "compose" }),
+      state: draftState,
+    },
+  };
+}
+
+function buildFeedbackDraftNavigateTo(
+  proposed: Record<string, unknown>,
+  conversationId?: number,
+): NonNullable<AssistantResponse["navigateTo"]> {
+  const assignmentName =
+    readString(proposed.assignment_reference) ?? "Assignment";
+  const studentName = readString(proposed.student_reference) ?? "Student";
+
+  return {
+    path: paths.instructor.feedbackCreate,
+    state: {
+      returnTo: paths.instructor.assistant,
+      aiFeedbackDraft: {
+        courseId:
+          typeof proposed.local_course_id === "number"
+            ? proposed.local_course_id
+            : undefined,
+        assignmentId:
+          typeof proposed.assignment_id === "number"
+            ? proposed.assignment_id
+            : undefined,
+        studentId:
+          typeof proposed.student_id === "number"
+            ? proposed.student_id
+            : undefined,
+        assignmentName,
+        studentName,
+        newGrade: readString(proposed.new_grade),
+        feedback: readString(proposed.feedback),
+        conversationId,
+      },
+    },
+  };
+}
+
 function buildQuizCreateFormAction(
   proposed: Record<string, unknown>,
   previewMetadata: Record<string, unknown> | undefined,
@@ -338,11 +430,35 @@ export function mapChatReplyToAssistantResponse(
   conversationId?: number,
 ): AssistantResponse {
   if (isError || reply.error) {
-    return {
-      content:
-        readString(reply.error) ??
-        "The assistant is temporarily unavailable. Please try again.",
-    };
+    const requiresCanvasToken = reply.requires_canvas_token === true;
+    const deferredRequestId =
+      typeof reply.deferred_request_id === "number"
+        ? reply.deferred_request_id
+        : undefined;
+    const content =
+      readString(reply.error) ??
+      "The assistant is temporarily unavailable. Please try again.";
+
+    if (requiresCanvasToken) {
+      return {
+        content,
+        explanation:
+          "You are in limited mode until Canvas is connected. Saved requests can be resumed after connecting.",
+        requiresCanvasToken: true,
+        deferredRequestId,
+        interpretedAction: {
+          action: "Connect Canvas",
+          course: "Limited mode",
+          affectedStudents: "—",
+          primaryLink: {
+            label: "Connect Canvas in Settings",
+            href: instructorSettingsPath("canvas"),
+          },
+        },
+      };
+    }
+
+    return { content };
   }
 
   if (reply.intent_preview) {
@@ -371,6 +487,40 @@ export function mapChatReplyToAssistantResponse(
           previewMetadata,
           conversationId,
         ),
+      };
+    }
+
+    // send_message redirects to the Messages compose tab — same handoff
+    // pattern as create_quiz so the write is reviewed once and audited there.
+    if (proposed?.action === "send_message") {
+      return {
+        content:
+          readString(reply.summary) ??
+          "Opening the message draft with your details…",
+        explanation:
+          "Messages are drafted and sent in the Messages tab so the write is reviewed once and recorded in workflow history.",
+        navigateTo: buildMessageDraftNavigateTo(
+          proposed,
+          previewMetadata,
+          conversationId,
+        ),
+        interpretedAction: buildMessageDraftFormAction(
+          proposed,
+          previewMetadata,
+          conversationId,
+        ),
+      };
+    }
+
+    // update_grade redirects to the dedicated feedback form.
+    if (proposed?.action === "update_grade") {
+      return {
+        content:
+          readString(reply.summary) ??
+          "Opening the feedback form with your draft…",
+        explanation:
+          "Feedback is posted in the dedicated form so the write is reviewed once and recorded in workflow history.",
+        navigateTo: buildFeedbackDraftNavigateTo(proposed, conversationId),
       };
     }
 

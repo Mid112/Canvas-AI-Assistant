@@ -241,6 +241,9 @@ async def test_send_message_draft_success_marks_sent_and_records_delivery():
     )
     db.get = AsyncMock(return_value=draft)
     db.refresh = AsyncMock()
+    db.scalar = AsyncMock(return_value=None)
+    db.flush = AsyncMock()
+    db.add = Mock()
     user = SimpleNamespace(id=1)
 
     result = SimpleNamespace(delivery_mode="conversation", audience_size=1)
@@ -255,4 +258,6 @@ async def test_send_message_draft_success_marks_sent_and_records_delivery():
     assert updated.sent_at is not None
     assert updated.delivery_mode == "conversation"
     assert updated.recipient_count == 1
+    assert db.add.call_count >= 2
+    db.flush.assert_awaited()
     db.commit.assert_awaited_once()

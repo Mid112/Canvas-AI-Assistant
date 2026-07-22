@@ -577,9 +577,11 @@ describe("ChatWindow", () => {
 
   // Verifies: two previews resolved OUT OF ORDER (the second one confirmed
   // before the first is cancelled) each still show their own correct
-  // status on reload — the old FIFO-from-transcript-order reconstruction
-  // would have mislabeled these by resolving markers against the oldest
-  // still-open preview regardless of which one they actually settled.
+  // Verifies: two create_assignment previews keep their own status on
+  // reload — the old FIFO-from-transcript-order reconstruction would have
+  // mislabeled these by resolving markers against the oldest still-open
+  // preview regardless of which one they actually settled.
+  // (send_message is form-handoff and never gets chat confirm controls.)
   it("keeps each preview's correct status on reload when resolved out of order", async () => {
     mockedFetchConversation.mockResolvedValueOnce({
       id: 9,
@@ -591,9 +593,15 @@ describe("ChatWindow", () => {
           role: "assistant",
           content: JSON.stringify({
             intent_preview: true,
-            summary: "Message Alice about the quiz.",
-            proposed_action: { action: "send_message" },
-            preview_metadata: { course_name: "CPSC 310", audience: { label: "Alice" } },
+            summary: "Create Quiz for Alice's section.",
+            proposed_action: {
+              action: "create_assignment",
+              title: "Quiz A",
+              description: "A short quiz on course topics.",
+              due_date: "2030-01-01T00:00:00",
+              points_possible: 10,
+            },
+            preview_metadata: { course_name: "CPSC 310", audience: { label: "Entire class" } },
           }),
           created_at: "2026-06-24T10:01:00.000Z",
         },
@@ -602,26 +610,32 @@ describe("ChatWindow", () => {
           role: "assistant",
           content: JSON.stringify({
             intent_preview: true,
-            summary: "Message Bob about the quiz.",
-            proposed_action: { action: "send_message" },
-            preview_metadata: { course_name: "CPSC 310", audience: { label: "Bob" } },
+            summary: "Create Homework for Bob's section.",
+            proposed_action: {
+              action: "create_assignment",
+              title: "Homework B",
+              description: "A short homework on course topics.",
+              due_date: "2030-02-01T00:00:00",
+              points_possible: 20,
+            },
+            preview_metadata: { course_name: "CPSC 310", audience: { label: "Entire class" } },
           }),
           created_at: "2026-06-24T10:01:05.000Z",
         },
       ],
-      // Bob's (later) preview was confirmed; Alice's (earlier) preview was
-      // cancelled — the reverse of creation order.
+      // Later preview was confirmed; earlier preview was cancelled —
+      // the reverse of creation order.
       workflow_statuses: {
         50: {
           workflow_id: 5,
           status: "cancelled",
-          action_name: "send_message",
+          action_name: "create_assignment",
           result_message_id: null,
         },
         51: {
           workflow_id: 6,
           status: "executed",
-          action_name: "send_message",
+          action_name: "create_assignment",
           result_message_id: 52,
         },
       },
@@ -630,9 +644,9 @@ describe("ChatWindow", () => {
     renderWithInstitution(<ChatWindow initialConversationId={9} />);
 
     expect(
-      await screen.findByText("Message Alice about the quiz."),
+      await screen.findByText("Create Quiz for Alice's section."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Message Bob about the quiz.")).toBeInTheDocument();
+    expect(screen.getByText("Create Homework for Bob's section.")).toBeInTheDocument();
 
     expect(screen.getByText("This action was cancelled.")).toBeInTheDocument();
     expect(screen.getByText("This action was confirmed.")).toBeInTheDocument();

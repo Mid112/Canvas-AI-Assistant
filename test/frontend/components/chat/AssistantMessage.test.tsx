@@ -163,4 +163,50 @@ describe("AssistantMessage", () => {
       screen.getByText("Please include the course and assignment details."),
     ).toBeInTheDocument();
   });
+
+  it("hides handoff cards after dismiss and shows cancelled status", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <AssistantMessage
+          message={{
+            id: "3",
+            role: "assistant",
+            content: "Opening the quiz creation form with your draft…",
+            timestamp: new Date("2026-06-24T10:10:00"),
+            explanation: "Quiz creation happens in the dedicated form.",
+            interpretedAction: {
+              action: "Create Quiz",
+              course: "CPSC 310",
+              affectedStudents: "Course-wide",
+              primaryLink: {
+                label: "Open quiz creation form",
+                href: "/instructor/quizzes/create",
+              },
+            },
+          }}
+          onDismissHandoff={() => undefined}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Interpreted Action")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+
+    rerender(
+      <MemoryRouter>
+        <AssistantMessage
+          message={{
+            id: "3",
+            role: "assistant",
+            content: "Opening the quiz creation form with your draft…",
+            timestamp: new Date("2026-06-24T10:10:00"),
+            handoffDismissed: true,
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByText("Interpreted Action")).not.toBeInTheDocument();
+    expect(screen.getByText("This action was cancelled.")).toBeInTheDocument();
+  });
 });

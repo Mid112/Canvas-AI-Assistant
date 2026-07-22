@@ -14,24 +14,29 @@ import {
 import {
   getLlmProviderOption,
   hostingLabel,
-  LLM_PROVIDERS,
 } from "@/data/llmProviders";
+import { cn } from "@/lib/utils";
 import { instructorSettingsPath } from "@/routes/paths";
+import type { InstructorLlmProvider } from "@/services/instructorLlmProviders";
 import type { LlmProviderId, LlmProviderSettings } from "@/types/llmProvider";
 
 interface ChatModelSwitcherProps {
   settings: LlmProviderSettings;
+  providers: InstructorLlmProvider[];
   onProviderChange: (providerId: LlmProviderId) => void;
   disabled?: boolean;
 }
 
 export function ChatModelSwitcher({
   settings,
+  providers,
   onProviderChange,
   disabled = false,
 }: ChatModelSwitcherProps) {
   const navigate = useNavigate();
-  const selected = getLlmProviderOption(settings.provider);
+  const selected =
+    providers.find((provider) => provider.id === settings.provider) ??
+    getLlmProviderOption(settings.provider);
 
   return (
     <DropdownMenu>
@@ -56,25 +61,33 @@ export function ChatModelSwitcher({
         <DropdownMenuGroup>
           <DropdownMenuLabel>AI model</DropdownMenuLabel>
           <p className="px-2 pb-1 text-xs text-muted-foreground">
-            Applies to your next message. Providers marked "Needs server key"
-            or "Needs local runtime" only work once configured — see Settings.
+            Applies to your next message. Grey items are not connected yet.
           </p>
-          {LLM_PROVIDERS.map((provider) => {
+          {providers.map((provider) => {
             const isActive = provider.id === settings.provider;
+            const isConnected = provider.connected;
             return (
               <DropdownMenuItem
                 key={provider.id}
-                onClick={() => onProviderChange(provider.id)}
-                className="flex items-start justify-between gap-3"
+                disabled={!isConnected}
+                onClick={() => {
+                  if (isConnected) {
+                    onProviderChange(provider.id);
+                  }
+                }}
+                className={cn(
+                  "flex items-start justify-between gap-3",
+                  !isConnected && "text-muted-foreground opacity-60",
+                )}
               >
                 <div className="min-w-0 space-y-0.5">
                   <p className="text-sm font-medium">{provider.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {hostingLabel(provider.hosting)}
-                    {provider.defaultModel ? ` · ${provider.defaultModel}` : ""}
+                    {provider.models[0] ? ` · ${provider.models[0]}` : ""}
                   </p>
                 </div>
-                {isActive ? (
+                {isActive && isConnected ? (
                   <Check className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
                 ) : null}
               </DropdownMenuItem>
