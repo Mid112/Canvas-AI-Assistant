@@ -34,6 +34,8 @@ describe("gradeManagement service", () => {
   });
 
   it("sends preview payload with reason and current submission snapshot", async () => {
+    // Covers stale-state protection inputs: preview sends the current submission
+    // snapshot so the backend can compare what the instructor reviewed.
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       json: async () => ({ action: "update_grade" }),
@@ -55,6 +57,8 @@ describe("gradeManagement service", () => {
   });
 
   it("posts the same grade payload to submit", async () => {
+    // Covers mutation routing: submit uses the grade submit endpoint and keeps
+    // the same body shape the preview already validated.
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       json: async () => ({ submitted: true }),

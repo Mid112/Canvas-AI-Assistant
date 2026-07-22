@@ -16,6 +16,8 @@ def test_build_system_prompt_without_token_includes_canvas_gate():
 
 
 def test_build_system_prompt_distinguishes_assignment_feedback_from_private_message():
+    # Covers the reviewer clarification request: the model prompt tells chat to
+    # ask whether the instructor means assignment feedback or a private message.
     prompt = build_system_prompt()
     normalized_prompt = " ".join(prompt.split())
 

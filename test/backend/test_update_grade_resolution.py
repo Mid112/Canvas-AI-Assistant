@@ -11,6 +11,8 @@ from app.services.chat import (
 
 
 def test_update_grade_action_accepts_numeric_grade():
+    # Covers LLM/tool payload coercion so numeric grades from the model become
+    # the string format expected by the grade preview/submit workflow.
     action = UpdateGradeAction.model_validate(
         {
             "action": "update_grade",
@@ -77,6 +79,8 @@ def test_grouped_grade_update_wrapper_uses_grades_tab_handoff():
 
 
 def test_grade_clarification_partial_plan_preserves_target_context():
+    # Covers the clarify-loop fix: when the assistant still needs student scope,
+    # it keeps the resolved course/assignment and grade details for the next turn.
     action = UpdateGradeAction.model_validate(
         {
             "action": "update_grade",
@@ -102,4 +106,6 @@ def test_grade_clarification_partial_plan_preserves_target_context():
 
 
 def test_bulk_student_reference_tolerates_common_student_typo():
+    # Covers a real prompt typo seen in review: "all astudent" should still be
+    # understood as a bulk/all-students grade request.
     assert _is_bulk_student_reference("all astudent") is True

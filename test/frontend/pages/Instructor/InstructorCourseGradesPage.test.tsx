@@ -107,6 +107,8 @@ describe("InstructorCourseGradesPage", () => {
   });
 
   it("requires preview before submit and shows proposed grades in the New column", async () => {
+    // Covers the high-risk approval gate: grade submission stays disabled until
+    // the instructor previews, reviews warnings, and types the approval phrase.
     const user = userEvent.setup();
     renderPage();
 
@@ -138,6 +140,8 @@ describe("InstructorCourseGradesPage", () => {
   });
 
   it("prefills AI handoff details and warns without blocking bonus grades", async () => {
+    // Covers chat-to-Grades-tab handoff: query params preselect the assignment,
+    // student, and grade so the shared approval workflow starts already filled.
     // Over-max grades are advisory warnings, not hard blockers, because some
     // Canvas assignments intentionally allow bonus/curve scores.
     renderPage("/courses/7/grades?assignmentId=10&studentIds=42&grade=110");
@@ -151,6 +155,8 @@ describe("InstructorCourseGradesPage", () => {
   });
 
   it("filters grade rows and selects all visible students", async () => {
+    // Covers bulk workflow ergonomics: filters change which rows are visible,
+    // and "All" only selects the currently visible student rows.
     const user = userEvent.setup();
     // Manual visits start conservatively, while still showing unsubmitted rows
     // so instructors can opt into paper/in-person grading when appropriate.
@@ -251,6 +257,8 @@ describe("InstructorCourseGradesPage", () => {
   });
 
   it("refreshes displayed grades from submit results even when Canvas refetch is stale", async () => {
+    // Covers the post-submit refresh behavior: the page trusts the Canvas write
+    // response first so the table updates even if an immediate refetch is stale.
     const user = userEvent.setup();
     mockedSubmitGradeUpdate.mockResolvedValueOnce({
       action: "update_grade",
@@ -305,6 +313,8 @@ describe("InstructorCourseGradesPage", () => {
   });
 
   it("allows feedback-only submissions without typed grade approval", async () => {
+    // Covers the low-risk feedback path: comments can be previewed and sent
+    // without a posted grade or the typed UPDATE confirmation.
     const user = userEvent.setup();
     mockedPreviewGradeUpdate.mockResolvedValueOnce({
       action: "update_grade",

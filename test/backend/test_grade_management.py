@@ -30,6 +30,8 @@ def _unsubmitted_submission():
 
 
 def test_feedback_only_preview_is_low_risk_and_keeps_grade_unchanged():
+    # Covers the feedback-only path: a Canvas submission comment should not be
+    # treated like a high-risk grade mutation or change the posted grade.
     preview = _build_grade_preview(
         SimpleNamespace(id=7, name="COSC 777"),
         GradeUpdateRequest(
@@ -53,6 +55,8 @@ def test_feedback_only_preview_is_low_risk_and_keeps_grade_unchanged():
 
 
 def test_preview_requires_grade_or_feedback():
+    # Covers the shared validation rule for empty previews/submits. The backend
+    # rejects "do nothing" payloads instead of relying on the frontend form.
     with pytest.raises(HTTPException) as exc:
         _build_grade_preview(
             SimpleNamespace(id=7, name="COSC 777"),
@@ -74,6 +78,8 @@ def test_preview_requires_grade_or_feedback():
     ],
 )
 def test_preview_rejects_invalid_grade_payloads(posted_grade, detail):
+    # Covers server-side grade format/range validation for unsafe or malformed
+    # posted grades before Canvas is contacted.
     with pytest.raises(HTTPException) as exc:
         _build_grade_preview(
             SimpleNamespace(id=7, name="COSC 777"),
@@ -86,6 +92,8 @@ def test_preview_rejects_invalid_grade_payloads(posted_grade, detail):
 
 
 def test_preview_allows_bonus_grade_but_returns_server_warning():
+    # Covers the product decision for over-max scores: allow intentional bonus
+    # grades, but surface the warning from the backend as part of the preview.
     preview = _build_grade_preview(
         SimpleNamespace(id=7, name="COSC 777"),
         GradeUpdateRequest(assignment_id=10, user_id=42, posted_grade="110"),
@@ -99,6 +107,8 @@ def test_preview_allows_bonus_grade_but_returns_server_warning():
 
 
 def test_preview_warns_for_unsubmitted_submission_server_side():
+    # Covers unsubmitted rows on the backend so bulk grade warnings are not only
+    # enforced by the Grades tab UI.
     preview = _build_grade_preview(
         SimpleNamespace(id=7, name="COSC 777"),
         GradeUpdateRequest(assignment_id=10, user_id=42, posted_grade="88"),
@@ -112,6 +122,8 @@ def test_preview_warns_for_unsubmitted_submission_server_side():
 
 @pytest.mark.asyncio
 async def test_grade_preview_authorization_stops_before_canvas_fetch():
+    # Proves course authorization for grade preview: an instructor who does not
+    # own the local course gets a 404 and never reaches the Canvas fetch.
     db = AsyncMock()
     db.scalar = AsyncMock(return_value=None)
     user = SimpleNamespace(id=1, canvas_connections=[])
@@ -132,6 +144,8 @@ async def test_grade_preview_authorization_stops_before_canvas_fetch():
 
 @pytest.mark.asyncio
 async def test_grade_submit_authorization_stops_before_canvas_mutation():
+    # Proves course authorization for grade submit: unauthorized requests stop
+    # before both read-side Canvas fetches and write-side Canvas mutations.
     db = AsyncMock()
     db.scalar = AsyncMock(return_value=None)
     user = SimpleNamespace(id=1, canvas_connections=[])

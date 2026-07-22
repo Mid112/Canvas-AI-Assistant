@@ -70,6 +70,8 @@ describe("InstitutionSwitcher", () => {
   });
 
   it("prompts to connect when there are no institutions", () => {
+    // Covers the empty connection state: instructors without a Canvas
+    // institution should see the settings/connect call to action.
     mockUseAuth.mockReturnValue({
       accessToken: "token",
       user: {
@@ -97,6 +99,8 @@ describe("InstitutionSwitcher", () => {
   });
 
   it("lists connected institutions and allows switching", async () => {
+    // Covers the connected state: the dropdown lists each institution and calls
+    // the context setter with the selected institution id.
     const user = userEvent.setup();
     mockUseAuth.mockReturnValue({
       accessToken: "token",
