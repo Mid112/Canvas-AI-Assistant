@@ -20,8 +20,18 @@ from app.models.user import User
 from app.schemas.messages import MessageDraftCreate
 from app.services.ai_health import record_ai_call_outcome
 from app.services.assignment_draft import generate_assignment_draft
+from app.services.llm.provider_registry import ActiveLlmConfig
 from app.services.messages import create_message_draft
 from app.schemas.preview import AssignmentDraftRequest
+
+_ACTIVE_LLM_CONFIG = ActiveLlmConfig(
+    provider=settings.DEFAULT_LLM_PROVIDER,
+    model="test-model",
+    fallback_provider=None,
+    fallback_model=None,
+    cache_enabled=False,
+    cache_ttl_seconds=300,
+)
 
 
 def _make_session():
@@ -144,6 +154,10 @@ async def test_generate_assignment_draft_records_success_without_changing_output
 
     with (
         patch("app.services.assignment_draft.get_llm_adapter", return_value=adapter),
+        patch(
+            "app.services.assignment_draft.get_active_llm_config",
+            new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
+        ),
         patch("app.services.assignment_draft.record_ai_call_outcome", new=AsyncMock()) as mock_record,
     ):
         result = await generate_assignment_draft(body, db, user_id=42)
@@ -165,6 +179,10 @@ async def test_generate_assignment_draft_records_failure_when_response_is_unpars
 
     with (
         patch("app.services.assignment_draft.get_llm_adapter", return_value=adapter),
+        patch(
+            "app.services.assignment_draft.get_active_llm_config",
+            new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
+        ),
         patch("app.services.assignment_draft.record_ai_call_outcome", new=AsyncMock()) as mock_record,
     ):
         from fastapi import HTTPException
@@ -191,6 +209,10 @@ async def test_generate_assignment_draft_records_failure_and_still_raises_http_e
 
     with (
         patch("app.services.assignment_draft.get_llm_adapter", return_value=adapter),
+        patch(
+            "app.services.assignment_draft.get_active_llm_config",
+            new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
+        ),
         patch("app.services.assignment_draft.record_ai_call_outcome", new=AsyncMock()) as mock_record,
     ):
         from fastapi import HTTPException
