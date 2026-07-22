@@ -174,43 +174,42 @@ def _create_executed_create_assignment_workflow(client, headers, local_course_id
 def _create_executed_send_message_workflow(client, headers, local_course_id) -> int:
     """send_message is classified "irreversible" (mcp_tools.schemas.
     ACTION_CLASSIFICATION) and deliberately excluded from UNDOABLE_ACTIONS —
-    a sent Canvas announcement can't be un-sent."""
-    mock_adapter = AsyncMock()
-    mock_adapter.generate.return_value = (
-        '{"action": "intent_preview", "summary": "Send reminder", '
-        '"proposed_action": {"action": "send_message", '
-        f'"local_course_id": {local_course_id}, "subject": "Reminder", '
-        '"body": "Please submit your work."}}'
+    a sent Canvas announcement can't be un-sent.
+
+    Form-handoff records the executed Workflow via the Messages draft send
+    path rather than chat confirm."""
+    create = client.post(
+        "/api/v1/messages/drafts",
+        json={
+            "course_id": local_course_id,
+            "subject": "Reminder",
+            "body": "Please submit your work.",
+        },
+        headers=headers,
     )
-    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
-        preview = client.post(
-            "/api/v1/chat/",
-            json={"message": "send a reminder to the class"},
-            headers=headers,
-        )
-    body = preview.json()
-    conversation_id = body["conversation_id"]
-    pending_message_id = body["reply"]["pending_message_id"]
+    assert create.status_code == 201, create.json()
+    draft_id = create.json()["id"]
 
     fake_result = MessageSendResult(
         course_id=local_course_id, subject="Reminder", body="Please submit your work.",
         audience_size=30, delivery_mode="announcement",
     )
-    with patch(
-        "app.mcp_tools.dispatcher.send_course_message",
-        new=AsyncMock(return_value=fake_result),
+    with (
+        patch(
+            "app.services.canvas.send_course_message",
+            new=AsyncMock(return_value=fake_result),
+        ),
     ):
-        confirm = client.post(
-            "/api/v1/chat/confirm",
-            json={"conversation_id": conversation_id, "pending_message_id": pending_message_id},
+        send = client.post(
+            f"/api/v1/messages/drafts/{draft_id}/send",
             headers=headers,
         )
-    assert confirm.status_code == 200, confirm.json()
+    assert send.status_code == 200, send.json()
 
     history = client.get("/api/v1/history/workflows", headers=headers)
     return next(
         item["id"] for item in history.json()["items"]
-        if item["conversation_id"] == conversation_id
+        if item["action_name"] == "send_message"
     )
 
 

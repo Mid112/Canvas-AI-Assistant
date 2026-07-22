@@ -70,6 +70,9 @@ export interface ChatMessage {
   safetyMessage?: string;
   requiresCanvasToken?: boolean;
   deferredRequestId?: number;
+  /** True after the instructor dismisses a form-handoff offer (quiz /
+   * message / feedback) so the action card and explanation hide. */
+  handoffDismissed?: boolean;
 }
 
 export interface AssistantContext {

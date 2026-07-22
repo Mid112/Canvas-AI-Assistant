@@ -70,6 +70,7 @@ export function InstructorMessagesPage() {
           subject: aiDraft?.subject,
           body: aiDraft?.body,
           emptyRecipients: true,
+          conversationId: aiDraft?.conversationId,
         }
       : null,
     [activeCourse, aiDraft, basePrompt],
@@ -78,6 +79,8 @@ export function InstructorMessagesPage() {
     aiDraft?.subject ?? "",
     aiDraft?.body ?? "",
     aiDraft?.prompt ?? "",
+    aiDraft?.conversationId ?? "",
+    (aiDraft?.recipientIds ?? []).join(","),
   ].join("|");
 
   useEffect(() => {
@@ -132,22 +135,20 @@ export function InstructorMessagesPage() {
           return;
         }
 
-        // Exclude pending/identity-less students so the recipient list matches
-        // the addresses that can actually receive a message.
+        // Always keep the full roster visible. AI-selected recipients are
+        // pre-checked via preSelectedIds rather than filtering the list.
         const recipients = toStudentEmailRecipients(students);
         const preferredIds = aiDraft?.recipientIds;
-        const seededRecipients =
-          preferredIds && preferredIds.length > 0 ?
-            recipients.filter((recipient) => preferredIds.includes(recipient.id))
-          : recipients;
 
         setFetchOptions({
           courseId: localCourseId,
           prompt: aiDraft?.prompt ?? basePrompt,
           subject: aiDraft?.subject,
           body: aiDraft?.body,
-          recipients:
-            seededRecipients.length > 0 ? seededRecipients : recipients,
+          recipients,
+          preSelectedIds:
+            preferredIds && preferredIds.length > 0 ? preferredIds : undefined,
+          conversationId: aiDraft?.conversationId,
         });
       } catch (error) {
         if (
@@ -169,6 +170,7 @@ export function InstructorMessagesPage() {
           subject: aiDraft?.subject,
           body: aiDraft?.body,
           emptyRecipients: true,
+          conversationId: aiDraft?.conversationId,
         });
       }
     }
@@ -211,18 +213,6 @@ export function InstructorMessagesPage() {
     );
   }
 
-  if (!activeCourse) {
-    return (
-      <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
-        <Card className="shadow-sm ring-1 ring-border/60">
-          <CardContent className="p-6 text-sm text-muted-foreground">
-            Select an active course to view messages and draft new ones.
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-1 flex-col gap-4 p-4 md:p-6 lg:p-8">
       <header className="space-y-1">
@@ -230,8 +220,9 @@ export function InstructorMessagesPage() {
           Messages
         </h1>
         <p className="text-sm text-muted-foreground">
-          View conversations and student replies, or compose a new message for{" "}
-          {activeCourse.displayName}.
+          {activeCourse
+            ? `View conversations and student replies, or compose a new message for ${activeCourse.displayName}.`
+            : "View conversations across all courses. Select an active course to compose a new message."}
         </p>
       </header>
 
@@ -256,14 +247,27 @@ export function InstructorMessagesPage() {
           <TabsTrigger value="compose">Compose</TabsTrigger>
         </TabsList>
         <TabsContent value="inbox" className="mt-4">
-          <MessageInboxPanel courseId={activeCourse.localId} />
+          <MessageInboxPanel courseId={activeCourse?.localId} />
         </TabsContent>
         <TabsContent value="compose" className="mt-4 space-y-6">
-          <MessageDraftPageHeader />
-          <MessageDraftPage
-            key={draftSeedKey || "default-draft"}
-            fetchOptions={activeFetchOptions ?? fallbackFetchOptions ?? undefined}
-          />
+          {!activeCourse ? (
+            <Card className="shadow-sm ring-1 ring-border/60">
+              <CardContent className="p-6 text-sm text-muted-foreground">
+                Select an active course to compose a new message.
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <MessageDraftPageHeader />
+              <MessageDraftPage
+                key={draftSeedKey || "default-draft"}
+                fetchOptions={
+                  activeFetchOptions ?? fallbackFetchOptions ?? undefined
+                }
+                onCancel={() => setTab("inbox")}
+              />
+            </>
+          )}
         </TabsContent>
       </Tabs>
     </div>

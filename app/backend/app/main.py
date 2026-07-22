@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import logging
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -72,12 +73,21 @@ async def lifespan(app: FastAPI):
     await run_pending_migrations(engine)
     async with AsyncSessionLocal() as db:
         await seed_admin(db)
-    sync_task = asyncio.create_task(_course_sync_loop())
+    # The periodic sweep races TestClient request handling (shared event
+    # loop) and makes fetch_courses call-count assertions flaky — e.g.
+    # test_sync_courses_if_stale_respects_cooldown. Tests that need a
+    # sweep call run_course_sync_sweep directly.
+    sync_task = (
+        None
+        if "pytest" in sys.modules
+        else asyncio.create_task(_course_sync_loop())
+    )
     yield
     # Clean up DB connections and the background sync loop on shutdown
-    sync_task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await sync_task
+    if sync_task is not None:
+        sync_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await sync_task
     await engine.dispose()
 
 

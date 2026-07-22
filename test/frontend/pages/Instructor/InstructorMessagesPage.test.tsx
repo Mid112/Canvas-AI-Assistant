@@ -45,6 +45,11 @@ vi.mock("@/services/messageDraft", () => ({
   sendMessageDraft: vi.fn(),
 }));
 
+vi.mock("@/components/messages/MessageInboxPanel", () => ({
+  MessageInboxPanel: ({ courseId }: { courseId?: number }) =>
+    `inbox:${courseId == null ? "all" : courseId}`,
+}));
+
 const mockedFetchStudents = vi.mocked(fetchCourseStudentsWithSubmissionFallback);
 const mockedFetchDraft = vi.mocked(fetchMessageDraft);
 
@@ -125,8 +130,8 @@ describe("InstructorMessagesPage", () => {
     ).toBeInTheDocument();
   });
 
-  // Verifies: Without an active course, the page asks the instructor to select one.
-  it("asks the instructor to select an active course when none is set", () => {
+  // Verifies: Without an active course, inbox is still available (all courses).
+  it("shows the inbox without requiring an active course", () => {
     mockUseAuth.mockReturnValue({
       accessToken: "token",
       user: {
@@ -153,8 +158,11 @@ describe("InstructorMessagesPage", () => {
     renderWithRouter(<InstructorMessagesPage />);
 
     expect(
+      screen.getByRole("tab", { name: "Inbox & replies" }),
+    ).toBeInTheDocument();
+    expect(
       screen.getByText(
-        "Select an active course to view messages and draft new ones.",
+        "View conversations across all courses. Select an active course to compose a new message.",
       ),
     ).toBeInTheDocument();
   });

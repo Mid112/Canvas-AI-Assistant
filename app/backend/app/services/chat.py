@@ -66,6 +66,10 @@ from app.services.llm.response_cache import (
     is_safe_cache_response,
     store_cached_response,
 )
+from app.services.llm.student_context import (
+    format_llm_student_listing,
+    llm_student_candidates,
+)
 from app.services.quiz_validation import validate_quiz_for_create
 from app.services.resolved_set import (
     compute_submissions_by_status,
@@ -1171,11 +1175,7 @@ async def _resolve_students_via_llm(
         return {}
     result: dict[str, int | None] = dict.fromkeys(references)
     try:
-        listing = "\n".join(
-            f"- canvas_user_id={c.get('user_id')}, name={c.get('name')!r}, "
-            f"login_id={c.get('login_id')!r}, email={c.get('email')!r}"
-            for c in candidates
-        )
+        listing = format_llm_student_listing(candidates)
         prompt = (
             f"CANDIDATES:\n{listing}\n\n"
             f"References to resolve: {references}\n"
@@ -1265,15 +1265,7 @@ async def _run_update_grade_chain(
             execute_tool(db, user, fetch_action),
         )
         roster = roster_result.get("students", [])
-        candidates = [
-            {
-                "user_id": int(student["canvas_user_id"]),
-                "name": student.get("name"),
-                "login_id": student.get("login_id"),
-                "email": None,
-            }
-            for student in roster
-        ]
+        candidates = llm_student_candidates(roster)
         student_id = (
             await _resolve_students_via_llm(
                 candidates, [action.student_reference], user_message, adapter
@@ -1341,15 +1333,13 @@ async def _resolve_recipient_directives(
     can't be confidently resolved after both passes."""
     references = [d.student_reference for d in directives]
     known: dict[int, dict] = {
-        int(s["canvas_user_id"]): {
-            "user_id": int(s["canvas_user_id"]),
-            "name": s.get("name"),
-            "login_id": s.get("login_id"),
-            "email": None,
-        }
-        for s in roster
+        int(student["canvas_user_id"]): candidate
+        for student in roster
+        for candidate in llm_student_candidates([student])
     }
-    resolved = await _resolve_students_via_llm(list(known.values()), references, user_message, adapter)
+    resolved = await _resolve_students_via_llm(
+        list(known.values()), references, user_message, adapter
+    )
 
     unresolved = [ref for ref in references if resolved.get(ref) is None]
     if unresolved:
@@ -1359,11 +1349,15 @@ async def _resolve_recipient_directives(
             {"local_course_id": course.id, "scope": "all_assignments"},
             get_submission_derived_students(course, user, course.canvas_url),
         )
-        new_candidates = [s for s in fallback_students if s["user_id"] not in known]
+        new_candidates = llm_student_candidates(
+            [student for student in fallback_students if student["user_id"] not in known]
+        )
         for student in new_candidates:
             known[student["user_id"]] = student
         if new_candidates:
-            fallback_resolved = await _resolve_students_via_llm(new_candidates, unresolved, user_message, adapter)
+            fallback_resolved = await _resolve_students_via_llm(
+                new_candidates, unresolved, user_message, adapter
+            )
             for ref, candidate_id in fallback_resolved.items():
                 if candidate_id is not None:
                     resolved[ref] = candidate_id
@@ -1539,24 +1533,18 @@ async def _run_send_message_chain(
 async def _persist_additional_message_previews(
     db: AsyncSession,
     conversation: Conversation,
-    user: User,
-    user_msg: Message,
-    user_prompt: str,
     extra_groups: list[dict],
 ) -> list[dict]:
     """Persists every message group after the first from a grouped
     send_message turn (see _run_send_message_chain / _build_grouped_send_message_result)
     — group 0 already went through the ordinary single-preview persistence
     path in handle_chat_message, unchanged. Each of these is a brand-new
-    Message + Workflow row (pending_message_id=None always inserts, since
-    Workflow.preview_message_id is unique per row — no DB migration needed;
-    nothing enforces "at most one pending workflow per conversation" at the
-    schema level, that invariant was only ever app-level/frontend).
+    Message row so the transcript still shows every distinct body.
 
-    Phase 1: every group is shown at once, each independently
-    confirmable/cancelable. A later phase can queue these instead and
-    reveal them one at a time as earlier ones resolve, without changing
-    this persistence shape."""
+    send_message is a form-handoff action (Messages compose), so extras do
+    not get pending Workflow rows or pending_message_id — same as the
+    primary group. The client hands off the primary draft; additional
+    groups remain informational in the reply payload."""
     previews = []
     for entry in extra_groups:
         proposed_action = entry["proposed_action"]
@@ -1568,19 +1556,9 @@ async def _persist_additional_message_previews(
             "proposed_action": proposed_action,
             "preview_metadata": preview_metadata,
         }
-        assistant_msg = await log_message(
+        await log_message(
             db, conversation, role="assistant", content=_json_dumps(result)
         )
-        await _sync_workflow_for_preview(
-            db, conversation, user,
-            source_user_message_id=user_msg.id,
-            pending_message_id=None,
-            preview_message_id=assistant_msg.id,
-            user_prompt=user_prompt,
-            proposed_action=proposed_action,
-            affected_resources=preview_metadata.get("affected_resources", []),
-        )
-        result["pending_message_id"] = assistant_msg.id
         previews.append(result)
     return previews
 
@@ -2900,9 +2878,13 @@ async def handle_chat_message(
 
     if result.get("intent_preview"):
         proposed_action = result.get("proposed_action", {})
-        # create_quiz redirects to the dedicated form — skip creating a
-        # pending Workflow since the form records audit on approve.
-        if proposed_action.get("action") != "create_quiz":
+        # Form-handoff actions redirect to dedicated UIs that record audit on
+        # approve — skip creating a pending Workflow here.
+        if proposed_action.get("action") not in {
+            "create_quiz",
+            "send_message",
+            "update_grade",
+        }:
             preview_metadata = result.get("preview_metadata") or {}
             await _sync_workflow_for_preview(
                 db, conversation, user,
@@ -2931,7 +2913,7 @@ async def handle_chat_message(
     if extra_groups:
         if result.get("intent_preview"):
             result["additional_previews"] = await _persist_additional_message_previews(
-                db, conversation, user, user_msg, message, extra_groups,
+                db, conversation, extra_groups,
             )
         else:
             logger.error(
@@ -2958,10 +2940,10 @@ async def handle_chat_message(
             )
 
     # attach the stored message ID so the client can confirm by ID.
-    # create_quiz is handed off to the form and is not confirmable in chat.
+    # Form-handoff actions are not confirmable in chat.
     if result.get("intent_preview") and (
         result.get("proposed_action") or {}
-    ).get("action") != "create_quiz":
+    ).get("action") not in {"create_quiz", "send_message", "update_grade"}:
         result["pending_message_id"] = assistant_msg.id
 
     return conversation, result, False

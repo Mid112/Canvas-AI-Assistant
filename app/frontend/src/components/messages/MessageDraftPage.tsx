@@ -80,7 +80,16 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
       const loadedDraft = await fetchMessageDraft(accessToken, fetchOptions);
       setDraft(loadedDraft);
       setRecipients(loadedDraft.recipients);
-      setSelectedRecipientIds(new Set(loadedDraft.recipients.map((r) => r.id)));
+      const preferred = fetchOptions?.preSelectedIds;
+      setSelectedRecipientIds(
+        preferred && preferred.length > 0
+          ? new Set(
+              loadedDraft.recipients
+                .map((recipient) => recipient.id)
+                .filter((id) => preferred.includes(id)),
+            )
+          : new Set(loadedDraft.recipients.map((recipient) => recipient.id)),
+      );
       reset({
         subject: loadedDraft.subject,
         body: loadedDraft.body,
@@ -187,6 +196,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
         body: bodyValue.trim(),
         recipientIds: selectedRecipients.map((recipient) => recipient.id),
         recipients: selectedRecipients,
+        conversationId: fetchOptions?.conversationId,
       });
 
       setIsConfirmOpen(false);

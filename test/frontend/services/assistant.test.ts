@@ -351,6 +351,39 @@ describe("conversation history helpers", () => {
       content: "[URGENT] Please help with grading",
     });
   });
+
+  it("does not invent pending controls for create_quiz form handoffs", () => {
+    const messages = mapConversationToChatMessages({
+      id: 9,
+      course_id: 3,
+      created_at: "2026-07-01T12:00:00Z",
+      messages: [
+        {
+          id: 22,
+          role: "assistant",
+          content: JSON.stringify({
+            intent_preview: true,
+            summary: "Create Recursion Quiz.",
+            proposed_action: {
+              action: "create_quiz",
+              local_course_id: 3,
+              title: "Recursion Quiz",
+              questions: [],
+            },
+            preview_metadata: { course: "CPSC 310" },
+          }),
+          created_at: "2026-07-01T12:01:00Z",
+          pending_action_status: null,
+        },
+      ],
+    });
+
+    expect(messages[0].pendingMessageId).toBeUndefined();
+    expect(messages[0].pendingActionStatus).toBeUndefined();
+    expect(messages[0].interpretedAction?.primaryLink?.href).toBe(
+      "/instructor/quizzes/create",
+    );
+  });
 });
 
 describe("confirmAssistantAction", () => {

@@ -96,13 +96,19 @@ function toAssistantMessageResult(
     response.conversation_id,
   );
 
+  // Form-handoff actions (quiz / message / feedback) navigate away and are
+  // never confirmable in chat — never reattach a pending id from the raw
+  // reply after the mapper intentionally omitted it.
+  const pendingMessageId = mapped.navigateTo
+    ? undefined
+    : typeof response.reply.pending_message_id === "number"
+      ? response.reply.pending_message_id
+      : mapped.pendingMessageId;
+
   return {
     ...mapped,
     conversationId: response.conversation_id,
-    pendingMessageId:
-      typeof response.reply.pending_message_id === "number"
-        ? response.reply.pending_message_id
-        : mapped.pendingMessageId,
+    pendingMessageId,
   };
 }
 
@@ -167,15 +173,23 @@ export function mapConversationToChatMessages(
       const mapped = reply
         ? mapChatReplyToAssistantResponse(reply, false, conversation.id)
         : { content: message.content };
+
+      // Form-handoff previews (create_quiz / send_message / update_grade) are
+      // offered as dedicated forms — they have no pending Workflow to
+      // confirm/cancel, so never invent PendingActionControls for them.
+      const isFormHandoff = Boolean(
+        "navigateTo" in mapped && mapped.navigateTo,
+      );
       const workflowStatus = workflowStatuses[message.id]?.status;
-      const pendingActionStatus =
-        mapWorkflowStatus(workflowStatus) ??
-        mapWorkflowStatus(message.pending_action_status) ??
-        (reply && "intent_preview" in reply && reply.intent_preview
-          ? "pending"
-          : undefined);
+      const pendingActionStatus = isFormHandoff
+        ? undefined
+        : mapWorkflowStatus(workflowStatus) ??
+          mapWorkflowStatus(message.pending_action_status) ??
+          (reply && "intent_preview" in reply && reply.intent_preview
+            ? "pending"
+            : undefined);
       const pendingMessageId =
-        pendingActionStatus ? message.id : undefined;
+        !isFormHandoff && pendingActionStatus ? message.id : undefined;
 
       return [{
         id: `stored-${message.id}`,

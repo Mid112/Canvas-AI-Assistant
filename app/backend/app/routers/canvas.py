@@ -25,6 +25,9 @@ from app.schemas.preview import (
     ActionPreviewResponse,
     AssignmentDraftRequest,
     AssignmentDraftResponse,
+    FeedbackDraftRequest,
+    FeedbackDraftResponse,
+    FeedbackPostRequest,
     QuizDraftRequest,
     QuizDraftResponse,
 )
@@ -45,13 +48,18 @@ from app.services.canvas import (
     get_submissions,
     set_active_course,
     update_course_assignment,
+    update_course_grade,
 )
 from app.services.course_overview import get_course_overview
 from app.services.dashboard import get_instructor_dashboard
+from app.services.feedback_audit import record_feedback_post_history
+from app.services.feedback_draft import generate_feedback_draft
+from app.services.feedback_validation import validate_feedback_for_post
 from app.services.preview import build_action_preview
 from app.services.quiz_draft import generate_quiz_draft
 from app.services.quiz_validation import short_answer_new_quiz_warnings
 from app.services.student import get_students
+from app.services.write_preview import generate_write_preview
 
 router = APIRouter(prefix="/canvas", tags=["canvas"])
 
@@ -145,6 +153,122 @@ async def create_assignment_endpoint(
     db: AsyncSession = Depends(get_db),
 ):
     return await create_course_assignment(course_id, body, current_user, canvas_url, db)
+
+
+@router.post(
+    "/courses/{course_id}/feedback/generate-draft",
+    response_model=FeedbackDraftResponse,
+)
+async def generate_feedback_draft_endpoint(
+    course_id: int,
+    body: FeedbackDraftRequest,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await generate_feedback_draft(
+        course_id, body, current_user, canvas_url, db
+    )
+
+
+@router.post("/courses/{course_id}/feedback/preview", response_model=ActionPreviewResponse)
+async def preview_feedback_endpoint(
+    course_id: int,
+    body: FeedbackPostRequest,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    course = await validate_feedback_for_post(
+        course_id,
+        body.assignment_id,
+        body.student_id,
+        body.new_grade,
+        current_user,
+        canvas_url,
+        db,
+        feedback=body.feedback,
+    )
+    proposed = {
+        "action": "update_grade",
+        "local_course_id": course_id,
+        "assignment_id": body.assignment_id,
+        "student_id": body.student_id,
+        "assignment_reference": body.assignment_name,
+        "student_reference": body.student_name,
+        "new_grade": body.new_grade,
+        "feedback": body.feedback,
+    }
+    preview = generate_write_preview(proposed, course)
+    return ActionPreviewResponse(
+        action="update_grade",
+        summary=preview["summary"],
+        metadata=preview["metadata"],
+        reversible=preview["reversible"],
+        affected_resources=preview["affected_resources"],
+        risk_level=preview["risk_level"],
+    )
+
+
+@router.post("/courses/{course_id}/feedback")
+async def post_feedback_endpoint(
+    course_id: int,
+    body: FeedbackPostRequest,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    conversation_id: int | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    course = await validate_feedback_for_post(
+        course_id,
+        body.assignment_id,
+        body.student_id,
+        body.new_grade,
+        current_user,
+        canvas_url,
+        db,
+        feedback=body.feedback,
+    )
+    submission = await update_course_grade(
+        course_id,
+        body.assignment_id,
+        body.student_id,
+        body.new_grade.strip(),
+        current_user,
+        canvas_url,
+        db,
+        feedback=body.feedback.strip(),
+    )
+    proposed_action = {
+        "action": "update_grade",
+        "local_course_id": course_id,
+        "assignment_id": body.assignment_id,
+        "student_id": body.student_id,
+        "assignment_reference": body.assignment_name,
+        "student_reference": body.student_name,
+        "new_grade": body.new_grade,
+        "feedback": body.feedback,
+    }
+    await record_feedback_post_history(
+        db,
+        current_user,
+        course_id=course_id,
+        course_name=course.name,
+        proposed_action=proposed_action,
+        submission_result=submission,
+        user_prompt=(
+            f"Post feedback for {body.student_name} on {body.assignment_name}"
+        ),
+        conversation_id=conversation_id,
+    )
+    await db.commit()
+    return {
+        "assignment_id": body.assignment_id,
+        "student_id": body.student_id,
+        "submission_id": submission.get("id"),
+        "posted_grade": body.new_grade,
+        "feedback": body.feedback,
+    }
 
 
 @router.get("/courses/{course_id}/quizzes", response_model=list[QuizResponse])
