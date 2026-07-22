@@ -356,7 +356,7 @@ export function AiModelsSettingsTab() {
               <span className="font-medium text-emerald-700">Green</span> means
               connected (ready to use).{" "}
               <span className="font-medium text-sky-700">Blue / Active</span> is
-              the one currently preferred for chat. Grey cards still need an API
+              your preferred chat provider on this browser. Grey cards still need an API
               key or local runtime — expand one to connect it.
             </p>
           </div>

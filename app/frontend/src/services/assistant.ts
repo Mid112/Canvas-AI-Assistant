@@ -22,6 +22,7 @@ export interface SendAssistantMessageOptions {
   conversationId?: number;
   localCourseId?: number;
   pendingMessageId?: number;
+  deferredRequestId?: number;
   context?: AssistantContext;
   modelSettings?: LlmProviderSettings;
 }
@@ -152,6 +153,8 @@ function mapWorkflowStatus(
 export function mapConversationToChatMessages(
   conversation: ConversationResponse,
 ): ChatMessage[] {
+  const workflowStatuses = conversation.workflow_statuses ?? {};
+
   return conversation.messages.flatMap((message): ChatMessage[] => {
     const timestamp = new Date(message.created_at);
 
@@ -164,9 +167,13 @@ export function mapConversationToChatMessages(
       const mapped = reply
         ? mapChatReplyToAssistantResponse(reply, false, conversation.id)
         : { content: message.content };
-      const pendingActionStatus = mapWorkflowStatus(
-        message.pending_action_status,
-      ) ?? (reply?.intent_preview ? "pending" : undefined);
+      const workflowStatus = workflowStatuses[message.id]?.status;
+      const pendingActionStatus =
+        mapWorkflowStatus(workflowStatus) ??
+        mapWorkflowStatus(message.pending_action_status) ??
+        (reply && "intent_preview" in reply && reply.intent_preview
+          ? "pending"
+          : undefined);
       const pendingMessageId =
         pendingActionStatus ? message.id : undefined;
 
@@ -183,6 +190,12 @@ export function mapConversationToChatMessages(
         interpretedAction: mapped.interpretedAction,
         safetyBlocked: mapped.safetyBlocked,
         safetyMessage: mapped.safetyMessage,
+        requiresCanvasToken:
+          "requiresCanvasToken" in mapped
+            ? mapped.requiresCanvasToken
+            : undefined,
+        deferredRequestId:
+          "deferredRequestId" in mapped ? mapped.deferredRequestId : undefined,
       }];
     }
 
@@ -220,6 +233,7 @@ export async function sendAssistantMessage(
         conversation_id: options.conversationId,
         local_course_id: localCourseId,
         pending_message_id: options.pendingMessageId,
+        deferred_request_id: options.deferredRequestId,
         model_settings: modelSettings
           ? {
               provider: modelSettings.provider,
@@ -384,6 +398,21 @@ export async function resumeDeferredAssistantRequest(
   try {
     return await apiRequest<DeferredAssistantRequest>(
       `/chat/deferred/${deferredId}/resume`,
+      accessToken,
+      { method: "POST" },
+    );
+  } catch (error) {
+    wrapRequestError(error);
+  }
+}
+
+export async function cancelDeferredAssistantRequest(
+  accessToken: string,
+  deferredId: number,
+): Promise<DeferredAssistantRequest> {
+  try {
+    return await apiRequest<DeferredAssistantRequest>(
+      `/chat/deferred/${deferredId}/cancel`,
       accessToken,
       { method: "POST" },
     );

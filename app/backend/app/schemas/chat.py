@@ -167,6 +167,9 @@ class ChatRequest(BaseModel):
     # The backend accepts a provider/model preference but resolves credentials
     # server-side. Client base URLs and API keys are never honored directly.
     model_settings: ModelSettings | None = None
+    # When replaying a saved limited-mode request, the chat turn completes the
+    # deferred row only after a successful (non-limited-mode) reply.
+    deferred_request_id: int | None = None
 
 
 class ChatResponse(BaseModel):

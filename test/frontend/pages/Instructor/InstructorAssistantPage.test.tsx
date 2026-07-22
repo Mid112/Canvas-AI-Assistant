@@ -154,7 +154,7 @@ describe("InstructorAssistantPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("resumes only the next deferred request and keeps the rest queued", async () => {
+    it("resumes only the next deferred request and keeps the rest queued until send succeeds", async () => {
     const user = userEvent.setup();
 
     mockListDeferred.mockResolvedValue({
@@ -193,9 +193,9 @@ describe("InstructorAssistantPage", () => {
       conversation_id: null,
       message: "Third deferred",
       proposed_action: null,
-      status: "resumed",
+      status: "deferred",
       created_at: "2026-07-21T12:03:00.000Z",
-      resumed_at: "2026-07-21T12:10:00.000Z",
+      resumed_at: null,
     });
 
     renderWithInstitution(<InstructorAssistantPage />);
@@ -210,6 +210,7 @@ describe("InstructorAssistantPage", () => {
       expect(mockResumeDeferred).toHaveBeenCalledTimes(1);
     });
     expect(mockResumeDeferred).toHaveBeenCalledWith("token", 3);
+    // Resume peeks without consuming — queue stays until chat send succeeds.
     expect(
       await screen.findByRole("button", { name: "Resume next request" }),
     ).toBeInTheDocument();

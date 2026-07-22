@@ -1,7 +1,7 @@
 -- Rename the auto-generated UNIQUE constraint from older 01_schema.sql
 -- snapshots (cache_key VARCHAR UNIQUE → llm_response_cache_cache_key_key)
 -- to the named constraint used by the SQLAlchemy model. Idempotent when
--- the named constraint already exists (migration 021 / current init).
+-- the named constraint already exists (migration 024 / current init).
 
 DO $$
 BEGIN

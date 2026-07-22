@@ -7,14 +7,14 @@ interface AssistantLimitedModeBannerProps {
   deferredCount?: number;
   /** When true, copy focuses on resuming after Canvas is already connected. */
   resumeOnly?: boolean;
-  onResumeAll?: () => void;
+  onResumeNext?: () => void;
   isResuming?: boolean;
 }
 
 export function AssistantLimitedModeBanner({
   deferredCount = 0,
   resumeOnly = false,
-  onResumeAll,
+  onResumeNext,
   isResuming = false,
 }: AssistantLimitedModeBannerProps) {
   return (
@@ -36,13 +36,13 @@ export function AssistantLimitedModeBanner({
             Connect Canvas
           </Button>
         )}
-        {deferredCount > 0 && onResumeAll ? (
+        {deferredCount > 0 && onResumeNext ? (
           <Button
             type="button"
             variant={resumeOnly ? "default" : "outline"}
             size="sm"
             disabled={isResuming}
-            onClick={onResumeAll}
+            onClick={onResumeNext}
           >
             {isResuming
               ? "Preparing…"

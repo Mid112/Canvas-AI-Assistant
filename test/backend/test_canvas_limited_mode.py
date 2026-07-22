@@ -149,8 +149,26 @@ def test_resume_deferred_requires_canvas_credentials(client):
         headers=headers,
     )
     assert resumed.status_code == 200
-    assert resumed.json()["status"] == "resumed"
+    assert resumed.json()["status"] == "deferred"
     assert resumed.json()["message"] == "Show courses"
+
+    still_queued = client.get("/api/v1/chat/deferred", headers=headers)
+    assert len(still_queued.json()["items"]) == 1
+
+    mock_adapter.generate.return_value = (
+        '{"action": "respond", "message": "Here are your courses."}'
+    )
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        replay = client.post(
+            "/api/v1/chat/",
+            json={
+                "message": "Show courses",
+                "deferred_request_id": deferred_id,
+            },
+            headers=headers,
+        )
+    assert replay.status_code == 200, replay.json()
+    assert replay.json()["is_error"] is False
 
     empty = client.get("/api/v1/chat/deferred", headers=headers)
     assert empty.json()["items"] == []

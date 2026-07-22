@@ -46,11 +46,17 @@ async def list_deferred_assistant_requests(
     return list(rows)
 
 
-async def mark_deferred_request_resumed(
+async def get_deferred_request_for_resume(
     db: AsyncSession,
     user: User,
     deferred_id: int,
 ) -> DeferredAssistantRequest:
+    """Validate ownership/Canvas and return the queued request without consuming it.
+
+    Status stays ``deferred`` until chat successfully replays the message via
+    ``mark_deferred_request_resumed``. That way a failed or abandoned resume
+    leaves the request recoverable in the queue.
+    """
     if not user_has_canvas_credentials(user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -67,7 +73,38 @@ async def mark_deferred_request_resumed(
             status_code=status.HTTP_409_CONFLICT,
             detail="This deferred request was already resumed or cancelled.",
         )
+    return row
+
+
+async def mark_deferred_request_resumed(
+    db: AsyncSession,
+    user: User,
+    deferred_id: int,
+) -> DeferredAssistantRequest:
+    row = await get_deferred_request_for_resume(db, user, deferred_id)
     row.status = "resumed"
+    row.resumed_at = datetime.now(UTC)
+    await db.flush()
+    return row
+
+
+async def cancel_deferred_request(
+    db: AsyncSession,
+    user: User,
+    deferred_id: int,
+) -> DeferredAssistantRequest:
+    row = await db.get(DeferredAssistantRequest, deferred_id)
+    if row is None or row.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Deferred request not found.",
+        )
+    if row.status != "deferred":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This deferred request was already resumed or cancelled.",
+        )
+    row.status = "cancelled"
     row.resumed_at = datetime.now(UTC)
     await db.flush()
     return row

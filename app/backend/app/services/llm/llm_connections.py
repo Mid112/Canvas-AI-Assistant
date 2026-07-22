@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 
 from cryptography.fernet import InvalidToken
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decrypt_llm_api_key, encrypt_llm_api_key
 from app.models.instructor_llm_connection import InstructorLlmConnection
+from app.services.llm.base_url_validation import validate_llm_base_url
 from app.services.llm.provider_registry import (
     KNOWN_PROVIDER_IDS,
     ProviderDefinition,
@@ -45,11 +47,10 @@ def _has_custom_credentials(connection: InstructorLlmConnection | None) -> bool:
 def _decrypt_stored_api_key(encrypted_api_key: str) -> str:
     try:
         return decrypt_llm_api_key(encrypted_api_key)
-    except InvalidToken:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="LLM API key is corrupted — please reconnect this provider in Settings.",
-        )
+    except InvalidToken as exc:
+        raise ValueError(
+            "LLM API key is corrupted — please reconnect this provider in Settings."
+        ) from exc
 
 
 def provider_accepts_user_key(definition: ProviderDefinition) -> bool:
@@ -95,10 +96,9 @@ async def build_instructor_provider_catalog(
 ) -> list[dict]:
     connections = await get_user_connections(db, user_id)
     definitions = list_provider_definitions()
-    health = [
-        await check_provider_health(definition)
-        for definition in definitions
-    ]
+    health = await asyncio.gather(
+        *[check_provider_health(definition) for definition in definitions]
+    )
 
     catalog: list[dict] = []
     for definition, health_info in zip(definitions, health, strict=True):
@@ -244,7 +244,27 @@ async def upsert_llm_connection(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail="An API key is required to connect this provider.",
             )
-        normalized_base_url = effective_base_url
+        effective_model = normalized_model or (
+            connection.model if connection and connection.model else None
+        )
+        if not effective_model:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="A model name is required for custom providers.",
+            )
+        normalized_base_url = validate_llm_base_url(effective_base_url)
+        normalized_model = effective_model
+    elif definition.hosting == "local":
+        if normalized_api_key:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Local providers do not use API keys.",
+            )
+        if normalized_base_url:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="Local providers use the server-configured endpoint.",
+            )
     elif provider_requires_user_key(definition):
         if not normalized_api_key and not _has_user_credentials(connection):
             raise HTTPException(

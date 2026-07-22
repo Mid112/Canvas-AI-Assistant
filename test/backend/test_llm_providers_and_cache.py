@@ -33,9 +33,10 @@ from app.services.llm.response_cache import (
 
 
 class StubAdapter(LLMAdapter):
-    def __init__(self, result: str = "ok", error: Exception | None = None):
+    def __init__(self, result: str = "ok", error: Exception | None = None, model: str = "stub-model"):
         self.result = result
         self.error = error
+        self.model = model
         self.calls = 0
 
     async def generate(
@@ -111,6 +112,7 @@ def test_observable_adapter_fails_over_on_provider_transport_error():
     assert primary.calls == 1
     assert fallback.calls == 1
     assert adapter.last_provider == "groq"
+    assert adapter.last_model == "stub-model"
 
 
 def test_observable_adapter_does_not_fail_over_on_validation_error():
@@ -349,7 +351,6 @@ def test_corrupted_llm_api_key_asks_instructor_to_reconnect():
     from unittest.mock import patch
 
     from cryptography.fernet import InvalidToken
-    from fastapi import HTTPException
 
     from app.services.llm.llm_connections import _decrypt_stored_api_key
 
@@ -357,11 +358,50 @@ def test_corrupted_llm_api_key_asks_instructor_to_reconnect():
         "app.services.llm.llm_connections.decrypt_llm_api_key",
         side_effect=InvalidToken,
     ):
-        with pytest.raises(HTTPException) as error:
+        with pytest.raises(ValueError, match="reconnect"):
             _decrypt_stored_api_key("corrupted")
 
-    assert error.value.status_code == 403
-    assert "reconnect" in error.value.detail.lower()
+
+def test_custom_base_url_rejects_private_and_loopback_targets():
+    from app.services.llm.base_url_validation import validate_llm_base_url
+
+    assert (
+        validate_llm_base_url("https://api.example.com/v1")
+        == "https://api.example.com/v1"
+    )
+
+    with pytest.raises(HTTPException) as loopback:
+        validate_llm_base_url("http://127.0.0.1:8000/v1")
+    assert loopback.value.status_code == 422
+
+    with pytest.raises(HTTPException) as private:
+        validate_llm_base_url("http://10.0.0.5/v1")
+    assert private.value.status_code == 422
+
+    with pytest.raises(HTTPException) as with_creds:
+        validate_llm_base_url("https://user:pass@api.example.com/v1")
+    assert with_creds.value.status_code == 422
+
+
+def test_local_provider_upsert_rejects_api_keys():
+    from app.services.llm.llm_connections import upsert_llm_connection
+
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=None)
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(
+            upsert_llm_connection(
+                db,
+                1,
+                "ollama",
+                api_key="should-not-be-stored",
+                model="llama3.2",
+            )
+        )
+
+    assert error.value.status_code == 422
+    assert "do not use API keys" in error.value.detail
 
 
 def test_redact_secrets_strips_common_api_key_shapes():

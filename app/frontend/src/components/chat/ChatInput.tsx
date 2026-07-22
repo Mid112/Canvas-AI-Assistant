@@ -93,7 +93,7 @@ export function ChatInput({
                 settings={modelSettings}
                 providers={llmProviders}
                 onProviderChange={onModelProviderChange}
-                disabled={isDisabled}
+                disabled={isDisabled || isLoading}
               />
             ) : (
               <span className="px-2 text-xs text-muted-foreground">Model</span>

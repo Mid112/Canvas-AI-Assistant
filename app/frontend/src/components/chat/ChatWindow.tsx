@@ -103,11 +103,13 @@ interface ChatWindowProps {
   initialDraft?: string | null;
   initialConversationId?: number;
   initialPendingMessageId?: number;
+  initialDeferredRequestId?: number | null;
   loadedConversation?: ConversationResponse | null;
   onInitialPromptConsumed?: () => void;
   onModifyContextConsumed?: () => void;
   onConversationChange?: (conversationId: number) => void;
   onDeferredRequest?: () => void;
+  onDeferredResumeComplete?: () => void;
   onLoadingChange?: (isLoading: boolean) => void;
   onStartNewChat?: () => void;
   modelSettings?: LlmProviderSettings | null;
@@ -124,11 +126,13 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   initialDraft = null,
   initialConversationId,
   initialPendingMessageId,
+  initialDeferredRequestId = null,
   loadedConversation = null,
   onInitialPromptConsumed,
   onModifyContextConsumed,
   onConversationChange,
   onDeferredRequest,
+  onDeferredResumeComplete,
   onLoadingChange,
   onStartNewChat,
   modelSettings = null,
@@ -193,6 +197,9 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
     initialChatState.hydratedConversationId,
   );
   const isDeliveringRef = useRef(false);
+  const deferredRequestIdRef = useRef<number | null>(
+    initialDeferredRequestId ?? null,
+  );
 
   const assistantContext = useMemo(
     () => ({
@@ -416,6 +423,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           context: assistantContext,
           conversationId,
           pendingMessageId: pendingMessageIdToSend,
+          deferredRequestId: deferredRequestIdRef.current ?? undefined,
           modelSettings: modelSettings ?? undefined,
         });
 
@@ -443,6 +451,9 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
             deferredRequestId: response.deferredRequestId,
           });
           onDeferredRequest?.();
+        } else if (deferredRequestIdRef.current != null) {
+          deferredRequestIdRef.current = null;
+          onDeferredResumeComplete?.();
         }
         appendAssistantMessage(response);
         setRetryMessage(null);
@@ -466,6 +477,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       modelSettings,
       onConversationChange,
       onDeferredRequest,
+      onDeferredResumeComplete,
       onModifyContextConsumed,
       user?.id,
     ],

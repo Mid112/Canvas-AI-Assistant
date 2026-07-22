@@ -207,6 +207,12 @@ class ObservableAdapter(LLMAdapter):
         self.primary = primary
         self.fallback = fallback
         self.last_provider = primary[0]
+        self.last_model = self._adapter_model(primary[1])
+
+    @staticmethod
+    def _adapter_model(adapter: LLMAdapter) -> str | None:
+        model = getattr(adapter, "model", None)
+        return model if isinstance(model, str) and model.strip() else None
 
     async def generate(
         self,
@@ -222,6 +228,7 @@ class ObservableAdapter(LLMAdapter):
                 system_prompt, user_message, timeout=timeout, history=history
             )
             self.last_provider = provider_id
+            self.last_model = self._adapter_model(adapter)
             logger.info(
                 "llm_execution provider=%s outcome=success duration_ms=%d",
                 provider_id,
@@ -243,6 +250,7 @@ class ObservableAdapter(LLMAdapter):
             system_prompt, user_message, timeout=timeout, history=history
         )
         self.last_provider = fallback_id
+        self.last_model = self._adapter_model(fallback_adapter)
         logger.info(
             "llm_execution provider=%s outcome=fallback_success duration_ms=%d",
             fallback_id,

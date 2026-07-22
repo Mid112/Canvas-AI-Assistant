@@ -50,7 +50,7 @@ from app.services.canvas_assistant_gate import (
     classify_action_for_limited_mode,
     user_has_canvas_credentials,
 )
-from app.services.deferred_assistant import defer_assistant_request
+from app.services.deferred_assistant import defer_assistant_request, mark_deferred_request_resumed
 from app.services.llm.base import LLMAdapter
 from app.services.llm.json_extraction import extract_json_object
 from app.services.llm.llm_connections import resolve_instructor_llm_request
@@ -2323,6 +2323,7 @@ async def handle_chat_message(
     conversation_id: int | None,
     pending_message_id: int | None = None,
     model_settings: dict | None = None,
+    deferred_request_id: int | None = None,
 ) -> tuple[Conversation, dict, bool]:
     """Main chat handler. Two distinct flows:
 
@@ -2507,7 +2508,11 @@ async def handle_chat_message(
             system_prompt=system_prompt,
             llm_message=first_llm_message,
         )
-        cached_raw_output = await get_cached_response(db, cache_key)
+        cached_raw_output = await get_cached_response(
+            db,
+            cache_key=cache_key,
+            user_id=user.id,
+        )
 
     # Step loop: lets the model chain a bounded sequence of read/resolver
     # decisions within this ONE user turn, instead of every read
@@ -2866,7 +2871,7 @@ async def handle_chat_message(
             user_id=user.id,
             cache_key=cache_key,
             provider=adapter.last_provider,
-            model=selected_model,
+            model=adapter.last_model or selected_model,
             response=raw_output,
             ttl_seconds=llm_config.cache_ttl_seconds,
         )
@@ -2935,6 +2940,9 @@ async def handle_chat_message(
                 len(extra_groups),
                 result.get("action"),
             )
+
+    if deferred_request_id is not None:
+        await mark_deferred_request_resumed(db, user, deferred_request_id)
 
     await db.commit()
 

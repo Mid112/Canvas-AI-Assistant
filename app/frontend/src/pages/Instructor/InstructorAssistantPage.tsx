@@ -123,8 +123,13 @@ export function InstructorAssistantPage() {
   const [deferredRequests, setDeferredRequests] = useState<
     DeferredAssistantRequest[]
   >([]);
+  const [deferredListLoaded, setDeferredListLoaded] = useState(false);
   const [isResumingDeferred, setIsResumingDeferred] = useState(false);
+  const [pendingDeferredRequestId, setPendingDeferredRequestId] = useState<
+    number | null
+  >(null);
   const chatWindowRef = useRef<ChatWindowHandle>(null);
+  const conversationLoadRequestRef = useRef(0);
   const limitedMode = Boolean(user && !user.has_canvas_token);
 
   const loadConversationList = useCallback(async () => {
@@ -161,6 +166,8 @@ export function InstructorAssistantPage() {
       setDeferredRequests(response.items);
     } catch {
       // Banner still works without the count; chat remains usable.
+    } finally {
+      setDeferredListLoaded(true);
     }
   }, [accessToken]);
 
@@ -198,23 +205,34 @@ export function InstructorAssistantPage() {
   }, [accessToken, user]);
 
   // After Canvas is connected, restore any locally cached deferred draft into
-  // the composer so the instructor can resume without retyping. Schedule
-  // setState asynchronously — synchronous setState in an effect body trips
-  // react-hooks/set-state-in-effect.
+  // the composer only when the server queue is empty. The server queue is the
+  // source of truth once requests are deferred — restoring a local draft while
+  // the same request is still queued would duplicate it.
   useEffect(() => {
-    if (!user?.has_canvas_token) return;
+    if (!user?.has_canvas_token || !user.id || !deferredListLoaded) return;
     const draft = getStoredDeferredDraft(user.id);
     if (!draft?.message) return;
     clearStoredDeferredDraft(user.id);
+    if (deferredRequests.length > 0) {
+      return;
+    }
     const timer = window.setTimeout(() => {
       setPendingDraft(draft.message);
       if (draft.conversationId !== undefined) {
         setPendingConversationId(draft.conversationId);
       }
+      if (draft.deferredRequestId != null) {
+        setPendingDeferredRequestId(draft.deferredRequestId);
+      }
       setChatSessionKey((current) => current + 1);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [user?.has_canvas_token, user?.id]);
+  }, [
+    deferredListLoaded,
+    deferredRequests.length,
+    user?.has_canvas_token,
+    user?.id,
+  ]);
 
   const handleModelProviderChange = useCallback(
     (providerId: LlmProviderId) => {
@@ -242,6 +260,7 @@ export function InstructorAssistantPage() {
     setPendingPrompt(null);
     setPendingConversationId(undefined);
     setPendingMessageId(undefined);
+    setPendingDeferredRequestId(null);
     setHistoryError(null);
     setChatSessionKey((current) => current + 1);
   };
@@ -251,25 +270,36 @@ export function InstructorAssistantPage() {
       return;
     }
 
+    const requestId = conversationLoadRequestRef.current + 1;
+    conversationLoadRequestRef.current = requestId;
     setLoadingConversationId(conversationId);
     setHistoryError(null);
 
     try {
       const conversation = await fetchConversation(accessToken, conversationId);
+      if (conversationLoadRequestRef.current !== requestId) {
+        return;
+      }
       setSelectedConversation(conversation);
       setPendingDraft(null);
       setPendingPrompt(null);
+      setPendingDeferredRequestId(null);
       setPendingConversationId(conversation.id);
       setPendingMessageId(undefined);
       setChatSessionKey((current) => current + 1);
     } catch (requestError) {
+      if (conversationLoadRequestRef.current !== requestId) {
+        return;
+      }
       setHistoryError(
         requestError instanceof AssistantApiError
           ? requestError.message
           : "Unable to load this conversation.",
       );
     } finally {
-      setLoadingConversationId(null);
+      if (conversationLoadRequestRef.current === requestId) {
+        setLoadingConversationId(null);
+      }
     }
   };
 
@@ -285,15 +315,15 @@ export function InstructorAssistantPage() {
 
     setIsResumingDeferred(true);
     try {
-      const [first, ...rest] = deferredRequests;
+      const [first] = deferredRequests;
       const resumed = await resumeDeferredAssistantRequest(accessToken, first.id);
       setPendingPrompt(resumed.message);
+      setPendingDeferredRequestId(resumed.id);
       if (resumed.conversation_id != null) {
         setPendingConversationId(resumed.conversation_id);
       }
       setSelectedConversation(null);
       setChatSessionKey((current) => current + 1);
-      setDeferredRequests(rest);
       if (user) {
         clearStoredDeferredDraft(user.id);
       }
@@ -318,7 +348,7 @@ export function InstructorAssistantPage() {
         <AssistantLimitedModeBanner
           resumeOnly
           deferredCount={deferredRequests.length}
-          onResumeAll={() => void handleResumeDeferred()}
+          onResumeNext={() => void handleResumeDeferred()}
           isResuming={isResumingDeferred}
         />
       ) : null}
@@ -339,6 +369,7 @@ export function InstructorAssistantPage() {
           initialDraft={pendingDraft}
           initialConversationId={pendingConversationId}
           initialPendingMessageId={pendingMessageId}
+          initialDeferredRequestId={pendingDeferredRequestId}
           loadedConversation={selectedConversation}
           onInitialPromptConsumed={() => setPendingPrompt(null)}
           onModifyContextConsumed={() => {
@@ -348,6 +379,10 @@ export function InstructorAssistantPage() {
           }}
           onConversationChange={handleConversationChange}
           onDeferredRequest={() => void loadDeferredRequests()}
+          onDeferredResumeComplete={() => {
+            setPendingDeferredRequestId(null);
+            void loadDeferredRequests();
+          }}
           onLoadingChange={setIsLoading}
           onStartNewChat={handleStartNewChat}
           modelSettings={llmSettings}

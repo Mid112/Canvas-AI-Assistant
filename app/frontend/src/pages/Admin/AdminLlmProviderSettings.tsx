@@ -153,11 +153,21 @@ export function AdminLlmProviderSettings() {
                 });
               }}
             >
-              {data.providers.map((provider) => (
-                <option key={provider.id} value={provider.id}>
-                  {provider.name}
-                </option>
-              ))}
+              {data.providers
+                .filter(
+                  (provider) =>
+                    provider.configured ||
+                    provider.hosting === "local" ||
+                    provider.id === config.provider,
+                )
+                .map((provider) => (
+                  <option key={provider.id} value={provider.id}>
+                    {provider.name}
+                    {provider.configured || provider.hosting === "local"
+                      ? ""
+                      : " (unavailable)"}
+                  </option>
+                ))}
             </select>
           </div>
 

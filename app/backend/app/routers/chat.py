@@ -29,8 +29,9 @@ from app.services.chat import (
     list_conversations,
 )
 from app.services.deferred_assistant import (
+    cancel_deferred_request,
+    get_deferred_request_for_resume,
     list_deferred_assistant_requests,
-    mark_deferred_request_resumed,
 )
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -92,6 +93,7 @@ async def chat(
         body.conversation_id,
         body.pending_message_id,
         body.model_settings.model_dump(exclude_none=True) if body.model_settings else None,
+        body.deferred_request_id,
     )
     return ChatResponse(conversation_id=conversation.id, reply=reply, is_error=is_error)
 
@@ -116,7 +118,25 @@ async def resume_deferred_request(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    row = await mark_deferred_request_resumed(db, current_user, deferred_id)
+    """Return a queued request for replay without consuming it.
+
+    The row stays ``deferred`` until ``POST /chat/`` succeeds with
+    ``deferred_request_id``, so abandoned or failed resumes remain recoverable.
+    """
+    row = await get_deferred_request_for_resume(db, current_user, deferred_id)
+    return DeferredAssistantRequestResponse.model_validate(row)
+
+
+@router.post(
+    "/deferred/{deferred_id}/cancel",
+    response_model=DeferredAssistantRequestResponse,
+)
+async def cancel_deferred_assistant_request(
+    deferred_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    row = await cancel_deferred_request(db, current_user, deferred_id)
     await db.commit()
     return DeferredAssistantRequestResponse.model_validate(row)
 

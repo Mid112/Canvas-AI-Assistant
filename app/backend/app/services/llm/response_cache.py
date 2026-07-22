@@ -59,9 +59,19 @@ def build_cache_key(
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-async def get_cached_response(db: AsyncSession, cache_key: str) -> str | None:
+async def get_cached_response(
+    db: AsyncSession,
+    *,
+    cache_key: str,
+    user_id: int,
+) -> str | None:
     now = datetime.now(UTC)
-    row = await db.scalar(select(LlmResponseCache).where(LlmResponseCache.cache_key == cache_key))
+    row = await db.scalar(
+        select(LlmResponseCache).where(
+            LlmResponseCache.cache_key == cache_key,
+            LlmResponseCache.user_id == user_id,
+        )
+    )
     if row is None:
         return None
     if row.expires_at <= now:
