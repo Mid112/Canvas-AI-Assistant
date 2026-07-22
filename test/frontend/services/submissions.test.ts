@@ -33,6 +33,7 @@ describe("submissions service", () => {
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:8000/api/v1/canvas/courses/5/assignments/1/submissions",
       expect.objectContaining({
+        cache: "no-store",
         headers: { Authorization: "Bearer access-token" },
       }),
     );

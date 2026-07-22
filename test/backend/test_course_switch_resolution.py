@@ -94,6 +94,29 @@ def test_first_turn_never_calls_the_pre_resolver(client):
     assert mock_adapter.generate.await_count == 1
 
 
+def test_short_course_context_statement_switches_without_llm(client):
+    headers, local_ids = _register_with_two_courses(client)
+
+    first, _ = _chat(
+        client, headers, "show me assignments for CPSC 310",
+        '{"action": "respond", "course_name": "CPSC 310", "message": "OK."}',
+    )
+    assert first["is_error"] is False, first
+
+    body, mock_adapter = _chat(
+        client,
+        headers,
+        "couse is CPSC 320",
+        '{"action": "respond", "message": "This should not be used."}',
+        conversation_id=first["conversation_id"],
+    )
+
+    assert body["is_error"] is False, body
+    assert body["reply"]["message"] == "Using CPSC 320 for this chat."
+    assert body["conversation_id"] != first["conversation_id"]
+    assert mock_adapter.generate.await_count == 0
+
+
 # Verifies: a follow-up turn that switches to an explicitly-named
 # different course is detected BEFORE the main call, so the main call
 # receives the correct "CURRENT COURSE" framing and correctly-scoped

@@ -134,14 +134,20 @@ e2e-up:
 	@echo "Stopping Docker backend container; e2e uses the native backend..."
 	-docker compose -f docker-compose.dev.yml stop backend >/dev/null 2>&1
 	@echo "Freeing backend/frontend ports..."
-	@pids=$$(lsof -ti :8000 :5173 2>/dev/null); if [ -n "$$pids" ]; then kill $$pids; fi
+	@pids=$$(lsof -ti :8000 :5173 2>/dev/null); \
+	if [ -n "$$pids" ]; then \
+		kill $$pids 2>/dev/null || true; \
+		sleep 1; \
+		stuck=$$(lsof -ti :8000 :5173 2>/dev/null); \
+		if [ -n "$$stuck" ]; then kill -9 $$stuck 2>/dev/null || true; fi; \
+	fi
 	@echo "Starting backend on http://localhost:8000 and frontend on http://localhost:5173"
 	@echo "Default e2e admin seed: admin@example.com / AdminPass123!"
 	@trap 'kill 0' INT TERM EXIT; \
 	(cd app/backend && \
 		DATABASE_URL=$${DATABASE_URL:-postgresql+asyncpg://appuser:localdev@localhost:5433/appdb} \
 		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
-		DEBUG=true \
+		DEBUG=false \
 		BACKEND_CORS_ORIGINS=$${BACKEND_CORS_ORIGINS:-http://localhost:5173} \
 		CANVAS_API_URL=$${CANVAS_API_URL:-http://localhost:3000} \
 		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \

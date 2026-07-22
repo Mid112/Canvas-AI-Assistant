@@ -8,6 +8,7 @@ from fastapi import HTTPException
 
 from app.schemas.canvas import AssignmentCreate, AssignmentUpdate, SubmissionStatus
 from app.services.canvas import (
+    _cache_submissions,
     _fill_submission_contact_fields,
     _parse_submission,
     _parse_submission_status,
@@ -552,12 +553,14 @@ async def test_get_submissions_caches_new_and_updates_existing():
         patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
         patch("app.services.canvas.fetch_submissions", new=AsyncMock(return_value=fetched)),
         patch("app.services.canvas.fetch_user_profile", new=AsyncMock()),
+        patch("app.services.canvas._cache_submissions_safely", new=AsyncMock()) as mock_cache,
     ):
         result = await get_submissions(1, 10, user, "https://canvas.ubc.ca", db)
 
     assert len(result) == 2
-    assert existing_submission.status == "graded"
-    db.commit.assert_awaited_once()
+    mock_cache.assert_awaited_once()
+    db.commit.assert_not_called()
+    db.rollback.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -580,18 +583,35 @@ async def test_get_submissions_creates_assignment_cache_row_when_missing():
         patch("app.services.canvas.get_owned_course", new=AsyncMock(return_value=course)),
         patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
         patch("app.services.canvas.fetch_submissions", new=AsyncMock(return_value=fetched)),
+        patch("app.services.canvas._cache_submissions_safely", new=AsyncMock()) as mock_cache,
     ):
         result = await get_submissions(1, 10, user, "https://canvas.ubc.ca", db)
 
     assert len(result) == 1
-    # Two adds: the placeholder Assignment row, then the new Submission row.
-    assert db.add.call_count == 2
-    db.flush.assert_awaited_once()
-    db.commit.assert_awaited_once()
+    mock_cache.assert_awaited_once()
+    db.add.assert_not_called()
+    db.commit.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_get_submissions_rolls_back_and_still_returns_data_on_cache_failure():
+async def test_get_submissions_authorization_stops_before_canvas_fetch():
+    db = AsyncMock()
+    db.scalar = AsyncMock(return_value=None)
+    user = SimpleNamespace(id=2, canvas_connections=[_connection("https://canvas.ubc.ca")])
+
+    with (
+        patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
+        patch("app.services.canvas.fetch_submissions", new=AsyncMock()) as fetch_mock,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await get_submissions(999, 10, user, "https://canvas.ubc.ca", db)
+
+    assert exc_info.value.status_code == 404
+    fetch_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_submissions_cache_failure_does_not_touch_caller_transaction():
     """A caching hiccup must not break the live Canvas view — the parsed
     submissions are still returned even if the local write fails."""
     db = AsyncMock()
@@ -599,18 +619,55 @@ async def test_get_submissions_rolls_back_and_still_returns_data_on_cache_failur
         id=1, canvas_course_id="100", canvas_url="https://canvas.ubc.ca", workflow_state="available",
     )
     user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.ubc.ca")])
-    db.scalar = AsyncMock(side_effect=RuntimeError("db exploded"))
-
     fetched = [{"id": 1, "assignment_id": 10, "user_id": 100, "workflow_state": "unsubmitted"}]
 
     with (
         patch("app.services.canvas.get_owned_course", new=AsyncMock(return_value=course)),
         patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
         patch("app.services.canvas.fetch_submissions", new=AsyncMock(return_value=fetched)),
+        patch("app.services.canvas._cache_submissions_safely", new=AsyncMock()) as mock_cache,
     ):
         result = await get_submissions(1, 10, user, "https://canvas.ubc.ca", db)
 
     assert len(result) == 1
+    mock_cache.assert_awaited_once()
+    db.rollback.assert_not_called()
+    db.commit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cache_submissions_caches_new_and_updates_existing():
+    db = _db_assigning_ids()
+    existing_assignment_row = SimpleNamespace(id=77)
+    existing_submission = SimpleNamespace(
+        canvas_submission_id="1", status=None, score=None, grade=None,
+        graded_at=None, submitted_at=None, student_name=None,
+    )
+    db.scalar = AsyncMock(return_value=existing_assignment_row)
+    db.scalars = AsyncMock(return_value=[existing_submission])
+    submissions = [
+        _parse_submission(
+            {"id": 1, "assignment_id": 10, "user_id": 100, "workflow_state": "graded", "user": {"name": "Alice"}}
+        ),
+        _parse_submission({"id": 2, "assignment_id": 10, "user_id": 200, "workflow_state": "unsubmitted"}),
+    ]
+
+    await _cache_submissions(db, 1, 10, submissions)
+
+    assert existing_submission.status == "graded"
+    assert db.add.call_count == 1
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cache_submissions_rolls_back_its_own_session_on_failure():
+    db = AsyncMock()
+    db.scalar = AsyncMock(side_effect=RuntimeError("db exploded"))
+    submissions = [_parse_submission({"id": 1, "assignment_id": 10, "user_id": 100, "workflow_state": "unsubmitted"})]
+
+    with pytest.raises(RuntimeError, match="db exploded"):
+        await _cache_submissions(db, 1, 10, submissions)
+
     db.rollback.assert_awaited_once()
     db.commit.assert_not_called()
 

@@ -367,16 +367,23 @@ async def update_submission_grade(
     course_id: int,
     assignment_id: int,
     student_id: int,
-    posted_grade: str,
+    posted_grade: str | None,
     token: str,
     canvas_url: str = settings.CANVAS_API_URL,
     *,
     feedback: str | None = None,
+    comment: str | None = None,
 ) -> dict:
     canvas_url = resolve_server_canvas_url(canvas_url)
-    payload: dict = {"submission": {"posted_grade": posted_grade}}
-    if feedback and feedback.strip():
-        payload["comment"] = {"text_comment": feedback.strip()}
+    # Canvas accepts grade and comment together on the submission update
+    # endpoint. Keeping them in one request prevents a grade from being
+    # changed without the instructor's audit note appearing beside it.
+    payload: dict = {}
+    if posted_grade and posted_grade.strip():
+        payload["submission"] = {"posted_grade": posted_grade.strip()}
+    feedback_text = feedback if feedback is not None else comment
+    if feedback_text and feedback_text.strip():
+        payload["comment"] = {"text_comment": feedback_text.strip()}
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.put(

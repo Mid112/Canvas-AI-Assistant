@@ -39,9 +39,21 @@ def test_summarize_leaves_user_messages_alone():
     assert _summarize_assistant_history_content("user", raw) == raw
 
 
-def test_summarize_strips_clarify_to_question():
+def test_summarize_strips_empty_clarify_partial_plan_to_question():
     raw = '{"action": "clarify", "question": "Which course?", "partial_plan": {}}'
     assert _summarize_assistant_history_content("assistant", raw) == "Which course?"
+
+
+def test_summarize_preserves_grade_clarify_partial_plan():
+    raw = (
+        '{"action": "clarify", "question": "What grade?", '
+        '"partial_plan": {"action": "update_grade", "assignment_reference": "ggg", '
+        '"student_reference": "all students"}}'
+    )
+    summarized = _summarize_assistant_history_content("assistant", raw)
+
+    assert '"assignment_reference": "ggg"' in summarized
+    assert '"student_reference": "all students"' in summarized
 
 
 def test_summarize_strips_respond_to_message():

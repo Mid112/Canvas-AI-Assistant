@@ -77,6 +77,72 @@ describe("mapChatReply", () => {
     });
   });
 
+  it("maps grade clarify partial plans to the Grades tab when grade scoped", () => {
+    expect(
+      mapChatReply(
+        {
+          action: "clarify",
+          clarify: true,
+          question: "Which assignment should I update?",
+          partial_plan: {
+            action: "update_grade",
+            local_course_id: 7,
+            course_name: "COSC 777",
+            assignment_reference: "leetcode",
+            new_grade: "110",
+            reason: "Bonus adjustment",
+          },
+        },
+        false,
+      ),
+    ).toEqual({
+      acknowledgedFields: [
+        { label: "Course Name", value: "COSC 777" },
+        { label: "Assignment Reference", value: "leetcode" },
+        { label: "New Grade", value: "110" },
+        { label: "Reason", value: "Bonus adjustment" },
+      ],
+      content:
+        "I have course name: COSC 777, assignment reference: leetcode, new grade: 110, reason: Bonus adjustment. Which assignment should I update?",
+      interpretedAction: {
+        action: "Update Grade",
+        course: "COSC 777",
+        affectedStudents: "Course-wide",
+        primaryLink: {
+          label: "Open Grades tab",
+          href: "/instructor/courses/7/grades?grade=110&reason=Bonus+adjustment",
+        },
+      },
+    });
+  });
+
+  it("does not map ambiguous feedback clarify replies to the Grades tab", () => {
+    expect(
+      mapChatReply(
+        {
+          action: "clarify",
+          clarify: true,
+          question:
+            "Do you want to add assignment feedback on a submission, or send a private message to the student?",
+          partial_plan: {
+            action: "update_grade",
+            local_course_id: 7,
+            student_reference: "Coin",
+            reason: "Please improve the explanation.",
+          },
+        },
+        false,
+      ),
+    ).toEqual({
+      acknowledgedFields: [
+        { label: "Student Reference", value: "Coin" },
+        { label: "Reason", value: "Please improve the explanation." },
+      ],
+      content:
+        "I have student reference: Coin, reason: Please improve the explanation. Do you want to add assignment feedback on a submission, or send a private message to the student?",
+    });
+  });
+
   // Verifies: Maps intent_preview replies.
   it("maps intent_preview replies", () => {
     const result = mapChatReply(
@@ -146,6 +212,40 @@ describe("mapChatReply", () => {
       ),
     ).toEqual({
       content: "I can help with course management.",
+    });
+  });
+
+  it("maps grade handoff replies to the Grades tab prefill action", () => {
+    // The backend sends a normal respond envelope; the mapper is responsible
+    // for turning the grade_handoff payload into the existing action-card link.
+    expect(
+      mapChatReply(
+        {
+          action: "respond",
+          message: "Open the Grades tab to review and approve.",
+          grade_handoff: {
+            local_course_id: 7,
+            course_name: "COSC 777",
+            assignment_id: 10,
+            student_ids: [42, 43],
+            student_count: 2,
+            new_grade: "110",
+            reason: "Bonus adjustment",
+          },
+        },
+        false,
+      ),
+    ).toEqual({
+      content: "Open the Grades tab to review and approve.",
+      interpretedAction: {
+        action: "Update Grade",
+        course: "COSC 777",
+        affectedStudents: "2 students",
+        primaryLink: {
+          label: "Open Grades tab",
+          href: "/instructor/courses/7/grades?assignmentId=10&studentIds=42%2C43&grade=110&reason=Bonus+adjustment",
+        },
+      },
     });
   });
 

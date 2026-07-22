@@ -60,6 +60,7 @@ export async function fetchAssignmentSubmissions(
     buildSubmissionsUrl(localCourseId, assignmentId, canvasUrl),
     {
       headers: { Authorization: `Bearer ${accessToken}` },
+      cache: "no-store",
     },
   );
 

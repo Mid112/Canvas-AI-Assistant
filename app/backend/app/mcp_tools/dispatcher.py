@@ -15,6 +15,7 @@ from app.schemas.canvas import (
     AssignmentCreate,
     AssignmentResponse,
     AssignmentUpdate,
+    GradeUpdateRequest,
     QuizCreate,
     QuizQuestionBankGroupCreate,
     QuizQuestionCreate,
@@ -41,6 +42,7 @@ from app.services.canvas import (
 )
 from app.services.canvas_status import CanvasWriteResult
 from app.services.course_access import get_owned_course_or_404
+from app.services.grade_management import submit_grade_update
 from app.services.llm.json_extraction import extract_json_object as _extract_json
 from app.services.message_validation import validate_message_for_send
 from app.services.quiz_validation import validate_quiz_for_create
@@ -561,6 +563,35 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                         "status": "created",
                     },
                 ],
+            )
+            return result.to_dict()
+
+        case "update_grade":
+            course = await _resolve_course(db, user, action.local_course_id)
+            if action.assignment_id is None or action.student_id is None:
+                raise ToolExecutionError(
+                    "The assistant needs to resolve the assignment and student before updating a grade.",
+                    log_detail=f"Unresolved update_grade action reached dispatcher: {action.model_dump()}",
+                )
+            grade_result = await submit_grade_update(
+                course.id,
+                GradeUpdateRequest(
+                    assignment_id=action.assignment_id,
+                    user_id=action.student_id,
+                    posted_grade=action.new_grade,
+                    reason=action.reason,
+                ),
+                user,
+                course.canvas_url,
+                db,
+                record_workflow_audit=False,
+            )
+            result = CanvasWriteResult(
+                action="update_grade",
+                data=grade_result.canvas_submission,
+                reversible=is_reversible("update_grade"),
+                affected_resources=grade_result.affected_resources,
+                previous_data=grade_result.current,
             )
             return result.to_dict()
 

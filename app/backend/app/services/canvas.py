@@ -104,6 +104,8 @@ class CanvasTokenRequiredError(HTTPException):
 
 
 def require_canvas_token(user: User, canvas_url: str) -> str:
+    """Return the decrypted token for one Canvas URL, or raise a user-facing
+    403 that tells the caller whether the token is missing or unreadable."""
     canvas_url = normalize_canvas_url(canvas_url)
     conn = next(
         (c for c in user.canvas_connections if canvas_urls_equivalent(c.canvas_url, canvas_url)),
@@ -118,6 +120,22 @@ def require_canvas_token(user: User, canvas_url: str) -> str:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Canvas token is corrupted — please reconnect Canvas.",
         )
+
+
+def _is_expected_canvas_token_sync_error(exc: Exception) -> bool:
+    """Background sync treats missing/corrupted Canvas tokens as expected
+    account state, not infrastructure failure. Interactive endpoints still
+    raise the original 403, but sweeps should only log a concise reconnect
+    warning so stack startup is not flooded with tracebacks."""
+    return (
+        isinstance(exc, HTTPException)
+        and exc.status_code == status.HTTP_403_FORBIDDEN
+        and isinstance(exc.detail, str)
+        and (
+            exc.detail.startswith("No Canvas token")
+            or exc.detail.startswith("Canvas token is corrupted")
+        )
+    )
 
 
 async def get_owned_course(
@@ -1023,8 +1041,6 @@ async def get_submissions(
     canvas_url: str,
     db: AsyncSession,
 ) -> list[SubmissionResponse]:
-    from app.models.submission import Submission
-
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     data = await fetch_submissions(
@@ -1035,27 +1051,58 @@ async def get_submissions(
     )
     parsed = [_parse_submission(raw) for raw in data]
     await _fill_submission_contact_fields(parsed, token, canvas_url)
+    await _cache_submissions_safely(course.id, assignment_id, parsed)
+
+    return parsed
+
+
+async def _cache_submissions_safely(
+    local_course_id: int,
+    assignment_id: int,
+    submissions: list[SubmissionResponse],
+) -> None:
+    """Persist analytics cache rows without touching the caller's session."""
+    try:
+        async with AsyncSessionLocal() as cache_db:
+            await _cache_submissions(cache_db, local_course_id, assignment_id, submissions)
+    except Exception as error:
+        logger.warning(
+            "Could not cache Canvas submissions for course %s assignment %s: %s",
+            local_course_id,
+            assignment_id,
+            error,
+            exc_info=True,
+        )
+
+
+async def _cache_submissions(
+    db: AsyncSession,
+    local_course_id: int,
+    assignment_id: int,
+    submissions: list[SubmissionResponse],
+) -> None:
+    from app.models.submission import Submission
 
     try:
-        # The API response is authoritative even if the local analytics cache
-        # write fails below, so keep cache persistence isolated from the return
-        # value. This prevents a DB cache hiccup from breaking the live Canvas view.
+        # The API response is authoritative; this write only refreshes the
+        # local analytics cache and runs in its own session so failures cannot
+        # rollback chat/workflow state owned by the caller.
         assignment = await db.scalar(
             select(Assignment).where(
                 Assignment.canvas_assignment_id == str(assignment_id),
-                Assignment.course_id == course.id,
+                Assignment.course_id == local_course_id,
             )
         )
         if not assignment:
             assignment = Assignment(
                 canvas_assignment_id=str(assignment_id),
-                course_id=course.id,
+                course_id=local_course_id,
                 title=f"Assignment {assignment_id}",
             )
             db.add(assignment)
             await db.flush()
 
-        canvas_ids = [str(item.id) for item in parsed]
+        canvas_ids = [str(item.id) for item in submissions]
         # Canvas submission ids are unique in our schema, but scoping by the
         # local assignment makes the intent explicit and protects this upsert if
         # the uniqueness model changes later.
@@ -1067,7 +1114,7 @@ async def get_submissions(
         )
         submission_map = {s.canvas_submission_id: s for s in existing_rows}
 
-        for item in parsed:
+        for item in submissions:
             cid = str(item.id)
             if cid in submission_map:
                 row = submission_map[cid]
@@ -1093,17 +1140,9 @@ async def get_submissions(
                 )
 
         await db.commit()
-    except Exception as error:
+    except Exception:
         await db.rollback()
-        logger.warning(
-            "Could not cache Canvas submissions for course %s assignment %s: %s",
-            local_course_id,
-            assignment_id,
-            error,
-            exc_info=True,
-        )
-
-    return parsed
+        raise
 
 
 async def sync_courses_if_stale(user: User, connection: CanvasConnection, db: AsyncSession) -> None:
@@ -1202,11 +1241,17 @@ async def run_course_sync_sweep(db: AsyncSession) -> None:
                 continue
             try:
                 await sync_courses_if_stale(user, connection, conn_db)
-            except Exception:
-                logger.warning(
-                    "course sync sweep failed for canvas_connection_id=%s user_id=%s",
-                    connection_id, user_id, exc_info=True,
-                )
+            except Exception as exc:
+                if _is_expected_canvas_token_sync_error(exc):
+                    logger.warning(
+                        "course sync sweep skipped canvas_connection_id=%s user_id=%s: %s",
+                        connection_id, user_id, exc.detail,
+                    )
+                else:
+                    logger.warning(
+                        "course sync sweep failed for canvas_connection_id=%s user_id=%s",
+                        connection_id, user_id, exc_info=True,
+                    )
                 await conn_db.rollback()
 
 
@@ -1268,11 +1313,17 @@ async def set_active_course(user: User, local_course_id: int, db: AsyncSession) 
             if sync_connection is not None and sync_user is not None:
                 try:
                     await sync_courses_if_stale(sync_user, sync_connection, sync_db)
-                except Exception:
-                    logger.warning(
-                        "set_active_course sync_courses_if_stale failed for canvas_connection_id=%s user_id=%s",
-                        connection.id, user.id, exc_info=True,
-                    )
+                except Exception as exc:
+                    if _is_expected_canvas_token_sync_error(exc):
+                        logger.warning(
+                            "set_active_course sync skipped canvas_connection_id=%s user_id=%s: %s",
+                            connection.id, user.id, exc.detail,
+                        )
+                    else:
+                        logger.warning(
+                            "set_active_course sync_courses_if_stale failed for canvas_connection_id=%s user_id=%s",
+                            connection.id, user.id, exc_info=True,
+                        )
                     await sync_db.rollback()
         # The isolated session above may have just committed a Canvas
         # rename onto this same Course row (get_courses upserts Course.name,

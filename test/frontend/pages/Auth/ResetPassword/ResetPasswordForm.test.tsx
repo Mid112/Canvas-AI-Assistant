@@ -64,13 +64,14 @@ describe("ResetPasswordForm", () => {
   });
 
   // Verifies: Does not submit when the email is invalid.
-  it("does not submit when the email is invalid", async () => {
-    const user = userEvent.setup();
+  it("does not submit when the email is invalid", () => {
     const onSubmit = vi.fn();
 
     renderWithRouter(<ResetPasswordForm onSubmit={onSubmit} />);
 
-    await user.type(screen.getByLabelText("Email Address"), "invalid-email");
+    fireEvent.change(screen.getByLabelText("Email Address"), {
+      target: { value: "invalid-email" },
+    });
     fireEvent.submit(
       screen.getByRole("button", { name: "Send Reset Link" }).closest("form")!,
     );

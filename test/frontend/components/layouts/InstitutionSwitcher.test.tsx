@@ -4,13 +4,19 @@ import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { InstitutionSwitcher } from "@/components/layouts/InstitutionSwitcher";
-import { InstitutionProvider } from "@/contexts/InstitutionProvider";
+import type { Institution } from "@/types/institution";
 
 const mockUseAuth = vi.fn();
 const mockNavigate = vi.fn();
+const mockSetSelectedInstitution = vi.fn();
+const mockUseInstitution = vi.hoisted(() => vi.fn());
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => mockUseAuth(),
+}));
+
+vi.mock("@/contexts/useInstitution", () => ({
+  useInstitution: () => mockUseInstitution(),
 }));
 
 vi.mock("react-router-dom", async () => {
@@ -21,12 +27,25 @@ vi.mock("react-router-dom", async () => {
   };
 });
 
+const connectedInstitutions: Institution[] = [
+  {
+    id: "ubc",
+    name: "University of British Columbia",
+    shortName: "UBC",
+    canvasUrl: "https://canvas.ubc.ca",
+  },
+  {
+    id: "ubco",
+    name: "UBC Okanagan",
+    shortName: "UBCO",
+    canvasUrl: "https://canvas.ok.ubc.ca",
+  },
+];
+
 function renderSwitcher() {
   return render(
     <MemoryRouter>
-      <InstitutionProvider>
-        <InstitutionSwitcher />
-      </InstitutionProvider>
+      <InstitutionSwitcher />
     </MemoryRouter>,
   );
 }
@@ -36,9 +55,23 @@ describe("InstitutionSwitcher", () => {
     vi.clearAllMocks();
     vi.stubEnv("VITE_CANVAS_UBC_URL", "https://canvas.ubc.ca");
     vi.stubEnv("VITE_CANVAS_UBCO_URL", "https://canvas.ok.ubc.ca");
+    mockUseInstitution.mockReturnValue({
+      institutions: [],
+      selectedInstitution: {
+        id: "ubc",
+        name: "University of British Columbia",
+        shortName: "UBC",
+      },
+      setSelectedInstitution: mockSetSelectedInstitution,
+      courses: [],
+      analytics: {},
+      dashboard: {},
+    });
   });
 
   it("prompts to connect when there are no institutions", () => {
+    // Covers the empty connection state: instructors without a Canvas
+    // institution should see the settings/connect call to action.
     mockUseAuth.mockReturnValue({
       accessToken: "token",
       user: {
@@ -66,6 +99,8 @@ describe("InstitutionSwitcher", () => {
   });
 
   it("lists connected institutions and allows switching", async () => {
+    // Covers the connected state: the dropdown lists each institution and calls
+    // the context setter with the selected institution id.
     const user = userEvent.setup();
     mockUseAuth.mockReturnValue({
       accessToken: "token",
@@ -97,6 +132,17 @@ describe("InstitutionSwitcher", () => {
       refreshUser: vi.fn(),
     });
 
+    // Mock the hook directly so this unit test does not start the provider's
+    // async dashboard fetch while still proving the switcher delegates updates.
+    mockUseInstitution.mockReturnValue({
+      institutions: connectedInstitutions,
+      selectedInstitution: connectedInstitutions[0],
+      setSelectedInstitution: mockSetSelectedInstitution,
+      courses: [],
+      analytics: {},
+      dashboard: {},
+    });
+
     renderSwitcher();
 
     await user.click(screen.getByRole("button", { name: "Switch institution" }));
@@ -104,8 +150,6 @@ describe("InstitutionSwitcher", () => {
     expect(screen.getByRole("menuitem", { name: /UBCO/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole("menuitem", { name: /UBCO/i }));
-    expect(screen.getByRole("button", { name: "Switch institution" })).toHaveTextContent(
-      "UBCO",
-    );
+    expect(mockSetSelectedInstitution).toHaveBeenCalledWith("ubco");
   });
 });

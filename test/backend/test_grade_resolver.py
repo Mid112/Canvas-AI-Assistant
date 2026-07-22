@@ -8,6 +8,8 @@ from app.services.chat import _run_update_grade_chain
 
 @pytest.mark.asyncio
 async def test_grade_resolver_uses_real_assignment_and_student_candidates():
+    # Covers the chat resolver pattern: the assistant can accept names like
+    # "the midterm" and "Alex" without asking the instructor for raw Canvas IDs.
     db = AsyncMock()
     user = MagicMock(id=1)
     conversation = SimpleNamespace(id=9)
