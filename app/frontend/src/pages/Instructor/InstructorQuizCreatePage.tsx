@@ -128,22 +128,13 @@ export function InstructorQuizCreatePage() {
 
   // AI handoff may omit local_course_id; fall back to the active course so
   // review actions (capabilities / question banks) have a real course id.
-  useEffect(() => {
-    if (describeValues.courseId || !activeCourse) {
-      return;
-    }
-    setDescribeValues((current) =>
-      current.courseId
-        ? current
-        : { ...current, courseId: String(activeCourse.localId) },
-    );
-  }, [activeCourse, describeValues.courseId]);
+  const resolvedCourseId =
+    describeValues.courseId ||
+    (activeCourse ? String(activeCourse.localId) : "");
 
   const courseLabel =
-    courseOptions.find((course) => course.id === describeValues.courseId)
-      ?.label ??
-    (activeCourse &&
-    String(activeCourse.localId) === describeValues.courseId
+    courseOptions.find((course) => course.id === resolvedCourseId)?.label ??
+    (activeCourse && String(activeCourse.localId) === resolvedCourseId
       ? activeCourse.displayName
       : "your course");
   const effectiveCourseLoadError = needsCanvasConnection
@@ -151,7 +142,7 @@ export function InstructorQuizCreatePage() {
     : courseLoadError;
 
   useEffect(() => {
-    const courseId = Number(describeValues.courseId);
+    const courseId = Number(resolvedCourseId);
     if (
       step !== "review" ||
       !accessToken ||
@@ -182,14 +173,14 @@ export function InstructorQuizCreatePage() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, canvasUrl, describeValues.courseId, step]);
+  }, [accessToken, canvasUrl, resolvedCourseId, step]);
 
   const handleLoadQuestionBanks = async () => {
     if (!accessToken) {
       setApproveError("Your session has expired. Please sign in again.");
       return;
     }
-    const courseId = Number(describeValues.courseId);
+    const courseId = Number(resolvedCourseId);
     if (!Number.isInteger(courseId) || courseId <= 0) {
       setApproveError(
         "Select a course before loading question banks. Use Back to Describe if no course is set.",
@@ -267,7 +258,7 @@ export function InstructorQuizCreatePage() {
     }
 
     const payload = {
-      courseId: describeValues.courseId,
+      courseId: resolvedCourseId,
       name: values.name,
       description: values.description,
       dueDate: values.dueDate,
@@ -313,7 +304,7 @@ export function InstructorQuizCreatePage() {
     try {
       await approveQuizDraft(
         {
-          courseId: describeValues.courseId,
+          courseId: resolvedCourseId,
           name: pendingApproval.name,
           description: pendingApproval.description,
           dueDate: pendingApproval.dueDate,
@@ -436,7 +427,7 @@ export function InstructorQuizCreatePage() {
 
       {step === "describe" ? (
         <QuizDescribeStep
-          defaultValues={describeValues}
+          defaultValues={{ ...describeValues, courseId: resolvedCourseId }}
           isGenerating={isGenerating}
           generateError={generateError}
           courseOptions={courseOptions}

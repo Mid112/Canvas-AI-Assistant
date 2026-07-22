@@ -144,7 +144,8 @@ def test_resolve_missing_submissions_chains_into_send_message_in_one_turn(client
     assert reply["proposed_action"]["action"] == "send_message"
     assert reply["proposed_action"]["recipient_canvas_user_ids"] == [501]
     assert reply["proposed_action"]["recipient_names"] == ["Alice"]
-    assert "pending_message_id" in reply
+    # Form-handoff: send_message is reviewed in Messages compose, not chat confirm.
+    assert "pending_message_id" not in reply
 
 
 # Verifies: hitting MAX_TURN_STEPS without ever reaching a terminal action

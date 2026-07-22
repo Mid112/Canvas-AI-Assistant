@@ -1504,24 +1504,18 @@ async def _run_send_message_chain(
 async def _persist_additional_message_previews(
     db: AsyncSession,
     conversation: Conversation,
-    user: User,
-    user_msg: Message,
-    user_prompt: str,
     extra_groups: list[dict],
 ) -> list[dict]:
     """Persists every message group after the first from a grouped
     send_message turn (see _run_send_message_chain / _build_grouped_send_message_result)
     — group 0 already went through the ordinary single-preview persistence
     path in handle_chat_message, unchanged. Each of these is a brand-new
-    Message + Workflow row (pending_message_id=None always inserts, since
-    Workflow.preview_message_id is unique per row — no DB migration needed;
-    nothing enforces "at most one pending workflow per conversation" at the
-    schema level, that invariant was only ever app-level/frontend).
+    Message row so the transcript still shows every distinct body.
 
-    Phase 1: every group is shown at once, each independently
-    confirmable/cancelable. A later phase can queue these instead and
-    reveal them one at a time as earlier ones resolve, without changing
-    this persistence shape."""
+    send_message is a form-handoff action (Messages compose), so extras do
+    not get pending Workflow rows or pending_message_id — same as the
+    primary group. The client hands off the primary draft; additional
+    groups remain informational in the reply payload."""
     previews = []
     for entry in extra_groups:
         proposed_action = entry["proposed_action"]
@@ -1533,19 +1527,9 @@ async def _persist_additional_message_previews(
             "proposed_action": proposed_action,
             "preview_metadata": preview_metadata,
         }
-        assistant_msg = await log_message(
+        await log_message(
             db, conversation, role="assistant", content=_json_dumps(result)
         )
-        await _sync_workflow_for_preview(
-            db, conversation, user,
-            source_user_message_id=user_msg.id,
-            pending_message_id=None,
-            preview_message_id=assistant_msg.id,
-            user_prompt=user_prompt,
-            proposed_action=proposed_action,
-            affected_resources=preview_metadata.get("affected_resources", []),
-        )
-        result["pending_message_id"] = assistant_msg.id
         previews.append(result)
     return previews
 
@@ -2757,7 +2741,7 @@ async def handle_chat_message(
     if extra_groups:
         if result.get("intent_preview"):
             result["additional_previews"] = await _persist_additional_message_previews(
-                db, conversation, user, user_msg, message, extra_groups,
+                db, conversation, extra_groups,
             )
         else:
             logger.error(
