@@ -7,7 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.user import User
 from app.schemas.preview import FeedbackDraftRequest, FeedbackDraftResponse
-from app.services.feedback_validation import verify_canvas_student_in_course
+from app.services.feedback_validation import (
+    verify_assignment_in_course,
+    verify_canvas_student_in_course,
+)
 from app.services.llm.json_extraction import loads_llm_json
 from app.services.llm.llm_setting import get_llm_adapter
 
@@ -19,6 +22,9 @@ async def generate_feedback_draft(
     canvas_url: str,
     db: AsyncSession,
 ) -> FeedbackDraftResponse:
+    await verify_assignment_in_course(
+        local_course_id, body.assignment_id, user, canvas_url, db
+    )
     await verify_canvas_student_in_course(
         local_course_id, body.student_id, user, canvas_url, db
     )
@@ -37,12 +43,15 @@ async def generate_feedback_draft(
         "Respond with JSON only: "
         '{"new_grade": "letter or number", "feedback": "plain text comment"}. '
         "The feedback must be constructive, specific, and suitable to post as "
-        "a Canvas submission comment. Do not include student email addresses "
-        "or login identifiers."
+        "a Canvas submission comment. Address the learner in second person "
+        "('you') and never invent or include a student name, email, or login."
     )
+    # Do not send student names/emails/logins to the LLM (#908). Keep only
+    # assignment context and the instructor's prompt; the UI still receives
+    # student_name back from the request body for display.
     context = (
         f"Assignment: {body.assignment_name}\n"
-        f"Student: {body.student_name}\n"
+        "Learner: selected enrolled student (do not name them)\n"
         f"Current grade: {body.current_grade or 'not provided'}\n"
         f"Instructor request: {body.prompt}"
     )

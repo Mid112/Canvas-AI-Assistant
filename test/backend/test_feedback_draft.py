@@ -32,6 +32,10 @@ def test_generate_feedback_draft_success(client):
 
     with (
         patch(
+            "app.services.feedback_draft.verify_assignment_in_course",
+            new=AsyncMock(),
+        ),
+        patch(
             "app.services.feedback_draft.verify_canvas_student_in_course",
             new=AsyncMock(),
         ),
@@ -56,3 +60,8 @@ def test_generate_feedback_draft_success(client):
     data = response.json()
     assert data["new_grade"] == "85"
     assert "base case" in data["feedback"]
+    # UI still gets the student name, but the LLM prompt must not (#908).
+    assert data["student_name"] == "Alex Chen"
+    llm_prompt = mock_adapter.generate.await_args.args[1]
+    assert "Alex Chen" not in llm_prompt
+    assert "selected enrolled student" in llm_prompt

@@ -69,3 +69,23 @@ async def test_verify_canvas_student_in_course_accepts_single_enrollment():
             1, 77, user, "http://localhost", db
         )
     assert result is course
+
+
+@pytest.mark.asyncio
+async def test_verify_assignment_in_course_rejects_missing_assignment():
+    from fastapi import HTTPException
+
+    from app.services.feedback_validation import verify_assignment_in_course
+
+    db = AsyncMock()
+    user = AsyncMock()
+    with patch(
+        "app.services.feedback_validation.get_assignment",
+        new=AsyncMock(
+            side_effect=HTTPException(status_code=404, detail="Not found")
+        ),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await verify_assignment_in_course(1, 99, user, "http://localhost", db)
+    assert exc.value.status_code == 422
+    assert "assignment" in exc.value.detail.lower()

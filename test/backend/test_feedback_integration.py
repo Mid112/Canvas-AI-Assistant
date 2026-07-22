@@ -1,12 +1,12 @@
 """Integration tests for the feedback workflow (#1116–#1119)."""
 
-from unittest.mock import AsyncMock, patch
+from contextlib import contextmanager
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.schemas.student import StudentResponse
 from integration_helpers import CANVAS_URL, register_with_canvas
 
 
@@ -31,26 +31,34 @@ def _feedback_payload(**overrides):
     return payload
 
 
-def _enrolled_student(local_course_id: int) -> StudentResponse:
-    return StudentResponse(
-        id=1,
-        canvas_user_id="77",
-        course_id=local_course_id,
-        name="Alex Chen",
-        enrollment_state="active",
-    )
+@contextmanager
+def _patch_feedback_access(*, enrolled: bool = True):
+    """Mock assignment + single-student enrollment checks used by validation."""
+    enrollment = [{"id": 1, "user_id": 77}] if enrolled else []
+    with (
+        patch(
+            "app.services.feedback_validation.get_assignment",
+            new_callable=AsyncMock,
+            return_value=MagicMock(id=44, name="Recursion Homework"),
+        ),
+        patch(
+            "app.services.feedback_validation.require_canvas_token",
+            return_value="token",
+        ),
+        patch(
+            "app.services.feedback_validation.fetch_student_enrollment",
+            new_callable=AsyncMock,
+            return_value=enrollment,
+        ),
+    ):
+        yield
 
 
 # Verifies: Feedback preview returns risk metadata for structured edits (#1118).
 def test_feedback_preview_structured_edit(client):
     headers, local_course_id = register_with_canvas(client, prefix="fb_preview")
-    enrolled = _enrolled_student(local_course_id)
 
-    with patch(
-        "app.services.feedback_validation.get_students",
-        new_callable=AsyncMock,
-        return_value=[enrolled],
-    ):
+    with _patch_feedback_access():
         preview = client.post(
             f"/api/v1/canvas/courses/{local_course_id}/feedback/preview?canvas_url={CANVAS_URL}",
             json=_feedback_payload(new_grade="90", feedback="Excellent recursion trace."),
@@ -67,15 +75,10 @@ def test_feedback_preview_structured_edit(client):
 # Verifies: Approved feedback posts to Canvas (#1116).
 def test_feedback_post_success(client):
     headers, local_course_id = register_with_canvas(client, prefix="fb_post")
-    enrolled = _enrolled_student(local_course_id)
     submission = {"id": 9001, "posted_grade": "85"}
 
     with (
-        patch(
-            "app.services.feedback_validation.get_students",
-            new_callable=AsyncMock,
-            return_value=[enrolled],
-        ),
+        _patch_feedback_access(),
         patch(
             "app.services.canvas.update_submission_grade",
             new_callable=AsyncMock,
@@ -96,14 +99,9 @@ def test_feedback_post_success(client):
 # Verifies: Posted feedback appears in workflow history (#1117).
 def test_feedback_post_records_workflow_history(client):
     headers, local_course_id = register_with_canvas(client, prefix="fb_hist")
-    enrolled = _enrolled_student(local_course_id)
 
     with (
-        patch(
-            "app.services.feedback_validation.get_students",
-            new_callable=AsyncMock,
-            return_value=[enrolled],
-        ),
+        _patch_feedback_access(),
         patch(
             "app.services.canvas.update_submission_grade",
             new_callable=AsyncMock,
@@ -130,6 +128,10 @@ def test_feedback_generate_draft_missing_context(client):
     mock_adapter.generate.return_value = '{"new_grade": "", "feedback": ""}'
 
     with (
+        patch(
+            "app.services.feedback_draft.verify_assignment_in_course",
+            new_callable=AsyncMock,
+        ),
         patch(
             "app.services.feedback_draft.verify_canvas_student_in_course",
             new_callable=AsyncMock,
@@ -162,6 +164,10 @@ def test_feedback_generate_draft_llm_failure_returns_clarification(client):
 
     with (
         patch(
+            "app.services.feedback_draft.verify_assignment_in_course",
+            new_callable=AsyncMock,
+        ),
+        patch(
             "app.services.feedback_draft.verify_canvas_student_in_course",
             new_callable=AsyncMock,
         ),
@@ -190,11 +196,7 @@ def test_feedback_generate_draft_llm_failure_returns_clarification(client):
 def test_feedback_post_rejects_student_outside_roster(client):
     headers, local_course_id = register_with_canvas(client, prefix="fb_roster")
 
-    with patch(
-        "app.services.feedback_validation.get_students",
-        new_callable=AsyncMock,
-        return_value=[],
-    ):
+    with _patch_feedback_access(enrolled=False):
         response = client.post(
             f"/api/v1/canvas/courses/{local_course_id}/feedback?canvas_url={CANVAS_URL}",
             json=_feedback_payload(student_id=999),
