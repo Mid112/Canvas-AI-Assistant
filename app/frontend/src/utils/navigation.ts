@@ -83,12 +83,15 @@ export function getAssistantPath(role: UserRole): string {
 /** Returns a copy of `navItems` with the System Health entry's `badge` set
  * from the latest known overall status — only that one entry is touched,
  * and only when there's something to flag (a healthy status renders no
- * badge, matching Sidebar's calm-by-default treatment). */
+ * badge, matching Sidebar's calm-by-default treatment). "unknown" (nothing
+ * checked yet) is treated the same as calm -- it's not a confirmed problem,
+ * so it shouldn't render as one, but it's also deliberately not folded into
+ * "healthy" at the data layer (see LatestOverallStatus). */
 export function decorateNavItemsWithHealth(
   navItems: NavItem[],
-  overallStatus: "healthy" | "degraded" | "down" | undefined,
+  overallStatus: "healthy" | "degraded" | "down" | "unknown" | undefined,
 ): NavItem[] {
-  if (!overallStatus || overallStatus === "healthy") {
+  if (!overallStatus || overallStatus === "healthy" || overallStatus === "unknown") {
     return navItems;
   }
 

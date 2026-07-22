@@ -7,11 +7,15 @@ import { ActiveCourseProvider } from "@/contexts/ActiveCourseProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { InstitutionProvider } from "@/contexts/InstitutionProvider";
 import {
+  SystemHealthBadgeProvider,
+  useSystemHealthBadge,
+} from "@/contexts/SystemHealthBadgeContext";
+import {
   getStoredSidebarOpen,
   setStoredSidebarOpen,
 } from "@/lib/sidebar-storage";
 import { cn } from "@/lib/utils";
-import { fetchLatestSystemHealth, type HealthStatus } from "@/services/systemHealth";
+import { fetchLatestSystemHealth } from "@/services/systemHealth";
 import {
   decorateNavItemsWithHealth,
   getNavItemsForRole,
@@ -73,7 +77,7 @@ function DashboardShell({ role }: DashboardLayoutProps) {
   const roleLabel = getRoleLabel(role);
   const title = getPageTitle(pathname, role);
   const [sidebarOpen, setSidebarOpen] = useState(() => getStoredSidebarOpen());
-  const [healthStatus, setHealthStatus] = useState<HealthStatus | undefined>();
+  const { status: healthStatus, setStatus: setHealthStatus } = useSystemHealthBadge();
 
   useEffect(() => {
     setStoredSidebarOpen(sidebarOpen);
@@ -89,6 +93,9 @@ function DashboardShell({ role }: DashboardLayoutProps) {
     // Cheap, no live checks — just a nice-to-have nav indicator, so a
     // failed fetch is silently ignored (falls back to the undecorated
     // static nav list) rather than showing an error banner on every page.
+    // SystemHealthPage keeps this fresher afterward by pushing its own
+    // live-check results into the same shared context (see
+    // SystemHealthBadgeContext) — this effect only seeds the initial value.
     void (async () => {
       try {
         const data = await fetchLatestSystemHealth(accessToken);
@@ -103,6 +110,7 @@ function DashboardShell({ role }: DashboardLayoutProps) {
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- setHealthStatus is a stable context setter
   }, [role, accessToken]);
 
   const navItems = decorateNavItemsWithHealth(getNavItemsForRole(role), healthStatus);
@@ -145,7 +153,11 @@ function DashboardShell({ role }: DashboardLayoutProps) {
 }
 
 export function DashboardLayout({ role }: DashboardLayoutProps) {
-  const content = <DashboardShell role={role} />;
+  const content = (
+    <SystemHealthBadgeProvider>
+      <DashboardShell role={role} />
+    </SystemHealthBadgeProvider>
+  );
 
   return (
     <InstitutionProvider>

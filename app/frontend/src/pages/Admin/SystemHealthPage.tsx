@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSystemHealthBadge } from "@/contexts/SystemHealthBadgeContext";
 import { cn } from "@/lib/utils";
 import { pageShell } from "@/lib/page-shell";
 import {
@@ -43,14 +44,22 @@ const STATUS_DOT_CLASS: Record<HealthStatus, string> = {
   down: "bg-destructive",
 };
 
+// Backend already caps GET /admin/health/history's total row count
+// (services/health.py), but a compact sparkline still shouldn't try to
+// render however many points that cap allows through -- slice to the most
+// recent points actually worth showing here.
+const SPARKLINE_MAX_POINTS = 48;
+
 function HistorySparkline({ entries }: { entries: HealthHistoryEntry[] }) {
   if (entries.length === 0) {
     return null;
   }
 
+  const visibleEntries = entries.slice(-SPARKLINE_MAX_POINTS);
+
   return (
     <div className="flex items-center gap-0.5" aria-hidden="true">
-      {entries.map((entry, index) => (
+      {visibleEntries.map((entry, index) => (
         <span
           key={`${entry.checked_at}-${index}`}
           title={`${entry.status} at ${new Date(entry.checked_at).toLocaleString()}`}
@@ -110,7 +119,12 @@ function InstructorCanvasCard({ health }: { health: HealthCheckResponse }) {
         {summary.failing_connections.length > 0 ? (
           <ul className="space-y-1">
             {summary.failing_connections.map((connection) => (
-              <li key={connection.user_email} className="text-destructive">
+              // One instructor can have multiple Canvas connections (different
+              // canvas_url per row) -- email alone can collide.
+              <li
+                key={`${connection.user_email}-${connection.canvas_url}`}
+                className="text-destructive"
+              >
                 {connection.user_name} ({connection.user_email}) — {connection.error_detail}
               </li>
             ))}
@@ -150,6 +164,7 @@ function InstructorAiCard({ health }: { health: HealthCheckResponse }) {
 
 export function SystemHealthPage() {
   const { accessToken } = useAuth();
+  const { setStatus: setBadgeStatus } = useSystemHealthBadge();
   const [health, setHealth] = useState<HealthCheckResponse | null>(null);
   const [history, setHistory] = useState<HealthHistoryResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -170,12 +185,17 @@ export function SystemHealthPage() {
       ]);
       setHealth(healthData);
       setHistory(historyData);
+      // Push this live result straight into the shared nav-badge state --
+      // otherwise the sidebar badge only reflected whatever GET
+      // /admin/health/latest returned on the last full layout mount, and
+      // stayed stale after a visit/refresh here actually changed things.
+      setBadgeStatus(healthData.overall_status);
     } catch {
       setLoadError("Unable to load system health status.");
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken]);
+  }, [accessToken, setBadgeStatus]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- async health load on mount/auth changes

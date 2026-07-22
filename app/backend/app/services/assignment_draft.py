@@ -72,16 +72,23 @@ async def generate_assignment_draft(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="The assignment generator is temporarily unavailable. Please try again.",
         ) from e
-    else:
-        await record_ai_call_outcome(db, user_id, settings.DEFAULT_LLM_PROVIDER)
 
     try:
         data = loads_llm_json(raw)
     except (json.JSONDecodeError, ValueError) as e:
+        # The HTTP call itself succeeded, but an unparseable response is
+        # still a failure from the instructor's point of view (502 either
+        # way) -- record it as such rather than a false "ok" on the
+        # instructor AI health card.
+        await record_ai_call_outcome(
+            db, user_id, settings.DEFAULT_LLM_PROVIDER, error_detail="Unparseable model response"
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Could not generate assignment draft",
         ) from e
+
+    await record_ai_call_outcome(db, user_id, settings.DEFAULT_LLM_PROVIDER)
 
     due_at = None
     if data.get("due_at"):

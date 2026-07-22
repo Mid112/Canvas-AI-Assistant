@@ -10,9 +10,10 @@ from app.core.database import Base
 
 class HealthCheck(Base):
     """One row per service per GET /admin/health run (backend/database/canvas/ai).
-    Pure audit trail for the system-health dashboard's "Verify monitoring"
-    requirement — the dashboard itself only ever reads the latest run, this
-    table is not used to render any history/trend UI."""
+    Audit trail for the system-health dashboard's "Verify monitoring"
+    requirement, and the source for GET /admin/health/history's sparkline
+    (Phase 2) — retained _HEALTH_CHECK_RETENTION_DAYS (services/health.py),
+    not kept indefinitely."""
 
     __tablename__ = "health_checks"
     __table_args__ = (

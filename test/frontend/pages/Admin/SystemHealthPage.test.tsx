@@ -2,9 +2,18 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import {
+  SystemHealthBadgeProvider,
+  useSystemHealthBadge,
+} from "@/contexts/SystemHealthBadgeContext";
 import { SystemHealthPage } from "@/pages/Admin/SystemHealthPage";
 import * as systemHealthService from "@/services/systemHealth";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
+
+function BadgeStatusProbe() {
+  const { status } = useSystemHealthBadge();
+  return <span data-testid="badge-status">{status ?? "none"}</span>;
+}
 
 const mockUseAuth = vi.fn();
 
@@ -147,6 +156,67 @@ describe("SystemHealthPage", () => {
     expect(screen.getByText("No AI failures in the last hour.")).toBeInTheDocument();
   });
 
+  it("renders both failing connections for an instructor with two Canvas URLs", async () => {
+    // Regression test: failing_connections previously keyed list items by
+    // user_email alone, which collides when one instructor has multiple
+    // Canvas connections.
+    vi.spyOn(systemHealthService, "fetchSystemHealth").mockResolvedValue({
+      ...healthyResponse,
+      instructor_canvas: {
+        total: 2,
+        healthy: 0,
+        failing: 2,
+        failing_connections: [
+          {
+            user_name: "Jane Doe",
+            user_email: "jane@example.com",
+            canvas_url: "https://canvas-a.example.edu",
+            error_detail: "401 Unauthorized",
+          },
+          {
+            user_name: "Jane Doe",
+            user_email: "jane@example.com",
+            canvas_url: "https://canvas-b.example.edu",
+            error_detail: "403 Forbidden",
+          },
+        ],
+      },
+    });
+
+    renderWithRouter(<SystemHealthPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Jane Doe (jane@example.com) — 401 Unauthorized")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Jane Doe (jane@example.com) — 403 Forbidden")).toBeInTheDocument();
+  });
+
+  it("caps the history sparkline to the most recent points", async () => {
+    const manyEntries = Array.from({ length: 60 }, (_, i) => ({
+      status: "healthy" as const,
+      latency_ms: i,
+      checked_at: new Date(2026, 0, 1, 0, i).toISOString(),
+    }));
+    vi.spyOn(systemHealthService, "fetchSystemHealthHistory").mockResolvedValue({
+      services: { backend: manyEntries, database: [], canvas: [], ai: [] },
+    });
+
+    renderWithRouter(<SystemHealthPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Backend")).toBeInTheDocument();
+    });
+
+    // 60 entries in, capped display must render fewer than that -- and the
+    // most recent one (index 59) must still be present (a naive head-slice
+    // instead of a tail-slice would drop it).
+    const dots = screen.getAllByTitle(/healthy at/);
+    expect(dots.length).toBeLessThan(60);
+    expect(
+      screen.getByTitle(`healthy at ${new Date(manyEntries[59].checked_at).toLocaleString()}`),
+    ).toBeInTheDocument();
+  });
+
   it("shows an error state when the health check fails to load", async () => {
     vi.spyOn(systemHealthService, "fetchSystemHealth").mockRejectedValueOnce(
       new Error("network error"),
@@ -172,6 +242,34 @@ describe("SystemHealthPage", () => {
     await waitFor(() => {
       expect(systemHealthService.fetchSystemHealth).toHaveBeenCalledTimes(2);
       expect(systemHealthService.fetchSystemHealthHistory).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("pushes the live overall_status into the shared nav badge on load and on refresh", async () => {
+    vi.spyOn(systemHealthService, "fetchSystemHealth").mockResolvedValueOnce(healthyResponse);
+
+    renderWithRouter(
+      <SystemHealthBadgeProvider>
+        <BadgeStatusProbe />
+        <SystemHealthPage />
+      </SystemHealthBadgeProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("badge-status")).toHaveTextContent("healthy");
+    });
+
+    vi.spyOn(systemHealthService, "fetchSystemHealth").mockResolvedValueOnce({
+      ...healthyResponse,
+      overall_status: "down",
+    });
+
+    await user.click(screen.getByRole("button", { name: "Refresh health status" }));
+
+    // The sidebar badge must reflect this refresh immediately -- not just
+    // whatever GET /admin/health/latest returned on the last layout mount.
+    await waitFor(() => {
+      expect(screen.getByTestId("badge-status")).toHaveTextContent("down");
     });
   });
 });

@@ -42,6 +42,11 @@ _HEALTH_CHECK_RETENTION_DAYS = 30
 _AI_FAILURE_RECENT_HOURS = 1
 # Bounded so the admin page never renders an unbounded list of instructors.
 _FAILING_CANVAS_CONNECTIONS_LIMIT = 10
+# Bounds the history sparkline. Every run_health_checks call inserts exactly
+# one row per monitored service in lockstep, so capping total rows (instead
+# of a per-service window-function query) still keeps services balanced.
+_MAX_HISTORY_ROWS_PER_SERVICE = 200
+_MONITORED_SERVICE_COUNT = 4
 
 
 def _status_for_latency(latency_ms: int, timeout_seconds: float) -> HealthStatus:
@@ -52,6 +57,25 @@ def _status_for_latency(latency_ms: int, timeout_seconds: float) -> HealthStatus
 
 def _overall_status(statuses: list[HealthStatus]) -> HealthStatus:
     return max(statuses, key=lambda status: _STATUS_SEVERITY[status])
+
+
+def _apply_instructor_severity(
+    overall_status: HealthStatus,
+    instructor_canvas: InstructorCanvasSummary,
+    instructor_ai: InstructorAiSummary,
+) -> HealthStatus:
+    """Fold instructor-facing failures into the platform-wide signal.
+
+    Phase 2 added per-instructor Canvas/AI summaries specifically to close
+    the "shared infra only" gap, but overall_status previously ignored them
+    entirely -- every instructor connection could be broken and the nav
+    badge/overall chip would still read "healthy". Any failing Canvas
+    connection or recent AI failure now floors the status at "degraded";
+    infra checks can still independently push it to "down".
+    """
+    if instructor_canvas.failing > 0 or instructor_ai.failing_recent > 0:
+        return _overall_status([overall_status, "degraded"])
+    return overall_status
 
 
 async def check_backend(started_at: float) -> ServiceHealth:
@@ -211,14 +235,21 @@ async def get_instructor_ai_summary(db: AsyncSession) -> InstructorAiSummary:
 
 
 async def run_health_checks(db: AsyncSession, backend_started_at: float) -> HealthCheckResponse:
-    backend, database, canvas, ai, instructor_canvas, instructor_ai = await asyncio.gather(
+    # Network-only checks don't touch the DB, so they're safe to run
+    # concurrently. check_database, get_instructor_canvas_summary, and
+    # get_instructor_ai_summary all use this request's AsyncSession, and
+    # SQLAlchemy's asyncio docs are explicit that one AsyncSession is not
+    # safe for concurrent tasks -- gathering those together caused
+    # intermittent failures/corrupted results under load. Run them
+    # sequentially on the same session instead.
+    backend, canvas, ai = await asyncio.gather(
         check_backend(backend_started_at),
-        check_database(db),
         check_canvas(),
         check_ai(),
-        get_instructor_canvas_summary(db),
-        get_instructor_ai_summary(db),
     )
+    database = await check_database(db)
+    instructor_canvas = await get_instructor_canvas_summary(db)
+    instructor_ai = await get_instructor_ai_summary(db)
     services = {"backend": backend, "database": database, "canvas": canvas, "ai": ai}
 
     for service_name, health in services.items():
@@ -241,7 +272,11 @@ async def run_health_checks(db: AsyncSession, backend_started_at: float) -> Heal
     )
     await db.commit()
 
-    overall_status = _overall_status([health.status for health in services.values()])
+    overall_status = _apply_instructor_severity(
+        _overall_status([health.status for health in services.values()]),
+        instructor_canvas,
+        instructor_ai,
+    )
     return HealthCheckResponse(
         overall_status=overall_status,
         checked_at=datetime.now(UTC),
@@ -265,7 +300,10 @@ async def get_latest_health_status(db: AsyncSession) -> LatestHealthResponse:
         )
     )
     if not rows:
-        return LatestHealthResponse(overall_status="healthy", checked_at=None, services={})
+        # "Never checked" (fresh deploy, or every row pruned) is a distinct
+        # state from "confirmed healthy" -- claiming "healthy" here let a
+        # deploy with a broken health-check loop look calm indefinitely.
+        return LatestHealthResponse(overall_status="unknown", checked_at=None, services={})
 
     services = {
         row.service: ServiceHealth(
@@ -273,8 +311,13 @@ async def get_latest_health_status(db: AsyncSession) -> LatestHealthResponse:
         )
         for row in rows
     }
+    instructor_canvas = await get_instructor_canvas_summary(db)
+    instructor_ai = await get_instructor_ai_summary(db)
+    overall_status = _apply_instructor_severity(
+        _overall_status([row.status for row in rows]), instructor_canvas, instructor_ai
+    )
     return LatestHealthResponse(
-        overall_status=_overall_status([row.status for row in rows]),
+        overall_status=overall_status,
         checked_at=max(row.checked_at for row in rows),
         services=services,
     )
@@ -282,11 +325,15 @@ async def get_latest_health_status(db: AsyncSession) -> LatestHealthResponse:
 
 async def get_health_history(db: AsyncSession, hours: int = 24) -> HealthHistoryResponse:
     since = datetime.now(UTC) - timedelta(hours=hours)
-    rows = await db.scalars(
-        select(HealthCheck)
-        .where(HealthCheck.checked_at >= since)
-        .order_by(HealthCheck.checked_at.asc())
+    rows = list(
+        await db.scalars(
+            select(HealthCheck)
+            .where(HealthCheck.checked_at >= since)
+            .order_by(HealthCheck.checked_at.desc())
+            .limit(_MAX_HISTORY_ROWS_PER_SERVICE * _MONITORED_SERVICE_COUNT)
+        )
     )
+    rows.reverse()  # back to chronological order for the sparkline
 
     services: dict[str, list[HealthHistoryEntry]] = {
         "backend": [], "database": [], "canvas": [], "ai": [],

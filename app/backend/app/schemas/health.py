@@ -4,6 +4,10 @@ from typing import Literal
 from pydantic import BaseModel
 
 HealthStatus = Literal["healthy", "degraded", "down"]
+# Only ever returned by GET /admin/health/latest, for a fresh deploy (or
+# after retention pruning) with no persisted health_checks rows yet -- a
+# distinct state from a confirmed "healthy" run.
+LatestOverallStatus = Literal["healthy", "degraded", "down", "unknown"]
 
 
 class ServiceHealth(BaseModel):
@@ -41,7 +45,7 @@ class HealthCheckResponse(BaseModel):
 
 
 class LatestHealthResponse(BaseModel):
-    overall_status: HealthStatus
+    overall_status: LatestOverallStatus
     checked_at: datetime | None
     services: dict[str, ServiceHealth]
 

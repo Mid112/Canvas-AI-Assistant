@@ -70,4 +70,11 @@ describe("decorateNavItemsWithHealth", () => {
     decorateNavItemsWithHealth(adminNavItems, "down");
     expect(adminNavItems).toEqual(original);
   });
+
+  it("returns the items unchanged when status is unknown (never checked)", () => {
+    // "unknown" (nothing checked yet) is not a confirmed problem, so it
+    // must render calm like "healthy"/undefined -- not a false alarm.
+    const result = decorateNavItemsWithHealth(adminNavItems, "unknown");
+    expect(result).toEqual(adminNavItems);
+  });
 });

@@ -1,8 +1,9 @@
 -- System Health Monitoring (Feature 9). GET /admin/health runs 4 checks
--- (backend/database/canvas/ai) concurrently on every call and writes one
--- row per service here as an audit trail for "Verify monitoring" -- the
--- dashboard itself only ever reads the latest run, this table backs no
--- history/trend UI.
+-- (backend/database/canvas/ai) on every call and writes one row per
+-- service here as an audit trail for "Verify monitoring". Also backs
+-- GET /admin/health/history's sparkline (Phase 2) -- rows older than
+-- services/health.py's retention window are pruned on every live check,
+-- so this isn't kept indefinitely.
 CREATE TABLE IF NOT EXISTS health_checks (
     id            SERIAL PRIMARY KEY,
     service       VARCHAR NOT NULL

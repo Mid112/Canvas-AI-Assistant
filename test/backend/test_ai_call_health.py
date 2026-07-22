@@ -154,6 +154,31 @@ async def test_generate_assignment_draft_records_success_without_changing_output
 
 
 @pytest.mark.asyncio
+async def test_generate_assignment_draft_records_failure_when_response_is_unparseable():
+    """A 200 response that isn't valid JSON still 502s the endpoint -- the
+    instructor AI health card must reflect that as a failure, not a false
+    "ok" recorded before the parse step even ran."""
+    db = AsyncMock()
+    adapter = AsyncMock()
+    adapter.generate = AsyncMock(return_value="not json at all")
+    body = AssignmentDraftRequest(prompt="Create a quiz on recursion")
+
+    with (
+        patch("app.services.assignment_draft.get_llm_adapter", return_value=adapter),
+        patch("app.services.assignment_draft.record_ai_call_outcome", new=AsyncMock()) as mock_record,
+    ):
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc_info:
+            await generate_assignment_draft(body, db, user_id=42)
+
+    assert exc_info.value.status_code == 502
+    mock_record.assert_awaited_once_with(
+        db, 42, settings.DEFAULT_LLM_PROVIDER, error_detail="Unparseable model response"
+    )
+
+
+@pytest.mark.asyncio
 async def test_generate_assignment_draft_records_failure_and_still_raises_http_exception():
     db = AsyncMock()
     adapter = AsyncMock()

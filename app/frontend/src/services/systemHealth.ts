@@ -47,8 +47,13 @@ export interface HealthCheckResponse {
   instructor_ai: InstructorAiSummary;
 }
 
+// Only ever returned by GET /admin/health/latest, for a fresh deploy (or
+// after retention pruning) with no persisted health_checks rows yet -- a
+// distinct state from a confirmed "healthy" run.
+export type LatestOverallStatus = HealthStatus | "unknown";
+
 export interface LatestHealthResponse {
-  overall_status: HealthStatus;
+  overall_status: LatestOverallStatus;
   checked_at: string | null;
   services: Partial<ServiceMap>;
 }
