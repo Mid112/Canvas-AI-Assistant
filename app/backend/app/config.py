@@ -95,6 +95,13 @@ class Settings(BaseSettings):
     HF_TOKEN: str = ""
     HF_MODEL: str = "openai/gpt-oss-20b:groq"
 
+    # Optional hosted providers. Keys remain server-side and are never returned
+    # by the provider configuration API.
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini"
+    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_MODEL: str = "claude-sonnet-4-5"
+
     # Both the tick interval of the background course-name sync loop
     # (app.main's lifespan) and the per-connection cooldown
     # sync_courses_if_stale enforces before making a real Canvas call —

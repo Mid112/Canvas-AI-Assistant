@@ -438,6 +438,51 @@ CREATE TABLE system_settings (
     updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Expiring, user-scoped cache for safe assistant responses. The cache_key is
+-- a SHA-256 digest; raw prompts are intentionally not stored.
+CREATE TABLE llm_response_cache (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    cache_key   VARCHAR(64) NOT NULL,
+    provider    VARCHAR(64) NOT NULL,
+    model       VARCHAR(255) NOT NULL,
+    response    TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    expires_at  TIMESTAMPTZ NOT NULL,
+    CONSTRAINT uq_llm_response_cache_key UNIQUE (cache_key)
+);
+
+CREATE INDEX idx_llm_response_cache_user_id ON llm_response_cache(user_id);
+CREATE INDEX idx_llm_response_cache_expires_at ON llm_response_cache(expires_at);
+
+CREATE TABLE instructor_llm_connections (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider_id VARCHAR NOT NULL,
+    model VARCHAR,
+    base_url VARCHAR,
+    -- never store the raw key — always Fernet-encrypted before insert
+    -- (same CANVAS_TOKEN_ENCRYPTION_KEY as canvas_connections.encrypted_token)
+    encrypted_api_key TEXT,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, provider_id)
+);
+
+CREATE INDEX idx_instructor_llm_connections_user_id ON instructor_llm_connections(user_id);
+
+CREATE TABLE deferred_assistant_requests (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    conversation_id INTEGER REFERENCES conversations(id) ON DELETE SET NULL,
+    message         TEXT NOT NULL,
+    proposed_action JSONB,
+    status          VARCHAR NOT NULL DEFAULT 'deferred',
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resumed_at      TIMESTAMPTZ
+);
+
+CREATE INDEX idx_deferred_assistant_requests_user_status
+    ON deferred_assistant_requests(user_id, status);
+
 -- ─────────────────────────────────────────────
 -- Schema Migrations
 -- Tracks which db/migrations/*.sql files have been applied — read and
@@ -481,4 +526,8 @@ INSERT INTO schema_migrations (filename) VALUES
     ('022_audit_logs_allow_submission_resource_type.sql'),
     ('023_workflow_nullable_preview.sql'),
     ('024_grade_history.sql'),
-    ('025_submission_cache_key.sql');
+    ('024_llm_response_cache.sql'),
+    ('025_instructor_llm_connections.sql'),
+    ('025_submission_cache_key.sql'),
+    ('026_deferred_assistant_requests.sql'),
+    ('027_llm_response_cache_constraint_name.sql');

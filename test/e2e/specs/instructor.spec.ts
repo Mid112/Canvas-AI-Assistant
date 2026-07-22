@@ -13,11 +13,12 @@ function mainHeading(page: import("@playwright/test").Page, name: string | RegEx
 }
 
 test.describe("Instructor workflows (#711)", () => {
-  test("register, skip Canvas, and land on assistant gate", async ({ page }) => {
+  test("register, skip Canvas, and land on assistant limited mode", async ({ page }) => {
     await registerAndSkipCanvas(page);
     await expect(mainHeading(page, "AI Assistant")).toBeVisible();
+    await expect(page.getByText("Limited mode")).toBeVisible();
     await expect(
-      page.getByRole("heading", { name: "Connect Canvas to continue" }),
+      page.getByRole("textbox", { name: "Chat message" }),
     ).toBeVisible();
   });
 

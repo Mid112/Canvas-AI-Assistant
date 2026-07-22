@@ -46,6 +46,22 @@ describe("mapChatReplyToAssistantResponse", () => {
     expect(response.content).toBe("LLM unavailable");
   });
 
+  it("maps limited-mode Canvas blocks with a connect action", () => {
+    const response = mapChatReplyToAssistantResponse(
+      {
+        error: "This action needs a connected Canvas account.",
+        requires_canvas_token: true,
+        deferred_request_id: 42,
+        limited_mode: true,
+      },
+      true,
+    );
+
+    expect(response.requiresCanvasToken).toBe(true);
+    expect(response.deferredRequestId).toBe(42);
+    expect(response.interpretedAction?.primaryLink?.label).toMatch(/Connect Canvas/i);
+  });
+
   // Verifies: Maps successful confirm replies.
   it("maps successful confirm replies", () => {
     const response = mapChatReplyToAssistantResponse(

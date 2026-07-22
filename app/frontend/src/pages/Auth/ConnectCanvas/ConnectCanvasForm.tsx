@@ -180,8 +180,9 @@ export function ConnectCanvasForm({
           Continue without connecting
         </Button>
         <p className="text-center text-xs leading-relaxed text-muted-foreground">
-          Skip Canvas connection to use the query assistant only, without
-          institution workflows.
+          Continue in limited mode for general questions. Course and messaging
+          actions stay blocked until Canvas is connected — saved requests can be
+          resumed afterward.
         </p>
       </div>
     </form>

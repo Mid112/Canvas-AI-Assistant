@@ -2,6 +2,7 @@ import { History, Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 
+import { AssistantLimitedModeBanner } from "@/components/chat/AssistantLimitedModeBanner";
 import { ChatWindow, type ChatWindowHandle } from "@/components/chat/ChatWindow";
 import { ActiveCourseContextBar } from "@/components/courses/ActiveCourseContextBar";
 import { Button } from "@/components/ui/button";
@@ -13,20 +14,27 @@ import {
 } from "@/pages/Instructor/InstructorAssistant/InstructorAssistantHeader";
 import { buildSuggestedActions } from "@/data/assistantSeedData";
 import {
-  createDefaultLlmProviderSettings,
-  getLlmProviderOption,
-} from "@/data/llmProviders";
+  clearStoredDeferredDraft,
+  getStoredDeferredDraft,
+} from "@/lib/deferred-assistant-storage";
 import {
   getStoredLlmProviderSettings,
   setStoredLlmProviderSettings,
 } from "@/lib/llm-provider-storage";
-import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
+import {
+  fetchInstructorLlmProviders,
+  resolveConnectedSettings,
+  type InstructorLlmProvider,
+} from "@/services/instructorLlmProviders";
 import {
   AssistantApiError,
   fetchConversation,
   listAssistantConversations,
+  listDeferredAssistantRequests,
+  resumeDeferredAssistantRequest,
   type ConversationResponse,
   type ConversationSummary,
+  type DeferredAssistantRequest,
 } from "@/services/assistant";
 import type { LlmProviderId, LlmProviderSettings } from "@/types/llmProvider";
 
@@ -100,11 +108,10 @@ export function InstructorAssistantPage() {
   );
   const [chatSessionKey, setChatSessionKey] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
-  const [llmSettings, setLlmSettings] = useState<LlmProviderSettings>(() =>
-    user
-      ? getStoredLlmProviderSettings(user.id)
-      : createDefaultLlmProviderSettings(),
+  const [llmSettings, setLlmSettings] = useState<LlmProviderSettings | null>(
+    null,
   );
+  const [llmProviders, setLlmProviders] = useState<InstructorLlmProvider[]>([]);
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
   const [selectedConversation, setSelectedConversation] =
     useState<ConversationResponse | null>(null);
@@ -113,27 +120,20 @@ export function InstructorAssistantPage() {
   const [loadingConversationId, setLoadingConversationId] = useState<
     number | null
   >(null);
+  const [deferredRequests, setDeferredRequests] = useState<
+    DeferredAssistantRequest[]
+  >([]);
+  const [deferredListLoaded, setDeferredListLoaded] = useState(false);
+  const [isResumingDeferred, setIsResumingDeferred] = useState(false);
+  const [pendingDeferredRequestId, setPendingDeferredRequestId] = useState<
+    number | null
+  >(null);
   const chatWindowRef = useRef<ChatWindowHandle>(null);
-
-  const handleModelProviderChange = useCallback(
-    (providerId: LlmProviderId) => {
-      const option = getLlmProviderOption(providerId);
-      const next: LlmProviderSettings = {
-        provider: providerId,
-        model: option.defaultModel,
-        baseUrl:
-          providerId === "openai_compatible_custom" ? llmSettings.baseUrl : "",
-      };
-      setLlmSettings(next);
-      if (user) {
-        setStoredLlmProviderSettings(user.id, next);
-      }
-    },
-    [llmSettings.baseUrl, user],
-  );
+  const conversationLoadRequestRef = useRef(0);
+  const limitedMode = Boolean(user && !user.has_canvas_token);
 
   const loadConversationList = useCallback(async () => {
-    if (!accessToken || !user?.has_canvas_token) {
+    if (!accessToken) {
       return;
     }
 
@@ -154,12 +154,100 @@ export function InstructorAssistantPage() {
     } finally {
       setIsHistoryLoading(false);
     }
-  }, [accessToken, user?.has_canvas_token]);
+  }, [accessToken]);
+
+  const loadDeferredRequests = useCallback(async () => {
+    if (!accessToken) {
+      return;
+    }
+
+    try {
+      const response = await listDeferredAssistantRequests(accessToken);
+      setDeferredRequests(response.items);
+    } catch {
+      // Banner still works without the count; chat remains usable.
+    } finally {
+      setDeferredListLoaded(true);
+    }
+  }, [accessToken]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- async history load on mount/auth changes
     void loadConversationList();
   }, [loadConversationList]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async deferred load on mount/auth changes
+    void loadDeferredRequests();
+  }, [loadDeferredRequests]);
+
+  useEffect(() => {
+    if (!accessToken || !user) return;
+    let cancelled = false;
+    void fetchInstructorLlmProviders(accessToken)
+      .then((policy) => {
+        if (cancelled) return;
+        const resolved = resolveConnectedSettings(
+          policy,
+          getStoredLlmProviderSettings(user.id),
+        );
+        setLlmProviders(policy.providers);
+        setLlmSettings(resolved);
+        setStoredLlmProviderSettings(user.id, resolved);
+      })
+      .catch(() => {
+        // The chat remains usable with the server default if policy metadata
+        // cannot be loaded; the picker simply stays hidden.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, user]);
+
+  // After Canvas is connected, restore any locally cached deferred draft into
+  // the composer only when the server queue is empty. The server queue is the
+  // source of truth once requests are deferred — restoring a local draft while
+  // the same request is still queued would duplicate it.
+  useEffect(() => {
+    if (!user?.has_canvas_token || !user.id || !deferredListLoaded) return;
+    const draft = getStoredDeferredDraft(user.id);
+    if (!draft?.message) return;
+    clearStoredDeferredDraft(user.id);
+    if (deferredRequests.length > 0) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setPendingDraft(draft.message);
+      if (draft.conversationId !== undefined) {
+        setPendingConversationId(draft.conversationId);
+      }
+      if (draft.deferredRequestId != null) {
+        setPendingDeferredRequestId(draft.deferredRequestId);
+      }
+      setChatSessionKey((current) => current + 1);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [
+    deferredListLoaded,
+    deferredRequests.length,
+    user?.has_canvas_token,
+    user?.id,
+  ]);
+
+  const handleModelProviderChange = useCallback(
+    (providerId: LlmProviderId) => {
+      const provider = llmProviders.find((item) => item.id === providerId);
+      if (!provider?.connected || !user) return;
+      const next = {
+        provider: provider.id,
+        model: provider.saved_model ?? provider.models[0] ?? provider.default_model,
+        baseUrl: provider.saved_base_url ?? "",
+      };
+      setLlmSettings(next);
+      setStoredLlmProviderSettings(user.id, next);
+    },
+    [llmProviders, user],
+  );
 
   const handleSuggestedAction = (prompt: string) => {
     setSelectedConversation(null);
@@ -172,6 +260,7 @@ export function InstructorAssistantPage() {
     setPendingPrompt(null);
     setPendingConversationId(undefined);
     setPendingMessageId(undefined);
+    setPendingDeferredRequestId(null);
     setHistoryError(null);
     setChatSessionKey((current) => current + 1);
   };
@@ -181,25 +270,36 @@ export function InstructorAssistantPage() {
       return;
     }
 
+    const requestId = conversationLoadRequestRef.current + 1;
+    conversationLoadRequestRef.current = requestId;
     setLoadingConversationId(conversationId);
     setHistoryError(null);
 
     try {
       const conversation = await fetchConversation(accessToken, conversationId);
+      if (conversationLoadRequestRef.current !== requestId) {
+        return;
+      }
       setSelectedConversation(conversation);
       setPendingDraft(null);
       setPendingPrompt(null);
+      setPendingDeferredRequestId(null);
       setPendingConversationId(conversation.id);
       setPendingMessageId(undefined);
       setChatSessionKey((current) => current + 1);
     } catch (requestError) {
+      if (conversationLoadRequestRef.current !== requestId) {
+        return;
+      }
       setHistoryError(
         requestError instanceof AssistantApiError
           ? requestError.message
           : "Unable to load this conversation.",
       );
     } finally {
-      setLoadingConversationId(null);
+      if (conversationLoadRequestRef.current === requestId) {
+        setLoadingConversationId(null);
+      }
     }
   };
 
@@ -208,15 +308,52 @@ export function InstructorAssistantPage() {
     void loadConversationList();
   };
 
+  const handleResumeDeferred = async () => {
+    if (!accessToken || deferredRequests.length === 0) {
+      return;
+    }
+
+    setIsResumingDeferred(true);
+    try {
+      const [first] = deferredRequests;
+      const resumed = await resumeDeferredAssistantRequest(accessToken, first.id);
+      setPendingPrompt(resumed.message);
+      setPendingDeferredRequestId(resumed.id);
+      if (resumed.conversation_id != null) {
+        setPendingConversationId(resumed.conversation_id);
+      }
+      setSelectedConversation(null);
+      setChatSessionKey((current) => current + 1);
+      if (user) {
+        clearStoredDeferredDraft(user.id);
+      }
+    } catch (requestError) {
+      setHistoryError(
+        requestError instanceof AssistantApiError
+          ? requestError.message
+          : "Unable to resume the saved request. Connect Canvas and try again.",
+      );
+    } finally {
+      setIsResumingDeferred(false);
+    }
+  };
+
   return (
     <div className="flex min-h-full flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-5 lg:p-6">
       <InstructorAssistantHeader />
 
-      {!user?.has_canvas_token ? (
-        <CanvasConnectionRequired description="Connect Canvas to use the AI assistant with your courses and assignments." />
-      ) : (
-        <>
-      <ActiveCourseContextBar />
+      {limitedMode ? (
+        <AssistantLimitedModeBanner deferredCount={deferredRequests.length} />
+      ) : deferredRequests.length > 0 ? (
+        <AssistantLimitedModeBanner
+          resumeOnly
+          deferredCount={deferredRequests.length}
+          onResumeNext={() => void handleResumeDeferred()}
+          isResuming={isResumingDeferred}
+        />
+      ) : null}
+
+      {user?.has_canvas_token ? <ActiveCourseContextBar /> : null}
 
       <InstructorAssistantSuggestedActions
         actions={suggestedActions}
@@ -232,6 +369,7 @@ export function InstructorAssistantPage() {
           initialDraft={pendingDraft}
           initialConversationId={pendingConversationId}
           initialPendingMessageId={pendingMessageId}
+          initialDeferredRequestId={pendingDeferredRequestId}
           loadedConversation={selectedConversation}
           onInitialPromptConsumed={() => setPendingPrompt(null)}
           onModifyContextConsumed={() => {
@@ -240,9 +378,15 @@ export function InstructorAssistantPage() {
             setPendingMessageId(undefined);
           }}
           onConversationChange={handleConversationChange}
+          onDeferredRequest={() => void loadDeferredRequests()}
+          onDeferredResumeComplete={() => {
+            setPendingDeferredRequestId(null);
+            void loadDeferredRequests();
+          }}
           onLoadingChange={setIsLoading}
           onStartNewChat={handleStartNewChat}
           modelSettings={llmSettings}
+          llmProviders={llmProviders}
           onModelProviderChange={handleModelProviderChange}
         />
 
@@ -334,8 +478,6 @@ export function InstructorAssistantPage() {
           </div>
         </section>
       </div>
-        </>
-      )}
     </div>
   );
 }

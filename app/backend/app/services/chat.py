@@ -16,9 +16,9 @@ from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.config import settings
 from app.core.canvas_url import canvas_urls_equivalent
 from app.core.database import AsyncSessionLocal
+from app.core.secret_redaction import redact_secrets, safe_exception_text
 from app.mcp_tools.dispatcher import ToolExecutionError, execute_tool, parse_action
 from app.mcp_tools.dispatcher import _resolve_course as resolve_course
 from app.mcp_tools.schemas import (
@@ -46,9 +46,26 @@ from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
 from app.services.assignment_rate import find_assignments_by_submission_rate
 from app.services.canvas import CanvasTokenRequiredError, sync_courses_if_stale
+from app.services.canvas_assistant_gate import (
+    classify_action_for_limited_mode,
+    user_has_canvas_credentials,
+)
+from app.services.deferred_assistant import defer_assistant_request, mark_deferred_request_resumed
 from app.services.llm.base import LLMAdapter
 from app.services.llm.json_extraction import extract_json_object
+from app.services.llm.llm_connections import resolve_instructor_llm_request
 from app.services.llm.llm_setting import get_llm_adapter
+from app.services.llm.provider_registry import (
+    ObservableAdapter,
+    get_active_llm_config,
+)
+from app.services.llm.response_cache import (
+    build_cache_key,
+    get_cached_response,
+    is_safe_cache_candidate,
+    is_safe_cache_response,
+    store_cached_response,
+)
 from app.services.llm.student_context import (
     format_llm_student_listing,
     llm_student_candidates,
@@ -67,7 +84,19 @@ logger = logging.getLogger(__name__)
 LLM_TIMEOUT_SECONDS = 90.0
 HISTORY_WINDOW = 10
 CANVAS_TOKEN_REQUIRED_MESSAGE = (
-    "This action needs a connected Canvas account. Connect Canvas in Settings, then try again."
+    "This action needs a connected Canvas account. Connect Canvas in Settings, "
+    "then resume this request from the assistant."
+)
+
+LIMITED_MODE_PROMPT = (
+    "\nLIMITED MODE — the current user has NOT connected a Canvas account. "
+    "You are in limited mode: answer general teaching/Canvas-process questions "
+    "with {\"action\": \"respond\", ...} only. Do not propose or execute any "
+    "Canvas-touching action (fetch/create/update/send/grade). If the request "
+    "needs Canvas data or would change Canvas, respond with "
+    '{"action": "respond", "message": "..."} telling them they are in limited '
+    "mode and must connect Canvas in Settings to continue — the app will save "
+    "the request so they can resume after connecting.\n"
 )
 
 # Hard cap on how many LLM decisions a single user turn may chain through
@@ -600,7 +629,7 @@ async def _run_tracked_read(
         result = await coro
     except Exception as e:
         call_log.status = "failed"
-        call_log.error_detail = str(e)
+        call_log.error_detail = safe_exception_text(e)
         await db.flush()
         raise
     call_log.status = "executed"
@@ -1908,6 +1937,50 @@ async def log_message(
     return message
 
 
+async def _defer_canvas_limited_mode_reply(
+    db: AsyncSession,
+    *,
+    user: User,
+    conversation: Conversation,
+    message: str,
+    action,
+) -> dict | None:
+    """Classify before tool execution; defer Canvas work in limited mode.
+
+    Returns an error reply dict when blocked, or None when the action may proceed.
+    """
+    if user_has_canvas_credentials(user):
+        return None
+
+    proposed = getattr(action, "proposed_action", None)
+    proposed_dict = proposed if isinstance(proposed, dict) else None
+    if classify_action_for_limited_mode(action.action, proposed_dict) == "allow":
+        return None
+
+    deferred = await defer_assistant_request(
+        db,
+        user=user,
+        conversation_id=conversation.id,
+        message=message,
+        proposed_action=action.model_dump(),
+    )
+    reply = {
+        "error": CANVAS_TOKEN_REQUIRED_MESSAGE,
+        "requires_canvas_token": True,
+        "limited_mode": True,
+        "deferred_request_id": deferred.id,
+        "deferred_message": message,
+    }
+    await log_message(
+        db,
+        conversation,
+        role="assistant",
+        content=json.dumps(reply),
+    )
+    await db.commit()
+    return reply
+
+
 async def update_message_content(
     db: AsyncSession,
     conversation_id: int,
@@ -2161,18 +2234,9 @@ def build_system_prompt(has_canvas_token: bool = True) -> str:
         '"in two weeks") against this date — never against a year from your\n'
         "training data. A resolved date must always fall on or after today.\n"
     )
-    # The backend already fails safely without this (CanvasTokenRequiredError
-    # is caught and turned into a friendly message), so this is purely an
-    # optimization to skip a doomed-to-fail LLM round-trip for the common
-    # case of a user who hasn't connected Canvas yet asking a Canvas question.
-    canvas_gate_line = "" if has_canvas_token else (
-        "\nThe current user has NOT connected a Canvas account yet. Do not "
-        "propose any Canvas-touching action (fetch/create/update/send) — it "
-        "will fail. If the request needs Canvas data, respond with "
-        '{"action": "respond", "message": "..."} telling them to connect '
-        "Canvas in Settings first. Still answer general, non-Canvas "
-        "questions normally.\n"
-    )
+    # Soft guidance only — hard enforcement is classify_action_for_limited_mode
+    # before any Canvas tool execution (issue #1245).
+    canvas_gate_line = "" if has_canvas_token else LIMITED_MODE_PROMPT
 
     return """You are a Canvas LMS assistant for instructors. You help
 with course management, assignments, student submissions, and
@@ -2517,6 +2581,7 @@ async def handle_chat_message(
     conversation_id: int | None,
     pending_message_id: int | None = None,
     model_settings: dict | None = None,
+    deferred_request_id: int | None = None,
 ) -> tuple[Conversation, dict, bool]:
     """Main chat handler. Two distinct flows:
 
@@ -2578,24 +2643,58 @@ async def handle_chat_message(
     course_names = await _get_course_names_for_user(db, user)
     history = await _get_recent_messages(db, conversation.id)
 
-    # Built once per turn and threaded into every resolver call below
-    # (_resolve_course_switch, _resolve_assignment_reference via
-    # _resolve_course_and_assignment, _resolve_students_via_llm via
-    # _resolve_recipient_directives) so a user's chosen provider/model
-    # (AI Models settings page / in-chat switcher) governs the whole
-    # turn consistently, not just the main call. Falls back to
-    # settings.DEFAULT_LLM_PROVIDER when the client didn't send one.
+    # Instructors choose a connected provider/model. Credentials are resolved
+    # server-side from stored instructor keys or deployment secrets.
     try:
-        adapter = get_llm_adapter(model_settings or {"provider": settings.DEFAULT_LLM_PROVIDER})
+        llm_config = await get_active_llm_config(db)
+        selected_provider, selected_model, adapter_settings = (
+            await resolve_instructor_llm_request(
+                db,
+                user.id,
+                llm_config.provider,
+                llm_config.model,
+                model_settings,
+            )
+        )
+        primary = (
+            selected_provider,
+            get_llm_adapter(adapter_settings),
+        )
+        fallback = None
+        if (
+            llm_config.fallback_provider
+            and llm_config.fallback_model
+            and llm_config.fallback_provider != selected_provider
+        ):
+            try:
+                fallback_provider, _, fallback_settings = (
+                    await resolve_instructor_llm_request(
+                        db,
+                        user.id,
+                        llm_config.fallback_provider,
+                        llm_config.fallback_model,
+                        None,
+                    )
+                )
+                fallback = (
+                    fallback_provider,
+                    get_llm_adapter(fallback_settings),
+                )
+            except ValueError:
+                fallback = None
+        adapter = ObservableAdapter(primary, fallback)
     except (KeyError, ValueError) as e:
-        # An unknown provider id, or a provider (openai/anthropic/custom)
-        # that needs a key the server hasn't configured and the client
-        # never supplies — surface as a normal chat error rather than a
-        # raw 500, same as any other failure this function returns.
-        await log_message(db, conversation, role="assistant", content=f"LLM provider error: {e}")
+        await log_message(
+            db,
+            conversation,
+            role="assistant",
+            content=f"LLM provider error: {safe_exception_text(e)}",
+        )
         await db.commit()
         return conversation, {
-            "error": "The selected AI model isn't available right now. Try a different one in Settings.",
+            "error": (
+                "That AI model is not connected. Connect it in Settings and try again."
+            ),
         }, True
 
     if pending_message_id is None and local_course_id is None:
@@ -2676,6 +2775,34 @@ async def handle_chat_message(
             current_proposed_action = stored_preview.get("proposed_action")
 
     system_prompt = build_system_prompt(has_canvas_token=bool(user.canvas_connections))
+    first_llm_message = _build_llm_message(
+        message,
+        course_names,
+        conversation.course_name,
+        current_proposed_action,
+        [],
+    )
+    cache_key: str | None = None
+    cached_raw_output: str | None = None
+    if llm_config.cache_enabled and is_safe_cache_candidate(
+        message,
+        has_history=bool(history),
+        local_course_id=local_course_id,
+        conversation_course_id=conversation.course_id,
+        pending_message_id=pending_message_id,
+    ):
+        cache_key = build_cache_key(
+            user_id=user.id,
+            provider=selected_provider,
+            model=selected_model,
+            system_prompt=system_prompt,
+            llm_message=first_llm_message,
+        )
+        cached_raw_output = await get_cached_response(
+            db,
+            cache_key=cache_key,
+            user_id=user.id,
+        )
 
     # Step loop: lets the model chain a bounded sequence of read/resolver
     # decisions within this ONE user turn, instead of every read
@@ -2696,18 +2823,29 @@ async def handle_chat_message(
 
     for step in range(1, MAX_TURN_STEPS + 1):
         try:
-            raw_output = await asyncio.wait_for(
-                adapter.generate(
-                    system_prompt,
-                    _build_llm_message(
-                        message, course_names, conversation.course_name,
-                        current_proposed_action, loop_steps,
+            if step == 1 and cached_raw_output is not None:
+                raw_output = cached_raw_output
+            else:
+                llm_message = (
+                    first_llm_message
+                    if step == 1
+                    else _build_llm_message(
+                        message,
+                        course_names,
+                        conversation.course_name,
+                        current_proposed_action,
+                        loop_steps,
+                    )
+                )
+                raw_output = await asyncio.wait_for(
+                    adapter.generate(
+                        system_prompt,
+                        llm_message,
+                        history=history,
+                        timeout=LLM_TIMEOUT_SECONDS,
                     ),
-                    history=history,
                     timeout=LLM_TIMEOUT_SECONDS,
-                ),
-                timeout=LLM_TIMEOUT_SECONDS,
-            )
+                )
         except TimeoutError:
             log_detail = f"LLM request timed out after {LLM_TIMEOUT_SECONDS}s"
             await log_message(db, conversation, role="assistant", content=log_detail)
@@ -2728,7 +2866,7 @@ async def handle_chat_message(
             await db.commit()
             return conversation, {"error": user_message}, True
         except Exception as e:
-            log_detail = f"LLM request failed: {type(e).__name__}: {e}"
+            log_detail = f"LLM request failed: {safe_exception_text(e)}"
             await log_message(db, conversation, role="assistant", content=log_detail)
             await db.commit()
             return (
@@ -2877,6 +3015,16 @@ async def handle_chat_message(
                 # of showing a pointless double preview.
                 action = parse_action(json.dumps(action.proposed_action))
 
+            limited_reply = await _defer_canvas_limited_mode_reply(
+                db,
+                user=user,
+                conversation=conversation,
+                message=message,
+                action=action,
+            )
+            if limited_reply is not None:
+                return conversation, limited_reply, True
+
             if action.action == "fetch_submissions":
                 # Needs a real Canvas assignment_id, which the model is
                 # never allowed to invent — resolve it server-side (chains
@@ -2960,16 +3108,20 @@ async def handle_chat_message(
             else:
                 result = await execute_tool(db, user, action)
         except ToolExecutionError as e:
-            await log_message(db, conversation, role="assistant", content=e.log_detail)
+            await log_message(
+                db, conversation, role="assistant", content=redact_secrets(e.log_detail)
+            )
             await db.commit()
             return conversation, {"error": e.user_message}, True
         except CanvasTokenRequiredError as e:
-            await log_message(db, conversation, role="assistant", content=str(e.detail))
+            await log_message(
+                db, conversation, role="assistant", content=redact_secrets(str(e.detail))
+            )
             await db.commit()
             return conversation, {"error": CANVAS_TOKEN_REQUIRED_MESSAGE, "requires_canvas_token": True}, True
         except HTTPException as e:
             detail = e.detail if isinstance(e.detail, str) else str(e.detail)
-            error_detail = f"HTTPException {e.status_code}: {detail}"
+            error_detail = redact_secrets(f"HTTPException {e.status_code}: {detail}")
             await log_message(db, conversation, role="assistant", content=error_detail)
             await db.commit()
             return conversation, {"error": detail}, True
@@ -2994,6 +3146,26 @@ async def handle_chat_message(
         if step >= MAX_TURN_STEPS:
             result = _step_budget_exhausted_response(loop_steps)
             break
+
+    # Only terminal conversational responses are cacheable. Canvas reads,
+    # writes, previews, clarification flows, and multi-step turns always bypass
+    # storage even if their initial wording looked harmless.
+    if (
+        cache_key
+        and cached_raw_output is None
+        and result.get("action") == "respond"
+        and not loop_steps
+        and is_safe_cache_response(raw_output)
+    ):
+        await store_cached_response(
+            db,
+            user_id=user.id,
+            cache_key=cache_key,
+            provider=adapter.last_provider,
+            model=adapter.last_model or selected_model,
+            response=raw_output,
+            ttl_seconds=llm_config.cache_ttl_seconds,
+        )
 
     # Log the assistant result — if this is a modify turn superseding a
     # previous intent_preview, overwrite that message in place rather than
@@ -3064,7 +3236,21 @@ async def handle_chat_message(
                 result.get("action"),
             )
 
+    # Persist the chat turn first so a deferred-status update failure cannot
+    # roll back an already-generated assistant reply.
     await db.commit()
+
+    if deferred_request_id is not None:
+        try:
+            await mark_deferred_request_resumed(db, user, deferred_request_id)
+            await db.commit()
+        except HTTPException as exc:
+            await db.rollback()
+            logger.warning(
+                "Chat reply saved but deferred request %s was not marked resumed: %s",
+                deferred_request_id,
+                exc.detail,
+            )
 
     # attach the stored message ID so the client can confirm by ID.
     # Form-handoff actions are not confirmable in chat.
@@ -3329,17 +3515,37 @@ async def handle_confirmed_action(
 
     try:
         action = parse_action(json.dumps(workflow.proposed_action))
+        if not user_has_canvas_credentials(user) and classify_action_for_limited_mode(
+            action.action,
+            action.proposed_action if isinstance(getattr(action, "proposed_action", None), dict) else None,
+        ) == "block":
+            # Preserve the pending preview so confirm can resume after Canvas
+            # is connected (issue #1245).
+            workflow.status = "pending"
+            reply = {
+                "error": CANVAS_TOKEN_REQUIRED_MESSAGE,
+                "requires_canvas_token": True,
+                "limited_mode": True,
+                "pending_message_id": pending_message_id,
+            }
+            await log_message(
+                db, conversation, role="assistant", content=json.dumps(reply)
+            )
+            await db.commit()
+            return conversation, reply, True
         result = await execute_tool(db, user, action)
     except ToolExecutionError as e:
-        await log_message(db, conversation, role="assistant", content=e.log_detail)
+        safe_detail = redact_secrets(e.log_detail)
+        await log_message(db, conversation, role="assistant", content=safe_detail)
         workflow.status = "failed"
-        workflow.error_detail = e.log_detail
+        workflow.error_detail = safe_detail
         await db.commit()
         return conversation, {"error": e.user_message}, True
     except CanvasTokenRequiredError as e:
-        await log_message(db, conversation, role="assistant", content=str(e.detail))
+        safe_detail = redact_secrets(str(e.detail))
+        await log_message(db, conversation, role="assistant", content=safe_detail)
         workflow.status = "failed"
-        workflow.error_detail = str(e.detail)
+        workflow.error_detail = safe_detail
         await db.commit()
         return conversation, {"error": CANVAS_TOKEN_REQUIRED_MESSAGE, "requires_canvas_token": True}, True
     except HTTPException as e:
@@ -3350,7 +3556,7 @@ async def handle_confirmed_action(
         # with no "reply" key. Fold it into the same error-reply shape
         # so the user actually sees why the confirmed action failed.
         detail = e.detail if isinstance(e.detail, str) else str(e.detail)
-        error_detail = f"HTTPException {e.status_code}: {detail}"
+        error_detail = redact_secrets(f"HTTPException {e.status_code}: {detail}")
         await log_message(db, conversation, role="assistant", content=error_detail)
         workflow.status = "failed"
         workflow.error_detail = error_detail

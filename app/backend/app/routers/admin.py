@@ -14,6 +14,7 @@ from app.schemas.admin import (
     InstructorResponse,
     UpdateInstructorRequest,
 )
+from app.schemas.llm_provider import LlmProviderConfig, LlmProviderConfigResponse
 from app.services.admin import (
     create_admin_user,
     create_instructor,
@@ -21,11 +22,14 @@ from app.services.admin import (
     enable_instructor,
     get_admin_settings,
     get_dashboard_stats,
+    get_llm_provider_config,
     list_instructors,
     revoke_instructor_access,
     update_admin_settings,
     update_instructor,
+    update_llm_provider_config,
 )
+from app.services.llm.provider_registry import get_provider_statuses
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -54,6 +58,30 @@ async def update_settings(
 ):
     settings = await update_admin_settings(db, body.settings)
     return AdminSettingsResponse(settings=settings)
+
+
+@router.get("/llm/providers", response_model=LlmProviderConfigResponse)
+async def llm_provider_settings(
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return LlmProviderConfigResponse(
+        config=await get_llm_provider_config(db),
+        providers=await get_provider_statuses(),
+    )
+
+
+@router.put("/llm/providers", response_model=LlmProviderConfigResponse)
+async def update_llm_provider_settings(
+    body: LlmProviderConfig,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    config = await update_llm_provider_config(db, body, current_user)
+    return LlmProviderConfigResponse(
+        config=config,
+        providers=await get_provider_statuses(),
+    )
 
 
 @router.post("/users", response_model=AdminUserResponse, status_code=status.HTTP_201_CREATED)

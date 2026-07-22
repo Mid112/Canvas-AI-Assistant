@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from app.models.canvas_connection import CanvasConnection
     from app.models.conversation import Conversation
     from app.models.course import Course
+    from app.models.instructor_llm_connection import InstructorLlmConnection
     from app.models.message_draft import MessageDraft
     from app.models.message_template import MessageTemplate
     from app.models.password_reset_token import PasswordResetToken
@@ -58,6 +59,11 @@ class User(Base):
     )
     message_drafts: Mapped[list["MessageDraft"]] = relationship(
         "MessageDraft", back_populates="user", cascade="all, delete-orphan"
+    )
+    llm_connections: Mapped[list["InstructorLlmConnection"]] = relationship(
+        "InstructorLlmConnection",
+        back_populates="user",
+        cascade="all, delete-orphan",
     )
     password_reset_tokens: Mapped[list["PasswordResetToken"]] = relationship(
         "PasswordResetToken", back_populates="user", cascade="all, delete-orphan"

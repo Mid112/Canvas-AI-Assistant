@@ -5,6 +5,7 @@ import { ChatModelSwitcher } from "@/components/chat/ChatModelSwitcher";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
+import type { InstructorLlmProvider } from "@/services/instructorLlmProviders";
 import type { LlmProviderId, LlmProviderSettings } from "@/types/llmProvider";
 
 interface ChatInputProps {
@@ -14,6 +15,7 @@ interface ChatInputProps {
   inputError?: string | null;
   initialValue?: string;
   modelSettings?: LlmProviderSettings | null;
+  llmProviders?: InstructorLlmProvider[];
   onModelProviderChange?: (providerId: LlmProviderId) => void;
 }
 
@@ -24,6 +26,7 @@ export function ChatInput({
   inputError,
   initialValue = "",
   modelSettings = null,
+  llmProviders = [],
   onModelProviderChange,
 }: ChatInputProps) {
   const [value, setValue] = useState(initialValue);
@@ -88,8 +91,9 @@ export function ChatInput({
             {modelSettings && onModelProviderChange ? (
               <ChatModelSwitcher
                 settings={modelSettings}
+                providers={llmProviders}
                 onProviderChange={onModelProviderChange}
-                disabled={isDisabled}
+                disabled={isDisabled || isLoading}
               />
             ) : (
               <span className="px-2 text-xs text-muted-foreground">Model</span>

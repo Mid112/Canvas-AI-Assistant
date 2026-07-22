@@ -49,6 +49,7 @@ def generate_reset_token() -> str:
 
 
 def _fernet() -> Fernet:
+    # Same Fernet key encrypts Canvas tokens and instructor LLM API keys at rest.
     return Fernet(settings.CANVAS_TOKEN_ENCRYPTION_KEY.encode())
 
 
@@ -58,3 +59,11 @@ def encrypt_canvas_token(plain_token: str) -> str:
 
 def decrypt_canvas_token(encrypted_token: str) -> str:
     return _fernet().decrypt(encrypted_token.encode()).decode()
+
+
+def encrypt_llm_api_key(plain_api_key: str) -> str:
+    return _fernet().encrypt(plain_api_key.encode()).decode()
+
+
+def decrypt_llm_api_key(encrypted_api_key: str) -> str:
+    return _fernet().decrypt(encrypted_api_key.encode()).decode()
