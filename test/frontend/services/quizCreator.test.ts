@@ -131,6 +131,9 @@ describe("quizCreator", () => {
     ).resolves.toMatchObject({
       id: 88,
       title: "Recursion Quiz",
+      warnings: [
+        expect.stringContaining("Best-effort recovery"),
+      ],
     });
   });
 

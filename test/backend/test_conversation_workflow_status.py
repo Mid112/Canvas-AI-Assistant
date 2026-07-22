@@ -9,8 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.schemas.canvas import AssignmentResponse, MessageSendResult
-from app.schemas.student import StudentResponse
+from app.schemas.canvas import AssignmentResponse
 
 CANVAS_URL = "https://canvas.ubc.ca"
 
@@ -152,43 +151,42 @@ def test_cancelled_preview_reflected_in_workflow_statuses(client):
     assert entry["status"] == "cancelled"
 
 
-# Verifies: two previews resolved OUT OF ORDER (the second confirmed
-# before the first is cancelled) each keep their own correct status — the
-# old frontend FIFO-from-transcript reconstruction this backend field
-# replaces would have mislabeled these.
+# Verifies: two create_assignment previews resolved OUT OF ORDER (the
+# second confirmed before the first is cancelled) each keep their own
+# correct status — the old frontend FIFO-from-transcript reconstruction
+# this backend field replaces would have mislabeled these.
 def test_multiple_previews_out_of_order_keep_correct_individual_statuses(client):
     headers, local_course_id = _register_with_canvas(client)
-    students = [
-        StudentResponse(id=1, canvas_user_id="501", course_id=local_course_id, name="Alice", enrollment_state="active"),
-        StudentResponse(id=2, canvas_user_id="502", course_id=local_course_id, name="Bob", enrollment_state="active"),
-    ]
 
-    llm_outputs = [
-        '{"action": "send_message", "course_name": "CPSC 310", "subject": "Reminder", '
-        '"body": "placeholder", "recipient_directives": '
-        '[{"student_reference": "Alice", "body": "Message for Alice"}, '
-        '{"student_reference": "Bob", "body": "Message for Bob"}]}',
-        '{"resolutions": [{"student_reference": "Alice", "canvas_user_id": 501}, '
-        '{"student_reference": "Bob", "canvas_user_id": 502}]}',
-    ]
-    with patch("app.mcp_tools.dispatcher.get_students", new=AsyncMock(return_value=students)):
-        first = _chat(client, headers, "message alice and bob with different notes", llm_outputs)
+    first = _create_assignment_preview(client, headers, local_course_id)
     assert first["is_error"] is False, first
     conversation_id = first["conversation_id"]
     first_pending_id = first["reply"]["pending_message_id"]
-    second_pending_id = first["reply"]["additional_previews"][0]["pending_message_id"]
+
+    second_llm = (
+        '{"switched_to": null}',
+        '{"action": "intent_preview", "course_name": "CPSC 310", "summary": "Create Homework", '
+        '"proposed_action": {"action": "create_assignment", '
+        f'"local_course_id": {local_course_id}, "title": "Homework", '
+        '"description": "A short homework on course topics.", "due_date": "2030-02-01T00:00:00", '
+        '"points_possible": 20}}'
+    )
+    second = _chat(
+        client, headers, "also create a homework", list(second_llm), conversation_id=conversation_id,
+    )
+    assert second["is_error"] is False, second
+    second_pending_id = second["reply"]["pending_message_id"]
+    assert second_pending_id != first_pending_id
 
     # Resolve the SECOND (later-created) preview first, confirming it;
     # then cancel the FIRST one — the reverse of creation order.
-    with (
-        patch("app.services.message_validation.get_students", new=AsyncMock(return_value=students)),
-        patch(
-            "app.mcp_tools.dispatcher.send_course_message",
-            new=AsyncMock(return_value=MessageSendResult(
-                course_id=1, subject="Reminder", body="Message for Bob",
-                audience_size=1, delivery_mode="conversation", recipient_canvas_user_ids=[502],
-            )),
-        ),
+    with patch(
+        "app.mcp_tools.dispatcher.create_course_assignment",
+        new=AsyncMock(return_value=AssignmentResponse(
+            id=2, course_id=local_course_id, name="Homework",
+            description="A short homework on course topics.",
+            due_at="2030-02-01T00:00:00", points_possible=20,
+        )),
     ):
         confirm_resp = client.post(
             "/api/v1/chat/confirm",

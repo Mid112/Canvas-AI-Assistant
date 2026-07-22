@@ -6,6 +6,10 @@ from app.core.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.inbox import (
+    InboxReplyDraftRequest,
+    InboxReplyDraftResponse,
+    InboxReplyPreviewRequest,
+    InboxReplyPreviewResponse,
     InboxReplyRequest,
     InboxThreadDetail,
     InboxThreadList,
@@ -20,6 +24,10 @@ from app.services.inbox import (
     get_inbox_thread,
     list_inbox_threads,
     reply_to_inbox_thread,
+)
+from app.services.inbox_reply_draft import (
+    generate_inbox_reply_draft,
+    preview_inbox_reply,
 )
 from app.services.messages import (
     create_message_draft,
@@ -67,9 +75,16 @@ async def send_draft(
     draft_id: int,
     current_user: User = Depends(get_current_user),
     canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    conversation_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    draft = await send_message_draft(db, current_user, draft_id, canvas_url)
+    draft = await send_message_draft(
+        db,
+        current_user,
+        draft_id,
+        canvas_url,
+        conversation_id=conversation_id,
+    )
     return MessageSendResponse(
         draft_id=draft.id,
         status=draft.status,
@@ -101,6 +116,50 @@ async def get_inbox_conversation(
 ):
     return await get_inbox_thread(
         conversation_id, current_user, canvas_url, db, local_course_id=course_id
+    )
+
+
+@router.post(
+    "/inbox/{conversation_id}/generate-reply-draft",
+    response_model=InboxReplyDraftResponse,
+)
+async def generate_inbox_reply_draft_endpoint(
+    conversation_id: int,
+    body: InboxReplyDraftRequest,
+    current_user: User = Depends(get_current_user),
+    course_id: int | None = Query(default=None),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await generate_inbox_reply_draft(
+        conversation_id,
+        body,
+        current_user,
+        canvas_url,
+        db,
+        local_course_id=course_id,
+    )
+
+
+@router.post(
+    "/inbox/{conversation_id}/reply/preview",
+    response_model=InboxReplyPreviewResponse,
+)
+async def preview_inbox_reply_endpoint(
+    conversation_id: int,
+    body: InboxReplyPreviewRequest,
+    current_user: User = Depends(get_current_user),
+    course_id: int | None = Query(default=None),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    return await preview_inbox_reply(
+        conversation_id,
+        body,
+        current_user,
+        canvas_url,
+        db,
+        local_course_id=course_id,
     )
 
 

@@ -55,3 +55,31 @@ class ActionPreviewResponse(BaseModel):
     reversible: bool
     affected_resources: list[dict]
     risk_level: Literal["low", "medium", "high"] = "medium"
+
+
+class FeedbackDraftRequest(BaseModel):
+    prompt: str = Field(min_length=20)
+    assignment_id: int
+    student_id: int
+    assignment_name: str = Field(min_length=1)
+    student_name: str = Field(min_length=1)
+    current_grade: str | None = None
+
+
+class FeedbackDraftResponse(BaseModel):
+    assignment_id: int
+    student_id: int
+    assignment_name: str
+    student_name: str
+    new_grade: str
+    feedback: str
+    current_grade: str | None = None
+
+
+class FeedbackPostRequest(BaseModel):
+    assignment_id: int
+    student_id: int
+    assignment_name: str = Field(min_length=1)
+    student_name: str = Field(min_length=1)
+    new_grade: str = Field(min_length=1)
+    feedback: str = Field(min_length=1)

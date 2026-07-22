@@ -389,4 +389,90 @@ describe("mapChatReply", () => {
       },
     });
   });
+
+  it("auto-redirects send_message to the Messages compose tab", () => {
+    const result = mapChatReply(
+      {
+        intent_preview: true,
+        summary: "Send deadline reminder to 2 students.",
+        proposed_action: {
+          action: "send_message",
+          local_course_id: 5,
+          subject: "Deadline Reminder",
+          body: "Please submit by Friday.",
+          recipient_canvas_user_ids: [11, 22],
+        },
+        preview_metadata: {
+          course: "CPSC 310",
+          summary: "Deadline reminder",
+          risk_level: "high",
+          reversible: false,
+        },
+        pending_message_id: 12,
+      },
+      false,
+      3,
+    );
+
+    expect(result.pendingMessageId).toBeUndefined();
+    expect(result.navigateTo?.path).toBe("/instructor/messages?tab=compose");
+    expect(result.navigateTo?.state).toMatchObject({
+      returnTo: "/instructor/assistant",
+      aiMessageDraft: {
+        subject: "Deadline Reminder",
+        body: "Please submit by Friday.",
+        courseId: 5,
+        recipientIds: ["11", "22"],
+        conversationId: 3,
+      },
+    });
+    expect(result.interpretedAction?.primaryLink?.label).toBe(
+      "Open message draft",
+    );
+    expect(result.interpretedAction?.secondaryLink).toBeUndefined();
+  });
+
+  it("auto-redirects update_grade to the feedback form", () => {
+    const result = mapChatReply(
+      {
+        intent_preview: true,
+        summary: "Update grade for Alex Chen on Recursion Homework.",
+        proposed_action: {
+          action: "update_grade",
+          local_course_id: 5,
+          assignment_id: 44,
+          student_id: 77,
+          assignment_reference: "Recursion Homework",
+          student_reference: "Alex Chen",
+          new_grade: "85",
+          feedback: "Strong work on the base case explanation.",
+        },
+        preview_metadata: {
+          course: "CPSC 310",
+          risk_level: "medium",
+          reversible: true,
+        },
+        pending_message_id: 11,
+      },
+      false,
+      3,
+    );
+
+    expect(result.pendingMessageId).toBeUndefined();
+    expect(result.navigateTo?.path).toBe("/instructor/feedback/create");
+    expect(result.navigateTo?.state).toMatchObject({
+      returnTo: "/instructor/assistant",
+      aiFeedbackDraft: {
+        courseId: 5,
+        assignmentId: 44,
+        studentId: 77,
+        assignmentName: "Recursion Homework",
+        studentName: "Alex Chen",
+        newGrade: "85",
+        feedback: "Strong work on the base case explanation.",
+        conversationId: 3,
+      },
+    });
+    expect(result.interpretedAction).toBeUndefined();
+  });
 });

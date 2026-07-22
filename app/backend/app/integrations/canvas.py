@@ -460,6 +460,45 @@ async def fetch_enrollments(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
 
 
+async def fetch_student_enrollment(
+    course_id: int,
+    canvas_user_id: int,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> list[dict]:
+    """Return active StudentEnrollment rows for one Canvas user in a course.
+
+    Prefer this over fetch_enrollments when verifying a single student — Canvas
+    can filter by user_id, so we avoid paging the full roster.
+    """
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            return await _fetch_all_pages(
+                client,
+                f"{canvas_url}/api/v1/courses/{course_id}/enrollments",
+                headers=_headers(token),
+                params={
+                    "type[]": "StudentEnrollment",
+                    "state[]": "active",
+                    "user_id[]": canvas_user_id,
+                    "include[]": "user",
+                    "per_page": 10,
+                },
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Canvas API timed out",
+        )
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach Canvas",
+        ) from e
+
+
 async def post_announcement(
     course_id: int,
     subject: str,
