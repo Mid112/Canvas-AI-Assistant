@@ -1,4 +1,4 @@
-import { Calendar, Undo2 } from "lucide-react";
+import { Calendar, Info, Undo2 } from "lucide-react";
 import { useState } from "react";
 
 import { WorkflowStatusBadge } from "@/components/workflow/WorkflowStatusBadge";
@@ -25,7 +25,22 @@ interface WorkflowHistoryTableProps {
 }
 
 function canUndo(entry: WorkflowHistoryEntry): boolean {
-  return entry.undoable && entry.status === "approved" && !entry.undoneAt;
+  return getReversal(entry).available;
+}
+
+function getReversal(entry: WorkflowHistoryEntry) {
+  return entry.reversal ?? {
+    status: entry.undoneAt ? "reversed" : entry.undoable ? "available" : "unavailable",
+    available: entry.undoable && entry.status === "approved" && !entry.undoneAt,
+    optionLabel: entry.undoable ? "Reverse action" : null,
+    warning: entry.undoable ? "Review this reversal before applying it in Canvas." : null,
+    unavailableReason: entry.undoable ? null : "This workflow does not support automated reversal.",
+    recoveryInstructions: entry.undoable
+      ? "Use the reversal option while this workflow remains available."
+      : "Apply any needed correction manually in Canvas.",
+    resultMessage: entry.undoneAt ? "This workflow was reversed." : null,
+    reversedAt: entry.undoneAt,
+  };
 }
 
 export function WorkflowHistoryTable({
@@ -81,6 +96,7 @@ export function WorkflowHistoryTable({
             const isActing = actingWorkflowIds.has(entry.id);
             const showCancel = entry.status === "pending" && onCancelPending;
             const showUndo = !showCancel && onUndo && canUndo(entry);
+            const reversal = getReversal(entry);
 
             return (
               <TableRow key={entry.id}>
@@ -115,6 +131,23 @@ export function WorkflowHistoryTable({
                         {entry.affectedResourcesSummary}
                       </p>
                     </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase text-muted-foreground">
+                        Reversal
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {reversal.status === "reversed"
+                          ? reversal.resultMessage
+                          : reversal.available
+                            ? reversal.warning
+                            : reversal.unavailableReason}
+                      </p>
+                      {!reversal.available && reversal.status !== "reversed" ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {reversal.recoveryInstructions}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell className="text-sm">{entry.userName}</TableCell>
@@ -141,10 +174,13 @@ export function WorkflowHistoryTable({
                         onClick={() => onUndo(entry)}
                       >
                         <Undo2 className="size-4" aria-hidden="true" />
-                        Undo
+                        Reverse
                       </Button>
                     ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
+                      <span className="inline-flex max-w-28 items-center justify-end gap-1 text-xs text-muted-foreground">
+                        <Info className="size-3.5 shrink-0" aria-hidden="true" />
+                        {reversal.status === "reversed" ? "Reversed" : "Unavailable"}
+                      </span>
                     )}
                   </div>
                 </TableCell>

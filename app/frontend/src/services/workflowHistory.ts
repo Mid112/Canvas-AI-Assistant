@@ -100,6 +100,28 @@ export async function undoWorkflow(
     const message =
       error instanceof Error
         ? error.message
+        : "Unable to reverse this action. Please try again.";
+
+    const status = error instanceof ApiRequestError ? error.status : 0;
+    throw new WorkflowHistoryApiError(message, status);
+  }
+}
+
+export async function reverseWorkflow(
+  accessToken: string,
+  workflowId: string,
+): Promise<WorkflowHistoryEntry> {
+  try {
+    const item = await apiRequest<WorkflowHistoryApiItem>(
+      `${WORKFLOW_HISTORY_PATH}/${workflowId}/reverse`,
+      accessToken,
+      { method: "POST" },
+    );
+    return mapWorkflowHistoryApiToEntry(item);
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
         : "Unable to undo this action. Please try again.";
 
     const status = error instanceof ApiRequestError ? error.status : 0;

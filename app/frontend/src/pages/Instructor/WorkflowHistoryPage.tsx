@@ -20,7 +20,7 @@ import {
   downloadWorkflowHistoryCsv,
   fetchWorkflowHistory,
   getWorkflowHistoryStatusCounts,
-  undoWorkflow,
+  reverseWorkflow,
   WorkflowHistoryApiError,
 } from "@/services/workflowHistory";
 import {
@@ -97,9 +97,9 @@ export function WorkflowHistoryPage() {
       };
     }
     return {
-      title: "Undo this action",
-      description: `Undo "${undoTarget.workflowName}"? This reverts the assignment back to its state before this action.`,
-      confirmLabel: "Undo action",
+      title: "Reverse this action",
+      description: `Reverse "${undoTarget.workflowName}"? This reverts the assignment back to its state before this action.`,
+      confirmLabel: "Reverse action",
     };
   }, [undoTarget]);
 
@@ -189,13 +189,14 @@ export function WorkflowHistoryPage() {
 
     setIsUndoing(true);
     try {
-      await undoWorkflow(accessToken, undoTarget.id);
+      const reversed = await reverseWorkflow(accessToken, undoTarget.id);
       const successMessage =
-        undoTarget.actionName === "create_assignment"
-          ? `"${undoTarget.workflowName}" was undone — the assignment was deleted.`
+        reversed.reversal?.resultMessage ??
+        (undoTarget.actionName === "create_assignment"
+          ? `"${undoTarget.workflowName}" was reversed; the assignment was deleted.`
           : undoTarget.actionName === "create_quiz"
-            ? `"${undoTarget.workflowName}" was undone — the quiz was deleted.`
-          : `"${undoTarget.workflowName}" was undone.`;
+            ? `"${undoTarget.workflowName}" was reversed; the quiz was deleted.`
+          : `"${undoTarget.workflowName}" was reversed.`);
       setToast({ message: successMessage, type: "success" });
       setUndoTarget(null);
       await loadEntries();

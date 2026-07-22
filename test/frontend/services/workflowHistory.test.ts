@@ -6,6 +6,7 @@ import {
   buildWorkflowHistoryCsv,
   downloadWorkflowHistoryCsv,
   fetchWorkflowHistory,
+  reverseWorkflow,
   undoWorkflow,
   WORKFLOW_HISTORY_PATH,
 } from "@/services/workflowHistory";
@@ -196,6 +197,49 @@ describe("workflowHistory service", () => {
 
     await expect(undoWorkflow("access-token", "5")).rejects.toThrow(
       "This action has already been undone.",
+    );
+  });
+
+  // Verifies: Reverses a workflow through the feature-facing reverse endpoint.
+  it("reverses a workflow via the reverse endpoint", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: 6,
+          conversation_id: 15,
+          action_name: "create_assignment",
+          user_prompt: "create lab 1",
+          status: "executed",
+          proposed_action: { action: "create_assignment" },
+          affected_resources: [],
+          created_at: "2026-05-01T12:00:00.000Z",
+          executed_at: "2026-05-01T12:05:00.000Z",
+          user_name: "Dr. Jane Doe",
+          undoable: true,
+          undone_at: "2026-05-01T13:00:00.000Z",
+          reversal: {
+            status: "reversed",
+            available: false,
+            option_label: null,
+            warning: null,
+            unavailable_reason: "This workflow has already been reversed.",
+            recovery_instructions: "Review the reversal audit entry for the Canvas change that was applied.",
+            result_message: "The created assignment was deleted from Canvas.",
+            reversed_at: "2026-05-01T13:00:00.000Z",
+          },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const entry = await reverseWorkflow("access-token", "6");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `http://localhost:8000/api/v1${WORKFLOW_HISTORY_PATH}/6/reverse`,
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(entry.reversal?.resultMessage).toBe(
+      "The created assignment was deleted from Canvas.",
     );
   });
 

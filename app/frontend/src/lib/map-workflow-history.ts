@@ -84,6 +84,21 @@ export function mapWorkflowHistoryApiToEntry(
   item: WorkflowHistoryApiItem,
 ): WorkflowHistoryEntry {
   const affectedResources = item.affected_resources;
+  const undoable = item.undoable ?? false;
+  const undoneAt = item.undone_at ?? null;
+  const fallbackReversal = {
+    status: undoneAt ? "reversed" : undoable ? "available" : "unavailable",
+    available: undoable && !undoneAt && item.status === "executed",
+    optionLabel: undoable ? "Reverse action" : null,
+    warning: undoable ? "Review this reversal before applying it in Canvas." : null,
+    unavailableReason: undoable ? null : "This workflow does not support automated reversal.",
+    recoveryInstructions: undoable
+      ? "Use the reversal option while this workflow remains available."
+      : "Apply any needed correction manually in Canvas.",
+    resultMessage: undoneAt ? "This workflow was reversed." : null,
+    reversedAt: undoneAt,
+  };
+  const apiReversal = item.reversal;
 
   return {
     id: String(item.id),
@@ -95,7 +110,19 @@ export function mapWorkflowHistoryApiToEntry(
     status: mapWorkflowStatus(item.status),
     affectedResources,
     affectedResourcesSummary: summarizeAffectedResources(affectedResources),
-    undoable: item.undoable,
-    undoneAt: item.undone_at,
+    undoable,
+    undoneAt,
+    reversal: apiReversal
+      ? {
+          status: apiReversal.status,
+          available: apiReversal.available,
+          optionLabel: apiReversal.option_label,
+          warning: apiReversal.warning,
+          unavailableReason: apiReversal.unavailable_reason,
+          recoveryInstructions: apiReversal.recovery_instructions,
+          resultMessage: apiReversal.result_message,
+          reversedAt: apiReversal.reversed_at,
+        }
+      : fallbackReversal,
   };
 }

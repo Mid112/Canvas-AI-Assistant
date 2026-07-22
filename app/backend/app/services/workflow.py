@@ -63,8 +63,8 @@ async def cancel_workflow(db: AsyncSession, user: User, workflow_id: int) -> Wor
     return workflow
 
 
-async def undo_workflow(db: AsyncSession, user: User, workflow_id: int) -> Workflow:
-    """Reverts a reversible, already-executed action. Scoped to
+async def reverse_workflow(db: AsyncSession, user: User, workflow_id: int) -> Workflow:
+    """Reverses a supported, already-executed Canvas action. Scoped to
     update_assignment and create_assignment (see mcp_tools.schemas.
     UNDOABLE_ACTIONS): update_assignment re-applies its AuditLog row's
     before_data; create_assignment has no "prior state" to re-apply (the
@@ -212,3 +212,13 @@ async def undo_workflow(db: AsyncSession, user: User, workflow_id: int) -> Workf
 
     await db.commit()
     return workflow
+
+
+async def undo_workflow(db: AsyncSession, user: User, workflow_id: int) -> Workflow:
+    """Backward-compatible alias for the original /undo route.
+
+    UR2.28 names the feature "action reversal"; older UI/tests still call the
+    endpoint "undo". Keeping this tiny wrapper avoids breaking clients while
+    making reverse_workflow the primary service name.
+    """
+    return await reverse_workflow(db, user, workflow_id)
