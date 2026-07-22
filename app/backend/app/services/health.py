@@ -25,6 +25,7 @@ from app.schemas.health import (
     ServiceHealth,
 )
 from app.services.llm.llm_setting import get_llm_adapter
+from app.services.llm.provider_registry import get_active_llm_config
 
 logger = logging.getLogger(__name__)
 
@@ -141,10 +142,15 @@ async def check_canvas() -> ServiceHealth:
     )
 
 
-async def check_ai() -> ServiceHealth:
+async def check_ai(db: AsyncSession) -> ServiceHealth:
     start = time.monotonic()
     try:
-        adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
+        # Health-check whatever provider the admin actually has active
+        # (Feature 8), not the .env DEFAULT_LLM_PROVIDER -- after an admin
+        # switches providers, monitoring the old default would silently
+        # check the wrong service.
+        llm_config = await get_active_llm_config(db)
+        adapter = get_llm_adapter({"provider": llm_config.provider, "model": llm_config.model})
         await adapter.generate(
             "You are a health check.",
             "Reply with OK.",
@@ -235,19 +241,19 @@ async def get_instructor_ai_summary(db: AsyncSession) -> InstructorAiSummary:
 
 
 async def run_health_checks(db: AsyncSession, backend_started_at: float) -> HealthCheckResponse:
-    # Network-only checks don't touch the DB, so they're safe to run
-    # concurrently. check_database, get_instructor_canvas_summary, and
-    # get_instructor_ai_summary all use this request's AsyncSession, and
-    # SQLAlchemy's asyncio docs are explicit that one AsyncSession is not
-    # safe for concurrent tasks -- gathering those together caused
-    # intermittent failures/corrupted results under load. Run them
-    # sequentially on the same session instead.
-    backend, canvas, ai = await asyncio.gather(
+    # Only check_backend and check_canvas touch nothing but the network, so
+    # only those two are safe to run concurrently. check_database, check_ai
+    # (needs db to resolve the admin's active provider), and the instructor
+    # summaries all use this request's AsyncSession, and SQLAlchemy's
+    # asyncio docs are explicit that one AsyncSession is not safe for
+    # concurrent tasks -- gathering those together caused intermittent
+    # failures/corrupted results under load. Run them sequentially instead.
+    backend, canvas = await asyncio.gather(
         check_backend(backend_started_at),
         check_canvas(),
-        check_ai(),
     )
     database = await check_database(db)
+    ai = await check_ai(db)
     instructor_canvas = await get_instructor_canvas_summary(db)
     instructor_ai = await get_instructor_ai_summary(db)
     services = {"backend": backend, "database": database, "canvas": canvas, "ai": ai}

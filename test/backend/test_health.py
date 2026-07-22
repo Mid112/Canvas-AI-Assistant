@@ -260,27 +260,71 @@ class SimpleAdapter:
         return self._result
 
 
+def _mock_active_llm_config(provider: str = "groq"):
+    """check_ai now resolves the admin's active provider (Feature 8) before
+    building an adapter -- these tests don't exercise that resolution
+    itself (see test_check_ai_uses_admin_configured_provider below), just
+    the generate()/status-mapping logic, so this is patched to a fixed,
+    known-good config."""
+    from app.services.llm.provider_registry import ActiveLlmConfig
+
+    return patch(
+        "app.services.health.get_active_llm_config",
+        new=AsyncMock(
+            return_value=ActiveLlmConfig(
+                provider=provider,
+                model="test-model",
+                fallback_provider=None,
+                fallback_model=None,
+                cache_enabled=False,
+                cache_ttl_seconds=300,
+            )
+        ),
+    )
+
+
 @pytest.mark.asyncio
 async def test_check_ai_healthy_when_generate_succeeds():
-    with patch(
-        "app.services.health.get_llm_adapter",
-        return_value=SimpleAdapter(result="OK"),
+    with (
+        _mock_active_llm_config(),
+        patch(
+            "app.services.health.get_llm_adapter",
+            return_value=SimpleAdapter(result="OK"),
+        ),
     ):
-        result = await check_ai()
+        result = await check_ai(AsyncMock())
 
     assert result.status in ("healthy", "degraded")
 
 
 @pytest.mark.asyncio
+async def test_check_ai_uses_admin_configured_provider():
+    """The whole point of the fix: check_ai must monitor whatever provider
+    the admin actually set active, not settings.DEFAULT_LLM_PROVIDER."""
+    with (
+        _mock_active_llm_config(provider="openai"),
+        patch(
+            "app.services.health.get_llm_adapter",
+            return_value=SimpleAdapter(result="OK"),
+        ) as mock_get_adapter,
+    ):
+        await check_ai(AsyncMock())
+
+    called_settings = mock_get_adapter.call_args.args[0]
+    assert called_settings["provider"] == "openai"
+
+
+@pytest.mark.asyncio
 async def test_check_ai_degraded_when_status_helper_says_so():
     with (
+        _mock_active_llm_config(),
         patch(
             "app.services.health.get_llm_adapter",
             return_value=SimpleAdapter(result="OK"),
         ),
         patch("app.services.health._status_for_latency", return_value="degraded"),
     ):
-        result = await check_ai()
+        result = await check_ai(AsyncMock())
 
     assert result.status == "degraded"
 
@@ -295,11 +339,14 @@ async def test_check_ai_degraded_on_auth_or_billing_rejection():
         response = httpx.Response(status_code, request=request)
         error = httpx.HTTPStatusError("rejected", request=request, response=response)
 
-        with patch(
-            "app.services.health.get_llm_adapter",
-            return_value=SimpleAdapter(exc=error),
+        with (
+            _mock_active_llm_config(),
+            patch(
+                "app.services.health.get_llm_adapter",
+                return_value=SimpleAdapter(exc=error),
+            ),
         ):
-            result = await check_ai()
+            result = await check_ai(AsyncMock())
 
         assert result.status == "degraded", f"status_code={status_code}"
         assert str(status_code) in result.error_detail
@@ -311,11 +358,14 @@ async def test_check_ai_down_on_server_error():
     response = httpx.Response(503, request=request)
     error = httpx.HTTPStatusError("service unavailable", request=request, response=response)
 
-    with patch(
-        "app.services.health.get_llm_adapter",
-        return_value=SimpleAdapter(exc=error),
+    with (
+        _mock_active_llm_config(),
+        patch(
+            "app.services.health.get_llm_adapter",
+            return_value=SimpleAdapter(exc=error),
+        ),
     ):
-        result = await check_ai()
+        result = await check_ai(AsyncMock())
 
     assert result.status == "down"
     assert "503" in result.error_detail
@@ -323,11 +373,14 @@ async def test_check_ai_down_on_server_error():
 
 @pytest.mark.asyncio
 async def test_check_ai_down_on_timeout():
-    with patch(
-        "app.services.health.get_llm_adapter",
-        return_value=SimpleAdapter(exc=httpx.TimeoutException("timed out")),
+    with (
+        _mock_active_llm_config(),
+        patch(
+            "app.services.health.get_llm_adapter",
+            return_value=SimpleAdapter(exc=httpx.TimeoutException("timed out")),
+        ),
     ):
-        result = await check_ai()
+        result = await check_ai(AsyncMock())
 
     assert result.status == "down"
 
@@ -337,11 +390,14 @@ async def test_check_ai_down_on_misconfiguration():
     """get_llm_adapter/generate raising a plain (non-httpx) exception -- e.g.
     an unknown provider or missing api_key -- must still resolve to "down",
     not propagate and 500 the whole aggregate endpoint."""
-    with patch(
-        "app.services.health.get_llm_adapter",
-        side_effect=ValueError("Unknown LLM provider: bogus"),
+    with (
+        _mock_active_llm_config(),
+        patch(
+            "app.services.health.get_llm_adapter",
+            side_effect=ValueError("Unknown LLM provider: bogus"),
+        ),
     ):
-        result = await check_ai()
+        result = await check_ai(AsyncMock())
 
     assert result.status == "down"
 

@@ -50,15 +50,19 @@ async def create_message_draft(db: AsyncSession, user: User, body: MessageDraftC
     content = body.body or ""
 
     if body.prompt and not body.body:
+        # Resolved once so the outcome record matches whichever provider
+        # _generate_draft_content actually used (the admin's active
+        # provider, not always the .env DEFAULT_LLM_PROVIDER).
+        llm_config = await get_active_llm_config(db)
         try:
             subject, content = await _generate_draft_content(
                 body.prompt, body.template_name, db
             )
-            await record_ai_call_outcome(db, user.id, settings.DEFAULT_LLM_PROVIDER)
+            await record_ai_call_outcome(db, user.id, llm_config.provider)
         except Exception as e:
             subject = body.subject or f"{body.template_name or 'Course'} Announcement"
             content = body.prompt
-            await record_ai_call_outcome(db, user.id, settings.DEFAULT_LLM_PROVIDER, error_detail=str(e)[:500])
+            await record_ai_call_outcome(db, user.id, llm_config.provider, error_detail=str(e)[:500])
 
     draft = MessageDraft(
         user_id=user.id,

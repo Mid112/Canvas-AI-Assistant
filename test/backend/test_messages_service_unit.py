@@ -81,7 +81,13 @@ async def test_create_message_draft_generates_content_from_prompt():
     body = MessageDraftCreate(course_id=5, prompt="remind about the midterm", template_name="reminder")
 
     generated = AsyncMock(return_value=("Midterm Reminder", "Don't forget the midterm."))
-    with patch("app.services.messages._generate_draft_content", generated):
+    with (
+        patch("app.services.messages._generate_draft_content", generated),
+        patch(
+            "app.services.messages.get_active_llm_config",
+            new=AsyncMock(return_value=SimpleNamespace(provider="test-provider")),
+        ),
+    ):
         draft = await create_message_draft(db, user, body)
 
     assert draft.subject == "Midterm Reminder"
@@ -97,7 +103,13 @@ async def test_create_message_draft_falls_back_when_generation_raises():
     body = MessageDraftCreate(course_id=5, prompt="remind about the midterm", template_name="reminder")
 
     failing = AsyncMock(side_effect=RuntimeError("LLM unavailable"))
-    with patch("app.services.messages._generate_draft_content", failing):
+    with (
+        patch("app.services.messages._generate_draft_content", failing),
+        patch(
+            "app.services.messages.get_active_llm_config",
+            new=AsyncMock(return_value=SimpleNamespace(provider="test-provider")),
+        ),
+    ):
         draft = await create_message_draft(db, user, body)
 
     assert draft.subject == "reminder Announcement"

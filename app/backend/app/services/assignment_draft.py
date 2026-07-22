@@ -7,7 +7,6 @@ import httpx
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.schemas.preview import AssignmentDraftRequest, AssignmentDraftResponse
 from app.services.ai_health import record_ai_call_outcome
 from app.services.llm.json_extraction import loads_llm_json
@@ -55,7 +54,7 @@ async def generate_assignment_draft(
         raw = await adapter.generate(system, body.prompt)
     except httpx.HTTPStatusError as e:
         await record_ai_call_outcome(
-            db, user_id, settings.DEFAULT_LLM_PROVIDER, error_detail=f"HTTP {e.response.status_code}"
+            db, user_id, llm_config.provider, error_detail=f"HTTP {e.response.status_code}"
         )
         if e.response.status_code == 429:
             raise HTTPException(
@@ -67,7 +66,7 @@ async def generate_assignment_draft(
             detail="The assignment generator is temporarily unavailable. Please try again.",
         ) from e
     except httpx.RequestError as e:
-        await record_ai_call_outcome(db, user_id, settings.DEFAULT_LLM_PROVIDER, error_detail=str(e)[:500])
+        await record_ai_call_outcome(db, user_id, llm_config.provider, error_detail=str(e)[:500])
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="The assignment generator is temporarily unavailable. Please try again.",
@@ -81,14 +80,14 @@ async def generate_assignment_draft(
         # way) -- record it as such rather than a false "ok" on the
         # instructor AI health card.
         await record_ai_call_outcome(
-            db, user_id, settings.DEFAULT_LLM_PROVIDER, error_detail="Unparseable model response"
+            db, user_id, llm_config.provider, error_detail="Unparseable model response"
         )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Could not generate assignment draft",
         ) from e
 
-    await record_ai_call_outcome(db, user_id, settings.DEFAULT_LLM_PROVIDER)
+    await record_ai_call_outcome(db, user_id, llm_config.provider)
 
     due_at = None
     if data.get("due_at"):

@@ -24,8 +24,12 @@ from app.services.llm.provider_registry import ActiveLlmConfig
 from app.services.messages import create_message_draft
 from app.schemas.preview import AssignmentDraftRequest
 
+# Deliberately different from settings.DEFAULT_LLM_PROVIDER: these tests
+# assert the recorded outcome uses *this* resolved provider, proving the
+# code reads the admin's active provider rather than always reporting the
+# .env default regardless of what was actually used.
 _ACTIVE_LLM_CONFIG = ActiveLlmConfig(
-    provider=settings.DEFAULT_LLM_PROVIDER,
+    provider="openai",
     model="test-model",
     fallback_provider=None,
     fallback_model=None,
@@ -104,13 +108,17 @@ async def test_create_message_draft_records_success_without_changing_output():
     generated = AsyncMock(return_value=("Midterm Reminder", "Don't forget the midterm."))
     with (
         patch("app.services.messages._generate_draft_content", generated),
+        patch(
+            "app.services.messages.get_active_llm_config",
+            new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
+        ),
         patch("app.services.messages.record_ai_call_outcome", new=AsyncMock()) as mock_record,
     ):
         draft = await create_message_draft(db, user, body)
 
     assert draft.subject == "Midterm Reminder"
     assert draft.body == "Don't forget the midterm."
-    mock_record.assert_awaited_once_with(db, user.id, settings.DEFAULT_LLM_PROVIDER)
+    mock_record.assert_awaited_once_with(db, user.id, _ACTIVE_LLM_CONFIG.provider)
 
 
 @pytest.mark.asyncio
@@ -122,6 +130,10 @@ async def test_create_message_draft_records_failure_without_changing_fallback():
     failing = AsyncMock(side_effect=RuntimeError("LLM unavailable"))
     with (
         patch("app.services.messages._generate_draft_content", failing),
+        patch(
+            "app.services.messages.get_active_llm_config",
+            new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
+        ),
         patch("app.services.messages.record_ai_call_outcome", new=AsyncMock()) as mock_record,
     ):
         draft = await create_message_draft(db, user, body)
@@ -134,6 +146,7 @@ async def test_create_message_draft_records_failure_without_changing_fallback():
     args = mock_record.await_args.args
     assert args[0] is db
     assert args[1] == user.id
+    assert args[2] == _ACTIVE_LLM_CONFIG.provider
     kwargs = mock_record.await_args.kwargs
     assert "LLM unavailable" in kwargs["error_detail"]
 
@@ -164,7 +177,7 @@ async def test_generate_assignment_draft_records_success_without_changing_output
 
     assert result.title == "Recursion Quiz"
     assert result.points_possible == 20
-    mock_record.assert_awaited_once_with(db, 42, settings.DEFAULT_LLM_PROVIDER)
+    mock_record.assert_awaited_once_with(db, 42, _ACTIVE_LLM_CONFIG.provider)
 
 
 @pytest.mark.asyncio
@@ -192,7 +205,7 @@ async def test_generate_assignment_draft_records_failure_when_response_is_unpars
 
     assert exc_info.value.status_code == 502
     mock_record.assert_awaited_once_with(
-        db, 42, settings.DEFAULT_LLM_PROVIDER, error_detail="Unparseable model response"
+        db, 42, _ACTIVE_LLM_CONFIG.provider, error_detail="Unparseable model response"
     )
 
 
