@@ -1,11 +1,4 @@
-import {
-  AlertTriangle,
-  ArrowRight,
-  ChevronDown,
-  RotateCcw,
-  ShieldCheck,
-  Zap,
-} from "lucide-react";
+import { ArrowRight, ChevronDown, Zap } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -59,48 +52,6 @@ export function ActionCard({ action }: ActionCardProps) {
           <dd className="font-medium">{action.affectedStudents}</dd>
         </div>
       </dl>
-
-      {risk ? (
-        <div className="mt-3 space-y-2 border-t border-border/70 pt-3 text-sm">
-          {risk.warnings.length > 0 ? (
-            <div className="flex gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-amber-950">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              <div className="space-y-1">
-                {risk.warnings.map((warning) => (
-                  <p key={warning}>{warning}</p>
-                ))}
-              </div>
-            </div>
-          ) : null}
-
-          <div className="grid gap-2 sm:grid-cols-2">
-            <div className="flex gap-2 rounded-md bg-background px-2.5 py-2">
-              <RotateCcw className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <div>
-                <p className="text-xs text-muted-foreground">Undo</p>
-                <p className="font-medium">{risk.can_undo ? "Can be undone" : "No one-click undo"}</p>
-              </div>
-            </div>
-            <div className="flex gap-2 rounded-md bg-background px-2.5 py-2">
-              <ShieldCheck className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <div>
-                <p className="text-xs text-muted-foreground">Reversibility</p>
-                <p className="font-medium">{risk.reversibility}</p>
-              </div>
-            </div>
-          </div>
-
-          <details className="rounded-md bg-background px-2.5 py-2">
-            <summary className="flex cursor-pointer items-center gap-1 text-sm font-medium">
-              <ChevronDown className="size-4" aria-hidden="true" />
-              Technical details
-            </summary>
-            <pre className="mt-2 max-h-48 overflow-auto rounded bg-muted/60 p-2 text-xs">
-              {JSON.stringify(risk.technical_details, null, 2)}
-            </pre>
-          </details>
-        </div>
-      ) : null}
 
       {hasTechnicalDetails ? (
         <div className="mt-3 border-t border-border/70 pt-2">

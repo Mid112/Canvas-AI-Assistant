@@ -1,14 +1,12 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { Input } from "@/components/ui/input";
 import type { PendingActionStatus, RiskMetadata } from "@/types/chat";
 
 interface PendingActionControlsProps {
   status?: PendingActionStatus;
   isLoading?: boolean;
-  error?: string | null;
   risk?: RiskMetadata;
   onConfirm: () => void;
   onCancel: () => void;
@@ -18,7 +16,6 @@ interface PendingActionControlsProps {
 export function PendingActionControls({
   status = "pending",
   isLoading = false,
-  error,
   risk,
   onConfirm,
   onCancel,
@@ -48,8 +45,10 @@ export function PendingActionControls({
   ) {
     return (
       <div className="rounded-lg border border-border/70 bg-background px-3 py-3">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Actions
+        </div>
         <p className="text-sm font-medium">Read-only action. No confirmation required.</p>
-        {error ? <ErrorAlert message={error} className="mt-2 px-3 py-2" /> : null}
       </div>
     );
   }
@@ -63,6 +62,9 @@ export function PendingActionControls({
 
   return (
     <div className="space-y-2 rounded-lg border border-border/70 bg-background px-3 py-3">
+      <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        Actions
+      </div>
       <p className="text-sm font-medium">
         {requiresStrongConfirmation
           ? "High-risk action requires confirmation"
@@ -85,9 +87,6 @@ export function PendingActionControls({
             Type {confirmationPhrase} to enable confirmation.
           </p>
         </div>
-      ) : null}
-      {error ? (
-        <ErrorAlert message={error} className="px-3 py-2" />
       ) : null}
       <div className="flex flex-wrap gap-2">
         <Button

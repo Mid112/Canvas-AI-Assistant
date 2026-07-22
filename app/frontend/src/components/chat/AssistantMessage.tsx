@@ -5,6 +5,7 @@ import { AssistantAvatar } from "@/components/brand/AssistantAvatar";
 import { ActionCard } from "@/components/chat/ActionCard";
 import { ExplanationCard } from "@/components/chat/ExplanationCard";
 import { PendingActionControls } from "@/components/chat/PendingActionControls";
+import { RiskAlerts } from "@/components/chat/RiskAlerts";
 import type { ChatMessage } from "@/types/chat";
 
 interface AssistantMessageProps {
@@ -78,12 +79,18 @@ export function AssistantMessage({
           <ActionCard action={message.interpretedAction} />
         ) : null}
 
+        {message.interpretedAction?.risk || pendingActionError ? (
+          <RiskAlerts
+            risk={message.interpretedAction?.risk}
+            error={pendingActionError}
+          />
+        ) : null}
+
         {showPendingControls ? (
           <PendingActionControls
             status={message.pendingActionStatus}
             risk={message.interpretedAction?.risk}
             isLoading={isResolvingPendingAction}
-            error={pendingActionError}
             onConfirm={
               message.pendingActionStatus === "pending"
                 ? onConfirmPendingAction!
