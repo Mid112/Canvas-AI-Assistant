@@ -165,3 +165,67 @@ export async function replyToMessageThread(
     throw toApiError(error, "Unable to send reply.");
   }
 }
+
+interface ApiReplyDraftResponse {
+  body: string;
+}
+
+interface ApiReplyPreviewResponse {
+  summary: string;
+  recipient_count: number;
+  body_preview: string;
+}
+
+/** Generates an AI-assisted reply draft for a conversation thread. */
+export async function generateInboxReplyDraft(
+  accessToken: string,
+  threadId: string,
+  courseId?: number,
+  canvasUrl?: string,
+  prompt?: string,
+): Promise<string> {
+  try {
+    const data = await apiRequest<ApiReplyDraftResponse>(
+      `${INBOX_PATH}/${threadId}/generate-reply-draft${buildQuery(courseId, canvasUrl)}`,
+      accessToken,
+      {
+        method: "POST",
+        body: JSON.stringify({ prompt: prompt ?? null }),
+      },
+    );
+    return data.body;
+  } catch (error) {
+    throw toApiError(error, "Unable to generate a reply draft.");
+  }
+}
+
+/** Previews a reply before sending it to Canvas. */
+export async function previewInboxReply(
+  accessToken: string,
+  threadId: string,
+  body: string,
+  courseId?: number,
+  canvasUrl?: string,
+): Promise<{ summary: string; recipientCount: number; bodyPreview: string }> {
+  const trimmed = body.trim();
+  if (!trimmed) {
+    throw new MessageThreadsApiError("Reply cannot be empty.", 0);
+  }
+  try {
+    const data = await apiRequest<ApiReplyPreviewResponse>(
+      `${INBOX_PATH}/${threadId}/reply/preview${buildQuery(courseId, canvasUrl)}`,
+      accessToken,
+      {
+        method: "POST",
+        body: JSON.stringify({ body: trimmed }),
+      },
+    );
+    return {
+      summary: data.summary,
+      recipientCount: data.recipient_count,
+      bodyPreview: data.body_preview,
+    };
+  } catch (error) {
+    throw toApiError(error, "Unable to preview this reply.");
+  }
+}

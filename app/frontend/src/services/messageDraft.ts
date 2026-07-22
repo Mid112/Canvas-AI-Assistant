@@ -156,7 +156,12 @@ export async function sendMessageDraft(
       },
     );
 
-    await apiRequest(`/messages/drafts/${payload.draftId}/send`, accessToken, {
+    const sendPath =
+      payload.conversationId != null
+        ? `/messages/drafts/${payload.draftId}/send?conversation_id=${payload.conversationId}`
+        : `/messages/drafts/${payload.draftId}/send`;
+
+    await apiRequest(sendPath, accessToken, {
       method: "POST",
     });
   } catch (error) {

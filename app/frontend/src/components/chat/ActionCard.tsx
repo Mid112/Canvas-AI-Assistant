@@ -2,16 +2,18 @@ import { ArrowRight, ChevronDown, Zap } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { paths } from "@/routes/paths";
 import type { InterpretedAction } from "@/types/chat";
 
 interface ActionCardProps {
   action: InterpretedAction;
+  /** Dismiss a form-handoff offer (no pending Workflow to cancel). */
+  onDismiss?: () => void;
 }
 
-export function ActionCard({ action }: ActionCardProps) {
+export function ActionCard({ action, onDismiss }: ActionCardProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const hasLinks = action.primaryLink || action.secondaryLink;
   const hasTechnicalDetails =
@@ -68,7 +70,7 @@ export function ActionCard({ action }: ActionCardProps) {
         </div>
       ) : null}
 
-      {hasLinks ? (
+      {hasLinks || onDismiss ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {action.primaryLink ? (
             <Link
@@ -91,6 +93,11 @@ export function ActionCard({ action }: ActionCardProps) {
             >
               {action.secondaryLink.label}
             </Link>
+          ) : null}
+          {onDismiss ? (
+            <Button type="button" size="sm" variant="outline" onClick={onDismiss}>
+              Cancel
+            </Button>
           ) : null}
         </div>
       ) : null}

@@ -10,7 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.schemas.canvas import AssignmentResponse, MessageSendResult
+from app.schemas.canvas import AssignmentResponse
 from app.schemas.student import StudentResponse
 
 CANVAS_URL = "https://canvas.ubc.ca"
@@ -139,7 +139,8 @@ def test_shared_body_directives_resolve_to_single_preview(client):
     reply = body["reply"]
     assert reply["action"] == "intent_preview"
     assert sorted(reply["proposed_action"]["recipient_canvas_user_ids"]) == [501, 502]
-    assert "pending_message_id" in reply
+    # Form-handoff: send_message is reviewed in Messages compose, not chat confirm.
+    assert "pending_message_id" not in reply
     assert "additional_previews" not in reply
 
     logs = _tool_call_logs(body["conversation_id"])
@@ -147,7 +148,7 @@ def test_shared_body_directives_resolve_to_single_preview(client):
 
 
 # Verifies: recipient_directives with distinct message bodies produce one
-# grouped preview per distinct body, each independently pending.
+# grouped preview per distinct body (informational under form-handoff).
 def test_distinct_body_directives_produce_additional_previews(client):
     headers, local_course_id = _register_with_canvas(client)
     students = [_student("501", local_course_id, "Alice"), _student("502", local_course_id, "Bob")]
@@ -174,8 +175,8 @@ def test_distinct_body_directives_produce_additional_previews(client):
     assert bodies == {"Message for Alice", "Message for Bob"}
     recipient_ids = {p["proposed_action"]["recipient_canvas_user_ids"][0] for p in all_previews}
     assert recipient_ids == {501, 502}
-    pending_ids = {p["pending_message_id"] for p in all_previews}
-    assert len(pending_ids) == 2  # each preview is independently confirmable/cancelable
+    # Form-handoff: no chat-confirmable pending ids on any group.
+    assert all("pending_message_id" not in p for p in all_previews)
     assert all(p["preview_metadata"]["message_count"] == 2 for p in all_previews)
 
 
@@ -308,9 +309,9 @@ def test_plain_send_message_without_new_fields_is_unaffected(client):
     assert _tool_call_logs(body["conversation_id"]) == []
 
 
-# Verifies: two independently pending previews from one grouped batch can
-# be confirmed and cancelled independently of each other.
-def test_confirm_and_cancel_two_grouped_previews_independently(client):
+# Verifies: a grouped send_message batch is form-handoff only — no chat
+# confirm/cancel path, and distinct bodies still surface as additional_previews.
+def test_grouped_send_message_previews_are_not_chat_confirmable(client):
     headers, local_course_id = _register_with_canvas(client)
     students = [_student("501", local_course_id, "Alice"), _student("502", local_course_id, "Bob")]
 
@@ -327,44 +328,25 @@ def test_confirm_and_cancel_two_grouped_previews_independently(client):
         body = _chat(client, headers, "message alice and bob with different notes", llm_outputs)
 
     assert body["is_error"] is False, body
-    conversation_id = body["conversation_id"]
-    primary_pending_id = body["reply"]["pending_message_id"]
-    second_pending_id = body["reply"]["additional_previews"][0]["pending_message_id"]
+    reply = body["reply"]
+    assert reply["proposed_action"]["action"] == "send_message"
+    assert "pending_message_id" not in reply
+    assert len(reply["additional_previews"]) == 1
+    assert "pending_message_id" not in reply["additional_previews"][0]
 
-    with (
-        patch("app.services.message_validation.get_students", new=AsyncMock(return_value=students)),
-        patch(
-            "app.mcp_tools.dispatcher.send_course_message",
-            new=AsyncMock(return_value=MessageSendResult(
-                course_id=1, subject="Reminder", body="Message for Alice",
-                audience_size=1, delivery_mode="conversation", recipient_canvas_user_ids=[501],
-            )),
-        ) as mock_send,
-    ):
-        confirm_resp = client.post(
-            "/api/v1/chat/confirm",
-            json={"conversation_id": conversation_id, "pending_message_id": primary_pending_id},
-            headers=headers,
-        )
-    assert confirm_resp.status_code == 200, confirm_resp.text
-    assert confirm_resp.json()["is_error"] is False
-    mock_send.assert_awaited_once()
-
-    cancel_resp = client.post(
-        "/api/v1/chat/cancel",
-        json={"conversation_id": conversation_id, "pending_message_id": second_pending_id},
+    # Chat confirm must reject — there is no pending workflow for form-handoff.
+    confirm_resp = client.post(
+        "/api/v1/chat/confirm",
+        json={"conversation_id": body["conversation_id"], "pending_message_id": 1},
         headers=headers,
     )
-    assert cancel_resp.status_code == 200, cancel_resp.text
-    cancel_body = cancel_resp.json()
-    assert cancel_body["is_error"] is False
-    assert cancel_body["reply"]["cancelled"] is True
+    assert confirm_resp.status_code in {404, 409}
 
 
-# Verifies: a fresh send_message batch in the same conversation supersedes
-# the earlier batch's still-pending preview, but leaves an unrelated
-# pending create_assignment preview untouched.
-def test_new_message_batch_supersedes_only_stale_send_message_previews(client):
+# Verifies: a fresh send_message in the same conversation leaves an
+# unrelated pending create_assignment preview untouched (send_message
+# itself no longer stages a chat-confirmable workflow).
+def test_send_message_does_not_supersede_unrelated_create_assignment_preview(client):
     headers, local_course_id = _register_with_canvas(client)
     students_v1 = [_student("501", local_course_id, "Alice")]
 
@@ -378,7 +360,7 @@ def test_new_message_batch_supersedes_only_stale_send_message_previews(client):
         first = _chat(client, headers, "message alice", first_outputs)
     assert first["is_error"] is False, first
     conversation_id = first["conversation_id"]
-    first_pending_id = first["reply"]["pending_message_id"]
+    assert "pending_message_id" not in first["reply"]
 
     create_output = (
         '{"action": "intent_preview", "summary": "Create Quiz", '
@@ -409,15 +391,7 @@ def test_new_message_batch_supersedes_only_stale_send_message_previews(client):
             conversation_id=conversation_id,
         )
     assert second["is_error"] is False, second
-
-    # The first batch's preview is now superseded.
-    stale_confirm = client.post(
-        "/api/v1/chat/confirm",
-        json={"conversation_id": conversation_id, "pending_message_id": first_pending_id},
-        headers=headers,
-    )
-    assert stale_confirm.status_code == 409
-    assert "superseded" in stale_confirm.json()["detail"]
+    assert "pending_message_id" not in second["reply"]
 
     # The unrelated create_assignment preview is untouched.
     with patch(

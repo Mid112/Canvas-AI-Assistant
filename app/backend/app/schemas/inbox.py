@@ -39,3 +39,21 @@ class InboxThreadDetail(InboxThreadSummary):
 
 class InboxReplyRequest(BaseModel):
     body: str
+
+
+class InboxReplyDraftRequest(BaseModel):
+    prompt: str | None = None
+
+
+class InboxReplyDraftResponse(BaseModel):
+    body: str
+
+
+class InboxReplyPreviewRequest(BaseModel):
+    body: str
+
+
+class InboxReplyPreviewResponse(BaseModel):
+    summary: str
+    recipient_count: int
+    body_preview: str

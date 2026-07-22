@@ -21,6 +21,7 @@ import { InstructorCourseStudentsPage } from "@/pages/Instructor/InstructorCours
 import { InstructorCourseSubmissionsPage } from "@/pages/Instructor/InstructorCourseSubmissionsPage";
 import { InstructorAssignmentCreatePage } from "@/pages/Instructor/InstructorAssignmentCreatePage";
 import { InstructorQuizCreatePage } from "@/pages/Instructor/InstructorQuizCreatePage";
+import { InstructorFeedbackCreatePage } from "@/pages/Instructor/InstructorFeedbackCreatePage";
 import { InstructorAssignmentUpdatePage } from "@/pages/Instructor/InstructorAssignmentUpdatePage";
 import { DryRunPreviewPage } from "@/pages/Instructor/DryRunPreviewPage";
 import { InstructorAssistantPage } from "@/pages/Instructor/InstructorAssistantPage";
@@ -128,6 +129,10 @@ export const router = createBrowserRouter([
                   {
                     path: paths.instructor.quizCreate,
                     element: <InstructorQuizCreatePage />,
+                  },
+                  {
+                    path: paths.instructor.feedbackCreate,
+                    element: <InstructorFeedbackCreatePage />,
                   },
                   {
                     path: paths.instructor.assistant,

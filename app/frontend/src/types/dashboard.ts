@@ -65,6 +65,11 @@ export const sharedDashboardQuickActions: DashboardQuickAction[] = [
     description: "AI-assisted quiz creation",
   },
   {
+    id: "create-feedback",
+    title: "Draft Feedback",
+    description: "AI-assisted submission feedback",
+  },
+  {
     id: "draft-announcement",
     title: "Draft Announcement",
     description: "Generate course announcement",

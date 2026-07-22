@@ -29,8 +29,11 @@ export interface FetchMessageDraftOptions {
   subject?: string;
   body?: string;
   recipients?: MessageRecipient[];
+  /** When set, only these IDs start checked; the full roster stays visible. */
+  preSelectedIds?: string[];
   emptyRecipients?: boolean;
   simulateLoadError?: boolean;
+  conversationId?: number;
 }
 
 export interface SendMessageDraftPayload {
@@ -39,6 +42,7 @@ export interface SendMessageDraftPayload {
   body: string;
   recipientIds: string[];
   recipients?: MessageRecipient[];
+  conversationId?: number;
 }
 
 export type MessageDraftPageState =

@@ -1,0 +1,128 @@
+import { ChevronDown, Loader2 } from "lucide-react";
+import { useState } from "react";
+
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
+import type { FeedbackPreviewSummary } from "@/types/feedbackCreate";
+
+interface FeedbackPreviewDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  preview: FeedbackPreviewSummary | null;
+  isPosting: boolean;
+  onConfirm: () => void;
+}
+
+const riskStyles = {
+  low: "bg-emerald-50 text-emerald-800 ring-emerald-200",
+  medium: "bg-amber-50 text-amber-900 ring-amber-200",
+  high: "bg-red-50 text-red-800 ring-red-200",
+} as const;
+
+const riskLabels = {
+  low: "Low risk",
+  medium: "Medium risk",
+  high: "High risk",
+} as const;
+
+export function FeedbackPreviewDialog({
+  open,
+  onOpenChange,
+  preview,
+  isPosting,
+  onConfirm,
+}: FeedbackPreviewDialogProps) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const riskLevel = preview?.riskLevel ?? "medium";
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg" showCloseButton={!isPosting}>
+        <DialogHeader>
+          <DialogTitle>Post this feedback?</DialogTitle>
+          <DialogDescription>
+            {preview?.summary ?? "Review what will be posted to Canvas."}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span
+            className={cn(
+              "inline-flex rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
+              riskStyles[riskLevel],
+            )}
+          >
+            {riskLabels[riskLevel]}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            Grade and feedback will be written to the student submission.
+          </span>
+        </div>
+
+        {preview && preview.affectedResources.length > 0 ? (
+          <ul className="space-y-1 text-sm text-muted-foreground">
+            {preview.affectedResources.map((resource) => (
+              <li key={`${resource.type}-${resource.name}`}>
+                {resource.type}:{" "}
+                <span className="font-medium text-foreground">{resource.name}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        <button
+          type="button"
+          className="flex w-full items-center justify-between rounded-md border border-border/70 px-3 py-2 text-left text-sm"
+          onClick={() => setDetailsOpen((value) => !value)}
+          aria-expanded={detailsOpen}
+        >
+          <span>Technical details</span>
+          <ChevronDown
+            className={cn("size-4 transition-transform", detailsOpen && "rotate-180")}
+            aria-hidden="true"
+          />
+        </button>
+        {detailsOpen && preview ? (
+          <p className="rounded-md bg-muted/40 p-3 text-xs text-muted-foreground">
+            Canvas write: PUT submission grade and comment for the selected student.
+          </p>
+        ) : null}
+
+        <DialogFooter className="sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isPosting}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            className={cn(dashboardColors.blue.button)}
+            onClick={onConfirm}
+            disabled={isPosting}
+          >
+            {isPosting ? (
+              <>
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                Posting...
+              </>
+            ) : (
+              "Confirm & Post"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

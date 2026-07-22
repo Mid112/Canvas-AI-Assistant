@@ -61,6 +61,25 @@ async def test_send_rejects_empty_body():
 
 
 @pytest.mark.asyncio
+async def test_send_rejects_profanity_in_body():
+    with patch(
+        "app.services.message_validation.get_owned_course_or_404",
+        new=AsyncMock(return_value=COURSE),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await validate_message_for_send(
+                COURSE.id,
+                USER,
+                "Subject",
+                "This is fucking inappropriate",
+                AsyncMock(),
+                canvas_url=CANVAS_URL,
+            )
+    assert exc.value.status_code == 422
+    assert "appropriate" in exc.value.detail.lower()
+
+
+@pytest.mark.asyncio
 async def test_send_without_recipients_skips_roster_lookup():
     with (
         patch(

@@ -317,7 +317,7 @@ async function recoverCreatedQuiz(
       id: match.id,
       title: match.title,
       warnings: match.warnings ?? [
-        "Recovered an existing Canvas quiz that matched this draft after a failed create response.",
+        "Best-effort recovery: matched an existing Canvas quiz by title, points, due date, description, and question count after the create response failed. Confirm in Canvas that this is the quiz you just submitted before editing further.",
       ],
     };
   } catch {
