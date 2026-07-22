@@ -89,6 +89,13 @@ export function WorkflowHistoryPage() {
         confirmLabel: "Delete assignment",
       };
     }
+    if (undoTarget.actionName === "create_quiz") {
+      return {
+        title: "Delete this quiz",
+        description: `Undo "${undoTarget.workflowName}"? This permanently deletes the quiz from Canvas. This cannot be undone.`,
+        confirmLabel: "Delete quiz",
+      };
+    }
     return {
       title: "Undo this action",
       description: `Undo "${undoTarget.workflowName}"? This reverts the assignment back to its state before this action.`,
@@ -186,6 +193,8 @@ export function WorkflowHistoryPage() {
       const successMessage =
         undoTarget.actionName === "create_assignment"
           ? `"${undoTarget.workflowName}" was undone — the assignment was deleted.`
+          : undoTarget.actionName === "create_quiz"
+            ? `"${undoTarget.workflowName}" was undone — the quiz was deleted.`
           : `"${undoTarget.workflowName}" was undone.`;
       setToast({ message: successMessage, type: "success" });
       setUndoTarget(null);

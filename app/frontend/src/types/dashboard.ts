@@ -60,6 +60,11 @@ export const sharedDashboardQuickActions: DashboardQuickAction[] = [
     description: "AI-assisted assignment creation",
   },
   {
+    id: "create-quiz",
+    title: "Create Quiz",
+    description: "AI-assisted quiz creation",
+  },
+  {
     id: "draft-announcement",
     title: "Draft Announcement",
     description: "Generate course announcement",

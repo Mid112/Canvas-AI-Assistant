@@ -46,7 +46,9 @@ export function AssistantLimitedModeBanner({
           >
             {isResuming
               ? "Preparing…"
-              : `Resume ${deferredCount} saved request${deferredCount === 1 ? "" : "s"}`}
+              : deferredCount === 1
+                ? "Resume saved request"
+                : "Resume next request"}
           </Button>
         ) : null}
       </div>

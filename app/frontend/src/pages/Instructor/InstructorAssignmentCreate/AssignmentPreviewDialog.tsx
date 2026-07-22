@@ -1,4 +1,5 @@
-import { Loader2 } from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +29,8 @@ export function AssignmentPreviewDialog({
   isCreating,
   onConfirm,
 }: AssignmentPreviewDialogProps) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md" showCloseButton={!isCreating}>
@@ -53,6 +56,36 @@ export function AssignmentPreviewDialog({
             ? "This can be edited or removed in Canvas afterward."
             : "This action cannot be undone."}
         </p>
+
+        <button
+          type="button"
+          className="flex w-full items-center justify-between rounded-md border border-border/70 px-3 py-2 text-left text-sm"
+          aria-expanded={detailsOpen}
+          onClick={() => setDetailsOpen((current) => !current)}
+        >
+          Technical details
+          <ChevronDown
+            className={cn(
+              "size-4 transition-transform",
+              detailsOpen && "rotate-180",
+            )}
+            aria-hidden="true"
+          />
+        </button>
+        {detailsOpen && preview ? (
+          <dl className="grid gap-2 rounded-md bg-muted/40 p-3 text-xs sm:grid-cols-2">
+            <div>
+              <dt className="text-muted-foreground">Action</dt>
+              <dd className="font-medium">Create assignment</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Reversible</dt>
+              <dd className="font-medium">
+                {preview.reversible ? "Yes" : "No"}
+              </dd>
+            </div>
+          </dl>
+        ) : null}
 
         <DialogFooter className="sm:justify-end">
           <Button

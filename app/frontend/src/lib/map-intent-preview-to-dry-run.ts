@@ -19,7 +19,14 @@ interface IntentPreviewPayload {
 // Not meaningful to surface as a "change": the action type switching would
 // be a different preview entirely, and local_course_id is an internal id
 // the user never typed.
-const DIFF_IGNORED_FIELDS = new Set(["action", "local_course_id"]);
+const DIFF_IGNORED_FIELDS = new Set([
+  "action",
+  "local_course_id",
+  "assignment_id",
+  "student_id",
+  "recipient_canvas_user_ids",
+  "recipient_handle",
+]);
 
 function formatFieldLabel(field: string): string {
   return field
@@ -32,7 +39,16 @@ function formatFieldValue(value: unknown): string {
   if (value === null || value === undefined) {
     return "";
   }
-  return typeof value === "string" ? value : JSON.stringify(value);
+  if (typeof value === "string") {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return `${value.length} item${value.length === 1 ? "" : "s"}`;
+  }
+  return "";
 }
 
 function computeProposedActionChanges(
@@ -100,10 +116,42 @@ function buildProposedPlanFields(
     return indexA - indexB;
   });
 
+  const actionName = String(proposed.action ?? "");
+  const editableByAction: Record<string, Set<string>> = {
+    create_assignment: new Set([
+      "title",
+      "description",
+      "due_date",
+      "points_possible",
+    ]),
+    create_quiz: new Set([
+      "title",
+      "description",
+      "due_date",
+      "points_possible",
+      "allowed_attempts",
+      "time_limit",
+      "quiz_engine",
+      "questions",
+      "question_bank_groups",
+    ]),
+    update_assignment: new Set([
+      "title",
+      "description",
+      "due_date",
+      "points_possible",
+    ]),
+    send_message: new Set(["subject", "body"]),
+    update_grade: new Set(["new_grade", "feedback"]),
+  };
+  const editable = editableByAction[actionName] ?? new Set<string>();
+
   return fields.map((field) => ({
     field,
     label: formatFieldLabel(field),
     value: formatFieldValue(proposed[field]) || "—",
+    rawValue: proposed[field],
+    editable: editable.has(field),
   }));
 }
 
@@ -137,6 +185,7 @@ function parseIntentPreviewContent(content: string): IntentPreviewPayload | null
 function mapActionType(actionName: string): DryRunActionType {
   switch (actionName) {
     case "create_assignment":
+    case "create_quiz":
       return "Create";
     case "update_assignment":
     case "update_grade":
@@ -179,10 +228,37 @@ function mapReversibility(
   };
 }
 
-function mapApiOperations(actionName: string): DryRunApiOperation[] {
+function mapApiOperations(
+  actionName: string,
+  proposed?: Record<string, unknown>,
+): DryRunApiOperation[] {
   switch (actionName) {
     case "create_assignment":
       return [{ method: "POST", endpoint: "/courses/:course_id/assignments" }];
+    case "create_quiz":
+      if (proposed?.quiz_engine === "new_quizzes") {
+        return [
+          { method: "POST", endpoint: "/api/quiz/v1/courses/:course_id/quizzes" },
+          {
+            method: "POST",
+            endpoint:
+              "/api/quiz/v1/courses/:course_id/quizzes/:assignment_id/items",
+          },
+        ];
+      }
+      return [
+        { method: "POST", endpoint: "/courses/:course_id/quizzes" },
+        { method: "POST", endpoint: "/courses/:course_id/quizzes/:id/questions" },
+        ...(Array.isArray(proposed?.question_bank_groups) &&
+        proposed.question_bank_groups.length > 0
+          ? [
+              {
+                method: "POST" as const,
+                endpoint: "/courses/:course_id/quizzes/:id/groups",
+              },
+            ]
+          : []),
+      ];
     case "update_assignment":
       return [
         { method: "GET", endpoint: "/courses/:course_id/assignments/:id" },
@@ -234,6 +310,18 @@ function mapAffectedResources(
           typeof metadata?.due_date === "string" ? metadata.due_date : undefined,
       };
     }
+
+    if (type === "quiz") {
+      const metadata = previewMetadata.metadata as
+        | Record<string, unknown>
+        | undefined;
+      affected.assignment = {
+        name: name ?? "Quiz",
+        id: id ?? "quiz",
+        dueDate:
+          typeof metadata?.due_date === "string" ? metadata.due_date : undefined,
+      };
+    }
   }
 
   const audience = previewMetadata.audience as Record<string, unknown> | undefined;
@@ -262,6 +350,10 @@ function buildAiExplanation(
     case "create_assignment":
       return [
         `Create assignment "${String(metadata?.title ?? "Untitled")}" in ${String(previewMetadata.course ?? "the selected course")}.`,
+      ];
+    case "create_quiz":
+      return [
+        `Create quiz "${String(metadata?.title ?? "Untitled Quiz")}" in ${String(previewMetadata.course ?? "the selected course")}.`,
       ];
     case "update_assignment":
       return [
@@ -365,9 +457,16 @@ export function mapIntentPreviewToDryRun(
   );
   const previewMetadata = payload.preview_metadata ?? {};
   const { reversibility, explanation } = mapReversibility(previewMetadata);
+  const riskLevel =
+    previewMetadata.risk_level === "low" ||
+    previewMetadata.risk_level === "medium" ||
+    previewMetadata.risk_level === "high"
+      ? previewMetadata.risk_level
+      : undefined;
 
   return {
     id: `chat-${conversationId}-${pendingMessageId}`,
+    actionName,
     title: "Workflow Preview",
     subtitle: "Review AI-generated actions before execution",
     originalRequest: findOriginalRequest(messages, pendingMessageId),
@@ -380,10 +479,11 @@ export function mapIntentPreviewToDryRun(
         : "Review the proposed action before confirming."),
     actionType: mapActionType(actionName),
     aiExplanation: buildAiExplanation(actionName, previewMetadata),
-    apiOperations: mapApiOperations(actionName),
+    apiOperations: mapApiOperations(actionName, payload.proposed_action),
     affectedResources: mapAffectedResources(previewMetadata),
     reversibility,
     reversibilityExplanation: explanation,
+    riskLevel,
     changesFromPreviousRequest: computeProposedActionChanges(
       payload.previous_proposed_action,
       payload.proposed_action,

@@ -49,6 +49,7 @@ export interface InterpretedAction {
   action: string;
   course: string;
   affectedStudents: string;
+  technicalDetails?: Array<{ label: string; value: string }>;
   previewId?: string;
   primaryLink?: ActionLink;
   secondaryLink?: ActionLink;
@@ -63,6 +64,7 @@ export interface ChatMessage {
   pendingMessageId?: number;
   pendingActionStatus?: PendingActionStatus;
   explanation?: string;
+  acknowledgedFields?: Array<{ label: string; value: string }>;
   interpretedAction?: InterpretedAction;
   safetyBlocked?: boolean;
   safetyMessage?: string;
@@ -80,11 +82,18 @@ export interface AssistantResponse {
   conversationId?: number;
   pendingMessageId?: number;
   explanation?: string;
+  acknowledgedFields?: Array<{ label: string; value: string }>;
   interpretedAction?: InterpretedAction;
   safetyBlocked?: boolean;
   safetyMessage?: string;
   requiresCanvasToken?: boolean;
   deferredRequestId?: number;
+  /** When set, navigate to this route instead of showing a preview
+   * card. The chat message content is still displayed. */
+  navigateTo?: {
+    path: string;
+    state: Record<string, unknown>;
+  };
   /** A single send_message turn can resolve to more than one distinct
    * message (different text per recipient, or an announcement plus
    * targeted messages) — the primary preview is this response itself;

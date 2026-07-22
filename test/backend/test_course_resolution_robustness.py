@@ -151,7 +151,7 @@ def test_confirm_succeeds_even_when_post_write_sync_fails(client):
         '{"action": "intent_preview", "course_name": "CPSC 310", "summary": "Create Quiz", '
         '"proposed_action": {"action": "create_assignment", '
         f'"local_course_id": {local_course_id}, "title": "Quiz", '
-        '"description": "Short quiz", "due_date": "2030-01-01T00:00:00", '
+        '"description": "A short quiz on course topics.", "due_date": "2030-01-01T00:00:00", '
         '"points_possible": 10}}'
     )
     first = _chat(client, headers, "create a quiz", create_output, local_course_id=local_course_id)
@@ -163,7 +163,7 @@ def test_confirm_succeeds_even_when_post_write_sync_fails(client):
         patch(
             "app.mcp_tools.dispatcher.create_course_assignment",
             new=AsyncMock(return_value=AssignmentResponse(
-                id=1, course_id=local_course_id, name="Quiz", description="Short quiz",
+                id=1, course_id=local_course_id, name="Quiz", description="A short quiz on course topics.",
                 due_at="2030-01-01T00:00:00", points_possible=10,
             )),
         ),
@@ -354,7 +354,7 @@ def test_modify_turn_never_forks_even_with_conflicting_course_name(client):
         '{"action": "intent_preview", "course_name": "CPSC 310", "summary": "Create Quiz", '
         '"proposed_action": {"action": "create_assignment", '
         f'"local_course_id": {local_id_310}, "title": "Quiz", '
-        '"description": "Short quiz", "due_date": "2030-01-01T00:00:00", '
+        '"description": "A short quiz on course topics.", "due_date": "2030-01-01T00:00:00", '
         '"points_possible": 10}}'
     )
     first = _chat(client, headers, "create a quiz", create_output, local_course_id=local_id_310)
@@ -368,7 +368,7 @@ def test_modify_turn_never_forks_even_with_conflicting_course_name(client):
         '{"action": "intent_preview", "course_name": "CPSC 320", "summary": "Create Quiz (renamed)", '
         '"proposed_action": {"action": "create_assignment", '
         f'"local_course_id": {local_id_310}, "title": "Quiz 2", '
-        '"description": "Short quiz", "due_date": "2030-01-01T00:00:00", '
+        '"description": "A short quiz on course topics.", "due_date": "2030-01-01T00:00:00", '
         '"points_possible": 10}}'
     )
     mock_adapter = AsyncMock()

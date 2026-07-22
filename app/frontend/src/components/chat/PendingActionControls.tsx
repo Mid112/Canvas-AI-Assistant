@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { ErrorAlert } from "@/components/common/ErrorAlert";
 import type { PendingActionStatus } from "@/types/chat";
 
 interface PendingActionControlsProps {
@@ -41,9 +42,7 @@ export function PendingActionControls({
         Confirm to send as-is, or edit the request in chat before confirming.
       </p>
       {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+        <ErrorAlert message={error} className="px-3 py-2" />
       ) : null}
       <div className="flex flex-wrap gap-2">
         <Button

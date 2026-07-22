@@ -60,7 +60,6 @@ export function AffectedResourcesCard({ resources }: AffectedResourcesCardProps)
               Course
             </p>
             <p className="text-sm font-semibold text-foreground">{resources.course.name}</p>
-            <p className="text-xs text-muted-foreground">Course ID: {resources.course.id}</p>
           </div>
         ) : null}
 
@@ -72,12 +71,11 @@ export function AffectedResourcesCard({ resources }: AffectedResourcesCardProps)
             <p className="text-sm font-semibold text-foreground">
               {resources.assignment.name}
             </p>
-            <p className="text-xs text-muted-foreground">
-              Assignment ID: {resources.assignment.id}
-              {resources.assignment.dueDate
-                ? ` • Due: ${resources.assignment.dueDate}`
-                : ""}
-            </p>
+            {resources.assignment.dueDate ? (
+              <p className="text-xs text-muted-foreground">
+                Due: {resources.assignment.dueDate}
+              </p>
+            ) : null}
           </div>
         ) : null}
 

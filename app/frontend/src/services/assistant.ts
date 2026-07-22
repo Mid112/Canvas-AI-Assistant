@@ -179,6 +179,7 @@ export function mapConversationToChatMessages(
         pendingMessageId,
         pendingActionStatus,
         explanation: mapped.explanation,
+        acknowledgedFields: mapped.acknowledgedFields,
         interpretedAction: mapped.interpretedAction,
         safetyBlocked: mapped.safetyBlocked,
         safetyMessage: mapped.safetyMessage,
@@ -273,6 +274,32 @@ export async function cancelAssistantAction(
         body: JSON.stringify({
           conversation_id: conversationId,
           pending_message_id: pendingMessageId,
+        }),
+      },
+    );
+
+    return toAssistantMessageResult(response);
+  } catch (error) {
+    wrapRequestError(error);
+  }
+}
+
+export async function modifyAssistantAction(
+  accessToken: string,
+  conversationId: number,
+  pendingMessageId: number,
+  changes: Record<string, unknown>,
+): Promise<AssistantMessageResult> {
+  try {
+    const response = await apiRequest<ChatApiResponse>(
+      "/chat/preview",
+      accessToken,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          pending_message_id: pendingMessageId,
+          changes,
         }),
       },
     );

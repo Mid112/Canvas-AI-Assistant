@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { AssistantMessage } from "@/components/chat/AssistantMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -134,6 +135,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   llmProviders = [],
   onModelProviderChange,
 }, ref) {
+  const navigate = useNavigate();
   const { accessToken, user } = useAuth();
   const { activeCourse, refreshActiveCourse, notifyCoursesChanged } =
     useActiveCourse();
@@ -290,6 +292,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
               ? mapWorkflowStatus(workflowStatuses[mapped.pendingMessageId]?.status)
               : undefined,
             explanation: mapped.explanation,
+            acknowledgedFields: mapped.acknowledgedFields,
             interpretedAction: mapped.interpretedAction,
             safetyBlocked: mapped.safetyBlocked,
             safetyMessage: mapped.safetyMessage,
@@ -330,6 +333,24 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
 
   const appendAssistantMessage = useCallback(
     (response: AssistantMessageResult) => {
+      // Navigate to dedicated form pages instead of showing preview cards.
+      // Keep interpretedAction on the transcript so reopening chat history
+      // still offers "Open quiz creation form".
+      if (response.navigateTo) {
+        const briefMsg: ChatMessage = {
+          id: createMessageId(),
+          role: "assistant",
+          content: response.content,
+          timestamp: new Date(),
+          conversationId: response.conversationId,
+          explanation: response.explanation,
+          interpretedAction: response.interpretedAction,
+        };
+        setMessages((current) => [...current, briefMsg]);
+        navigate(response.navigateTo.path, { state: response.navigateTo.state });
+        return;
+      }
+
       // A grouped send_message turn can resolve to more than one distinct
       // message — the primary response plus every entry in
       // additionalPreviews all become their own message row, each
@@ -345,6 +366,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
         pendingMessageId: entry.pendingMessageId,
         pendingActionStatus: entry.pendingMessageId ? "pending" : undefined,
         explanation: entry.explanation,
+        acknowledgedFields: entry.acknowledgedFields,
         interpretedAction: entry.interpretedAction,
         safetyBlocked: entry.safetyBlocked,
         safetyMessage: entry.safetyMessage,
@@ -361,7 +383,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
         setActivePendingMessageIds((current) => [...current, ...newPendingIds]);
       }
     },
-    [],
+    [navigate],
   );
 
   const deliverAssistantResponse = useCallback(

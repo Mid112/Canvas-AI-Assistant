@@ -1,4 +1,5 @@
-import { ArrowRight, Zap } from "lucide-react";
+import { ArrowRight, ChevronDown, Zap } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -11,7 +12,10 @@ interface ActionCardProps {
 }
 
 export function ActionCard({ action }: ActionCardProps) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const hasLinks = action.primaryLink || action.secondaryLink;
+  const hasTechnicalDetails =
+    action.technicalDetails && action.technicalDetails.length > 0;
 
   return (
     <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-2.5">
@@ -33,6 +37,36 @@ export function ActionCard({ action }: ActionCardProps) {
           <dd className="font-medium">{action.affectedStudents}</dd>
         </div>
       </dl>
+
+      {hasTechnicalDetails ? (
+        <div className="mt-3 border-t border-border/70 pt-2">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between text-xs font-medium text-muted-foreground"
+            aria-expanded={detailsOpen}
+            onClick={() => setDetailsOpen((current) => !current)}
+          >
+            Technical details
+            <ChevronDown
+              className={cn(
+                "size-3.5 transition-transform",
+                detailsOpen && "rotate-180",
+              )}
+              aria-hidden="true"
+            />
+          </button>
+          {detailsOpen ? (
+            <dl className="mt-2 grid gap-1.5 text-xs sm:grid-cols-2">
+              {action.technicalDetails!.map((detail) => (
+                <div key={detail.label}>
+                  <dt className="text-muted-foreground">{detail.label}</dt>
+                  <dd className="font-medium text-foreground">{detail.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
+        </div>
+      ) : null}
 
       {hasLinks ? (
         <div className="mt-3 flex flex-wrap gap-2">

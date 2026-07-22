@@ -70,8 +70,8 @@ across backend workers.
 ## Deployment
 
 1. Configure at least one provider in the backend environment.
-2. Start the backend so migrations `021_llm_response_cache.sql`,
-   `022_instructor_llm_connections.sql`, and
-   `023_deferred_assistant_requests.sql` are applied.
+2. Start the backend so migrations `024_llm_response_cache.sql`,
+   `025_instructor_llm_connections.sql`, and
+   `026_deferred_assistant_requests.sql` are applied.
 3. Optionally sign in as an administrator and set the institution default.
 4. Instructors connect providers and choose a model in Settings or chat.

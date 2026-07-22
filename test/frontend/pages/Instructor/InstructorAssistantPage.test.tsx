@@ -10,6 +10,7 @@ const mockListAssistantConversations = vi.hoisted(() => vi.fn());
 const mockFetchConversation = vi.hoisted(() => vi.fn());
 const mockFetchProviders = vi.hoisted(() => vi.fn());
 const mockListDeferred = vi.hoisted(() => vi.fn());
+const mockResumeDeferred = vi.hoisted(() => vi.fn());
 
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
@@ -32,6 +33,7 @@ vi.mock("@/services/assistant", async () => {
     fetchConversation: mockFetchConversation,
     listAssistantConversations: mockListAssistantConversations,
     listDeferredAssistantRequests: mockListDeferred,
+    resumeDeferredAssistantRequest: mockResumeDeferred,
     sendAssistantMessage: vi.fn(),
   };
 });
@@ -77,6 +79,7 @@ beforeEach(() => {
     total: 0,
   });
   mockListDeferred.mockResolvedValue({ items: [] });
+  mockResumeDeferred.mockReset();
   mockFetchProviders.mockResolvedValue({
     default_provider: "ollama",
     default_model: "llama3.2",
@@ -149,6 +152,67 @@ describe("InstructorAssistantPage", () => {
     expect(
       screen.queryByRole("heading", { name: "Connect Canvas to continue" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("resumes only the next deferred request and keeps the rest queued", async () => {
+    const user = userEvent.setup();
+
+    mockListDeferred.mockResolvedValue({
+      items: [
+        {
+          id: 3,
+          conversation_id: null,
+          message: "Third deferred",
+          proposed_action: null,
+          status: "deferred",
+          created_at: "2026-07-21T12:03:00.000Z",
+          resumed_at: null,
+        },
+        {
+          id: 2,
+          conversation_id: null,
+          message: "Second deferred",
+          proposed_action: null,
+          status: "deferred",
+          created_at: "2026-07-21T12:02:00.000Z",
+          resumed_at: null,
+        },
+        {
+          id: 1,
+          conversation_id: 9,
+          message: "First deferred",
+          proposed_action: null,
+          status: "deferred",
+          created_at: "2026-07-21T12:01:00.000Z",
+          resumed_at: null,
+        },
+      ],
+    });
+    mockResumeDeferred.mockResolvedValue({
+      id: 3,
+      conversation_id: null,
+      message: "Third deferred",
+      proposed_action: null,
+      status: "resumed",
+      created_at: "2026-07-21T12:03:00.000Z",
+      resumed_at: "2026-07-21T12:10:00.000Z",
+    });
+
+    renderWithInstitution(<InstructorAssistantPage />);
+
+    expect(
+      await screen.findByRole("button", { name: "Resume next request" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Resume next request" }));
+
+    await waitFor(() => {
+      expect(mockResumeDeferred).toHaveBeenCalledTimes(1);
+    });
+    expect(mockResumeDeferred).toHaveBeenCalledWith("token", 3);
+    expect(
+      await screen.findByRole("button", { name: "Resume next request" }),
+    ).toBeInTheDocument();
   });
 
   it("starts a fresh chat from a loaded conversation", async () => {

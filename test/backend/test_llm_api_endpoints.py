@@ -335,3 +335,37 @@ def test_admin_can_update_llm_defaults(client, admin_credentials):
             headers=headers,
             json=original,
         )
+
+
+def test_admin_update_rejects_unknown_provider(client, admin_credentials):
+    login = client.post("/api/v1/auth/admin/login", json=admin_credentials)
+    assert login.status_code == 200, login.json()
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    current = client.get("/api/v1/admin/llm/providers", headers=headers)
+    assert current.status_code == 200, current.json()
+    original = current.json()["config"]
+
+    invalid_provider = client.put(
+        "/api/v1/admin/llm/providers",
+        headers=headers,
+        json={
+            **original,
+            "provider": "not-a-real-provider",
+            "model": "whatever",
+        },
+    )
+    assert invalid_provider.status_code == 422, invalid_provider.json()
+    assert "Unknown LLM provider" in invalid_provider.json()["detail"]
+
+    invalid_fallback = client.put(
+        "/api/v1/admin/llm/providers",
+        headers=headers,
+        json={
+            **original,
+            "fallback_provider": "also-not-real",
+            "fallback_model": "whatever",
+        },
+    )
+    assert invalid_fallback.status_code == 422, invalid_fallback.json()
+    assert "Unknown LLM provider" in invalid_fallback.json()["detail"]

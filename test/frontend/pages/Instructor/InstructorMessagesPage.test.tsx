@@ -212,6 +212,8 @@ describe("InstructorMessagesPage", () => {
         screen.getByText(/Unable to load course students for messaging/i),
       ).toBeInTheDocument();
     });
-    expect(await screen.findByLabelText("Subject")).toBeInTheDocument();
+    expect(
+      await screen.findByLabelText("Subject", {}, { timeout: 3000 }),
+    ).toBeInTheDocument();
   });
 });

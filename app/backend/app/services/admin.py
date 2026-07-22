@@ -20,6 +20,7 @@ from app.services.llm.provider_registry import (
     CACHE_TTL_KEY,
     FALLBACK_MODEL_KEY,
     FALLBACK_PROVIDER_KEY,
+    KNOWN_PROVIDER_IDS,
     LLM_SETTING_KEYS,
     get_active_llm_config,
     get_provider_definition,
@@ -103,6 +104,17 @@ async def update_llm_provider_config(
     config: LlmProviderConfig,
     admin: User,
 ) -> LlmProviderConfig:
+    if config.provider not in KNOWN_PROVIDER_IDS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Unknown LLM provider: {config.provider}",
+        )
+    if config.fallback_provider and config.fallback_provider not in KNOWN_PROVIDER_IDS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Unknown LLM provider: {config.fallback_provider}",
+        )
+
     get_provider_definition(config.provider)
     if config.fallback_provider:
         get_provider_definition(config.fallback_provider)

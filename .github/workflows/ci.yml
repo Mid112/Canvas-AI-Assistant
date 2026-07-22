@@ -109,6 +109,8 @@ jobs:
     needs: backend-lint
     steps:
       - uses: actions/checkout@v4
+      - name: Ensure Docker daemon
+        run: bash .github/scripts/ensure-docker.sh
       - name: Start PostgreSQL
         # Service containers only work on Linux runners. On macOS self-hosted
         # runners, start Postgres via Docker instead.
@@ -198,31 +200,54 @@ jobs:
     if: needs.changes.outputs.e2e == 'true'
     steps:
       - uses: actions/checkout@v4
+      - name: Ensure Docker daemon
+        run: bash .github/scripts/ensure-docker.sh
       - name: Start isolated PostgreSQL
         run: |
           CONTAINER="ci-e2e-postgres-${{ github.run_id }}-${{ github.run_attempt }}"
+          # Fixed host port avoids fragile `docker port` multi-line parsing on
+          # Docker Desktop (IPv4+IPv6 lines can corrupt GITHUB_ENV). Offset by
+          # run_attempt so a retried job does not collide with a dying container.
+          HOST_PORT=$((15432 + (${{ github.run_attempt }} % 50)))
+
           docker rm -f "$CONTAINER" 2>/dev/null || true
+          # Drop any stale listener on the chosen host port.
+          if command -v lsof >/dev/null 2>&1; then
+            pids=$(lsof -tiTCP:"$HOST_PORT" -sTCP:LISTEN 2>/dev/null || true)
+            if [ -n "$pids" ]; then
+              echo "Freeing stale listener(s) on :$HOST_PORT: $pids"
+              kill $pids 2>/dev/null || true
+              sleep 1
+              kill -9 $pids 2>/dev/null || true
+            fi
+          fi
+
           docker run -d \
             --name "$CONTAINER" \
-            -p 127.0.0.1::5432 \
+            -p "127.0.0.1:${HOST_PORT}:5432" \
             -v "${{ github.workspace }}/db/init:/docker-entrypoint-initdb.d:ro" \
             -e POSTGRES_USER=appuser \
             -e POSTGRES_PASSWORD=localdev \
             -e POSTGRES_DB=appdb \
             postgres:16-alpine
 
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             if docker exec "$CONTAINER" pg_isready -U appuser -d appdb >/dev/null 2>&1; then
-              echo "PostgreSQL is ready"
-              E2E_DB_PORT="$(docker port "$CONTAINER" 5432/tcp | sed 's/.*://')"
-              echo "E2E_DB_CONTAINER=$CONTAINER" >> "$GITHUB_ENV"
-              echo "E2E_DB_PORT=$E2E_DB_PORT" >> "$GITHUB_ENV"
-              exit 0
+              # pg_isready inside the container is not enough on Docker Desktop —
+              # wait until the published host port actually accepts TCP.
+              if nc -z 127.0.0.1 "$HOST_PORT" 2>/dev/null \
+                || python3 -c "import socket; s=socket.create_connection(('127.0.0.1', int('$HOST_PORT')), 1); s.close()" 2>/dev/null; then
+                echo "PostgreSQL is ready on 127.0.0.1:${HOST_PORT}"
+                echo "E2E_DB_CONTAINER=$CONTAINER" >> "$GITHUB_ENV"
+                echo "E2E_DB_PORT=$HOST_PORT" >> "$GITHUB_ENV"
+                exit 0
+              fi
             fi
             sleep 1
           done
-          echo "PostgreSQL failed to start"
-          docker logs "$CONTAINER"
+          echo "PostgreSQL failed to become reachable on 127.0.0.1:${HOST_PORT}"
+          docker ps -a --filter "name=$CONTAINER"
+          docker logs "$CONTAINER" || true
           exit 1
       - name: Set up Python venv + backend deps
         run: |
@@ -247,8 +272,9 @@ jobs:
       - name: Free E2E ports
         # Self-hosted runners can retain stale backend/frontend processes from
         # prior runs; Playwright sets reuseExistingServer=false in CI.
+        # Include both local defaults and the CI-mapped ports.
         run: |
-          for port in 8000 5173; do
+          for port in 8000 5173 18000 15173; do
             pids=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
             if [ -n "$pids" ]; then
               echo "Killing stale listener(s) on :$port: $pids"
@@ -269,7 +295,26 @@ jobs:
           SECRET_KEY: ci-e2e-secret
           CANVAS_TOKEN_ENCRYPTION_KEY: ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=
         run: |
+          if [[ ! "${E2E_DB_PORT:-}" =~ ^[0-9]+$ ]]; then
+            echo "E2E_DB_PORT is missing or invalid: '${E2E_DB_PORT:-}'"
+            exit 1
+          fi
+          if ! docker inspect -f '{{.State.Running}}' "$E2E_DB_CONTAINER" 2>/dev/null | grep -q true; then
+            echo "E2E Postgres container is not running: ${E2E_DB_CONTAINER:-unset}"
+            docker ps -a
+            exit 1
+          fi
+          # Self-hosted workspaces can retain a developer .env pointing at :5433.
+          # Playwright/uvicorn cwd is app/backend, so remove it so CI's DATABASE_URL wins.
+          rm -f "${{ github.workspace }}/app/backend/.env"
+          if ! nc -z 127.0.0.1 "$E2E_DB_PORT" 2>/dev/null \
+            && ! python3 -c "import socket; s=socket.create_connection(('127.0.0.1', int('$E2E_DB_PORT')), 2); s.close()"; then
+            echo "Host port 127.0.0.1:${E2E_DB_PORT} is not accepting connections"
+            docker logs "$E2E_DB_CONTAINER" || true
+            exit 1
+          fi
           export DATABASE_URL="postgresql+asyncpg://appuser:localdev@127.0.0.1:${E2E_DB_PORT}/appdb"
+          echo "Using Postgres at 127.0.0.1:${E2E_DB_PORT}"
           npm test
       - name: Stop isolated PostgreSQL
         if: always()
@@ -294,6 +339,8 @@ jobs:
     if: always() && !failure() && !cancelled()
     steps:
       - uses: actions/checkout@v4
+      - name: Ensure Docker daemon
+        run: bash .github/scripts/ensure-docker.sh
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Build backend image

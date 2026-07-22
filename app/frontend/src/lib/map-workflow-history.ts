@@ -6,10 +6,12 @@ import type {
 
 const ACTION_LABELS: Record<string, string> = {
   create_assignment: "Create Assignment",
+  create_quiz: "Create Quiz",
   update_assignment: "Update Assignment",
   send_message: "Send Reminder Emails",
   fetch_courses: "Fetch Courses",
   fetch_assignments: "Fetch Assignments",
+  fetch_quizzes: "Fetch Quizzes",
   fetch_submissions: "Fetch Submissions",
   fetch_students: "Fetch Students",
   set_active_course: "Set Active Course",

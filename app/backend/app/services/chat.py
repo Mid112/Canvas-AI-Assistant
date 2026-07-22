@@ -66,6 +66,7 @@ from app.services.llm.response_cache import (
     is_safe_cache_response,
     store_cached_response,
 )
+from app.services.quiz_validation import validate_quiz_for_create
 from app.services.resolved_set import (
     compute_submissions_by_status,
     create_resolved_set,
@@ -159,7 +160,9 @@ NORMAL_TURN_ALLOWED_ACTIONS = {"intent_preview", "clarify", "out_of_scope", "res
 # from the write result below rather than assumed from action_name alone.
 _AUDIT_RESOURCE_MAP = {
     "create_assignment": ("assignment", "create"),
+    "create_quiz": ("quiz", "create"),
     "update_assignment": ("assignment", "update"),
+    "update_grade": ("submission", "update"),
     "send_message": ("announcement", "create"),
 }
 
@@ -177,6 +180,63 @@ def _json_dumps(obj) -> str:
             return o.isoformat()
         raise TypeError(f"Object of type {type(o).__name__} is not JSON serializable")
     return json.dumps(obj, default=default)
+
+
+async def record_write_audit(
+    db: AsyncSession,
+    user: User,
+    workflow: Workflow,
+    result: dict,
+) -> None:
+    """Write an AuditLog row for a successfully executed Canvas write.
+    Shared by handle_confirmed_action (chat confirm path) and form write
+    endpoints (e.g. create_quiz REST) that record Workflow rows directly.
+    """
+    if workflow.action_name not in WRITE_ACTIONS:
+        return
+
+    resource_type, operation = _AUDIT_RESOURCE_MAP.get(
+        workflow.action_name, (workflow.action_name, "create")
+    )
+    if workflow.action_name == "send_message":
+        created_resource = next(
+            (
+                resource
+                for resource in result.get("affected_resources", [])
+                if resource.get("status") == "created"
+            ),
+            None,
+        )
+        if created_resource and created_resource.get("type"):
+            resource_type = created_resource["type"]
+
+    raw_data = result.get("data") or {}
+    if hasattr(raw_data, "model_dump"):
+        raw_data = raw_data.model_dump(mode="json")
+    data = json.loads(_json_dumps(raw_data))
+    resource_id = (
+        str(data["id"]) if isinstance(data, dict) and data.get("id") is not None else None
+    )
+    before_data = (
+        json.loads(_json_dumps(result["previous_data"]))
+        if result.get("previous_data") is not None
+        else None
+    )
+    db.add(
+        AuditLog(
+            user_id=user.id,
+            workflow_id=workflow.id,
+            course_id=workflow.course_id,
+            action=workflow.action_name,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            operation=operation,
+            status="success",
+            before_data=before_data,
+            after_data=data,
+            request_payload=workflow.proposed_action,
+        )
+    )
 
 async def get_or_create_conversation(
     db: AsyncSession,
@@ -641,6 +701,58 @@ async def _resolve_assignment_reference(
         return None
 
 
+_QUIZ_RESOLVER_SYSTEM_PROMPT = """You resolve which Canvas quiz an instructor is
+referring to. You are given a list of real quizzes (with their Canvas ids
+and titles) and the instructor's own words.
+
+Respond with JSON only:
+{"quiz_id": <integer from QUIZZES> | null}
+
+Use the "id" value from the matching quiz in QUIZZES — never a value that
+isn't in that list. If the reference is "latest"/"most recent"/"newest",
+pick the quiz with the latest due_at (if none have a due_at, treat it as
+no confident match). If the reference names or closely matches one quiz's
+title, pick that one. If you cannot confidently pick exactly one, respond
+with {"quiz_id": null} instead of guessing."""
+
+
+async def _resolve_quiz_reference(
+    quizzes: list[dict], reference: str | None, user_message: str, adapter: LLMAdapter,
+) -> int | None:
+    """Resolves a natural-language quiz reference to a real Canvas quiz ID
+    against a candidate list the app already fetched — never invents an ID.
+    Same contract as _resolve_assignment_reference: returns None on any
+    failure so the caller can clarify instead of crashing the chat turn."""
+    try:
+        if len(quizzes) == 1:
+            return _coerce_int(quizzes[0].get("id"))
+
+        listing = "\n".join(
+            f"- id={q.get('id')}, title={q.get('title')!r}, due_at={q.get('due_at')}, "
+            f"points_possible={q.get('points_possible')}"
+            for q in quizzes
+        )
+        prompt = (
+            f"QUIZZES:\n{listing}\n\n"
+            f"User's reference to a quiz: {reference or '(not given)'}\n"
+            f"User's full message: {user_message}"
+        )
+        raw = await asyncio.wait_for(
+            adapter.generate(
+                _QUIZ_RESOLVER_SYSTEM_PROMPT, prompt, history=[],
+                timeout=ASSIGNMENT_RESOLVER_TIMEOUT_SECONDS,
+            ),
+            timeout=ASSIGNMENT_RESOLVER_TIMEOUT_SECONDS,
+        )
+        parsed = json.loads(extract_json_object(raw))
+        candidate = _coerce_int(parsed.get("quiz_id")) if isinstance(parsed, dict) else None
+        valid_ids = {_coerce_int(q.get("id")) for q in quizzes}
+        valid_ids.discard(None)
+        return candidate if candidate in valid_ids else None
+    except Exception:
+        return None
+
+
 async def _resolve_course_and_assignment(
     db: AsyncSession,
     user: User,
@@ -1097,6 +1209,113 @@ async def _resolve_students_via_llm(
         return result
     except Exception:
         return result
+
+
+async def _run_update_grade_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    action: Any,
+    user_message: str,
+    adapter: LLMAdapter,
+) -> dict:
+    """Resolve natural assignment/student references before grade preview.
+
+    Numeric Canvas IDs are selected only from real assignment and roster
+    data returned by existing backend fetches; they are never requested from
+    the instructor or invented by the general chat model.
+    """
+    resolved_assignment = await _resolve_course_and_assignment(
+        db,
+        user,
+        conversation,
+        user_msg,
+        action.local_course_id,
+        action.assignment_id,
+        action.assignment_reference,
+        user_message,
+        adapter,
+    )
+    if isinstance(resolved_assignment, dict):
+        return resolved_assignment
+    course, assignment_id = resolved_assignment
+
+    student_id = action.student_id
+    if student_id is None:
+        if not action.student_reference:
+            return {
+                "action": "clarify",
+                "clarify": True,
+                "question": "Which student should receive this grade?",
+                "partial_plan": {
+                    "assignment_reference": action.assignment_reference,
+                    "new_grade": action.new_grade,
+                    "feedback": action.feedback,
+                },
+            }
+        fetch_action = FetchStudentsAction(local_course_id=course.id)
+        roster_result = await _run_tracked_read(
+            db,
+            user,
+            conversation,
+            user_msg.id,
+            "fetch_students",
+            fetch_action.model_dump(),
+            execute_tool(db, user, fetch_action),
+        )
+        roster = roster_result.get("students", [])
+        candidates = [
+            {
+                "user_id": int(student["canvas_user_id"]),
+                "name": student.get("name"),
+                "login_id": student.get("login_id"),
+                "email": None,
+            }
+            for student in roster
+        ]
+        student_id = (
+            await _resolve_students_via_llm(
+                candidates, [action.student_reference], user_message, adapter
+            )
+        ).get(action.student_reference)
+        if student_id is None:
+            return {
+                "action": "clarify",
+                "clarify": True,
+                "question": (
+                    f'I could not confidently match "{action.student_reference}" '
+                    "to one student in this course. What is their full name or email?"
+                ),
+                "partial_plan": {
+                    "assignment_reference": action.assignment_reference,
+                    "student_reference": action.student_reference,
+                    "new_grade": action.new_grade,
+                    "feedback": action.feedback,
+                },
+            }
+
+    proposed_action = {
+        "action": "update_grade",
+        "local_course_id": course.id,
+        "assignment_id": assignment_id,
+        "assignment_reference": action.assignment_reference,
+        "student_id": student_id,
+        "student_reference": action.student_reference,
+        "new_grade": action.new_grade,
+        "feedback": action.feedback,
+    }
+    proposed_action = {
+        key: value for key, value in proposed_action.items() if value is not None
+    }
+    preview_metadata = generate_write_preview(proposed_action, course)
+    return {
+        "action": "intent_preview",
+        "intent_preview": True,
+        "summary": preview_metadata["summary"],
+        "proposed_action": proposed_action,
+        "preview_metadata": preview_metadata,
+    }
 
 
 async def _resolve_recipient_directives(
@@ -1829,22 +2048,40 @@ Put every field you already do have into partial_plan so the next turn
 doesn't lose it once the user answers. Only ask ONE question per turn.
 
 REQUIRED FIELDS — before proposing any write action (create_assignment,
-update_assignment, send_message), check every field listed as "required"
+update_assignment, update_grade, send_message), check every field listed as "required"
 in that action's schema below. This includes the action/task type itself
 (e.g. don't guess whether the user wants create_assignment vs
-update_assignment), and fields like title, description, and due_date.
+create_quiz vs update_assignment), and fields like title, description, and due_date.
 If any required field is missing or was not stated by the user, use the
 AMBIGUITY CHECK format to ask for it. Never invent a placeholder value
 and never silently omit a required field from proposed_action.
+(create_quiz is the exception — see QUIZ ENGINES below: always intent_preview,
+never clarify for missing quiz fields.)
 
 INTENT PREVIEW — before executing a WRITE action:
-create_assignment, update_assignment, and send_message change real Canvas
+create_assignment, create_quiz, update_assignment, update_grade, and send_message change real Canvas
 data, so the user must see and confirm exactly what will happen first:
 {"action": "intent_preview", "summary": "<plain English description>", "proposed_action": <dict>}
 The user will confirm, modify, or cancel from here.
 
+QUIZ ENGINES:
+For create_quiz, use quiz_engine="classic" unless the instructor explicitly
+asks for a New Quiz. Use quiz_engine="new_quizzes" only for that explicit
+request; the app verifies whether their Canvas course supports it. Classic
+question-bank groups require real bank IDs selected by the instructor in
+the quiz review form. Never invent bank_id values or add question_bank_groups
+from natural-language guesses.
+
+IMPORTANT — create_quiz ALWAYS skips the AMBIGUITY CHECK. Even when the
+user gives only a partial request (e.g. "create a quiz" with no title or
+description), propose intent_preview immediately with whatever details you
+have. The quiz creation form opens with pre-filled values and handles all
+missing-field validation. Never ask clarifying questions for create_quiz:
+propose {"action": "intent_preview", "proposed_action": {"action": "create_quiz",
+...}} right away.
+
 READ ACTIONS — execute immediately, no preview:
-fetch_courses, fetch_assignments, fetch_students, fetch_submissions,
+fetch_courses, fetch_assignments, fetch_quizzes, fetch_students, fetch_submissions,
 resolve_missing_submissions, find_assignment_by_submission_rate, and
 get_active_course never change any data, so propose them directly and
 plainly — do NOT wrap them in intent_preview:
@@ -1999,6 +2236,16 @@ unresolvable assignment_reference is handled for you automatically. Only
 include the fields the user actually wants changed — leave every other
 field out of proposed_action entirely, since anything omitted is
 preserved automatically.
+
+RESOLVING A GRADE UPDATE:
+update_grade needs one assignment and one student, but never ask the user
+for Canvas IDs. Set assignment_reference and student_reference to the
+user's own words, together with new_grade and optional feedback, and
+propose update_grade directly (not intent_preview). Dedicated resolver
+functions match both references against real course data and build the
+preview in the same turn. If exact IDs were already returned earlier in
+this conversation, assignment_id/student_id may be passed directly. Never
+invent either numeric ID.
 
 MESSAGING STUDENTS:
 send_message can post a public class announcement, send a private Canvas
@@ -2449,6 +2696,12 @@ async def handle_chat_message(
                     proposed_name == "update_assignment"
                     and proposed.get("assignment_id") is None
                     and bool(proposed.get("assignment_reference"))
+                ) or (
+                    proposed_name == "update_grade"
+                    and (
+                        proposed.get("assignment_id") is None
+                        or proposed.get("student_id") is None
+                    )
                 )
             if needs_unwrap:
                 # Defensive: the model wrapped a read, a send_message that
@@ -2503,6 +2756,18 @@ async def handle_chat_message(
                 # ask again once a fetch_assignments result is in history.
                 result = await _run_update_assignment_chain(
                     db, user, conversation, user_msg, action, message, adapter
+                )
+            elif action.action == "update_grade" and (
+                action.assignment_id is None or action.student_id is None
+            ):
+                result = await _run_update_grade_chain(
+                    db,
+                    user,
+                    conversation,
+                    user_msg,
+                    action,
+                    message,
+                    adapter,
                 )
             elif action.action == "send_message" and (
                 action.recipient_directives or action.broadcast_to_all_students or action.recipient_handle
@@ -2629,16 +2894,20 @@ async def handle_chat_message(
         )
 
     if result.get("intent_preview"):
-        preview_metadata = result.get("preview_metadata") or {}
-        await _sync_workflow_for_preview(
-            db, conversation, user,
-            source_user_message_id=user_msg.id,
-            pending_message_id=pending_message_id,
-            preview_message_id=assistant_msg.id,
-            user_prompt=message,
-            proposed_action=result.get("proposed_action", {}),
-            affected_resources=preview_metadata.get("affected_resources", []),
-        )
+        proposed_action = result.get("proposed_action", {})
+        # create_quiz redirects to the dedicated form — skip creating a
+        # pending Workflow since the form records audit on approve.
+        if proposed_action.get("action") != "create_quiz":
+            preview_metadata = result.get("preview_metadata") or {}
+            await _sync_workflow_for_preview(
+                db, conversation, user,
+                source_user_message_id=user_msg.id,
+                pending_message_id=pending_message_id,
+                preview_message_id=assistant_msg.id,
+                user_prompt=message,
+                proposed_action=proposed_action,
+                affected_resources=preview_metadata.get("affected_resources", []),
+            )
     else:
         await _supersede_pending_workflow(
             db,
@@ -2650,16 +2919,30 @@ async def handle_chat_message(
     # resolved to more than one distinct message — group 0 was just
     # persisted above through the ordinary single-preview path unchanged;
     # every remaining group still needs its own Message + Workflow row.
+    # Only persist extras when the primary result is an intent_preview;
+    # otherwise log and discard so a clarify/error path cannot silently
+    # drop (or incorrectly keep) orphaned group payloads.
     extra_groups = result.pop("_extra_groups", None)
     if extra_groups:
-        result["additional_previews"] = await _persist_additional_message_previews(
-            db, conversation, user, user_msg, message, extra_groups,
-        )
+        if result.get("intent_preview"):
+            result["additional_previews"] = await _persist_additional_message_previews(
+                db, conversation, user, user_msg, message, extra_groups,
+            )
+        else:
+            logger.error(
+                "Discarding %s _extra_groups because primary chat result "
+                "is not an intent_preview (action=%s)",
+                len(extra_groups),
+                result.get("action"),
+            )
 
     await db.commit()
 
-    # attach the stored message ID so the client can confirm by ID
-    if result.get("intent_preview"):
+    # attach the stored message ID so the client can confirm by ID.
+    # create_quiz is handed off to the form and is not confirmable in chat.
+    if result.get("intent_preview") and (
+        result.get("proposed_action") or {}
+    ).get("action") != "create_quiz":
         result["pending_message_id"] = assistant_msg.id
 
     return conversation, result, False
@@ -2695,6 +2978,150 @@ async def _claim_pending_workflow(db: AsyncSession, workflow: Workflow, new_stat
     # — an async lazy-load on that would fail outside a greenlet context.
     await db.refresh(workflow, attribute_names=["status"])
     return False
+
+
+_EDITABLE_PREVIEW_FIELDS: dict[str, frozenset[str]] = {
+    "create_assignment": frozenset(
+        {"title", "description", "due_date", "points_possible"}
+    ),
+    "create_quiz": frozenset(
+        {
+            "title",
+            "description",
+            "due_date",
+            "points_possible",
+            "allowed_attempts",
+            "time_limit",
+            "quiz_engine",
+            "questions",
+            "question_bank_groups",
+        }
+    ),
+    "update_assignment": frozenset(
+        {"title", "description", "due_date", "points_possible"}
+    ),
+    # Feedback is represented by the message body for targeted Canvas
+    # messages, so this same form covers both messages and feedback drafts.
+    "send_message": frozenset({"subject", "body"}),
+    "update_grade": frozenset({"new_grade", "feedback"}),
+}
+
+
+async def handle_modified_action(
+    db: AsyncSession,
+    user: User,
+    conversation_id: int,
+    pending_message_id: int,
+    changes: dict,
+) -> tuple[Conversation, dict, bool]:
+    """Apply validated structured edits to a pending preview.
+
+    Resolved Canvas identifiers are copied from the server-stored workflow
+    and cannot be replaced by the client. The refreshed metadata is generated
+    by the same preview builder used for the original proposal, so the form,
+    in-chat card, and confirmation payload stay synchronized.
+    """
+    conversation = await db.scalar(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == user.id,
+        )
+    )
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found.")
+
+    workflow = await db.scalar(
+        select(Workflow).where(
+            Workflow.preview_message_id == pending_message_id,
+            Workflow.conversation_id == conversation_id,
+        )
+    )
+    if not workflow:
+        raise HTTPException(
+            status_code=404, detail="Preview not found in this conversation."
+        )
+    if workflow.status != "pending":
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "This action is no longer pending "
+                f"(status: {workflow.status}). "
+                "It may already have been confirmed or cancelled "
+                "in another tab."
+            ),
+        )
+
+    current = dict(workflow.proposed_action or {})
+    action_name = current.get("action")
+    editable = _EDITABLE_PREVIEW_FIELDS.get(str(action_name))
+    if not editable:
+        raise HTTPException(
+            status_code=422,
+            detail="This action does not have editable preview fields.",
+        )
+
+    disallowed = set(changes) - editable
+    if disallowed:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "These fields cannot be edited from the preview: "
+                + ", ".join(sorted(disallowed))
+            ),
+        )
+
+    proposed = {**current, **changes}
+    try:
+        # Full schema validation prevents a form edit from producing a
+        # proposal that could fail only after the instructor confirms it.
+        validated_action = parse_action(_json_dumps(proposed))
+        proposed = validated_action.model_dump(exclude_none=True)
+    except ToolExecutionError as exc:
+        raise HTTPException(status_code=422, detail=exc.user_message) from exc
+
+    local_course_id = proposed.get("local_course_id")
+    if local_course_id is None:
+        raise HTTPException(status_code=422, detail="The preview has no course.")
+    try:
+        course = await resolve_course(db, user, int(local_course_id))
+    except ToolExecutionError as exc:
+        raise HTTPException(status_code=422, detail=exc.user_message) from exc
+
+    if action_name == "create_quiz":
+        await validate_quiz_for_create(
+            int(local_course_id),
+            user,
+            str(proposed.get("title") or ""),
+            str(proposed.get("description") or ""),
+            proposed.get("due_date"),
+            proposed.get("points_possible"),
+            db,
+            allowed_attempts=proposed.get("allowed_attempts"),
+            time_limit=proposed.get("time_limit"),
+            questions=proposed.get("questions"),
+            quiz_engine=str(proposed.get("quiz_engine") or "classic"),
+            question_bank_groups=proposed.get("question_bank_groups"),
+        )
+
+    preview_metadata = generate_write_preview(proposed, course)
+    result = {
+        "action": "intent_preview",
+        "intent_preview": True,
+        "summary": preview_metadata["summary"],
+        "proposed_action": proposed,
+        "preview_metadata": preview_metadata,
+        "previous_proposed_action": current,
+    }
+    await update_message_content(
+        db, conversation.id, pending_message_id, _json_dumps(result)
+    )
+    workflow.proposed_action = proposed
+    workflow.user_prompt = "Edited in review form"
+    workflow.affected_resources = preview_metadata.get("affected_resources", [])
+    workflow.error_detail = None
+    await db.commit()
+    result["pending_message_id"] = pending_message_id
+    return conversation, result, False
 
 
 async def handle_confirmed_action(
@@ -2749,7 +3176,12 @@ async def handle_confirmed_action(
     if not await _claim_pending_workflow(db, workflow, "executing"):
         raise HTTPException(
             status_code=409,
-            detail=f"This action is no longer pending (status: {workflow.status}).",
+            detail=(
+                "This action is no longer pending "
+                f"(status: {workflow.status}). "
+                "It may already have been confirmed or cancelled "
+                "in another tab."
+            ),
         )
     await db.commit()
     workflow.status = "executing"
@@ -2831,54 +3263,7 @@ async def handle_confirmed_action(
     # _sync_workflow_for_preview), but must NOT get an audit row: their
     # action_name isn't in _AUDIT_RESOURCE_MAP and would violate
     # audit_logs' resource_type/operation CHECK constraints if written.
-    if workflow.action_name in WRITE_ACTIONS:
-        resource_type, operation = _AUDIT_RESOURCE_MAP.get(
-            workflow.action_name, (workflow.action_name, "create")
-        )
-        if workflow.action_name == "send_message":
-            # Use the resource type the write actually produced (announcement
-            # vs. conversation) instead of the static default above, since
-            # the same action can go either way depending on whether
-            # recipient_canvas_user_ids was set.
-            created_resource = next(
-                (
-                    resource
-                    for resource in result.get("affected_resources", [])
-                    if resource.get("status") == "created"
-                ),
-                None,
-            )
-            if created_resource and created_resource.get("type"):
-                resource_type = created_resource["type"]
-        # result["data"] comes from CanvasWriteResult.to_dict()'s plain
-        # .model_dump() (not mode="json"), so it can still contain native
-        # datetime objects — JSONB needs JSON-safe values. Round-trip
-        # through the same _json_dumps used for Message.content to
-        # normalize them.
-        data = json.loads(_json_dumps(result.get("data") or {}))
-        resource_id = str(data["id"]) if isinstance(data, dict) and data.get("id") is not None else None
-        # Only set for update_assignment today (see CanvasWriteResult.previous_data) —
-        # the state undo_workflow re-applies to revert this action.
-        before_data = (
-            json.loads(_json_dumps(result["previous_data"]))
-            if result.get("previous_data") is not None
-            else None
-        )
-        db.add(
-            AuditLog(
-                user_id=user.id,
-                workflow_id=workflow.id,
-                course_id=workflow.course_id,
-                action=workflow.action_name,
-                resource_type=resource_type,
-                resource_id=resource_id,
-                operation=operation,
-                status="success",
-                before_data=before_data,
-                after_data=data,
-                request_payload=workflow.proposed_action,
-            )
-        )
+    await record_write_audit(db, user, workflow, result)
 
     await db.commit()
 
@@ -2965,7 +3350,12 @@ async def handle_cancelled_action(
     if not await _claim_pending_workflow(db, workflow, "cancelled"):
         raise HTTPException(
             status_code=409,
-            detail=f"This action is no longer pending (status: {workflow.status}).",
+            detail=(
+                "This action is no longer pending "
+                f"(status: {workflow.status}). "
+                "It may already have been confirmed or cancelled "
+                "in another tab."
+            ),
         )
     await db.commit()
     workflow.status = "cancelled"

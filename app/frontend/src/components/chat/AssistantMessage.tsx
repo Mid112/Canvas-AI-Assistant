@@ -43,6 +43,23 @@ export function AssistantMessage({
           {message.content}
         </div>
 
+        {message.acknowledgedFields &&
+        message.acknowledgedFields.length > 0 ? (
+          <div className="rounded-lg border border-border/70 bg-background px-3 py-2.5">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
+              Already provided
+            </p>
+            <dl className="grid gap-1.5 text-sm sm:grid-cols-2">
+              {message.acknowledgedFields.map((field) => (
+                <div key={field.label}>
+                  <dt className="text-xs text-muted-foreground">{field.label}</dt>
+                  <dd className="font-medium">{field.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ) : null}
+
         {message.safetyBlocked && message.safetyMessage ? (
           <div
             role="alert"

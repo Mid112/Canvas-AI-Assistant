@@ -45,17 +45,6 @@ export function AssignmentUpdateForm({
       <form onSubmit={handleSubmit(onPreview)} noValidate>
         <CardContent className="space-y-5">
           <div className="space-y-2">
-            <Label htmlFor="assignment-id">Assignment ID</Label>
-            <Input
-              id="assignment-id"
-              value={String(assignment.id)}
-              readOnly
-              disabled
-              aria-readonly="true"
-            />
-          </div>
-
-          <div className="space-y-2">
             <Label htmlFor="assignment-title">Assignment title</Label>
             <Input
               id="assignment-title"
