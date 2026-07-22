@@ -7,6 +7,7 @@ import { InstructorCourseGradesPage } from "@/pages/Instructor/InstructorCourseG
 import { fetchCourseAssignments } from "@/services/assignments";
 import { previewGradeUpdate, submitGradeUpdate } from "@/services/gradeManagement";
 import { fetchAssignmentSubmissions } from "@/services/submissions";
+import type { GradeUpdateResult } from "@/types/gradeManagement";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -87,8 +88,8 @@ describe("InstructorCourseGradesPage", () => {
       risk_level: "high",
       requires_approval: true,
       irreversible_warning: "This grade update is irreversible.",
-      rollback_available: true,
-      rollback_message: "History is recorded for this grade change; restore a prior grade manually if needed.",
+      rollback_available: false,
+      rollback_message: "History is recorded for audit context; use a new grade change for any manual correction.",
       summary: "Update Coin to 110.",
       current: {
         grade: null,
@@ -265,8 +266,8 @@ describe("InstructorCourseGradesPage", () => {
       risk_level: "high",
       requires_approval: true,
       irreversible_warning: "This grade update is irreversible.",
-      rollback_available: true,
-      rollback_message: "History is recorded for this grade change; restore a prior grade manually if needed.",
+      rollback_available: false,
+      rollback_message: "History is recorded for audit context; use a new grade change for any manual correction.",
       summary: "Update Coin to 110.",
       current: {
         grade: null,
@@ -310,6 +311,127 @@ describe("InstructorCourseGradesPage", () => {
     expect(screen.queryByText("Low Risk")).not.toBeInTheDocument();
     const coinRow = screen.getByRole("row", { name: /Coin Unsubmitted, Graded 110 110 -/i });
     expect(coinRow).toBeInTheDocument();
+  });
+
+  it("submits bulk grade changes sequentially to avoid Canvas rate-limit spikes", async () => {
+    // Covers the bulk mutation throttle: the page may preview many rows, but
+    // Canvas grade writes are submitted one at a time instead of with Promise.all.
+    const user = userEvent.setup();
+    mockedFetchSubmissions.mockResolvedValue([
+      {
+        id: 99,
+        assignment_id: 10,
+        user_id: 42,
+        student_name: "Coin",
+        student_email: null,
+        student_login_id: null,
+        submitted_at: "2026-01-01T00:00:00Z",
+        workflow_state: "submitted",
+        status: "submitted",
+        score: null,
+        grade: null,
+        graded_at: null,
+      },
+      {
+        id: 100,
+        assignment_id: 10,
+        user_id: 43,
+        student_name: "Mn",
+        student_email: null,
+        student_login_id: null,
+        submitted_at: "2026-01-01T00:00:00Z",
+        workflow_state: "submitted",
+        status: "submitted",
+        score: null,
+        grade: null,
+        graded_at: null,
+      },
+    ]);
+    mockedPreviewGradeUpdate.mockImplementation(async (_courseId, payload) => ({
+      action: "update_grade",
+      risk_level: "high",
+      requires_approval: true,
+      irreversible_warning: "This grade update is irreversible.",
+      rollback_available: false,
+      rollback_message: "History is recorded for audit context; use a new grade change for any manual correction.",
+      summary: `Update student ${payload.user_id} to 95.`,
+      current: {
+        grade: null,
+        score: null,
+        status: "submitted",
+        student_name: `Student ${payload.user_id}`,
+        student_canvas_id: payload.user_id,
+      },
+      proposed: { posted_grade: "95", reason: null, warnings: [] },
+      affected_resources: [],
+    }));
+    let resolveFirstSubmit!: (value: GradeUpdateResult) => void;
+    const firstSubmit = new Promise<GradeUpdateResult>((resolve) => {
+      resolveFirstSubmit = resolve;
+    });
+    const firstResult: GradeUpdateResult = {
+      action: "update_grade",
+      risk_level: "high",
+      requires_approval: true,
+      irreversible_warning: "This grade update is irreversible.",
+      rollback_available: false,
+      rollback_message: "History is recorded for audit context; use a new grade change for any manual correction.",
+      summary: "Update Coin to 95.",
+      current: {
+        grade: null,
+        score: null,
+        status: "submitted",
+        student_name: "Coin",
+        student_canvas_id: 42,
+      },
+      proposed: { posted_grade: "95", reason: null },
+      affected_resources: [],
+      submitted: true,
+      history_id: 12,
+      canvas_submission: {
+        id: 99,
+        assignment_id: 10,
+        user_id: 42,
+        student_name: "Coin",
+        student_email: null,
+        student_login_id: null,
+        submitted_at: null,
+        workflow_state: "graded",
+        status: "graded",
+        score: 95,
+        grade: "95",
+        graded_at: "2026-01-01T00:00:00Z",
+      },
+    };
+    const secondResult: GradeUpdateResult = {
+      ...firstResult,
+      history_id: 13,
+      current: { ...firstResult.current, student_name: "Mn", student_canvas_id: 43 },
+      summary: "Update Mn to 95.",
+      canvas_submission: {
+        ...firstResult.canvas_submission,
+        id: 100,
+        user_id: 43,
+        student_name: "Mn",
+      },
+    };
+    mockedSubmitGradeUpdate
+      .mockReturnValueOnce(firstSubmit)
+      .mockResolvedValueOnce(secondResult);
+
+    renderPage();
+
+    await screen.findByRole("cell", { name: "Coin" });
+    await screen.findByRole("cell", { name: "Mn" });
+    await user.type(screen.getByLabelText("New grade"), "95");
+    await user.click(screen.getByRole("button", { name: "Preview change" }));
+    await waitFor(() => expect(mockedPreviewGradeUpdate).toHaveBeenCalledTimes(2));
+    await user.type(screen.getByLabelText("Type UPDATE to approve"), "UPDATE");
+    await user.click(screen.getByRole("button", { name: "Submit grade change" }));
+
+    await waitFor(() => expect(mockedSubmitGradeUpdate).toHaveBeenCalledTimes(1));
+    resolveFirstSubmit(firstResult);
+    await waitFor(() => expect(mockedSubmitGradeUpdate).toHaveBeenCalledTimes(2));
   });
 
   it("allows feedback-only submissions without typed grade approval", async () => {

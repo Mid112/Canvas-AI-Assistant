@@ -1,9 +1,12 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 
+from app.models.audit_log import AuditLog
+from app.models.grade_history import GradeHistory
+from app.models.workflow import Workflow
 from app.schemas.canvas import GradeUpdateRequest, SubmissionStatus
 from app.services.grade_management import _build_grade_preview, preview_grade_update, submit_grade_update
 
@@ -101,6 +104,8 @@ def test_preview_allows_bonus_grade_but_returns_server_warning():
     )
 
     assert preview.proposed["posted_grade"] == "110"
+    assert preview.rollback_available is False
+    assert "manual correction" in preview.rollback_message
     assert preview.proposed["warnings"] == [
         "This grade is above the assignment's 100 possible points; submit only if this is intentional bonus or adjusted grading."
     ]
@@ -166,3 +171,121 @@ async def test_grade_submit_authorization_stops_before_canvas_mutation():
     assert exc.value.status_code == 404
     mock_fetch.assert_not_awaited()
     mock_update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_grade_submit_records_workflow_audit_and_history_in_one_commit():
+    # Covers direct Grades tab auditing: successful Canvas writes create a
+    # workflow row, grade history row, and admin audit row before one DB commit.
+    db = AsyncMock()
+    db.add = MagicMock()
+    added = []
+
+    def add_row(row):
+        added.append(row)
+
+    async def flush_rows():
+        for row in added:
+            if isinstance(row, Workflow) and row.id is None:
+                row.id = 501
+            if isinstance(row, GradeHistory) and row.id is None:
+                row.id = 601
+
+    db.add.side_effect = add_row
+    db.flush = AsyncMock(side_effect=flush_rows)
+    user = SimpleNamespace(id=1)
+    course = SimpleNamespace(
+        id=7,
+        name="COSC 777",
+        canvas_course_id="77",
+        canvas_url="https://canvas.ubc.ca",
+    )
+    raw_submission = {
+        "id": 99,
+        "assignment_id": 10,
+        "user_id": 42,
+        "workflow_state": "graded",
+        "score": 95,
+        "grade": "95",
+        "user": {"name": "Coin"},
+    }
+
+    with (
+        patch(
+            "app.services.grade_management._find_submission",
+            new=AsyncMock(return_value=(course, "token", _submission())),
+        ),
+        patch(
+            "app.services.grade_management.update_submission_grade",
+            new=AsyncMock(return_value=raw_submission),
+        ),
+    ):
+        result = await submit_grade_update(
+            7,
+            GradeUpdateRequest(
+                assignment_id=10,
+                user_id=42,
+                posted_grade="95",
+                reason="Rubric correction",
+            ),
+            user,
+            "https://canvas.ubc.ca",
+            db,
+        )
+
+    workflow = next(row for row in added if isinstance(row, Workflow))
+    history = next(row for row in added if isinstance(row, GradeHistory))
+    audit = next(row for row in added if isinstance(row, AuditLog))
+    assert result.history_id == 601
+    assert workflow.status == "executed"
+    assert workflow.action_name == "update_grade"
+    assert history.rollback_available is False
+    assert audit.workflow_id == 501
+    assert audit.resource_type == "submission"
+    assert audit.before_data["student_canvas_id"] == 42
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_grade_submit_rolls_back_when_history_or_audit_commit_fails():
+    # Covers the orphan-state guard: if persistence fails after Canvas returns,
+    # the pending workflow/history/audit transaction is rolled back and surfaced.
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.commit = AsyncMock(side_effect=RuntimeError("database unavailable"))
+    user = SimpleNamespace(id=1)
+    course = SimpleNamespace(
+        id=7,
+        name="COSC 777",
+        canvas_course_id="77",
+        canvas_url="https://canvas.ubc.ca",
+    )
+    raw_submission = {
+        "id": 99,
+        "assignment_id": 10,
+        "user_id": 42,
+        "workflow_state": "graded",
+        "score": 95,
+        "grade": "95",
+    }
+
+    with (
+        patch(
+            "app.services.grade_management._find_submission",
+            new=AsyncMock(return_value=(course, "token", _submission())),
+        ),
+        patch(
+            "app.services.grade_management.update_submission_grade",
+            new=AsyncMock(return_value=raw_submission),
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="database unavailable"):
+            await submit_grade_update(
+                7,
+                GradeUpdateRequest(assignment_id=10, user_id=42, posted_grade="95"),
+                user,
+                "https://canvas.ubc.ca",
+                db,
+            )
+
+    db.rollback.assert_awaited_once()

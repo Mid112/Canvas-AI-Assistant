@@ -1,13 +1,15 @@
 import json
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.canvas import fetch_submissions, update_submission_grade
+from app.models.audit_log import AuditLog
 from app.models.grade_history import GradeHistory
 from app.models.user import User
+from app.models.workflow import Workflow
 from app.schemas.canvas import GradePreviewResponse, GradeUpdateRequest, GradeUpdateResponse
 from app.services.canvas import (
     _fill_submission_contact_fields,
@@ -21,7 +23,7 @@ IRREVERSIBLE_GRADE_WARNING = (
     "Grade changes are high risk because Canvas updates the student's official record immediately."
 )
 ROLLBACK_MESSAGE = (
-    "History is recorded for this grade change; restore a prior grade manually if needed."
+    "History is recorded for audit context; use a new grade change for any manual correction."
 )
 FEEDBACK_ONLY_WARNING = (
     "Feedback only is low risk because it adds a Canvas comment without changing the official grade."
@@ -215,7 +217,7 @@ def _build_grade_preview(course, body: GradeUpdateRequest, submission) -> GradeP
         risk_level="low" if feedback_only else "high",
         requires_approval=not feedback_only,
         irreversible_warning=FEEDBACK_ONLY_WARNING if feedback_only else IRREVERSIBLE_GRADE_WARNING,
-        rollback_available=not feedback_only,
+        rollback_available=False,
         rollback_message=FEEDBACK_ONLY_ROLLBACK_MESSAGE if feedback_only else ROLLBACK_MESSAGE,
         summary=summary,
         current={
@@ -270,6 +272,8 @@ async def submit_grade_update(
     user: User,
     canvas_url: str,
     db: AsyncSession,
+    *,
+    record_workflow_audit: bool = True,
 ) -> GradeUpdateResponse:
     course, token, submission = await _find_submission(
         local_course_id=local_course_id,
@@ -302,16 +306,59 @@ async def submit_grade_update(
         new_grade=proposed_grade or submission.grade or "unchanged",
         reason=feedback or None,
         risk_level="low" if feedback_only else "high",
-        rollback_available=not feedback_only,
+        # History supports audit/manual correction, but there is no automated
+        # undo endpoint for grade writes yet.
+        rollback_available=False,
         canvas_response=json.loads(json.dumps(raw, default=_json_default)),
     )
+    workflow = None
+    if record_workflow_audit:
+        # Direct Grades tab submits do not have chat messages, but they still
+        # need workflow/audit traceability alongside grade history.
+        workflow = Workflow(
+            conversation_id=None,
+            user_id=user.id,
+            course_id=course.id,
+            action_name="update_grade",
+            user_prompt="Grades tab grade update",
+            proposed_action=body.model_dump(mode="json"),
+            affected_resources=preview.affected_resources,
+            status="executed",
+            executed_at=datetime.now(UTC),
+        )
+        db.add(workflow)
+        await db.flush()
+
     db.add(history)
-    await db.commit()
-    await db.refresh(history)
+    await db.flush()
+    history_id = history.id
+    if workflow is not None:
+        # GradeHistory is the instructor-facing change ledger; AuditLog ties the
+        # same successful Canvas write to workflow history for admin review.
+        db.add(
+            AuditLog(
+                user_id=user.id,
+                workflow_id=workflow.id,
+                course_id=course.id,
+                action="update_grade",
+                resource_type="submission",
+                resource_id=str(updated.id) if updated.id is not None else None,
+                operation="update",
+                status="success",
+                before_data=preview.current,
+                after_data=json.loads(json.dumps(raw, default=_json_default)),
+                request_payload=body.model_dump(mode="json"),
+            )
+        )
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
     return GradeUpdateResponse(
         **preview.model_dump(),
         submitted=True,
-        history_id=history.id,
+        history_id=history_id,
         canvas_submission=updated,
     )
 

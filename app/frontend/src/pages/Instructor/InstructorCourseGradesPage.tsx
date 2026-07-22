@@ -33,6 +33,19 @@ import type { ApiSubmission } from "@/types/submission";
 
 type GradeStatusFilter = "all" | "graded" | "submitted" | "unsubmitted";
 
+async function runSequentially<T, R>(
+  items: T[],
+  task: (item: T) => Promise<R>,
+): Promise<R[]> {
+  // Canvas grade writes are official mutations. Keep bulk submit intentionally
+  // sequential so a large selection does not fan out into rate-limit spikes.
+  const results: R[] = [];
+  for (const item of items) {
+    results.push(await task(item));
+  }
+  return results;
+}
+
 function normalizeSubmissionStatus(submission: ApiSubmission) {
   return String(submission.status || submission.workflow_state || "")
     .trim()
@@ -376,10 +389,8 @@ export function InstructorCourseGradesPage() {
     }
     setIsSubmitting(true);
     try {
-      const results = await Promise.all(
-        payloads.map((payload) =>
-          submitGradeUpdate(parsedLocalCourseId, payload, accessToken, canvasUrl),
-        ),
+      const results = await runSequentially(payloads, (payload) =>
+        submitGradeUpdate(parsedLocalCourseId, payload, accessToken, canvasUrl),
       );
       setNotice(
         results.length === 1

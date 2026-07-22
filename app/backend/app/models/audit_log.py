@@ -45,7 +45,8 @@ class AuditLog(Base):
     )
 
     action: Mapped[str] = mapped_column(String, nullable=False)
-    resource_type: Mapped[str] = mapped_column(String, nullable=False)  # assignment | announcement
+    # Mirrors the DB CHECK constraint; grade updates audit Canvas submissions.
+    resource_type: Mapped[str] = mapped_column(String, nullable=False)
     resource_id: Mapped[str | None] = mapped_column(String, nullable=True)
     operation: Mapped[str] = mapped_column(String, nullable=False)  # create | update
     # "failed" is reserved but unreachable this pass — rows are only

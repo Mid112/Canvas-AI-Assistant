@@ -584,6 +584,7 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 user,
                 course.canvas_url,
                 db,
+                record_workflow_audit=False,
             )
             result = CanvasWriteResult(
                 action="update_grade",

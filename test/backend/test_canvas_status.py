@@ -30,7 +30,7 @@ def test_irreversible_result_includes_reversibility_note():
 
 # Verifies: Affected resources always a list even when empty.
 def test_affected_resources_always_a_list_even_when_empty():
-    result = CanvasWriteResult(action="update_grade", data={}, reversible=True, affected_resources=[])
+    result = CanvasWriteResult(action="update_grade", data={}, reversible=False, affected_resources=[])
     assert result.to_dict()["affected_resources"] == []
 
 

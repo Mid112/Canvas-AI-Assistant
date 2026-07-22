@@ -341,7 +341,9 @@ ACTION_CLASSIFICATION: dict[str, ActionClassification] = {
     "create_assignment": "modifying",
     "create_quiz": "modifying",
     "update_assignment": "modifying",
-    "update_grade": "modifying",
+    # Grade changes have history, but no automated undo path yet. Classify them
+    # as irreversible so safety-facing UI does not imply rollback support.
+    "update_grade": "irreversible",
     "send_message": "irreversible",
 }
 
