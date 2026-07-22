@@ -11,7 +11,7 @@ import {
   instructorSettingsPath,
   paths,
 } from "@/routes/paths";
-import type { AssistantResponse } from "@/types/chat";
+import type { AssistantResponse, RiskMetadata } from "@/types/chat";
 
 export class ChatReplyMappingError extends Error {
   constructor(message: string) {
@@ -227,6 +227,7 @@ function buildInterpretedAction(
     action: formatActionLabel(actionName),
     course: courseLabel,
     affectedStudents,
+    risk: readRiskMetadata(previewMetadata?.risk_metadata),
     technicalDetails: [
       { label: "Action type", value: formatActionLabel(actionName) },
       ...(readString(previewMetadata?.risk_level)
@@ -283,6 +284,23 @@ function buildInterpretedAction(
   }
 
   return interpretedAction;
+}
+
+function readRiskMetadata(value: unknown): RiskMetadata | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const record = value as Partial<RiskMetadata>;
+  if (
+    (record.risk_level === "low" ||
+      record.risk_level === "medium" ||
+      record.risk_level === "high") &&
+    record.confirmation_requirement &&
+    typeof record.confirmation_requirement === "object"
+  ) {
+    return record as RiskMetadata;
+  }
+  return undefined;
 }
 
 function buildQuizCreateDraftState(
@@ -486,6 +504,7 @@ function buildQuizCreateFormAction(
     action: "Create Quiz",
     course: courseLabel,
     affectedStudents: "Course-wide",
+    risk: readRiskMetadata(previewMetadata?.risk_metadata),
     technicalDetails: [
       { label: "Action type", value: "Create Quiz" },
       ...(readString(previewMetadata?.risk_level)

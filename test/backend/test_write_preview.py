@@ -11,6 +11,8 @@ def test_create_assignment_preview_reversible_and_resources():
         COURSE,
     )
     assert preview["reversible"] is True
+    assert preview["risk_metadata"]["risk_level"] == "medium"
+    assert preview["risk_metadata"]["confirmation_requirement"]["type"] == "standard"
     assert "reversibility_note" not in preview
     assert preview["affected_resources"] == [
         {"type": "course", "id": 1, "name": "cosc 501", "status": "unchanged"},
@@ -39,6 +41,9 @@ def test_send_message_preview_is_irreversible_with_note_and_audience():
         COURSE,
     )
     assert preview["reversible"] is False
+    assert preview["risk_metadata"]["risk_level"] == "high"
+    assert preview["risk_metadata"]["confirmation_requirement"]["type"] == "strong"
+    assert preview["risk_metadata"]["can_undo"] is False
     assert preview["reversibility_note"] == "This action cannot be undone once submitted."
     resources = {r["type"]: r for r in preview["affected_resources"]}
     assert resources["course"]["status"] == "unchanged"
@@ -87,3 +92,10 @@ def test_unrecognized_action_falls_back_safely():
     preview = generate_write_preview({"action": "fetch_courses"}, COURSE)
     assert preview["affected_resources"] == []
     assert preview["reversible"] is True
+
+
+# Verifies: Risk service classifies read-only actions as low risk.
+def test_read_only_preview_risk_metadata_is_low():
+    preview = generate_write_preview({"action": "fetch_courses"}, COURSE)
+    assert preview["risk_metadata"]["risk_level"] == "low"
+    assert preview["risk_metadata"]["requires_confirmation"] is False

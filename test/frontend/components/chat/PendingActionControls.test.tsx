@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { PendingActionControls } from "@/components/chat/PendingActionControls";
 
 describe("PendingActionControls", () => {
-  it("shows confirm, edit, and cancel actions for pending proposals", async () => {
+  it("shows an Actions section with confirm, edit, and cancel for pending proposals", async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();
     const onCancel = vi.fn();
@@ -13,19 +13,16 @@ describe("PendingActionControls", () => {
 
     render(
       <PendingActionControls
-        error="Unable to confirm action."
         onConfirm={onConfirm}
         onCancel={onCancel}
         onModify={onModify}
       />,
     );
 
+    expect(screen.getByText("Actions")).toBeInTheDocument();
     expect(
       screen.getByText("Approve this proposed action?"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Unable to confirm action.",
-    );
 
     await user.click(screen.getByRole("button", { name: "Confirm" }));
     await user.click(screen.getByRole("button", { name: "Edit before sending" }));
@@ -34,6 +31,77 @@ describe("PendingActionControls", () => {
     expect(onConfirm).toHaveBeenCalledTimes(1);
     expect(onModify).toHaveBeenCalledTimes(1);
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it("minimizes actions for read-only previews", () => {
+    render(
+      <PendingActionControls
+        risk={{
+          risk_level: "low",
+          classification: "read_only",
+          requires_confirmation: false,
+          confirmation_requirement: {
+            type: "none",
+            label: "No confirmation needed",
+            description: "Read-only actions run immediately and do not change Canvas.",
+          },
+          destructive: false,
+          reversible: true,
+          undoable: false,
+          can_undo: false,
+          reversibility: "No Canvas changes will be made.",
+          warnings: [],
+          technical_details: {},
+        }}
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText("Read-only action. No confirmation required."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirm" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+  });
+
+  it("requires typed confirmation for high-risk proposals", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+
+    render(
+      <PendingActionControls
+        risk={{
+          risk_level: "high",
+          classification: "irreversible",
+          requires_confirmation: true,
+          confirmation_requirement: {
+            type: "strong",
+            label: "Strong confirmation",
+            description: "Type CONFIRM before executing this high-risk action.",
+            confirmation_phrase: "CONFIRM",
+          },
+          destructive: true,
+          reversible: false,
+          undoable: false,
+          can_undo: false,
+          reversibility: "This action cannot be undone once submitted.",
+          warnings: [],
+          technical_details: {},
+        }}
+        onConfirm={onConfirm}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    const confirmButton = screen.getByRole("button", { name: "Confirm" });
+    expect(confirmButton).toBeDisabled();
+
+    await user.type(screen.getByLabelText("Type CONFIRM to confirm"), "CONFIRM");
+    expect(confirmButton).toBeEnabled();
+    await user.click(confirmButton);
+
+    expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
   // Verifies: Shows status text after the proposal is resolved.

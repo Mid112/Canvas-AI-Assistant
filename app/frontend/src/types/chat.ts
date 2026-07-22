@@ -53,6 +53,30 @@ export interface InterpretedAction {
   previewId?: string;
   primaryLink?: ActionLink;
   secondaryLink?: ActionLink;
+  risk?: RiskMetadata;
+}
+
+export type RiskLevel = "low" | "medium" | "high";
+
+export interface ConfirmationRequirement {
+  type: "none" | "standard" | "strong";
+  label: string;
+  description: string;
+  confirmation_phrase?: string;
+}
+
+export interface RiskMetadata {
+  risk_level: RiskLevel;
+  classification: string;
+  requires_confirmation: boolean;
+  confirmation_requirement: ConfirmationRequirement;
+  destructive: boolean;
+  reversible: boolean;
+  undoable: boolean;
+  can_undo: boolean;
+  reversibility: string;
+  warnings: string[];
+  technical_details: Record<string, unknown>;
 }
 
 export interface ChatMessage {

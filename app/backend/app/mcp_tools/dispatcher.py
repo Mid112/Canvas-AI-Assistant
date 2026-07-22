@@ -46,6 +46,7 @@ from app.services.grade_management import submit_grade_update
 from app.services.llm.json_extraction import extract_json_object as _extract_json
 from app.services.message_validation import validate_message_for_send
 from app.services.quiz_validation import validate_quiz_for_create
+from app.services.risk import classify_action_risk
 from app.services.student import get_students
 from app.services.write_preview import generate_write_preview
 
@@ -781,6 +782,9 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 # action is course-scoped — otherwise the UI has nothing to
                 # show but a generic "Active course" placeholder.
                 preview_metadata = {"action": proposed.get("action")}
+                preview_metadata["risk_metadata"] = classify_action_risk(
+                    nested_action_name, proposed
+                )
                 try:
                     read_local_course_id = int(proposed.get("local_course_id", 0))
                 except (TypeError, ValueError):

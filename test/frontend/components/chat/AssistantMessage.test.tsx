@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ActionCard } from "@/components/chat/ActionCard";
 import { AssistantMessage } from "@/components/chat/AssistantMessage";
@@ -89,6 +89,59 @@ describe("AssistantMessage", () => {
     expect(screen.getByText("I found missing submissions.")).toBeInTheDocument();
     expect(screen.getByText("Explanation")).toBeInTheDocument();
     expect(screen.getByText("Interpreted Action")).toBeInTheDocument();
+  });
+
+  it("renders action summary, alerts, and actions as separate sections", () => {
+    render(
+      <AssistantMessage
+        message={{
+          id: "3",
+          role: "assistant",
+          content: "I prepared a message for review.",
+          timestamp: new Date("2026-06-24T10:10:00"),
+          pendingMessageId: 42,
+          pendingActionStatus: "pending",
+          interpretedAction: {
+            action: "Send Message",
+            course: "COSC 499",
+            affectedStudents: "Entire class",
+            risk: {
+              risk_level: "high",
+              classification: "irreversible",
+              requires_confirmation: true,
+              confirmation_requirement: {
+                type: "strong",
+                label: "Strong confirmation",
+                description: "Type CONFIRM before executing this high-risk action.",
+                confirmation_phrase: "CONFIRM",
+              },
+              destructive: true,
+              reversible: false,
+              undoable: false,
+              can_undo: false,
+              reversibility: "This action cannot be undone once submitted.",
+              warnings: ["Review recipients and content carefully before confirming."],
+              technical_details: { action: "send_message" },
+            },
+          },
+        }}
+        pendingActionError="Unable to confirm action."
+        onConfirmPendingAction={vi.fn()}
+        onCancelPendingAction={vi.fn()}
+        onModifyPendingAction={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Interpreted Action")).toBeInTheDocument();
+    expect(screen.getByText("Alerts")).toBeInTheDocument();
+    expect(screen.getByText("Actions")).toBeInTheDocument();
+    expect(
+      screen.getByText("Review recipients and content carefully before confirming."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Unable to confirm action.");
+    expect(
+      screen.getByRole("button", { name: "Edit before sending" }),
+    ).toBeInTheDocument();
   });
 
   // Verifies: Renders a safety notice when the request was blocked.
