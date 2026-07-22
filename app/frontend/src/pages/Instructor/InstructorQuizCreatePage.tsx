@@ -100,6 +100,7 @@ export function InstructorQuizCreatePage() {
 
   const canvasUrl = useCanvasConnectionUrl();
   const {
+    activeCourse,
     availableCourses,
     isLoading: isLoadingCourses,
     error: courseLoadError,
@@ -125,9 +126,26 @@ export function InstructorQuizCreatePage() {
     [labelById, writableCourses],
   );
 
+  // AI handoff may omit local_course_id; fall back to the active course so
+  // review actions (capabilities / question banks) have a real course id.
+  useEffect(() => {
+    if (describeValues.courseId || !activeCourse) {
+      return;
+    }
+    setDescribeValues((current) =>
+      current.courseId
+        ? current
+        : { ...current, courseId: String(activeCourse.localId) },
+    );
+  }, [activeCourse, describeValues.courseId]);
+
   const courseLabel =
     courseOptions.find((course) => course.id === describeValues.courseId)
-      ?.label ?? "your course";
+      ?.label ??
+    (activeCourse &&
+    String(activeCourse.localId) === describeValues.courseId
+      ? activeCourse.displayName
+      : "your course");
   const effectiveCourseLoadError = needsCanvasConnection
     ? "Connect your Canvas account to load courses."
     : courseLoadError;
@@ -168,15 +186,35 @@ export function InstructorQuizCreatePage() {
 
   const handleLoadQuestionBanks = async () => {
     if (!accessToken) {
+      setApproveError("Your session has expired. Please sign in again.");
       return;
     }
     const courseId = Number(describeValues.courseId);
+    if (!Number.isInteger(courseId) || courseId <= 0) {
+      setApproveError(
+        "Select a course before loading question banks. Use Back to Describe if no course is set.",
+      );
+      return;
+    }
+    if (!canvasUrl) {
+      setApproveError(
+        "Connect your Canvas account before loading question banks.",
+      );
+      return;
+    }
     setIsLoadingQuestionBanks(true);
     setApproveError(null);
     try {
-      setQuestionBanks(
-        await fetchQuestionBanks(courseId, { accessToken, canvasUrl }),
-      );
+      const banks = await fetchQuestionBanks(courseId, {
+        accessToken,
+        canvasUrl,
+      });
+      setQuestionBanks(banks);
+      if (banks.length === 0) {
+        setApproveError(
+          "No Classic question banks were found in this Canvas course.",
+        );
+      }
     } catch (error) {
       setApproveError(
         error instanceof Error

@@ -14,6 +14,7 @@ interface AssistantMessageProps {
   onConfirmPendingAction?: () => void;
   onCancelPendingAction?: () => void;
   onModifyPendingAction?: () => void;
+  onDismissHandoff?: () => void;
 }
 
 function formatTimestamp(timestamp: Date): string {
@@ -30,9 +31,12 @@ export function AssistantMessage({
   onConfirmPendingAction,
   onCancelPendingAction,
   onModifyPendingAction,
+  onDismissHandoff,
 }: AssistantMessageProps) {
   const showPendingControls =
     message.pendingMessageId !== undefined && message.pendingActionStatus;
+  const showHandoffOffer =
+    !message.handoffDismissed && Boolean(message.interpretedAction);
 
   return (
     <div className="flex gap-3">
@@ -70,12 +74,19 @@ export function AssistantMessage({
           </div>
         ) : null}
 
-        {message.explanation ? (
+        {showHandoffOffer && message.explanation ? (
           <ExplanationCard explanation={message.explanation} />
         ) : null}
 
-        {message.interpretedAction ? (
-          <ActionCard action={message.interpretedAction} />
+        {showHandoffOffer && message.interpretedAction ? (
+          <ActionCard
+            action={message.interpretedAction}
+            onDismiss={
+              !showPendingControls && onDismissHandoff
+                ? onDismissHandoff
+                : undefined
+            }
+          />
         ) : null}
 
         {showPendingControls ? (
@@ -99,6 +110,12 @@ export function AssistantMessage({
                 : undefined
             }
           />
+        ) : null}
+
+        {message.handoffDismissed ? (
+          <p className="text-sm text-muted-foreground">
+            This action was cancelled.
+          </p>
         ) : null}
 
         <time

@@ -494,6 +494,15 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
                   ...entry,
                   pendingActionStatus:
                     action === "confirm" ? "confirmed" : "cancelled",
+                  // Hide the offer cards after cancel so the proposal
+                  // disappears entirely (no leftover explanation/action UI).
+                  ...(action === "cancel"
+                    ? {
+                        handoffDismissed: true,
+                        explanation: undefined,
+                        interpretedAction: undefined,
+                      }
+                    : {}),
                 }
               : entry,
           ),
@@ -511,6 +520,30 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           void refreshDashboard();
         }
       } catch (requestError) {
+        // Cancelling a form-handoff leftover (no Workflow row) should still
+        // dismiss the UI locally — there is nothing to audit/cancel server-side.
+        if (action === "cancel") {
+          setActivePendingMessageIds((current) =>
+            current.filter((id) => id !== message.pendingMessageId),
+          );
+          setMessages((current) =>
+            current.map((entry) =>
+              entry.id === message.id
+                ? {
+                    ...entry,
+                    pendingActionStatus: "cancelled",
+                    handoffDismissed: true,
+                    explanation: undefined,
+                    interpretedAction: undefined,
+                    pendingMessageId: undefined,
+                  }
+                : entry,
+            ),
+          );
+          setPendingActionError(null);
+          return;
+        }
+
         const errorMessage =
           requestError instanceof AssistantApiError
             ? requestError.message
@@ -529,6 +562,21 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       refreshDashboard,
     ],
   );
+
+  const dismissHandoffOffer = useCallback((messageId: string) => {
+    setMessages((current) =>
+      current.map((entry) =>
+        entry.id === messageId
+          ? {
+              ...entry,
+              handoffDismissed: true,
+              explanation: undefined,
+              interpretedAction: undefined,
+            }
+          : entry,
+      ),
+    );
+  }, []);
 
   const handleSend = useCallback(
     (text: string) => {
@@ -659,6 +707,11 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
                 onCancelPendingAction={
                   message.pendingMessageId
                     ? () => void resolvePendingAction(message, "cancel")
+                    : undefined
+                }
+                onDismissHandoff={
+                  message.interpretedAction && !message.pendingMessageId
+                    ? () => dismissHandoffOffer(message.id)
                     : undefined
                 }
               />
