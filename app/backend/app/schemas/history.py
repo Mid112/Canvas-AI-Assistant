@@ -9,7 +9,8 @@ from app.models.workflow import Workflow
 
 class WorkflowHistoryItem(BaseModel):
     id: int
-    conversation_id: int
+    # Null for form-created writes that were never tied to a chat turn.
+    conversation_id: int | None
     action_name: str
     user_prompt: str
     status: str

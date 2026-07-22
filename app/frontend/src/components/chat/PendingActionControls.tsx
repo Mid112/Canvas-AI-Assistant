@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { Input } from "@/components/ui/input";
 import type { PendingActionStatus, RiskMetadata } from "@/types/chat";
 
@@ -41,6 +42,18 @@ export function PendingActionControls({
   }
 
   const requirement = risk?.confirmation_requirement;
+  if (
+    risk?.requires_confirmation === false ||
+    requirement?.type === "none"
+  ) {
+    return (
+      <div className="rounded-lg border border-border/70 bg-background px-3 py-3">
+        <p className="text-sm font-medium">Read-only action. No confirmation required.</p>
+        {error ? <ErrorAlert message={error} className="mt-2 px-3 py-2" /> : null}
+      </div>
+    );
+  }
+
   const requiresStrongConfirmation = requirement?.type === "strong";
   const confirmationPhrase = requirement?.confirmation_phrase ?? "CONFIRM";
   // This is a UI guard on top of the backend workflow gate: the server
@@ -74,9 +87,7 @@ export function PendingActionControls({
         </div>
       ) : null}
       {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
+        <ErrorAlert message={error} className="px-3 py-2" />
       ) : null}
       <div className="flex flex-wrap gap-2">
         <Button

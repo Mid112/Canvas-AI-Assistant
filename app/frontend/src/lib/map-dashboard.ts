@@ -38,6 +38,7 @@ export interface InstructorDashboardApiResponse {
 function mapWorkflowToActivityType(actionName: string): DashboardActivityType {
   switch (actionName) {
     case "create_assignment":
+    case "create_quiz":
     case "update_assignment":
       return "assignment_created";
     case "send_message":

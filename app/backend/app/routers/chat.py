@@ -13,6 +13,7 @@ from app.schemas.chat import (
     ConversationResponse,
     ConversationSummary,
     MessageResponse,
+    ModifyActionRequest,
     WorkflowStatus,
 )
 from app.services.chat import (
@@ -20,6 +21,7 @@ from app.services.chat import (
     handle_cancelled_action,
     handle_chat_message,
     handle_confirmed_action,
+    handle_modified_action,
     list_conversations,
 )
 
@@ -48,6 +50,24 @@ async def cancel_action(
         db, current_user, body.conversation_id, body.pending_message_id
     )
     return ChatResponse(conversation_id=conversation.id, reply=reply, is_error=is_error)
+
+
+@router.patch("/preview", response_model=ChatResponse)
+async def modify_action_preview(
+    body: ModifyActionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    conversation, reply, is_error = await handle_modified_action(
+        db,
+        current_user,
+        body.conversation_id,
+        body.pending_message_id,
+        body.changes,
+    )
+    return ChatResponse(
+        conversation_id=conversation.id, reply=reply, is_error=is_error
+    )
 
 
 

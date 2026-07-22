@@ -7,7 +7,8 @@ import { mockStudentReminderPreview } from "@/data/mockDryRunPreview";
 
 describe("PreviewPanel", () => {
   // Verifies: Renders workflow preview sections from mock data.
-  it("renders workflow preview sections from mock data", () => {
+  it("renders workflow preview with technical details collapsed", async () => {
+    const user = userEvent.setup();
     render(
       <PreviewPanel
         preview={mockStudentReminderPreview}
@@ -22,10 +23,14 @@ describe("PreviewPanel", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Original Request")).toBeInTheDocument();
     expect(screen.getByText("AI Explanation")).toBeInTheDocument();
-    expect(screen.getByText("Generated Canvas Query")).toBeInTheDocument();
+    const details = screen.getByRole("button", { name: "Technical details" });
+    expect(details).toHaveAttribute("aria-expanded", "false");
     expect(screen.getByText("Affected Entities")).toBeInTheDocument();
     expect(screen.getByText("Review Required")).toBeInTheDocument();
     expect(screen.getByText("Alex Johnson")).toBeInTheDocument();
+
+    await user.click(details);
+
     expect(screen.getByText("GET /assignments/submissions")).toBeInTheDocument();
     expect(screen.getByText("POST /conversations")).toBeInTheDocument();
   });
@@ -76,5 +81,49 @@ describe("PreviewPanel", () => {
     expect(screen.queryByText("Original Request")).not.toBeInTheDocument();
     expect(screen.getByText("Midterm Exam")).toBeInTheDocument();
     expect(screen.getByText("2026-08-01")).toBeInTheDocument();
+  });
+
+  it("submits editable fields to regenerate the preview", async () => {
+    const user = userEvent.setup();
+    const onSaveEdits = vi.fn();
+    render(
+      <PreviewPanel
+        preview={{
+          ...mockStudentReminderPreview,
+          actionName: "create_assignment",
+          proposedPlan: [
+            {
+              field: "title",
+              label: "Title",
+              value: "Midterm",
+              rawValue: "Midterm",
+              editable: true,
+            },
+            {
+              field: "points_possible",
+              label: "Points Possible",
+              value: "50",
+              rawValue: 50,
+              editable: true,
+            },
+          ],
+        }}
+        onSaveEdits={onSaveEdits}
+        onReject={vi.fn()}
+        onModify={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    await user.clear(screen.getByLabelText("Title"));
+    await user.type(screen.getByLabelText("Title"), "Final Exam");
+    await user.click(
+      screen.getByRole("button", { name: "Save & regenerate preview" }),
+    );
+
+    expect(onSaveEdits).toHaveBeenCalledWith({
+      title: "Final Exam",
+      points_possible: 50,
+    });
   });
 });

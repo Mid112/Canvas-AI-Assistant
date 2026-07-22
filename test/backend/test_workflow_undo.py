@@ -135,7 +135,7 @@ def _create_executed_create_assignment_workflow(client, headers, local_course_id
         '{"action": "intent_preview", "summary": "Create Midterm Exam", '
         '"proposed_action": {"action": "create_assignment", '
         f'"local_course_id": {local_course_id}, "title": "Midterm Exam", '
-        '"description": "Covers chapters 1-5", "due_date": "2030-01-01T00:00:00", '
+        '"description": "Covers chapters 1 through 5", "due_date": "2030-01-01T00:00:00", '
         '"points_possible": 100}}'
     )
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
@@ -150,7 +150,7 @@ def _create_executed_create_assignment_workflow(client, headers, local_course_id
 
     fake_assignment = AssignmentResponse(
         id=uuid.uuid4().int % 10_000_000, name="Midterm Exam",
-        description="Covers chapters 1-5", due_at="2030-01-01T00:00:00",
+        description="Covers chapters 1 through 5", due_at="2030-01-01T00:00:00",
         points_possible=100.0, course_id=local_course_id,
     )
     with patch(

@@ -6,6 +6,7 @@ import {
   ShieldCheck,
   Zap,
 } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
@@ -19,8 +20,11 @@ interface ActionCardProps {
 }
 
 export function ActionCard({ action }: ActionCardProps) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const hasLinks = action.primaryLink || action.secondaryLink;
   const risk = action.risk;
+  const hasTechnicalDetails =
+    action.technicalDetails && action.technicalDetails.length > 0;
   // Badge color is intentionally derived only from risk_level so every
   // action surface presents low/medium/high risk consistently.
   const riskClassName =
@@ -95,6 +99,36 @@ export function ActionCard({ action }: ActionCardProps) {
               {JSON.stringify(risk.technical_details, null, 2)}
             </pre>
           </details>
+        </div>
+      ) : null}
+
+      {hasTechnicalDetails ? (
+        <div className="mt-3 border-t border-border/70 pt-2">
+          <button
+            type="button"
+            className="flex w-full items-center justify-between text-xs font-medium text-muted-foreground"
+            aria-expanded={detailsOpen}
+            onClick={() => setDetailsOpen((current) => !current)}
+          >
+            Technical details
+            <ChevronDown
+              className={cn(
+                "size-3.5 transition-transform",
+                detailsOpen && "rotate-180",
+              )}
+              aria-hidden="true"
+            />
+          </button>
+          {detailsOpen ? (
+            <dl className="mt-2 grid gap-1.5 text-xs sm:grid-cols-2">
+              {action.technicalDetails!.map((detail) => (
+                <div key={detail.label}>
+                  <dt className="text-muted-foreground">{detail.label}</dt>
+                  <dd className="font-medium text-foreground">{detail.value}</dd>
+                </div>
+              ))}
+            </dl>
+          ) : null}
         </div>
       ) : null}
 

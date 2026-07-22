@@ -34,10 +34,14 @@ export function InstructorMessagesPage() {
   const [fetchOptions, setFetchOptions] =
     useState<FetchMessageDraftOptions | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [tab, setTab] = useState("inbox");
-
   const aiDraft = (location.state as AiMessageDraftLocationState | null)
     ?.aiMessageDraft;
+  // Seed from the URL/AI draft on first paint so "?tab=compose" does not
+  // briefly mount the inbox panel (which made Subject-field assertions flake
+  // when the roster error banner appeared first).
+  const [tab, setTab] = useState(() =>
+    searchParams.get("tab") === "compose" || aiDraft ? "compose" : "inbox",
+  );
 
   const basePrompt = useMemo(
     () =>

@@ -17,8 +17,8 @@ const assignment: Assignment = {
 };
 
 describe("AssignmentUpdateForm", () => {
-  // Verifies: Renders assignment fields and read-only id.
-  it("renders assignment fields and read-only id", () => {
+  // Verifies: Renders editable fields without exposing internal Canvas IDs.
+  it("renders assignment fields without an internal id", () => {
     render(
       <AssignmentUpdateForm
         assignment={assignment}
@@ -27,7 +27,7 @@ describe("AssignmentUpdateForm", () => {
       />,
     );
 
-    expect(screen.getByLabelText("Assignment ID")).toHaveValue("10");
+    expect(screen.queryByLabelText("Assignment ID")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Assignment title")).toHaveValue("Lab 1");
     expect(screen.getByLabelText("Assignment description")).toHaveValue(
       "Complete the lab.",

@@ -29,17 +29,13 @@ export function AssignmentUpdatePreview({
       <CardHeader className="space-y-2">
         <CardTitle>Preview Changes</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Review the proposed updates for assignment #{assignment.id} before
-          sending them to Canvas.
+          Review the proposed updates before sending them to Canvas.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-xl border bg-muted/20 p-4">
           <p className="text-sm font-medium">Affected assignment</p>
           <p className="mt-1 text-base font-semibold">{assignment.name}</p>
-          <p className="text-sm text-muted-foreground">
-            Course ID: {assignment.course_id}
-          </p>
         </div>
 
         {changes.length === 0 ? (

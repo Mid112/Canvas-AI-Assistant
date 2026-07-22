@@ -215,7 +215,7 @@ def test_modify_turn_never_loops_even_for_a_chainable_action(client):
         '{"action": "intent_preview", "course_name": "CPSC 310", "summary": "Create Quiz", '
         '"proposed_action": {"action": "create_assignment", '
         f'"local_course_id": {local_course_id}, "title": "Quiz", '
-        '"description": "Short quiz", "due_date": "2030-01-01T00:00:00", '
+        '"description": "A short quiz on course topics.", "due_date": "2030-01-01T00:00:00", '
         '"points_possible": 10}}'
     )
     mock_adapter = AsyncMock()

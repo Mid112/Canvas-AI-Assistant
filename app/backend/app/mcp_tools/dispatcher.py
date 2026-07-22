@@ -11,26 +11,39 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS, is_reversible
 from app.models.course import Course
 from app.models.user import User
-from app.schemas.canvas import AssignmentCreate, AssignmentResponse, AssignmentUpdate, SubmissionResponse, SubmissionStatus
+from app.schemas.canvas import (
+    AssignmentCreate,
+    AssignmentResponse,
+    AssignmentUpdate,
+    QuizCreate,
+    QuizQuestionBankGroupCreate,
+    QuizQuestionCreate,
+    SubmissionResponse,
+    SubmissionStatus,
+)
 from app.services.assignment_validation import (
     validate_assignment_for_create,
     validate_assignment_for_update,
 )
 from app.services.canvas import (
     create_course_assignment,
+    create_course_quiz,
     get_active_course,
     get_assignment,
     get_assignments,
+    get_course_quizzes,
     get_courses,
     get_submissions,
     send_course_message,
     set_active_course,
     update_course_assignment,
+    update_course_grade,
 )
 from app.services.canvas_status import CanvasWriteResult
 from app.services.course_access import get_owned_course_or_404
 from app.services.llm.json_extraction import extract_json_object as _extract_json
 from app.services.message_validation import validate_message_for_send
+from app.services.quiz_validation import validate_quiz_for_create
 from app.services.risk import classify_action_risk
 from app.services.student import get_students
 from app.services.write_preview import generate_write_preview
@@ -96,6 +109,10 @@ _CREATE_ASSIGNMENT_FIELD_QUESTIONS = {
     "points_possible": "How many points is this assignment worth?",
 }
 
+# Kept for call-site compatibility; quiz field gathering happens in the
+# dedicated quiz creation form, not via chat clarify turns.
+_CREATE_QUIZ_FIELD_QUESTIONS: dict[str, str] = {}
+
 
 def _create_assignment_missing_field(proposed: dict) -> str | None:
     """Returns the name of the first required create_assignment field
@@ -117,6 +134,25 @@ def _create_assignment_missing_field(proposed: dict) -> str | None:
             return field
     if proposed.get("points_possible") is None:
         return "points_possible"
+    return None
+
+
+def _create_quiz_missing_field(proposed: dict) -> str | None:
+    """Always None — quiz creation routes to the dedicated form.
+
+    Title, description, due date, points, and questions are validated by
+    the form (quizReviewSchema / validate_quiz_for_create), not via chat
+    clarify turns. Returning a missing field here would block navigateTo.
+    """
+    del proposed  # kept for call-site signature compatibility
+    return None
+
+
+def _send_message_missing_field(proposed: dict) -> str | None:
+    for field in ("subject", "body"):
+        value = proposed.get(field)
+        if not isinstance(value, str) or not value.strip():
+            return field
     return None
 
 
@@ -266,6 +302,17 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 ),
             }
 
+        case "fetch_quizzes":
+            course = await _resolve_course(db, user, action.local_course_id)
+            quizzes = await get_course_quizzes(
+                course.id, user, course.canvas_url, db
+            )
+            return {
+                "quizzes": [quiz.model_dump(mode="json") for quiz in quizzes],
+                "count": len(quizzes),
+                "summary": f"{course.name} has {len(quizzes)} quiz(zes).",
+            }
+
         case "set_active_course":
             result = await set_active_course(user, action.local_course_id, db)
             return {"active_course": result.model_dump()}
@@ -313,6 +360,68 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 affected_resources=[
                     {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
                     {"type": "assignment", "id": assignment.id, "name": assignment.name, "status": "created"},
+                ],
+            )
+            return result.to_dict()
+
+        case "create_quiz":
+            course = await _resolve_course(db, user, action.local_course_id)
+            questions = [
+                q.model_dump() if hasattr(q, "model_dump") else q
+                for q in (action.questions or [])
+            ]
+            question_bank_groups = [
+                group.model_dump() if hasattr(group, "model_dump") else group
+                for group in (action.question_bank_groups or [])
+            ]
+            await validate_quiz_for_create(
+                action.local_course_id,
+                user,
+                action.title,
+                action.description,
+                action.due_date,
+                action.points_possible,
+                db,
+                allowed_attempts=action.allowed_attempts,
+                time_limit=action.time_limit,
+                questions=questions,
+                quiz_engine=action.quiz_engine,
+                question_bank_groups=question_bank_groups,
+            )
+            payload = QuizCreate(
+                title=action.title,
+                description=action.description,
+                due_at=action.due_date,
+                points_possible=action.points_possible,
+                allowed_attempts=action.allowed_attempts,
+                time_limit=action.time_limit,
+                quiz_engine=action.quiz_engine,
+                questions=[
+                    QuizQuestionCreate(
+                        **{
+                            **question,
+                            "answers": question.get("answers") or [],
+                        }
+                    )
+                    if isinstance(question, dict)
+                    else question
+                    for question in questions
+                ],
+                question_bank_groups=[
+                    QuizQuestionBankGroupCreate(**group)
+                    for group in question_bank_groups
+                ],
+            )
+            quiz = await create_course_quiz(
+                course.id, payload, user, course.canvas_url, db
+            )
+            result = CanvasWriteResult(
+                action="create_quiz",
+                data=quiz,
+                reversible=is_reversible("create_quiz"),
+                affected_resources=[
+                    {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
+                    {"type": "quiz", "id": quiz.id, "name": quiz.title, "status": "created"},
                 ],
             )
             return result.to_dict()
@@ -366,6 +475,50 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                     },
                 ],
                 previous_data=current,
+            )
+            return result.to_dict()
+
+        case "update_grade":
+            course = await _resolve_course(db, user, action.local_course_id)
+            if action.assignment_id is None or action.student_id is None:
+                raise ToolExecutionError(
+                    "The assignment and student must be resolved before updating a grade."
+                )
+            if not action.new_grade.strip():
+                raise ToolExecutionError("The new grade cannot be empty.")
+
+            submission = await update_course_grade(
+                course.id,
+                action.assignment_id,
+                action.student_id,
+                action.new_grade.strip(),
+                user,
+                course.canvas_url,
+                db,
+                feedback=action.feedback,
+            )
+            result = CanvasWriteResult(
+                action="update_grade",
+                data=submission,
+                reversible=is_reversible("update_grade"),
+                affected_resources=[
+                    {
+                        "type": "course",
+                        "id": course.id,
+                        "name": course.name,
+                        "status": "unchanged",
+                    },
+                    {
+                        "type": "submission",
+                        "id": submission.get("id"),
+                        "name": action.student_reference or "Student grade",
+                        "status": "modified",
+                        "changed_fields": [
+                            "grade",
+                            *(["feedback"] if action.feedback else []),
+                        ],
+                    },
+                ],
             )
             return result.to_dict()
 
@@ -488,6 +641,91 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                         "partial_plan": partial_plan,
                     }
 
+            if proposed.get("action") == "create_quiz":
+                # Always hand off to the quiz creation form — do not clarify
+                # for missing fields or past due dates here. The form's
+                # review schema and validate_quiz_for_create own that.
+                # Helpers retained (always-empty / always-None) so call sites
+                # and docs stay stable if clarification is reintroduced later.
+                _ = (
+                    _create_quiz_missing_field(proposed),
+                    _CREATE_QUIZ_FIELD_QUESTIONS,
+                )
+
+            if proposed.get("action") == "send_message":
+                missing_field = _send_message_missing_field(proposed)
+                if missing_field:
+                    partial_plan = {
+                        key: value
+                        for key, value in proposed.items()
+                        if key not in ("action", missing_field)
+                    }
+                    question = (
+                        "What should the message subject be?"
+                        if missing_field == "subject"
+                        else "What should the message say?"
+                    )
+                    return {
+                        "action": "clarify",
+                        "clarify": True,
+                        "question": question,
+                        "partial_plan": partial_plan,
+                    }
+
+            if proposed.get("action") == "update_assignment":
+                changed_fields = (
+                    "title",
+                    "description",
+                    "due_date",
+                    "points_possible",
+                )
+                if not any(proposed.get(field) is not None for field in changed_fields):
+                    return {
+                        "action": "clarify",
+                        "clarify": True,
+                        "question": "What would you like to change about this assignment?",
+                        "partial_plan": {
+                            key: value
+                            for key, value in proposed.items()
+                            if key != "action"
+                        },
+                    }
+
+            if proposed.get("action") == "update_grade":
+                required_grade_fields = (
+                    (
+                        "assignment",
+                        proposed.get("assignment_id")
+                        or proposed.get("assignment_reference"),
+                        "Which assignment should I update the grade for?",
+                    ),
+                    (
+                        "student",
+                        proposed.get("student_id")
+                        or proposed.get("student_reference"),
+                        "Which student should receive this grade?",
+                    ),
+                    (
+                        "new_grade",
+                        proposed.get("new_grade"),
+                        "What grade should I enter?",
+                    ),
+                )
+                for field_name, value, question in required_grade_fields:
+                    if value is None or (
+                        isinstance(value, str) and not value.strip()
+                    ):
+                        return {
+                            "action": "clarify",
+                            "clarify": True,
+                            "question": question,
+                            "partial_plan": {
+                                key: item
+                                for key, item in proposed.items()
+                                if key not in ("action", field_name)
+                            },
+                        }
+
             if proposed.get("action") in WRITE_ACTIONS:
                 # proposed_action is a raw, unvalidated dict from the LLM's
                 # own JSON (IntentPreviewAction.proposed_action is typed as
@@ -513,10 +751,9 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 # action is course-scoped — otherwise the UI has nothing to
                 # show but a generic "Active course" placeholder.
                 preview_metadata = {"action": proposed.get("action")}
-                if nested_action_name:
-                    preview_metadata["risk_metadata"] = classify_action_risk(
-                        nested_action_name, proposed
-                    )
+                preview_metadata["risk_metadata"] = classify_action_risk(
+                    nested_action_name, proposed
+                )
                 try:
                     read_local_course_id = int(proposed.get("local_course_id", 0))
                 except (TypeError, ValueError):

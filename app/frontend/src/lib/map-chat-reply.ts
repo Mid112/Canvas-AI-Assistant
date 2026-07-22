@@ -1,4 +1,7 @@
-import { formatDueDateForDisplay } from "@/lib/assignment-utils";
+import {
+  formatDueDateForDisplay,
+  formatDueDateForInput,
+} from "@/lib/assignment-utils";
 import {
   instructorChatPreviewPath,
   instructorCourseAnalyticsPath,
@@ -24,6 +27,53 @@ function formatActionLabel(actionName: string): string {
 
 function readString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+const INTERNAL_FIELDS = new Set([
+  "action",
+  "local_course_id",
+  "assignment_id",
+  "student_id",
+  "recipient_canvas_user_ids",
+  "recipient_handle",
+  "preview_id",
+]);
+
+function formatFieldLabel(field: string): string {
+  return field
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatSafeValue(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim()) {
+    return value;
+  }
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    return `${value.length} item${value.length === 1 ? "" : "s"}`;
+  }
+  return undefined;
+}
+
+function readableFields(
+  value: unknown,
+): Array<{ label: string; value: string }> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return [];
+  }
+
+  return Object.entries(value as Record<string, unknown>)
+    .filter(([field]) => !INTERNAL_FIELDS.has(field))
+    .flatMap(([field, fieldValue]) => {
+      const formatted = formatSafeValue(fieldValue);
+      return formatted
+        ? [{ label: formatFieldLabel(field), value: formatted }]
+        : [];
+    });
 }
 
 function buildInterpretedAction(
@@ -67,6 +117,20 @@ function buildInterpretedAction(
     course: courseLabel,
     affectedStudents,
     risk: readRiskMetadata(previewMetadata?.risk_metadata),
+    technicalDetails: [
+      { label: "Action type", value: formatActionLabel(actionName) },
+      ...(readString(previewMetadata?.risk_level)
+        ? [{ label: "Risk level", value: readString(previewMetadata?.risk_level)! }]
+        : []),
+      ...(typeof previewMetadata?.reversible === "boolean"
+        ? [
+            {
+              label: "Reversible",
+              value: previewMetadata.reversible ? "Yes" : "No",
+            },
+          ]
+        : []),
+    ],
   };
 
   if (conversationId !== undefined && pendingMessageId !== undefined) {
@@ -107,6 +171,25 @@ function buildInterpretedAction(
     };
   }
 
+  if (actionName === "create_assignment") {
+    interpretedAction.secondaryLink = {
+      label: "Edit assignment details",
+      href: paths.instructor.assignmentCreate,
+      state: {
+        returnTo: paths.instructor.assistant,
+        aiAssignmentDraft: {
+          courseId,
+          name: readString(proposed.title),
+          description: readString(proposed.description),
+          dueDate: readString(proposed.due_date)
+            ? formatDueDateForInput(readString(proposed.due_date)!)
+            : undefined,
+          pointsPossible: proposed.points_possible,
+        },
+      },
+    };
+  }
+
   if (courseId != null && actionName.includes("submission")) {
     interpretedAction.primaryLink = {
       label: "Open course analytics",
@@ -134,6 +217,121 @@ function readRiskMetadata(value: unknown): RiskMetadata | undefined {
   return undefined;
 }
 
+function buildQuizCreateDraftState(
+  proposed: Record<string, unknown>,
+  conversationId?: number,
+): Record<string, unknown> {
+  const questions = Array.isArray(proposed.questions)
+    ? proposed.questions.map((question) => {
+        const record = question as Record<string, unknown>;
+        return {
+          questionText: readString(record.question_text) ?? "",
+          questionType:
+            (readString(record.question_type) as
+              | "multiple_choice_question"
+              | "true_false_question"
+              | "short_answer_question"
+              | "essay_question") ?? "essay_question",
+          pointsPossible:
+            typeof record.points_possible === "number"
+              ? record.points_possible
+              : 1,
+          answers: Array.isArray(record.answers)
+            ? (record.answers as Array<{ text: string; weight: number }>)
+            : [],
+        };
+      })
+    : [];
+
+  return {
+    returnTo: paths.instructor.assistant,
+    aiQuizDraft: {
+      courseId:
+        typeof proposed.local_course_id === "number"
+          ? proposed.local_course_id
+          : undefined,
+      name: readString(proposed.title),
+      description: readString(proposed.description),
+      dueDate: readString(proposed.due_date)
+        ? formatDueDateForInput(readString(proposed.due_date)!)
+        : undefined,
+      pointsPossible: proposed.points_possible,
+      allowedAttempts: proposed.allowed_attempts,
+      timeLimit: proposed.time_limit,
+      quizEngine:
+        proposed.quiz_engine === "new_quizzes" ? "new_quizzes" : "classic",
+      questionBankGroups: Array.isArray(proposed.question_bank_groups)
+        ? proposed.question_bank_groups.map((group) => {
+            const record = group as Record<string, unknown>;
+            return {
+              bankId: Number(record.bank_id),
+              bankName: readString(record.bank_name) ?? "Question bank",
+              pickCount: Number(record.pick_count),
+              questionPoints: Number(record.question_points),
+            };
+          })
+        : [],
+      questions,
+      conversationId,
+    },
+  };
+}
+
+function buildQuizCreateNavigateTo(
+  proposed: Record<string, unknown>,
+  conversationId?: number,
+): NonNullable<AssistantResponse["navigateTo"]> {
+  return {
+    path: paths.instructor.quizCreate,
+    state: buildQuizCreateDraftState(proposed, conversationId),
+  };
+}
+
+function buildQuizCreateFormAction(
+  proposed: Record<string, unknown>,
+  previewMetadata: Record<string, unknown> | undefined,
+  conversationId?: number,
+): NonNullable<AssistantResponse["interpretedAction"]> {
+  const courseLabel =
+    readString(previewMetadata?.course_name) ??
+    readString(previewMetadata?.course) ??
+    "Active course";
+  const draftState = buildQuizCreateDraftState(proposed, conversationId);
+
+  return {
+    action: "Create Quiz",
+    course: courseLabel,
+    affectedStudents: "Course-wide",
+    risk: readRiskMetadata(previewMetadata?.risk_metadata),
+    technicalDetails: [
+      { label: "Action type", value: "Create Quiz" },
+      ...(readString(previewMetadata?.risk_level)
+        ? [{ label: "Risk level", value: readString(previewMetadata?.risk_level)! }]
+        : []),
+      ...(typeof previewMetadata?.reversible === "boolean"
+        ? [
+            {
+              label: "Reversible",
+              value: previewMetadata.reversible ? "Yes" : "No",
+            },
+          ]
+        : []),
+      {
+        label: "Quiz engine",
+        value:
+          proposed.quiz_engine === "new_quizzes"
+            ? "New Quizzes"
+            : "Classic Quizzes",
+      },
+    ],
+    primaryLink: {
+      label: "Open quiz creation form",
+      href: paths.instructor.quizCreate,
+      state: draftState,
+    },
+  };
+}
+
 export function mapChatReplyToAssistantResponse(
   reply: Record<string, unknown>,
   isError: boolean,
@@ -156,6 +354,25 @@ export function mapChatReplyToAssistantResponse(
       typeof reply.pending_message_id === "number"
         ? reply.pending_message_id
         : undefined;
+
+    // Quiz creation redirects to the dedicated form on live turns, and also
+    // keeps an "Open quiz creation form" button so reopening chat history
+    // can return to the seeded form without a confirmable preview panel.
+    if (proposed?.action === "create_quiz") {
+      return {
+        content:
+          readString(reply.summary) ??
+          "Opening the quiz creation form with your draft…",
+        explanation:
+          "Quiz creation happens in the dedicated form so the write is reviewed once and recorded in workflow history.",
+        navigateTo: buildQuizCreateNavigateTo(proposed, conversationId),
+        interpretedAction: buildQuizCreateFormAction(
+          proposed,
+          previewMetadata,
+          conversationId,
+        ),
+      };
+    }
 
     // A grouped send_message turn can resolve to more than one distinct
     // message (see additional_previews in chat.py's
@@ -193,10 +410,19 @@ export function mapChatReplyToAssistantResponse(
   }
 
   if (reply.action === "clarify" || reply.clarify) {
+    const acknowledgedFields = readableFields(reply.partial_plan);
+    const acknowledgement =
+      acknowledgedFields.length > 0
+        ? `I have ${acknowledgedFields
+            .map((field) => `${field.label.toLowerCase()}: ${field.value}`)
+            .join(", ")}. `
+        : "";
+    const question =
+      readString(reply.question) ??
+      "Could you share a bit more detail so I can help?";
     return {
-      content:
-        readString(reply.question) ??
-        "Could you share a bit more detail so I can help?",
+      content: `${acknowledgement}${question}`,
+      acknowledgedFields,
     };
   }
 
@@ -322,7 +548,6 @@ export function mapChatReplyToAssistantResponse(
   if (reply.data) {
     return {
       content: "The action completed successfully.",
-      explanation: JSON.stringify(reply.data, null, 2),
     };
   }
 
@@ -331,8 +556,8 @@ export function mapChatReplyToAssistantResponse(
   }
 
   return {
-    content: "I processed your request.",
-    explanation: JSON.stringify(reply, null, 2),
+    content:
+      "I completed the request, but no additional details were returned.",
   };
 }
 

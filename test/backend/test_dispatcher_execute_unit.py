@@ -15,6 +15,7 @@ from app.mcp_tools.dispatcher import ToolExecutionError, _default_canvas_url, ex
 from app.mcp_tools.schemas import (
     ClarifyAction,
     CreateAssignmentAction,
+    CreateQuizAction,
     FetchAssignmentsAction,
     FetchCoursesAction,
     FetchStudentsAction,
@@ -26,6 +27,7 @@ from app.mcp_tools.schemas import (
     SendMessageAction,
     SetActiveCourseAction,
     UpdateAssignmentAction,
+    UpdateGradeAction,
 )
 from app.schemas.canvas import SubmissionStatus
 
@@ -184,6 +186,45 @@ async def test_execute_create_assignment_writes_and_wraps_result():
 
 
 @pytest.mark.asyncio
+async def test_execute_create_quiz_writes_only_after_confirm_path():
+    course = _course()
+    db = _db_with_course(course)
+    user = MagicMock(id=1)
+    action = CreateQuizAction(
+        local_course_id=1,
+        title="Recursion Quiz",
+        description="Covers base cases and recursive definitions.",
+        due_date="2030-01-01T00:00:00",
+        points_possible=10,
+        questions=[
+            {
+                "question_text": "What is a base case?",
+                "question_type": "essay_question",
+                "points_possible": 10,
+            }
+        ],
+    )
+    quiz = SimpleNamespace(id=77, title="Recursion Quiz")
+
+    with (
+        patch(
+            "app.mcp_tools.dispatcher.validate_quiz_for_create",
+            new=AsyncMock(),
+        ),
+        patch(
+            "app.mcp_tools.dispatcher.create_course_quiz",
+            new=AsyncMock(return_value=quiz),
+        ) as create_quiz,
+    ):
+        result = await execute_tool(db, user, action)
+
+    assert result["action"] == "create_quiz"
+    assert result["affected_resources"][1]["id"] == 77
+    assert result["reversible"] is True
+    create_quiz.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_execute_update_assignment_merges_current_state():
     course = _course()
     db = _db_with_course(course)
@@ -206,6 +247,44 @@ async def test_execute_update_assignment_merges_current_state():
     payload = mock_update.call_args.args[2]
     assert payload.name == "New Title"
     assert payload.description == "Old desc"  # carried over, not blanked
+
+
+@pytest.mark.asyncio
+async def test_execute_update_grade_calls_canvas_with_feedback():
+    course = _course()
+    db = _db_with_course(course)
+    user = MagicMock(id=1)
+    action = UpdateGradeAction(
+        local_course_id=1,
+        assignment_id=50,
+        assignment_reference="Midterm",
+        student_id=25,
+        student_reference="Alex",
+        new_grade="85",
+        feedback="Strong improvement",
+    )
+
+    with patch(
+        "app.mcp_tools.dispatcher.update_course_grade",
+        new=AsyncMock(return_value={"id": 10, "score": 85}),
+    ) as update_grade:
+        result = await execute_tool(db, user, action)
+
+    update_grade.assert_awaited_once_with(
+        1,
+        50,
+        25,
+        "85",
+        user,
+        course.canvas_url,
+        db,
+        feedback="Strong improvement",
+    )
+    assert result["action"] == "update_grade"
+    assert result["affected_resources"][1]["changed_fields"] == [
+        "grade",
+        "feedback",
+    ]
 
 
 @pytest.mark.asyncio
@@ -415,6 +494,82 @@ async def test_execute_intent_preview_create_assignment_past_due_date_downgrades
     assert result["action"] == "clarify"
     assert "already" in result["question"].lower()
     assert "due_date" not in result["partial_plan"]
+
+
+@pytest.mark.asyncio
+async def test_execute_intent_preview_create_quiz_routes_with_empty_fields():
+    """Chat never clarifies quiz fields — the form owns validation."""
+    course = _course()
+    db = _db_with_course(course)
+    user = MagicMock(id=1)
+    action = IntentPreviewAction(
+        summary="I'll help you create a quiz...",
+        proposed_action={
+            "action": "create_quiz",
+            "local_course_id": 1,
+            "title": "",
+            "description": "",
+            "due_date": "",
+            "points_possible": None,
+        },
+    )
+
+    result = await execute_tool(db, user, action)
+
+    assert result.get("intent_preview") is True
+    assert result["proposed_action"]["action"] == "create_quiz"
+    assert result["action"] != "clarify"
+
+
+@pytest.mark.asyncio
+async def test_execute_intent_preview_create_quiz_without_questions_routes_to_form():
+    """Questions are added in the quiz form — preview must not clarify for them."""
+    course = _course()
+    db = _db_with_course(course)
+    user = MagicMock(id=1)
+    action = IntentPreviewAction(
+        summary="create a quiz",
+        proposed_action={
+            "action": "create_quiz",
+            "local_course_id": 1,
+            "title": "Quiz 1",
+            "description": "Covers recursion concepts in depth.",
+            "due_date": "2030-01-01T00:00:00",
+            "points_possible": 10,
+        },
+    )
+
+    result = await execute_tool(db, user, action)
+
+    assert result.get("intent_preview") is True
+    assert result["proposed_action"]["action"] == "create_quiz"
+    assert result["proposed_action"]["title"] == "Quiz 1"
+    assert result["action"] != "clarify"
+
+
+@pytest.mark.asyncio
+async def test_execute_intent_preview_create_quiz_past_date_still_routes_to_form():
+    """Past due dates are validated in the form, not via chat clarify."""
+    course = _course()
+    db = _db_with_course(course)
+    user = MagicMock(id=1)
+    action = IntentPreviewAction(
+        summary="create a quiz",
+        proposed_action={
+            "action": "create_quiz",
+            "local_course_id": 1,
+            "title": "Quiz 1",
+            "description": "Covers recursion concepts in depth.",
+            "due_date": "2020-01-01T00:00:00",
+            "points_possible": 10,
+        },
+    )
+
+    result = await execute_tool(db, user, action)
+
+    assert result.get("intent_preview") is True
+    assert result["proposed_action"]["action"] == "create_quiz"
+    assert result["action"] != "clarify"
 
 
 # ---------------------------------------------------------------------------

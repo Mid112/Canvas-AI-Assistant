@@ -19,6 +19,7 @@ export const paths = {
     assignmentUpdate:
       "/instructor/courses/:localCourseId/assignments/:assignmentId/edit",
     assignmentCreate: "/instructor/assignments/create",
+    quizCreate: "/instructor/quizzes/create",
     courseAnalytics: "/instructor/courses/:courseId/analytics",
     assistant: "/instructor/assistant",
     dryRunPreview: "/instructor/actions/preview",
@@ -106,6 +107,46 @@ export interface AiMessageDraftLocationState {
     prompt?: string;
     courseId?: number;
     recipientIds?: string[];
+  };
+}
+
+/** Structured action drafts passed from an assistant preview into the
+ * dedicated validated review forms. */
+export interface AiActionDraftLocationState {
+  returnTo?: string;
+  aiAssignmentDraft?: {
+    courseId?: number;
+    name?: string;
+    description?: string;
+    dueDate?: string;
+    pointsPossible?: unknown;
+  };
+  aiQuizDraft?: {
+    courseId?: number;
+    name?: string;
+    description?: string;
+    dueDate?: string;
+    pointsPossible?: unknown;
+    allowedAttempts?: unknown;
+    timeLimit?: unknown;
+    quizEngine?: "classic" | "new_quizzes";
+    conversationId?: number;
+    questionBankGroups?: Array<{
+      bankId: number;
+      bankName: string;
+      pickCount: number;
+      questionPoints: number;
+    }>;
+    questions?: Array<{
+      questionText: string;
+      questionType:
+        | "multiple_choice_question"
+        | "true_false_question"
+        | "short_answer_question"
+        | "essay_question";
+      pointsPossible: number;
+      answers: Array<{ text: string; weight: number }>;
+    }>;
   };
 }
 

@@ -18,6 +18,21 @@ function envOr(key: string, fallback: string): string {
   return value ? value : fallback;
 }
 
+/** CI must supply DATABASE_URL (isolated Postgres). Never fall back to :5433. */
+function databaseUrl(): string {
+  const value = process.env.DATABASE_URL?.trim();
+  if (value) {
+    return value;
+  }
+  if (process.env.CI) {
+    throw new Error(
+      "DATABASE_URL must be set in CI (isolated e2e Postgres). " +
+        "Refusing to fall back to localhost:5433.",
+    );
+  }
+  return "postgresql+asyncpg://appuser:localdev@localhost:5433/appdb";
+}
+
 export default defineConfig({
   testDir: "./specs",
   fullyParallel: false,
@@ -49,10 +64,7 @@ export default defineConfig({
       timeout: 120_000,
       env: {
         ...process.env,
-        DATABASE_URL: envOr(
-          "DATABASE_URL",
-          "postgresql+asyncpg://appuser:localdev@localhost:5433/appdb",
-        ),
+        DATABASE_URL: databaseUrl(),
         SECRET_KEY: envOr("SECRET_KEY", "localdevsecret"),
         DEBUG: "true",
         BACKEND_CORS_ORIGINS: frontendURL,

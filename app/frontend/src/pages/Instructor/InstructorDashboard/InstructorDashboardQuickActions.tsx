@@ -1,4 +1,4 @@
-import { Bot, ClipboardList, Megaphone, Sparkles } from "lucide-react";
+import { Bot, ClipboardList, HelpCircle, Megaphone, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ interface InstructorDashboardQuickActionsProps {
 
 const actionIcons = {
   "create-assignment": ClipboardList,
+  "create-quiz": HelpCircle,
   "draft-announcement": Megaphone,
   "grade-analysis": Bot,
 } as const;
@@ -48,6 +49,11 @@ export function InstructorDashboardQuickActions({
   const openQuickAction = (actionId: string) => {
     if (actionId === "create-assignment") {
       navigate(paths.instructor.assignmentCreate);
+      return;
+    }
+
+    if (actionId === "create-quiz") {
+      navigate(paths.instructor.quizCreate);
       return;
     }
 

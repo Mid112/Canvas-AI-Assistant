@@ -100,7 +100,7 @@ def create_assignment_preview_llm(local_course_id: int, title: str = "Midterm Ex
                 "action": "create_assignment",
                 "local_course_id": local_course_id,
                 "title": title,
-                "description": "Covers chapters 1-5",
+                "description": "Covers chapters 1 through 5",
                 "due_date": "2030-01-01T00:00:00",
                 "points_possible": 100,
             },
@@ -155,7 +155,7 @@ def fake_assignment(title: str = "Midterm Exam") -> AssignmentResponse:
     return AssignmentResponse(
         id=42,
         name=title,
-        description="Covers chapters 1-5",
+        description="Covers chapters 1 through 5",
         due_at="2030-01-01T00:00:00",
         points_possible=100.0,
         course_id=9999,

@@ -12,7 +12,7 @@ from app.models.audit_log import AuditLog
 from app.models.user import User
 from app.models.workflow import Workflow
 from app.schemas.canvas import AssignmentUpdate
-from app.services.canvas import delete_course_assignment, update_course_assignment
+from app.services.canvas import delete_course_assignment, delete_course_quiz, update_course_assignment
 from app.services.chat import _claim_pending_workflow, _json_dumps
 from app.services.course_access import get_owned_course_or_404
 
@@ -144,6 +144,32 @@ async def undo_workflow(db: AsyncSession, user: User, workflow_id: int) -> Workf
                 course_id=workflow.course_id,
                 action="undo_assignment",
                 resource_type="assignment",
+                resource_id=audit_row.resource_id,
+                operation="delete",
+                status="success",
+                before_data=json.loads(_json_dumps(audit_row.after_data)),
+                after_data=None,
+                request_payload=None,
+            )
+        )
+    elif workflow.action_name == "create_quiz":
+        await delete_course_quiz(
+            workflow.course_id,
+            assignment_id,
+            user,
+            course.canvas_url,
+            db,
+            quiz_engine=(audit_row.after_data or {}).get(
+                "quiz_engine", "classic"
+            ),
+        )
+        db.add(
+            AuditLog(
+                user_id=user.id,
+                workflow_id=workflow.id,
+                course_id=workflow.course_id,
+                action="undo_quiz",
+                resource_type="quiz",
                 resource_id=audit_row.resource_id,
                 operation="delete",
                 status="success",
