@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import logging
 import sys
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -64,6 +65,7 @@ async def lifespan(app: FastAPI):
     # create_all() first means every current model's columns (including
     # ones later migrations also add, e.g. assignments.published) are
     # already present on a fresh table, so those migrations become no-ops.
+    app.state.started_at = time.monotonic()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     # Catches an existing database up on any schema change

@@ -38,6 +38,7 @@ export const paths = {
     audit: "/admin/audit",
     settings: "/admin/settings",
     profile: "/admin/profile",
+    systemHealth: "/admin/system-health",
   },
 } as const;
 

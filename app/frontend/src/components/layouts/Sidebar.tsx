@@ -83,6 +83,15 @@ export function Sidebar({
           >
             <item.icon className="size-4 shrink-0" aria-hidden="true" />
             {item.title}
+            {item.badge === "degraded" || item.badge === "down" ? (
+              <span
+                aria-label={`${item.title} status: ${item.badge}`}
+                className={cn(
+                  "ml-auto size-2 shrink-0 rounded-full",
+                  item.badge === "down" ? "bg-destructive" : "bg-amber-500",
+                )}
+              />
+            ) : null}
           </NavLink>
         ))}
       </nav>

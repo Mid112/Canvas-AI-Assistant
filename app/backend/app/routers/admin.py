@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -14,6 +14,7 @@ from app.schemas.admin import (
     InstructorResponse,
     UpdateInstructorRequest,
 )
+from app.schemas.health import HealthCheckResponse, HealthHistoryResponse, LatestHealthResponse
 from app.schemas.llm_provider import LlmProviderConfig, LlmProviderConfigResponse
 from app.services.admin import (
     create_admin_user,
@@ -29,6 +30,7 @@ from app.services.admin import (
     update_instructor,
     update_llm_provider_config,
 )
+from app.services.health import get_health_history, get_latest_health_status, run_health_checks
 from app.services.llm.provider_registry import get_provider_statuses
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -40,6 +42,36 @@ async def admin_dashboard(
     db: AsyncSession = Depends(get_db),
 ):
     return await get_dashboard_stats(db)
+
+
+@router.get("/health", response_model=HealthCheckResponse)
+async def admin_health(
+    request: Request,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await run_health_checks(db, request.app.state.started_at)
+
+
+@router.get("/health/latest", response_model=LatestHealthResponse)
+async def admin_health_latest(
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cheap: reads persisted state only, triggers no live checks (no
+    Canvas ping, no AI generate() call). Meant to be called on every admin
+    page load to power the nav badge — use GET /admin/health for a real,
+    live check."""
+    return await get_latest_health_status(db)
+
+
+@router.get("/health/history", response_model=HealthHistoryResponse)
+async def admin_health_history(
+    hours: int = Query(default=24, ge=1, le=168),
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_health_history(db, hours=hours)
 
 
 @router.get("/settings", response_model=AdminSettingsResponse)

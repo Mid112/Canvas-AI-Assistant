@@ -24,6 +24,13 @@ class CanvasConnection(Base):
     # Canvas for this connection's course list (not just checked the
     # cooldown) — null until the first sync ever runs.
     courses_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set by run_course_sync_sweep (services/canvas.py) whenever the
+    # periodic sync fails for this connection (bad/expired token, Canvas
+    # outage) — cleared back to null the next time it succeeds. Backs the
+    # admin System Health page's per-instructor Canvas connectivity summary
+    # (Feature 9 Phase 2) at zero extra Canvas calls, since the sweep
+    # already hits every connection on its own ~60s cadence regardless.
+    last_sync_error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # one token per user per school — prevents duplicate rows for the same Canvas URL
     __table_args__ = (UniqueConstraint("user_id", "canvas_url", name="uq_user_canvas_url"),)

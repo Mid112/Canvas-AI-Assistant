@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from cryptography.fernet import InvalidToken
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
@@ -1241,6 +1241,16 @@ async def run_course_sync_sweep(db: AsyncSession) -> None:
                 continue
             try:
                 await sync_courses_if_stale(user, connection, conn_db)
+                # A skip-due-to-cooldown is just as valid a "healthy" signal
+                # as a genuine successful attempt: only a successful sync
+                # ever advances courses_synced_at, so a connection can only
+                # be skipped here if its last real attempt already
+                # succeeded. Backs the admin System Health page's
+                # per-instructor Canvas connectivity summary (Feature 9
+                # Phase 2) at zero new Canvas calls.
+                if connection.last_sync_error is not None:
+                    connection.last_sync_error = None
+                    await conn_db.commit()
             except Exception as exc:
                 if _is_expected_canvas_token_sync_error(exc):
                     logger.warning(
@@ -1253,6 +1263,17 @@ async def run_course_sync_sweep(db: AsyncSession) -> None:
                         connection_id, user_id, exc_info=True,
                     )
                 await conn_db.rollback()
+                # rollback() expires every object tracked by this session --
+                # writing through the (now-expired) `connection` ORM object
+                # would need an implicit reload of its current state first.
+                # Update by id directly instead, so this doesn't depend on
+                # SQLAlchemy's expire-on-rollback internals at all.
+                await conn_db.execute(
+                    update(CanvasConnection)
+                    .where(CanvasConnection.id == connection_id)
+                    .values(last_sync_error=str(exc)[:500])
+                )
+                await conn_db.commit()
 
 
 async def get_active_course(user: User, db: AsyncSession) -> ActiveCourseResponse | None:

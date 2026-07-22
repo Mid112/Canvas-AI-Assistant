@@ -28,6 +28,7 @@ export default defineConfig([
             'tabsListVariants',
             'useAuth',
             'useInstitution',
+            'useSystemHealthBadge',
             'AuthApiError',
           ],
         },

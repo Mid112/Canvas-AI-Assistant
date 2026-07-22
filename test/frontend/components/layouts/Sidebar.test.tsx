@@ -1,11 +1,13 @@
 import type { ComponentProps } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { LayoutDashboard } from "lucide-react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
 import { Sidebar } from "@/components/layouts/Sidebar";
 import { paths } from "@/routes/paths";
+import type { NavItem } from "@/types/navigation";
 import { instructorNavItems } from "@/utils/navigation";
 
 const mockNavigate = vi.fn();
@@ -149,5 +151,48 @@ describe("Sidebar", () => {
     expect(mockLogout).toHaveBeenCalledTimes(1);
     expect(onNavigate).toHaveBeenCalledTimes(1);
     expect(mockNavigate).toHaveBeenCalledWith(paths.login);
+  });
+
+  // Feature 9 Phase 2: nav item health badge dot.
+  const dashboardItem: NavItem = {
+    title: "Dashboard",
+    href: instructorNavItems[0].href,
+    icon: LayoutDashboard,
+  };
+
+  it("renders no badge dot for an item with no badge set", () => {
+    renderSidebar({ navItems: [dashboardItem], role: "instructor", roleLabel: "Instructor" });
+
+    expect(screen.queryByLabelText(/status:/)).not.toBeInTheDocument();
+  });
+
+  it("renders no badge dot for a healthy item", () => {
+    renderSidebar({
+      navItems: [{ ...dashboardItem, badge: "healthy" }],
+      role: "instructor",
+      roleLabel: "Instructor",
+    });
+
+    expect(screen.queryByLabelText(/status:/)).not.toBeInTheDocument();
+  });
+
+  it("renders a badge dot for a degraded item", () => {
+    renderSidebar({
+      navItems: [{ ...dashboardItem, badge: "degraded" }],
+      role: "instructor",
+      roleLabel: "Instructor",
+    });
+
+    expect(screen.getByLabelText("Dashboard status: degraded")).toBeInTheDocument();
+  });
+
+  it("renders a badge dot for a down item", () => {
+    renderSidebar({
+      navItems: [{ ...dashboardItem, badge: "down" }],
+      role: "instructor",
+      roleLabel: "Instructor",
+    });
+
+    expect(screen.getByLabelText("Dashboard status: down")).toBeInTheDocument();
   });
 });

@@ -35,6 +35,7 @@ import { AdminDashboardPage } from "@/pages/Admin/AdminDashboardPage";
 import { AdminUsersPage } from "@/pages/Admin/AdminUsersPage";
 import { AdminAuditPage } from "@/pages/Admin/AdminAuditPage";
 import { AdminSettingsPage } from "@/pages/Admin/AdminSettingsPage";
+import { SystemHealthPage } from "@/pages/Admin/SystemHealthPage";
 import { ProfilePage } from "@/pages/Profile/ProfilePage";
 import { GuestRoute } from "@/routes/GuestRoute";
 import { ProtectedRoute } from "@/routes/ProtectedRoute";
@@ -177,6 +178,10 @@ export const router = createBrowserRouter([
                   { path: paths.admin.dashboard, element: <AdminDashboardPage /> },
                   { path: paths.admin.users, element: <AdminUsersPage /> },
                   { path: paths.admin.audit, element: <AdminAuditPage /> },
+                  {
+                    path: paths.admin.systemHealth,
+                    element: <SystemHealthPage />,
+                  },
                   { path: paths.admin.settings, element: <AdminSettingsPage /> },
                   { path: paths.admin.profile, element: <ProfilePage /> },
                 ],

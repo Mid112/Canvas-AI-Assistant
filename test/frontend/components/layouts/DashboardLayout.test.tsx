@@ -1,10 +1,13 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Route, Routes } from "react-router-dom";
 
 import { DashboardLayout } from "@/components/layouts/DashboardLayout";
+import * as systemHealthService from "@/services/systemHealth";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
+
+let mockRole: "instructor" | "admin" = "instructor";
 
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
@@ -15,7 +18,7 @@ vi.mock("@/contexts/AuthContext", () => ({
       id: 1,
       email: "jane.doe@ubc.ca",
       name: "Dr. Jane Doe",
-      role: "instructor" as const,
+      role: mockRole,
       is_active: true,
       has_canvas_token: true,
       canvas_connections: [
@@ -124,5 +127,58 @@ describe("DashboardLayout", () => {
     expect(
       screen.getAllByRole("link", { name: "Messages" }).length,
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("DashboardLayout admin nav health badge", () => {
+  function renderAdminDashboard(path: string) {
+    return renderWithRouter(
+      <Routes>
+        <Route path="/" element={<DashboardLayout role="admin" />}>
+          <Route path="admin/dashboard" element={<div>Admin dashboard content</div>} />
+        </Route>
+      </Routes>,
+      { routerProps: { initialEntries: [path] } },
+    );
+  }
+
+  afterEach(() => {
+    mockRole = "instructor";
+  });
+
+  // Verifies: the nav badge is seeded from GET /admin/health/latest on
+  // mount for admins (DashboardLayout.tsx's role === "admin" fetch effect).
+  it("decorates the System Health nav item once /admin/health/latest resolves", async () => {
+    mockRole = "admin";
+    vi.spyOn(systemHealthService, "fetchLatestSystemHealth").mockResolvedValue({
+      overall_status: "degraded",
+      checked_at: "2026-07-21T18:00:00Z",
+      services: {},
+    });
+
+    renderAdminDashboard("/admin/dashboard");
+
+    await waitFor(() => {
+      expect(
+        screen.getByLabelText("System Health status: degraded"),
+      ).toBeInTheDocument();
+    });
+  });
+
+  // Verifies: "unknown" (nothing checked yet) renders calm, not a false alarm.
+  it("does not badge the nav item when the latest status is unknown", async () => {
+    mockRole = "admin";
+    vi.spyOn(systemHealthService, "fetchLatestSystemHealth").mockResolvedValue({
+      overall_status: "unknown",
+      checked_at: null,
+      services: {},
+    });
+
+    renderAdminDashboard("/admin/dashboard");
+
+    await waitFor(() => {
+      expect(screen.getByText("Admin dashboard content")).toBeInTheDocument();
+    });
+    expect(screen.queryByLabelText(/System Health status:/)).not.toBeInTheDocument();
   });
 });

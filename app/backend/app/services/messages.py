@@ -12,6 +12,7 @@ from app.models.message_draft import MessageDraft
 from app.models.user import User
 from app.models.workflow import Workflow
 from app.schemas.messages import MessageDraftCreate, MessageDraftUpdate
+from app.services.ai_health import record_ai_call_outcome
 from app.services.llm.llm_setting import get_llm_adapter
 from app.services.llm.provider_registry import get_active_llm_config
 from app.services.message_validation import validate_message_for_send
@@ -49,13 +50,19 @@ async def create_message_draft(db: AsyncSession, user: User, body: MessageDraftC
     content = body.body or ""
 
     if body.prompt and not body.body:
+        # Resolved once so the outcome record matches whichever provider
+        # _generate_draft_content actually used (the admin's active
+        # provider, not always the .env DEFAULT_LLM_PROVIDER).
+        llm_config = await get_active_llm_config(db)
         try:
             subject, content = await _generate_draft_content(
                 body.prompt, body.template_name, db
             )
-        except Exception:
+            await record_ai_call_outcome(db, user.id, llm_config.provider)
+        except Exception as e:
             subject = body.subject or f"{body.template_name or 'Course'} Announcement"
             content = body.prompt
+            await record_ai_call_outcome(db, user.id, llm_config.provider, error_detail=str(e)[:500])
 
     draft = MessageDraft(
         user_id=user.id,

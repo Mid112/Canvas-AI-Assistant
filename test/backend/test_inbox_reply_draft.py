@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import HTTPException
 
-from app.models.course import Course
 from app.models.user import User
 from app.schemas.inbox import InboxReplyDraftRequest, InboxReplyPreviewRequest
 from app.services.inbox_reply_draft import (
