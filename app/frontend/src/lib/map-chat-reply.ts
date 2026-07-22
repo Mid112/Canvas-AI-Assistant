@@ -7,6 +7,7 @@ import {
   instructorCourseAnalyticsPath,
   instructorDryRunPreviewPath,
   instructorMessagesPath,
+  instructorSettingsPath,
   paths,
 } from "@/routes/paths";
 import type { AssistantResponse } from "@/types/chat";
@@ -410,11 +411,35 @@ export function mapChatReplyToAssistantResponse(
   conversationId?: number,
 ): AssistantResponse {
   if (isError || reply.error) {
-    return {
-      content:
-        readString(reply.error) ??
-        "The assistant is temporarily unavailable. Please try again.",
-    };
+    const requiresCanvasToken = reply.requires_canvas_token === true;
+    const deferredRequestId =
+      typeof reply.deferred_request_id === "number"
+        ? reply.deferred_request_id
+        : undefined;
+    const content =
+      readString(reply.error) ??
+      "The assistant is temporarily unavailable. Please try again.";
+
+    if (requiresCanvasToken) {
+      return {
+        content,
+        explanation:
+          "You are in limited mode until Canvas is connected. Saved requests can be resumed after connecting.",
+        requiresCanvasToken: true,
+        deferredRequestId,
+        interpretedAction: {
+          action: "Connect Canvas",
+          course: "Limited mode",
+          affectedStudents: "—",
+          primaryLink: {
+            label: "Connect Canvas in Settings",
+            href: instructorSettingsPath("canvas"),
+          },
+        },
+      };
+    }
+
+    return { content };
   }
 
   if (reply.intent_preview) {

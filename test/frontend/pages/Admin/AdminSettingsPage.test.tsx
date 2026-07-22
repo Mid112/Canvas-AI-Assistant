@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AdminSettingsPage } from "@/pages/Admin/AdminSettingsPage";
+import * as adminLlmService from "@/services/adminLlmProviders";
 import * as adminSettingsService from "@/services/adminSettings";
 import * as adminUsersService from "@/services/adminUsers";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
@@ -46,6 +47,38 @@ describe("AdminSettingsPage", () => {
       role: "admin",
       is_active: true,
       created_at: new Date().toISOString(),
+    });
+    vi.spyOn(adminLlmService, "fetchAdminLlmProviders").mockResolvedValue({
+      config: {
+        provider: "ollama",
+        model: "llama3.2",
+        fallback_provider: null,
+        fallback_model: null,
+        cache_enabled: true,
+        cache_ttl_seconds: 300,
+      },
+      providers: [
+        {
+          id: "ollama",
+          name: "Ollama",
+          hosting: "local",
+          default_model: "llama3.2",
+          configured: true,
+          status: "available",
+          models: ["llama3.2"],
+          detail: null,
+        },
+        {
+          id: "groq",
+          name: "Groq",
+          hosting: "internet",
+          default_model: "qwen/qwen3.6-27b",
+          configured: true,
+          status: "available",
+          models: ["qwen/qwen3.6-27b"],
+          detail: null,
+        },
+      ],
     });
   });
 
@@ -96,5 +129,37 @@ describe("AdminSettingsPage", () => {
     await user.click(screen.getByRole("button", { name: "Create admin account" }));
 
     expect(await screen.findByText("Email already registered")).toBeInTheDocument();
+  });
+
+  it("saves the institution default provider settings", async () => {
+    vi.spyOn(adminLlmService, "updateAdminLlmProviders").mockImplementation(
+      async (_token, config) => ({
+        config,
+        providers: await adminLlmService
+          .fetchAdminLlmProviders("access-token")
+          .then((response) => response.providers),
+      }),
+    );
+
+    renderWithRouter(<AdminSettingsPage />);
+    await waitForLoaded();
+
+    await user.selectOptions(
+      await screen.findByLabelText("Default provider"),
+      "groq",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save AI defaults" }));
+
+    await waitFor(() => {
+      expect(adminLlmService.updateAdminLlmProviders).toHaveBeenCalledWith(
+        "access-token",
+        expect.objectContaining({
+          provider: "groq",
+          model: "qwen/qwen3.6-27b",
+          cache_enabled: true,
+        }),
+      );
+    });
   });
 });

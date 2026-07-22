@@ -2,7 +2,7 @@
 import json
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from app.models.conversation import Conversation
 from app.models.message import Message
@@ -127,14 +127,24 @@ class ModifyActionRequest(ConfirmActionRequest):
 
 
 class ModelSettings(BaseModel):
-    """Mirrors the frontend's LlmProviderSettings (types/llmProvider.ts) —
-    which provider/model the AI Models settings page (or the in-chat
-    switcher) has saved for this user. Passed through to
-    get_llm_adapter(); server-side API keys (GROQ_API_KEY, HF_TOKEN, ...)
-    are never supplied by the client, only which provider/model to use."""
+    """Instructor preference. Credentials are resolved server-side only."""
+
     provider: str
     model: str | None = None
+    # Accepted for backwards compatibility with older clients:
+    # - api_key is rejected (hard failure via reject_client_credentials)
+    # - base_url from chat is unused; URLs come from server config / connections
     base_url: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_client_credentials(cls, data: object) -> object:
+        if isinstance(data, dict) and data.get("api_key"):
+            raise ValueError(
+                "Client-supplied API keys are not accepted. "
+                "Connect providers in Settings instead."
+            )
+        return data
 
 
 class ChatRequest(BaseModel):
@@ -154,10 +164,12 @@ class ChatRequest(BaseModel):
     # a new message being appended, so conversation history stays clean
     # and the LLM sees only the latest agreed plan on the next turn.
     pending_message_id: int | None = None
-    # If omitted, falls back to settings.DEFAULT_LLM_PROVIDER (server's
-    # own .env default) — unchanged behavior for any client that doesn't
-    # send this.
+    # The backend accepts a provider/model preference but resolves credentials
+    # server-side. Client base URLs and API keys are never honored directly.
     model_settings: ModelSettings | None = None
+    # When replaying a saved limited-mode request, the chat turn completes the
+    # deferred row only after a successful (non-limited-mode) reply.
+    deferred_request_id: int | None = None
 
 
 class ChatResponse(BaseModel):

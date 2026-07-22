@@ -68,6 +68,8 @@ export interface ChatMessage {
   interpretedAction?: InterpretedAction;
   safetyBlocked?: boolean;
   safetyMessage?: string;
+  requiresCanvasToken?: boolean;
+  deferredRequestId?: number;
   /** True after the instructor dismisses a form-handoff offer (quiz /
    * message / feedback) so the action card and explanation hide. */
   handoffDismissed?: boolean;
@@ -87,6 +89,8 @@ export interface AssistantResponse {
   interpretedAction?: InterpretedAction;
   safetyBlocked?: boolean;
   safetyMessage?: string;
+  requiresCanvasToken?: boolean;
+  deferredRequestId?: number;
   /** When set, navigate to this route instead of showing a preview
    * card. The chat message content is still displayed. */
   navigateTo?: {

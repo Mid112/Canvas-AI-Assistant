@@ -8,6 +8,9 @@ import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 const mockUseAuth = vi.fn();
 const mockListAssistantConversations = vi.hoisted(() => vi.fn());
 const mockFetchConversation = vi.hoisted(() => vi.fn());
+const mockFetchProviders = vi.hoisted(() => vi.fn());
+const mockListDeferred = vi.hoisted(() => vi.fn());
+const mockResumeDeferred = vi.hoisted(() => vi.fn());
 
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
@@ -29,7 +32,19 @@ vi.mock("@/services/assistant", async () => {
     ...actual,
     fetchConversation: mockFetchConversation,
     listAssistantConversations: mockListAssistantConversations,
+    listDeferredAssistantRequests: mockListDeferred,
+    resumeDeferredAssistantRequest: mockResumeDeferred,
     sendAssistantMessage: vi.fn(),
+  };
+});
+
+vi.mock("@/services/instructorLlmProviders", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/services/instructorLlmProviders")
+  >("@/services/instructorLlmProviders");
+  return {
+    ...actual,
+    fetchInstructorLlmProviders: mockFetchProviders,
   };
 });
 
@@ -63,6 +78,30 @@ beforeEach(() => {
     items: [],
     total: 0,
   });
+  mockListDeferred.mockResolvedValue({ items: [] });
+  mockResumeDeferred.mockReset();
+  mockFetchProviders.mockResolvedValue({
+    default_provider: "ollama",
+    default_model: "llama3.2",
+    providers: [
+      {
+        id: "ollama",
+        name: "Ollama",
+        hosting: "local",
+        default_model: "llama3.2",
+        configured: true,
+        status: "available",
+        models: ["llama3.2"],
+        detail: null,
+        connected: true,
+        requires_api_key: false,
+        accepts_api_key: false,
+        has_api_key: false,
+        saved_model: null,
+        saved_base_url: null,
+      },
+    ],
+  });
 });
 
 describe("InstructorAssistantPage", () => {
@@ -81,6 +120,99 @@ describe("InstructorAssistantPage", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole("textbox", { name: "Chat message" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows limited mode when Canvas is not connected", async () => {
+    mockUseAuth.mockReturnValue({
+      user: {
+        id: 1,
+        email: "jane.doe@example.com",
+        name: "Dr. Jane Doe",
+        role: "instructor",
+        is_active: true,
+        has_canvas_token: false,
+        canvas_connections: [],
+      },
+      accessToken: "token",
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    });
+
+    renderWithInstitution(<InstructorAssistantPage />);
+
+    expect(await screen.findByText("Limited mode")).toBeInTheDocument();
+    expect(
+      screen.getByRole("textbox", { name: "Chat message" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Connect Canvas to continue" }),
+    ).not.toBeInTheDocument();
+  });
+
+    it("resumes only the next deferred request and keeps the rest queued until send succeeds", async () => {
+    const user = userEvent.setup();
+
+    mockListDeferred.mockResolvedValue({
+      items: [
+        {
+          id: 3,
+          conversation_id: null,
+          message: "Third deferred",
+          proposed_action: null,
+          status: "deferred",
+          created_at: "2026-07-21T12:03:00.000Z",
+          resumed_at: null,
+        },
+        {
+          id: 2,
+          conversation_id: null,
+          message: "Second deferred",
+          proposed_action: null,
+          status: "deferred",
+          created_at: "2026-07-21T12:02:00.000Z",
+          resumed_at: null,
+        },
+        {
+          id: 1,
+          conversation_id: 9,
+          message: "First deferred",
+          proposed_action: null,
+          status: "deferred",
+          created_at: "2026-07-21T12:01:00.000Z",
+          resumed_at: null,
+        },
+      ],
+    });
+    mockResumeDeferred.mockResolvedValue({
+      id: 3,
+      conversation_id: null,
+      message: "Third deferred",
+      proposed_action: null,
+      status: "deferred",
+      created_at: "2026-07-21T12:03:00.000Z",
+      resumed_at: null,
+    });
+
+    renderWithInstitution(<InstructorAssistantPage />);
+
+    expect(
+      await screen.findByRole("button", { name: "Resume next request" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Resume next request" }));
+
+    await waitFor(() => {
+      expect(mockResumeDeferred).toHaveBeenCalledTimes(1);
+    });
+    expect(mockResumeDeferred).toHaveBeenCalledWith("token", 3);
+    // Resume peeks without consuming — queue stays until chat send succeeds.
+    expect(
+      await screen.findByRole("button", { name: "Resume next request" }),
     ).toBeInTheDocument();
   });
 

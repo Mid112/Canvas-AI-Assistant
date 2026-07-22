@@ -13,16 +13,29 @@ from app.models.user import User
 from app.models.workflow import Workflow
 from app.schemas.messages import MessageDraftCreate, MessageDraftUpdate
 from app.services.llm.llm_setting import get_llm_adapter
+from app.services.llm.provider_registry import get_active_llm_config
 from app.services.message_validation import validate_message_for_send
 
 
-async def _generate_draft_content(prompt: str, template_name: str | None) -> tuple[str, str]:
+async def _generate_draft_content(
+    prompt: str,
+    template_name: str | None,
+    db: AsyncSession | None = None,
+) -> tuple[str, str]:
     system = (
         "You draft class announcement emails for instructors. "
         "Respond with JSON only: {\"subject\": \"...\", \"body\": \"...\"}"
     )
     user_msg = f"Template: {template_name or 'general'}\nRequest: {prompt}"
-    adapter = get_llm_adapter({"provider": settings.DEFAULT_LLM_PROVIDER})
+    if db is None:
+        adapter_settings = {"provider": settings.DEFAULT_LLM_PROVIDER}
+    else:
+        llm_config = await get_active_llm_config(db)
+        adapter_settings = {
+            "provider": llm_config.provider,
+            "model": llm_config.model,
+        }
+    adapter = get_llm_adapter(adapter_settings)
     raw = await adapter.generate(system, user_msg)
     try:
         data = json.loads(raw[raw.find("{") : raw.rfind("}") + 1])
@@ -37,7 +50,9 @@ async def create_message_draft(db: AsyncSession, user: User, body: MessageDraftC
 
     if body.prompt and not body.body:
         try:
-            subject, content = await _generate_draft_content(body.prompt, body.template_name)
+            subject, content = await _generate_draft_content(
+                body.prompt, body.template_name, db
+            )
         except Exception:
             subject = body.subject or f"{body.template_name or 'Course'} Announcement"
             content = body.prompt
