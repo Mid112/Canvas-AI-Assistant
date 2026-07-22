@@ -35,7 +35,7 @@ export function AssistantMessage({
 }: AssistantMessageProps) {
   const showPendingControls =
     message.pendingMessageId !== undefined && message.pendingActionStatus;
-  const showHandoffOffer =
+  const showActionOffer =
     !message.handoffDismissed && Boolean(message.interpretedAction);
 
   return (
@@ -74,11 +74,11 @@ export function AssistantMessage({
           </div>
         ) : null}
 
-        {showHandoffOffer && message.explanation ? (
+        {!message.handoffDismissed && message.explanation ? (
           <ExplanationCard explanation={message.explanation} />
         ) : null}
 
-        {showHandoffOffer && message.interpretedAction ? (
+        {showActionOffer && message.interpretedAction ? (
           <ActionCard
             action={message.interpretedAction}
             onDismiss={
@@ -112,7 +112,7 @@ export function AssistantMessage({
           />
         ) : null}
 
-        {message.handoffDismissed ? (
+        {message.handoffDismissed && !showPendingControls ? (
           <p className="text-sm text-muted-foreground">
             This action was cancelled.
           </p>
