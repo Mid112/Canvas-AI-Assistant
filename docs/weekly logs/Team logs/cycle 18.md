@@ -143,6 +143,15 @@ Time was tracked using Clockify for **Cycle 18 (Jul 17, 2026 – Jul 20, 2026)**
 - LLM Provider Switching logic underwent localized testing to ensure invalid client-supplied API keys are rejected and secure keys are properly Fernet-encrypted at rest.
 - The new limited-mode assistant gate was tested to ensure Canvas reads/writes are appropriately deferred.
 
+**Frontend Tests:**
+
+<img width="852" height="482" alt="FrontendTest" src="https://github.com/user-attachments/assets/6746809c-7a24-4f86-8f1b-c42c149080e1" />
+
+**Backend Tests:**
+
+<img width="856" height="415" alt="BackendTest" src="https://github.com/user-attachments/assets/66384f84-80fe-4fa2-b5e9-4648ab5eddbf" />
+
+
 ---
 
 ## Project Status Summary
