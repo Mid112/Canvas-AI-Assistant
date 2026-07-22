@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import {
   instructorCourseAnalyticsPath,
   instructorCourseAssignmentsPath,
+  instructorCourseGradesPath,
   instructorCourseMessagesPath,
   instructorCoursePath,
   instructorCourseStudentsPath,
@@ -27,6 +28,11 @@ export function InstructorCourseTabs({ localCourseId }: InstructorCourseTabsProp
     {
       label: "Students",
       to: instructorCourseStudentsPath(localCourseId),
+      end: false,
+    },
+    {
+      label: "Grades",
+      to: instructorCourseGradesPath(localCourseId),
       end: false,
     },
     {

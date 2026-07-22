@@ -9,15 +9,16 @@ def test_read_actions_are_read_only():
         assert ACTION_CLASSIFICATION[action] == "read_only"
 
 
-# Verifies: Writes are modifying.
+# Verifies: Undoable writes are modifying.
 def test_writes_are_modifying():
-    for action in ("set_active_course", "create_assignment", "update_assignment", "update_grade"):
+    for action in ("set_active_course", "create_assignment", "update_assignment"):
         assert ACTION_CLASSIFICATION[action] == "modifying"
 
 
-# Verifies: Send message is irreversible.
-def test_send_message_is_irreversible():
+# Verifies: Writes without undo paths are irreversible.
+def test_writes_without_undo_paths_are_irreversible():
     assert ACTION_CLASSIFICATION["send_message"] == "irreversible"
+    assert ACTION_CLASSIFICATION["update_grade"] == "irreversible"
 
 
 # Verifies: Conversational actions are not classified.
@@ -44,6 +45,7 @@ def test_is_reversible_matches_classification():
     assert is_reversible("fetch_courses") is True
     assert is_reversible("create_assignment") is True
     assert is_reversible("update_assignment") is True
+    assert is_reversible("update_grade") is False
     assert is_reversible("send_message") is False
 
 

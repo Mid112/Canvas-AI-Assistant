@@ -88,6 +88,8 @@ services:
       # Mount your local code into the container so changes
       # are reflected immediately without rebuilding the image.
       - ./app/backend:/app
+      # Keep startup migrations available even though /app is a dev bind mount.
+      - ./db/migrations:/db/migrations:ro
     ports:
       # Access the API directly at http://localhost:8000
       # Swagger docs available at http://localhost:8000/docs

@@ -281,6 +281,7 @@ async def test_execute_update_grade_calls_canvas_with_feedback():
         feedback="Strong improvement",
     )
     assert result["action"] == "update_grade"
+    assert result["reversible"] is False
     assert result["affected_resources"][1]["changed_fields"] == [
         "grade",
         "feedback",

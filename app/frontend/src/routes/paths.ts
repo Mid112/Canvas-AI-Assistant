@@ -13,6 +13,7 @@ export const paths = {
     course: "/instructor/courses/:localCourseId",
     courseAssignments: "/instructor/courses/:localCourseId/assignments",
     courseStudents: "/instructor/courses/:localCourseId/students",
+    courseGrades: "/instructor/courses/:localCourseId/grades",
     courseMessages: "/instructor/courses/:localCourseId/messages",
     courseSubmissions:
       "/instructor/courses/:localCourseId/assignments/:assignmentId/submissions",
@@ -60,6 +61,40 @@ export function instructorCourseAssignmentsPath(localCourseId: number | string) 
 
 export function instructorCourseStudentsPath(localCourseId: number | string) {
   return `/instructor/courses/${localCourseId}/students`;
+}
+
+export function instructorCourseGradesPath(localCourseId: number | string) {
+  return `/instructor/courses/${localCourseId}/grades`;
+}
+
+export function instructorCourseGradesPrefillPath(
+  localCourseId: number | string,
+  options?: {
+    assignmentId?: number | string;
+    studentIds?: Array<number | string>;
+    grade?: string;
+    reason?: string | null;
+  },
+) {
+  // AI grade requests resolve real Canvas-backed ids server-side, then land
+  // here as URL params so the Grades page can reuse its normal preview and
+  // approval workflow instead of inventing a separate chat-only editor.
+  const params = new URLSearchParams();
+  if (options?.assignmentId !== undefined) {
+    params.set("assignmentId", String(options.assignmentId));
+  }
+  if (options?.studentIds?.length) {
+    params.set("studentIds", options.studentIds.map(String).join(","));
+  }
+  if (options?.grade) {
+    params.set("grade", options.grade);
+  }
+  if (options?.reason) {
+    params.set("reason", options.reason);
+  }
+
+  const query = params.toString();
+  return `${instructorCourseGradesPath(localCourseId)}${query ? `?${query}` : ""}`;
 }
 
 export function instructorCourseSubmissionsPath(

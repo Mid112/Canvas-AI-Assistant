@@ -7,6 +7,7 @@ from app.models.canvas_course_name import CanvasCourseName
 from app.models.conversation import Conversation
 from app.models.course import Course
 from app.models.deferred_assistant_request import DeferredAssistantRequest
+from app.models.grade_history import GradeHistory
 from app.models.instructor_llm_connection import InstructorLlmConnection
 from app.models.llm_response_cache import LlmResponseCache
 from app.models.message import Message
@@ -32,6 +33,7 @@ __all__ = [
     "Conversation",
     "Course",
     "DeferredAssistantRequest",
+    "GradeHistory",
     "InstructorLlmConnection",
     "LlmResponseCache",
     "Message",

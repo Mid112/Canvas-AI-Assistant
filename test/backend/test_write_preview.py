@@ -74,7 +74,8 @@ def test_update_grade_preview_marks_submission_modified():
         {"action": "update_grade", "assignment_id": 1, "student_id": 2, "new_grade": "A"},
         COURSE,
     )
-    assert preview["reversible"] is True
+    # Grade updates keep history, but they are not automatically undoable yet.
+    assert preview["reversible"] is False
     resources = {r["type"]: r for r in preview["affected_resources"]}
     assert resources["submission"]["status"] == "modified"
     assert resources["submission"]["changed_fields"] == ["grade"]

@@ -145,7 +145,7 @@ CREATE INDEX idx_assignments_course_id ON assignments(course_id);
 -- ─────────────────────────────────────────────
 CREATE TABLE submissions (
     id                    SERIAL PRIMARY KEY,
-    canvas_submission_id  VARCHAR UNIQUE NOT NULL,
+    canvas_submission_id  VARCHAR NOT NULL,
     assignment_id         INTEGER NOT NULL REFERENCES assignments(id) ON DELETE CASCADE,
     student_canvas_id     VARCHAR NOT NULL,
     student_name          VARCHAR,
@@ -153,7 +153,10 @@ CREATE TABLE submissions (
     score                 FLOAT,
     grade                 VARCHAR,
     graded_at             TIMESTAMPTZ,
-    submitted_at          TIMESTAMPTZ
+    submitted_at          TIMESTAMPTZ,
+    -- Canvas submission ids are not globally unique across every course in
+    -- local/dev Canvas, so cache identity is scoped to the assignment.
+    CONSTRAINT uq_submission_per_assignment UNIQUE (assignment_id, canvas_submission_id)
 );
 
 CREATE INDEX idx_submissions_assignment_id ON submissions(assignment_id);
@@ -405,6 +408,29 @@ CREATE TABLE message_drafts (
 
 CREATE INDEX idx_message_drafts_user_id ON message_drafts(user_id);
 
+-- Grade history
+CREATE TABLE grade_history (
+    id                  SERIAL PRIMARY KEY,
+    user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    course_id           INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    assignment_id       VARCHAR NOT NULL,
+    student_canvas_id   VARCHAR NOT NULL,
+    previous_grade      VARCHAR,
+    new_grade           VARCHAR NOT NULL,
+    previous_score      DOUBLE PRECISION,
+    reason              TEXT,
+    risk_level          VARCHAR NOT NULL DEFAULT 'high',
+    rollback_available  BOOLEAN NOT NULL DEFAULT TRUE,
+    canvas_response     JSONB,
+    created_at          TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_grade_history_user_id ON grade_history(user_id);
+CREATE INDEX idx_grade_history_course_id ON grade_history(course_id);
+CREATE INDEX idx_grade_history_assignment_id ON grade_history(assignment_id);
+CREATE INDEX idx_grade_history_student_canvas_id ON grade_history(student_canvas_id);
+CREATE INDEX idx_grade_history_created_at ON grade_history(created_at);
+
 -- Admin system settings
 CREATE TABLE system_settings (
     key         VARCHAR PRIMARY KEY,
@@ -499,7 +525,9 @@ INSERT INTO schema_migrations (filename) VALUES
     ('021_audit_logs_allow_quiz_resource_type.sql'),
     ('022_audit_logs_allow_submission_resource_type.sql'),
     ('023_workflow_nullable_preview.sql'),
+    ('024_grade_history.sql'),
     ('024_llm_response_cache.sql'),
     ('025_instructor_llm_connections.sql'),
+    ('025_submission_cache_key.sql'),
     ('026_deferred_assistant_requests.sql'),
     ('027_llm_response_cache_constraint_name.sql');

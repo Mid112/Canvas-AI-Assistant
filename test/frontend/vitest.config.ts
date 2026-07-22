@@ -1,13 +1,12 @@
 import path from "path";
 import { defineConfig } from "vitest/config";
-import react from "@vitejs/plugin-react";
 
 const appDir = path.resolve(__dirname, "../../app");
 const frontendDir = path.resolve(appDir, "frontend");
 const frontendNodeModules = path.resolve(frontendDir, "node_modules");
+const isCi = process.env.CI === "true";
 
 export default defineConfig({
-  plugins: [react()],
   esbuild: {
     jsx: "automatic",
   },
@@ -37,6 +36,10 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./setup.ts"],
     include: ["**/*.{test,spec}.{ts,tsx}"],
+    fileParallelism: !isCi,
+    maxWorkers: isCi ? 1 : undefined,
+    minWorkers: isCi ? 1 : undefined,
+    testTimeout: isCi ? 10000 : 5000,
     coverage: {
       provider: "v8",
       allowExternal: true,
