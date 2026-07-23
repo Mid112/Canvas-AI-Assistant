@@ -3,7 +3,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.mcp_tools.schemas import ACTION_CLASSIFICATION, is_undoable, is_reversible
+from app.mcp_tools.schemas import ACTION_CLASSIFICATION, is_reversible, is_undoable
 from app.models.workflow import Workflow
 
 
@@ -111,7 +111,9 @@ def build_reversal_metadata(workflow: Workflow) -> ReversalMetadata:
         instructions = _irreversible_recovery_instructions(action)
     elif is_reversible(action):
         reason = "This operation can be corrected later, but automated rollback is not implemented for it yet."
-        instructions = "Open Canvas and manually apply a corrective change, then keep this workflow history row as the audit trail."
+        instructions = (
+            "Open Canvas and manually apply a corrective change, then keep this workflow history row as the audit trail."
+        )
     else:
         reason = "This action type is not recognized by the reversal service."
         instructions = "Review the Canvas state manually before taking further action."
