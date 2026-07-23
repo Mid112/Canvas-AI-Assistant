@@ -101,33 +101,38 @@ describe("ActionCard", () => {
 });
 
 describe("RiskAlerts", () => {
+  function makeRisk(overrides = {}) {
+    return {
+      risk_level: "high" as const,
+      classification: "irreversible",
+      requires_confirmation: true,
+      confirmation_requirement: {
+        type: "strong" as const,
+        label: "Strong confirmation",
+        description: "Type CONFIRM before executing this high-risk action.",
+        confirmation_phrase: "CONFIRM",
+      },
+      destructive: true,
+      reversible: false,
+      undoable: false,
+      can_undo: false,
+      reversibility: "This action cannot be undone once submitted.",
+      warnings: ["Review recipients and content carefully before confirming."],
+      technical_details: {
+        action: "send_message",
+        classification: "irreversible",
+      },
+      ...overrides,
+    };
+  }
+
   it("shows warnings, undo/reversibility copy, and expandable technical details", async () => {
     const user = userEvent.setup();
 
     render(
-      <RiskAlerts
-        risk={{
-          risk_level: "high",
-          classification: "irreversible",
-          requires_confirmation: true,
-          confirmation_requirement: {
-            type: "strong",
-            label: "Strong confirmation",
-            description: "Type CONFIRM before executing this high-risk action.",
-            confirmation_phrase: "CONFIRM",
-          },
-          destructive: true,
-          reversible: false,
-          undoable: false,
-          can_undo: false,
-          reversibility: "This action cannot be undone once submitted.",
-          warnings: ["Review recipients and content carefully before confirming."],
-          technical_details: {
-            action: "send_message",
-            classification: "irreversible",
-          },
-        }}
-      />,
+      <MemoryRouter>
+        <RiskAlerts risk={makeRisk()} />
+      </MemoryRouter>,
     );
 
     expect(screen.getByText("Alerts")).toBeInTheDocument();
@@ -143,5 +148,32 @@ describe("RiskAlerts", () => {
 
     expect(screen.getByText(/send_message/)).toBeInTheDocument();
     expect(screen.getByText(/irreversible/)).toBeInTheDocument();
+  });
+
+  // Verifies: Undoable actions include a direct link to the workflow history reversal UI.
+  it("links undoable actions to workflow history", () => {
+    render(
+      <MemoryRouter>
+        <RiskAlerts
+          risk={makeRisk({
+            risk_level: "medium",
+            classification: "modifying",
+            destructive: false,
+            reversible: true,
+            undoable: true,
+            can_undo: true,
+            reversibility: "This action can be undone from workflow history.",
+            warnings: [],
+            technical_details: { action: "create_assignment" },
+          })}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("Can be undone")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open workflow history" })).toHaveAttribute(
+      "href",
+      "/instructor/history",
+    );
   });
 });
