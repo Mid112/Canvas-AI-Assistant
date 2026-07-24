@@ -975,5 +975,51 @@ Total: 9 hours
 - Begin **Feature 10: Audit Logging**
 - Begin **Feature 12: Secure Troubleshooting**
 
+---
 
+# Cycle 18 Report: July 21 – July 23
 
+## Timesheet
+
+### Clockify Report
+
+- 21/7 (Tuesday): Meeting with the team – 2h 42m 25s
+- 22/7 (Wednesday): Implementing / Extending audit log feature – 3h 18m 56s
+- 23/7 (Thursday): Implementing troubleshooting + dashboard – 2h 24m 22s (10:30PM–1:15AM, spilling into 21/7)
+
+**Total (clocked): ~8h 25m 43s**
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting (Tuesday, 21/7)
+- Attended the team meeting — 2h42m25s clocked; no code changes tied to this session
+
+### 2: Feature 10 — Audit Logging (Wednesday, 22/7)
+- Landed as a single commit the following night, `Add audit log feature backend + frontend`
+- Merged two previously-disconnected audit sources into one sorted, paginated feed: `audit_logs` (workflow-driven Canvas mutations) and `audit_logs_session` (admin actions, logins, password changes)
+- Closed six real logging gaps: failed logins, regular instructor login/logout (previously admin-only), self-registration, password-reset requests, Canvas connection add/update/remove, and admin settings updates
+- Fixed the exposed `GET /audit/logs` endpoint silently discarding its own `total` count, and replaced the frontend's fixed 200-row fetch with proper `limit`/`offset` pagination and a "Load more" control
+- Fixed a downstream consumer (the MCP `get_audit_logs` tool) that would have silently broken on the new `{items, total}` response shape
+
+### 3: Feature 12 — Secure Troubleshooting + Troubleshooting Dashboard (Thursday, 23/7, spilling past midnight into 24/7)
+- New `GET /admin/troubleshoot/diagnostics` and `GET /admin/troubleshoot/failed-operations` endpoints, composed from Feature 9's existing System Health services (`get_latest_health_status`, `get_instructor_canvas_summary`, `get_provider_statuses`) rather than duplicating them, plus a new paginated query over `Workflow.status == "failed"` — closing the gap that no admin-facing endpoint surfaced failed workflows at all
+- Found and fixed a real credential-leak gap while building this: `get_instructor_canvas_summary`'s `last_sync_error` was never redacted before reaching an admin response — now scrubbed through the existing `redact_secrets()` utility, which also benefits the pre-existing System Health page for free
+- New `/admin/troubleshooting` page (`TroubleshootingPage.tsx`) with diagnostics cards (health, uptime, Canvas host, LLM provider status, instructor Canvas connections) and a paginated failed-operations table with "Load more", wired into nav/routing
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- All three of live testing event 2 feature assignments (#9 System Health, #10 Audit Logging, #12 Secure Troubleshooting) are now code-complete and pushed to `feature/secure-trouble-shooting-integration-monitoring`
+- The Troubleshooting diagnostics endpoint deliberately reused System Health's existing service functions instead of re-implementing them — kept the new feature small, and meant the credential-redaction fix landed in one shared place instead of two.
+
+### Retrospective:
+- Found a genuine, unredacted credential-leak path (`last_sync_error` on the System Health page) while building an unrelated feature — worth a quick audit of other admin-facing free-text fields (error details, log messages) for the same class of gap rather than waiting to trip over the next one incidentally.
+
+## Next Cycle Goals
+- **Priority: track down and fix the Vite dev-proxy / backend-connectivity bug found during this cycle's Docker reset** — the Troubleshooting page currently fails to load in the browser even though the backend endpoints work correctly when called directly
+- Fix any other integration bugs found ahead of **Testing Live Event 2 next Tuesday** — treat this as the cycle's primary deadline
+- Audit other admin-facing free-text fields (error details, sync/log messages) for the same unredacted-credential class of bug just found and fixed in System Health
