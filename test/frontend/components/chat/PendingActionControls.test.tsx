@@ -136,4 +136,47 @@ describe("PendingActionControls", () => {
     );
     expect(screen.getByText("This action was cancelled.")).toBeInTheDocument();
   });
+
+  it("shows pause and rename for pending proposals", async () => {
+    const user = userEvent.setup();
+    const onPause = vi.fn();
+    const onRename = vi.fn();
+
+    render(
+      <PendingActionControls
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+        onPause={onPause}
+        onRename={onRename}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Pause" }));
+    expect(onPause).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("button", { name: "Rename workflow" }));
+    await user.type(screen.getByLabelText("Workflow name"), "Quiz draft");
+    await user.click(screen.getByRole("button", { name: "Save name" }));
+    expect(onRename).toHaveBeenCalledWith("Quiz draft");
+  });
+
+  it("shows resume controls for paused proposals", async () => {
+    const user = userEvent.setup();
+    const onResume = vi.fn();
+    const onCancel = vi.fn();
+
+    render(
+      <PendingActionControls
+        status="paused"
+        displayName="Quiz draft"
+        onConfirm={vi.fn()}
+        onCancel={onCancel}
+        onResume={onResume}
+      />,
+    );
+
+    expect(screen.getByText(/“Quiz draft” is paused/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Resume" }));
+    expect(onResume).toHaveBeenCalledTimes(1);
+  });
 });

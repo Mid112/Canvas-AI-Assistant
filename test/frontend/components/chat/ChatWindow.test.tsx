@@ -46,6 +46,9 @@ vi.mock("@/services/assistant", async () => {
     sendAssistantMessage: vi.fn(actual.sendAssistantMessage),
     confirmAssistantAction: vi.fn(actual.confirmAssistantAction),
     cancelAssistantAction: vi.fn(actual.cancelAssistantAction),
+    pauseAssistantAction: vi.fn(actual.pauseAssistantAction),
+    resumeAssistantAction: vi.fn(actual.resumeAssistantAction),
+    renameAssistantAction: vi.fn(actual.renameAssistantAction),
     fetchConversation: vi.fn(actual.fetchConversation),
   };
 });
@@ -88,6 +91,7 @@ describe("ChatWindow", () => {
       error: null,
       selectActiveCourse: vi.fn(),
       refreshActiveCourse: vi.fn(),
+      notifyCoursesChanged: vi.fn(),
     });
   });
 
@@ -193,6 +197,48 @@ describe("ChatWindow", () => {
     expect(
       await screen.findByText("I can still help while course context loads."),
     ).toBeInTheDocument();
+  });
+
+  // Verifies: Stop aborts the in-flight request and shows a soft Stopped message (not an error banner).
+  it("shows a soft Stopped message when the request is aborted", async () => {
+    const user = userEvent.setup();
+
+    mockedSendAssistantMessage.mockImplementation(
+      (_token, _text, options) =>
+        new Promise((_resolve, reject) => {
+          const signal = options?.signal;
+          if (!signal) {
+            reject(new Error("expected abort signal"));
+            return;
+          }
+          if (signal.aborted) {
+            reject(new DOMException("Aborted", "AbortError"));
+            return;
+          }
+          signal.addEventListener("abort", () => {
+            reject(new DOMException("Aborted", "AbortError"));
+          });
+        }),
+    );
+
+    renderWithInstitution(<ChatWindow />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "Write a long answer",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    const stopButton = await screen.findByRole("button", {
+      name: "Stop response",
+    });
+    await user.click(stopButton);
+
+    expect(await screen.findByText("Stopped.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retry" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/temporarily unavailable|Something went wrong/i),
+    ).not.toBeInTheDocument();
   });
 
   // Verifies: Shows an error banner and retry button when the request fails.
@@ -817,5 +863,57 @@ describe("ChatWindow", () => {
     expect(screen.getByText("This action was confirmed.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Confirm" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+  });
+
+  it("marks confirm as failed when the backend returns is_error", async () => {
+    const user = userEvent.setup();
+    mockedSendAssistantMessage.mockResolvedValue({
+      content: "Ready to create Homework.",
+      conversationId: 21,
+      pendingMessageId: 88,
+      explanation: "Review before confirming.",
+      interpretedAction: {
+        action: "Create Assignment",
+        course: "CPSC 310",
+        affectedStudents: "Entire class",
+        details: [],
+        risk: {
+          risk_level: "medium",
+          classification: "modifying",
+          requires_confirmation: true,
+          confirmation_requirement: {
+            type: "simple",
+            label: "Confirm",
+            description: "Confirm to create.",
+          },
+          destructive: false,
+          reversible: true,
+          undoable: true,
+          can_undo: true,
+          reversibility: "Can be undone.",
+          warnings: [],
+          technical_details: {},
+        },
+      },
+    });
+    mockedConfirmAssistantAction.mockResolvedValue({
+      content: "Canvas rejected this write.",
+      conversationId: 21,
+      isError: true,
+    });
+
+    renderWithInstitution(<ChatWindow />);
+    await user.type(
+      screen.getByPlaceholderText(/ask me anything about your canvas courses/i),
+      "Create homework",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    expect(await screen.findByText("Ready to create Homework.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    expect(
+      await screen.findByText("This action failed to complete — nothing was changed."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Canvas rejected this write.")).toBeInTheDocument();
   });
 });
