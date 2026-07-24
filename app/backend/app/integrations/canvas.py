@@ -69,6 +69,7 @@ _TIMEOUT = httpx.Timeout(10.0)
 # Maximum number of pages to follow before giving up — guards against runaway pagination
 _MAX_PAGES = 50
 _RETRY_DELAY = 1.0
+_MAX_READ_RETRIES = 2
 
 
 def _parse_next_link(link_header: str) -> str | None:
@@ -80,13 +81,52 @@ def _parse_next_link(link_header: str) -> str | None:
 
 
 async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
-    # Single retry on transient Canvas 5xx — network blips shouldn't fail the whole request.
-    response = await client.get(url, **kwargs)
-    if response.is_server_error:
-        logger.warning("Canvas returned %d for %s — retrying once", response.status_code, url)
-        await asyncio.sleep(_RETRY_DELAY)
-        response = await client.get(url, **kwargs)
-    return response
+    # Feature Reliability (#1190): retry transient Canvas 5xx / timeouts on
+    # safe reads with short backoff. Writes must not use this helper.
+    last_error: Exception | None = None
+    for attempt in range(_MAX_READ_RETRIES + 1):
+        try:
+            response = await client.get(url, **kwargs)
+        except httpx.TimeoutException as exc:
+            last_error = exc
+            if attempt >= _MAX_READ_RETRIES:
+                raise
+            logger.warning(
+                "Canvas GET timed out for %s — retry %s/%s",
+                url,
+                attempt + 1,
+                _MAX_READ_RETRIES,
+            )
+            await asyncio.sleep(_RETRY_DELAY * (attempt + 1))
+            continue
+        except httpx.RequestError as exc:
+            last_error = exc
+            if attempt >= _MAX_READ_RETRIES:
+                raise
+            logger.warning(
+                "Canvas GET network error for %s — retry %s/%s",
+                url,
+                attempt + 1,
+                _MAX_READ_RETRIES,
+            )
+            await asyncio.sleep(_RETRY_DELAY * (attempt + 1))
+            continue
+
+        if response.is_server_error and attempt < _MAX_READ_RETRIES:
+            logger.warning(
+                "Canvas returned %d for %s — retry %s/%s",
+                response.status_code,
+                url,
+                attempt + 1,
+                _MAX_READ_RETRIES,
+            )
+            await asyncio.sleep(_RETRY_DELAY * (attempt + 1))
+            continue
+        return response
+
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("Canvas GET retry loop exited without a response")
 
 
 async def _fetch_all_pages(

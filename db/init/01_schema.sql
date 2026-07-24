@@ -180,6 +180,8 @@ CREATE TABLE conversations (
     course_id   INTEGER REFERENCES courses(id) ON DELETE SET NULL,
     -- Denormalized snapshot of course.name at the time course_id was set.
     course_name VARCHAR,
+    -- Confirmed/collected assistant fields reused across turns (#1235).
+    field_memory JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -220,11 +222,12 @@ CREATE TABLE workflows (
     preview_message_id       INTEGER REFERENCES messages(id) ON DELETE CASCADE,
     result_message_id        INTEGER REFERENCES messages(id) ON DELETE SET NULL,
     action_name              VARCHAR NOT NULL,
+    display_name             TEXT,
     user_prompt              TEXT NOT NULL,
     proposed_action          JSONB NOT NULL,
     affected_resources       JSONB NOT NULL DEFAULT '[]'::jsonb,
     status                   VARCHAR NOT NULL DEFAULT 'pending'
-                             CHECK (status IN ('pending', 'executing', 'executed', 'failed', 'cancelled', 'superseded')),
+                             CHECK (status IN ('pending', 'paused', 'executing', 'executed', 'failed', 'cancelled', 'superseded')),
     error_detail             TEXT,
     executed_at              TIMESTAMPTZ,
     -- Set when a reversible action (currently update_assignment only) has
@@ -526,7 +529,6 @@ CREATE TABLE ai_call_health (
 
 -- ─────────────────────────────────────────────
 -- Canvas Idempotency Keys (Feature Reliability #1189)
--- Reflects migrations 031 + 034 (claim status + nullable response_json).
 -- ─────────────────────────────────────────────
 CREATE TABLE canvas_idempotency_keys (
     idempotency_key VARCHAR PRIMARY KEY,
@@ -596,4 +598,7 @@ INSERT INTO schema_migrations (filename) VALUES
     ('029_canvas_connection_last_sync_error.sql'),
     ('030_ai_call_health.sql'),
     ('031_canvas_idempotency_keys.sql'),
-    ('034_canvas_idempotency_claim_and_retention.sql');
+    ('032_conversation_field_memory.sql'),
+    ('033_workflow_paused_status.sql'),
+    ('034_canvas_idempotency_claim_and_retention.sql'),
+    ('035_workflow_display_name.sql');

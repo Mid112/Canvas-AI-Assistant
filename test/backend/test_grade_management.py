@@ -32,7 +32,7 @@ def _unsubmitted_submission():
     return submission
 
 
-def test_feedback_only_preview_is_low_risk_and_keeps_grade_unchanged():
+def test_feedback_only_preview_is_medium_risk_and_keeps_grade_unchanged():
     # Covers the feedback-only path: a Canvas submission comment should not be
     # treated like a high-risk grade mutation or change the posted grade.
     preview = _build_grade_preview(
@@ -46,8 +46,8 @@ def test_feedback_only_preview_is_low_risk_and_keeps_grade_unchanged():
         _submission(),
     )
 
-    assert preview.risk_level == "low"
-    assert preview.requires_approval is False
+    assert preview.risk_level == "medium"
+    assert preview.requires_approval is True
     assert preview.rollback_available is False
     assert preview.proposed == {
         "posted_grade": "",
@@ -244,6 +244,113 @@ async def test_grade_submit_records_workflow_audit_and_history_in_one_commit():
     assert audit.resource_type == "submission"
     assert audit.before_data["student_canvas_id"] == 42
     db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_grade_submit_rejects_stale_preview_snapshot():
+    # Feature 14 (#909): if the Grades tab previewed grade X but live Canvas
+    # now shows grade Y, refuse the mutation so the instructor re-previews.
+    db = AsyncMock()
+    user = SimpleNamespace(id=1)
+    course = SimpleNamespace(
+        id=7,
+        name="COSC 777",
+        canvas_course_id="77",
+        canvas_url="https://canvas.ubc.ca",
+    )
+    live = _submission()
+    live.grade = "90"
+    live.score = 90
+
+    with (
+        patch(
+            "app.services.grade_management._find_submission",
+            new=AsyncMock(return_value=(course, "token", live)),
+        ),
+        patch(
+            "app.services.grade_management.update_submission_grade",
+            new=AsyncMock(),
+        ) as mock_update,
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await submit_grade_update(
+                7,
+                GradeUpdateRequest(
+                    assignment_id=10,
+                    user_id=42,
+                    posted_grade="95",
+                    current_submission={
+                        "user_id": 42,
+                        "assignment_id": 10,
+                        "grade": "88",
+                        "score": 88,
+                    },
+                ),
+                user,
+                "https://canvas.ubc.ca",
+                db,
+            )
+
+    assert exc.value.status_code == 409
+    assert "changed since you previewed" in exc.value.detail
+    mock_update.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_grade_submit_accepts_matching_preview_snapshot():
+    db = AsyncMock()
+    db.add = MagicMock()
+    db.flush = AsyncMock()
+    db.commit = AsyncMock()
+    user = SimpleNamespace(id=1)
+    course = SimpleNamespace(
+        id=7,
+        name="COSC 777",
+        canvas_course_id="77",
+        canvas_url="https://canvas.ubc.ca",
+    )
+    live = _submission()
+    raw_submission = {
+        "id": 99,
+        "assignment_id": 10,
+        "user_id": 42,
+        "workflow_state": "graded",
+        "score": 95,
+        "grade": "95",
+        "user": {"name": "Coin"},
+    }
+
+    with (
+        patch(
+            "app.services.grade_management._find_submission",
+            new=AsyncMock(return_value=(course, "token", live)),
+        ),
+        patch(
+            "app.services.grade_management.update_submission_grade",
+            new=AsyncMock(return_value=raw_submission),
+        ) as mock_update,
+    ):
+        result = await submit_grade_update(
+            7,
+            GradeUpdateRequest(
+                assignment_id=10,
+                user_id=42,
+                posted_grade="95",
+                current_submission={
+                    "user_id": 42,
+                    "assignment_id": 10,
+                    "grade": "88",
+                    "score": 88,
+                },
+            ),
+            user,
+            "https://canvas.ubc.ca",
+            db,
+            record_workflow_audit=False,
+        )
+
+    assert result.submitted is True
+    mock_update.assert_awaited_once()
 
 
 @pytest.mark.asyncio
