@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.canvas_url import resolve_server_canvas_url
+from app.core.secret_redaction import redact_secrets
 from app.models.ai_call_health import AiCallHealth
 from app.models.canvas_connection import CanvasConnection
 from app.models.health_check import HealthCheck
@@ -210,7 +211,13 @@ async def get_instructor_canvas_summary(db: AsyncSession) -> InstructorCanvasSum
     )
     failing_connections = [
         FailingCanvasConnection(
-            user_name=name, user_email=email, canvas_url=canvas_url, error_detail=error_detail
+            user_name=name,
+            user_email=email,
+            canvas_url=canvas_url,
+            # last_sync_error is free-form text from an HTTP client failure --
+            # it could echo a bearer token/API key back from a raw request
+            # error, so scrub before this ever reaches an admin-facing response.
+            error_detail=redact_secrets(error_detail) if error_detail else None,
         )
         for name, email, canvas_url, error_detail in rows
     ]

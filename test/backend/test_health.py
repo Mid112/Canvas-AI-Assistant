@@ -865,6 +865,33 @@ async def test_get_instructor_canvas_summary_maps_failing_connection_fields():
 
 
 @pytest.mark.asyncio
+async def test_get_instructor_canvas_summary_redacts_secrets_in_error_detail():
+    """last_sync_error is free-form text from an HTTP client failure and
+    could echo a bearer token/API key back -- it must never reach an
+    admin-facing response unredacted (feeds both this page and the new
+    troubleshooting diagnostics endpoint)."""
+    db = AsyncMock()
+    db.scalar = AsyncMock(side_effect=[1, 1])  # total, then failing
+    db.execute = AsyncMock(
+        return_value=[
+            (
+                "Jane Doe",
+                "jane@example.com",
+                "https://canvas.example.edu",
+                "401 Unauthorized: Authorization: Bearer sk-ant-abc12345secret",
+            )
+        ]
+    )
+
+    summary = await get_instructor_canvas_summary(db)
+
+    error_detail = summary.failing_connections[0].error_detail
+    assert error_detail is not None
+    assert "sk-ant-abc12345secret" not in error_detail
+    assert "[REDACTED" in error_detail
+
+
+@pytest.mark.asyncio
 async def test_get_instructor_canvas_summary_zero_failures():
     from app.models.canvas_connection import CanvasConnection
     from app.models.user import User

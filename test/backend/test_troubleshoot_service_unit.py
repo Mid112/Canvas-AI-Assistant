@@ -1,0 +1,116 @@
+"""Direct unit tests for services/troubleshoot.py."""
+from datetime import UTC, datetime
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+from app.services.troubleshoot import get_diagnostics, list_failed_operations
+
+
+def _workflow_row(id, created_at, *, error_detail=None, course=None, executed_at=None):
+    return SimpleNamespace(
+        id=id,
+        action_name="create_assignment",
+        user=SimpleNamespace(name="Jane Doe", email="jane@example.com"),
+        course=course,
+        error_detail=error_detail,
+        created_at=created_at,
+        executed_at=executed_at,
+    )
+
+
+def _db(scalar_results, scalars_result):
+    db = AsyncMock()
+    db.scalar = AsyncMock(side_effect=scalar_results)
+    db.scalars = AsyncMock(return_value=scalars_result)
+    return db
+
+
+@pytest.mark.asyncio
+async def test_list_failed_operations_returns_items_and_total():
+    ts = datetime(2026, 1, 1, tzinfo=UTC)
+    course = SimpleNamespace(name="CPSC 310")
+    db = _db(scalar_results=[3], scalars_result=[_workflow_row(1, ts, course=course)])
+
+    result = await list_failed_operations(db, limit=10, offset=0)
+
+    assert result.total == 3
+    assert len(result.items) == 1
+    assert result.items[0].user_email == "jane@example.com"
+    assert result.items[0].course_name == "CPSC 310"
+
+
+@pytest.mark.asyncio
+async def test_list_failed_operations_course_name_none_when_no_course():
+    ts = datetime(2026, 1, 1, tzinfo=UTC)
+    db = _db(scalar_results=[1], scalars_result=[_workflow_row(1, ts, course=None)])
+
+    result = await list_failed_operations(db, limit=10, offset=0)
+
+    assert result.items[0].course_name is None
+
+
+@pytest.mark.asyncio
+async def test_list_failed_operations_redacts_secrets_in_error_detail():
+    ts = datetime(2026, 1, 1, tzinfo=UTC)
+    db = _db(
+        scalar_results=[1],
+        scalars_result=[
+            _workflow_row(1, ts, error_detail="HTTPException 401: Bearer sk-ant-abc12345secret")
+        ],
+    )
+
+    result = await list_failed_operations(db, limit=10, offset=0)
+
+    assert "sk-ant-abc12345secret" not in result.items[0].error_detail
+    assert "[REDACTED" in result.items[0].error_detail
+
+
+@pytest.mark.asyncio
+async def test_list_failed_operations_error_detail_none_stays_none():
+    ts = datetime(2026, 1, 1, tzinfo=UTC)
+    db = _db(scalar_results=[1], scalars_result=[_workflow_row(1, ts, error_detail=None)])
+
+    result = await list_failed_operations(db, limit=10, offset=0)
+
+    assert result.items[0].error_detail is None
+
+
+@pytest.mark.asyncio
+async def test_get_diagnostics_composes_reused_services():
+    """get_diagnostics is a thin composition over health.py/provider_registry
+    -- assert it wires the reused calls through rather than reimplementing
+    them, and appends its own uptime/failed-count fields."""
+    from app.schemas.health import InstructorCanvasSummary, LatestHealthResponse
+
+    fake_health = LatestHealthResponse(overall_status="healthy", checked_at=None, services={})
+    fake_canvas = InstructorCanvasSummary(total=2, healthy=2, failing=0, failing_connections=[])
+    fake_providers = [
+        {
+            "id": "openai",
+            "name": "OpenAI",
+            "hosting": "internet",
+            "default_model": "gpt-4",
+            "configured": True,
+            "status": "available",
+            "models": [],
+            "detail": None,
+        }
+    ]
+
+    db = AsyncMock()
+    db.scalar = AsyncMock(return_value=4)  # recent failed operations count
+
+    with (
+        patch("app.services.troubleshoot.get_latest_health_status", AsyncMock(return_value=fake_health)),
+        patch("app.services.troubleshoot.get_instructor_canvas_summary", AsyncMock(return_value=fake_canvas)),
+        patch("app.services.troubleshoot.get_provider_statuses", AsyncMock(return_value=fake_providers)),
+    ):
+        result = await get_diagnostics(db, backend_started_at=0.0)
+
+    assert result.health == fake_health
+    assert result.instructor_canvas == fake_canvas
+    assert result.llm_providers[0].id == "openai"
+    assert result.recent_failed_operations_count == 4
+    assert result.backend_uptime_seconds >= 0
