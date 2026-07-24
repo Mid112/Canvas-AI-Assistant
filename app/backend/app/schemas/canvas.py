@@ -174,7 +174,7 @@ class GradeUpdateRequest(BaseModel):
 
 class GradePreviewResponse(BaseModel):
     action: Literal["update_grade"] = "update_grade"
-    risk_level: Literal["high", "low"] = "high"
+    risk_level: Literal["high", "medium", "low"] = "high"
     requires_approval: bool = True
     irreversible_warning: str
     rollback_available: bool
