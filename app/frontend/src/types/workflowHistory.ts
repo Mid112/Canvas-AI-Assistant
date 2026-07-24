@@ -15,6 +15,18 @@ export interface WorkflowHistoryEntry {
    * before actually showing an Undo affordance. */
   undoable: boolean;
   undoneAt: string | null;
+  reversal?: ReversalMetadata;
+}
+
+export interface ReversalMetadata {
+  status: "available" | "unavailable" | "reversed" | string;
+  available: boolean;
+  optionLabel: string | null;
+  warning: string | null;
+  unavailableReason: string | null;
+  recoveryInstructions: string;
+  resultMessage: string | null;
+  reversedAt: string | null;
 }
 
 /**
@@ -32,8 +44,18 @@ export interface WorkflowHistoryApiItem {
   created_at: string;
   executed_at: string | null;
   user_name: string;
-  undoable: boolean;
-  undone_at: string | null;
+  undoable?: boolean;
+  undone_at?: string | null;
+  reversal?: {
+    status: string;
+    available: boolean;
+    option_label: string | null;
+    warning: string | null;
+    unavailable_reason: string | null;
+    recovery_instructions: string;
+    result_message: string | null;
+    reversed_at: string | null;
+  };
 }
 
 export interface WorkflowHistoryApiResponse {

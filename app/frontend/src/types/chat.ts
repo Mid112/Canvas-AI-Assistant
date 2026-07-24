@@ -86,6 +86,7 @@ export interface ChatMessage {
   timestamp: Date;
   conversationId?: number;
   pendingMessageId?: number;
+  workflowId?: number;
   pendingActionStatus?: PendingActionStatus;
   explanation?: string;
   acknowledgedFields?: Array<{ label: string; value: string }>;

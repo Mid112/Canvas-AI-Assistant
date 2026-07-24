@@ -16,6 +16,9 @@ interface AssistantMessageProps {
   onCancelPendingAction?: () => void;
   onModifyPendingAction?: () => void;
   onDismissHandoff?: () => void;
+  isReversingAction?: boolean;
+  reversedWorkflowIds?: ReadonlySet<number>;
+  onReverseAction?: (message: ChatMessage) => void;
 }
 
 function formatTimestamp(timestamp: Date): string {
@@ -33,6 +36,9 @@ export function AssistantMessage({
   onCancelPendingAction,
   onModifyPendingAction,
   onDismissHandoff,
+  isReversingAction = false,
+  reversedWorkflowIds,
+  onReverseAction,
 }: AssistantMessageProps) {
   const showPendingControls =
     message.pendingMessageId !== undefined && message.pendingActionStatus;
@@ -94,6 +100,18 @@ export function AssistantMessage({
           <RiskAlerts
             risk={message.interpretedAction?.risk}
             error={pendingActionError}
+            canReverseAction={
+              message.pendingActionStatus === "confirmed" &&
+              message.workflowId !== undefined
+            }
+            isReversingAction={isReversingAction}
+            reversalCompleted={
+              message.workflowId !== undefined &&
+              Boolean(reversedWorkflowIds?.has(message.workflowId))
+            }
+            onReverseAction={
+              onReverseAction ? () => onReverseAction(message) : undefined
+            }
           />
         ) : null}
 

@@ -333,7 +333,7 @@ describe("WorkflowHistoryPage", () => {
     downloadSpy.mockRestore();
   });
 
-  describe("undo", () => {
+  describe("reversal", () => {
     const undoableEntry = {
       ...mockWorkflowHistory[0]!,
       id: "wh-undoable",
@@ -343,17 +343,17 @@ describe("WorkflowHistoryPage", () => {
       undoneAt: null,
     };
 
-    // Verifies: No Undo button is shown for non-undoable or already-undone entries.
-    it("does not show an Undo button for non-undoable entries", async () => {
+    // Verifies: No Reverse button is shown for non-reversible or already-reversed entries.
+    it("does not show a Reverse button for non-reversible entries", async () => {
       renderWithRouter(<WorkflowHistoryPage />);
 
       await waitForLoaded();
 
-      expect(screen.queryByRole("button", { name: "Undo" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Reverse" })).not.toBeInTheDocument();
     });
 
-    // Verifies: Clicking Undo opens a confirmation dialog.
-    it("shows a confirmation dialog before undoing", async () => {
+    // Verifies: Clicking Reverse opens a confirmation dialog.
+    it("shows a confirmation dialog before reversing", async () => {
       vi.spyOn(workflowHistoryService, "fetchWorkflowHistory").mockResolvedValueOnce(
         mockWorkflowHistoryResult([undoableEntry]),
       );
@@ -361,42 +361,44 @@ describe("WorkflowHistoryPage", () => {
       renderWithRouter(<WorkflowHistoryPage />);
       await waitForLoaded();
 
-      await user.click(screen.getByRole("button", { name: "Undo" }));
+      await user.click(screen.getByRole("button", { name: "Reverse" }));
 
       expect(
-        screen.getByRole("heading", { name: "Undo this action" }),
+        screen.getByRole("heading", { name: "Reverse this action" }),
       ).toBeInTheDocument();
     });
 
-    // Verifies: Confirming undo calls the service and refreshes the list.
-    it("undoes the workflow and shows a success toast", async () => {
+    // Verifies: Confirming reversal calls the service and refreshes the list.
+    it("reverses the workflow and shows a success toast", async () => {
       vi.spyOn(workflowHistoryService, "fetchWorkflowHistory")
         .mockResolvedValueOnce(mockWorkflowHistoryResult([undoableEntry]))
         .mockResolvedValueOnce(
           mockWorkflowHistoryResult([{ ...undoableEntry, undoneAt: "2026-06-01T00:00:00.000Z" }]),
         );
-      const undoSpy = vi
-        .spyOn(workflowHistoryService, "undoWorkflow")
+      const reverseSpy = vi
+        .spyOn(workflowHistoryService, "reverseWorkflow")
         .mockResolvedValue({ ...undoableEntry, undoneAt: "2026-06-01T00:00:00.000Z" });
 
       renderWithRouter(<WorkflowHistoryPage />);
       await waitForLoaded();
 
-      await user.click(screen.getByRole("button", { name: "Undo" }));
-      await user.click(screen.getByRole("button", { name: "Undo action" }));
+      await user.click(screen.getByRole("button", { name: "Reverse" }));
+      await user.click(screen.getByRole("button", { name: "Reverse action" }));
 
       await waitFor(() => {
-        expect(undoSpy).toHaveBeenCalledWith("access-token", "wh-undoable");
+        expect(reverseSpy).toHaveBeenCalledWith("access-token", "wh-undoable");
       });
-      expect(await screen.findByText(/was undone/i)).toBeInTheDocument();
+      expect(
+        await screen.findByText('"Update Assignment" was reversed.'),
+      ).toBeInTheDocument();
     });
 
-    // Verifies: A failed undo shows the backend's actionable error text.
-    it("shows an error toast with the backend's detail text when undo fails", async () => {
+    // Verifies: A failed reversal shows the backend's actionable error text.
+    it("shows an error toast with the backend's detail text when reversal fails", async () => {
       vi.spyOn(workflowHistoryService, "fetchWorkflowHistory").mockResolvedValueOnce(
         mockWorkflowHistoryResult([undoableEntry]),
       );
-      vi.spyOn(workflowHistoryService, "undoWorkflow").mockRejectedValue(
+      vi.spyOn(workflowHistoryService, "reverseWorkflow").mockRejectedValue(
         new workflowHistoryService.WorkflowHistoryApiError(
           "This action has already been undone.",
           409,
@@ -406,16 +408,16 @@ describe("WorkflowHistoryPage", () => {
       renderWithRouter(<WorkflowHistoryPage />);
       await waitForLoaded();
 
-      await user.click(screen.getByRole("button", { name: "Undo" }));
-      await user.click(screen.getByRole("button", { name: "Undo action" }));
+      await user.click(screen.getByRole("button", { name: "Reverse" }));
+      await user.click(screen.getByRole("button", { name: "Reverse action" }));
 
       expect(
         await screen.findByText("This action has already been undone."),
       ).toBeInTheDocument();
     });
 
-    // Verifies: Undoing a create_assignment shows delete-specific, more severe copy.
-    it("shows delete-specific confirmation copy for undoing a create_assignment", async () => {
+    // Verifies: Reversing a create_assignment shows delete-specific, more severe copy.
+    it("shows delete-specific confirmation copy for reversing a create_assignment", async () => {
       const createEntry = {
         ...undoableEntry,
         id: "wh-create-undoable",
@@ -429,7 +431,7 @@ describe("WorkflowHistoryPage", () => {
       renderWithRouter(<WorkflowHistoryPage />);
       await waitForLoaded();
 
-      await user.click(screen.getByRole("button", { name: "Undo" }));
+      await user.click(screen.getByRole("button", { name: "Reverse" }));
 
       expect(
         screen.getByRole("heading", { name: "Delete this assignment" }),
@@ -442,8 +444,8 @@ describe("WorkflowHistoryPage", () => {
       ).toBeInTheDocument();
     });
 
-    // Verifies: Undoing a create_assignment shows a delete-specific success toast.
-    it("shows a delete-specific success toast after undoing a create_assignment", async () => {
+    // Verifies: Reversing a create_assignment shows a delete-specific success toast.
+    it("shows a delete-specific success toast after reversing a create_assignment", async () => {
       const createEntry = {
         ...undoableEntry,
         id: "wh-create-undoable",
@@ -455,7 +457,7 @@ describe("WorkflowHistoryPage", () => {
         .mockResolvedValueOnce(
           mockWorkflowHistoryResult([{ ...createEntry, undoneAt: "2026-06-01T00:00:00.000Z" }]),
         );
-      vi.spyOn(workflowHistoryService, "undoWorkflow").mockResolvedValue({
+      vi.spyOn(workflowHistoryService, "reverseWorkflow").mockResolvedValue({
         ...createEntry,
         undoneAt: "2026-06-01T00:00:00.000Z",
       });
@@ -463,7 +465,7 @@ describe("WorkflowHistoryPage", () => {
       renderWithRouter(<WorkflowHistoryPage />);
       await waitForLoaded();
 
-      await user.click(screen.getByRole("button", { name: "Undo" }));
+      await user.click(screen.getByRole("button", { name: "Reverse" }));
       await user.click(screen.getByRole("button", { name: "Delete assignment" }));
 
       expect(

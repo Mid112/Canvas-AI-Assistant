@@ -1,4 +1,4 @@
-import { Calendar, Undo2 } from "lucide-react";
+import { Calendar, Info, Undo2 } from "lucide-react";
 import { useState } from "react";
 
 import { WorkflowStatusBadge } from "@/components/workflow/WorkflowStatusBadge";
@@ -25,7 +25,22 @@ interface WorkflowHistoryTableProps {
 }
 
 function canUndo(entry: WorkflowHistoryEntry): boolean {
-  return entry.undoable && entry.status === "approved" && !entry.undoneAt;
+  return getReversal(entry).available;
+}
+
+function getReversal(entry: WorkflowHistoryEntry) {
+  return entry.reversal ?? {
+    status: entry.undoneAt ? "reversed" : entry.undoable ? "available" : "unavailable",
+    available: entry.undoable && entry.status === "approved" && !entry.undoneAt,
+    optionLabel: entry.undoable ? "Reverse action" : null,
+    warning: entry.undoable ? "Review this reversal before applying it in Canvas." : null,
+    unavailableReason: entry.undoable ? null : "This workflow does not support automated reversal.",
+    recoveryInstructions: entry.undoable
+      ? "Use the reversal option while this workflow remains available."
+      : "Apply any needed correction manually in Canvas.",
+    resultMessage: entry.undoneAt ? "This workflow was reversed." : null,
+    reversedAt: entry.undoneAt,
+  };
 }
 
 export function WorkflowHistoryTable({
@@ -66,7 +81,7 @@ export function WorkflowHistoryTable({
           {actionError ?? localError}
         </p>
       ) : null}
-      <Table>
+      <Table className="table-fixed">
         <TableHeader>
           <TableRow>
             <TableHead className="w-44">Date & Time</TableHead>
@@ -81,10 +96,11 @@ export function WorkflowHistoryTable({
             const isActing = actingWorkflowIds.has(entry.id);
             const showCancel = entry.status === "pending" && onCancelPending;
             const showUndo = !showCancel && onUndo && canUndo(entry);
+            const reversal = getReversal(entry);
 
             return (
               <TableRow key={entry.id}>
-                <TableCell>
+                <TableCell className="align-top">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Calendar
                       className="size-4 shrink-0"
@@ -93,35 +109,52 @@ export function WorkflowHistoryTable({
                     <span>{formatAuditTimestamp(entry.timestamp)}</span>
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell className="min-w-0 align-top">
                   <div className="space-y-2">
                     <div>
                       <p className="text-xs font-medium uppercase text-muted-foreground">
                         Action
                       </p>
-                      <p className="text-sm font-medium">{entry.workflowName}</p>
+                      <p className="break-words text-sm font-medium">{entry.workflowName}</p>
                     </div>
                     <div>
                       <p className="text-xs font-medium uppercase text-muted-foreground">
                         Prompt
                       </p>
-                      <p className="text-sm text-muted-foreground">{entry.prompt}</p>
+                      <p className="break-words text-sm text-muted-foreground">{entry.prompt}</p>
                     </div>
                     <div>
                       <p className="text-xs font-medium uppercase text-muted-foreground">
                         Affected Resources
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="break-words text-sm text-muted-foreground">
                         {entry.affectedResourcesSummary}
                       </p>
                     </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase text-muted-foreground">
+                        Reversal
+                      </p>
+                      <p className="break-words text-sm text-muted-foreground">
+                        {reversal.status === "reversed"
+                          ? reversal.resultMessage
+                          : reversal.available
+                            ? reversal.warning
+                            : reversal.unavailableReason}
+                      </p>
+                      {!reversal.available && reversal.status !== "reversed" ? (
+                        <p className="mt-1 break-words text-xs text-muted-foreground">
+                          {reversal.recoveryInstructions}
+                        </p>
+                      ) : null}
+                    </div>
                   </div>
                 </TableCell>
-                <TableCell className="text-sm">{entry.userName}</TableCell>
-                <TableCell className="text-center">
+                <TableCell className="align-top text-sm">{entry.userName}</TableCell>
+                <TableCell className="align-top text-center">
                   <WorkflowStatusBadge status={entry.status} />
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="align-top text-right">
                   <div className="flex flex-col items-end gap-1">
                     {showCancel ? (
                       <Button
@@ -136,15 +169,19 @@ export function WorkflowHistoryTable({
                     ) : showUndo ? (
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
+                        className="border-primary/40 text-primary hover:bg-primary/10"
                         onClick={() => onUndo(entry)}
                       >
                         <Undo2 className="size-4" aria-hidden="true" />
-                        Undo
+                        Reverse
                       </Button>
                     ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
+                      <span className="inline-flex max-w-28 items-center justify-end gap-1 text-xs text-muted-foreground">
+                        <Info className="size-3.5 shrink-0" aria-hidden="true" />
+                        {reversal.status === "reversed" ? "Reversed" : "Unavailable"}
+                      </span>
                     )}
                   </div>
                 </TableCell>

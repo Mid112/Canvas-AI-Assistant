@@ -33,6 +33,10 @@ import {
   type ConversationResponse,
 } from "@/services/assistant";
 import type { AssistantMessageResult } from "@/services/assistant";
+import {
+  reverseWorkflow,
+  WorkflowHistoryApiError,
+} from "@/services/workflowHistory";
 import type { InstructorLlmProvider } from "@/services/instructorLlmProviders";
 import type { ChatMessage } from "@/types/chat";
 import { mapWorkflowStatus } from "@/types/chat";
@@ -191,6 +195,10 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   const [pendingActionError, setPendingActionError] = useState<string | null>(
     null,
   );
+  const [reversingWorkflowId, setReversingWorkflowId] = useState<number | null>(null);
+  const [reversedWorkflowIds, setReversedWorkflowIds] = useState<Set<number>>(
+    () => new Set(),
+  );
   const messageListRef = useRef<HTMLDivElement>(null);
   const initialPromptHandledRef = useRef<string | null>(null);
   const hydratedConversationRef = useRef<number | undefined>(
@@ -295,6 +303,9 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
             timestamp,
             conversationId: conversation.id,
             pendingMessageId: mapped.pendingMessageId,
+            workflowId: mapped.pendingMessageId
+              ? workflowStatuses[mapped.pendingMessageId]?.workflow_id
+              : undefined,
             pendingActionStatus: mapped.pendingMessageId
               ? mapWorkflowStatus(workflowStatuses[mapped.pendingMessageId]?.status)
               : undefined,
@@ -371,6 +382,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
         timestamp: new Date(),
         conversationId: entry.conversationId ?? response.conversationId,
         pendingMessageId: entry.pendingMessageId,
+        workflowId: undefined,
         pendingActionStatus: entry.pendingMessageId ? "pending" : undefined,
         explanation: entry.explanation,
         acknowledgedFields: entry.acknowledgedFields,
@@ -514,6 +526,12 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
                 activeConversationId,
                 message.pendingMessageId,
               );
+        const confirmedWorkflowId =
+          action === "confirm"
+            ? (
+                await fetchConversation(accessToken, activeConversationId)
+              ).workflow_statuses[message.pendingMessageId]?.workflow_id
+            : undefined;
 
         setConversationId(response.conversationId);
         setActivePendingMessageIds((current) =>
@@ -526,6 +544,10 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
                   ...entry,
                   pendingActionStatus:
                     action === "confirm" ? "confirmed" : "cancelled",
+                  workflowId:
+                    action === "confirm"
+                      ? confirmedWorkflowId
+                      : entry.workflowId,
                   // Hide the offer cards after cancel so the proposal
                   // disappears entirely (no leftover explanation/action UI).
                   ...(action === "cancel"
@@ -609,6 +631,73 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       ),
     );
   }, []);
+
+  const handleReverseConfirmedAction = useCallback(
+    async (message: ChatMessage) => {
+      if (!accessToken || message.workflowId === undefined) {
+        return;
+      }
+
+      const shouldReverse = window.confirm(
+        "Reverse this action? This will apply the stored rollback in Canvas.",
+      );
+      if (!shouldReverse) {
+        return;
+      }
+
+      setReversingWorkflowId(message.workflowId);
+      setPendingActionError(null);
+
+      try {
+        await reverseWorkflow(accessToken, String(message.workflowId));
+        const activeConversationId = message.conversationId ?? conversationId;
+        const conversation =
+          activeConversationId !== undefined
+            ? await fetchConversation(accessToken, activeConversationId)
+            : null;
+        const latestAssistantMessage = conversation?.messages
+          .filter((entry) => entry.role === "assistant")
+          .at(-1);
+
+        setReversedWorkflowIds((current) => new Set(current).add(message.workflowId!));
+        if (latestAssistantMessage) {
+          setMessages((current) => {
+            if (current.some((entry) => entry.id === String(latestAssistantMessage.id))) {
+              return current;
+            }
+            return [
+              ...current,
+              {
+                id: String(latestAssistantMessage.id),
+                role: "assistant",
+                content: latestAssistantMessage.content,
+                timestamp: new Date(latestAssistantMessage.created_at),
+                conversationId: conversation?.id,
+              },
+            ];
+          });
+        }
+        void refreshActiveCourse();
+        notifyCoursesChanged();
+        void refreshDashboard();
+      } catch (requestError) {
+        const errorMessage =
+          requestError instanceof WorkflowHistoryApiError
+            ? requestError.message
+            : "Unable to reverse this action. Please try again.";
+        setPendingActionError(errorMessage);
+      } finally {
+        setReversingWorkflowId(null);
+      }
+    },
+    [
+      accessToken,
+      conversationId,
+      notifyCoursesChanged,
+      refreshActiveCourse,
+      refreshDashboard,
+    ],
+  );
 
   const handleSend = useCallback(
     (text: string) => {
@@ -746,6 +835,12 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
                     ? () => dismissHandoffOffer(message.id)
                     : undefined
                 }
+                isReversingAction={
+                  message.workflowId !== undefined &&
+                  reversingWorkflowId === message.workflowId
+                }
+                reversedWorkflowIds={reversedWorkflowIds}
+                onReverseAction={handleReverseConfirmedAction}
               />
             ) : (
               <UserMessage key={message.id} message={message} />

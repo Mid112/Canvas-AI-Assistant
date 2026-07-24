@@ -198,6 +198,9 @@ export function mapConversationToChatMessages(
         timestamp,
         conversationId: conversation.id,
         pendingMessageId,
+        workflowId: pendingMessageId
+          ? workflowStatuses[pendingMessageId]?.workflow_id
+          : undefined,
         pendingActionStatus,
         explanation: mapped.explanation,
         acknowledgedFields: mapped.acknowledgedFields,

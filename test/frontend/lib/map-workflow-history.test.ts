@@ -18,7 +18,7 @@ describe("mapWorkflowHistoryApiToEntry", () => {
       user_name: "Dr. Jane Doe",
     });
 
-    expect(entry).toEqual({
+    expect(entry).toMatchObject({
       id: "1",
       timestamp: "2026-05-01T12:00:00.000Z",
       actionName: "create_assignment",
@@ -105,6 +105,7 @@ describe("mapWorkflowHistoryApiToEntry", () => {
 
     expect(undoneEntry.undoable).toBe(true);
     expect(undoneEntry.undoneAt).toBe("2026-05-01T13:00:00.000Z");
+    expect(undoneEntry.reversal?.status).toBe("reversed");
 
     const notUndoableEntry = mapWorkflowHistoryApiToEntry({
       id: 6,
@@ -123,5 +124,40 @@ describe("mapWorkflowHistoryApiToEntry", () => {
 
     expect(notUndoableEntry.undoable).toBe(false);
     expect(notUndoableEntry.undoneAt).toBeNull();
+    expect(notUndoableEntry.reversal?.recoveryInstructions).toBe(
+      "Apply any needed correction manually in Canvas.",
+    );
+  });
+
+  // Verifies: Maps backend reversal metadata into frontend camelCase fields.
+  it("maps reversal metadata from the API", () => {
+    const entry = mapWorkflowHistoryApiToEntry({
+      id: 7,
+      conversation_id: 16,
+      action_name: "create_assignment",
+      user_prompt: "create lab 1",
+      status: "executed",
+      proposed_action: { action: "create_assignment" },
+      affected_resources: [],
+      created_at: "2026-05-01T12:00:00.000Z",
+      executed_at: "2026-05-01T12:05:00.000Z",
+      user_name: "Dr. Jane Doe",
+      undoable: true,
+      undone_at: null,
+      reversal: {
+        status: "available",
+        available: true,
+        option_label: "Delete created assignment",
+        warning: "Reversing this workflow deletes the assignment created in Canvas.",
+        unavailable_reason: null,
+        recovery_instructions: "Use the reversal option to apply the stored rollback through Canvas.",
+        result_message: null,
+        reversed_at: null,
+      },
+    });
+
+    expect(entry.reversal?.available).toBe(true);
+    expect(entry.reversal?.optionLabel).toBe("Delete created assignment");
+    expect(entry.reversal?.recoveryInstructions).toContain("stored rollback");
   });
 });

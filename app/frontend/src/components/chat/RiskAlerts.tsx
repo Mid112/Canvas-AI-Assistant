@@ -1,14 +1,28 @@
 import { AlertTriangle, ChevronDown, RotateCcw, ShieldCheck } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
+import { Button } from "@/components/ui/button";
+import { paths } from "@/routes/paths";
 import type { RiskMetadata } from "@/types/chat";
 
 interface RiskAlertsProps {
   risk?: RiskMetadata;
   error?: string | null;
+  canReverseAction?: boolean;
+  isReversingAction?: boolean;
+  reversalCompleted?: boolean;
+  onReverseAction?: () => void;
 }
 
-export function RiskAlerts({ risk, error }: RiskAlertsProps) {
+export function RiskAlerts({
+  risk,
+  error,
+  canReverseAction = false,
+  isReversingAction = false,
+  reversalCompleted = false,
+  onReverseAction,
+}: RiskAlertsProps) {
   if (!risk && !error) {
     return null;
   }
@@ -38,11 +52,33 @@ export function RiskAlerts({ risk, error }: RiskAlertsProps) {
           <div className="grid gap-2 text-sm sm:grid-cols-2">
             <div className="flex gap-2 rounded-md bg-muted/50 px-2.5 py-2">
               <RotateCcw className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              <div>
+              <div className="min-w-0 space-y-2">
                 <p className="text-xs text-muted-foreground">Undo</p>
                 <p className="font-medium">
                   {risk.can_undo ? "Can be undone" : "No one-click undo"}
                 </p>
+                {risk.can_undo && canReverseAction && onReverseAction && !reversalCompleted ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="border-primary/40 text-primary hover:bg-primary/10"
+                    disabled={isReversingAction}
+                    onClick={onReverseAction}
+                  >
+                    <RotateCcw className="size-4" aria-hidden="true" />
+                    {isReversingAction ? "Reversing..." : "Reverse action"}
+                  </Button>
+                ) : risk.can_undo ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    render={<Link to={paths.instructor.history} />}
+                  >
+                    Open workflow history
+                  </Button>
+                ) : null}
               </div>
             </div>
             <div className="flex gap-2 rounded-md bg-muted/50 px-2.5 py-2">
