@@ -1225,3 +1225,79 @@ Testing three fairly different features (quiz creation, grading, and an LLM-prov
 
 
 
+
+
+
+
+# Cycle 19 Report: 07/21 – 07/23 (July 21 – July 23)
+
+## Timesheet
+
+### Clockify Report
+- **07/21 (Tuesday):** Using Clockify – Logged 04:01:43 hours
+- **07/22 (Wednesday):** Using Clockify – Logged 0 hours
+- **07/23 (Thursday):** Using Clockify – Logged 02:44:11 hours
+
+<img width="1229" height="429" alt="Screenshot 2026-07-24 at 10 59 53 AM" src="https://github.com/user-attachments/assets/75598f25-4371-4457-80d6-3939059c46b2" />
+
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Review and end-to-end test every feature branch merged into `develop` this cycle
+- Went through the past week's merges into `develop` one PR at a time rather than testing code in the abstract — for each, pulled the merge commit, matched it back to its PR number and the feature number it implements, and ran it end-to-end against a live Canvas sandbox rather than relying on the PR's own test suite as sufficient evidence.
+- Explicitly numbered every branch below against its feature number and PR, in direct response to reviewer feedback on Cycle 18 that reporting was comprehensive overall but inconsistent about tying work to numbered board items — one cycle's write-up leaned on a generic PR description instead of a clear number. This cycle's table is the fix: every row is a number, a name, and a tested outcome, not prose.
+
+| Feature # | Feature Name                                         | PR    | Branch                                  | End-to-End Tested |
+| --------- | ----------------------------------------------------- | ----- | ---------------------------------------- | ------------------ |
+| 1         | Quiz Management                                        | #1249 | `Feature-1--Quiz-Management`             | ✅ |
+| 2         | Feedback Workflow                                       | #1251 | `Feature-2--Feedback-Workflow`           | ✅ |
+| 3         | Grade Management (high-risk grade update workflow)      | #1231 | `feature/grade-management`               | ✅ |
+| 4         | Action Reversal                                         | #1264 | `feature/action-reversal`                | ✅ |
+| 5         | Risk-Based Confirmation (risk metadata on action previews) | #1250 | `feature/risk-confirmation`            | ✅ |
+| 8         | LLM Provider Switching with Response Caching            | #1252 | `feature/llm-provider-switching-cache`   | ✅ |
+| 9         | System Health Monitoring                                | #1259 | `feature/system-health-monitoring`       | ✅ |
+
+- Note on #1259 (System Health Monitoring): unlike the other six, this PR's title and commits didn't carry an explicit feature-number reference — I've numbered it here as Feature 9 by matching its content (an admin-facing health dashboard) against the settled feature list, not from a "Closes #9" in the PR itself. Flagging this as the one branch that still isn't consistently numbered at the source, so it doesn't quietly repeat the exact gap the reviewer called out.
+
+### #2: Confirm Cycle 18's carryover goal against what actually shipped
+- Feature 5 (Risk-Based Confirmation) — the feature Cycle 18 set as "start implementation" — is the one that actually merged and passed end-to-end testing this cycle, closing that goal out rather than just carrying it forward again.
+
+---
+
+## Progress Update (since 07/21/2026)
+
+| TASK/ISSUE #                                                                 | STATUS      |
+| ----------------------------------------------------------------------------- | ----------- |
+| Identify all PRs merged into `develop` in the past week                       | Completed   |
+| Match each merged branch to its PR number and feature number                  | Completed   |
+| End-to-end test Quiz Management (Feature 1, PR #1249)                         | Completed   |
+| End-to-end test Feedback Workflow (Feature 2, PR #1251)                       | Completed   |
+| End-to-end test Grade Management (Feature 3, PR #1231)                        | Completed   |
+| End-to-end test Action Reversal (Feature 4, PR #1264)                         | Completed   |
+| End-to-end test Risk-Based Confirmation (Feature 5, PR #1250)                 | Completed   |
+| End-to-end test LLM Provider Switching + caching (Feature 8, PR #1252)        | Completed   |
+| End-to-end test System Health Monitoring (Feature 9, PR #1259)                | Completed   |
+| Start implementation on Risk-Based Confirmation Service (Cycle 18 carryover)  | Completed   |
+| Finish live e2e verification against Canvas sandbox (Cycle 16/17 carryover)   | In Progress |
+| Decide whether to extend resolution to `update_assignment` (carryover)        | Not Started |
+
+---
+
+## Cycle 19 Goal Review
+
+### Reflection:
+This cycle was structured directly around the reviewer's comment rather than around a specific feature I was building — the goal was to make every piece of testing traceable to a number, not just a description. That constraint turned out to be useful discipline: going PR by PR instead of "testing the app generally" is what surfaced that #1259 didn't carry a feature-number reference anywhere in its own history, which is exactly the kind of inconsistency that prompted the feedback in the first place. Separately, seeing Feature 5 (Risk-Based Confirmation) go from "next cycle's goal" in Cycle 18 to merged-and-tested this cycle was a good, concrete confirmation that the goal-carryover process in these logs is actually tracking real progress and not just getting restated cycle after cycle.
+
+### Retrospective:
+Reviewing merged PRs as a batch, back to back, made a pattern visible that testing one feature at a time doesn't show as clearly: several of these features (Risk-Based Confirmation, Grade Management, Action Reversal) all touch the same underlying preview/confirmation and undo machinery, so end-to-end testing them in sequence caught interaction effects between features that unit or single-feature integration tests wouldn't — e.g., a risk-tiered confirmation step needs to behave consistently whether it's guarding a grade change or a reversal. Worth doing this kind of batched, cross-feature pass again at the end of future cycles rather than only testing each feature in isolation right after its own PR merges.
+
+## Next Cycle 20 Goals
+- **Goal 1:** Get feature/system-health-monitoring's PR retroactively linked to its feature number on the board, so it doesn't remain the one branch without a traceable numbered reference.
+- **Goal 2:** Finish the live e2e verification against the Canvas sandbox — multi-course switching, ambiguous course/assignment names, and the `fetch_submissions` chain — carried over from Cycle 16/17/18.
+- **Goal 3:** Decide whether to extend natural-language assignment resolution to `update_assignment` — carried over from Cycle 16/17/18.
+
+
+
+
