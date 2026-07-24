@@ -1,8 +1,22 @@
 import { apiRequest } from "@/lib/api-request";
-import type { InstructorCanvasSummary, LatestHealthResponse } from "@/services/systemHealth";
+import type { LatestHealthResponse } from "@/services/systemHealth";
 
 export const DIAGNOSTICS_PATH = "/admin/troubleshoot/diagnostics";
 export const FAILED_OPERATIONS_PATH = "/admin/troubleshoot/failed-operations";
+
+export interface FailingCanvasConnection {
+  user_name: string;
+  user_email: string;
+  canvas_url: string;
+  error_detail: string | null;
+}
+
+export interface InstructorCanvasSummary {
+  total: number;
+  healthy: number;
+  failing: number;
+  failing_connections: FailingCanvasConnection[];
+}
 
 export interface LlmProviderStatus {
   id: string;

@@ -2,8 +2,22 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
-from app.schemas.health import InstructorCanvasSummary, LatestHealthResponse
+from app.schemas.health import LatestHealthResponse
 from app.schemas.llm_provider import LlmProviderStatus
+
+
+class FailingCanvasConnection(BaseModel):
+    user_name: str
+    user_email: str
+    canvas_url: str
+    error_detail: str | None = None
+
+
+class InstructorCanvasSummary(BaseModel):
+    total: int
+    healthy: int
+    failing: int
+    failing_connections: list[FailingCanvasConnection]
 
 
 class FailedOperation(BaseModel):

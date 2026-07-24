@@ -7,16 +7,69 @@ from sqlalchemy.orm import joinedload
 
 from app.config import settings
 from app.core.secret_redaction import redact_secrets
+from app.models.canvas_connection import CanvasConnection
+from app.models.user import User
 from app.models.workflow import Workflow
-from app.schemas.troubleshoot import DiagnosticsResponse, FailedOperation, FailedOperationListResponse
-from app.services.health import get_instructor_canvas_summary, get_latest_health_status
+from app.schemas.troubleshoot import (
+    DiagnosticsResponse,
+    FailedOperation,
+    FailedOperationListResponse,
+    FailingCanvasConnection,
+    InstructorCanvasSummary,
+)
+from app.services.health import get_latest_health_status
 from app.services.llm.provider_registry import get_provider_statuses
 
 # Failed workflows older than this don't count toward the diagnostics
 # summary's "recent" count -- an outage from last week shouldn't still read
-# as an active problem today (mirrors _AI_FAILURE_RECENT_HOURS in health.py,
-# just on a longer window since a failed write is rarer than an AI call).
+# as an active problem today.
 _RECENT_FAILURE_HOURS = 24
+# Bounded so the admin page never renders an unbounded list of instructors.
+_FAILING_CANVAS_CONNECTIONS_LIMIT = 10
+
+
+async def get_instructor_canvas_summary(db: AsyncSession) -> InstructorCanvasSummary:
+    """Real per-instructor Canvas connectivity, derived from
+    run_course_sync_sweep's already-happening ~60s sweep (services/canvas.py)
+    -- no new Canvas calls. Distinct from health.check_canvas(), which only
+    tests whether the Canvas host itself is reachable. This is deep-dive,
+    admin-only detail -- it belongs in Troubleshooting, not the at-a-glance
+    System Health status board."""
+    total = await db.scalar(select(func.count()).select_from(CanvasConnection)) or 0
+    failing = (
+        await db.scalar(
+            select(func.count())
+            .select_from(CanvasConnection)
+            .where(CanvasConnection.last_sync_error.is_not(None))
+        )
+        or 0
+    )
+    rows = await db.execute(
+        select(
+            User.name, User.email, CanvasConnection.canvas_url, CanvasConnection.last_sync_error
+        )
+        .join(User, User.id == CanvasConnection.user_id)
+        .where(CanvasConnection.last_sync_error.is_not(None))
+        .limit(_FAILING_CANVAS_CONNECTIONS_LIMIT)
+    )
+    failing_connections = [
+        FailingCanvasConnection(
+            user_name=name,
+            user_email=email,
+            canvas_url=canvas_url,
+            # last_sync_error is free-form text from an HTTP client failure --
+            # it could echo a bearer token/API key back from a raw request
+            # error, so scrub before this ever reaches an admin-facing response.
+            error_detail=redact_secrets(error_detail) if error_detail else None,
+        )
+        for name, email, canvas_url, error_detail in rows
+    ]
+    return InstructorCanvasSummary(
+        total=total,
+        healthy=total - failing,
+        failing=failing,
+        failing_connections=failing_connections,
+    )
 
 
 def _to_failed_operation(row: Workflow) -> FailedOperation:

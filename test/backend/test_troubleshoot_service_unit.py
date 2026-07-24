@@ -1,11 +1,23 @@
 """Direct unit tests for services/troubleshoot.py."""
+import uuid
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.services.troubleshoot import get_diagnostics, list_failed_operations
+from app.config import settings
+from app.services.troubleshoot import (
+    get_diagnostics,
+    get_instructor_canvas_summary,
+    list_failed_operations,
+)
+
+
+def _make_session():
+    engine = create_async_engine(settings.DATABASE_URL)
+    return engine, async_sessionmaker(engine, expire_on_commit=False)
 
 
 def _workflow_row(id, created_at, *, error_detail=None, course=None, executed_at=None):
@@ -82,7 +94,8 @@ async def test_get_diagnostics_composes_reused_services():
     """get_diagnostics is a thin composition over health.py/provider_registry
     -- assert it wires the reused calls through rather than reimplementing
     them, and appends its own uptime/failed-count fields."""
-    from app.schemas.health import InstructorCanvasSummary, LatestHealthResponse
+    from app.schemas.health import LatestHealthResponse
+    from app.schemas.troubleshoot import InstructorCanvasSummary
 
     fake_health = LatestHealthResponse(overall_status="healthy", checked_at=None, services={})
     fake_canvas = InstructorCanvasSummary(total=2, healthy=2, failing=0, failing_connections=[])
@@ -114,3 +127,134 @@ async def test_get_diagnostics_composes_reused_services():
     assert result.llm_providers[0].id == "openai"
     assert result.recent_failed_operations_count == 4
     assert result.backend_uptime_seconds >= 0
+
+
+# ---------------------------------------------------------------------------
+# get_instructor_canvas_summary — deep-dive detail, admin-only, lives here
+# (not on System Health, which only shows the 4 core service tabs)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_get_instructor_canvas_summary_counts_reflect_a_new_failure():
+    """The shared dev/test DB already has hundreds of failing connections
+    left over from other test runs, and the admin-facing list is
+    deliberately bounded (LIMIT 10) -- asserting our own row appears in that
+    bounded list would be flaky (no guaranteed ordering, easily crowded out).
+    Before/after deltas are robust regardless of pre-existing junk."""
+    from app.models.canvas_connection import CanvasConnection
+    from app.models.user import User
+
+    engine, Session = _make_session()
+    try:
+        async with Session() as db:
+            before = await get_instructor_canvas_summary(db)
+
+            user = User(
+                name="Broken Canvas Instructor",
+                email=f"canvasfail_{uuid.uuid4()}@example.com",
+                hashed_password="x",
+                role="instructor",
+            )
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
+
+            db.add(
+                CanvasConnection(
+                    user_id=user.id,
+                    canvas_url="https://canvas.example.test",
+                    encrypted_token="dummy",
+                    last_sync_error="401 Unauthorized",
+                )
+            )
+            await db.commit()
+
+            after = await get_instructor_canvas_summary(db)
+
+        assert after.total == before.total + 1
+        assert after.failing == before.failing + 1
+        assert after.healthy == before.healthy
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_get_instructor_canvas_summary_maps_failing_connection_fields():
+    """Direct unit test (mocked db) for the failing_connections list-building
+    logic itself, isolated from the shared DB's real junk data."""
+    db = AsyncMock()
+    db.scalar = AsyncMock(side_effect=[5, 2])  # total, then failing
+    db.execute = AsyncMock(
+        return_value=[("Jane Doe", "jane@example.com", "https://canvas.example.edu", "401 Unauthorized")]
+    )
+
+    summary = await get_instructor_canvas_summary(db)
+
+    assert summary.total == 5
+    assert summary.failing == 2
+    assert summary.healthy == 3
+    assert len(summary.failing_connections) == 1
+    assert summary.failing_connections[0].user_email == "jane@example.com"
+    assert summary.failing_connections[0].canvas_url == "https://canvas.example.edu"
+    assert summary.failing_connections[0].error_detail == "401 Unauthorized"
+
+
+@pytest.mark.asyncio
+async def test_get_instructor_canvas_summary_redacts_secrets_in_error_detail():
+    """last_sync_error is free-form text from an HTTP client failure and
+    could echo a bearer token/API key back -- it must never reach an
+    admin-facing response unredacted."""
+    db = AsyncMock()
+    db.scalar = AsyncMock(side_effect=[1, 1])  # total, then failing
+    db.execute = AsyncMock(
+        return_value=[
+            (
+                "Jane Doe",
+                "jane@example.com",
+                "https://canvas.example.edu",
+                "401 Unauthorized: Authorization: Bearer sk-ant-abc12345secret",
+            )
+        ]
+    )
+
+    summary = await get_instructor_canvas_summary(db)
+
+    error_detail = summary.failing_connections[0].error_detail
+    assert error_detail is not None
+    assert "sk-ant-abc12345secret" not in error_detail
+    assert "[REDACTED" in error_detail
+
+
+@pytest.mark.asyncio
+async def test_get_instructor_canvas_summary_zero_failures():
+    from app.models.canvas_connection import CanvasConnection
+    from app.models.user import User
+
+    engine, Session = _make_session()
+    try:
+        async with Session() as db:
+            user = User(
+                name="Healthy Canvas Instructor",
+                email=f"canvasok_{uuid.uuid4()}@example.com",
+                hashed_password="x",
+                role="instructor",
+            )
+            db.add(user)
+            await db.commit()
+            await db.refresh(user)
+
+            db.add(
+                CanvasConnection(
+                    user_id=user.id,
+                    canvas_url="https://canvas.example.test",
+                    encrypted_token="dummy",
+                    last_sync_error=None,
+                )
+            )
+            await db.commit()
+
+            summary = await get_instructor_canvas_summary(db)
+
+        assert not any(c.user_email == user.email for c in summary.failing_connections)
+    finally:
+        await engine.dispose()
