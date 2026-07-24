@@ -300,7 +300,10 @@ async def get_audit_logs(user_id: int, limit: int = 20) -> dict[str, Any]:
             )
         if response.is_error:
             return {"error": f"Backend error: {response.status_code}", "logs": []}
-        return {"logs": response.json()}
+        data = response.json()
+        # GET /audit/logs returns {items, total}; unwrap so "logs" stays a
+        # plain list of entries as documented above.
+        return {"logs": data["items"] if isinstance(data, dict) else data}
     except httpx.RequestError as e:
         return {"error": str(e), "logs": []}
 

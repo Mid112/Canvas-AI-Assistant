@@ -5,9 +5,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mockAuditLogs } from "@/data/mockAuditLogs";
 import { AuditLogsPage } from "@/pages/Admin/AuditLogsPage";
 import * as auditLogsService from "@/services/auditLogs";
+import type { AuditLogEntry } from "@/types/auditLog";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 const mockUseAuth = vi.fn();
+
+/** fetchAuditLogs now resolves a {entries, total} batch rather than a bare array. */
+function toBatch(entries: AuditLogEntry[]): auditLogsService.AuditLogsBatch {
+  return { entries, total: entries.length };
+}
 
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
@@ -34,7 +40,7 @@ describe("AuditLogsPage", () => {
       logout: vi.fn(),
       refreshUser: vi.fn(),
     });
-    vi.spyOn(auditLogsService, "fetchAuditLogs").mockResolvedValue(mockAuditLogs);
+    vi.spyOn(auditLogsService, "fetchAuditLogs").mockResolvedValue(toBatch(mockAuditLogs));
   });
 
   async function waitForLoaded() {
@@ -274,6 +280,34 @@ describe("AuditLogsPage", () => {
     expect(screen.getByText("Audit logs (5)")).toBeInTheDocument();
   });
 
+  // Verifies: Offers a "Load more" control when more rows exist on the server than were fetched.
+  it("loads the next batch when total exceeds what's already loaded", async () => {
+    const fetchSpy = vi
+      .spyOn(auditLogsService, "fetchAuditLogs")
+      .mockResolvedValueOnce({ entries: mockAuditLogs, total: 7 });
+
+    renderWithRouter(<AuditLogsPage />);
+
+    await waitForLoaded();
+    expect(screen.getByText("Audit logs (5 of 7)")).toBeInTheDocument();
+
+    const extraLogs = [
+      { ...mockAuditLogs[0]!, id: "audit-extra-1", userEmail: "extra1@university.edu" },
+      { ...mockAuditLogs[0]!, id: "audit-extra-2", userEmail: "extra2@university.edu" },
+    ];
+    fetchSpy.mockResolvedValueOnce({ entries: extraLogs, total: 7 });
+
+    await user.click(screen.getByRole("button", { name: "Load more" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Audit logs (7)")).toBeInTheDocument();
+    });
+    expect(fetchSpy).toHaveBeenLastCalledWith("access-token", { offset: 5 });
+    expect(
+      screen.queryByRole("button", { name: "Load more" }),
+    ).not.toBeInTheDocument();
+  });
+
   // Verifies: Shows a load error with retry.
   it("shows a load error with retry", async () => {
     vi.spyOn(auditLogsService, "fetchAuditLogs").mockRejectedValueOnce(
@@ -288,7 +322,7 @@ describe("AuditLogsPage", () => {
 
     const retrySpy = vi
       .spyOn(auditLogsService, "fetchAuditLogs")
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce(toBatch([]));
 
     await user.click(screen.getByRole("button", { name: "Try again" }));
 
@@ -337,7 +371,7 @@ describe("AuditLogsPage", () => {
       resource: `Resource ${index}`,
     }));
 
-    vi.spyOn(auditLogsService, "fetchAuditLogs").mockResolvedValueOnce(manyLogs);
+    vi.spyOn(auditLogsService, "fetchAuditLogs").mockResolvedValueOnce(toBatch(manyLogs));
 
     renderWithRouter(<AuditLogsPage />);
 
@@ -364,7 +398,7 @@ describe("AuditLogsPage", () => {
       resource: `Resource ${index}`,
     }));
 
-    vi.spyOn(auditLogsService, "fetchAuditLogs").mockResolvedValueOnce(manyLogs);
+    vi.spyOn(auditLogsService, "fetchAuditLogs").mockResolvedValueOnce(toBatch(manyLogs));
     const downloadSpy = vi
       .spyOn(auditLogsService, "downloadAuditLogsCsv")
       .mockImplementation(() => {});

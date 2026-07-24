@@ -13,16 +13,27 @@ export const AUDIT_LOGS_ADMIN_PATH = "/audit/logs";
 /** Per-user route (MCP). Admin UI uses AUDIT_LOGS_ADMIN_PATH. */
 export const AUDIT_LOGS_USER_PATH = "/audit/logs";
 
+/** Rows fetched per network request; further pages are fetched via `offset` on demand. */
+export const AUDIT_LOGS_BATCH_SIZE = 200;
+
+export interface AuditLogsBatch {
+  entries: AuditLogEntry[];
+  /** Total matching rows on the server, across both audit_logs and audit_logs_session. */
+  total: number;
+}
+
 export async function fetchAuditLogs(
   accessToken: string,
-): Promise<AuditLogEntry[]> {
+  { offset = 0, limit = AUDIT_LOGS_BATCH_SIZE }: { offset?: number; limit?: number } = {},
+): Promise<AuditLogsBatch> {
   const response = await apiRequest<FetchAuditLogsResponse | AuditLogApiRecord[]>(
-    `${AUDIT_LOGS_ADMIN_PATH}?limit=200&offset=0`,
+    `${AUDIT_LOGS_ADMIN_PATH}?limit=${limit}&offset=${offset}`,
     accessToken,
   );
 
   const records = Array.isArray(response) ? response : response.items;
-  return records.map(mapAuditLogApiToEntry);
+  const total = Array.isArray(response) ? records.length : response.total;
+  return { entries: records.map(mapAuditLogApiToEntry), total };
 }
 
 function escapeCsvField(value: string): string {

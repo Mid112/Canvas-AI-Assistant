@@ -29,10 +29,12 @@ import { pageShellXWide } from "@/lib/page-shell";
 export function AuditLogsPage() {
   const { accessToken } = useAuth();
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
+  const [total, setTotal] = useState(0);
   const [filters, setFilters] = useState<AuditLogFilters>(emptyAuditLogFilters);
   const [sort, setSort] = useState<AuditLogSort>(defaultAuditLogSort);
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const loadRequestId = useRef(0);
 
@@ -60,20 +62,26 @@ export function AuditLogsPage() {
   }, []);
 
   const loadLogs = useCallback(async () => {
+    if (!accessToken) {
+      return;
+    }
+
     const requestId = loadRequestId.current + 1;
     loadRequestId.current = requestId;
     setIsLoading(true);
     setLoadError(null);
 
     try {
-      const data = await fetchAuditLogs(accessToken!);
+      const batch = await fetchAuditLogs(accessToken);
       if (loadRequestId.current === requestId) {
-        setLogs(data);
+        setLogs(batch.entries);
+        setTotal(batch.total);
       }
     } catch {
       if (loadRequestId.current === requestId) {
         setLoadError("Unable to load audit logs. Please try again.");
         setLogs([]);
+        setTotal(0);
       }
     } finally {
       if (loadRequestId.current === requestId) {
@@ -83,50 +91,37 @@ export function AuditLogsPage() {
   }, [accessToken]);
 
   useEffect(() => {
-    if (!accessToken) {
+    // The leading await defers the effect's first setState past the current
+    // tick (react-hooks/set-state-in-effect) without changing behavior.
+    void (async () => {
+      await Promise.resolve();
+      await loadLogs();
+    })();
+  }, [loadLogs]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (!accessToken || isLoadingMore) {
       return;
     }
 
-    let cancelled = false;
-    const requestId = loadRequestId.current + 1;
-    loadRequestId.current = requestId;
-
-    void (async () => {
-      await Promise.resolve();
-      if (cancelled || loadRequestId.current !== requestId) {
-        return;
-      }
-
-      setIsLoading(true);
-      setLoadError(null);
-
-      try {
-        const data = await fetchAuditLogs(accessToken);
-        if (!cancelled && loadRequestId.current === requestId) {
-          setLogs(data);
-        }
-      } catch {
-        if (!cancelled && loadRequestId.current === requestId) {
-          setLoadError("Unable to load audit logs. Please try again.");
-          setLogs([]);
-        }
-      } finally {
-        if (!cancelled && loadRequestId.current === requestId) {
-          setIsLoading(false);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [accessToken]);
+    setIsLoadingMore(true);
+    try {
+      const batch = await fetchAuditLogs(accessToken, { offset: logs.length });
+      setLogs((current) => [...current, ...batch.entries]);
+      setTotal(batch.total);
+    } catch {
+      setLoadError("Unable to load more audit logs. Please try again.");
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [accessToken, isLoadingMore, logs.length]);
 
   const signedOutError = accessToken
     ? null
     : "You must be signed in to view audit logs.";
   const effectiveLoading = accessToken ? isLoading : false;
   const effectiveError = signedOutError ?? loadError;
+  const hasMore = logs.length < total;
 
   const handleExport = () => {
     downloadAuditLogsCsv(filteredLogs);
@@ -154,8 +149,21 @@ export function AuditLogsPage() {
       </header>
 
       <div className="flex flex-col gap-4 rounded-xl border bg-card p-4 shadow-sm ring-1 ring-border/60">
-        <div className="inline-flex w-fit items-center rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary">
-          Audit logs ({logs.length})
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="inline-flex w-fit items-center rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary">
+            {hasMore ? `Audit logs (${logs.length} of ${total})` : `Audit logs (${logs.length})`}
+          </div>
+          {hasMore ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void handleLoadMore()}
+              disabled={isLoadingMore}
+            >
+              {isLoadingMore ? "Loading more..." : "Load more"}
+            </Button>
+          ) : null}
         </div>
         <AuditLogFiltersBar
           filters={filters}

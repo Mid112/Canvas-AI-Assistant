@@ -68,7 +68,7 @@ async def get_admin_settings(db: AsyncSession) -> dict:
     return settings
 
 
-async def update_admin_settings(db: AsyncSession, new_settings: dict) -> dict:
+async def update_admin_settings(db: AsyncSession, new_settings: dict, admin: User) -> dict:
     protected_keys = LLM_SETTING_KEYS.intersection(new_settings)
     if protected_keys:
         raise HTTPException(
@@ -83,6 +83,11 @@ async def update_admin_settings(db: AsyncSession, new_settings: dict) -> dict:
         else:
             db.add(SystemSetting(key=key, value=value))
 
+    db.add(AuditLogSession(
+        user_id=admin.id,
+        action="admin_settings_updated",
+        details={"changed_keys": list(new_settings.keys()), "values": new_settings},
+    ))
     await db.commit()
     return await get_admin_settings(db)
 

@@ -47,6 +47,43 @@ describe("mapAuditLogApiToEntry", () => {
 
     expect(entry.resource).toBe("announcement");
   });
+
+  // Verifies: Omits workflowId for session-sourced rows with no workflow.
+  it("omits workflowId when workflow_id is null", () => {
+    const record = { ...mockAuditLogApiRecords[0]!, workflow_id: null };
+
+    const entry = mapAuditLogApiToEntry(record);
+
+    expect(entry.details.workflowId).toBeUndefined();
+  });
+
+  // Verifies: Spreads primitive details fields into the UI details map.
+  it("spreads scalar details fields onto the entry", () => {
+    const record = {
+      ...mockAuditLogApiRecords[0]!,
+      details: { instructor_id: 42, email: "i@example.com", changes: { name: "New Name" } },
+    };
+
+    const entry = mapAuditLogApiToEntry(record);
+
+    expect(entry.details.instructor_id).toBe(42);
+    expect(entry.details.email).toBe("i@example.com");
+    expect(entry.details.changes).toBeUndefined();
+  });
+
+  // Verifies: A details field can't shadow the canonical operation/courseId/workflowId columns.
+  it("does not let a details field shadow the canonical columns", () => {
+    const record = {
+      ...mockAuditLogApiRecords[0]!,
+      details: { operation: "hijacked", workflowId: 999, courseId: 999 },
+    };
+
+    const entry = mapAuditLogApiToEntry(record);
+
+    expect(entry.details.operation).toBe("create");
+    expect(entry.details.workflowId).toBe(128);
+    expect(entry.details.courseId).toBe(3);
+  });
 });
 
 describe("formatAuditLogUserRole", () => {

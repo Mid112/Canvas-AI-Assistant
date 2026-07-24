@@ -36,7 +36,18 @@ export function mapAuditLogApiToEntry(record: AuditLogApiRecord): AuditLogEntry 
     uiDetails.courseId = record.course_id;
   }
 
-  uiDetails.workflowId = record.workflow_id;
+  if (record.workflow_id != null) {
+    uiDetails.workflowId = record.workflow_id;
+  }
+
+  for (const [key, value] of Object.entries(record.details ?? {})) {
+    if (key in uiDetails) {
+      continue; // Don't let a details field shadow the canonical columns above.
+    }
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value === null) {
+      uiDetails[key] = value;
+    }
+  }
 
   return {
     id: String(record.id),

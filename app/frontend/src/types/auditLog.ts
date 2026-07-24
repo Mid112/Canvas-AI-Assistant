@@ -25,7 +25,8 @@ export interface AuditLogEntry {
 export interface AuditLogApiRecord {
   id: number;
   user_id: number;
-  workflow_id: number;
+  /** Null for rows sourced from audit_logs_session (admin/security events). */
+  workflow_id: number | null;
   course_id: number | null;
   action: string;
   resource_type: string;
@@ -35,14 +36,13 @@ export interface AuditLogApiRecord {
   timestamp: string;
   user_email: string;
   user_role: UserRole;
+  details?: Record<string, unknown> | null;
 }
 
-/** Proposed paginated admin list response for GET /api/v1/admin/audit/logs */
+/** GET /api/v1/audit/logs and /api/v1/admin/audit/logs response shape. */
 export interface FetchAuditLogsResponse {
   items: AuditLogApiRecord[];
   total: number;
-  page: number;
-  page_size: number;
 }
 
 export interface AuditLogFilters {

@@ -88,7 +88,7 @@ async def update_settings(
     current_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    settings = await update_admin_settings(db, body.settings)
+    settings = await update_admin_settings(db, body.settings, current_user)
     return AdminSettingsResponse(settings=settings)
 
 

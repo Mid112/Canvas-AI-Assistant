@@ -29,7 +29,7 @@ describe("auditLogs service", () => {
       ),
     );
 
-    const logs = await fetchAuditLogs("access-token");
+    const batch = await fetchAuditLogs("access-token");
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       `http://localhost:8000/api/v1${AUDIT_LOGS_ADMIN_PATH}?limit=200&offset=0`,
@@ -37,8 +37,27 @@ describe("auditLogs service", () => {
         headers: expect.any(Headers),
       }),
     );
-    expect(logs).toHaveLength(1);
-    expect(logs[0]?.action).toBe("send_message");
+    expect(batch.entries).toHaveLength(1);
+    expect(batch.entries[0]?.action).toBe("send_message");
+    expect(batch.total).toBe(1);
+  });
+
+  // Verifies: Requests a specific offset/limit window when paging further.
+  it("requests a specific offset/limit window when paging further", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ items: [], total: 250 }), { status: 200 }),
+    );
+
+    const batch = await fetchAuditLogs("access-token", { offset: 200, limit: 50 });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `http://localhost:8000/api/v1${AUDIT_LOGS_ADMIN_PATH}?limit=50&offset=200`,
+      expect.objectContaining({
+        headers: expect.any(Headers),
+      }),
+    );
+    expect(batch.entries).toHaveLength(0);
+    expect(batch.total).toBe(250);
   });
 
   // Verifies: Builds a CSV export with headers and rows.
