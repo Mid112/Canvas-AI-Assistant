@@ -81,7 +81,7 @@ export function WorkflowHistoryTable({
           {actionError ?? localError}
         </p>
       ) : null}
-      <Table>
+      <Table className="table-fixed">
         <TableHeader>
           <TableRow>
             <TableHead className="w-44">Date & Time</TableHead>
@@ -100,7 +100,7 @@ export function WorkflowHistoryTable({
 
             return (
               <TableRow key={entry.id}>
-                <TableCell>
+                <TableCell className="align-top">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Calendar
                       className="size-4 shrink-0"
@@ -109,25 +109,25 @@ export function WorkflowHistoryTable({
                     <span>{formatAuditTimestamp(entry.timestamp)}</span>
                   </div>
                 </TableCell>
-                <TableCell>
+                <TableCell className="min-w-0 align-top">
                   <div className="space-y-2">
                     <div>
                       <p className="text-xs font-medium uppercase text-muted-foreground">
                         Action
                       </p>
-                      <p className="text-sm font-medium">{entry.workflowName}</p>
+                      <p className="break-words text-sm font-medium">{entry.workflowName}</p>
                     </div>
                     <div>
                       <p className="text-xs font-medium uppercase text-muted-foreground">
                         Prompt
                       </p>
-                      <p className="text-sm text-muted-foreground">{entry.prompt}</p>
+                      <p className="break-words text-sm text-muted-foreground">{entry.prompt}</p>
                     </div>
                     <div>
                       <p className="text-xs font-medium uppercase text-muted-foreground">
                         Affected Resources
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="break-words text-sm text-muted-foreground">
                         {entry.affectedResourcesSummary}
                       </p>
                     </div>
@@ -135,7 +135,7 @@ export function WorkflowHistoryTable({
                       <p className="text-xs font-medium uppercase text-muted-foreground">
                         Reversal
                       </p>
-                      <p className="text-sm text-muted-foreground">
+                      <p className="break-words text-sm text-muted-foreground">
                         {reversal.status === "reversed"
                           ? reversal.resultMessage
                           : reversal.available
@@ -143,18 +143,18 @@ export function WorkflowHistoryTable({
                             : reversal.unavailableReason}
                       </p>
                       {!reversal.available && reversal.status !== "reversed" ? (
-                        <p className="mt-1 text-xs text-muted-foreground">
+                        <p className="mt-1 break-words text-xs text-muted-foreground">
                           {reversal.recoveryInstructions}
                         </p>
                       ) : null}
                     </div>
                   </div>
                 </TableCell>
-                <TableCell className="text-sm">{entry.userName}</TableCell>
-                <TableCell className="text-center">
+                <TableCell className="align-top text-sm">{entry.userName}</TableCell>
+                <TableCell className="align-top text-center">
                   <WorkflowStatusBadge status={entry.status} />
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="align-top text-right">
                   <div className="flex flex-col items-end gap-1">
                     {showCancel ? (
                       <Button
@@ -169,8 +169,9 @@ export function WorkflowHistoryTable({
                     ) : showUndo ? (
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
+                        className="border-primary/40 text-primary hover:bg-primary/10"
                         onClick={() => onUndo(entry)}
                       >
                         <Undo2 className="size-4" aria-hidden="true" />

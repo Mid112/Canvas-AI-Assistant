@@ -9,12 +9,28 @@ from sqlalchemy.orm import selectinload
 
 from app.mcp_tools.schemas import is_undoable
 from app.models.audit_log import AuditLog
+from app.models.message import Message
 from app.models.user import User
 from app.models.workflow import Workflow
 from app.schemas.canvas import AssignmentUpdate
 from app.services.canvas import delete_course_assignment, delete_course_quiz, update_course_assignment
 from app.services.chat import _claim_pending_workflow, _json_dumps
 from app.services.course_access import get_owned_course_or_404
+
+
+def _reversal_chat_message(workflow: Workflow) -> str:
+    """Return the persisted assistant transcript message for a completed reversal.
+
+    Audit logs and workflow history remain the structured source of truth; this
+    message gives instructors the same visible chat confirmation they get after
+    approving an action.
+    """
+    action_label = workflow.action_name.replace("_", " ").title()
+    if workflow.action_name == "create_assignment":
+        return f"Reversed {action_label}: the created assignment was deleted from Canvas."
+    if workflow.action_name == "create_quiz":
+        return f"Reversed {action_label}: the created quiz was deleted from Canvas."
+    return f"Reversed {action_label}: the previous Canvas state was restored."
 
 
 async def list_workflow_history(
@@ -207,6 +223,15 @@ async def reverse_workflow(db: AsyncSession, user: User, workflow_id: int) -> Wo
                 before_data=json.loads(_json_dumps(audit_row.after_data)),
                 after_data=json.loads(_json_dumps(restored.model_dump())),
                 request_payload=payload.model_dump(mode="json"),
+            )
+        )
+
+    if workflow.conversation_id is not None:
+        db.add(
+            Message(
+                conversation_id=workflow.conversation_id,
+                role="assistant",
+                content=_reversal_chat_message(workflow),
             )
         )
 

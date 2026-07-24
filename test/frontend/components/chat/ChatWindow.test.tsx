@@ -15,6 +15,7 @@ import {
   fetchConversation,
   sendAssistantMessage,
 } from "@/services/assistant";
+import { reverseWorkflow } from "@/services/workflowHistory";
 import { renderWithInstitution } from "../../utils/renderWithInstitution";
 
 const mockUseAuth = vi.fn();
@@ -49,10 +50,22 @@ vi.mock("@/services/assistant", async () => {
   };
 });
 
+vi.mock("@/services/workflowHistory", async () => {
+  const actual = await vi.importActual<typeof import("@/services/workflowHistory")>(
+    "@/services/workflowHistory",
+  );
+
+  return {
+    ...actual,
+    reverseWorkflow: vi.fn(actual.reverseWorkflow),
+  };
+});
+
 const mockedSendAssistantMessage = vi.mocked(sendAssistantMessage);
 const mockedConfirmAssistantAction = vi.mocked(confirmAssistantAction);
 const mockedCancelAssistantAction = vi.mocked(cancelAssistantAction);
 const mockedFetchConversation = vi.mocked(fetchConversation);
+const mockedReverseWorkflow = vi.mocked(reverseWorkflow);
 
 describe("ChatWindow", () => {
   beforeEach(() => {
@@ -238,6 +251,22 @@ describe("ChatWindow", () => {
     mockedConfirmAssistantAction.mockResolvedValueOnce({
       content: "Successfully completed Create Assignment: Midterm Exam.",
       conversationId: 7,
+    });
+    mockedFetchConversation.mockResolvedValueOnce({
+      id: 7,
+      course_id: 310,
+      created_at: "2026-07-10T12:00:00.000Z",
+      messages: [],
+      // Verifies: After approval, chat refreshes workflow status metadata so
+      // the confirmed card can expose the direct reversal action.
+      workflow_statuses: {
+        42: {
+          workflow_id: 123,
+          status: "executed",
+          action_name: "create_assignment",
+          result_message_id: null,
+        },
+      },
     });
 
     renderWithInstitution(<ChatWindow />);
@@ -551,7 +580,27 @@ describe("ChatWindow", () => {
             intent_preview: true,
             summary: "I prepared a midterm exam for review.",
             proposed_action: { action: "create_assignment" },
-            preview_metadata: { course_name: "CPSC 310", audience: { label: "Entire class" } },
+            preview_metadata: {
+              course_name: "CPSC 310",
+              audience: { label: "Entire class" },
+              risk_metadata: {
+                risk_level: "medium",
+                classification: "modifying",
+                requires_confirmation: true,
+                confirmation_requirement: {
+                  type: "standard",
+                  label: "Standard confirmation",
+                  description: "Review before executing this action.",
+                },
+                destructive: false,
+                reversible: true,
+                undoable: true,
+                can_undo: true,
+                reversibility: "This action can be undone from workflow history.",
+                warnings: [],
+                technical_details: { action: "create_assignment" },
+              },
+            },
           }),
           created_at: "2026-06-24T10:02:00.000Z",
         },
@@ -573,6 +622,122 @@ describe("ChatWindow", () => {
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Confirm" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+  });
+
+  // Verifies: Direct reversal from a confirmed chat card calls the backend
+  // reversal endpoint and appends the persisted reversal transcript message.
+  it("shows a persisted reversal message after direct reversal", async () => {
+    const user = userEvent.setup();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValueOnce(true);
+
+    mockedFetchConversation.mockResolvedValueOnce({
+      id: 7,
+      course_id: 3,
+      created_at: "2026-06-24T10:00:00.000Z",
+      messages: [
+        {
+          id: 42,
+          role: "assistant",
+          content: JSON.stringify({
+            intent_preview: true,
+            summary: "I prepared a midterm exam for review.",
+            proposed_action: { action: "create_assignment" },
+            preview_metadata: {
+              course_name: "CPSC 310",
+              audience: { label: "Entire class" },
+              risk_metadata: {
+                risk_level: "medium",
+                classification: "modifying",
+                requires_confirmation: true,
+                confirmation_requirement: {
+                  type: "standard",
+                  label: "Standard confirmation",
+                  description: "Review before executing this action.",
+                },
+                destructive: false,
+                reversible: true,
+                undoable: true,
+                can_undo: true,
+                reversibility: "This action can be undone from workflow history.",
+                warnings: [],
+                technical_details: { action: "create_assignment" },
+              },
+            },
+          }),
+          created_at: "2026-06-24T10:02:00.000Z",
+        },
+      ],
+      workflow_statuses: {
+        42: {
+          workflow_id: 123,
+          status: "executed",
+          action_name: "create_assignment",
+          result_message_id: 43,
+        },
+      },
+    });
+    mockedReverseWorkflow.mockResolvedValueOnce({
+      id: "123",
+      timestamp: "2026-06-24T10:02:00.000Z",
+      actionName: "create_assignment",
+      workflowName: "Create Assignment",
+      prompt: "Create a midterm exam",
+      userName: "Instructor",
+      status: "approved",
+      affectedResources: [],
+      affectedResourcesSummary: "assignment: Midterm Exam",
+      undoable: true,
+      undoneAt: "2026-06-24T10:04:00.000Z",
+    });
+    mockedFetchConversation.mockResolvedValueOnce({
+      id: 7,
+      course_id: 3,
+      created_at: "2026-06-24T10:00:00.000Z",
+      messages: [
+        {
+          id: 42,
+          role: "assistant",
+          content: JSON.stringify({
+            intent_preview: true,
+            summary: "I prepared a midterm exam for review.",
+            proposed_action: { action: "create_assignment" },
+            preview_metadata: { course_name: "CPSC 310", audience: { label: "Entire class" } },
+          }),
+          created_at: "2026-06-24T10:02:00.000Z",
+        },
+        {
+          id: 44,
+          role: "assistant",
+          content: "Reversed Create Assignment: the created assignment was deleted from Canvas.",
+          created_at: "2026-06-24T10:04:00.000Z",
+        },
+      ],
+      workflow_statuses: {
+        42: {
+          workflow_id: 123,
+          status: "executed",
+          action_name: "create_assignment",
+          result_message_id: 43,
+        },
+      },
+    });
+
+    try {
+      renderWithInstitution(<ChatWindow initialConversationId={7} />);
+
+      await user.click(await screen.findByRole("button", { name: "Reverse action" }));
+
+      await waitFor(() => {
+        expect(mockedReverseWorkflow).toHaveBeenCalledWith("test-token", "123");
+      });
+      expect(
+        await screen.findByText(
+          "Reversed Create Assignment: the created assignment was deleted from Canvas.",
+        ),
+      ).toBeInTheDocument();
+    } finally {
+      confirmSpy.mockRestore();
+    }
   });
 
   // Verifies: two previews resolved OUT OF ORDER (the second one confirmed

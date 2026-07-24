@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.config import settings
 from app.main import app
 from app.models.audit_log import AuditLog
+from app.models.message import Message
 from app.models.workflow import Workflow
 from app.schemas.canvas import AssignmentResponse, MessageSendResult
 
@@ -169,6 +170,25 @@ def _create_executed_create_assignment_workflow(client, headers, local_course_id
         item["id"] for item in history.json()["items"]
         if item["conversation_id"] == conversation_id
     )
+
+
+async def _get_reversal_chat_messages(workflow_id: int) -> list[Message]:
+    engine, Session = _make_session()
+    try:
+        async with Session() as db:
+            workflow = await db.get(Workflow, workflow_id)
+            rows = await db.scalars(
+                select(Message)
+                .where(
+                    Message.conversation_id == workflow.conversation_id,
+                    Message.role == "assistant",
+                    Message.content.ilike("Reversed %"),
+                )
+                .order_by(Message.created_at.asc())
+            )
+            return list(rows)
+    finally:
+        await engine.dispose()
 
 
 def _create_executed_send_message_workflow(client, headers, local_course_id) -> int:
@@ -361,6 +381,32 @@ def test_undo_sets_undone_at_in_history(client):
     item = next(i for i in history.json()["items"] if i["id"] == workflow_id)
     assert item["undone_at"] is not None
     assert item["undoable"] is True
+
+
+# Verifies: A successful undo is persisted into the originating chat transcript,
+# not only reflected in frontend-only state.
+def test_undo_writes_reversal_message_to_chat_history(client):
+    headers, local_course_id = _register_with_canvas(client)
+    workflow_id, assignment_id = _create_executed_update_assignment_workflow(
+        client, headers, local_course_id
+    )
+
+    reverted_assignment = AssignmentResponse(
+        id=assignment_id, name="Old Title", description="Original description",
+        due_at=None, points_possible=50.0, course_id=local_course_id,
+    )
+    with patch(
+        "app.services.workflow.update_course_assignment",
+        new=AsyncMock(return_value=reverted_assignment),
+    ):
+        response = client.post(f"/api/v1/history/workflows/{workflow_id}/undo", headers=headers)
+
+    assert response.status_code == 200
+    reversal_messages = asyncio.run(_get_reversal_chat_messages(workflow_id))
+    assert len(reversal_messages) == 1
+    assert reversal_messages[0].content == (
+        "Reversed Update Assignment: the previous Canvas state was restored."
+    )
 
 
 # ---------------------------------------------------------------------------

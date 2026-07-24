@@ -9,9 +9,20 @@ import type { RiskMetadata } from "@/types/chat";
 interface RiskAlertsProps {
   risk?: RiskMetadata;
   error?: string | null;
+  canReverseAction?: boolean;
+  isReversingAction?: boolean;
+  reversalCompleted?: boolean;
+  onReverseAction?: () => void;
 }
 
-export function RiskAlerts({ risk, error }: RiskAlertsProps) {
+export function RiskAlerts({
+  risk,
+  error,
+  canReverseAction = false,
+  isReversingAction = false,
+  reversalCompleted = false,
+  onReverseAction,
+}: RiskAlertsProps) {
   if (!risk && !error) {
     return null;
   }
@@ -46,7 +57,19 @@ export function RiskAlerts({ risk, error }: RiskAlertsProps) {
                 <p className="font-medium">
                   {risk.can_undo ? "Can be undone" : "No one-click undo"}
                 </p>
-                {risk.can_undo ? (
+                {risk.can_undo && canReverseAction && onReverseAction && !reversalCompleted ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="border-primary/40 text-primary hover:bg-primary/10"
+                    disabled={isReversingAction}
+                    onClick={onReverseAction}
+                  >
+                    <RotateCcw className="size-4" aria-hidden="true" />
+                    {isReversingAction ? "Reversing..." : "Reverse action"}
+                  </Button>
+                ) : risk.can_undo ? (
                   <Button
                     type="button"
                     size="sm"

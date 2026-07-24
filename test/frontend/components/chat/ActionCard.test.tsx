@@ -150,8 +150,8 @@ describe("RiskAlerts", () => {
     expect(screen.getByText(/irreversible/)).toBeInTheDocument();
   });
 
-  // Verifies: Undoable actions include a direct link to the workflow history reversal UI.
-  it("links undoable actions to workflow history", () => {
+  // Verifies: Undoable actions without an attached workflow still fall back to the history page.
+  it("links undoable actions to workflow history when direct reversal is unavailable", () => {
     render(
       <MemoryRouter>
         <RiskAlerts
@@ -171,6 +171,69 @@ describe("RiskAlerts", () => {
     );
 
     expect(screen.getByText("Can be undone")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open workflow history" })).toHaveAttribute(
+      "href",
+      "/instructor/history",
+    );
+  });
+
+  // Verifies: Once chat knows the approved workflow id, undoable actions show the direct reversal button first.
+  it("shows a direct reverse button when direct reversal is available", async () => {
+    const user = userEvent.setup();
+    const onReverseAction = vi.fn();
+
+    render(
+      <MemoryRouter>
+        <RiskAlerts
+          risk={makeRisk({
+            risk_level: "medium",
+            classification: "modifying",
+            destructive: false,
+            reversible: true,
+            undoable: true,
+            can_undo: true,
+            reversibility: "This action can be undone from workflow history.",
+            warnings: [],
+            technical_details: { action: "create_assignment" },
+          })}
+          canReverseAction
+          onReverseAction={onReverseAction}
+        />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Reverse action" }));
+
+    expect(onReverseAction).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole("button", { name: "Open workflow history" }),
+    ).not.toBeInTheDocument();
+  });
+
+  // Verifies: After a direct reversal completes, the card changes back to the audit trail link.
+  it("links to workflow history after direct reversal completes", () => {
+    render(
+      <MemoryRouter>
+        <RiskAlerts
+          risk={makeRisk({
+            risk_level: "medium",
+            classification: "modifying",
+            destructive: false,
+            reversible: true,
+            undoable: true,
+            can_undo: true,
+            reversibility: "This action can be undone from workflow history.",
+            warnings: [],
+            technical_details: { action: "create_assignment" },
+          })}
+          canReverseAction
+          reversalCompleted
+          onReverseAction={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole("button", { name: "Reverse action" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open workflow history" })).toHaveAttribute(
       "href",
       "/instructor/history",
