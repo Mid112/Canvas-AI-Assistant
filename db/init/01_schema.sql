@@ -525,6 +525,35 @@ CREATE TABLE ai_call_health (
 );
 
 -- ─────────────────────────────────────────────
+-- Failed Operations
+-- Append-only log of Canvas and AI failures for the admin Failed
+-- Operations dashboard (Feature 11, UR1.6).
+-- ─────────────────────────────────────────────
+CREATE TABLE failed_operations (
+    id               SERIAL PRIMARY KEY,
+    source           VARCHAR NOT NULL CHECK (source IN ('canvas', 'ai')),
+    operation        VARCHAR NOT NULL,
+    user_id          INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    course_id        INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    conversation_id  INTEGER REFERENCES conversations(id) ON DELETE SET NULL,
+    workflow_id      INTEGER REFERENCES workflows(id) ON DELETE SET NULL,
+    tool_call_id     INTEGER REFERENCES tool_call_logs(id) ON DELETE SET NULL,
+    provider         VARCHAR,
+    error_detail     TEXT NOT NULL,
+    context_json     JSONB NOT NULL DEFAULT '{}',
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_failed_operations_created_at
+    ON failed_operations(created_at DESC);
+
+CREATE INDEX idx_failed_operations_source_created_at
+    ON failed_operations(source, created_at DESC);
+
+CREATE INDEX idx_failed_operations_user_created_at
+    ON failed_operations(user_id, created_at DESC);
+
+-- ─────────────────────────────────────────────
 -- Schema Migrations
 -- Tracks which db/migrations/*.sql files have been applied — read and
 -- written by app/backend/app/core/migrations.py on every backend startup,
@@ -574,4 +603,5 @@ INSERT INTO schema_migrations (filename) VALUES
     ('027_llm_response_cache_constraint_name.sql'),
     ('028_health_checks.sql'),
     ('029_canvas_connection_last_sync_error.sql'),
-    ('030_ai_call_health.sql');
+    ('030_ai_call_health.sql'),
+    ('031_failed_operations.sql');

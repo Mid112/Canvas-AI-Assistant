@@ -1252,7 +1252,8 @@ async def run_course_sync_sweep(db: AsyncSession) -> None:
                     connection.last_sync_error = None
                     await conn_db.commit()
             except Exception as exc:
-                if _is_expected_canvas_token_sync_error(exc):
+                expected_token_issue = _is_expected_canvas_token_sync_error(exc)
+                if expected_token_issue:
                     logger.warning(
                         "course sync sweep skipped canvas_connection_id=%s user_id=%s: %s",
                         connection_id, user_id, exc.detail,
@@ -1268,11 +1269,39 @@ async def run_course_sync_sweep(db: AsyncSession) -> None:
                 # would need an implicit reload of its current state first.
                 # Update by id directly instead, so this doesn't depend on
                 # SQLAlchemy's expire-on-rollback internals at all.
+                error_detail = str(exc)[:500]
+                previous_error = await conn_db.scalar(
+                    select(CanvasConnection.last_sync_error).where(
+                        CanvasConnection.id == connection_id
+                    )
+                )
                 await conn_db.execute(
                     update(CanvasConnection)
                     .where(CanvasConnection.id == connection_id)
-                    .values(last_sync_error=str(exc)[:500])
+                    .values(last_sync_error=error_detail)
                 )
+                # Background sweeps run every ~60s. Do not append a failed_operations
+                # row for expected missing/corrupted tokens (Feature 9 already
+                # surfaces those), or for the same ongoing unexpected failure —
+                # otherwise admin monitoring floods with duplicate course_sync rows.
+                from app.services.failed_operations import (
+                    record_failed_operation,
+                    should_record_course_sync_failure,
+                )
+
+                if should_record_course_sync_failure(
+                    expected_token_issue=expected_token_issue,
+                    previous_error=previous_error,
+                    error_detail=error_detail,
+                ):
+                    await record_failed_operation(
+                        conn_db,
+                        source="canvas",
+                        operation="course_sync",
+                        error_detail=error_detail,
+                        user_id=user_id,
+                        context_json={"canvas_connection_id": connection_id},
+                    )
                 await conn_db.commit()
 
 

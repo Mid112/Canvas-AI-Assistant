@@ -36,6 +36,14 @@ describe("navigation helpers", () => {
     expect(systemHealthItem).toBeDefined();
     expect(systemHealthItem?.href).toBe(paths.admin.systemHealth);
   });
+
+  it("includes a Failed Operations nav entry for Feature 11", () => {
+    const failedOpsItem = adminNavItems.find(
+      (item) => item.title === "Failed Operations",
+    );
+    expect(failedOpsItem).toBeDefined();
+    expect(failedOpsItem?.href).toBe(paths.admin.failedOperations);
+  });
 });
 
 describe("decorateNavItemsWithHealth", () => {

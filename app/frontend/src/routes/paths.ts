@@ -39,6 +39,7 @@ export const paths = {
     settings: "/admin/settings",
     profile: "/admin/profile",
     systemHealth: "/admin/system-health",
+    failedOperations: "/admin/failed-operations",
   },
 } as const;
 
