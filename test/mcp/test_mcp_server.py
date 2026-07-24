@@ -32,7 +32,12 @@ EXPECTED_TOOLS = {
     "fetch_assignments",
     "fetch_submissions",
     "fetch_missing_submissions",
+    "fetch_students",
+    "fetch_quizzes",
     "create_assignment",
+    "update_assignment",
+    "update_grade",
+    "create_announcement",
     "send_message_to_students",
     "get_audit_logs",
 }
