@@ -35,6 +35,18 @@ describe("classifyErrorMessage", () => {
     expect(classifyErrorMessage("Something went wrong on our end.")).toBe("generic");
   });
 
+  it("classifies duplicate-in-flight messages", () => {
+    expect(
+      classifyErrorMessage("Another Canvas write is already running."),
+    ).toBe("duplicate-in-flight");
+  });
+
+  it("classifies validation messages", () => {
+    expect(
+      classifyErrorMessage("This course has concluded and is read-only."),
+    ).toBe("validation");
+  });
+
   it("is case-insensitive", () => {
     expect(classifyErrorMessage("INVALID CANVAS API TOKEN")).toBe("canvas-auth");
   });
