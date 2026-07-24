@@ -115,6 +115,24 @@ class ConfirmActionRequest(BaseModel):
     pending_message_id: int
 
 
+class WorkflowTransitionRequest(BaseModel):
+    workflow_id: int | None = None
+    pending_message_id: int | None = None
+    conversation_id: int | None = None
+
+    @model_validator(mode="after")
+    def require_identifier(self) -> "WorkflowTransitionRequest":
+        if self.workflow_id is None and self.pending_message_id is None:
+            raise ValueError("workflow_id or pending_message_id is required")
+        if self.pending_message_id is not None and self.conversation_id is None:
+            raise ValueError("conversation_id is required when using pending_message_id")
+        return self
+
+
+class WorkflowRenameRequest(WorkflowTransitionRequest):
+    display_name: str
+
+
 class ModifyActionRequest(ConfirmActionRequest):
     """Structured edits to an existing pending preview.
 
@@ -258,7 +276,7 @@ class ConversationSummary(BaseModel):
         pending_actions = [
             workflow
             for workflow in conversation.workflows
-            if workflow.status in {"pending", "executing"}
+            if workflow.status in {"pending", "executing", "paused"}
         ]
 
         return cls(

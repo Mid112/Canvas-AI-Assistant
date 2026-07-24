@@ -1,4 +1,4 @@
-import { apiRequest, ApiRequestError } from "@/lib/api-request";
+import { apiRequest, ApiRequestError, isAbortError } from "@/lib/api-request";
 import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
 import type {
   AssistantContext,
@@ -25,11 +25,14 @@ export interface SendAssistantMessageOptions {
   deferredRequestId?: number;
   context?: AssistantContext;
   modelSettings?: LlmProviderSettings;
+  signal?: AbortSignal;
 }
 
 export interface AssistantMessageResult extends AssistantResponse {
   conversationId: number;
   pendingMessageId?: number;
+  /** True when the backend returned HTTP 200 with ``is_error`` / reply.error. */
+  isError?: boolean;
 }
 
 export type AssistantChatResult = AssistantMessageResult;
@@ -109,10 +112,15 @@ function toAssistantMessageResult(
     ...mapped,
     conversationId: response.conversation_id,
     pendingMessageId,
+    isError: Boolean(response.is_error || response.reply?.error),
   };
 }
 
 function wrapRequestError(error: unknown): never {
+  if (isAbortError(error)) {
+    throw error;
+  }
+
   if (error instanceof ApiRequestError) {
     throw new AssistantApiError(error.message, error.status);
   }
@@ -149,6 +157,8 @@ function mapWorkflowStatus(
       return "cancelled";
     case "superseded":
       return "superseded";
+    case "paused":
+      return "paused";
     case "failed":
       return "failed";
     default:
@@ -259,6 +269,7 @@ export async function sendAssistantMessage(
             }
           : undefined,
       }),
+      signal: options.signal,
     });
 
     return toAssistantMessageResult(response);
@@ -310,6 +321,74 @@ export async function cancelAssistantAction(
     );
 
     return toAssistantMessageResult(response);
+  } catch (error) {
+    wrapRequestError(error);
+  }
+}
+
+export async function pauseAssistantAction(
+  accessToken: string,
+  conversationId: number,
+  pendingMessageId: number,
+): Promise<{ workflow_id: number; status: string; action_name: string }> {
+  try {
+    return await apiRequest(
+      "/chat/pause",
+      accessToken,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          pending_message_id: pendingMessageId,
+        }),
+      },
+    );
+  } catch (error) {
+    wrapRequestError(error);
+  }
+}
+
+export async function resumeAssistantAction(
+  accessToken: string,
+  conversationId: number,
+  pendingMessageId: number,
+): Promise<{ workflow_id: number; status: string; action_name: string }> {
+  try {
+    return await apiRequest(
+      "/chat/resume",
+      accessToken,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          pending_message_id: pendingMessageId,
+        }),
+      },
+    );
+  } catch (error) {
+    wrapRequestError(error);
+  }
+}
+
+export async function renameAssistantAction(
+  accessToken: string,
+  conversationId: number,
+  pendingMessageId: number,
+  displayName: string,
+): Promise<{ workflow_id: number; status: string; action_name: string }> {
+  try {
+    return await apiRequest(
+      "/chat/rename",
+      accessToken,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          conversation_id: conversationId,
+          pending_message_id: pendingMessageId,
+          display_name: displayName,
+        }),
+      },
+    );
   } catch (error) {
     wrapRequestError(error);
   }

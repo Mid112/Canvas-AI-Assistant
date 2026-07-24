@@ -14,7 +14,9 @@ from app.schemas.chat import (
     ConversationSummary,
     MessageResponse,
     ModifyActionRequest,
+    WorkflowRenameRequest,
     WorkflowStatus,
+    WorkflowTransitionRequest,
 )
 from app.schemas.deferred_assistant import (
     DeferredAssistantRequestListResponse,
@@ -33,6 +35,7 @@ from app.services.deferred_assistant import (
     get_deferred_request_for_resume,
     list_deferred_assistant_requests,
 )
+from app.services.workflow import pause_workflow, rename_workflow, resume_workflow
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -59,6 +62,70 @@ async def cancel_action(
         db, current_user, body.conversation_id, body.pending_message_id
     )
     return ChatResponse(conversation_id=conversation.id, reply=reply, is_error=is_error)
+
+
+@router.post("/pause", response_model=WorkflowStatus)
+async def pause_action(
+    body: WorkflowTransitionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    workflow = await pause_workflow(
+        db,
+        current_user,
+        workflow_id=body.workflow_id,
+        pending_message_id=body.pending_message_id,
+        conversation_id=body.conversation_id,
+    )
+    return WorkflowStatus(
+        workflow_id=workflow.id,
+        status=workflow.status,
+        action_name=workflow.action_name,
+        result_message_id=workflow.result_message_id,
+    )
+
+
+@router.post("/resume", response_model=WorkflowStatus)
+async def resume_action(
+    body: WorkflowTransitionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    workflow = await resume_workflow(
+        db,
+        current_user,
+        workflow_id=body.workflow_id,
+        pending_message_id=body.pending_message_id,
+        conversation_id=body.conversation_id,
+    )
+    return WorkflowStatus(
+        workflow_id=workflow.id,
+        status=workflow.status,
+        action_name=workflow.action_name,
+        result_message_id=workflow.result_message_id,
+    )
+
+
+@router.post("/rename", response_model=WorkflowStatus)
+async def rename_action(
+    body: WorkflowRenameRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    workflow = await rename_workflow(
+        db,
+        current_user,
+        display_name=body.display_name,
+        workflow_id=body.workflow_id,
+        pending_message_id=body.pending_message_id,
+        conversation_id=body.conversation_id,
+    )
+    return WorkflowStatus(
+        workflow_id=workflow.id,
+        status=workflow.status,
+        action_name=workflow.action_name,
+        result_message_id=workflow.result_message_id,
+    )
 
 
 @router.patch("/preview", response_model=ChatResponse)
