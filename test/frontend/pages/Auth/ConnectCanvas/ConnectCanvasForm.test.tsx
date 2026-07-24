@@ -15,7 +15,6 @@ const mockedValidateCanvasToken = vi.mocked(validateCanvasToken);
 const defaultProps = {
   accessToken: "access-token",
   onSubmit: vi.fn(),
-  onSkip: vi.fn(),
 };
 
 const CANVAS_URL = "https://canvas.university.edu";
@@ -51,8 +50,8 @@ describe("ConnectCanvasForm", () => {
       screen.getByRole("button", { name: "Connect Canvas" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Continue without connecting" }),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: "Continue without connecting" }),
+    ).not.toBeInTheDocument();
   });
 
   // Verifies: Disables connect until a valid URL and token are provided.
@@ -172,22 +171,6 @@ describe("ConnectCanvasForm", () => {
     );
 
     expect(screen.getAllByLabelText("Canvas URL")).toHaveLength(1);
-  });
-
-  // Verifies: Calls onSkip when continuing without connecting.
-  it("calls onSkip when continuing without connecting", async () => {
-    const user = userEvent.setup();
-    const onSkip = vi.fn().mockResolvedValue(undefined);
-
-    renderWithRouter(
-      <ConnectCanvasForm {...defaultProps} onSkip={onSkip} />,
-    );
-
-    await user.click(
-      screen.getByRole("button", { name: "Continue without connecting" }),
-    );
-
-    expect(onSkip).toHaveBeenCalledTimes(1);
   });
 
   // Verifies: Shows an error message when provided.

@@ -10,9 +10,8 @@ export function ConnectCanvasHeader() {
         Connect Your Canvas Account
       </h1>
       <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-        Add one or more Canvas tokens to connect institution workflows, or
-        continue in limited mode for general assistant questions until you
-        connect.
+        Add one or more Canvas API tokens to connect institution workflows.
+        Course and messaging actions stay unavailable until Canvas is connected.
       </p>
     </div>
   );

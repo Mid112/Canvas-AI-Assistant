@@ -173,19 +173,4 @@ describe("ConnectCanvasPage", () => {
     expect(mockLogout).toHaveBeenCalledTimes(1);
     expect(mockNavigate).not.toHaveBeenCalled();
   });
-
-  // Verifies: Skips canvas connection and opens the assistant in limited mode.
-  it("skips canvas connection and opens the query assistant", async () => {
-    const user = userEvent.setup();
-
-    renderWithRouter(<ConnectCanvasPage />);
-
-    await user.click(
-      screen.getByRole("button", { name: "Continue without connecting" }),
-    );
-
-    expect(mockedMarkOnboardingComplete).toHaveBeenCalledWith(1);
-    expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant);
-    expect(mockedUpdateCanvasConnections).not.toHaveBeenCalled();
-  });
 });

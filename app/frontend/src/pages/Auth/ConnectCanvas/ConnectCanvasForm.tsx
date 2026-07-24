@@ -18,7 +18,6 @@ interface ConnectCanvasFormProps {
   isSubmitting?: boolean;
   onSessionExpired?: () => void;
   onSubmit: (values: { connections: CanvasConnectionInput[] }) => void | Promise<void>;
-  onSkip: () => void | Promise<void>;
 }
 
 export function ConnectCanvasForm({
@@ -27,7 +26,6 @@ export function ConnectCanvasForm({
   isSubmitting = false,
   onSessionExpired,
   onSubmit,
-  onSkip,
 }: ConnectCanvasFormProps) {
   const [entries, setEntries] = useState<CanvasConnectionEntryState[]>(() => [
     createCanvasConnectionEntry(),
@@ -71,14 +69,6 @@ export function ConnectCanvasForm({
     }
 
     await onSubmit({ connections: completedConnections });
-  };
-
-  const handleSkip = async () => {
-    if (isSubmitting) {
-      return;
-    }
-
-    await onSkip();
   };
 
   const updateField = (
@@ -169,20 +159,9 @@ export function ConnectCanvasForm({
         >
           {isSubmitting ? "Connecting..." : "Connect Canvas"}
         </Button>
-
-        <Button
-          type="button"
-          variant="outline"
-          disabled={isSubmitting}
-          onClick={handleSkip}
-          className="h-11 w-full rounded-lg border-border bg-card text-base font-semibold text-muted-foreground hover:bg-muted"
-        >
-          Continue without connecting
-        </Button>
         <p className="text-center text-xs leading-relaxed text-muted-foreground">
-          Continue in limited mode for general questions. Course and messaging
-          actions stay blocked until Canvas is connected — saved requests can be
-          resumed afterward.
+          A valid Canvas API token is required before using course, messaging,
+          and write workflows.
         </p>
       </div>
     </form>
