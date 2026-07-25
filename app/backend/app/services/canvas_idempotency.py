@@ -1,8 +1,14 @@
 """Idempotent Canvas write helpers (Feature Reliability #1188 / #1189).
 
-Uses reserve-first claiming: a unique pending row is inserted before the Canvas
-mutation so concurrent callers with the same key cannot both write. Losers see
-the winner's completed payload or a 409 while a claim is still in flight.
+Uses reserve-first claiming: a unique pending row is inserted and **committed**
+before the Canvas mutation so concurrent callers with the same key observe
+``status='pending'`` and get a 409 (instead of blocking on an uncommitted
+unique-index row). Losers see the winner's completed payload once stored, or
+409 while a claim is still in flight.
+
+Claim / complete / release / prune run in short independent transactions on
+the same engine as the caller's session so the external Canvas write never
+holds an open DB transaction that hides the pending row from peers.
 """
 
 from __future__ import annotations
@@ -10,14 +16,14 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Coroutine
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, TypeVar
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.models.canvas_idempotency_key import CanvasIdempotencyKey
 
@@ -31,11 +37,40 @@ PENDING_CLAIM_TTL = timedelta(minutes=5)
 _STATUS_PENDING = "pending"
 _STATUS_COMPLETED = "completed"
 
+T = TypeVar("T")
+
 
 def build_idempotency_key(*parts: object) -> str:
     """Stable SHA-256 key from operation identity parts."""
     payload = json.dumps(parts, sort_keys=True, default=str, separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+async def _run_committed(
+    db: AsyncSession,
+    work: Callable[[AsyncSession], Coroutine[Any, Any, T]],
+) -> T:
+    """Run ``work`` and commit in a short independent session when ``db`` is real.
+
+    Unit tests pass MagicMock sessions and patch the helpers that ``work``
+    would call; in that case operate on the provided object without opening a
+    real connection.
+    """
+    if not isinstance(db, AsyncSession):
+        return await work(db)
+
+    # Prefer ``db.bind`` (AsyncEngine). ``get_bind()`` returns the sync Engine
+    # proxy and cannot be passed to ``async_sessionmaker``.
+    bind = db.bind
+    if bind is None:
+        raise RuntimeError(
+            "AsyncSession has no bind; cannot open an independent idempotency transaction"
+        )
+    factory = async_sessionmaker(bind, expire_on_commit=False)
+    async with factory() as session:
+        result = await work(session)
+        await session.commit()
+        return result
 
 
 async def prune_expired_idempotency_keys(db: AsyncSession) -> None:
@@ -84,7 +119,11 @@ async def _try_claim_canvas_write(
     user_id: int,
     operation: str,
 ) -> bool:
-    """Insert a pending claim. Returns True if this caller owns the write."""
+    """Insert a pending claim. Returns True if this caller owns the write.
+
+    Callers that need cross-request visibility must commit (see
+    ``_run_committed`` used by ``run_idempotent_canvas_write``).
+    """
     stmt = (
         pg_insert(CanvasIdempotencyKey)
         .values(
@@ -208,7 +247,7 @@ async def run_idempotent_canvas_write(
     idempotency_key: str | None,
     write: Callable[[], Awaitable[dict[str, Any]]],
 ) -> dict[str, Any]:
-    """Claim the key, run the Canvas write once, then store the result.
+    """Claim the key (committed), run the Canvas write once, then store the result.
 
     Without db/user/key, runs write directly.
     """
@@ -216,7 +255,7 @@ async def run_idempotent_canvas_write(
         return await write()
 
     try:
-        await prune_expired_idempotency_keys(db)
+        await _run_committed(db, prune_expired_idempotency_keys)
     except Exception:
         logger.warning(
             "canvas_idempotency outcome=prune_failed operation=%s",
@@ -224,40 +263,50 @@ async def run_idempotent_canvas_write(
             exc_info=True,
         )
 
-    cached = await get_cached_canvas_write(db, idempotency_key)
+    cached = await _run_committed(
+        db, lambda session: get_cached_canvas_write(session, idempotency_key)
+    )
     if cached is not None:
         return cached
 
-    claimed = await _try_claim_canvas_write(
-        db,
-        idempotency_key=idempotency_key,
-        user_id=user_id,
-        operation=operation,
-    )
-    if not claimed:
-        existing = await _resolve_existing_claim(db, idempotency_key)
-        if existing is not None:
-            return existing
-        # Stale pending was released, or row vanished — try one more claim.
-        claimed = await _try_claim_canvas_write(
-            db,
+    async def _claim(session: AsyncSession) -> bool:
+        return await _try_claim_canvas_write(
+            session,
             idempotency_key=idempotency_key,
             user_id=user_id,
             operation=operation,
         )
+
+    claimed = await _run_committed(db, _claim)
+    if not claimed:
+        existing = await _run_committed(
+            db, lambda session: _resolve_existing_claim(session, idempotency_key)
+        )
+        if existing is not None:
+            return existing
+        # Stale pending was released, or row vanished — try one more claim.
+        claimed = await _run_committed(db, _claim)
         if not claimed:
-            existing = await _resolve_existing_claim(db, idempotency_key)
+            existing = await _run_committed(
+                db, lambda session: _resolve_existing_claim(session, idempotency_key)
+            )
             if existing is not None:
                 return existing
             raise duplicate_in_flight_http_exception()
 
     try:
+        # External Canvas mutation — pending claim is already committed so a
+        # concurrent peer sees status='pending' and 409s instead of blocking.
         result = await write()
     except HTTPException:
-        await _release_canvas_write_claim(db, idempotency_key)
+        await _run_committed(
+            db, lambda session: _release_canvas_write_claim(session, idempotency_key)
+        )
         raise
     except Exception as exc:
-        await _release_canvas_write_claim(db, idempotency_key)
+        await _run_committed(
+            db, lambda session: _release_canvas_write_claim(session, idempotency_key)
+        )
         logger.warning(
             "canvas_idempotency outcome=write_failed operation=%s error=%s",
             operation,
@@ -266,14 +315,19 @@ async def run_idempotent_canvas_write(
         raise
 
     if not isinstance(result, dict):
-        await _release_canvas_write_claim(db, idempotency_key)
+        await _run_committed(
+            db, lambda session: _release_canvas_write_claim(session, idempotency_key)
+        )
         return result
 
     try:
-        await _complete_canvas_write(
+        await _run_committed(
             db,
-            idempotency_key=idempotency_key,
-            response_json=result,
+            lambda session: _complete_canvas_write(
+                session,
+                idempotency_key=idempotency_key,
+                response_json=result,
+            ),
         )
     except Exception:
         # Write already succeeded on Canvas — do not fail the caller because
