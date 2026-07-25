@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { mockAuditLogs } from "@/data/mockAuditLogs";
 import {
-  filterAuditLogs,
+  auditLogFiltersToQueryParams,
   paginateAuditLogs,
   sortAuditLogs,
 } from "@/lib/audit-log-query";
@@ -12,73 +12,50 @@ import {
   type AuditLogEntry,
 } from "@/types/auditLog";
 
-describe("filterAuditLogs", () => {
-  // Verifies: Returns all logs when filters are empty.
-  it("returns all logs when filters are empty", () => {
-    expect(filterAuditLogs(mockAuditLogs, emptyAuditLogFilters)).toHaveLength(5);
+describe("auditLogFiltersToQueryParams", () => {
+  // Verifies: Returns no params when filters are empty.
+  it("returns no params when filters are empty", () => {
+    expect(auditLogFiltersToQueryParams(emptyAuditLogFilters)).toEqual({});
   });
 
-  // Verifies: Filters by user email or role.
-  it("filters by user email or role", () => {
-    const filtered = filterAuditLogs(mockAuditLogs, {
+  // Verifies: Passes search/action/user/result straight through.
+  it("passes search/action/user/result straight through", () => {
+    const params = auditLogFiltersToQueryParams({
       ...emptyAuditLogFilters,
-      user: "Instructor",
-    });
-
-    expect(filtered).toHaveLength(4);
-    expect(filtered.every((log) => log.userRole === "instructor")).toBe(true);
-  });
-
-  // Verifies: Filters by action name.
-  it("filters by action name", () => {
-    const filtered = filterAuditLogs(mockAuditLogs, {
-      ...emptyAuditLogFilters,
+      search: "bearer sk-",
       action: "Delete",
-    });
-
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0]?.action).toBe("Delete Assignment");
-  });
-
-  // Verifies: Filters by result.
-  it("filters by result", () => {
-    const filtered = filterAuditLogs(mockAuditLogs, {
-      ...emptyAuditLogFilters,
+      user: "Instructor",
       result: "failed",
     });
 
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0]?.result).toBe("failed");
+    expect(params).toMatchObject({
+      search: "bearer sk-",
+      action: "Delete",
+      user: "Instructor",
+      result: "failed",
+    });
   });
 
-  // Verifies: Filters by date using local time (matching displayed date).
-  it("filters by date using local time (matching displayed date)", () => {
-    const filtered = filterAuditLogs(mockAuditLogs, {
+  // Verifies: Converts a local-time date into a UTC [start, end) range.
+  it("converts a local-time date into a UTC start/end range", () => {
+    const params = auditLogFiltersToQueryParams({
       ...emptyAuditLogFilters,
       date: "2026-05-31",
     });
 
-    expect(filtered).toHaveLength(5);
+    expect(params.startTime).toBe(new Date(2026, 4, 31, 0, 0, 0, 0).toISOString());
+    expect(params.endTime).toBe(new Date(2026, 5, 1, 0, 0, 0, 0).toISOString());
   });
 
-  // Verifies: Matches date filter against local time, not UTC.
-  it("matches date filter against local time, not UTC", () => {
-    const lateUtcLog: AuditLogEntry = {
-      ...mockAuditLogs[0]!,
-      id: "audit-late-utc",
-      timestamp: "2026-05-31T23:50:00.000Z",
-    };
-
-    const localDate = new Date("2026-05-31T23:50:00.000Z");
-    const pad = (v: number) => String(v).padStart(2, "0");
-    const expectedLocalDate = `${localDate.getFullYear()}-${pad(localDate.getMonth() + 1)}-${pad(localDate.getDate())}`;
-
-    const filtered = filterAuditLogs([lateUtcLog], {
+  // Verifies: The converted range spans exactly one local calendar day.
+  it("spans exactly one local calendar day regardless of timezone", () => {
+    const params = auditLogFiltersToQueryParams({
       ...emptyAuditLogFilters,
-      date: expectedLocalDate,
+      date: "2026-05-31",
     });
 
-    expect(filtered).toHaveLength(1);
+    const spanMs = new Date(params.endTime!).getTime() - new Date(params.startTime!).getTime();
+    expect(spanMs).toBe(24 * 60 * 60 * 1000);
   });
 });
 

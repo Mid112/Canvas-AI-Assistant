@@ -15,6 +15,52 @@ function toBatch(entries: AuditLogEntry[]): auditLogsService.AuditLogsBatch {
   return { entries, total: entries.length };
 }
 
+function matchesQuery(haystack: string, query: string): boolean {
+  return haystack.toLowerCase().includes(query.trim().toLowerCase());
+}
+
+/** Stands in for the real backend's search/filter logic (services/audit.py)
+ * so tests can drive the same filter bar interactions as before -- just now
+ * routed through the (mocked) server call instead of client-side filtering. */
+function fakeServerFetch(all: AuditLogEntry[]) {
+  return async (
+    _accessToken: string,
+    params: auditLogsService.FetchAuditLogsParams = {},
+  ): Promise<auditLogsService.AuditLogsBatch> => {
+    const { search, action, user, result, startTime, endTime, offset = 0, limit = all.length } =
+      params;
+
+    let filtered = all;
+    if (action) {
+      filtered = filtered.filter((log) => matchesQuery(log.action, action));
+    }
+    if (user) {
+      filtered = filtered.filter((log) =>
+        matchesQuery(`${log.userEmail} ${log.userRole}`, user),
+      );
+    }
+    if (result) {
+      filtered = filtered.filter((log) => log.result === result);
+    }
+    if (startTime) {
+      filtered = filtered.filter((log) => log.timestamp >= startTime);
+    }
+    if (endTime) {
+      filtered = filtered.filter((log) => log.timestamp < endTime);
+    }
+    if (search) {
+      filtered = filtered.filter((log) =>
+        matchesQuery(
+          [log.userEmail, log.userRole, log.action, log.resource, log.result].join(" "),
+          search,
+        ),
+      );
+    }
+
+    return { entries: filtered.slice(offset, offset + limit), total: filtered.length };
+  };
+}
+
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
     "@/contexts/AuthContext",
@@ -40,7 +86,9 @@ describe("AuditLogsPage", () => {
       logout: vi.fn(),
       refreshUser: vi.fn(),
     });
-    vi.spyOn(auditLogsService, "fetchAuditLogs").mockResolvedValue(toBatch(mockAuditLogs));
+    vi.spyOn(auditLogsService, "fetchAuditLogs").mockImplementation(
+      fakeServerFetch(mockAuditLogs),
+    );
   });
 
   async function waitForLoaded() {
@@ -69,7 +117,7 @@ describe("AuditLogsPage", () => {
     expect(screen.getByText("Showing 1–5 of 5 audit logs")).toBeInTheDocument();
   });
 
-  // Verifies: Filters audit logs by user.
+  // Verifies: Filters audit logs by user (server-side, debounced).
   it("filters audit logs by user", async () => {
     renderWithRouter(<AuditLogsPage />);
 
@@ -77,11 +125,11 @@ describe("AuditLogsPage", () => {
 
     await user.type(screen.getByLabelText("Filter by user"), "admin@system");
 
-    expect(tableScope().getByText("admin@system.local")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(tableScope().getByText("admin@system.local")).toBeInTheDocument();
+    });
     expect(tableScope().queryByText("jane.doe@university.edu")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Showing 1 of 1 matching audit logs (5 total)"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
   });
 
   // Verifies: Filters audit logs by typing in the action combobox.
@@ -92,10 +140,10 @@ describe("AuditLogsPage", () => {
 
     await user.type(screen.getByLabelText("Filter by action"), "Delete");
 
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
+    });
     expect(tableScope().queryByText("Create Message Draft")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Showing 1 of 1 matching audit logs (5 total)"),
-    ).toBeInTheDocument();
   });
 
   // Verifies: Filters audit logs by selecting an action from the dropdown.
@@ -107,11 +155,11 @@ describe("AuditLogsPage", () => {
     await user.click(screen.getByLabelText("Filter by action"));
     await user.click(screen.getByRole("button", { name: "Export Report" }));
 
-    expect(tableScope().getByText("Missing Work Report - CS 201")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(tableScope().getByText("Missing Work Report - CS 201")).toBeInTheDocument();
+    });
     expect(tableScope().queryByText("Message Draft #4521")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Showing 1 of 1 matching audit logs (5 total)"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
   });
 
   // Verifies: Filters audit logs by search query.
@@ -122,11 +170,11 @@ describe("AuditLogsPage", () => {
 
     await user.type(screen.getByLabelText("Search logs"), "Quiz 5");
 
-    expect(tableScope().getByText("Assignment: Quiz 5")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(tableScope().getByText("Assignment: Quiz 5")).toBeInTheDocument();
+    });
     expect(tableScope().queryByText("Message Draft #4521")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Showing 1 of 1 matching audit logs (5 total)"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
   });
 
   // Verifies: Expands a row to show additional details.
@@ -156,6 +204,10 @@ describe("AuditLogsPage", () => {
     await waitForLoaded();
 
     await user.type(screen.getByLabelText("Filter by user"), "jane.doe");
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
+    });
+
     await user.click(screen.getByRole("button", { name: "Export" }));
 
     expect(downloadSpy).toHaveBeenCalledTimes(1);
@@ -175,9 +227,11 @@ describe("AuditLogsPage", () => {
 
     await user.type(screen.getByLabelText("Search logs"), "no matching logs");
 
+    await waitFor(() => {
+      expect(screen.getByText("No audit logs found.")).toBeInTheDocument();
+    });
     expect(screen.getByRole("button", { name: "Export" })).toBeDisabled();
     expect(screen.getByText("Showing 0 of 5 audit logs")).toBeInTheDocument();
-    expect(screen.getByText("No audit logs found.")).toBeInTheDocument();
   });
 
   // Verifies: Filters audit logs by selecting a user from the dropdown.
@@ -189,11 +243,11 @@ describe("AuditLogsPage", () => {
     await user.click(screen.getByLabelText("Filter by user"));
     await user.click(screen.getByRole("button", { name: "jane.doe@university.edu" }));
 
-    expect(tableScope().getByText("Message Draft #4521")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(tableScope().getByText("Message Draft #4521")).toBeInTheDocument();
+    });
     expect(tableScope().queryByText("admin@system.local")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Showing 1 of 1 matching audit logs (5 total)"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
   });
 
   // Verifies: Resets to default timestamp sort from another column.
@@ -245,11 +299,11 @@ describe("AuditLogsPage", () => {
     await user.click(screen.getByLabelText("Filter result column"));
     await user.click(await screen.findByText("Failed only"));
 
-    expect(tableScope().getByText("Assignment: Quiz 5")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(tableScope().getByText("Assignment: Quiz 5")).toBeInTheDocument();
+    });
     expect(tableScope().queryByText("Message Draft #4521")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Showing 1 of 1 matching audit logs (5 total)"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
   });
 
   // Verifies: Shows action and result badges in each row.
@@ -339,10 +393,10 @@ describe("AuditLogsPage", () => {
 
     await user.type(screen.getByLabelText("Filter by date"), "2026-05-31");
 
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1–5 of 5 audit logs")).toBeInTheDocument();
+    });
     expect(tableScope().getByText("jane.doe@university.edu")).toBeInTheDocument();
-    expect(
-      screen.getByText("Showing 1–5 of 5 audit logs"),
-    ).toBeInTheDocument();
   });
 
   // Verifies: Clears active filters.
@@ -352,12 +406,16 @@ describe("AuditLogsPage", () => {
     await waitForLoaded();
 
     await user.type(screen.getByLabelText("Search logs"), "Quiz 5");
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
+    });
     expect(screen.getByRole("button", { name: "Clear filters" })).toBeInTheDocument();
-    expect(screen.getByText("Showing 1 of 1 matching audit logs (5 total)")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Clear filters" }));
 
-    expect(screen.getByText("Showing 1–5 of 5 audit logs")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1–5 of 5 audit logs")).toBeInTheDocument();
+    });
     expect(screen.queryByRole("button", { name: "Clear filters" })).not.toBeInTheDocument();
   });
 

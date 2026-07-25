@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { getUniqueAuditLogActions } from "@/lib/audit-log-actions";
 import {
-  filterAuditLogs,
+  auditLogFiltersToQueryParams,
   paginateAuditLogs,
   sortAuditLogs,
 } from "@/lib/audit-log-query";
@@ -26,10 +26,21 @@ import {
 } from "@/types/auditLog";
 import { pageShellXWide } from "@/lib/page-shell";
 
+// Debounces every filter keystroke (search/user/action are all free-typed,
+// firing onChange per character) into a single server request instead of
+// one per keystroke.
+const FILTER_DEBOUNCE_MS = 300;
+
+// Seeds the filter bar's suggestion dropdowns from a modest, unfiltered
+// recent sample -- independent of the main (filtered, paginated) fetch, so
+// the suggestion pool doesn't shrink to just the current page's rows.
+const OPTIONS_SAMPLE_SIZE = 200;
+
 export function AuditLogsPage() {
   const { accessToken } = useAuth();
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [total, setTotal] = useState(0);
+  const [optionsSample, setOptionsSample] = useState<AuditLogEntry[]>([]);
   const [filters, setFilters] = useState<AuditLogFilters>(emptyAuditLogFilters);
   const [sort, setSort] = useState<AuditLogSort>(defaultAuditLogSort);
   const [page, setPage] = useState(1);
@@ -38,17 +49,14 @@ export function AuditLogsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const loadRequestId = useRef(0);
 
-  const userOptions = useMemo(() => getUniqueAuditLogUsers(logs), [logs]);
-  const actionOptions = useMemo(() => getUniqueAuditLogActions(logs), [logs]);
+  const userOptions = useMemo(() => getUniqueAuditLogUsers(optionsSample), [optionsSample]);
+  const actionOptions = useMemo(() => getUniqueAuditLogActions(optionsSample), [optionsSample]);
 
-  const filteredLogs = useMemo(
-    () => sortAuditLogs(filterAuditLogs(logs, filters), sort),
-    [logs, filters, sort],
-  );
+  const sortedLogs = useMemo(() => sortAuditLogs(logs, sort), [logs, sort]);
 
   const pagination = useMemo(
-    () => paginateAuditLogs(filteredLogs, page, AUDIT_LOG_PAGE_SIZE),
-    [filteredLogs, page],
+    () => paginateAuditLogs(sortedLogs, page, AUDIT_LOG_PAGE_SIZE),
+    [sortedLogs, page],
   );
 
   const handleFiltersChange = useCallback((next: AuditLogFilters) => {
@@ -61,6 +69,9 @@ export function AuditLogsPage() {
     setPage(1);
   }, []);
 
+  // The actual search/filter query -- runs server-side against the full
+  // audit table (see services/audit.py::list_audit_logs), not just
+  // whatever page happened to already be loaded here.
   const loadLogs = useCallback(async () => {
     if (!accessToken) {
       return;
@@ -72,7 +83,7 @@ export function AuditLogsPage() {
     setLoadError(null);
 
     try {
-      const batch = await fetchAuditLogs(accessToken);
+      const batch = await fetchAuditLogs(accessToken, auditLogFiltersToQueryParams(filters));
       if (loadRequestId.current === requestId) {
         setLogs(batch.entries);
         setTotal(batch.total);
@@ -88,16 +99,26 @@ export function AuditLogsPage() {
         setIsLoading(false);
       }
     }
-  }, [accessToken]);
+  }, [accessToken, filters]);
 
   useEffect(() => {
-    // The leading await defers the effect's first setState past the current
-    // tick (react-hooks/set-state-in-effect) without changing behavior.
-    void (async () => {
-      await Promise.resolve();
-      await loadLogs();
-    })();
+    const timer = setTimeout(() => {
+      void loadLogs();
+    }, FILTER_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
   }, [loadLogs]);
+
+  useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+    void fetchAuditLogs(accessToken, { limit: OPTIONS_SAMPLE_SIZE })
+      .then((batch) => setOptionsSample(batch.entries))
+      .catch(() => {
+        // Suggestion dropdowns are a convenience, not core functionality --
+        // free-typed filter values still work even with no options loaded.
+      });
+  }, [accessToken]);
 
   const handleLoadMore = useCallback(async () => {
     if (!accessToken || isLoadingMore) {
@@ -106,7 +127,10 @@ export function AuditLogsPage() {
 
     setIsLoadingMore(true);
     try {
-      const batch = await fetchAuditLogs(accessToken, { offset: logs.length });
+      const batch = await fetchAuditLogs(accessToken, {
+        ...auditLogFiltersToQueryParams(filters),
+        offset: logs.length,
+      });
       setLogs((current) => [...current, ...batch.entries]);
       setTotal(batch.total);
     } catch {
@@ -114,7 +138,7 @@ export function AuditLogsPage() {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [accessToken, isLoadingMore, logs.length]);
+  }, [accessToken, isLoadingMore, logs.length, filters]);
 
   const signedOutError = accessToken
     ? null
@@ -124,7 +148,7 @@ export function AuditLogsPage() {
   const hasMore = logs.length < total;
 
   const handleExport = () => {
-    downloadAuditLogsCsv(filteredLogs);
+    downloadAuditLogsCsv(sortedLogs);
   };
 
   return (
@@ -141,7 +165,7 @@ export function AuditLogsPage() {
         <Button
           type="button"
           onClick={handleExport}
-          disabled={effectiveLoading || filteredLogs.length === 0}
+          disabled={effectiveLoading || sortedLogs.length === 0}
         >
           <Download className="size-4" aria-hidden="true" />
           Export
@@ -175,8 +199,8 @@ export function AuditLogsPage() {
 
       <AuditLogTable
         logs={pagination.items}
-        matchingCount={filteredLogs.length}
-        totalCount={logs.length}
+        matchingCount={sortedLogs.length}
+        totalCount={sortedLogs.length}
         startIndex={pagination.startIndex}
         endIndex={pagination.endIndex}
         page={pagination.page}
