@@ -289,18 +289,24 @@ describe("AuditLogsPage", () => {
     await user.click(screen.getByLabelText("Filter user column"));
     await user.click(await screen.findByText("A to Z"));
 
-    const emailsAfterUserSort = tableScope()
-      .getAllByText(/@/)
-      .map((element) => element.textContent);
-    expect(emailsAfterUserSort[0]).toBe("admin@system.local");
+    // Sort is now a server round-trip (debounced), not an instant client-side
+    // re-sort -- wait for the re-fetched, re-sorted rows to land.
+    await waitFor(() => {
+      const emailsAfterUserSort = tableScope()
+        .getAllByText(/@/)
+        .map((element) => element.textContent);
+      expect(emailsAfterUserSort[0]).toBe("admin@system.local");
+    });
 
     await user.click(screen.getByLabelText("Filter timestamp column"));
     await user.click(await screen.findByText("Newest first"));
 
-    const emailsAfterDefault = tableScope()
-      .getAllByText(/@/)
-      .map((element) => element.textContent);
-    expect(emailsAfterDefault[0]).toBe("jane.doe@university.edu");
+    await waitFor(() => {
+      const emailsAfterDefault = tableScope()
+        .getAllByText(/@/)
+        .map((element) => element.textContent);
+      expect(emailsAfterDefault[0]).toBe("jane.doe@university.edu");
+    });
   }, 10000);
 
   // Verifies: Sorts audit logs by user alphabetically.
@@ -312,12 +318,15 @@ describe("AuditLogsPage", () => {
     await user.click(screen.getByLabelText("Filter user column"));
     await user.click(await screen.findByText("A to Z"));
 
-    const emails = tableScope()
-      .getAllByText(/@/)
-      .map((element) => element.textContent)
-      .filter((text) => text?.includes("@"));
-
-    expect(emails[0]).toBe("admin@system.local");
+    // Sort is now a server round-trip (debounced), not an instant client-side
+    // re-sort -- wait for the re-fetched, re-sorted rows to land.
+    await waitFor(() => {
+      const emails = tableScope()
+        .getAllByText(/@/)
+        .map((element) => element.textContent)
+        .filter((text) => text?.includes("@"));
+      expect(emails[0]).toBe("admin@system.local");
+    });
   });
 
   // Verifies: Filters audit logs by result.

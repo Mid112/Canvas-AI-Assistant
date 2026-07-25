@@ -244,7 +244,11 @@ describe("FailedOperationsPage", () => {
     await waitFor(() => {
       expect(supportTicketsService.createTicket).toHaveBeenCalledWith("access-token", 1);
     });
-    expect(await screen.findByText("Open")).toBeInTheDocument();
+    // Scoped to the status badge -- "Open" also appears as one of the three
+    // always-rendered status buttons (Open/Investigating/Resolved).
+    expect(
+      await screen.findByText("Open", { selector: '[data-slot="badge"]' }),
+    ).toBeInTheDocument();
   });
 
   it("shows existing ticket status and lets an admin resolve it", async () => {
@@ -281,7 +285,11 @@ describe("FailedOperationsPage", () => {
 
     await user.click(await screen.findByText("fetch_assignments"));
 
-    expect(await screen.findByText("Investigating")).toBeInTheDocument();
+    // Scoped to the status badge -- "Investigating" also appears as one of
+    // the three always-rendered status buttons.
+    expect(
+      await screen.findByText("Investigating", { selector: '[data-slot="badge"]' }),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Resolved" }));
 
