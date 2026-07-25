@@ -10,7 +10,7 @@ export interface GradeUpdatePayload {
 
 export interface GradePreview {
   action: "update_grade";
-  risk_level: "high" | "low";
+  risk_level: "high" | "medium" | "low";
   requires_approval: boolean;
   irreversible_warning: string;
   rollback_available: boolean;
