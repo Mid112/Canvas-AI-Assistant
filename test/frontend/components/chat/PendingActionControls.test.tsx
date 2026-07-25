@@ -160,7 +160,7 @@ describe("PendingActionControls", () => {
     expect(onRename).toHaveBeenCalledWith("Quiz draft");
   });
 
-  it("shows resume controls for paused proposals", async () => {
+  it("shows resume controls for paused proposals without cancel", async () => {
     const user = userEvent.setup();
     const onResume = vi.fn();
     const onCancel = vi.fn();
@@ -176,7 +176,9 @@ describe("PendingActionControls", () => {
     );
 
     expect(screen.getByText(/“Quiz draft” is paused/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Resume" }));
     expect(onResume).toHaveBeenCalledTimes(1);
+    expect(onCancel).not.toHaveBeenCalled();
   });
 });

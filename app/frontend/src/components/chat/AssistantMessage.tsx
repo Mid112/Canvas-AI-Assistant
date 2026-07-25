@@ -138,7 +138,11 @@ export function AssistantMessage({
                 ? onConfirmPendingAction!
                 : () => {}
             }
-            onCancel={canActOnPending ? onCancelPendingAction! : () => {}}
+            onCancel={
+              message.pendingActionStatus === "pending"
+                ? onCancelPendingAction!
+                : () => {}
+            }
             onModify={
               message.pendingActionStatus === "pending"
                 ? onModifyPendingAction
