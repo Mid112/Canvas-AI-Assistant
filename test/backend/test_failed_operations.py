@@ -492,7 +492,7 @@ async def test_admin_list_endpoint_returns_seeded_rows(client, admin_headers):
 
         # Viewing detail is an access-logged action, visible in Audit Logs.
         audit = client.get(
-            f"/api/v1/admin/audit/logs?action=failed_operation_viewed",
+            "/api/v1/admin/audit/logs?action=failed_operation_viewed",
             headers=admin_headers,
         )
         assert audit.status_code == 200
