@@ -145,6 +145,7 @@ function TicketPanel({ failedOperationId }: { failedOperationId: number }) {
     }
 
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async ticket load on mount/failedOperationId change
     setIsLoading(true);
     setError(null);
 

@@ -47,6 +47,7 @@ export function ResetCanvasTokenDialog({
 
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reset form fields whenever the dialog reopens for a (possibly different) connection
       setUrl(canvasUrl);
       setToken("");
       setError(null);
