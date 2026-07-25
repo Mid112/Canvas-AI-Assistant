@@ -525,6 +525,26 @@ CREATE TABLE ai_call_health (
 );
 
 -- ─────────────────────────────────────────────
+-- Canvas Idempotency Keys (Feature Reliability #1189)
+-- Reflects migrations 031 + 034 (claim status + nullable response_json).
+-- ─────────────────────────────────────────────
+CREATE TABLE canvas_idempotency_keys (
+    idempotency_key VARCHAR PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    operation       VARCHAR NOT NULL,
+    response_json   JSONB,
+    status          VARCHAR NOT NULL DEFAULT 'completed'
+        CHECK (status IN ('pending', 'completed')),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_canvas_idempotency_keys_user_created
+    ON canvas_idempotency_keys(user_id, created_at DESC);
+
+CREATE INDEX idx_canvas_idempotency_keys_created_at
+    ON canvas_idempotency_keys(created_at);
+
+-- ─────────────────────────────────────────────
 -- Schema Migrations
 -- Tracks which db/migrations/*.sql files have been applied — read and
 -- written by app/backend/app/core/migrations.py on every backend startup,
@@ -574,4 +594,6 @@ INSERT INTO schema_migrations (filename) VALUES
     ('027_llm_response_cache_constraint_name.sql'),
     ('028_health_checks.sql'),
     ('029_canvas_connection_last_sync_error.sql'),
-    ('030_ai_call_health.sql');
+    ('030_ai_call_health.sql'),
+    ('031_canvas_idempotency_keys.sql'),
+    ('034_canvas_idempotency_claim_and_retention.sql');
