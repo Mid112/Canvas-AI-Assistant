@@ -541,6 +541,7 @@ CREATE TABLE failed_operations (
     provider         VARCHAR,
     error_detail     TEXT NOT NULL,
     context_json     JSONB NOT NULL DEFAULT '{}',
+    human_summary    VARCHAR NOT NULL,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -552,6 +553,27 @@ CREATE INDEX idx_failed_operations_source_created_at
 
 CREATE INDEX idx_failed_operations_user_created_at
     ON failed_operations(user_id, created_at DESC);
+
+-- ─────────────────────────────────────────────
+-- Support Tickets
+-- Admin-side escalation tracking for failed operations (Feature 12, Secure
+-- Troubleshooting). One ticket per failed_operation.
+-- ─────────────────────────────────────────────
+CREATE TABLE support_tickets (
+    id                  SERIAL PRIMARY KEY,
+    failed_operation_id INTEGER NOT NULL UNIQUE REFERENCES failed_operations(id) ON DELETE CASCADE,
+    user_id             INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    status              VARCHAR NOT NULL DEFAULT 'open'
+                            CHECK (status IN ('open', 'investigating', 'resolved')),
+    admin_notes         TEXT,
+    created_by          INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    resolved_by         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_at         TIMESTAMPTZ
+);
+
+CREATE INDEX idx_support_tickets_status_created_at
+    ON support_tickets(status, created_at DESC);
 
 -- ─────────────────────────────────────────────
 -- Schema Migrations
@@ -604,4 +626,6 @@ INSERT INTO schema_migrations (filename) VALUES
     ('028_health_checks.sql'),
     ('029_canvas_connection_last_sync_error.sql'),
     ('030_ai_call_health.sql'),
-    ('031_failed_operations.sql');
+    ('031_failed_operations.sql'),
+    ('032_failed_operations_human_summary.sql'),
+    ('033_support_tickets.sql');

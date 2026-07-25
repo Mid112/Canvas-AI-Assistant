@@ -6,11 +6,7 @@ import { AuditLogTable } from "@/components/admin/AuditLogTable";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { getUniqueAuditLogActions } from "@/lib/audit-log-actions";
-import {
-  auditLogFiltersToQueryParams,
-  paginateAuditLogs,
-  sortAuditLogs,
-} from "@/lib/audit-log-query";
+import { auditLogFiltersToQueryParams, paginateAuditLogs } from "@/lib/audit-log-query";
 import { getUniqueAuditLogUsers } from "@/lib/audit-log-users";
 import {
   downloadAuditLogsCsv,
@@ -52,7 +48,10 @@ export function AuditLogsPage() {
   const userOptions = useMemo(() => getUniqueAuditLogUsers(optionsSample), [optionsSample]);
   const actionOptions = useMemo(() => getUniqueAuditLogActions(optionsSample), [optionsSample]);
 
-  const sortedLogs = useMemo(() => sortAuditLogs(logs, sort), [logs, sort]);
+  // Rows already arrive sorted from the server (see loadLogs below, which
+  // sends `sort` as sort_field/sort_direction) — a true global sort across
+  // the full table, not just whatever's been loaded into `logs` so far.
+  const sortedLogs = logs;
 
   const pagination = useMemo(
     () => paginateAuditLogs(sortedLogs, page, AUDIT_LOG_PAGE_SIZE),
@@ -69,9 +68,11 @@ export function AuditLogsPage() {
     setPage(1);
   }, []);
 
-  // The actual search/filter query -- runs server-side against the full
-  // audit table (see services/audit.py::list_audit_logs), not just
-  // whatever page happened to already be loaded here.
+  // The actual search/filter/sort query -- runs server-side against the
+  // full audit table (see services/audit.py::list_audit_logs), not just
+  // whatever page happened to already be loaded here. Changing `sort`
+  // refetches from offset 0, replacing `logs` outright (below), since the
+  // server is now the source of truth for ordering.
   const loadLogs = useCallback(async () => {
     if (!accessToken) {
       return;
@@ -83,7 +84,11 @@ export function AuditLogsPage() {
     setLoadError(null);
 
     try {
-      const batch = await fetchAuditLogs(accessToken, auditLogFiltersToQueryParams(filters));
+      const batch = await fetchAuditLogs(accessToken, {
+        ...auditLogFiltersToQueryParams(filters),
+        sortField: sort.field,
+        sortDirection: sort.direction,
+      });
       if (loadRequestId.current === requestId) {
         setLogs(batch.entries);
         setTotal(batch.total);
@@ -99,7 +104,7 @@ export function AuditLogsPage() {
         setIsLoading(false);
       }
     }
-  }, [accessToken, filters]);
+  }, [accessToken, filters, sort]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -130,6 +135,8 @@ export function AuditLogsPage() {
       const batch = await fetchAuditLogs(accessToken, {
         ...auditLogFiltersToQueryParams(filters),
         offset: logs.length,
+        sortField: sort.field,
+        sortDirection: sort.direction,
       });
       setLogs((current) => [...current, ...batch.entries]);
       setTotal(batch.total);
@@ -138,7 +145,7 @@ export function AuditLogsPage() {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [accessToken, isLoadingMore, logs.length, filters]);
+  }, [accessToken, isLoadingMore, logs.length, filters, sort]);
 
   const signedOutError = accessToken
     ? null

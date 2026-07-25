@@ -90,6 +90,69 @@ async def test_list_audit_logs_paginates_across_merged_sources():
     assert result.total == 3
 
 
+@pytest.mark.asyncio
+async def test_list_audit_logs_sort_direction_asc_returns_oldest_first():
+    older = datetime(2026, 1, 1, tzinfo=UTC)
+    newer = datetime(2026, 1, 2, tzinfo=UTC)
+    db = _db(
+        scalar_results=[1, 1],
+        scalars_results=[[_workflow_row(1, older)], [_session_row(1, newer)]],
+    )
+
+    result = await list_audit_logs(db, limit=10, offset=0, sort_direction="asc")
+
+    assert [item.timestamp for item in result.items] == [older, newer]
+
+
+@pytest.mark.asyncio
+async def test_list_audit_logs_sorts_by_user_field_globally():
+    """A non-timestamp sort must be correct across the *whole* filtered set,
+    not just whatever a timestamp-ordered fetch happened to return first —
+    the whole point of closing the "page-local, not a true global sort" gap."""
+    ts = datetime(2026, 1, 1, tzinfo=UTC)
+    row_bravo = _workflow_row(1, ts)
+    row_bravo.user = SimpleNamespace(email="bravo@example.com", role="instructor")
+    row_alpha = _session_row(2, ts)
+    row_alpha.user = SimpleNamespace(email="alpha@example.com", role="admin")
+    db = _db(scalar_results=[1, 1], scalars_results=[[row_bravo], [row_alpha]])
+
+    result = await list_audit_logs(db, limit=10, offset=0, sort_field="user", sort_direction="asc")
+
+    assert [item.user_email for item in result.items] == [
+        "alpha@example.com",
+        "bravo@example.com",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_list_audit_logs_sorts_by_action_field():
+    ts = datetime(2026, 1, 1, tzinfo=UTC)
+    zeta_row = _workflow_row(1, ts)
+    zeta_row.action = "zeta_action"
+    db = _db(
+        scalar_results=[1, 1],
+        scalars_results=[[zeta_row], [_session_row(2, ts, action="admin_login")]],
+    )
+
+    result = await list_audit_logs(db, limit=10, offset=0, sort_field="action", sort_direction="asc")
+
+    assert [item.action for item in result.items] == ["admin_login", "zeta_action"]
+
+
+@pytest.mark.asyncio
+async def test_list_audit_logs_sorts_by_result_field_descending():
+    ts = datetime(2026, 1, 1, tzinfo=UTC)
+    failed_row = _workflow_row(1, ts)
+    failed_row.status = "failed"
+    success_row = _workflow_row(2, ts)
+    success_row.status = "success"
+    db = _db(scalar_results=[2, 0], scalars_results=[[failed_row, success_row], []])
+
+    result = await list_audit_logs(db, limit=10, offset=0, sort_field="result", sort_direction="desc")
+
+    assert [item.status for item in result.items] == ["success", "failed"]
+
+
 def test_session_row_to_response_unmapped_action_falls_back_to_default():
     row = _session_row(1, datetime(2026, 1, 1, tzinfo=UTC), action="some_future_action")
 

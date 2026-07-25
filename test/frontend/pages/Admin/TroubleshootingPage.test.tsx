@@ -2,7 +2,9 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { adminInstructorsFailingCanvasPath, paths } from "@/routes/paths";
 import { TroubleshootingPage } from "@/pages/Admin/TroubleshootingPage";
+import * as adminCanvasConnectionsService from "@/services/adminCanvasConnections";
 import * as failedOperationsService from "@/services/failedOperations";
 import * as troubleshootService from "@/services/troubleshoot";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
@@ -28,14 +30,6 @@ const diagnosticsResponse: troubleshootService.DiagnosticsResponse = {
     total: 4,
     healthy: 3,
     failing: 1,
-    failing_connections: [
-      {
-        user_name: "Jane Doe",
-        user_email: "jane@example.com",
-        canvas_url: "https://canvas.example.edu",
-        error_detail: "401 Unauthorized",
-      },
-    ],
   },
   llm_providers: [
     {
@@ -59,27 +53,19 @@ const summary: failedOperationsService.FailedOperationSummaryResponse = {
   hours: 24,
 };
 
-function failedOp(
-  id: number,
-  overrides: Partial<failedOperationsService.FailedOperation> = {},
-): failedOperationsService.FailedOperation {
-  return {
-    id,
-    source: "canvas",
-    operation: "create_assignment",
-    user_id: 10,
-    user_name: "Jane Doe",
-    course_id: 5,
-    conversation_id: 20,
-    workflow_id: null,
-    tool_call_id: null,
-    provider: null,
-    error_detail: "Canvas server error: 503",
-    context_json: {},
-    created_at: "2026-07-21T18:00:00Z",
-    ...overrides,
-  };
-}
+const failingConnections: troubleshootService.FailingCanvasConnectionListResponse = {
+  items: [
+    {
+      user_id: 42,
+      user_name: "Jane Doe",
+      user_email: "jane@example.com",
+      canvas_url: "https://canvas.example.edu",
+      human_summary: "Canvas isn't responding for this instructor right now.",
+      error_detail: "401 Unauthorized",
+    },
+  ],
+  total: 1,
+};
 
 describe("TroubleshootingPage", () => {
   const user = userEvent.setup();
@@ -97,15 +83,10 @@ describe("TroubleshootingPage", () => {
     });
     vi.spyOn(troubleshootService, "fetchDiagnostics").mockResolvedValue(diagnosticsResponse);
     vi.spyOn(failedOperationsService, "fetchFailedOperationsSummary").mockResolvedValue(summary);
-    vi.spyOn(failedOperationsService, "fetchFailedOperations").mockResolvedValue({
-      items: [failedOp(1)],
-      total: 1,
-      canvas_count: 1,
-      ai_count: 0,
-    });
-    vi.spyOn(failedOperationsService, "fetchFailedOperation").mockImplementation(
-      async (_token, id) => failedOp(id),
+    vi.spyOn(troubleshootService, "fetchFailingCanvasConnections").mockResolvedValue(
+      failingConnections,
     );
+    vi.spyOn(adminCanvasConnectionsService, "resetInstructorCanvasToken");
   });
 
   it("renders the diagnostics overview", async () => {
@@ -115,7 +96,7 @@ describe("TroubleshootingPage", () => {
       expect(screen.getByText("Overall health")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("degraded")).toBeInTheDocument();
+    expect(screen.getByText("Degraded")).toBeInTheDocument();
     expect(screen.getByText("https://canvas.ubc.ca")).toBeInTheDocument();
     expect(screen.getByText("3 min")).toBeInTheDocument();
   });
@@ -127,8 +108,10 @@ describe("TroubleshootingPage", () => {
       expect(screen.getByText("Instructor Canvas connections")).toBeInTheDocument();
     });
 
+    expect(screen.getByText("Jane Doe")).toBeInTheDocument();
+    expect(screen.getByText(/jane@example\.com/)).toBeInTheDocument();
     expect(
-      screen.getByText("Jane Doe (jane@example.com) — 401 Unauthorized"),
+      screen.getByText("Canvas isn't responding for this instructor right now."),
     ).toBeInTheDocument();
     expect(screen.queryByText(/token/i, { selector: "code, pre" })).not.toBeInTheDocument();
   });
@@ -144,116 +127,31 @@ describe("TroubleshootingPage", () => {
     expect(screen.getByText("Available")).toBeInTheDocument();
   });
 
-  it("renders failed-operation summary cards (Canvas + AI, Feature 11)", async () => {
-    renderWithRouter(<TroubleshootingPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Total failures")).toBeInTheDocument();
-    });
-
-    expect(screen.getByText("Canvas failures")).toBeInTheDocument();
-    expect(screen.getByText("AI failures")).toBeInTheDocument();
-  });
-
-  it("renders failed operations in a list with a detail panel", async () => {
+  it("renders a compact failed-operations summary (Canvas + AI, Feature 11)", async () => {
     renderWithRouter(<TroubleshootingPage />);
 
     await waitFor(() => {
       expect(screen.getByText("Failed operations")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("create_assignment")).toBeInTheDocument();
-    expect(screen.getAllByText("Canvas server error: 503").length).toBeGreaterThan(0);
-  });
-
-  it("filters the failed-operations list when a source tab is selected", async () => {
-    renderWithRouter(<TroubleshootingPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText("create_assignment")).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByRole("button", { name: "AI" }));
-
-    await waitFor(() => {
-      expect(failedOperationsService.fetchFailedOperations).toHaveBeenLastCalledWith(
-        "access-token",
-        expect.objectContaining({ source: "ai" }),
-      );
-    });
-  });
-
-  it("loads detail context when a list item is selected", async () => {
-    vi.spyOn(failedOperationsService, "fetchFailedOperations").mockResolvedValue({
-      items: [failedOp(1), failedOp(2, { operation: "assistant_chat", source: "ai", provider: "openai" })],
-      total: 2,
-      canvas_count: 1,
-      ai_count: 1,
-    });
-
-    renderWithRouter(<TroubleshootingPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText("assistant_chat")).toBeInTheDocument();
-    });
-
-    await user.click(screen.getByText("assistant_chat"));
-
-    await waitFor(() => {
-      expect(failedOperationsService.fetchFailedOperation).toHaveBeenLastCalledWith(
-        "access-token",
-        2,
-      );
-    });
-  });
-
-  it("shows a clean state when there are no failed operations", async () => {
-    vi.spyOn(failedOperationsService, "fetchFailedOperations").mockResolvedValue({
-      items: [],
-      total: 0,
-      canvas_count: 0,
-      ai_count: 0,
-    });
-
-    renderWithRouter(<TroubleshootingPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText("No failed operations recorded.")).toBeInTheDocument();
-    });
-    expect(screen.getByText("Select a failed operation to view details.")).toBeInTheDocument();
-  });
-
-  it("loads more failed operations when Load more is clicked", async () => {
-    vi.spyOn(failedOperationsService, "fetchFailedOperations").mockResolvedValueOnce({
-      items: [failedOp(1)],
-      total: 2,
-      canvas_count: 2,
-      ai_count: 0,
-    });
-
-    renderWithRouter(<TroubleshootingPage />);
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Load more" })).toBeInTheDocument();
-    });
-
-    vi.spyOn(failedOperationsService, "fetchFailedOperations").mockResolvedValueOnce({
-      items: [failedOp(2, { operation: "update_grade" })],
-      total: 2,
-      canvas_count: 2,
-      ai_count: 0,
-    });
-
-    await user.click(screen.getByRole("button", { name: "Load more" }));
-
-    await waitFor(() => {
-      expect(screen.getByText("update_grade")).toBeInTheDocument();
-    });
-    expect(failedOperationsService.fetchFailedOperations).toHaveBeenLastCalledWith(
-      "access-token",
-      { source: undefined, limit: 50, offset: 1 },
-    );
+    expect(screen.getByText("Total")).toBeInTheDocument();
+    expect(screen.getByText("Canvas")).toBeInTheDocument();
+    expect(screen.getByText("AI")).toBeInTheDocument();
+    // Renders as a compact summary only -- no list/filter/detail panel here.
     expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
+  });
+
+  it("links to the dedicated Failed Operations page for the full drill-down", async () => {
+    renderWithRouter(<TroubleshootingPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Failed operations")).toBeInTheDocument();
+    });
+
+    // The Button component keeps role="button" for a11y consistency even
+    // when rendered as a Link (Base UI's render prop), so query by button.
+    const link = screen.getByRole("button", { name: /view failed operations/i });
+    expect(link).toHaveAttribute("href", paths.admin.failedOperations);
   });
 
   it("shows an error state when diagnostics fail to load", async () => {
@@ -268,19 +166,99 @@ describe("TroubleshootingPage", () => {
     ).toBeInTheDocument();
   });
 
-  it("refetches diagnostics and failed operations when refresh is clicked", async () => {
+  it("refetches diagnostics and the failed-operations summary when refresh is clicked", async () => {
     renderWithRouter(<TroubleshootingPage />);
 
     await waitFor(() => {
       expect(troubleshootService.fetchDiagnostics).toHaveBeenCalledTimes(1);
-      expect(failedOperationsService.fetchFailedOperations).toHaveBeenCalledTimes(1);
+      expect(failedOperationsService.fetchFailedOperationsSummary).toHaveBeenCalledTimes(1);
     });
 
     await user.click(screen.getByRole("button", { name: "Refresh diagnostics" }));
 
     await waitFor(() => {
       expect(troubleshootService.fetchDiagnostics).toHaveBeenCalledTimes(2);
-      expect(failedOperationsService.fetchFailedOperations).toHaveBeenCalledTimes(2);
+      expect(failedOperationsService.fetchFailedOperationsSummary).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // Verifies: "Manage instructors" deep-links to the failing-only filtered
+  // view (see routes/paths.ts::adminInstructorsFailingCanvasPath), not the
+  // full instructor roster.
+  it("links Manage instructors to the failing-only instructor filter", async () => {
+    renderWithRouter(<TroubleshootingPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Instructor Canvas connections")).toBeInTheDocument();
+    });
+
+    const link = screen.getByRole("button", { name: "Manage instructors" });
+    expect(link).toHaveAttribute("href", adminInstructorsFailingCanvasPath());
+  });
+
+  it("paginates the failing connections list independently of the rest of diagnostics", async () => {
+    vi.spyOn(troubleshootService, "fetchFailingCanvasConnections").mockImplementation(
+      async (_token, options) => {
+        if ((options?.offset ?? 0) === 0) {
+          return { items: failingConnections.items, total: 7 };
+        }
+        return {
+          items: [
+            {
+              ...failingConnections.items[0]!,
+              user_id: 99,
+              user_name: "Second Page Instructor",
+            },
+          ],
+          total: 7,
+        };
+      },
+    );
+
+    renderWithRouter(<TroubleshootingPage />);
+
+    await screen.findByText("Jane Doe");
+    expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Second Page Instructor")).toBeInTheDocument();
+    });
+    expect(screen.getByText("Page 2 of 2")).toBeInTheDocument();
+    expect(troubleshootService.fetchFailingCanvasConnections).toHaveBeenLastCalledWith(
+      "access-token",
+      { limit: 5, offset: 5 },
+    );
+    // Paging the connections list must not re-run the rest of diagnostics.
+    expect(troubleshootService.fetchDiagnostics).toHaveBeenCalledTimes(1);
+  });
+
+  it("resets a failing connection's Canvas token directly from the card", async () => {
+    vi.spyOn(adminCanvasConnectionsService, "resetInstructorCanvasToken").mockResolvedValue([]);
+
+    renderWithRouter(<TroubleshootingPage />);
+
+    await screen.findByText("Jane Doe");
+
+    await user.click(screen.getByRole("button", { name: "Reset token" }));
+    await user.type(screen.getByLabelText("New Canvas API token"), "fresh-token-value");
+    await user.click(screen.getByRole("button", { name: "Update token" }));
+
+    await waitFor(() => {
+      expect(adminCanvasConnectionsService.resetInstructorCanvasToken).toHaveBeenCalledWith(
+        "access-token",
+        "42",
+        { canvasUrl: "https://canvas.example.edu", canvasToken: "fresh-token-value" },
+      );
+    });
+
+    // A successful reset refreshes both the diagnostics counts and this
+    // card's own connections page.
+    await waitFor(() => {
+      expect(troubleshootService.fetchDiagnostics).toHaveBeenCalledTimes(2);
+      expect(troubleshootService.fetchFailingCanvasConnections).toHaveBeenCalledTimes(2);
     });
   });
 });

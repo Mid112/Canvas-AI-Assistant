@@ -5,9 +5,13 @@ from app.schemas.llm_provider import LlmProviderStatus
 
 
 class FailingCanvasConnection(BaseModel):
+    user_id: int
     user_name: str
     user_email: str
     canvas_url: str
+    # Plain-language description for the admin dashboard's default view —
+    # see summarize_connection_error() in services/troubleshoot.py.
+    human_summary: str
     error_detail: str | None = None
 
 
@@ -15,7 +19,11 @@ class InstructorCanvasSummary(BaseModel):
     total: int
     healthy: int
     failing: int
-    failing_connections: list[FailingCanvasConnection]
+
+
+class FailingCanvasConnectionListResponse(BaseModel):
+    items: list[FailingCanvasConnection]
+    total: int
 
 
 class DiagnosticsResponse(BaseModel):

@@ -14,6 +14,10 @@ router = APIRouter(prefix="/audit", tags=["audit"])
 admin_router = APIRouter(prefix="/admin/audit", tags=["audit"])
 
 
+AuditLogSortField = Literal["timestamp", "user", "action", "resource", "result"]
+AuditLogSortDirection = Literal["asc", "desc"]
+
+
 @router.get("/logs", response_model=AuditLogListResponse)
 async def get_audit_logs(
     limit: int = Query(default=50, ge=1, le=200),
@@ -24,6 +28,8 @@ async def get_audit_logs(
     result: Literal["success", "failed", "unknown"] | None = Query(default=None),
     start_time: datetime | None = Query(default=None),
     end_time: datetime | None = Query(default=None),
+    sort_field: AuditLogSortField = Query(default="timestamp"),
+    sort_direction: AuditLogSortDirection = Query(default="desc"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -39,6 +45,8 @@ async def get_audit_logs(
         result=result,
         start_time=start_time,
         end_time=end_time,
+        sort_field=sort_field,
+        sort_direction=sort_direction,
     )
 
 
@@ -52,6 +60,8 @@ async def get_admin_audit_logs_alias(
     result: Literal["success", "failed", "unknown"] | None = Query(default=None),
     start_time: datetime | None = Query(default=None),
     end_time: datetime | None = Query(default=None),
+    sort_field: AuditLogSortField = Query(default="timestamp"),
+    sort_direction: AuditLogSortDirection = Query(default="desc"),
     current_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -65,4 +75,6 @@ async def get_admin_audit_logs_alias(
         result=result,
         start_time=start_time,
         end_time=end_time,
+        sort_field=sort_field,
+        sort_direction=sort_direction,
     )

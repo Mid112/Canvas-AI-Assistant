@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime
 
-from sqlalchemy import String, cast, desc, func, or_, select
+from sqlalchemy import String, asc, cast, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import contains_eager
 
@@ -11,6 +11,27 @@ from app.models.user import User
 from app.schemas.audit import AuditLogListResponse, AuditLogResponse
 
 logger = logging.getLogger(__name__)
+
+# Safety cap on per-source rows fetched when sorting by a field other than
+# timestamp (see list_audit_logs) — a non-timestamp global sort needs the
+# full filtered result set fetched before it can be sorted/sliced correctly
+# (unlike timestamp, which both tables are already indexed/ordered by), so
+# this bounds how large that single query can get when few/no filters are
+# active. Fine at this app's scale; revisit with a real per-field SQL sort
+# if this ever becomes a bottleneck.
+_MAX_SORT_ROWS = 5000
+
+
+def _sort_key(item: AuditLogResponse, field: str) -> tuple[str, str] | str | datetime:
+    if field == "user":
+        return (item.user_email, item.user_role)
+    if field == "action":
+        return item.action
+    if field == "resource":
+        return item.resource_type
+    if field == "result":
+        return item.status
+    return item.timestamp
 
 # AuditLogSession.action -> (resource_type, operation, status), so session
 # rows render through the same AuditLogResponse shape as audit_logs rows.
@@ -42,6 +63,13 @@ SESSION_ACTION_META: dict[str, tuple[str, str, str]] = {
     "instructor_access_revoked": ("instructor_account", "revoke", "success"),
     "llm_provider_configuration_updated": ("system_setting", "update", "success"),
     "admin_settings_updated": ("system_setting", "update", "success"),
+    # Written by services/failed_operations.py::get_failed_operation on every
+    # call — the audit trail of the audit tool: who looked at a failed
+    # operation's raw (potentially FERPA-sensitive) error_detail/context_json.
+    "failed_operation_viewed": ("failed_operation", "view", "success"),
+    # Written by services/admin.py::reset_instructor_canvas_token — an admin
+    # replacing an instructor's Canvas token on their behalf (support flow).
+    "instructor_canvas_token_reset": ("canvas_connection", "update", "success"),
 }
 _DEFAULT_SESSION_META: tuple[str, str, str] = ("account", "update", "success")
 
@@ -99,6 +127,8 @@ async def list_audit_logs(
     result: str | None = None,
     start_time: datetime | None = None,
     end_time: datetime | None = None,
+    sort_field: str = "timestamp",
+    sort_direction: str = "desc",
 ) -> AuditLogListResponse:
     """Server-side search/filter over both audit sources, so results are
     correct against the full table rather than whatever page happened to be
@@ -175,17 +205,30 @@ async def list_audit_logs(
     workflow_total = int(await db.scalar(workflow_count_query) or 0)
     session_total = int(await db.scalar(session_count_query) or 0)
 
-    # Both sources are already sorted desc by timestamp, so the top
-    # (offset + limit) rows from each is enough to merge-sort and slice the
-    # correct global window below — a simple fetch-then-merge rather than a
-    # SQL UNION ALL, fine at this app's scale.
-    fetch_cap = offset + limit
-    workflow_rows = await db.scalars(
-        workflow_query.order_by(desc(AuditLog.timestamp)).limit(fetch_cap)
-    )
-    session_rows = await db.scalars(
-        session_query.order_by(desc(AuditLogSession.timestamp)).limit(fetch_cap)
-    )
+    descending = sort_direction != "asc"
+
+    if sort_field == "timestamp":
+        # Both sources are already indexed/ordered by timestamp, so the top
+        # (offset + limit) rows from each in the requested direction is
+        # enough to merge-sort and slice the correct global window below —
+        # a simple fetch-then-merge rather than a SQL UNION ALL, fine at
+        # this app's scale.
+        fetch_cap = offset + limit
+        order = desc if descending else asc
+        workflow_rows = await db.scalars(
+            workflow_query.order_by(order(AuditLog.timestamp)).limit(fetch_cap)
+        )
+        session_rows = await db.scalars(
+            session_query.order_by(order(AuditLogSession.timestamp)).limit(fetch_cap)
+        )
+    else:
+        # A non-timestamp global sort can't be answered from a
+        # timestamp-ordered prefix — the row that belongs at a given offset
+        # depends on every filtered row, not just the most recent ones — so
+        # fetch the full filtered set from each source (capped defensively,
+        # see _MAX_SORT_ROWS) and sort in Python below instead.
+        workflow_rows = await db.scalars(workflow_query.limit(_MAX_SORT_ROWS))
+        session_rows = await db.scalars(session_query.limit(_MAX_SORT_ROWS))
 
     workflow_items = [
         AuditLogResponse(
@@ -206,7 +249,11 @@ async def list_audit_logs(
     ]
     session_items = [_session_row_to_response(row) for row in session_rows]
 
-    merged = sorted(workflow_items + session_items, key=lambda item: item.timestamp, reverse=True)
+    merged = sorted(
+        workflow_items + session_items,
+        key=lambda item: _sort_key(item, sort_field),
+        reverse=descending,
+    )
     items = merged[offset : offset + limit]
 
     return AuditLogListResponse(items=items, total=workflow_total + session_total)

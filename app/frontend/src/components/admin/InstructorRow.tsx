@@ -14,6 +14,7 @@ interface InstructorRowProps {
   onEnable: (instructor: Instructor) => void;
   onDisable: (instructor: Instructor) => void;
   onRevoke: (instructor: Instructor) => void;
+  onManageCanvasConnections: (instructor: Instructor) => void;
 }
 
 export function InstructorRow({
@@ -22,6 +23,7 @@ export function InstructorRow({
   onEnable,
   onDisable,
   onRevoke,
+  onManageCanvasConnections,
 }: InstructorRowProps) {
   const fullName = getInstructorFullName(instructor);
 
@@ -52,6 +54,7 @@ export function InstructorRow({
           onEnable={onEnable}
           onDisable={onDisable}
           onRevoke={onRevoke}
+          onManageCanvasConnections={onManageCanvasConnections}
         />
       </TableCell>
     </TableRow>

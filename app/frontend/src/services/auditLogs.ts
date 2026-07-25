@@ -5,6 +5,8 @@ import type {
   AuditLogApiRecord,
   AuditLogEntry,
   AuditLogResult,
+  AuditLogSortDirection,
+  AuditLogSortField,
   FetchAuditLogsResponse,
 } from "@/types/auditLog";
 
@@ -35,10 +37,15 @@ export interface FetchAuditLogsParams {
   startTime?: string;
   /** ISO 8601 instant, exclusive upper bound on timestamp. */
   endTime?: string;
+  /** Server-side sort — a true global sort across the full table, not just
+   * whatever rows happen to already be loaded client-side. */
+  sortField?: AuditLogSortField;
+  sortDirection?: AuditLogSortDirection;
 }
 
-/** Server-side search/filter, so results are correct against the full audit
- * table rather than whatever page happened to already be loaded client-side. */
+/** Server-side search/filter/sort, so results are correct against the full
+ * audit table rather than whatever page happened to already be loaded
+ * client-side. */
 export async function fetchAuditLogs(
   accessToken: string,
   {
@@ -50,6 +57,8 @@ export async function fetchAuditLogs(
     result,
     startTime,
     endTime,
+    sortField,
+    sortDirection,
   }: FetchAuditLogsParams = {},
 ): Promise<AuditLogsBatch> {
   const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
@@ -59,6 +68,8 @@ export async function fetchAuditLogs(
   if (result) query.set("result", result);
   if (startTime) query.set("start_time", startTime);
   if (endTime) query.set("end_time", endTime);
+  if (sortField) query.set("sort_field", sortField);
+  if (sortDirection) query.set("sort_direction", sortDirection);
 
   const response = await apiRequest<FetchAuditLogsResponse | AuditLogApiRecord[]>(
     `${AUDIT_LOGS_ADMIN_PATH}?${query.toString()}`,

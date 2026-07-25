@@ -11,9 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.secret_redaction import redact_secrets
+from app.models.audit_log_session import AuditLogSession
 from app.models.failed_operation import FailedOperation
 from app.models.user import User
 from app.schemas.failed_operations import (
+    FailedOperationDetailResponse,
     FailedOperationListResponse,
     FailedOperationResponse,
     FailedOperationSummaryResponse,
@@ -101,6 +103,33 @@ def _sanitize_context(context_json: dict[str, Any] | None) -> dict[str, Any]:
     return sanitized if isinstance(sanitized, dict) else {"value": sanitized}
 
 
+# Known (source, operation) pairs get a tailored plain-language summary;
+# anything else (mostly dynamic workflow.action_name values like
+# "update_assignment"/"create_quiz") falls back to a humanized generic
+# phrase in summarize_failure() below.
+_KNOWN_OPERATION_SUMMARIES: dict[tuple[str, str], str] = {
+    ("canvas", "course_sync"): "This course couldn't be synced from Canvas.",
+    ("ai", "assistant_chat"): "The AI assistant couldn't complete this request.",
+    ("ai", "ai_draft"): "The AI assistant couldn't generate a draft.",
+}
+
+
+def summarize_failure(source: str, operation: str) -> str:
+    """Plain-language description generated at write time (point of
+    failure), so the admin dashboard's default view never has to translate
+    raw error text/operation codes at render time. See _KNOWN_OPERATION_SUMMARIES
+    for the tailored cases; everything else (chiefly dynamic Canvas workflow
+    action names) gets a humanized generic phrase."""
+    known = _KNOWN_OPERATION_SUMMARIES.get((source, operation))
+    if known:
+        return known
+
+    phrase = operation.replace("_", " ").strip() or "operation"
+    if source == "canvas":
+        return f"Canvas couldn't {phrase}."
+    return f"The AI assistant couldn't {phrase}."
+
+
 def _to_response(row: FailedOperation) -> FailedOperationResponse:
     user_name = None
     if row.context_json:
@@ -121,9 +150,17 @@ def _to_response(row: FailedOperation) -> FailedOperationResponse:
         workflow_id=row.workflow_id,
         tool_call_id=row.tool_call_id,
         provider=row.provider,
+        human_summary=row.human_summary,
+        created_at=row.created_at,
+    )
+
+
+def _to_detail_response(row: FailedOperation) -> FailedOperationDetailResponse:
+    summary = _to_response(row)
+    return FailedOperationDetailResponse(
+        **summary.model_dump(),
         error_detail=row.error_detail,
         context_json=row.context_json or {},
-        created_at=row.created_at,
     )
 
 
@@ -166,6 +203,7 @@ async def record_failed_operation(
         provider=(provider.strip()[:64] if isinstance(provider, str) and provider.strip() else None),
         error_detail=detail,
         context_json=context,
+        human_summary=summarize_failure(source, op),
     )
     db.add(row)
     await db.flush()
@@ -266,7 +304,15 @@ async def list_failed_operations(
 async def get_failed_operation(
     db: AsyncSession,
     failed_operation_id: int,
-) -> FailedOperationResponse:
+    *,
+    viewer: User,
+) -> FailedOperationDetailResponse:
+    """Returns the full detail (raw error_detail/context_json), which can
+    contain FERPA-sensitive course/user data. Every call writes an
+    AuditLogSession "failed_operation_viewed" row first — an audit trail of
+    who looked at raw failure detail and when (see SESSION_ACTION_META in
+    services/audit.py, which is what surfaces this row in the Audit Logs
+    page)."""
     row = await db.scalar(
         select(FailedOperation)
         .options(selectinload(FailedOperation.user))
@@ -277,7 +323,18 @@ async def get_failed_operation(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Failed operation not found.",
         )
-    return _to_response(row)
+
+    db.add(
+        AuditLogSession(
+            user_id=viewer.id,
+            workflow_id=row.workflow_id,
+            action="failed_operation_viewed",
+            details={"failed_operation_id": row.id},
+        )
+    )
+    await db.commit()
+
+    return _to_detail_response(row)
 
 
 async def get_failed_operations_summary(

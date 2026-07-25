@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mockAuditLogs } from "@/data/mockAuditLogs";
+import { sortAuditLogs } from "@/lib/audit-log-query";
 import { AuditLogsPage } from "@/pages/Admin/AuditLogsPage";
 import * as auditLogsService from "@/services/auditLogs";
 import type { AuditLogEntry } from "@/types/auditLog";
@@ -19,16 +20,28 @@ function matchesQuery(haystack: string, query: string): boolean {
   return haystack.toLowerCase().includes(query.trim().toLowerCase());
 }
 
-/** Stands in for the real backend's search/filter logic (services/audit.py)
- * so tests can drive the same filter bar interactions as before -- just now
- * routed through the (mocked) server call instead of client-side filtering. */
+/** Stands in for the real backend's search/filter/sort logic
+ * (services/audit.py) so tests can drive the same filter bar and column-sort
+ * interactions as before -- just now routed through the (mocked) server call
+ * instead of client-side filtering/sorting, matching the true-global-sort
+ * contract the real backend now provides. */
 function fakeServerFetch(all: AuditLogEntry[]) {
   return async (
     _accessToken: string,
     params: auditLogsService.FetchAuditLogsParams = {},
   ): Promise<auditLogsService.AuditLogsBatch> => {
-    const { search, action, user, result, startTime, endTime, offset = 0, limit = all.length } =
-      params;
+    const {
+      search,
+      action,
+      user,
+      result,
+      startTime,
+      endTime,
+      offset = 0,
+      limit = all.length,
+      sortField,
+      sortDirection,
+    } = params;
 
     let filtered = all;
     if (action) {
@@ -55,6 +68,12 @@ function fakeServerFetch(all: AuditLogEntry[]) {
           search,
         ),
       );
+    }
+    if (sortField) {
+      filtered = sortAuditLogs(filtered, {
+        field: sortField,
+        direction: sortDirection ?? "desc",
+      });
     }
 
     return { entries: filtered.slice(offset, offset + limit), total: filtered.length };
@@ -375,7 +394,11 @@ describe("AuditLogsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Audit logs (7)")).toBeInTheDocument();
     });
-    expect(fetchSpy).toHaveBeenLastCalledWith("access-token", { offset: 5 });
+    expect(fetchSpy).toHaveBeenLastCalledWith("access-token", {
+      offset: 5,
+      sortField: "timestamp",
+      sortDirection: "desc",
+    });
     expect(
       screen.queryByRole("button", { name: "Load more" }),
     ).not.toBeInTheDocument();

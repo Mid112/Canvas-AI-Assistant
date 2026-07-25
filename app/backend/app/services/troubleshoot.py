@@ -10,6 +10,7 @@ from app.models.user import User
 from app.schemas.troubleshoot import (
     DiagnosticsResponse,
     FailingCanvasConnection,
+    FailingCanvasConnectionListResponse,
     InstructorCanvasSummary,
 )
 from app.services.failed_operations import get_failed_operations_summary
@@ -20,8 +21,23 @@ from app.services.llm.provider_registry import get_provider_statuses
 # summary's "recent" count -- an outage from last week shouldn't still read
 # as an active problem today.
 _RECENT_FAILURE_HOURS = 24
-# Bounded so the admin page never renders an unbounded list of instructors.
-_FAILING_CANVAS_CONNECTIONS_LIMIT = 10
+
+# Matches the same reconnect-vs-token-corrupted prefixes
+# _is_expected_canvas_token_sync_error (services/canvas.py) checks for —
+# these are the cases an instructor can fix themselves by reconnecting.
+_TOKEN_ISSUE_PREFIXES = ("No Canvas token", "Canvas token is corrupted", "Invalid Canvas API token")
+
+
+def summarize_connection_error(error_detail: str | None) -> str:
+    """Plain-language description for the admin dashboard's default view —
+    last_sync_error is a raw HTTP client failure message (e.g. "422: Invalid
+    Canvas API token" or a bare Canvas 5xx), not something an admin should
+    have to parse at render time."""
+    if error_detail is None:
+        return "This instructor's Canvas connection is healthy."
+    if any(prefix in error_detail for prefix in _TOKEN_ISSUE_PREFIXES):
+        return "This instructor needs to reconnect their Canvas account."
+    return "Canvas isn't responding for this instructor right now."
 
 
 async def get_instructor_canvas_summary(db: AsyncSession) -> InstructorCanvasSummary:
@@ -30,7 +46,8 @@ async def get_instructor_canvas_summary(db: AsyncSession) -> InstructorCanvasSum
     -- no new Canvas calls. Distinct from health.check_canvas(), which only
     tests whether the Canvas host itself is reachable. This is deep-dive,
     admin-only detail -- it belongs in Troubleshooting, not the at-a-glance
-    System Health status board."""
+    System Health status board. Counts only -- see
+    list_failing_canvas_connections for the paginated detail list."""
     total = await db.scalar(select(func.count()).select_from(CanvasConnection)) or 0
     failing = (
         await db.scalar(
@@ -40,32 +57,54 @@ async def get_instructor_canvas_summary(db: AsyncSession) -> InstructorCanvasSum
         )
         or 0
     )
+    return InstructorCanvasSummary(total=total, healthy=total - failing, failing=failing)
+
+
+async def list_failing_canvas_connections(
+    db: AsyncSession, *, limit: int = 10, offset: int = 0
+) -> FailingCanvasConnectionListResponse:
+    """Paginated detail behind InstructorCanvasSummary.failing -- kept as its
+    own query (rather than embedded in get_diagnostics) so paging through
+    failing connections doesn't re-run the health/LLM-provider checks that
+    live alongside it on the Troubleshooting page."""
+    total = (
+        await db.scalar(
+            select(func.count())
+            .select_from(CanvasConnection)
+            .where(CanvasConnection.last_sync_error.is_not(None))
+        )
+        or 0
+    )
     rows = await db.execute(
         select(
-            User.name, User.email, CanvasConnection.canvas_url, CanvasConnection.last_sync_error
+            User.id,
+            User.name,
+            User.email,
+            CanvasConnection.canvas_url,
+            CanvasConnection.last_sync_error,
         )
         .join(User, User.id == CanvasConnection.user_id)
         .where(CanvasConnection.last_sync_error.is_not(None))
-        .limit(_FAILING_CANVAS_CONNECTIONS_LIMIT)
+        # Stable order so paging doesn't reshuffle rows between pages.
+        .order_by(CanvasConnection.id)
+        .offset(offset)
+        .limit(limit)
     )
-    failing_connections = [
+    items = [
         FailingCanvasConnection(
+            user_id=user_id,
             user_name=name,
             user_email=email,
             canvas_url=canvas_url,
+            human_summary=summarize_connection_error(error_detail),
             # last_sync_error is free-form text from an HTTP client failure --
             # it could echo a bearer token/API key back from a raw request
             # error, so scrub before this ever reaches an admin-facing response.
             error_detail=redact_secrets(error_detail) if error_detail else None,
         )
-        for name, email, canvas_url, error_detail in rows
+        for user_id, name, email, canvas_url, error_detail in rows
     ]
-    return InstructorCanvasSummary(
-        total=total,
-        healthy=total - failing,
-        failing=failing,
-        failing_connections=failing_connections,
-    )
+    return FailingCanvasConnectionListResponse(items=items, total=total)
 
 
 async def get_diagnostics(db: AsyncSession, backend_started_at: float) -> DiagnosticsResponse:

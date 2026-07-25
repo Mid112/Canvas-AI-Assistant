@@ -27,6 +27,7 @@ from app.routers import (
     llm,
     message_templates,
     messages,
+    support_tickets,
     troubleshoot,
 )
 from app.services.canvas import run_course_sync_sweep
@@ -132,6 +133,7 @@ app.include_router(history.router, prefix=settings.API_V1_PREFIX)
 app.include_router(audit.router, prefix=settings.API_V1_PREFIX)
 app.include_router(audit.admin_router, prefix=settings.API_V1_PREFIX)
 app.include_router(failed_operations.router, prefix=settings.API_V1_PREFIX)
+app.include_router(support_tickets.router, prefix=settings.API_V1_PREFIX)
 app.include_router(message_templates.router, prefix=settings.API_V1_PREFIX)
 app.include_router(troubleshoot.router, prefix=settings.API_V1_PREFIX)
 

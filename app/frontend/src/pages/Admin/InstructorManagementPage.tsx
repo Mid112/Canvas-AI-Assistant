@@ -1,10 +1,12 @@
 import { Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { AdminToast } from "@/components/admin/AdminToast";
 import { ConfirmationDialog } from "@/components/admin/ConfirmationDialog";
 import { CreateInstructorDialog } from "@/components/admin/CreateInstructorDialog";
 import { EditInstructorDialog } from "@/components/admin/EditInstructorDialog";
+import { InstructorCanvasConnectionsDialog } from "@/components/admin/InstructorCanvasConnectionsDialog";
 import {
   InstructorCredentialsDialog,
   type CreatedInstructorCredentials,
@@ -30,6 +32,7 @@ import {
   type InstructorConfirmAction,
 } from "@/types/instructor";
 import { pageShellXWide } from "@/lib/page-shell";
+import { paths } from "@/routes/paths";
 
 type ConfirmDialogState = {
   action: InstructorConfirmAction;
@@ -43,6 +46,11 @@ type ToastState = {
 
 export function InstructorManagementPage() {
   const { accessToken } = useAuth();
+  const [searchParams] = useSearchParams();
+  // Deep-linked from Troubleshooting's "Manage instructors" button (see
+  // routes/paths.ts::adminInstructorsFailingCanvasPath) so the roster shown
+  // here matches exactly who that page named, not the full instructor list.
+  const canvasStatusFilter = searchParams.get("canvasStatus") === "failing" ? "failing" : undefined;
   const [instructors, setInstructors] = useState<Instructor[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -57,6 +65,8 @@ export function InstructorManagementPage() {
     useState<CreatedInstructorCredentials | null>(null);
   const [editingInstructor, setEditingInstructor] = useState<Instructor | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
+  const [canvasConnectionsInstructor, setCanvasConnectionsInstructor] =
+    useState<Instructor | null>(null);
   const loadRequestId = useRef(0);
 
   const filteredInstructors = useMemo(
@@ -89,7 +99,7 @@ export function InstructorManagementPage() {
     }
 
     try {
-      const data = await fetchInstructors(accessToken!);
+      const data = await fetchInstructors(accessToken!, { canvasStatus: canvasStatusFilter });
       if (loadRequestId.current === requestId) {
         setInstructors(data);
         setLoadError(null);
@@ -104,7 +114,7 @@ export function InstructorManagementPage() {
         setIsLoading(false);
       }
     }
-  }, [accessToken]);
+  }, [accessToken, canvasStatusFilter]);
 
   useEffect(() => {
     if (!accessToken) {
@@ -125,7 +135,7 @@ export function InstructorManagementPage() {
       setLoadError(null);
 
       try {
-        const data = await fetchInstructors(accessToken);
+        const data = await fetchInstructors(accessToken, { canvasStatus: canvasStatusFilter });
         if (!cancelled && loadRequestId.current === requestId) {
           setInstructors(data);
           setLoadError(null);
@@ -145,7 +155,7 @@ export function InstructorManagementPage() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken]);
+  }, [accessToken, canvasStatusFilter]);
 
   const signedOutError = accessToken
     ? null
@@ -295,6 +305,15 @@ export function InstructorManagementPage() {
         </Button>
       </header>
 
+      {canvasStatusFilter === "failing" ? (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-2.5 text-sm text-destructive">
+          <span>Showing only instructors with a failing Canvas connection.</span>
+          <Link to={paths.admin.users} className="font-medium underline underline-offset-2">
+            Show all instructors
+          </Link>
+        </div>
+      ) : null}
+
       <div className="flex flex-col gap-4 rounded-xl border bg-card p-4 shadow-sm ring-1 ring-border/60 sm:flex-row sm:items-center sm:justify-between">
         <div className="inline-flex w-fit items-center rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary">
           Instructors ({instructors.length})
@@ -325,6 +344,9 @@ export function InstructorManagementPage() {
         }}
         onRevoke={(instructor) => {
           setConfirmDialog({ action: "revoke", instructor });
+        }}
+        onManageCanvasConnections={(instructor) => {
+          setCanvasConnectionsInstructor(instructor);
         }}
       />
 
@@ -381,6 +403,16 @@ export function InstructorManagementPage() {
           onConfirm={() => void handleConfirmAction()}
         />
       ) : null}
+
+      <InstructorCanvasConnectionsDialog
+        open={canvasConnectionsInstructor !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCanvasConnectionsInstructor(null);
+          }
+        }}
+        instructor={canvasConnectionsInstructor}
+      />
 
       {toast ? (
         <AdminToast

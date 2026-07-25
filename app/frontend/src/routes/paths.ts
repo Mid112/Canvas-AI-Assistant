@@ -40,8 +40,20 @@ export const paths = {
     profile: "/admin/profile",
     systemHealth: "/admin/system-health",
     troubleshooting: "/admin/troubleshooting",
+    // Drill-in destination reached via the "View failed operations" button
+    // on Troubleshooting -- not a peer nav item (avoids duplicating that
+    // page's entry point).
+    failedOperations: "/admin/failed-operations",
   },
 } as const;
+
+/** Deep-links /admin/users pre-filtered to just the instructors with a
+ * failing Canvas connection -- reached via "Manage instructors" on
+ * Troubleshooting's Instructor Canvas connections card, so it lands on
+ * exactly who that card named instead of the full roster. */
+export function adminInstructorsFailingCanvasPath() {
+  return `${paths.admin.users}?canvasStatus=failing`;
+}
 
 export function instructorSettingsPath(
   tab?: "canvas" | "notifications" | "security" | "ai-models",
