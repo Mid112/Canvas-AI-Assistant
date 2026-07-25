@@ -139,7 +139,7 @@ export function getWorkflowHistoryStatusCounts(
       }
       return counts;
     },
-    { approved: 0, rejected: 0, pending: 0 },
+    { approved: 0, rejected: 0, pending: 0, paused: 0 },
   );
 }
 
