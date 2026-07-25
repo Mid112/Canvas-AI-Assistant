@@ -84,6 +84,11 @@ services:
       CANVAS_API_URL: ${CANVAS_API_URL:-http://canvas_lms:3000}
       CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-}
       CANVAS_TOKEN_ENCRYPTION_KEY: ${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=}
+      # Feature 13 MCP sidecar (optional). Default off so local day-to-day
+      # work still uses direct Canvas; set MCP_ENABLED=true to exercise the
+      # required-action routing path against mcp_server below.
+      MCP_SERVER_URL: ${MCP_SERVER_URL:-http://mcp_server:8001}
+      MCP_ENABLED: ${MCP_ENABLED:-false}
     volumes:
       # Mount your local code into the container so changes
       # are reflected immediately without rebuilding the image.
@@ -102,3 +107,23 @@ services:
     # --reload watches for file changes and restarts uvicorn
     # automatically — no manual restarts needed during development
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ─────────────────────────────────────────────
+  # MCP Server (Canvas tool sidecar) — Feature 13
+  # ─────────────────────────────────────────────
+  mcp_server:
+    build:
+      context: ./app/mcp
+      dockerfile: Dockerfile
+    container_name: app_mcp
+    restart: unless-stopped
+    environment:
+      CANVAS_API_URL: ${CANVAS_API_URL:-http://canvas_lms:3000}
+      CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-}
+      BACKEND_URL: http://backend:8000
+    ports:
+      - "8001:8001"
+    depends_on:
+      - backend
+    networks:
+      - backend_net
