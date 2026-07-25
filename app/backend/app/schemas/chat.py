@@ -212,7 +212,7 @@ class WorkflowStatus(BaseModel):
     """Authoritative preview lifecycle state for one Workflow row, keyed
     by preview_message_id on ConversationResponse. Lets a preview card
     render its real pending/executing/executed/failed/cancelled/superseded
-    status directly, instead of the frontend reconstructing it from
+    /paused status directly, instead of the frontend reconstructing it from
     transcript marker text ("[confirmed action]"/"[cancelled action]")
     and FIFO-guessing which pending preview a marker belongs to — a guess
     that silently mislabels cards once more than one preview exists in a
@@ -222,6 +222,8 @@ class WorkflowStatus(BaseModel):
     status: str
     action_name: str
     result_message_id: int | None = None
+    # Instructor-facing label from POST /chat/rename; null until renamed.
+    display_name: str | None = None
 
     model_config = {"from_attributes": True}
 

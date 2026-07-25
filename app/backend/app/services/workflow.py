@@ -178,12 +178,12 @@ async def rename_workflow(
     trimmed = display_name.strip()
     if not trimmed:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="display_name cannot be empty",
         )
     if len(trimmed) > 120:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="display_name must be 120 characters or fewer",
         )
 

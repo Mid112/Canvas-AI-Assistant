@@ -59,6 +59,8 @@ export interface WorkflowStatusEntry {
   status: string;
   action_name: string;
   result_message_id: number | null;
+  /** Instructor-facing label from rename; null until set. */
+  display_name?: string | null;
 }
 
 export interface ConversationResponse {

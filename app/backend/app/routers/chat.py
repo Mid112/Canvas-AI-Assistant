@@ -82,6 +82,7 @@ async def pause_action(
         status=workflow.status,
         action_name=workflow.action_name,
         result_message_id=workflow.result_message_id,
+        display_name=workflow.display_name,
     )
 
 
@@ -103,6 +104,7 @@ async def resume_action(
         status=workflow.status,
         action_name=workflow.action_name,
         result_message_id=workflow.result_message_id,
+        display_name=workflow.display_name,
     )
 
 
@@ -125,6 +127,7 @@ async def rename_action(
         status=workflow.status,
         action_name=workflow.action_name,
         result_message_id=workflow.result_message_id,
+        display_name=workflow.display_name,
     )
 
 
@@ -242,8 +245,10 @@ async def get_conversation(
             status=workflow.status,
             action_name=workflow.action_name,
             result_message_id=workflow.result_message_id,
+            display_name=workflow.display_name,
         )
         for workflow in conversation.workflows
+        if workflow.preview_message_id is not None
     }
     return ConversationResponse(
         id=conversation.id,
