@@ -334,6 +334,9 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
             pendingActionStatus: mapped.pendingMessageId
               ? mapWorkflowStatus(workflowStatuses[mapped.pendingMessageId]?.status)
               : undefined,
+            workflowDisplayName: mapped.pendingMessageId
+              ? workflowStatuses[mapped.pendingMessageId]?.display_name ?? null
+              : undefined,
             explanation: mapped.explanation,
             acknowledgedFields: mapped.acknowledgedFields,
             interpretedAction: mapped.interpretedAction,
@@ -559,9 +562,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       const allowedStatuses =
         action === "resume" || action === "rename"
           ? new Set(["pending", "paused"])
-          : action === "pause" || action === "confirm"
-            ? new Set(["pending"])
-            : new Set(["pending", "paused"]);
+          : new Set(["pending"]);
       if (
         !message.pendingActionStatus ||
         !allowedStatuses.has(message.pendingActionStatus)
@@ -736,9 +737,14 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           }
         }
       } catch (requestError) {
-        // Cancelling a form-handoff leftover (no Workflow row) should still
-        // dismiss the UI locally — there is nothing to audit/cancel server-side.
-        if (action === "cancel") {
+        // Form-handoff leftovers have no Workflow row (404). Only those may
+        // dismiss locally — real cancel/pause failures (e.g. 409 while paused)
+        // must surface so the UI stays in sync with the server.
+        if (
+          action === "cancel" &&
+          requestError instanceof AssistantApiError &&
+          requestError.status === 404
+        ) {
           setActivePendingMessageIds((current) =>
             current.filter((id) => id !== message.pendingMessageId),
           );

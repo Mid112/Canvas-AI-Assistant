@@ -45,7 +45,8 @@ export function PendingActionControls({
           {displayName ? `“${displayName}” is paused.` : "This workflow is paused."}
         </p>
         <p className="text-xs text-muted-foreground">
-          Resume to continue reviewing, or cancel to discard this proposal.
+          Resume to continue reviewing this proposal. Cancel is available after
+          resume — the server rejects cancel while paused.
         </p>
         {onRename ? (
           <div className="flex flex-wrap gap-2">
@@ -76,15 +77,6 @@ export function PendingActionControls({
             disabled={isLoading || !onResume}
           >
             {isLoading ? "Resuming..." : "Resume"}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={onCancel}
-            disabled={isLoading}
-          >
-            Cancel
           </Button>
         </div>
       </div>
@@ -220,7 +212,7 @@ export function PendingActionControls({
           onClick={onConfirm}
           disabled={isLoading || !canConfirm}
         >
-          {isLoading ? "Confirming..." : "Confirm"}
+          {isLoading ? "Updating..." : "Confirm"}
         </Button>
         {onModify ? (
           <Button
