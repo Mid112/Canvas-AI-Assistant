@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TroubleshootingPage } from "@/pages/Admin/TroubleshootingPage";
+import * as failedOperationsService from "@/services/failedOperations";
 import * as troubleshootService from "@/services/troubleshoot";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
@@ -51,16 +52,31 @@ const diagnosticsResponse: troubleshootService.DiagnosticsResponse = {
   recent_failed_operations_count: 3,
 };
 
-function failedOperation(id: number, overrides: Partial<troubleshootService.FailedOperation> = {}) {
+const summary: failedOperationsService.FailedOperationSummaryResponse = {
+  total: 3,
+  canvas_count: 2,
+  ai_count: 1,
+  hours: 24,
+};
+
+function failedOp(
+  id: number,
+  overrides: Partial<failedOperationsService.FailedOperation> = {},
+): failedOperationsService.FailedOperation {
   return {
     id,
-    action_name: "create_assignment",
+    source: "canvas",
+    operation: "create_assignment",
+    user_id: 10,
     user_name: "Jane Doe",
-    user_email: "jane@example.com",
-    course_name: "CPSC 310",
+    course_id: 5,
+    conversation_id: 20,
+    workflow_id: null,
+    tool_call_id: null,
+    provider: null,
     error_detail: "Canvas server error: 503",
+    context_json: {},
     created_at: "2026-07-21T18:00:00Z",
-    executed_at: null,
     ...overrides,
   };
 }
@@ -80,10 +96,16 @@ describe("TroubleshootingPage", () => {
       refreshUser: vi.fn(),
     });
     vi.spyOn(troubleshootService, "fetchDiagnostics").mockResolvedValue(diagnosticsResponse);
-    vi.spyOn(troubleshootService, "fetchFailedOperations").mockResolvedValue({
-      items: [failedOperation(1)],
+    vi.spyOn(failedOperationsService, "fetchFailedOperationsSummary").mockResolvedValue(summary);
+    vi.spyOn(failedOperationsService, "fetchFailedOperations").mockResolvedValue({
+      items: [failedOp(1)],
       total: 1,
+      canvas_count: 1,
+      ai_count: 0,
     });
+    vi.spyOn(failedOperationsService, "fetchFailedOperation").mockImplementation(
+      async (_token, id) => failedOp(id),
+    );
   });
 
   it("renders the diagnostics overview", async () => {
@@ -96,7 +118,6 @@ describe("TroubleshootingPage", () => {
     expect(screen.getByText("degraded")).toBeInTheDocument();
     expect(screen.getByText("https://canvas.ubc.ca")).toBeInTheDocument();
     expect(screen.getByText("3 min")).toBeInTheDocument();
-    expect(screen.getByText("3")).toBeInTheDocument();
   });
 
   it("renders the instructor Canvas connections summary without exposing tokens", async () => {
@@ -123,7 +144,18 @@ describe("TroubleshootingPage", () => {
     expect(screen.getByText("Available")).toBeInTheDocument();
   });
 
-  it("renders failed operations in a table", async () => {
+  it("renders failed-operation summary cards (Canvas + AI, Feature 11)", async () => {
+    renderWithRouter(<TroubleshootingPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Total failures")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText("Canvas failures")).toBeInTheDocument();
+    expect(screen.getByText("AI failures")).toBeInTheDocument();
+  });
+
+  it("renders failed operations in a list with a detail panel", async () => {
     renderWithRouter(<TroubleshootingPage />);
 
     await waitFor(() => {
@@ -131,14 +163,56 @@ describe("TroubleshootingPage", () => {
     });
 
     expect(screen.getByText("create_assignment")).toBeInTheDocument();
-    expect(screen.getByText("CPSC 310")).toBeInTheDocument();
-    expect(screen.getByText("Canvas server error: 503")).toBeInTheDocument();
+    expect(screen.getAllByText("Canvas server error: 503").length).toBeGreaterThan(0);
+  });
+
+  it("filters the failed-operations list when a source tab is selected", async () => {
+    renderWithRouter(<TroubleshootingPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("create_assignment")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "AI" }));
+
+    await waitFor(() => {
+      expect(failedOperationsService.fetchFailedOperations).toHaveBeenLastCalledWith(
+        "access-token",
+        expect.objectContaining({ source: "ai" }),
+      );
+    });
+  });
+
+  it("loads detail context when a list item is selected", async () => {
+    vi.spyOn(failedOperationsService, "fetchFailedOperations").mockResolvedValue({
+      items: [failedOp(1), failedOp(2, { operation: "assistant_chat", source: "ai", provider: "openai" })],
+      total: 2,
+      canvas_count: 1,
+      ai_count: 1,
+    });
+
+    renderWithRouter(<TroubleshootingPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("assistant_chat")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("assistant_chat"));
+
+    await waitFor(() => {
+      expect(failedOperationsService.fetchFailedOperation).toHaveBeenLastCalledWith(
+        "access-token",
+        2,
+      );
+    });
   });
 
   it("shows a clean state when there are no failed operations", async () => {
-    vi.spyOn(troubleshootService, "fetchFailedOperations").mockResolvedValue({
+    vi.spyOn(failedOperationsService, "fetchFailedOperations").mockResolvedValue({
       items: [],
       total: 0,
+      canvas_count: 0,
+      ai_count: 0,
     });
 
     renderWithRouter(<TroubleshootingPage />);
@@ -146,12 +220,15 @@ describe("TroubleshootingPage", () => {
     await waitFor(() => {
       expect(screen.getByText("No failed operations recorded.")).toBeInTheDocument();
     });
+    expect(screen.getByText("Select a failed operation to view details.")).toBeInTheDocument();
   });
 
   it("loads more failed operations when Load more is clicked", async () => {
-    vi.spyOn(troubleshootService, "fetchFailedOperations").mockResolvedValueOnce({
-      items: [failedOperation(1)],
+    vi.spyOn(failedOperationsService, "fetchFailedOperations").mockResolvedValueOnce({
+      items: [failedOp(1)],
       total: 2,
+      canvas_count: 2,
+      ai_count: 0,
     });
 
     renderWithRouter(<TroubleshootingPage />);
@@ -160,9 +237,11 @@ describe("TroubleshootingPage", () => {
       expect(screen.getByRole("button", { name: "Load more" })).toBeInTheDocument();
     });
 
-    vi.spyOn(troubleshootService, "fetchFailedOperations").mockResolvedValueOnce({
-      items: [failedOperation(2, { action_name: "update_grade", course_name: "CPSC 210" })],
+    vi.spyOn(failedOperationsService, "fetchFailedOperations").mockResolvedValueOnce({
+      items: [failedOp(2, { operation: "update_grade" })],
       total: 2,
+      canvas_count: 2,
+      ai_count: 0,
     });
 
     await user.click(screen.getByRole("button", { name: "Load more" }));
@@ -170,9 +249,9 @@ describe("TroubleshootingPage", () => {
     await waitFor(() => {
       expect(screen.getByText("update_grade")).toBeInTheDocument();
     });
-    expect(troubleshootService.fetchFailedOperations).toHaveBeenLastCalledWith(
+    expect(failedOperationsService.fetchFailedOperations).toHaveBeenLastCalledWith(
       "access-token",
-      { limit: 50, offset: 1 },
+      { source: undefined, limit: 50, offset: 1 },
     );
     expect(screen.queryByRole("button", { name: "Load more" })).not.toBeInTheDocument();
   });
@@ -194,14 +273,14 @@ describe("TroubleshootingPage", () => {
 
     await waitFor(() => {
       expect(troubleshootService.fetchDiagnostics).toHaveBeenCalledTimes(1);
-      expect(troubleshootService.fetchFailedOperations).toHaveBeenCalledTimes(1);
+      expect(failedOperationsService.fetchFailedOperations).toHaveBeenCalledTimes(1);
     });
 
     await user.click(screen.getByRole("button", { name: "Refresh diagnostics" }));
 
     await waitFor(() => {
       expect(troubleshootService.fetchDiagnostics).toHaveBeenCalledTimes(2);
-      expect(troubleshootService.fetchFailedOperations).toHaveBeenCalledTimes(2);
+      expect(failedOperationsService.fetchFailedOperations).toHaveBeenCalledTimes(2);
     });
   });
 });

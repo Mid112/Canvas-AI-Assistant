@@ -125,11 +125,14 @@ describe("AuditLogsPage", () => {
 
     await user.type(screen.getByLabelText("Filter by user"), "admin@system");
 
+    // "admin@system.local" is present both before and after filtering (it's
+    // one of the 5 seed rows), so wait on a count that can only be true
+    // once the debounced server fetch has actually narrowed the results.
     await waitFor(() => {
-      expect(tableScope().getByText("admin@system.local")).toBeInTheDocument();
+      expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
     });
+    expect(tableScope().getByText("admin@system.local")).toBeInTheDocument();
     expect(tableScope().queryByText("jane.doe@university.edu")).not.toBeInTheDocument();
-    expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
   });
 
   // Verifies: Filters audit logs by typing in the action combobox.
@@ -155,11 +158,13 @@ describe("AuditLogsPage", () => {
     await user.click(screen.getByLabelText("Filter by action"));
     await user.click(screen.getByRole("button", { name: "Export Report" }));
 
+    // "Missing Work Report - CS 201" is also present before filtering (one
+    // of the 5 seed rows), so wait on the narrowed count instead.
     await waitFor(() => {
-      expect(tableScope().getByText("Missing Work Report - CS 201")).toBeInTheDocument();
+      expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
     });
+    expect(tableScope().getByText("Missing Work Report - CS 201")).toBeInTheDocument();
     expect(tableScope().queryByText("Message Draft #4521")).not.toBeInTheDocument();
-    expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
   });
 
   // Verifies: Filters audit logs by search query.
@@ -170,11 +175,13 @@ describe("AuditLogsPage", () => {
 
     await user.type(screen.getByLabelText("Search logs"), "Quiz 5");
 
+    // "Assignment: Quiz 5" is also present before filtering (one of the 5
+    // seed rows), so wait on the narrowed count instead.
     await waitFor(() => {
-      expect(tableScope().getByText("Assignment: Quiz 5")).toBeInTheDocument();
+      expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
     });
+    expect(tableScope().getByText("Assignment: Quiz 5")).toBeInTheDocument();
     expect(tableScope().queryByText("Message Draft #4521")).not.toBeInTheDocument();
-    expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
   });
 
   // Verifies: Expands a row to show additional details.
@@ -231,7 +238,9 @@ describe("AuditLogsPage", () => {
       expect(screen.getByText("No audit logs found.")).toBeInTheDocument();
     });
     expect(screen.getByRole("button", { name: "Export" })).toBeDisabled();
-    expect(screen.getByText("Showing 0 of 5 audit logs")).toBeInTheDocument();
+    // Server-side filtering means there's no separate "loaded but
+    // unfiltered" count anymore -- both matching and total collapse to 0.
+    expect(screen.getByText("Showing 0 of 0 audit logs")).toBeInTheDocument();
   });
 
   // Verifies: Filters audit logs by selecting a user from the dropdown.
@@ -243,11 +252,13 @@ describe("AuditLogsPage", () => {
     await user.click(screen.getByLabelText("Filter by user"));
     await user.click(screen.getByRole("button", { name: "jane.doe@university.edu" }));
 
+    // "Message Draft #4521" is also present before filtering (one of the 5
+    // seed rows), so wait on the narrowed count instead.
     await waitFor(() => {
-      expect(tableScope().getByText("Message Draft #4521")).toBeInTheDocument();
+      expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
     });
+    expect(tableScope().getByText("Message Draft #4521")).toBeInTheDocument();
     expect(tableScope().queryByText("admin@system.local")).not.toBeInTheDocument();
-    expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
   });
 
   // Verifies: Resets to default timestamp sort from another column.
@@ -299,11 +310,13 @@ describe("AuditLogsPage", () => {
     await user.click(screen.getByLabelText("Filter result column"));
     await user.click(await screen.findByText("Failed only"));
 
+    // "Assignment: Quiz 5" is also present before filtering (one of the 5
+    // seed rows), so wait on the narrowed count instead.
     await waitFor(() => {
-      expect(tableScope().getByText("Assignment: Quiz 5")).toBeInTheDocument();
+      expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
     });
+    expect(tableScope().getByText("Assignment: Quiz 5")).toBeInTheDocument();
     expect(tableScope().queryByText("Message Draft #4521")).not.toBeInTheDocument();
-    expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
   });
 
   // Verifies: Shows action and result badges in each row.
@@ -336,20 +349,26 @@ describe("AuditLogsPage", () => {
 
   // Verifies: Offers a "Load more" control when more rows exist on the server than were fetched.
   it("loads the next batch when total exceeds what's already loaded", async () => {
+    const extraLogs = [
+      { ...mockAuditLogs[0]!, id: "audit-extra-1", userEmail: "extra1@university.edu" },
+      { ...mockAuditLogs[0]!, id: "audit-extra-2", userEmail: "extra2@university.edu" },
+    ];
+    // Keyed by offset (not call order) -- the page also fires an
+    // unfiltered "options sample" fetch on mount, so relying on
+    // mockResolvedValueOnce's call-order queue would be a race.
     const fetchSpy = vi
       .spyOn(auditLogsService, "fetchAuditLogs")
-      .mockResolvedValueOnce({ entries: mockAuditLogs, total: 7 });
+      .mockImplementation(async (_token, params: auditLogsService.FetchAuditLogsParams = {}) => {
+        if (params.offset === 5) {
+          return { entries: extraLogs, total: 7 };
+        }
+        return { entries: mockAuditLogs, total: 7 };
+      });
 
     renderWithRouter(<AuditLogsPage />);
 
     await waitForLoaded();
     expect(screen.getByText("Audit logs (5 of 7)")).toBeInTheDocument();
-
-    const extraLogs = [
-      { ...mockAuditLogs[0]!, id: "audit-extra-1", userEmail: "extra1@university.edu" },
-      { ...mockAuditLogs[0]!, id: "audit-extra-2", userEmail: "extra2@university.edu" },
-    ];
-    fetchSpy.mockResolvedValueOnce({ entries: extraLogs, total: 7 });
 
     await user.click(screen.getByRole("button", { name: "Load more" }));
 
@@ -364,7 +383,10 @@ describe("AuditLogsPage", () => {
 
   // Verifies: Shows a load error with retry.
   it("shows a load error with retry", async () => {
-    vi.spyOn(auditLogsService, "fetchAuditLogs").mockRejectedValueOnce(
+    // mockRejectedValue (not "Once") so both the options-sample fetch and
+    // the main load fail regardless of which one the runtime happens to
+    // resolve first.
+    vi.spyOn(auditLogsService, "fetchAuditLogs").mockRejectedValue(
       new Error("Network error"),
     );
 
@@ -376,7 +398,7 @@ describe("AuditLogsPage", () => {
 
     const retrySpy = vi
       .spyOn(auditLogsService, "fetchAuditLogs")
-      .mockResolvedValueOnce(toBatch([]));
+      .mockResolvedValue(toBatch([]));
 
     await user.click(screen.getByRole("button", { name: "Try again" }));
 
@@ -429,7 +451,9 @@ describe("AuditLogsPage", () => {
       resource: `Resource ${index}`,
     }));
 
-    vi.spyOn(auditLogsService, "fetchAuditLogs").mockResolvedValueOnce(toBatch(manyLogs));
+    // mockResolvedValue (not "Once") -- the page also fires an unfiltered
+    // "options sample" fetch on mount, so a call-order queue would race.
+    vi.spyOn(auditLogsService, "fetchAuditLogs").mockResolvedValue(toBatch(manyLogs));
 
     renderWithRouter(<AuditLogsPage />);
 
@@ -456,7 +480,7 @@ describe("AuditLogsPage", () => {
       resource: `Resource ${index}`,
     }));
 
-    vi.spyOn(auditLogsService, "fetchAuditLogs").mockResolvedValueOnce(toBatch(manyLogs));
+    vi.spyOn(auditLogsService, "fetchAuditLogs").mockResolvedValue(toBatch(manyLogs));
     const downloadSpy = vi
       .spyOn(auditLogsService, "downloadAuditLogsCsv")
       .mockImplementation(() => {});

@@ -1,24 +1,23 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { useAuth } from "@/contexts/AuthContext";
+import { cn } from "@/lib/utils";
 import { pageShellXWide } from "@/lib/page-shell";
 import {
-  fetchDiagnostics,
+  fetchFailedOperation,
   fetchFailedOperations,
-  type DiagnosticsResponse,
+  fetchFailedOperationsSummary,
   type FailedOperation,
+  type FailedOperationSource,
+  type FailedOperationSummaryResponse,
+} from "@/services/failedOperations";
+import {
+  fetchDiagnostics,
+  type DiagnosticsResponse,
   type LlmProviderStatus,
 } from "@/services/troubleshoot";
 
@@ -37,6 +36,13 @@ const PROVIDER_STATUS_LABEL: Record<LlmProviderStatus["status"], string> = {
   unavailable: "Unavailable",
   unconfigured: "Not configured",
 };
+
+const SOURCE_LABELS: Record<FailedOperationSource, string> = {
+  canvas: "Canvas",
+  ai: "AI",
+};
+
+type SourceFilter = "all" | FailedOperationSource;
 
 function formatUptime(seconds: number): string {
   const minutes = Math.floor(seconds / 60);
@@ -148,108 +154,277 @@ function LlmProvidersCard({ providers }: { providers: LlmProviderStatus[] }) {
   );
 }
 
-function FailedOperationsTable({
-  operations,
-  hasMore,
-  isLoadingMore,
-  onLoadMore,
-}: {
-  operations: FailedOperation[];
-  hasMore: boolean;
-  isLoadingMore: boolean;
-  onLoadMore: () => void;
-}) {
+function FailedOperationsSummaryCards({ summary }: { summary: FailedOperationSummaryResponse }) {
+  const cards = [
+    { label: "Total failures", value: summary.total },
+    { label: "Canvas failures", value: summary.canvas_count },
+    { label: "AI failures", value: summary.ai_count },
+  ];
+
+  return (
+    <div className="grid gap-4 sm:grid-cols-3">
+      {cards.map((card) => (
+        <Card key={card.label} className="shadow-sm ring-1 ring-border/60">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              {card.label}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-semibold tabular-nums">{card.value}</p>
+            <p className="text-xs text-muted-foreground">Last {summary.hours} hours</p>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function FailedOperationDetailPanel({ item }: { item: FailedOperation | null }) {
+  if (!item) {
+    return (
+      <Card className="shadow-sm ring-1 ring-border/60">
+        <CardContent className="py-10 text-sm text-muted-foreground">
+          Select a failed operation to view details.
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const contextEntries = Object.entries(item.context_json ?? {});
+
   return (
     <Card className="shadow-sm ring-1 ring-border/60">
       <CardHeader>
-        <CardTitle>Failed operations</CardTitle>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Badge variant={item.source === "canvas" ? "secondary" : "default"}>
+            {SOURCE_LABELS[item.source]}
+          </Badge>
+          {item.operation}
+        </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {operations.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No failed operations recorded.</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Action</TableHead>
-                <TableHead>User</TableHead>
-                <TableHead>Course</TableHead>
-                <TableHead>Error</TableHead>
-                <TableHead>When</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {operations.map((operation) => (
-                <TableRow key={operation.id}>
-                  <TableCell className="font-medium">{operation.action_name}</TableCell>
-                  <TableCell>
-                    {operation.user_name}
-                    <span className="block text-xs text-muted-foreground">
-                      {operation.user_email}
-                    </span>
-                  </TableCell>
-                  <TableCell>{operation.course_name ?? "—"}</TableCell>
-                  <TableCell className="max-w-xs whitespace-normal text-destructive">
-                    {operation.error_detail ?? "—"}
-                  </TableCell>
-                  <TableCell>{new Date(operation.created_at).toLocaleString()}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-        {hasMore ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onLoadMore}
-            disabled={isLoadingMore}
-          >
-            {isLoadingMore ? "Loading more..." : "Load more"}
-          </Button>
+      <CardContent className="space-y-3 text-sm">
+        <p className="text-muted-foreground">
+          {new Date(item.created_at).toLocaleString()}
+        </p>
+        {item.user_name ? <p>User: {item.user_name}</p> : null}
+        {item.provider ? <p>Provider: {item.provider}</p> : null}
+        {item.course_id !== null ? <p>Course ID: {item.course_id}</p> : null}
+        {item.conversation_id !== null ? (
+          <p>Conversation ID: {item.conversation_id}</p>
+        ) : null}
+        {item.workflow_id !== null ? <p>Workflow ID: {item.workflow_id}</p> : null}
+        {item.tool_call_id !== null ? <p>Tool call ID: {item.tool_call_id}</p> : null}
+        <div>
+          <p className="font-medium">Error</p>
+          <p className="whitespace-pre-wrap text-destructive">{item.error_detail}</p>
+        </div>
+        {contextEntries.length > 0 ? (
+          <div>
+            <p className="font-medium">Context</p>
+            <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">
+              {JSON.stringify(item.context_json, null, 2)}
+            </pre>
+          </div>
         ) : null}
       </CardContent>
     </Card>
   );
 }
 
+function FailedOperationsSection({
+  sourceFilter,
+  onSourceFilterChange,
+  items,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
+  selectedId,
+  selectedItem,
+  onSelect,
+}: {
+  sourceFilter: SourceFilter;
+  onSourceFilterChange: (source: SourceFilter) => void;
+  items: FailedOperation[];
+  hasMore: boolean;
+  isLoadingMore: boolean;
+  onLoadMore: () => void;
+  selectedId: number | null;
+  selectedItem: FailedOperation | null;
+  onSelect: (id: number) => void;
+}) {
+  const filterButtons: Array<{ key: SourceFilter; label: string }> = [
+    { key: "all", label: "All" },
+    { key: "canvas", label: "Canvas" },
+    { key: "ai", label: "AI" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {filterButtons.map((button) => (
+          <Button
+            key={button.key}
+            type="button"
+            size="sm"
+            variant={sourceFilter === button.key ? "default" : "outline"}
+            onClick={() => onSourceFilterChange(button.key)}
+          >
+            {button.label}
+          </Button>
+        ))}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+        <Card className="shadow-sm ring-1 ring-border/60">
+          <CardHeader>
+            <CardTitle>Failed operations</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {items.length === 0 ? (
+              <p className="px-6 pb-6 text-sm text-muted-foreground">
+                No failed operations recorded.
+              </p>
+            ) : (
+              <ul className="divide-y">
+                {items.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex w-full flex-col gap-1 px-6 py-4 text-left transition-colors hover:bg-muted/50",
+                        selectedId === item.id && "bg-muted/60",
+                      )}
+                      onClick={() => onSelect(item.id)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Badge variant={item.source === "canvas" ? "secondary" : "default"}>
+                          {SOURCE_LABELS[item.source]}
+                        </Badge>
+                        <span className="font-medium">{item.operation}</span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(item.created_at).toLocaleString()}
+                      </span>
+                      <span className="line-clamp-2 text-sm text-destructive">
+                        {item.error_detail}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {hasMore ? (
+              <div className="px-6 pb-6">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={onLoadMore}
+                  disabled={isLoadingMore}
+                >
+                  {isLoadingMore ? "Loading more..." : "Load more"}
+                </Button>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+
+        <FailedOperationDetailPanel item={selectedItem} />
+      </div>
+    </div>
+  );
+}
+
 export function TroubleshootingPage() {
   const { accessToken } = useAuth();
   const [diagnostics, setDiagnostics] = useState<DiagnosticsResponse | null>(null);
-  const [operations, setOperations] = useState<FailedOperation[]>([]);
-  const [operationsTotal, setOperationsTotal] = useState(0);
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
+  const [opsSummary, setOpsSummary] = useState<FailedOperationSummaryResponse | null>(null);
+  const [opsItems, setOpsItems] = useState<FailedOperation[]>([]);
+  const [opsTotal, setOpsTotal] = useState(0);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedItem, setSelectedItem] = useState<FailedOperation | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const loadRequestId = useRef(0);
 
   const loadAll = useCallback(async () => {
     if (!accessToken) {
       return;
     }
 
+    const requestId = ++loadRequestId.current;
     setIsLoading(true);
     setLoadError(null);
 
     try {
-      const [diagnosticsData, operationsData] = await Promise.all([
+      const [diagnosticsData, summaryData, opsData] = await Promise.all([
         fetchDiagnostics(accessToken),
-        fetchFailedOperations(accessToken, { limit: FAILED_OPS_PAGE_SIZE }),
+        fetchFailedOperationsSummary(accessToken),
+        fetchFailedOperations(accessToken, {
+          source: sourceFilter === "all" ? undefined : sourceFilter,
+          limit: FAILED_OPS_PAGE_SIZE,
+        }),
       ]);
+      if (requestId !== loadRequestId.current) {
+        return;
+      }
       setDiagnostics(diagnosticsData);
-      setOperations(operationsData.items);
-      setOperationsTotal(operationsData.total);
+      setOpsSummary(summaryData);
+      setOpsItems(opsData.items);
+      setOpsTotal(opsData.total);
+      setSelectedId((currentId) => {
+        if (currentId !== null && opsData.items.some((item) => item.id === currentId)) {
+          return currentId;
+        }
+        return opsData.items[0]?.id ?? null;
+      });
     } catch {
+      if (requestId !== loadRequestId.current) {
+        return;
+      }
       setLoadError("Unable to load troubleshooting diagnostics.");
     } finally {
-      setIsLoading(false);
+      if (requestId === loadRequestId.current) {
+        setIsLoading(false);
+      }
     }
-  }, [accessToken]);
+  }, [accessToken, sourceFilter]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- async diagnostics load on mount/auth changes
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async diagnostics load on mount/filter/auth changes
     void loadAll();
   }, [loadAll]);
+
+  useEffect(() => {
+    if (!accessToken || selectedId === null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear detail when nothing is selected
+      setSelectedItem(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const detail = await fetchFailedOperation(accessToken, selectedId);
+        if (!cancelled) {
+          setSelectedItem(detail);
+        }
+      } catch {
+        if (!cancelled) {
+          const fallback = opsItems.find((item) => item.id === selectedId) ?? null;
+          setSelectedItem(fallback);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, selectedId, opsItems]);
 
   const handleLoadMore = useCallback(async () => {
     if (!accessToken || isLoadingMore) {
@@ -259,19 +434,24 @@ export function TroubleshootingPage() {
     setIsLoadingMore(true);
     try {
       const batch = await fetchFailedOperations(accessToken, {
+        source: sourceFilter === "all" ? undefined : sourceFilter,
         limit: FAILED_OPS_PAGE_SIZE,
-        offset: operations.length,
+        offset: opsItems.length,
       });
-      setOperations((current) => [...current, ...batch.items]);
-      setOperationsTotal(batch.total);
+      setOpsItems((current) => [...current, ...batch.items]);
+      setOpsTotal(batch.total);
     } catch {
       setLoadError("Unable to load more failed operations.");
     } finally {
       setIsLoadingMore(false);
     }
-  }, [accessToken, isLoadingMore, operations.length]);
+  }, [accessToken, isLoadingMore, opsItems.length, sourceFilter]);
 
-  const hasMore = operations.length < operationsTotal;
+  const handleSourceFilterChange = useCallback((next: SourceFilter) => {
+    setSourceFilter(next);
+  }, []);
+
+  const hasMoreOps = opsItems.length < opsTotal;
 
   return (
     <div className={pageShellXWide}>
@@ -313,14 +493,22 @@ export function TroubleshootingPage() {
             <InstructorCanvasDiagnosticsCard diagnostics={diagnostics} />
             <LlmProvidersCard providers={diagnostics.llm_providers} />
           </div>
-          <FailedOperationsTable
-            operations={operations}
-            hasMore={hasMore}
-            isLoadingMore={isLoadingMore}
-            onLoadMore={() => void handleLoadMore()}
-          />
         </>
       ) : null}
+
+      {opsSummary ? <FailedOperationsSummaryCards summary={opsSummary} /> : null}
+
+      <FailedOperationsSection
+        sourceFilter={sourceFilter}
+        onSourceFilterChange={handleSourceFilterChange}
+        items={opsItems}
+        hasMore={hasMoreOps}
+        isLoadingMore={isLoadingMore}
+        onLoadMore={() => void handleLoadMore()}
+        selectedId={selectedId}
+        selectedItem={selectedItem}
+        onSelect={setSelectedId}
+      />
     </div>
   );
 }
