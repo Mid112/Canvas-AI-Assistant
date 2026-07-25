@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -106,16 +106,19 @@ export function FailedOperationsPage() {
   const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
   const [summary, setSummary] = useState<FailedOperationSummaryResponse | null>(null);
   const [items, setItems] = useState<FailedOperation[]>([]);
+  const [total, setTotal] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selectedItem, setSelectedItem] = useState<FailedOperation | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const loadRequestId = useRef(0);
 
   const loadList = useCallback(async () => {
     if (!accessToken) {
       return;
     }
 
+    const requestId = ++loadRequestId.current;
     setIsLoading(true);
     setLoadError(null);
 
@@ -128,8 +131,12 @@ export function FailedOperationsPage() {
           limit: 100,
         }),
       ]);
+      if (requestId !== loadRequestId.current) {
+        return;
+      }
       setSummary(summaryData);
       setItems(listData.items);
+      setTotal(listData.total);
       setSelectedId((currentId) => {
         if (currentId !== null && listData.items.some((item) => item.id === currentId)) {
           return currentId;
@@ -137,12 +144,18 @@ export function FailedOperationsPage() {
         return listData.items[0]?.id ?? null;
       });
     } catch {
+      if (requestId !== loadRequestId.current) {
+        return;
+      }
       setLoadError("Unable to load failed operations.");
       setItems([]);
+      setTotal(0);
       setSummary(null);
       setSelectedId(null);
     } finally {
-      setIsLoading(false);
+      if (requestId === loadRequestId.current) {
+        setIsLoading(false);
+      }
     }
   }, [accessToken, sourceFilter]);
 
@@ -198,7 +211,7 @@ export function FailedOperationsPage() {
           type="button"
           variant="outline"
           onClick={() => void loadList()}
-          disabled={isLoading}
+          disabled={isLoading || !accessToken}
           aria-label="Refresh failed operations"
         >
           {isLoading ? (
@@ -209,6 +222,12 @@ export function FailedOperationsPage() {
           Refresh
         </Button>
       </header>
+
+      {!accessToken ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Sign in as an admin to view failed operations.
+        </p>
+      ) : null}
 
       {loadError ? (
         <p role="alert" className="text-sm text-destructive">
@@ -226,6 +245,7 @@ export function FailedOperationsPage() {
             size="sm"
             variant={sourceFilter === button.key ? "default" : "outline"}
             onClick={() => setSourceFilter(button.key)}
+            disabled={!accessToken}
           >
             {button.label}
           </Button>
@@ -236,9 +256,20 @@ export function FailedOperationsPage() {
         <Card className="shadow-sm ring-1 ring-border/60">
           <CardHeader>
             <CardTitle>Recent failures</CardTitle>
+            {total > items.length ? (
+              <p className="text-xs text-muted-foreground">
+                Showing {items.length} of {total} in the last 24 hours.
+              </p>
+            ) : null}
           </CardHeader>
           <CardContent className="p-0">
-            {items.length === 0 ? (
+            {!accessToken ? (
+              <p className="px-6 pb-6 text-sm text-muted-foreground">
+                Waiting for authentication…
+              </p>
+            ) : isLoading && items.length === 0 ? (
+              <p className="px-6 pb-6 text-sm text-muted-foreground">Loading…</p>
+            ) : items.length === 0 ? (
               <p className="px-6 pb-6 text-sm text-muted-foreground">
                 No failed operations in the last 24 hours.
               </p>

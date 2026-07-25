@@ -45,13 +45,38 @@ from app.models.user import User
 from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
 from app.services.assignment_rate import find_assignments_by_submission_rate
-from app.services.canvas import CanvasTokenRequiredError, sync_courses_if_stale
+from app.services.canvas import (
+    CanvasTokenRequiredError,
+    _is_expected_canvas_token_sync_error,
+    sync_courses_if_stale,
+)
 from app.services.canvas_assistant_gate import (
     classify_action_for_limited_mode,
     user_has_canvas_credentials,
 )
 from app.services.deferred_assistant import defer_assistant_request, mark_deferred_request_resumed
 from app.services.failed_operations import record_failed_operation
+
+
+def _is_expected_canvas_reconnect_failure(exc: BaseException) -> bool:
+    """Match sweep policy: missing/invalid/corrupted tokens are account state,
+    not monitored infrastructure failures (avoids spam on retries)."""
+    if isinstance(exc, CanvasTokenRequiredError):
+        return True
+    if _is_expected_canvas_token_sync_error(exc):
+        return True
+    text = ""
+    if isinstance(exc, ToolExecutionError):
+        text = exc.log_detail or exc.user_message or ""
+    elif isinstance(exc, HTTPException) and isinstance(exc.detail, str):
+        text = exc.detail
+    else:
+        text = str(exc)
+    return (
+        "Invalid Canvas API token" in text
+        or "No Canvas token" in text
+        or "Canvas token is corrupted" in text
+    )
 from app.services.llm.base import LLMAdapter
 from app.services.llm.json_extraction import extract_json_object
 from app.services.llm.llm_connections import resolve_instructor_llm_request
@@ -632,17 +657,18 @@ async def _run_tracked_read(
         call_log.status = "failed"
         call_log.error_detail = safe_exception_text(e)
         await db.flush()
-        await record_failed_operation(
-            db,
-            source="canvas",
-            operation=action_name,
-            error_detail=call_log.error_detail,
-            user_id=user.id,
-            course_id=parameters.get("local_course_id"),
-            conversation_id=conversation.id,
-            tool_call_id=call_log.id,
-            context_json={"parameters": parameters},
-        )
+        if not _is_expected_canvas_reconnect_failure(e):
+            await record_failed_operation(
+                db,
+                source="canvas",
+                operation=action_name,
+                error_detail=call_log.error_detail,
+                user_id=user.id,
+                course_id=parameters.get("local_course_id"),
+                conversation_id=conversation.id,
+                tool_call_id=call_log.id,
+                context_json={"parameters": parameters},
+            )
         raise
     call_log.status = "executed"
     call_log.completed_at = datetime.now(UTC)
@@ -3584,33 +3610,25 @@ async def handle_confirmed_action(
         result = await execute_tool(db, user, action)
     except ToolExecutionError as e:
         safe_detail = redact_secrets(e.log_detail)
-        await record_failed_operation(
-            db,
-            source="canvas",
-            operation=workflow.action_name,
-            error_detail=safe_detail,
-            user_id=user.id,
-            course_id=workflow.course_id,
-            conversation_id=conversation.id,
-            workflow_id=workflow.id,
-        )
+        if not _is_expected_canvas_reconnect_failure(e):
+            await record_failed_operation(
+                db,
+                source="canvas",
+                operation=workflow.action_name,
+                error_detail=safe_detail,
+                user_id=user.id,
+                course_id=workflow.course_id,
+                conversation_id=conversation.id,
+                workflow_id=workflow.id,
+            )
         await log_message(db, conversation, role="assistant", content=safe_detail)
         workflow.status = "failed"
         workflow.error_detail = safe_detail
         await db.commit()
         return conversation, {"error": e.user_message}, True
     except CanvasTokenRequiredError as e:
+        # Expected reconnect state — surface in chat, do not flood monitoring.
         safe_detail = redact_secrets(str(e.detail))
-        await record_failed_operation(
-            db,
-            source="canvas",
-            operation=workflow.action_name,
-            error_detail=safe_detail,
-            user_id=user.id,
-            course_id=workflow.course_id,
-            conversation_id=conversation.id,
-            workflow_id=workflow.id,
-        )
         await log_message(db, conversation, role="assistant", content=safe_detail)
         workflow.status = "failed"
         workflow.error_detail = safe_detail
@@ -3625,16 +3643,17 @@ async def handle_confirmed_action(
         # so the user actually sees why the confirmed action failed.
         detail = e.detail if isinstance(e.detail, str) else str(e.detail)
         error_detail = redact_secrets(f"HTTPException {e.status_code}: {detail}")
-        await record_failed_operation(
-            db,
-            source="canvas",
-            operation=workflow.action_name,
-            error_detail=error_detail,
-            user_id=user.id,
-            course_id=workflow.course_id,
-            conversation_id=conversation.id,
-            workflow_id=workflow.id,
-        )
+        if not _is_expected_canvas_reconnect_failure(e):
+            await record_failed_operation(
+                db,
+                source="canvas",
+                operation=workflow.action_name,
+                error_detail=error_detail,
+                user_id=user.id,
+                course_id=workflow.course_id,
+                conversation_id=conversation.id,
+                workflow_id=workflow.id,
+            )
         await log_message(db, conversation, role="assistant", content=error_detail)
         workflow.status = "failed"
         workflow.error_detail = error_detail

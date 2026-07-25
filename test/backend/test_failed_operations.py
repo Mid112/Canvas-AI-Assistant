@@ -132,6 +132,7 @@ async def test_record_failed_operation_stores_user_name_in_context():
     [
         (True, None, "403: No Canvas token", False),
         (True, "old", "403: Canvas token is corrupted", False),
+        (True, None, "422: Invalid Canvas API token", False),
         (False, "Canvas 500", "Canvas 500", False),
         (False, None, "Canvas 500", True),
         (False, "Canvas 500", "Canvas 502", True),
@@ -150,6 +151,60 @@ def test_should_record_course_sync_failure(
             error_detail=error_detail,
         )
         is should_record
+    )
+
+
+@pytest.mark.parametrize(
+    ("status_code", "detail", "expected"),
+    [
+        (403, "No Canvas token for http://localhost:3000. PATCH to /api/v1/auth/me/canvas-token first.", True),
+        (403, "Canvas token is corrupted — please reconnect Canvas.", True),
+        (422, "Invalid Canvas API token", True),
+        (403, "Canvas token lacks permission for this resource", False),
+        (502, "Canvas server error: 500", False),
+        (500, "boom", False),
+    ],
+)
+def test_is_expected_canvas_token_sync_error(status_code, detail, expected):
+    from fastapi import HTTPException
+
+    from app.services.canvas import _is_expected_canvas_token_sync_error
+
+    assert (
+        _is_expected_canvas_token_sync_error(
+            HTTPException(status_code=status_code, detail=detail)
+        )
+        is expected
+    )
+
+
+def test_is_expected_canvas_token_sync_error_rejects_non_http_errors():
+    from app.services.canvas import _is_expected_canvas_token_sync_error
+
+    assert _is_expected_canvas_token_sync_error(RuntimeError("Invalid Canvas API token")) is False
+
+
+def test_chat_skips_monitoring_for_expected_canvas_reconnect_failures():
+    from fastapi import HTTPException, status
+
+    from app.mcp_tools.dispatcher import ToolExecutionError
+    from app.services.canvas import CanvasTokenRequiredError
+    from app.services.chat import _is_expected_canvas_reconnect_failure
+
+    assert _is_expected_canvas_reconnect_failure(
+        CanvasTokenRequiredError("http://localhost:3000")
+    )
+    assert _is_expected_canvas_reconnect_failure(
+        HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Invalid Canvas API token",
+        )
+    )
+    assert _is_expected_canvas_reconnect_failure(
+        ToolExecutionError("reconnect", log_detail="Canvas token is corrupted — please reconnect Canvas.")
+    )
+    assert not _is_expected_canvas_reconnect_failure(
+        HTTPException(status_code=502, detail="Canvas server error: 500")
     )
 
 

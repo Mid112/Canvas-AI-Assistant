@@ -103,7 +103,7 @@ async def test_sweep_clears_last_sync_error_on_success():
             patch("app.services.canvas.AsyncSessionLocal", new=Session),
             patch(
                 "app.services.canvas.sync_courses_if_stale",
-                new=AsyncMock(return_value=None),
+                new=AsyncMock(return_value=True),
             ),
         ):
             await run_course_sync_sweep(_sweep_db_scoped_to(user_id, connection_id))
@@ -111,5 +111,90 @@ async def test_sweep_clears_last_sync_error_on_success():
         async with Session() as check_db:
             refreshed = await check_db.get(CanvasConnection, connection_id)
             assert refreshed.last_sync_error is None
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_sweep_cooldown_skip_does_not_clear_last_sync_error():
+    """A cooldown skip is not a health check — clearing last_sync_error here
+    re-opened failed_operations spam on the next failing tick."""
+    engine, Session = _make_session()
+    try:
+        user_id, connection_id = await _create_user_and_connection(
+            Session, last_sync_error="previous failure"
+        )
+
+        with (
+            patch("app.services.canvas.AsyncSessionLocal", new=Session),
+            patch(
+                "app.services.canvas.sync_courses_if_stale",
+                new=AsyncMock(return_value=False),
+            ),
+        ):
+            await run_course_sync_sweep(_sweep_db_scoped_to(user_id, connection_id))
+
+        async with Session() as check_db:
+            refreshed = await check_db.get(CanvasConnection, connection_id)
+            assert refreshed.last_sync_error == "previous failure"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_sweep_invalid_canvas_token_does_not_append_failed_operations():
+    from fastapi import HTTPException, status
+    from sqlalchemy import func, select
+
+    from app.models.failed_operation import FailedOperation
+
+    engine, Session = _make_session()
+    try:
+        user_id, connection_id = await _create_user_and_connection(Session)
+
+        async with Session() as db:
+            before = int(
+                await db.scalar(
+                    select(func.count()).select_from(FailedOperation).where(
+                        FailedOperation.operation == "course_sync",
+                        FailedOperation.user_id == user_id,
+                    )
+                )
+                or 0
+            )
+
+        with (
+            patch("app.services.canvas.AsyncSessionLocal", new=Session),
+            patch(
+                "app.services.canvas.sync_courses_if_stale",
+                new=AsyncMock(
+                    side_effect=HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                        detail="Invalid Canvas API token",
+                    )
+                ),
+            ),
+            patch(
+                "app.services.failed_operations.record_failed_operation",
+                new=AsyncMock(),
+            ) as mock_record,
+        ):
+            await run_course_sync_sweep(_sweep_db_scoped_to(user_id, connection_id))
+            mock_record.assert_not_awaited()
+
+        async with Session() as db:
+            after = int(
+                await db.scalar(
+                    select(func.count()).select_from(FailedOperation).where(
+                        FailedOperation.operation == "course_sync",
+                        FailedOperation.user_id == user_id,
+                    )
+                )
+                or 0
+            )
+            assert after == before
+            refreshed = await db.get(CanvasConnection, connection_id)
+            assert refreshed.last_sync_error is not None
+            assert "Invalid Canvas API token" in refreshed.last_sync_error
     finally:
         await engine.dispose()
