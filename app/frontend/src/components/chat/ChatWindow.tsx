@@ -201,6 +201,10 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   const [pendingActionError, setPendingActionError] = useState<string | null>(
     null,
   );
+  // Kept separately from resolvingMessageId so errors remain visible after
+  // the request settles (finally clears the loading id).
+  const [pendingActionErrorMessageId, setPendingActionErrorMessageId] =
+    useState<string | null>(null);
   const [reversingWorkflowId, setReversingWorkflowId] = useState<number | null>(null);
   const [reversedWorkflowIds, setReversedWorkflowIds] = useState<Set<number>>(
     () => new Set(),
@@ -585,11 +589,13 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
         setPendingActionError(
           "Another Canvas write is already running. Wait for it to finish, or pause/cancel it first.",
         );
+        setPendingActionErrorMessageId(message.id);
         return;
       }
 
       setResolvingMessageId(message.id);
       setPendingActionError(null);
+      setPendingActionErrorMessageId(null);
 
       try {
         if (action === "pause") {
@@ -636,6 +642,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           const nextName = renameDisplayName?.trim();
           if (!nextName) {
             setPendingActionError("Enter a workflow name before saving.");
+            setPendingActionErrorMessageId(message.id);
             return;
           }
           await renameAssistantAction(
@@ -763,6 +770,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
             ),
           );
           setPendingActionError(null);
+          setPendingActionErrorMessageId(null);
           return;
         }
 
@@ -781,6 +789,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
             ? requestError.message
             : "Unable to update this proposed action. Please try again.";
         setPendingActionError(errorMessage);
+        setPendingActionErrorMessageId(message.id);
       } finally {
         setResolvingMessageId(null);
       }
@@ -826,6 +835,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
 
       setReversingWorkflowId(message.workflowId);
       setPendingActionError(null);
+      setPendingActionErrorMessageId(null);
 
       try {
         await reverseWorkflow(accessToken, String(message.workflowId));
@@ -865,6 +875,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
             ? requestError.message
             : "Unable to reverse this action. Please try again.";
         setPendingActionError(errorMessage);
+        setPendingActionErrorMessageId(message.id);
       } finally {
         setReversingWorkflowId(null);
       }
@@ -1003,7 +1014,9 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
                 message={message}
                 isResolvingPendingAction={resolvingMessageId === message.id}
                 pendingActionError={
-                  resolvingMessageId === message.id ? pendingActionError : null
+                  pendingActionErrorMessageId === message.id
+                    ? pendingActionError
+                    : null
                 }
                 confirmBlockedReason={
                   message.pendingActionStatus === "pending" &&
