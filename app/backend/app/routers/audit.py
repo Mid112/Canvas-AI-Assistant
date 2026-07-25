@@ -1,3 +1,6 @@
+from datetime import datetime
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,18 +18,51 @@ admin_router = APIRouter(prefix="/admin/audit", tags=["audit"])
 async def get_audit_logs(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    search: str | None = Query(default=None, max_length=200),
+    action: str | None = Query(default=None, max_length=200),
+    user: str | None = Query(default=None, max_length=200),
+    result: Literal["success", "failed", "unknown"] | None = Query(default=None),
+    start_time: datetime | None = Query(default=None),
+    end_time: datetime | None = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     user_id = None if current_user.role == "admin" else current_user.id
-    return await list_audit_logs(db, limit=limit, offset=offset, user_id=user_id)
+    return await list_audit_logs(
+        db,
+        limit=limit,
+        offset=offset,
+        user_id=user_id,
+        search=search,
+        action=action,
+        user_search=user,
+        result=result,
+        start_time=start_time,
+        end_time=end_time,
+    )
 
 
 @admin_router.get("/logs", response_model=AuditLogListResponse)
 async def get_admin_audit_logs_alias(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    search: str | None = Query(default=None, max_length=200),
+    action: str | None = Query(default=None, max_length=200),
+    user: str | None = Query(default=None, max_length=200),
+    result: Literal["success", "failed", "unknown"] | None = Query(default=None),
+    start_time: datetime | None = Query(default=None),
+    end_time: datetime | None = Query(default=None),
     current_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await list_audit_logs(db, limit=limit, offset=offset)
+    return await list_audit_logs(
+        db,
+        limit=limit,
+        offset=offset,
+        search=search,
+        action=action,
+        user_search=user,
+        result=result,
+        start_time=start_time,
+        end_time=end_time,
+    )

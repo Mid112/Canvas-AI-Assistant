@@ -1,11 +1,13 @@
 import logging
+from datetime import datetime
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import String, cast, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import contains_eager
 
 from app.models.audit_log import AuditLog
 from app.models.audit_log_session import AuditLogSession
+from app.models.user import User
 from app.schemas.audit import AuditLogListResponse, AuditLogResponse
 
 logger = logging.getLogger(__name__)
@@ -45,6 +47,14 @@ _DEFAULT_SESSION_META: tuple[str, str, str] = ("account", "update", "success")
 
 _SESSION_RESOURCE_ID_KEYS = ("instructor_id", "new_admin_id")
 
+# audit_logs_session has no `status` column -- its status is derived from
+# SESSION_ACTION_META at read time (see _session_row_to_response above), so
+# filtering/searching by result needs the reverse mapping: which actions
+# produce a given status.
+_SESSION_ACTIONS_BY_STATUS: dict[str, set[str]] = {}
+for _action_name, (_resource_type, _operation, _status) in SESSION_ACTION_META.items():
+    _SESSION_ACTIONS_BY_STATUS.setdefault(_status, set()).add(_action_name)
+
 
 def _session_row_to_response(row: AuditLogSession) -> AuditLogResponse:
     meta = SESSION_ACTION_META.get(row.action)
@@ -83,17 +93,84 @@ async def list_audit_logs(
     limit: int = 50,
     offset: int = 0,
     user_id: int | None = None,
+    search: str | None = None,
+    action: str | None = None,
+    user_search: str | None = None,
+    result: str | None = None,
+    start_time: datetime | None = None,
+    end_time: datetime | None = None,
 ) -> AuditLogListResponse:
-    workflow_query = select(AuditLog).options(joinedload(AuditLog.user))
-    workflow_count_query = select(func.count()).select_from(AuditLog)
-    session_query = select(AuditLogSession).options(joinedload(AuditLogSession.user))
-    session_count_query = select(func.count()).select_from(AuditLogSession)
+    """Server-side search/filter over both audit sources, so results are
+    correct against the full table rather than whatever page happened to be
+    loaded client-side (audit_logs/audit_logs_session can run into the tens
+    or hundreds of thousands of rows)."""
+    # Joined (not joinedload'd) so User columns are available to filter on;
+    # contains_eager reuses that same join for eager-loading .user instead
+    # of adding a second one.
+    workflow_query = select(AuditLog).join(AuditLog.user).options(contains_eager(AuditLog.user))
+    workflow_count_query = select(func.count()).select_from(AuditLog).join(AuditLog.user)
+    session_query = (
+        select(AuditLogSession).join(AuditLogSession.user).options(contains_eager(AuditLogSession.user))
+    )
+    session_count_query = select(func.count()).select_from(AuditLogSession).join(AuditLogSession.user)
 
     if user_id is not None:
         workflow_query = workflow_query.where(AuditLog.user_id == user_id)
         workflow_count_query = workflow_count_query.where(AuditLog.user_id == user_id)
         session_query = session_query.where(AuditLogSession.user_id == user_id)
         session_count_query = session_count_query.where(AuditLogSession.user_id == user_id)
+
+    if action:
+        term = f"%{action}%"
+        workflow_query = workflow_query.where(AuditLog.action.ilike(term))
+        workflow_count_query = workflow_count_query.where(AuditLog.action.ilike(term))
+        session_query = session_query.where(AuditLogSession.action.ilike(term))
+        session_count_query = session_count_query.where(AuditLogSession.action.ilike(term))
+
+    if user_search:
+        term = f"%{user_search}%"
+        user_clause = or_(User.email.ilike(term), User.role.ilike(term))
+        workflow_query = workflow_query.where(user_clause)
+        workflow_count_query = workflow_count_query.where(user_clause)
+        session_query = session_query.where(user_clause)
+        session_count_query = session_count_query.where(user_clause)
+
+    if result:
+        workflow_query = workflow_query.where(AuditLog.status == result)
+        workflow_count_query = workflow_count_query.where(AuditLog.status == result)
+        matching_actions = _SESSION_ACTIONS_BY_STATUS.get(result, set())
+        session_query = session_query.where(AuditLogSession.action.in_(matching_actions))
+        session_count_query = session_count_query.where(AuditLogSession.action.in_(matching_actions))
+
+    if start_time is not None:
+        workflow_query = workflow_query.where(AuditLog.timestamp >= start_time)
+        workflow_count_query = workflow_count_query.where(AuditLog.timestamp >= start_time)
+        session_query = session_query.where(AuditLogSession.timestamp >= start_time)
+        session_count_query = session_count_query.where(AuditLogSession.timestamp >= start_time)
+
+    if end_time is not None:
+        workflow_query = workflow_query.where(AuditLog.timestamp < end_time)
+        workflow_count_query = workflow_count_query.where(AuditLog.timestamp < end_time)
+        session_query = session_query.where(AuditLogSession.timestamp < end_time)
+        session_count_query = session_count_query.where(AuditLogSession.timestamp < end_time)
+
+    if search:
+        term = f"%{search}%"
+        workflow_search_clause = or_(
+            AuditLog.action.ilike(term),
+            AuditLog.resource_type.ilike(term),
+            AuditLog.resource_id.ilike(term),
+            User.email.ilike(term),
+        )
+        session_search_clause = or_(
+            AuditLogSession.action.ilike(term),
+            User.email.ilike(term),
+            cast(AuditLogSession.details, String).ilike(term),
+        )
+        workflow_query = workflow_query.where(workflow_search_clause)
+        workflow_count_query = workflow_count_query.where(workflow_search_clause)
+        session_query = session_query.where(session_search_clause)
+        session_count_query = session_count_query.where(session_search_clause)
 
     workflow_total = int(await db.scalar(workflow_count_query) or 0)
     session_total = int(await db.scalar(session_count_query) or 0)

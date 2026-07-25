@@ -22,12 +22,46 @@ export interface AuditLogsBatch {
   total: number;
 }
 
+export interface FetchAuditLogsParams {
+  offset?: number;
+  limit?: number;
+  /** Free-text match across action, resource, and user email/role (both audit sources). */
+  search?: string;
+  action?: string;
+  /** Free-text match against user email/role. */
+  user?: string;
+  result?: AuditLogResult;
+  /** ISO 8601 instant, inclusive lower bound on timestamp. */
+  startTime?: string;
+  /** ISO 8601 instant, exclusive upper bound on timestamp. */
+  endTime?: string;
+}
+
+/** Server-side search/filter, so results are correct against the full audit
+ * table rather than whatever page happened to already be loaded client-side. */
 export async function fetchAuditLogs(
   accessToken: string,
-  { offset = 0, limit = AUDIT_LOGS_BATCH_SIZE }: { offset?: number; limit?: number } = {},
+  {
+    offset = 0,
+    limit = AUDIT_LOGS_BATCH_SIZE,
+    search,
+    action,
+    user,
+    result,
+    startTime,
+    endTime,
+  }: FetchAuditLogsParams = {},
 ): Promise<AuditLogsBatch> {
+  const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+  if (search) query.set("search", search);
+  if (action) query.set("action", action);
+  if (user) query.set("user", user);
+  if (result) query.set("result", result);
+  if (startTime) query.set("start_time", startTime);
+  if (endTime) query.set("end_time", endTime);
+
   const response = await apiRequest<FetchAuditLogsResponse | AuditLogApiRecord[]>(
-    `${AUDIT_LOGS_ADMIN_PATH}?limit=${limit}&offset=${offset}`,
+    `${AUDIT_LOGS_ADMIN_PATH}?${query.toString()}`,
     accessToken,
   );
 
