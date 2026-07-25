@@ -8,6 +8,7 @@ from app.models.canvas_course_name import CanvasCourseName
 from app.models.conversation import Conversation
 from app.models.course import Course
 from app.models.deferred_assistant_request import DeferredAssistantRequest
+from app.models.failed_operation import FailedOperation
 from app.models.grade_history import GradeHistory
 from app.models.health_check import HealthCheck
 from app.models.instructor_llm_connection import InstructorLlmConnection
@@ -36,6 +37,7 @@ __all__ = [
     "Conversation",
     "Course",
     "DeferredAssistantRequest",
+    "FailedOperation",
     "GradeHistory",
     "HealthCheck",
     "InstructorLlmConnection",
