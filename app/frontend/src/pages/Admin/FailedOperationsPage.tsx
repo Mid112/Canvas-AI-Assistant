@@ -160,11 +160,13 @@ export function FailedOperationsPage() {
   }, [accessToken, sourceFilter]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async list load on mount/filter/auth changes
     void loadList();
   }, [loadList]);
 
   useEffect(() => {
     if (!accessToken || selectedId === null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear detail when nothing is selected
       setSelectedItem(null);
       return;
     }
