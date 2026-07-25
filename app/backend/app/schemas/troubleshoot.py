@@ -1,5 +1,3 @@
-from datetime import datetime
-
 from pydantic import BaseModel
 
 from app.schemas.health import LatestHealthResponse
@@ -18,22 +16,6 @@ class InstructorCanvasSummary(BaseModel):
     healthy: int
     failing: int
     failing_connections: list[FailingCanvasConnection]
-
-
-class FailedOperation(BaseModel):
-    id: int
-    action_name: str
-    user_name: str
-    user_email: str
-    course_name: str | None = None
-    error_detail: str | None = None
-    created_at: datetime
-    executed_at: datetime | None = None
-
-
-class FailedOperationListResponse(BaseModel):
-    items: list[FailedOperation]
-    total: int
 
 
 class DiagnosticsResponse(BaseModel):
