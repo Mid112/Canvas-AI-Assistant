@@ -121,6 +121,8 @@ class Settings(BaseSettings):
     # MCP integration (optional — disabled by default for unit tests)
     MCP_SERVER_URL: str = ""
     MCP_ENABLED: bool = False
+    # Must match MCP_SHARED_SECRET on the mcp_server sidecar.
+    MCP_SHARED_SECRET: str = ""
 
     @field_validator("CANVAS_TOKEN_ENCRYPTION_KEY", mode="before")
     @classmethod

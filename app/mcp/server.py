@@ -2,8 +2,10 @@
 # Exposes tools for reading/writing Canvas data and fetching audit logs.
 
 import os
+import secrets
 from contextvars import ContextVar
 from typing import Any, Awaitable, Callable
+from urllib.parse import urlparse
 
 import httpx
 import uvicorn
@@ -16,9 +18,60 @@ CANVAS_API_URL = os.getenv("CANVAS_API_URL", "http://localhost:4000/api/v1")
 CANVAS_API_TOKEN = os.getenv("CANVAS_API_TOKEN", "placeholder")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 MCP_PORT = int(os.getenv("MCP_PORT", "8001"))
+# Shared with the backend — /tools/call rejects callers without this secret.
+MCP_SHARED_SECRET = os.getenv("MCP_SHARED_SECRET", "").strip()
 
 _request_canvas_token: ContextVar[str | None] = ContextVar("canvas_token", default=None)
 _request_canvas_url: ContextVar[str | None] = ContextVar("canvas_url", default=None)
+
+
+def _allowed_canvas_hosts() -> set[str]:
+    hosts: set[str] = set()
+    for raw in (CANVAS_API_URL, *os.getenv("MCP_ALLOWED_CANVAS_HOSTS", "").split(",")):
+        value = raw.strip()
+        if not value:
+            continue
+        parsed = urlparse(value if "://" in value else f"https://{value}")
+        host = (parsed.hostname or "").lower()
+        if host:
+            hosts.add(host)
+    return hosts
+
+
+def _canvas_url_allowed(canvas_url: str | None) -> bool:
+    """Block SSRF via arbitrary canvas_url in /tools/call bodies."""
+    if canvas_url is None or not str(canvas_url).strip():
+        return True
+    if not isinstance(canvas_url, str):
+        return False
+    parsed = urlparse(canvas_url if "://" in canvas_url else f"https://{canvas_url}")
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return False
+    allowed = _allowed_canvas_hosts()
+    return bool(allowed) and host in allowed
+
+
+def _request_shared_secret(request: Request) -> str | None:
+    auth = request.headers.get("authorization") or ""
+    if auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    header = request.headers.get("x-mcp-shared-secret")
+    return header.strip() if isinstance(header, str) else None
+
+
+def _authorize_tools_call(request: Request) -> JSONResponse | None:
+    """Require MCP_SHARED_SECRET so /tools/call is not an open Canvas proxy."""
+    if not MCP_SHARED_SECRET:
+        return JSONResponse(
+            {"error": "MCP_SHARED_SECRET is not configured on the MCP server"},
+            status_code=503,
+        )
+    provided = _request_shared_secret(request)
+    if provided is None or not secrets.compare_digest(provided, MCP_SHARED_SECRET):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    return None
+
 
 ALLOWED_TOOLS = frozenset(
     {
@@ -572,6 +625,10 @@ _TOOL_DISPATCH: dict[str, Callable[..., Awaitable[dict[str, Any]]]] = {
 
 @mcp.custom_route("/tools/call", methods=["POST"])
 async def tools_call(request: Request) -> JSONResponse:
+    auth_error = _authorize_tools_call(request)
+    if auth_error is not None:
+        return auth_error
+
     try:
         body = await request.json()
     except Exception:
@@ -590,6 +647,11 @@ async def tools_call(request: Request) -> JSONResponse:
 
     token = body.get("canvas_token")
     canvas_url = body.get("canvas_url")
+    if not _canvas_url_allowed(canvas_url if isinstance(canvas_url, str) else None):
+        return JSONResponse(
+            {"error": "canvas_url host is not allowlisted"},
+            status_code=400,
+        )
     token_ctx = _request_canvas_token.set(token if isinstance(token, str) else None)
     url_ctx = _request_canvas_url.set(canvas_url if isinstance(canvas_url, str) else None)
     try:
