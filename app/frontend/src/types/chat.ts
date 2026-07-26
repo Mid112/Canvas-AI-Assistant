@@ -2,6 +2,7 @@ export type ChatMessageRole = "user" | "assistant";
 
 export type PendingActionStatus =
   | "pending"
+  | "paused"
   | "executing"
   | "confirmed"
   | "cancelled"
@@ -28,6 +29,8 @@ export function mapWorkflowStatus(
       return "cancelled";
     case "superseded":
       return "superseded";
+    case "paused":
+      return "paused";
     case "pending":
     case "executing":
     default:
@@ -88,6 +91,8 @@ export interface ChatMessage {
   pendingMessageId?: number;
   workflowId?: number;
   pendingActionStatus?: PendingActionStatus;
+  /** Instructor-facing label for multi-workflow pause/resume/rename. */
+  workflowDisplayName?: string | null;
   explanation?: string;
   acknowledgedFields?: Array<{ label: string; value: string }>;
   interpretedAction?: InterpretedAction;
