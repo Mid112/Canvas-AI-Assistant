@@ -3,7 +3,6 @@ from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.canvas import fetch_submissions, update_submission_grade
@@ -13,6 +12,7 @@ from app.models.user import User
 from app.models.workflow import Workflow
 from app.schemas.canvas import GradePreviewResponse, GradeUpdateRequest, GradeUpdateResponse
 from app.services.canvas import (
+    _assert_no_executing_write,
     _fill_submission_contact_fields,
     _parse_submission,
     get_owned_course,
@@ -21,7 +21,6 @@ from app.services.canvas import (
 )
 from app.services.canvas_idempotency import (
     build_idempotency_key,
-    duplicate_in_flight_http_exception,
     run_idempotent_canvas_write,
 )
 
@@ -337,24 +336,15 @@ async def submit_grade_update(
     feedback = (body.reason or "").strip()
     feedback_only = not proposed_grade and bool(feedback)
 
-    # Feature Reliability (#1188): refuse overlapping in-flight grade writes
-    # for the same instructor+assignment+student.
-    stmt = select(Workflow).where(
-        Workflow.user_id == user.id,
-        Workflow.action_name == "update_grade",
-        Workflow.status == "executing",
+    # Feature Reliability (#1188): same user-scoped mutex as other Canvas writes
+    # so a grade confirm cannot race an in-flight assignment/quiz/message write.
+    await _assert_no_executing_write(
+        db,
+        user_id=user.id,
+        action_name="update_grade",
+        local_course_id=course.id,
+        exclude_workflow_id=exclude_workflow_id,
     )
-    if exclude_workflow_id is not None:
-        stmt = stmt.where(Workflow.id != exclude_workflow_id)
-    executing = list(await db.scalars(stmt))
-    for existing in executing:
-        proposed = existing.proposed_action or {}
-        student_id = proposed.get("user_id", proposed.get("student_id"))
-        if (
-            proposed.get("assignment_id") == body.assignment_id
-            and student_id == body.user_id
-        ):
-            raise duplicate_in_flight_http_exception()
 
     idem_key = build_idempotency_key(
         "update_grade",

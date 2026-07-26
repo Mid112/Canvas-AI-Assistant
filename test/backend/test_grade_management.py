@@ -396,3 +396,46 @@ async def test_grade_submit_rolls_back_when_history_or_audit_commit_fails():
             )
 
     db.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_grade_submit_blocked_when_any_write_executing():
+    # Feature Reliability (#1188): update_grade must use the same user-scoped
+    # in-flight mutex as create_assignment — not only same assignment+student.
+    db = AsyncMock()
+    user = SimpleNamespace(id=1)
+    course = SimpleNamespace(
+        id=7,
+        name="COSC 777",
+        canvas_course_id="77",
+        canvas_url="https://canvas.ubc.ca",
+    )
+
+    with (
+        patch(
+            "app.services.grade_management._find_submission",
+            new=AsyncMock(return_value=(course, "token", _submission())),
+        ),
+        patch(
+            "app.services.grade_management._assert_no_executing_write",
+            new=AsyncMock(
+                side_effect=HTTPException(status_code=409, detail="in flight"),
+            ),
+        ) as mock_guard,
+        patch(
+            "app.services.grade_management.update_submission_grade",
+            new=AsyncMock(),
+        ) as mock_update,
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await submit_grade_update(
+                7,
+                GradeUpdateRequest(assignment_id=10, user_id=42, posted_grade="95"),
+                user,
+                "https://canvas.ubc.ca",
+                db,
+            )
+
+    assert exc.value.status_code == 409
+    mock_guard.assert_awaited_once()
+    mock_update.assert_not_awaited()
