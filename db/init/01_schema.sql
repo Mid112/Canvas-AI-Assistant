@@ -222,6 +222,7 @@ CREATE TABLE workflows (
     preview_message_id       INTEGER REFERENCES messages(id) ON DELETE CASCADE,
     result_message_id        INTEGER REFERENCES messages(id) ON DELETE SET NULL,
     action_name              VARCHAR NOT NULL,
+    -- Optional instructor-facing label for multi-workflow switching (#1237).
     display_name             TEXT,
     user_prompt              TEXT NOT NULL,
     proposed_action          JSONB NOT NULL,
