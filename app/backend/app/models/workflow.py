@@ -59,12 +59,14 @@ class Workflow(Base):
     )
 
     action_name: Mapped[str] = mapped_column(String, nullable=False)
+    # Optional instructor-facing label for multi-workflow switching (#1237).
+    display_name: Mapped[str | None] = mapped_column(String, nullable=True)
     user_prompt: Mapped[str] = mapped_column(Text, nullable=False)
     proposed_action: Mapped[dict] = mapped_column(JSONB, nullable=False)
     affected_resources: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
 
     # pending -> executing -> executed | failed
-    #         -> cancelled | superseded
+    #         -> cancelled | superseded | paused (resume -> pending)
     status: Mapped[str] = mapped_column(String, nullable=False, default="pending", index=True)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -37,6 +37,10 @@ function mapWorkflowStatus(status: string): WorkflowStatus {
     case "cancelled":
     case "superseded":
       return "rejected";
+    case "paused":
+      return "paused";
+    case "pending":
+    case "executing":
     default:
       return "pending";
   }
