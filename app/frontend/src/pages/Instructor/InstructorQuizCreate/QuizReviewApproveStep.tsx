@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
@@ -174,9 +174,11 @@ export function QuizReviewApproveStep({
     void trigger();
   }, [trigger]);
 
+  const lastSyncedDraftKey = useRef<string | null>(null);
+
   useEffect(() => {
     if (!onDraftChange) return;
-    onDraftChange({
+    const next: GeneratedQuizDraft = {
       name: String(watchedValues.name ?? draft.name),
       description: String(watchedValues.description ?? draft.description),
       dueDate: String(watchedValues.dueDate ?? draft.dueDate),
@@ -204,7 +206,13 @@ export function QuizReviewApproveStep({
         watchedValues.questionBankGroups,
         draft.questionBankGroups,
       ),
-    });
+    };
+    // normalize* always returns new arrays; skip parent sync when content is unchanged
+    // so the page doesn't setDraft → re-render → effect forever.
+    const key = JSON.stringify(next);
+    if (key === lastSyncedDraftKey.current) return;
+    lastSyncedDraftKey.current = key;
+    onDraftChange(next);
   }, [onDraftChange, watchedValues, draft.name, draft.description, draft.dueDate, draft.pointsPossible, draft.allowedAttempts, draft.timeLimit, draft.quizEngine, draft.questions, draft.questionBankGroups]);
 
   return (

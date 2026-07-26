@@ -34,6 +34,8 @@ interface FeedbackDescribeStepProps {
   courseLoadError?: string | null;
   isLoadingCourses?: boolean;
   onGenerate: (values: FeedbackDescribeValues) => void;
+  /** Keep parent describe state in sync (for Save draft before generate). */
+  onValuesChange?: (values: FeedbackDescribeValues) => void;
 }
 
 const selectClassName = cn(
@@ -52,6 +54,7 @@ export function FeedbackDescribeStep({
   courseLoadError = null,
   isLoadingCourses = false,
   onGenerate,
+  onValuesChange,
 }: FeedbackDescribeStepProps) {
   const [loadedContext, setLoadedContext] = useState<{
     courseId: number;
@@ -73,6 +76,7 @@ export function FeedbackDescribeStep({
     mode: "onChange",
   });
 
+  const watchedValues = useWatch({ control });
   const courseId = useWatch({ control, name: "courseId", defaultValue: defaultValues.courseId });
   const promptValue = useWatch({ control, name: "prompt", defaultValue: defaultValues.prompt });
   const numericCourseId = courseId ? Number(courseId) : null;
@@ -84,6 +88,31 @@ export function FeedbackDescribeStep({
     numericCourseId != null && loadedContext?.courseId === numericCourseId
       ? loadedContext.students
       : [];
+
+  useEffect(() => {
+    if (!onValuesChange) return;
+    const assignmentId = String(watchedValues.assignmentId ?? "");
+    const studentId = String(watchedValues.studentId ?? "");
+    onValuesChange({
+      courseId: String(watchedValues.courseId ?? ""),
+      assignmentId,
+      studentId,
+      assignmentName:
+        assignments.find((assignment) => String(assignment.id) === assignmentId)?.name ??
+        defaultValues.assignmentName,
+      studentName:
+        students.find((student) => String(student.id) === studentId)?.name ??
+        defaultValues.studentName,
+      prompt: String(watchedValues.prompt ?? ""),
+    });
+  }, [
+    onValuesChange,
+    watchedValues,
+    assignments,
+    students,
+    defaultValues.assignmentName,
+    defaultValues.studentName,
+  ]);
 
   useEffect(() => {
     if (!courseId || !accessToken) {

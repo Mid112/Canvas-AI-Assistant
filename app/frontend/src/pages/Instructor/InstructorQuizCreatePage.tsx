@@ -180,8 +180,11 @@ export function InstructorQuizCreatePage() {
         current.allowedAttempts === values.allowedAttempts &&
         current.timeLimit === values.timeLimit &&
         current.quizEngine === values.quizEngine &&
-        current.questions === values.questions &&
-        current.questionBankGroups === values.questionBankGroups
+        // useWatch + normalize helpers always allocate new arrays; compare by
+        // value so we don't setState → re-render → effect → setState forever.
+        JSON.stringify(current.questions) === JSON.stringify(values.questions) &&
+        JSON.stringify(current.questionBankGroups) ===
+          JSON.stringify(values.questionBankGroups)
       ) {
         return current;
       }

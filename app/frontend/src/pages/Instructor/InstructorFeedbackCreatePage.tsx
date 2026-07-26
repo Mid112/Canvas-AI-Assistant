@@ -163,6 +163,19 @@ export function InstructorFeedbackCreatePage() {
     });
   }, []);
 
+  const handleDescribeValuesChange = useCallback((values: FeedbackDescribeValues) => {
+    setDescribeValues((current) =>
+      current.courseId === values.courseId &&
+      current.assignmentId === values.assignmentId &&
+      current.studentId === values.studentId &&
+      current.assignmentName === values.assignmentName &&
+      current.studentName === values.studentName &&
+      current.prompt === values.prompt
+        ? current
+        : values,
+    );
+  }, []);
+
   const handleSaveTypedDraft = () => {
     if (!user?.id) return;
     const content = draft
@@ -431,6 +444,7 @@ export function InstructorFeedbackCreatePage() {
           }
           isLoadingCourses={isLoadingCourses}
           onGenerate={handleGenerate}
+          onValuesChange={handleDescribeValuesChange}
         />
       ) : draft ? (
         <FeedbackReviewApproveStep
