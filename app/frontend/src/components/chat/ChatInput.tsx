@@ -1,4 +1,4 @@
-import { Send } from "lucide-react";
+import { Send, Square } from "lucide-react";
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 
 import { ChatModelSwitcher } from "@/components/chat/ChatModelSwitcher";
@@ -10,6 +10,7 @@ import type { LlmProviderId, LlmProviderSettings } from "@/types/llmProvider";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
+  onStop?: () => void;
   isLoading: boolean;
   isDisabled?: boolean;
   inputError?: string | null;
@@ -21,6 +22,7 @@ interface ChatInputProps {
 
 export function ChatInput({
   onSend,
+  onStop,
   isLoading,
   isDisabled = false,
   inputError,
@@ -101,13 +103,14 @@ export function ChatInput({
           </div>
 
           <Button
-            type="submit"
+            type={isLoading ? "button" : "submit"}
             size="icon"
-            disabled={isLoading || isDisabled}
+            disabled={isDisabled}
+            onClick={isLoading ? onStop : undefined}
             className={cn("size-9 rounded-full", dashboardColors.blue.button)}
-            aria-label="Send message"
+            aria-label={isLoading ? "Stop response" : "Send message"}
           >
-            <Send className="size-4" />
+            {isLoading ? <Square className="size-4" /> : <Send className="size-4" />}
           </Button>
         </div>
       </form>
