@@ -37,22 +37,22 @@ def _check_body(body: str) -> None:
         )
 
 
-def _check_profanity(*parts: str) -> None:
+def _check_profanity(*parts: str, content_label: str = "Text") -> None:
     combined = " ".join(part for part in parts if part)
     match = _PROFANITY_PATTERN.search(combined)
     if match:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
-                "Message contains language that is not appropriate for "
+                f"{content_label} contains language that is not appropriate for "
                 "student communication. Please revise and try again."
             ),
         )
 
 
-def check_message_profanity(*parts: str) -> None:
-    """Public wrapper so inbox replies reuse the same content filter."""
-    _check_profanity(*parts)
+def check_message_profanity(*parts: str, content_label: str = "Message") -> None:
+    """Public wrapper so inbox replies and feedback comments share one filter."""
+    _check_profanity(*parts, content_label=content_label)
 
 
 async def _validate_recipients_in_course(
