@@ -1,4 +1,4 @@
-import { AlertCircle, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import {
   forwardRef,
   useCallback,
@@ -14,12 +14,14 @@ import { AssistantMessage } from "@/components/chat/AssistantMessage";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { LoadingIndicator } from "@/components/chat/LoadingIndicator";
 import { UserMessage } from "@/components/chat/UserMessage";
+import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useInstitution } from "@/contexts/useInstitution";
 import { seedChatMessages } from "@/data/assistantSeedData";
+import { isAbortError } from "@/lib/api-request";
 import { isCancellationPhrase } from "@/lib/chat-cancellation";
 import { setStoredDeferredDraft } from "@/lib/deferred-assistant-storage";
 import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
@@ -29,6 +31,9 @@ import {
   confirmAssistantAction,
   fetchConversation,
   mapConversationToChatMessages,
+  pauseAssistantAction,
+  renameAssistantAction,
+  resumeAssistantAction,
   sendAssistantMessage,
   type ConversationResponse,
 } from "@/services/assistant";
@@ -42,6 +47,7 @@ import type { ChatMessage } from "@/types/chat";
 import { mapWorkflowStatus } from "@/types/chat";
 import type { LlmProviderId, LlmProviderSettings } from "@/types/llmProvider";
 
+const SCROLL_STICK_THRESHOLD_PX = 100;
 function createMessageId(): string {
   return crypto.randomUUID();
 }
@@ -195,11 +201,16 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   const [pendingActionError, setPendingActionError] = useState<string | null>(
     null,
   );
+  // Kept separately from resolvingMessageId so errors remain visible after
+  // the request settles (finally clears the loading id).
+  const [pendingActionErrorMessageId, setPendingActionErrorMessageId] =
+    useState<string | null>(null);
   const [reversingWorkflowId, setReversingWorkflowId] = useState<number | null>(null);
   const [reversedWorkflowIds, setReversedWorkflowIds] = useState<Set<number>>(
     () => new Set(),
   );
   const messageListRef = useRef<HTMLDivElement>(null);
+  const stickToBottomRef = useRef(true);
   const initialPromptHandledRef = useRef<string | null>(null);
   const hydratedConversationRef = useRef<number | undefined>(
     initialChatState.hydratedConversationId,
@@ -208,6 +219,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   const deferredRequestIdRef = useRef<number | null>(
     initialDeferredRequestId ?? null,
   );
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const assistantContext = useMemo(
     () => ({
@@ -220,6 +232,23 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   useEffect(() => {
     const messageList = messageListRef.current;
     if (!messageList) {
+      return;
+    }
+
+    const updateStickToBottom = () => {
+      const distanceFromBottom =
+        messageList.scrollHeight - messageList.scrollTop - messageList.clientHeight;
+      stickToBottomRef.current = distanceFromBottom <= SCROLL_STICK_THRESHOLD_PX;
+    };
+
+    updateStickToBottom();
+    messageList.addEventListener("scroll", updateStickToBottom);
+    return () => messageList.removeEventListener("scroll", updateStickToBottom);
+  }, []);
+
+  useEffect(() => {
+    const messageList = messageListRef.current;
+    if (!messageList || !stickToBottomRef.current) {
       return;
     }
 
@@ -308,6 +337,9 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
               : undefined,
             pendingActionStatus: mapped.pendingMessageId
               ? mapWorkflowStatus(workflowStatuses[mapped.pendingMessageId]?.status)
+              : undefined,
+            workflowDisplayName: mapped.pendingMessageId
+              ? workflowStatuses[mapped.pendingMessageId]?.display_name ?? null
               : undefined,
             explanation: mapped.explanation,
             acknowledgedFields: mapped.acknowledgedFields,
@@ -430,6 +462,13 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       const pendingMessageIdToSend =
         activePendingMessageIds.length === 1 ? activePendingMessageIds[0] : undefined;
 
+      // Client-side abort only: cancels the browser fetch so the UI can show
+      // "Stopped." There is no server-side cancel endpoint — the backend
+      // assistant turn may still finish and persist. That is intentional for
+      // Phase 5 (soft stop UX), not a true cancel of Canvas/LLM work.
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       try {
         const response = await sendAssistantMessage(accessToken, userText, {
           context: assistantContext,
@@ -437,6 +476,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           pendingMessageId: pendingMessageIdToSend,
           deferredRequestId: deferredRequestIdRef.current ?? undefined,
           modelSettings: modelSettings ?? undefined,
+          signal: abortController.signal,
         });
 
         if (pendingMessageIdToSend !== undefined) {
@@ -470,12 +510,30 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
         appendAssistantMessage(response);
         setRetryMessage(null);
       } catch (requestError) {
-        const message =
-          requestError instanceof AssistantApiError
-            ? requestError.message
-            : "Something went wrong. Please try again.";
-        setError(message);
+        if (isAbortError(requestError)) {
+          setMessages((current) => [
+            ...current,
+            {
+              id: createMessageId(),
+              role: "assistant",
+              content: "Stopped.",
+              timestamp: new Date(),
+              conversationId,
+            },
+          ]);
+          setError(null);
+          setRetryMessage(null);
+        } else {
+          const message =
+            requestError instanceof AssistantApiError
+              ? requestError.message
+              : "Something went wrong. Please try again.";
+          setError(message);
+        }
       } finally {
+        if (abortControllerRef.current === abortController) {
+          abortControllerRef.current = null;
+        }
         isDeliveringRef.current = false;
         setIsLoading(false);
       }
@@ -496,11 +554,22 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   );
 
   const resolvePendingAction = useCallback(
-    async (message: ChatMessage, action: "confirm" | "cancel") => {
+    async (
+      message: ChatMessage,
+      action: "confirm" | "cancel" | "pause" | "resume" | "rename",
+      renameDisplayName?: string,
+    ) => {
+      if (!accessToken || message.pendingMessageId === undefined) {
+        return;
+      }
+
+      const allowedStatuses =
+        action === "resume" || action === "rename"
+          ? new Set(["pending", "paused"])
+          : new Set(["pending"]);
       if (
-        !accessToken ||
-        message.pendingMessageId === undefined ||
-        message.pendingActionStatus !== "pending"
+        !message.pendingActionStatus ||
+        !allowedStatuses.has(message.pendingActionStatus)
       ) {
         return;
       }
@@ -510,10 +579,98 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
         return;
       }
 
+      if (
+        action === "confirm" &&
+        messages.some(
+          (entry) =>
+            entry.id !== message.id && entry.pendingActionStatus === "executing",
+        )
+      ) {
+        setPendingActionError(
+          "Another Canvas write is already running. Wait for it to finish, or pause/cancel it first.",
+        );
+        setPendingActionErrorMessageId(message.id);
+        return;
+      }
+
       setResolvingMessageId(message.id);
       setPendingActionError(null);
+      setPendingActionErrorMessageId(null);
 
       try {
+        if (action === "pause") {
+          await pauseAssistantAction(
+            accessToken,
+            activeConversationId,
+            message.pendingMessageId,
+          );
+          setActivePendingMessageIds((current) =>
+            current.filter((id) => id !== message.pendingMessageId),
+          );
+          setMessages((current) =>
+            current.map((entry) =>
+              entry.id === message.id
+                ? { ...entry, pendingActionStatus: "paused" }
+                : entry,
+            ),
+          );
+          return;
+        }
+
+        if (action === "resume") {
+          await resumeAssistantAction(
+            accessToken,
+            activeConversationId,
+            message.pendingMessageId,
+          );
+          setActivePendingMessageIds((current) =>
+            current.includes(message.pendingMessageId!)
+              ? current
+              : [...current, message.pendingMessageId!],
+          );
+          setMessages((current) =>
+            current.map((entry) =>
+              entry.id === message.id
+                ? { ...entry, pendingActionStatus: "pending" }
+                : entry,
+            ),
+          );
+          return;
+        }
+
+        if (action === "rename") {
+          const nextName = renameDisplayName?.trim();
+          if (!nextName) {
+            setPendingActionError("Enter a workflow name before saving.");
+            setPendingActionErrorMessageId(message.id);
+            return;
+          }
+          await renameAssistantAction(
+            accessToken,
+            activeConversationId,
+            message.pendingMessageId,
+            nextName,
+          );
+          setMessages((current) =>
+            current.map((entry) =>
+              entry.id === message.id
+                ? { ...entry, workflowDisplayName: nextName }
+                : entry,
+            ),
+          );
+          return;
+        }
+
+        if (action === "confirm") {
+          setMessages((current) =>
+            current.map((entry) =>
+              entry.id === message.id
+                ? { ...entry, pendingActionStatus: "executing" }
+                : entry,
+            ),
+          );
+        }
+
         const response =
           action === "confirm"
             ? await confirmAssistantAction(
@@ -526,8 +683,13 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
                 activeConversationId,
                 message.pendingMessageId,
               );
+
+        const confirmFailed = action === "confirm" && Boolean(response.isError);
+        // Only resolve workflow_id after a successful confirm. A failed
+        // confirm must still surface response.content and must not be
+        // rewritten as a generic request error if conversation refresh fails.
         const confirmedWorkflowId =
-          action === "confirm"
+          action === "confirm" && !confirmFailed
             ? (
                 await fetchConversation(accessToken, activeConversationId)
               ).workflow_statuses[message.pendingMessageId]?.workflow_id
@@ -542,10 +704,13 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
             entry.id === message.id
               ? {
                   ...entry,
-                  pendingActionStatus:
-                    action === "confirm" ? "confirmed" : "cancelled",
+                  pendingActionStatus: confirmFailed
+                    ? "failed"
+                    : action === "confirm"
+                      ? "confirmed"
+                      : "cancelled",
                   workflowId:
-                    action === "confirm"
+                    action === "confirm" && !confirmFailed
                       ? confirmedWorkflowId
                       : entry.workflowId,
                   // Hide the offer cards after cancel so the proposal
@@ -563,20 +728,30 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
         );
         appendAssistantMessage(response);
 
-        if (action === "confirm") {
+        if (action === "confirm" && !confirmFailed) {
           // The confirmed action just committed a write to Canvas/the local
           // DB — ActiveCourseProvider and InstitutionProvider are both
           // mounted once for the whole session, so nothing else will ask
           // them to re-fetch. Without this, course/assignment counts and
           // dashboard metrics stay stale until a full page reload.
-          void refreshActiveCourse();
-          notifyCoursesChanged();
-          void refreshDashboard();
+          // Refresh failures must not rewrite a successful confirm as failed.
+          try {
+            void refreshActiveCourse();
+            notifyCoursesChanged?.();
+            void refreshDashboard();
+          } catch {
+            // Best-effort UI refresh only.
+          }
         }
       } catch (requestError) {
-        // Cancelling a form-handoff leftover (no Workflow row) should still
-        // dismiss the UI locally — there is nothing to audit/cancel server-side.
-        if (action === "cancel") {
+        // Form-handoff leftovers have no Workflow row (404). Only those may
+        // dismiss locally — real cancel/pause failures (e.g. 409 while paused)
+        // must surface so the UI stays in sync with the server.
+        if (
+          action === "cancel" &&
+          requestError instanceof AssistantApiError &&
+          requestError.status === 404
+        ) {
           setActivePendingMessageIds((current) =>
             current.filter((id) => id !== message.pendingMessageId),
           );
@@ -595,7 +770,18 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
             ),
           );
           setPendingActionError(null);
+          setPendingActionErrorMessageId(null);
           return;
+        }
+
+        if (action === "confirm") {
+          setMessages((current) =>
+            current.map((entry) =>
+              entry.id === message.id
+                ? { ...entry, pendingActionStatus: "failed" }
+                : entry,
+            ),
+          );
         }
 
         const errorMessage =
@@ -603,6 +789,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
             ? requestError.message
             : "Unable to update this proposed action. Please try again.";
         setPendingActionError(errorMessage);
+        setPendingActionErrorMessageId(message.id);
       } finally {
         setResolvingMessageId(null);
       }
@@ -611,6 +798,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       accessToken,
       appendAssistantMessage,
       conversationId,
+      messages,
       notifyCoursesChanged,
       refreshActiveCourse,
       refreshDashboard,
@@ -647,6 +835,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
 
       setReversingWorkflowId(message.workflowId);
       setPendingActionError(null);
+      setPendingActionErrorMessageId(null);
 
       try {
         await reverseWorkflow(accessToken, String(message.workflowId));
@@ -686,6 +875,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
             ? requestError.message
             : "Unable to reverse this action. Please try again.";
         setPendingActionError(errorMessage);
+        setPendingActionErrorMessageId(message.id);
       } finally {
         setReversingWorkflowId(null);
       }
@@ -708,6 +898,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       }
 
       setInputError(null);
+      stickToBottomRef.current = true;
 
       const userMessage: ChatMessage = {
         id: createMessageId(),
@@ -789,6 +980,11 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
     void deliverAssistantResponse(retryMessage);
   };
 
+  const handleStop = useCallback(() => {
+    // Soft stop: aborts the in-flight fetch only (see deliverAssistantResponse).
+    abortControllerRef.current?.abort();
+  }, []);
+
   return (
     <Card className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden shadow-sm ring-1 ring-border/60">
       <CardContent className="flex min-h-0 flex-1 flex-col gap-4 p-4 md:p-6">
@@ -818,7 +1014,19 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
                 message={message}
                 isResolvingPendingAction={resolvingMessageId === message.id}
                 pendingActionError={
-                  resolvingMessageId === message.id ? pendingActionError : null
+                  pendingActionErrorMessageId === message.id
+                    ? pendingActionError
+                    : null
+                }
+                confirmBlockedReason={
+                  message.pendingActionStatus === "pending" &&
+                  messages.some(
+                    (entry) =>
+                      entry.id !== message.id &&
+                      entry.pendingActionStatus === "executing",
+                  )
+                    ? "Another Canvas write is already running. Wait for it to finish before confirming."
+                    : null
                 }
                 onConfirmPendingAction={
                   message.pendingMessageId
@@ -828,6 +1036,22 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
                 onCancelPendingAction={
                   message.pendingMessageId
                     ? () => void resolvePendingAction(message, "cancel")
+                    : undefined
+                }
+                onPausePendingAction={
+                  message.pendingMessageId
+                    ? () => void resolvePendingAction(message, "pause")
+                    : undefined
+                }
+                onResumePendingAction={
+                  message.pendingMessageId
+                    ? () => void resolvePendingAction(message, "resume")
+                    : undefined
+                }
+                onRenamePendingAction={
+                  message.pendingMessageId
+                    ? (displayName) =>
+                        void resolvePendingAction(message, "rename", displayName)
                     : undefined
                 }
                 onDismissHandoff={
@@ -851,32 +1075,26 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
         </div>
 
         {error ? (
-          <div
-            role="alert"
-            className="shrink-0 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3"
-          >
-            <div className="flex items-start gap-2 text-sm text-destructive">
-              <AlertCircle
-                className="mt-0.5 size-4 shrink-0"
-                aria-hidden="true"
-              />
-              <span>{error}</span>
+          <div className="shrink-0 space-y-2">
+            <ErrorAlert message={error} />
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleRetry}
+                disabled={isLoading || !retryMessage}
+              >
+                Retry
+              </Button>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleRetry}
-              disabled={isLoading || !retryMessage}
-            >
-              Retry
-            </Button>
           </div>
         ) : null}
 
         <ChatInput
           key={initialDraft ?? ""}
           onSend={handleSend}
+          onStop={handleStop}
           isLoading={isLoading}
           inputError={inputError}
           initialValue={initialDraft ?? ""}
