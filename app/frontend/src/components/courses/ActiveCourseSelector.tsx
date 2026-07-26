@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ChangeEvent } from "react";
 import { BookOpen, Loader2 } from "lucide-react";
 
 import { useActiveCourse } from "@/contexts/useActiveCourse";
@@ -13,11 +13,19 @@ const selectClassName = cn(
 interface ActiveCourseSelectorProps {
   id?: string;
   className?: string;
+  /** When true (default), warn before switching away from an active course
+   * mid-assistant work so the instructor understands the conversation may
+   * fork onto a new thread for the new course (#1186). */
+  warnOnSwitch?: boolean;
+  /** Return true when chat has a pending preview or an in-progress reply. */
+  hasPendingAssistantWork?: () => boolean;
 }
 
 export function ActiveCourseSelector({
   id = "active-course-selector",
   className,
+  warnOnSwitch = true,
+  hasPendingAssistantWork,
 }: ActiveCourseSelectorProps) {
   const {
     activeCourse,
@@ -45,6 +53,36 @@ export function ActiveCourseSelector({
       ? "No published courses available"
       : "Select a course";
 
+  const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const value = Number(event.target.value);
+    if (!Number.isInteger(value) || value <= 0) {
+      return;
+    }
+
+    const switchingAway =
+      activeCourse != null && activeCourse.localId !== value;
+    const pendingWork = Boolean(hasPendingAssistantWork?.());
+
+    if (warnOnSwitch && switchingAway) {
+      const detail = pendingWork
+        ? "You have a pending assistant preview or an in-progress reply. Switching courses keeps the current conversation on the old course and starts (or resumes) a separate thread for the new course."
+        : "Switching the active course will keep any open conversation scoped to its original course and open a new thread when you chat about the new course.";
+      const confirmed = window.confirm(
+        `${detail}\n\nSwitch active course anyway?`,
+      );
+      if (!confirmed) {
+        // Controlled select already binds to activeCourse; force a reset so
+        // the cancelled option does not stick visually.
+        event.target.value = activeCourse?.localId
+          ? String(activeCourse.localId)
+          : "";
+        return;
+      }
+    }
+
+    void selectActiveCourse(value);
+  };
+
   return (
     <div className={cn("flex min-w-0 items-center gap-2", className)}>
       <label htmlFor={id} className="sr-only">
@@ -57,12 +95,7 @@ export function ActiveCourseSelector({
       <select
         id={id}
         value={activeCourse?.localId ?? ""}
-        onChange={(event) => {
-          const value = Number(event.target.value);
-          if (Number.isInteger(value) && value > 0) {
-            void selectActiveCourse(value);
-          }
-        }}
+        onChange={handleChange}
         disabled={isDisabled}
         className={selectClassName}
         aria-label="Select active course"

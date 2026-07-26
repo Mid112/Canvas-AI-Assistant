@@ -3,7 +3,13 @@ import { AlertCircle } from "lucide-react";
 import { ActiveCourseSelector } from "@/components/courses/ActiveCourseSelector";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
 
-export function ActiveCourseContextBar() {
+interface ActiveCourseContextBarProps {
+  hasPendingAssistantWork?: () => boolean;
+}
+
+export function ActiveCourseContextBar({
+  hasPendingAssistantWork,
+}: ActiveCourseContextBarProps) {
   const { activeCourse, error, isLoading } = useActiveCourse();
 
   // The selector's own <select> already displays the active course's name
@@ -26,7 +32,7 @@ export function ActiveCourseContextBar() {
             </p>
           ) : null}
         </div>
-        <ActiveCourseSelector />
+        <ActiveCourseSelector hasPendingAssistantWork={hasPendingAssistantWork} />
       </div>
 
       {error ? (
