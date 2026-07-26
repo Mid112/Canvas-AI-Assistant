@@ -15,7 +15,10 @@ import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboar
 import type {
   GeneratedQuizDraft,
   QuizCapabilities,
+  QuizEngine,
   QuizQuestionBank,
+  QuizQuestionBankGroup,
+  QuizQuestionDraft,
 } from "@/types/quizCreate";
 
 import {
@@ -23,6 +26,78 @@ import {
   type QuizReviewFormInput,
   type QuizReviewFormSchema,
 } from "./quizCreateSchema";
+
+const QUIZ_QUESTION_TYPES: QuizQuestionDraft["questionType"][] = [
+  "multiple_choice_question",
+  "true_false_question",
+  "short_answer_question",
+  "essay_question",
+];
+
+function normalizeQuizQuestions(
+  value: unknown,
+  fallback: QuizQuestionDraft[],
+): QuizQuestionDraft[] {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+
+  return value.map((raw, index) => {
+    const question = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+    const prior = fallback[index];
+    const questionType = QUIZ_QUESTION_TYPES.includes(
+      question.questionType as QuizQuestionDraft["questionType"],
+    )
+      ? (question.questionType as QuizQuestionDraft["questionType"])
+      : (prior?.questionType ?? "multiple_choice_question");
+    const answersRaw = Array.isArray(question.answers) ? question.answers : prior?.answers;
+
+    return {
+      questionText: String(question.questionText ?? prior?.questionText ?? ""),
+      questionType,
+      pointsPossible:
+        typeof question.pointsPossible === "number"
+          ? question.pointsPossible
+          : (prior?.pointsPossible ?? 1),
+      answers: Array.isArray(answersRaw)
+        ? answersRaw.map((answer) => {
+            const row =
+              answer && typeof answer === "object"
+                ? (answer as Record<string, unknown>)
+                : {};
+            return {
+              text: String(row.text ?? ""),
+              weight: typeof row.weight === "number" ? row.weight : 0,
+            };
+          })
+        : [],
+    };
+  });
+}
+
+function normalizeQuestionBankGroups(
+  value: unknown,
+  fallback: QuizQuestionBankGroup[] | undefined,
+): QuizQuestionBankGroup[] | undefined {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+
+  return value.map((raw, index) => {
+    const group = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+    const prior = fallback?.[index];
+    return {
+      bankId: typeof group.bankId === "number" ? group.bankId : (prior?.bankId ?? 0),
+      bankName: String(group.bankName ?? prior?.bankName ?? ""),
+      pickCount:
+        typeof group.pickCount === "number" ? group.pickCount : (prior?.pickCount ?? 1),
+      questionPoints:
+        typeof group.questionPoints === "number"
+          ? group.questionPoints
+          : (prior?.questionPoints ?? 1),
+    };
+  });
+}
 
 interface QuizReviewApproveStepProps {
   courseLabel: string;
@@ -122,14 +197,13 @@ export function QuizReviewApproveStep({
       quizEngine:
         watchedValues.quizEngine === "classic" ||
         watchedValues.quizEngine === "new_quizzes"
-          ? watchedValues.quizEngine
+          ? (watchedValues.quizEngine as QuizEngine)
           : draft.quizEngine,
-      questions: Array.isArray(watchedValues.questions)
-        ? watchedValues.questions
-        : draft.questions,
-      questionBankGroups: Array.isArray(watchedValues.questionBankGroups)
-        ? watchedValues.questionBankGroups
-        : draft.questionBankGroups,
+      questions: normalizeQuizQuestions(watchedValues.questions, draft.questions),
+      questionBankGroups: normalizeQuestionBankGroups(
+        watchedValues.questionBankGroups,
+        draft.questionBankGroups,
+      ),
     });
   }, [onDraftChange, watchedValues, draft.name, draft.description, draft.dueDate, draft.pointsPossible, draft.allowedAttempts, draft.timeLimit, draft.quizEngine, draft.questions, draft.questionBankGroups]);
 
