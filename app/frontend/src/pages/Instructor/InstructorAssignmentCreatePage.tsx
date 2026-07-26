@@ -1,5 +1,5 @@
 import { CheckCircle2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
@@ -46,21 +46,26 @@ export function InstructorAssignmentCreatePage() {
   const locationState = location.state as AiActionDraftLocationState | null;
   const seededDraft = locationState?.aiAssignmentDraft;
   const typedDraftId = locationState?.typedDraftId;
+  const hasGeneratedAssignment = Boolean(seededDraft?.name?.trim());
   const { accessToken, user } = useAuth();
   const [step, setStep] = useState<AssignmentCreateStep>(
-    seededDraft ? "review" : "describe",
+    hasGeneratedAssignment ? "review" : "describe",
   );
   const [describeValues, setDescribeValues] =
     useState<AssignmentDescribeValues>(
       seededDraft
         ? {
             courseId: String(seededDraft.courseId ?? ""),
-            prompt: "Drafted in the AI Assistant",
+            prompt: hasGeneratedAssignment
+              ? "Drafted in the AI Assistant"
+              : seededDraft.prompt?.trim() ||
+                seededDraft.description?.trim() ||
+                "",
           }
         : initialDescribeValues,
     );
   const [draft, setDraft] = useState<GeneratedAssignmentDraft | null>(
-    seededDraft
+    hasGeneratedAssignment && seededDraft
       ? {
           name: seededDraft.name ?? "",
           description: seededDraft.description ?? "",
@@ -124,6 +129,29 @@ export function InstructorAssignmentCreatePage() {
   const effectiveCourseLoadError = needsCanvasConnection
     ? "Connect your Canvas account to load courses."
     : courseLoadError;
+
+  const handleDescribeValuesChange = useCallback((values: AssignmentDescribeValues) => {
+    setDescribeValues((current) =>
+      current.courseId === values.courseId && current.prompt === values.prompt
+        ? current
+        : values,
+    );
+  }, []);
+
+  const handleReviewDraftChange = useCallback((values: GeneratedAssignmentDraft) => {
+    setDraft((current) => {
+      if (
+        current &&
+        current.name === values.name &&
+        current.description === values.description &&
+        current.dueDate === values.dueDate &&
+        current.pointsPossible === values.pointsPossible
+      ) {
+        return current;
+      }
+      return values;
+    });
+  }, []);
 
   const handleSaveTypedDraft = () => {
     if (!user?.id) return;
@@ -369,6 +397,7 @@ export function InstructorAssignmentCreatePage() {
           courseLoadError={effectiveCourseLoadError}
           isLoadingCourses={isLoadingCourses}
           onGenerate={handleGenerate}
+          onValuesChange={handleDescribeValuesChange}
         />
       ) : draft ? (
         <AssignmentReviewApproveStep
@@ -378,6 +407,7 @@ export function InstructorAssignmentCreatePage() {
           isApproving={isPreviewLoading}
           onApprove={handleRequestApproval}
           onBack={handleBack}
+          onDraftChange={handleReviewDraftChange}
         />
       ) : null}
 

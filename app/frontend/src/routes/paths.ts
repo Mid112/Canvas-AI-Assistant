@@ -162,6 +162,8 @@ export interface AiActionDraftLocationState {
     description?: string;
     dueDate?: string;
     pointsPossible?: unknown;
+    /** Describe-step seed when no generated title/description exists yet. */
+    prompt?: string;
   };
   aiQuizDraft?: {
     courseId?: number;

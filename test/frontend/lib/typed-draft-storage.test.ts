@@ -50,6 +50,26 @@ describe("typed-draft-storage", () => {
     });
   });
 
+  it("resumes prompt-only assignment drafts to describe (no empty review)", () => {
+    const draft = saveTypedDraft(7, {
+      kind: "assignment",
+      content: { body: "Create a midterm with rubric" },
+    });
+
+    expect(buildTypedDraftResumeTarget(draft, { courseId: 42 })).toEqual({
+      path: paths.instructor.assignmentCreate,
+      state: {
+        typedDraftId: draft.id,
+        aiAssignmentDraft: {
+          courseId: 42,
+          name: "",
+          description: "",
+          prompt: "Create a midterm with rubric",
+        },
+      },
+    });
+  });
+
   it("builds quiz resume targets that land on describe with free-text questions", () => {
     const draft = saveTypedDraft(7, {
       kind: "quiz",

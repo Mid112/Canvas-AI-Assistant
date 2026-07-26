@@ -1,5 +1,5 @@
 import { CheckCircle2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
@@ -145,6 +145,23 @@ export function InstructorFeedbackCreatePage() {
   const courseLabel =
     courseOptions.find((course) => course.id === describeValues.courseId)
       ?.label ?? "your course";
+
+  const handleReviewDraftChange = useCallback((values: GeneratedFeedbackDraft) => {
+    setDraft((current) => {
+      if (
+        current &&
+        current.assignmentId === values.assignmentId &&
+        current.studentId === values.studentId &&
+        current.assignmentName === values.assignmentName &&
+        current.studentName === values.studentName &&
+        current.newGrade === values.newGrade &&
+        current.feedback === values.feedback
+      ) {
+        return current;
+      }
+      return values;
+    });
+  }, []);
 
   const handleSaveTypedDraft = () => {
     if (!user?.id) return;
@@ -423,6 +440,7 @@ export function InstructorFeedbackCreatePage() {
           isApproving={isPreviewLoading}
           onApprove={handleRequestApproval}
           onBack={handleBack}
+          onDraftChange={handleReviewDraftChange}
         />
       ) : null}
 

@@ -1,5 +1,5 @@
 import { CheckCircle2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
@@ -160,6 +160,34 @@ export function InstructorQuizCreatePage() {
   const effectiveCourseLoadError = needsCanvasConnection
     ? "Connect your Canvas account to load courses."
     : courseLoadError;
+
+  const handleDescribeValuesChange = useCallback((values: QuizDescribeValues) => {
+    setDescribeValues((current) =>
+      current.courseId === values.courseId && current.prompt === values.prompt
+        ? current
+        : values,
+    );
+  }, []);
+
+  const handleReviewDraftChange = useCallback((values: GeneratedQuizDraft) => {
+    setDraft((current) => {
+      if (
+        current &&
+        current.name === values.name &&
+        current.description === values.description &&
+        current.dueDate === values.dueDate &&
+        current.pointsPossible === values.pointsPossible &&
+        current.allowedAttempts === values.allowedAttempts &&
+        current.timeLimit === values.timeLimit &&
+        current.quizEngine === values.quizEngine &&
+        current.questions === values.questions &&
+        current.questionBankGroups === values.questionBankGroups
+      ) {
+        return current;
+      }
+      return values;
+    });
+  }, []);
 
   const handleSaveTypedDraft = () => {
     if (!user?.id) return;
@@ -500,6 +528,7 @@ export function InstructorQuizCreatePage() {
           courseLoadError={effectiveCourseLoadError}
           isLoadingCourses={isLoadingCourses}
           onGenerate={handleGenerate}
+          onValuesChange={handleDescribeValuesChange}
         />
       ) : draft ? (
         <QuizReviewApproveStep
@@ -513,6 +542,7 @@ export function InstructorQuizCreatePage() {
           onLoadQuestionBanks={() => void handleLoadQuestionBanks()}
           onApprove={handleRequestApproval}
           onBack={handleBack}
+          onDraftChange={handleReviewDraftChange}
         />
       ) : null}
 

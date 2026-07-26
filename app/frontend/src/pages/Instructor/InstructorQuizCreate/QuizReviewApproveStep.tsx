@@ -35,6 +35,8 @@ interface QuizReviewApproveStepProps {
   questionBanks?: QuizQuestionBank[];
   isLoadingQuestionBanks?: boolean;
   onLoadQuestionBanks?: () => void;
+  /** Keep parent draft state in sync with form edits (for Save draft). */
+  onDraftChange?: (values: GeneratedQuizDraft) => void;
 }
 
 export function QuizReviewApproveStep({
@@ -48,6 +50,7 @@ export function QuizReviewApproveStep({
   questionBanks = [],
   isLoadingQuestionBanks = false,
   onLoadQuestionBanks,
+  onDraftChange,
 }: QuizReviewApproveStepProps) {
   const {
     register,
@@ -80,6 +83,7 @@ export function QuizReviewApproveStep({
     remove: removeBankGroup,
   } = useFieldArray({ control, name: "questionBankGroups" });
 
+  const watchedValues = useWatch({ control });
   const dueDateValue = useWatch({
     control,
     name: "dueDate",
@@ -94,6 +98,40 @@ export function QuizReviewApproveStep({
   useEffect(() => {
     void trigger();
   }, [trigger]);
+
+  useEffect(() => {
+    if (!onDraftChange) return;
+    onDraftChange({
+      name: String(watchedValues.name ?? draft.name),
+      description: String(watchedValues.description ?? draft.description),
+      dueDate: String(watchedValues.dueDate ?? draft.dueDate),
+      pointsPossible:
+        typeof watchedValues.pointsPossible === "number"
+          ? watchedValues.pointsPossible
+          : draft.pointsPossible,
+      allowedAttempts:
+        watchedValues.allowedAttempts === null ||
+        typeof watchedValues.allowedAttempts === "number"
+          ? watchedValues.allowedAttempts
+          : draft.allowedAttempts,
+      timeLimit:
+        watchedValues.timeLimit === null ||
+        typeof watchedValues.timeLimit === "number"
+          ? watchedValues.timeLimit
+          : draft.timeLimit,
+      quizEngine:
+        watchedValues.quizEngine === "classic" ||
+        watchedValues.quizEngine === "new_quizzes"
+          ? watchedValues.quizEngine
+          : draft.quizEngine,
+      questions: Array.isArray(watchedValues.questions)
+        ? watchedValues.questions
+        : draft.questions,
+      questionBankGroups: Array.isArray(watchedValues.questionBankGroups)
+        ? watchedValues.questionBankGroups
+        : draft.questionBankGroups,
+    });
+  }, [onDraftChange, watchedValues, draft.name, draft.description, draft.dueDate, draft.pointsPossible, draft.allowedAttempts, draft.timeLimit, draft.quizEngine, draft.questions, draft.questionBankGroups]);
 
   return (
     <Card className="shadow-sm ring-1 ring-border/60">

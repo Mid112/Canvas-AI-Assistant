@@ -172,7 +172,25 @@ export function buildTypedDraftResumeTarget(
         },
       };
     }
-    case "assignment":
+    case "assignment": {
+      // Prompt-only saves (describe step before generation) have no title —
+      // resume to describe with prompt, matching quiz/feedback.
+      const hasGeneratedTitle = Boolean(draft.content.title?.trim());
+      if (!hasGeneratedTitle) {
+        const prompt = draft.content.body?.trim() ?? "";
+        return {
+          path: paths.instructor.assignmentCreate,
+          state: {
+            typedDraftId,
+            aiAssignmentDraft: {
+              ...(courseId !== undefined ? { courseId } : {}),
+              name: "",
+              description: "",
+              ...(prompt ? { prompt } : {}),
+            },
+          },
+        };
+      }
       return {
         path: paths.instructor.assignmentCreate,
         state: {
@@ -184,6 +202,7 @@ export function buildTypedDraftResumeTarget(
           },
         },
       };
+    }
     case "feedback": {
       // Content-only drafts have no Canvas assignment/student ids — omit them
       // so the create page resumes at describe instead of Number(undefined).
