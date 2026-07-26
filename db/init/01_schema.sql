@@ -525,6 +525,26 @@ CREATE TABLE ai_call_health (
 );
 
 -- ─────────────────────────────────────────────
+-- Canvas Idempotency Keys (Feature Reliability #1189)
+-- Reflects migrations 031 + 034 (claim status + nullable response_json).
+-- ─────────────────────────────────────────────
+CREATE TABLE canvas_idempotency_keys (
+    idempotency_key VARCHAR PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    operation       VARCHAR NOT NULL,
+    response_json   JSONB,
+    status          VARCHAR NOT NULL DEFAULT 'completed'
+        CHECK (status IN ('pending', 'completed')),
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_canvas_idempotency_keys_user_created
+    ON canvas_idempotency_keys(user_id, created_at DESC);
+
+CREATE INDEX idx_canvas_idempotency_keys_created_at
+    ON canvas_idempotency_keys(created_at);
+
+-- ─────────────────────────────────────────────
 -- Failed Operations
 -- Append-only log of Canvas and AI failures for the admin Failed
 -- Operations dashboard (Feature 11, UR1.6).
@@ -604,4 +624,6 @@ INSERT INTO schema_migrations (filename) VALUES
     ('028_health_checks.sql'),
     ('029_canvas_connection_last_sync_error.sql'),
     ('030_ai_call_health.sql'),
-    ('031_failed_operations.sql');
+    ('031_canvas_idempotency_keys.sql'),
+    ('034_canvas_idempotency_claim_and_retention.sql'),
+    ('035_failed_operations.sql');

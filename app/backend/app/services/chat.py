@@ -56,27 +56,6 @@ from app.services.canvas_assistant_gate import (
 )
 from app.services.deferred_assistant import defer_assistant_request, mark_deferred_request_resumed
 from app.services.failed_operations import record_failed_operation
-
-
-def _is_expected_canvas_reconnect_failure(exc: BaseException) -> bool:
-    """Match sweep policy: missing/invalid/corrupted tokens are account state,
-    not monitored infrastructure failures (avoids spam on retries)."""
-    if isinstance(exc, CanvasTokenRequiredError):
-        return True
-    if _is_expected_canvas_token_sync_error(exc):
-        return True
-    text = ""
-    if isinstance(exc, ToolExecutionError):
-        text = exc.log_detail or exc.user_message or ""
-    elif isinstance(exc, HTTPException) and isinstance(exc.detail, str):
-        text = exc.detail
-    else:
-        text = str(exc)
-    return (
-        "Invalid Canvas API token" in text
-        or "No Canvas token" in text
-        or "Canvas token is corrupted" in text
-    )
 from app.services.llm.base import LLMAdapter
 from app.services.llm.json_extraction import extract_json_object
 from app.services.llm.llm_connections import resolve_instructor_llm_request
@@ -106,6 +85,27 @@ from app.services.student import get_submission_derived_students
 from app.services.write_preview import generate_write_preview
 
 logger = logging.getLogger(__name__)
+
+
+def _is_expected_canvas_reconnect_failure(exc: BaseException) -> bool:
+    """Match sweep policy: missing/invalid/corrupted tokens are account state,
+    not monitored infrastructure failures (avoids spam on retries)."""
+    if isinstance(exc, CanvasTokenRequiredError):
+        return True
+    if _is_expected_canvas_token_sync_error(exc):
+        return True
+    text = ""
+    if isinstance(exc, ToolExecutionError):
+        text = exc.log_detail or exc.user_message or ""
+    elif isinstance(exc, HTTPException) and isinstance(exc.detail, str):
+        text = exc.detail
+    else:
+        text = str(exc)
+    return (
+        "Invalid Canvas API token" in text
+        or "No Canvas token" in text
+        or "Canvas token is corrupted" in text
+    )
 
 LLM_TIMEOUT_SECONDS = 90.0
 HISTORY_WINDOW = 10
