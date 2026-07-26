@@ -54,6 +54,157 @@ async def list_workflow_history(
     return list(rows), int(total or 0)
 
 
+async def _get_user_workflow(
+    db: AsyncSession,
+    user: User,
+    *,
+    workflow_id: int | None = None,
+    pending_message_id: int | None = None,
+    conversation_id: int | None = None,
+) -> Workflow:
+    if workflow_id is not None:
+        workflow = await db.scalar(
+            select(Workflow)
+            .where(Workflow.id == workflow_id, Workflow.user_id == user.id)
+            .options(selectinload(Workflow.user))
+        )
+    elif pending_message_id is not None:
+        if conversation_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail="conversation_id is required when using pending_message_id.",
+            )
+        workflow = await db.scalar(
+            select(Workflow)
+            .where(
+                Workflow.preview_message_id == pending_message_id,
+                Workflow.conversation_id == conversation_id,
+                Workflow.user_id == user.id,
+            )
+            .options(selectinload(Workflow.user))
+        )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="workflow_id or pending_message_id is required.",
+        )
+
+    if not workflow:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workflow not found")
+    return workflow
+
+
+async def _transition_workflow_status(
+    db: AsyncSession,
+    workflow: Workflow,
+    *,
+    expected_status: str,
+    new_status: str,
+) -> bool:
+    claim = await db.execute(
+        sa_update(Workflow)
+        .where(Workflow.id == workflow.id, Workflow.status == expected_status)
+        .values(status=new_status)
+    )
+    if claim.rowcount > 0:
+        workflow.status = new_status
+        return True
+    await db.refresh(workflow, attribute_names=["status"])
+    return False
+
+
+async def pause_workflow(
+    db: AsyncSession,
+    user: User,
+    *,
+    workflow_id: int | None = None,
+    pending_message_id: int | None = None,
+    conversation_id: int | None = None,
+) -> Workflow:
+    workflow = await _get_user_workflow(
+        db,
+        user,
+        workflow_id=workflow_id,
+        pending_message_id=pending_message_id,
+        conversation_id=conversation_id,
+    )
+    if not await _transition_workflow_status(
+        db, workflow, expected_status="pending", new_status="paused"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot pause workflow with status '{workflow.status}'",
+        )
+    await db.commit()
+    return workflow
+
+
+async def resume_workflow(
+    db: AsyncSession,
+    user: User,
+    *,
+    workflow_id: int | None = None,
+    pending_message_id: int | None = None,
+    conversation_id: int | None = None,
+) -> Workflow:
+    workflow = await _get_user_workflow(
+        db,
+        user,
+        workflow_id=workflow_id,
+        pending_message_id=pending_message_id,
+        conversation_id=conversation_id,
+    )
+    if not await _transition_workflow_status(
+        db, workflow, expected_status="paused", new_status="pending"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot resume workflow with status '{workflow.status}'",
+        )
+    await db.commit()
+    return workflow
+
+
+async def rename_workflow(
+    db: AsyncSession,
+    user: User,
+    *,
+    display_name: str,
+    workflow_id: int | None = None,
+    pending_message_id: int | None = None,
+    conversation_id: int | None = None,
+) -> Workflow:
+    """Sets an instructor-facing label for switching among open workflows."""
+    trimmed = display_name.strip()
+    if not trimmed:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="display_name cannot be empty",
+        )
+    if len(trimmed) > 120:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="display_name must be 120 characters or fewer",
+        )
+
+    workflow = await _get_user_workflow(
+        db,
+        user,
+        workflow_id=workflow_id,
+        pending_message_id=pending_message_id,
+        conversation_id=conversation_id,
+    )
+    if workflow.status not in {"pending", "paused"}:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot rename workflow with status '{workflow.status}'",
+        )
+    workflow.display_name = trimmed
+    await db.commit()
+    await db.refresh(workflow)
+    return workflow
+
+
 async def cancel_workflow(db: AsyncSession, user: User, workflow_id: int) -> Workflow:
     workflow = await db.scalar(
         select(Workflow)
