@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -34,6 +35,9 @@ class Conversation(Base):
     # kept so the chat pipeline can build LLM prompts and API responses
     # without an extra join/lazy-load in an async context.
     course_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Feature #1235: confirmed/collected assistant fields reused across turns
+    # (assignment refs, draft params, student refs) without re-asking.
+    field_memory: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
