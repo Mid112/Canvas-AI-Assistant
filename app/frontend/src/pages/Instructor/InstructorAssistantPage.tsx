@@ -117,6 +117,7 @@ export function InstructorAssistantPage() {
   );
   const [chatSessionKey, setChatSessionKey] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasPendingAssistantWork, setHasPendingAssistantWork] = useState(false);
   const [llmSettings, setLlmSettings] = useState<LlmProviderSettings | null>(
     null,
   );
@@ -440,7 +441,11 @@ export function InstructorAssistantPage() {
         />
       ) : null}
 
-      {user?.has_canvas_token ? <ActiveCourseContextBar /> : null}
+      {user?.has_canvas_token ? (
+        <ActiveCourseContextBar
+          hasPendingAssistantWork={() => hasPendingAssistantWork}
+        />
+      ) : null}
 
       <InstructorAssistantSuggestedActions
         actions={suggestedActions}
@@ -471,6 +476,7 @@ export function InstructorAssistantPage() {
             void loadDeferredRequests();
           }}
           onLoadingChange={setIsLoading}
+          onPendingWorkChange={setHasPendingAssistantWork}
           onStartNewChat={handleStartNewChat}
           modelSettings={llmSettings}
           llmProviders={llmProviders}
