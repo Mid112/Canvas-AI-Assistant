@@ -52,12 +52,17 @@ for filter in "name=ci-postgres-" "name=ci-e2e-postgres-"; do
     docker rm -fv $ids >/dev/null 2>&1 || true
   fi
 done
-docker network prune -f >/dev/null 2>&1 || true
-# Only remove CI postgres volumes — avoid pruning unrelated unused volumes.
+# Only remove CI networks / volumes — avoid global prune touching unrelated
+# runner state (other jobs or local Docker Desktop usage on this host).
+nets=$(docker network ls --format '{{.Name}}' 2>/dev/null | grep -E '^ci-net-' || true)
+if [ -n "$nets" ]; then
+  # In-use networks fail rm; ignore so concurrent jobs keep theirs.
+  # shellcheck disable=SC2086
+  docker network rm $nets >/dev/null 2>&1 || true
+fi
 vols=$(docker volume ls -q 2>/dev/null | grep -E 'ci-postgres|ci-e2e-postgres' || true)
 if [ -n "$vols" ]; then
   # shellcheck disable=SC2086
   docker volume rm $vols >/dev/null 2>&1 || true
 fi
-docker builder prune -af --filter "until=24h" >/dev/null 2>&1 || true
 docker system df || true
