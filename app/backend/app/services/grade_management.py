@@ -26,7 +26,7 @@ ROLLBACK_MESSAGE = (
     "History is recorded for audit context; use a new grade change for any manual correction."
 )
 FEEDBACK_ONLY_WARNING = (
-    "Feedback only is low risk because it adds a Canvas comment without changing the official grade."
+    "Feedback only is medium risk because it adds a Canvas comment without changing the official grade."
 )
 FEEDBACK_ONLY_ROLLBACK_MESSAGE = (
     "History is recorded; no grade correction is needed because this action does not change the student's grade."
@@ -214,7 +214,7 @@ def _build_grade_preview(course, body: GradeUpdateRequest, submission) -> GradeP
         )
     )
     return GradePreviewResponse(
-        risk_level="low" if feedback_only else "high",
+        risk_level="medium" if feedback_only else "high",
         requires_approval=not feedback_only,
         irreversible_warning=FEEDBACK_ONLY_WARNING if feedback_only else IRREVERSIBLE_GRADE_WARNING,
         rollback_available=False,
@@ -305,7 +305,7 @@ async def submit_grade_update(
         previous_score=submission.score,
         new_grade=proposed_grade or submission.grade or "unchanged",
         reason=feedback or None,
-        risk_level="low" if feedback_only else "high",
+        risk_level="medium" if feedback_only else "high",
         # History supports audit/manual correction, but there is no automated
         # undo endpoint for grade writes yet.
         rollback_available=False,

@@ -47,11 +47,17 @@ echo "Reclaiming stale CI Docker resources..."
 for filter in "name=ci-postgres-" "name=ci-e2e-postgres-"; do
   ids=$(docker ps -aq --filter "$filter" --filter "status=exited" 2>/dev/null || true)
   if [ -n "$ids" ]; then
+    # -v removes anonymous volumes attached to those containers.
     # shellcheck disable=SC2086
-    docker rm -f $ids >/dev/null 2>&1 || true
+    docker rm -fv $ids >/dev/null 2>&1 || true
   fi
 done
 docker network prune -f >/dev/null 2>&1 || true
-docker volume prune -f >/dev/null 2>&1 || true
+# Only remove CI postgres volumes — avoid pruning unrelated unused volumes.
+vols=$(docker volume ls -q 2>/dev/null | grep -E 'ci-postgres|ci-e2e-postgres' || true)
+if [ -n "$vols" ]; then
+  # shellcheck disable=SC2086
+  docker volume rm $vols >/dev/null 2>&1 || true
+fi
 docker builder prune -af --filter "until=24h" >/dev/null 2>&1 || true
 docker system df || true

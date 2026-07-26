@@ -32,7 +32,7 @@ def _unsubmitted_submission():
     return submission
 
 
-def test_feedback_only_preview_is_low_risk_and_keeps_grade_unchanged():
+def test_feedback_only_preview_is_medium_risk_and_keeps_grade_unchanged():
     # Covers the feedback-only path: a Canvas submission comment should not be
     # treated like a high-risk grade mutation or change the posted grade.
     preview = _build_grade_preview(
@@ -46,7 +46,7 @@ def test_feedback_only_preview_is_low_risk_and_keeps_grade_unchanged():
         _submission(),
     )
 
-    assert preview.risk_level == "low"
+    assert preview.risk_level == "medium"
     assert preview.requires_approval is False
     assert preview.rollback_available is False
     assert preview.proposed == {
