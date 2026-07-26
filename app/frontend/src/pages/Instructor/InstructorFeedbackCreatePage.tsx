@@ -11,6 +11,10 @@ import { useInstitution } from "@/contexts/useInstitution";
 import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { disambiguateCourseLabels } from "@/lib/disambiguate-course-labels";
 import { pageShellNarrow } from "@/lib/page-shell";
+import {
+  discardTypedDraft,
+  saveTypedDraft,
+} from "@/lib/typed-draft-storage";
 import type { AiActionDraftLocationState } from "@/routes/paths";
 import {
   approveFeedbackDraft,
@@ -42,29 +46,52 @@ const initialDescribeValues: FeedbackDescribeValues = {
 
 export function InstructorFeedbackCreatePage() {
   const location = useLocation();
-  const seededDraft = (location.state as AiActionDraftLocationState | null)
-    ?.aiFeedbackDraft;
+  const locationState = location.state as AiActionDraftLocationState | null;
+  const seededDraft = locationState?.aiFeedbackDraft;
+  const typedDraftId = locationState?.typedDraftId;
+  const hasValidFeedbackIds =
+    typeof seededDraft?.assignmentId === "number" &&
+    Number.isFinite(seededDraft.assignmentId) &&
+    typeof seededDraft?.studentId === "number" &&
+    Number.isFinite(seededDraft.studentId);
   const { accessToken, user } = useAuth();
   const [step, setStep] = useState<FeedbackCreateStep>(
-    seededDraft ? "review" : "describe",
+    hasValidFeedbackIds ? "review" : "describe",
   );
   const [describeValues, setDescribeValues] = useState<FeedbackDescribeValues>(
     seededDraft
       ? {
           courseId: String(seededDraft.courseId ?? ""),
-          assignmentId: String(seededDraft.assignmentId ?? ""),
-          studentId: String(seededDraft.studentId ?? ""),
+          assignmentId: hasValidFeedbackIds
+            ? String(seededDraft.assignmentId)
+            : "",
+          studentId: hasValidFeedbackIds ? String(seededDraft.studentId) : "",
           assignmentName: seededDraft.assignmentName ?? "",
           studentName: seededDraft.studentName ?? "",
-          prompt: "Drafted in the AI Assistant",
+          prompt: hasValidFeedbackIds
+            ? "Drafted in the AI Assistant"
+            : seededDraft.prompt?.trim() ||
+              [
+                seededDraft.assignmentName
+                  ? `Assignment: ${seededDraft.assignmentName}`
+                  : "",
+                seededDraft.studentName
+                  ? `Student: ${seededDraft.studentName}`
+                  : "",
+                seededDraft.newGrade ? `Grade: ${seededDraft.newGrade}` : "",
+                seededDraft.feedback ?? "",
+              ]
+                .map((part) => part.trim())
+                .filter(Boolean)
+                .join("\n\n"),
         }
       : initialDescribeValues,
   );
   const [draft, setDraft] = useState<GeneratedFeedbackDraft | null>(
-    seededDraft
+    hasValidFeedbackIds && seededDraft
       ? {
-          assignmentId: Number(seededDraft.assignmentId),
-          studentId: Number(seededDraft.studentId),
+          assignmentId: seededDraft.assignmentId as number,
+          studentId: seededDraft.studentId as number,
           assignmentName: seededDraft.assignmentName ?? "Assignment",
           studentName: seededDraft.studentName ?? "Student",
           newGrade: String(seededDraft.newGrade ?? ""),
@@ -83,6 +110,10 @@ export function InstructorFeedbackCreatePage() {
   const [preview, setPreview] = useState<FeedbackPreviewSummary | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [draftSaveStatus, setDraftSaveStatus] = useState<string | null>(null);
+  const [savedTypedDraftId, setSavedTypedDraftId] = useState<string | undefined>(
+    typedDraftId,
+  );
 
   const canvasUrl = useCanvasConnectionUrl();
   const {
@@ -114,6 +145,41 @@ export function InstructorFeedbackCreatePage() {
   const courseLabel =
     courseOptions.find((course) => course.id === describeValues.courseId)
       ?.label ?? "your course";
+
+  const handleSaveTypedDraft = () => {
+    if (!user?.id) return;
+    const content = draft
+      ? {
+          assignmentName: draft.assignmentName,
+          studentName: draft.studentName,
+          grade: draft.newGrade,
+          feedback: draft.feedback,
+        }
+      : describeValues.prompt.trim()
+        ? {
+            assignmentName: describeValues.assignmentName || undefined,
+            studentName: describeValues.studentName || undefined,
+            feedback: describeValues.prompt.trim(),
+          }
+        : null;
+    if (
+      !content ||
+      (!content.feedback?.trim() &&
+        !content.assignmentName?.trim() &&
+        !content.studentName?.trim() &&
+        !content.grade?.trim())
+    ) {
+      setDraftSaveStatus("Add feedback details before saving a draft.");
+      return;
+    }
+    const saved = saveTypedDraft(user.id, {
+      id: savedTypedDraftId,
+      kind: "feedback",
+      content,
+    });
+    setSavedTypedDraftId(saved.id);
+    setDraftSaveStatus("Draft saved. Resume it anytime from the assistant.");
+  };
 
   const handleGenerate = async (values: FeedbackDescribeValues) => {
     if (!accessToken) {
@@ -216,6 +282,10 @@ export function InstructorFeedbackCreatePage() {
           conversationId: seededDraft?.conversationId,
         },
       );
+      if (user?.id && savedTypedDraftId) {
+        discardTypedDraft(user.id, savedTypedDraftId);
+        setSavedTypedDraftId(undefined);
+      }
       setApprovedValues(pendingApproval);
       setIsPreviewOpen(false);
       void refreshActiveCourse();
@@ -257,6 +327,8 @@ export function InstructorFeedbackCreatePage() {
     setPendingApproval(null);
     setPreview(null);
     setIsPreviewOpen(false);
+    setDraftSaveStatus(null);
+    setSavedTypedDraftId(undefined);
   };
 
   if (approvedValues && draft) {
@@ -315,6 +387,17 @@ export function InstructorFeedbackCreatePage() {
       </header>
 
       <FeedbackCreateStepper currentStep={step} />
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={handleSaveTypedDraft}>
+          Save draft
+        </Button>
+        {draftSaveStatus ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {draftSaveStatus}
+          </p>
+        ) : null}
+      </div>
 
       {step === "describe" ? (
         <FeedbackDescribeStep

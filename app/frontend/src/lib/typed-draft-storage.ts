@@ -1,4 +1,4 @@
-import { paths } from "@/routes/paths";
+import { instructorMessagesPath, paths } from "@/routes/paths";
 
 const TYPED_DRAFT_PREFIX = "assistant-typed-drafts:";
 
@@ -25,6 +25,11 @@ export interface TypedDraft {
   kind: TypedDraftKind;
   content: TypedDraftContent;
   savedAt: string;
+}
+
+export interface BuildTypedDraftResumeOptions {
+  /** Active course local id — used to seed create forms, not persisted. */
+  courseId?: number;
 }
 
 const KIND_LABELS: Record<TypedDraftKind, string> = {
@@ -67,6 +72,14 @@ function stripCanvasIdentifiers(
   };
 }
 
+function writeDrafts(userId: number, drafts: TypedDraft[]): void {
+  try {
+    localStorage.setItem(storageKey(userId), JSON.stringify(drafts));
+  } catch {
+    // Quota / private mode — avoid uncaught setItem failures.
+  }
+}
+
 export function listTypedDrafts(userId: number): TypedDraft[] {
   try {
     const raw = localStorage.getItem(storageKey(userId));
@@ -97,13 +110,13 @@ export function saveTypedDraft(
     savedAt: new Date().toISOString(),
   };
   const existing = listTypedDrafts(userId).filter((entry) => entry.id !== next.id);
-  localStorage.setItem(storageKey(userId), JSON.stringify([next, ...existing]));
+  writeDrafts(userId, [next, ...existing]);
   return next;
 }
 
 export function discardTypedDraft(userId: number, draftId: string): void {
   const remaining = listTypedDrafts(userId).filter((entry) => entry.id !== draftId);
-  localStorage.setItem(storageKey(userId), JSON.stringify(remaining));
+  writeDrafts(userId, remaining);
 }
 
 export function typedDraftPreviewText(draft: TypedDraft): string {
@@ -118,60 +131,98 @@ export function typedDraftPreviewText(draft: TypedDraft): string {
   );
 }
 
+function joinDescribePrompt(parts: Array<string | undefined>): string {
+  return parts.map((part) => part?.trim()).filter(Boolean).join("\n\n");
+}
+
 /** Resume routes into the matching create/compose surface with content-only seed.
- * Callers must ensure an active course is selected before navigation. */
-export function buildTypedDraftResumeTarget(draft: TypedDraft): {
+ * Callers must ensure an active course is selected before navigation.
+ * Does not discard the draft — callers discard after successful Canvas confirm. */
+export function buildTypedDraftResumeTarget(
+  draft: TypedDraft,
+  options?: BuildTypedDraftResumeOptions,
+): {
   path: string;
   state: Record<string, unknown>;
 } {
+  const courseId = options?.courseId;
+  const typedDraftId = draft.id;
+
   switch (draft.kind) {
-    case "quiz":
+    case "quiz": {
+      // Typed drafts store free-text questions only — land on describe so the
+      // create page can regenerate structured questions (pages ignore questionsText).
+      const prompt = joinDescribePrompt([
+        draft.content.title
+          ? `Create a quiz titled "${draft.content.title}"`
+          : undefined,
+        draft.content.body,
+        draft.content.questions,
+      ]);
       return {
         path: paths.instructor.quizCreate,
         state: {
+          typedDraftId,
           aiQuizDraft: {
-            title: draft.content.title ?? "",
+            ...(courseId !== undefined ? { courseId } : {}),
+            name: draft.content.title ?? "",
             description: draft.content.body ?? "",
-            questionsText: draft.content.questions ?? "",
-            requireCourseSelection: true,
+            ...(prompt ? { prompt } : {}),
           },
         },
       };
+    }
     case "assignment":
       return {
         path: paths.instructor.assignmentCreate,
         state: {
+          typedDraftId,
           aiAssignmentDraft: {
-            title: draft.content.title ?? "",
+            ...(courseId !== undefined ? { courseId } : {}),
+            name: draft.content.title ?? "",
             description: draft.content.body ?? "",
-            requireCourseSelection: true,
           },
         },
       };
-    case "feedback":
+    case "feedback": {
+      // Content-only drafts have no Canvas assignment/student ids — omit them
+      // so the create page resumes at describe instead of Number(undefined).
+      const prompt = joinDescribePrompt([
+        draft.content.assignmentName
+          ? `Assignment: ${draft.content.assignmentName}`
+          : undefined,
+        draft.content.studentName
+          ? `Student: ${draft.content.studentName}`
+          : undefined,
+        draft.content.grade ? `Grade: ${draft.content.grade}` : undefined,
+        draft.content.feedback,
+      ]);
       return {
         path: paths.instructor.feedbackCreate,
         state: {
+          typedDraftId,
           aiFeedbackDraft: {
+            ...(courseId !== undefined ? { courseId } : {}),
             assignmentName: draft.content.assignmentName ?? "",
             studentName: draft.content.studentName ?? "",
             newGrade: draft.content.grade ?? "",
             feedback: draft.content.feedback ?? "",
-            requireCourseSelection: true,
+            ...(prompt ? { prompt } : {}),
           },
         },
       };
+    }
     case "announcement":
     case "message":
     default:
       return {
-        path: paths.instructor.messages,
+        path: instructorMessagesPath({ tab: "compose" }),
         state: {
+          typedDraftId,
           aiMessageDraft: {
+            ...(courseId !== undefined ? { courseId } : {}),
             subject: draft.content.title ?? "",
             body: draft.content.body ?? "",
-            isAnnouncement: draft.kind === "announcement",
-            requireCourseSelection: true,
           },
         },
       };

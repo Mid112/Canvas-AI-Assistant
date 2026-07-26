@@ -12,6 +12,10 @@ import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
 import { disambiguateCourseLabels } from "@/lib/disambiguate-course-labels";
 import { pageShellNarrow } from "@/lib/page-shell";
+import {
+  discardTypedDraft,
+  saveTypedDraft,
+} from "@/lib/typed-draft-storage";
 import type { AiActionDraftLocationState } from "@/routes/paths";
 import {
   approveQuizDraft,
@@ -43,23 +47,35 @@ const initialDescribeValues: QuizDescribeValues = {
 
 export function InstructorQuizCreatePage() {
   const location = useLocation();
-  const seededDraft = (location.state as AiActionDraftLocationState | null)
-    ?.aiQuizDraft;
+  const locationState = location.state as AiActionDraftLocationState | null;
+  const seededDraft = locationState?.aiQuizDraft;
+  const typedDraftId = locationState?.typedDraftId;
+  const hasStructuredQuestions =
+    Array.isArray(seededDraft?.questions) && seededDraft.questions.length > 0;
   const { accessToken, user } = useAuth();
   const [step, setStep] = useState<QuizCreateStep>(
-    seededDraft ? "review" : "describe",
+    hasStructuredQuestions ? "review" : "describe",
   );
   const [describeValues, setDescribeValues] =
     useState<QuizDescribeValues>(
       seededDraft
         ? {
             courseId: String(seededDraft.courseId ?? ""),
-            prompt: "Drafted in the AI Assistant",
+            prompt: hasStructuredQuestions
+              ? "Drafted in the AI Assistant"
+              : seededDraft.prompt?.trim() ||
+                [
+                  seededDraft.name ? `Title: ${seededDraft.name}` : "",
+                  seededDraft.description ?? "",
+                ]
+                  .map((part) => part.trim())
+                  .filter(Boolean)
+                  .join("\n\n"),
           }
         : initialDescribeValues,
     );
   const [draft, setDraft] = useState<GeneratedQuizDraft | null>(
-    seededDraft
+    hasStructuredQuestions && seededDraft
       ? {
           name: seededDraft.name ?? "",
           description: seededDraft.description ?? "",
@@ -97,6 +113,10 @@ export function InstructorQuizCreatePage() {
     useState<QuizCapabilities | null>(null);
   const [questionBanks, setQuestionBanks] = useState<QuizQuestionBank[]>([]);
   const [isLoadingQuestionBanks, setIsLoadingQuestionBanks] = useState(false);
+  const [draftSaveStatus, setDraftSaveStatus] = useState<string | null>(null);
+  const [savedTypedDraftId, setSavedTypedDraftId] = useState<string | undefined>(
+    typedDraftId,
+  );
 
   const canvasUrl = useCanvasConnectionUrl();
   const {
@@ -140,6 +160,35 @@ export function InstructorQuizCreatePage() {
   const effectiveCourseLoadError = needsCanvasConnection
     ? "Connect your Canvas account to load courses."
     : courseLoadError;
+
+  const handleSaveTypedDraft = () => {
+    if (!user?.id) return;
+    const content = draft
+      ? {
+          title: draft.name,
+          body: draft.description,
+          questions: draft.questions.map((question) => question.questionText).join("\n"),
+        }
+      : describeValues.prompt.trim()
+        ? { questions: describeValues.prompt.trim() }
+        : null;
+    if (
+      !content ||
+      (!content.title?.trim() &&
+        !content.body?.trim() &&
+        !content.questions?.trim())
+    ) {
+      setDraftSaveStatus("Add quiz details before saving a draft.");
+      return;
+    }
+    const saved = saveTypedDraft(user.id, {
+      id: savedTypedDraftId,
+      kind: "quiz",
+      content,
+    });
+    setSavedTypedDraftId(saved.id);
+    setDraftSaveStatus("Draft saved. Resume it anytime from the assistant.");
+  };
 
   useEffect(() => {
     const courseId = Number(resolvedCourseId);
@@ -321,6 +370,10 @@ export function InstructorQuizCreatePage() {
           conversationId: seededDraft?.conversationId,
         },
       );
+      if (user?.id && savedTypedDraftId) {
+        discardTypedDraft(user.id, savedTypedDraftId);
+        setSavedTypedDraftId(undefined);
+      }
       setApprovedValues(pendingApproval);
       setIsPreviewOpen(false);
       void refreshActiveCourse();
@@ -362,6 +415,8 @@ export function InstructorQuizCreatePage() {
     setIsPreviewOpen(false);
     setCapabilities(null);
     setQuestionBanks([]);
+    setDraftSaveStatus(null);
+    setSavedTypedDraftId(undefined);
   };
 
   if (approvedValues) {
@@ -424,6 +479,17 @@ export function InstructorQuizCreatePage() {
       </header>
 
       <QuizCreateStepper currentStep={step} />
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={handleSaveTypedDraft}>
+          Save draft
+        </Button>
+        {draftSaveStatus ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {draftSaveStatus}
+          </p>
+        ) : null}
+      </div>
 
       {step === "describe" ? (
         <QuizDescribeStep

@@ -395,9 +395,10 @@ export function InstructorAssistantPage() {
     if (!activeCourse) return;
     const draft = typedDrafts.find((entry) => entry.id === draftId);
     if (!draft) return;
-    const target = buildTypedDraftResumeTarget(draft);
-    discardTypedDraft(user.id, draftId);
-    setTypedDraftRevision((current) => current + 1);
+    // Keep the draft until Canvas confirm/submit on the target create page.
+    const target = buildTypedDraftResumeTarget(draft, {
+      courseId: activeCourse.localId,
+    });
     navigate(target.path, { state: target.state });
   };
 
@@ -435,7 +436,7 @@ export function InstructorAssistantPage() {
           isResuming={isResumingDeferred}
           discardingId={discardingDeferredId}
           discardingTypedId={discardingTypedId}
-          requiresCourseSelection={Boolean(user?.has_canvas_token && !activeCourse)}
+          requiresCourseSelection={!activeCourse}
         />
       ) : null}
 
