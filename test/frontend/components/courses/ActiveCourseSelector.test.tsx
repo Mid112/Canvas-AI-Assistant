@@ -250,4 +250,45 @@ describe("ActiveCourseSelector", () => {
 
     expect(mockSelectActiveCourse).toHaveBeenCalledWith(7);
   });
+
+  it("uses the urgent pending-work warning when hasPendingAssistantWork is true", async () => {
+    const user = userEvent.setup();
+    mockUseActiveCourse.mockReturnValue({
+      activeCourse: {
+        localId: 10,
+        displayName: "COSC 499: Capstone",
+      },
+      availableCourses: [
+        makeCourse({
+          id: 10,
+          name: "Capstone",
+          code: "COSC 499",
+          term: "2026S",
+        }),
+        makeCourse({
+          id: 11,
+          name: "Algorithms",
+          code: "COSC 320",
+          term: "2026S",
+        }),
+      ],
+      isLoading: false,
+      isSaving: false,
+      selectActiveCourse: mockSelectActiveCourse,
+    });
+
+    render(
+      <ActiveCourseSelector hasPendingAssistantWork={() => true} />,
+    );
+
+    await user.selectOptions(
+      screen.getByLabelText("Select active course"),
+      "11",
+    );
+
+    expect(window.confirm).toHaveBeenCalledWith(
+      expect.stringContaining("pending assistant preview"),
+    );
+    expect(mockSelectActiveCourse).toHaveBeenCalledWith(11);
+  });
 });

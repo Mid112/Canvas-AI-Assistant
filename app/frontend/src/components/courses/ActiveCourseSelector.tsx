@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent } from "react";
+import { useMemo, type ChangeEvent } from "react";
 import { BookOpen, Loader2 } from "lucide-react";
 
 import { useActiveCourse } from "@/contexts/useActiveCourse";
@@ -17,7 +17,7 @@ interface ActiveCourseSelectorProps {
    * mid-assistant work so the instructor understands the conversation may
    * fork onto a new thread for the new course (#1186). */
   warnOnSwitch?: boolean;
-  /** Optional hook: return true when chat has a pending preview / mid-workflow. */
+  /** Return true when chat has a pending preview or an in-progress reply. */
   hasPendingAssistantWork?: () => boolean;
 }
 
@@ -34,7 +34,6 @@ export function ActiveCourseSelector({
     isSaving,
     selectActiveCourse,
   } = useActiveCourse();
-  const [pendingValue, setPendingValue] = useState<number | null>(null);
 
   // Setting a course active is an action, not just a display — only offer
   // published courses here, same as the assignment-creation course picker.
@@ -54,11 +53,6 @@ export function ActiveCourseSelector({
       ? "No published courses available"
       : "Select a course";
 
-  const applyCourse = async (courseId: number) => {
-    setPendingValue(null);
-    await selectActiveCourse(courseId);
-  };
-
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const value = Number(event.target.value);
     if (!Number.isInteger(value) || value <= 0) {
@@ -67,14 +61,7 @@ export function ActiveCourseSelector({
 
     const switchingAway =
       activeCourse != null && activeCourse.localId !== value;
-    const pendingWork =
-      hasPendingAssistantWork?.() ??
-      (typeof window !== "undefined" &&
-        Boolean(
-          document.querySelector(
-            '[data-pending-action-status="pending"], [data-chat-loading="true"]',
-          ),
-        ));
+    const pendingWork = Boolean(hasPendingAssistantWork?.());
 
     if (warnOnSwitch && switchingAway) {
       const detail = pendingWork
@@ -84,8 +71,8 @@ export function ActiveCourseSelector({
         `${detail}\n\nSwitch active course anyway?`,
       );
       if (!confirmed) {
-        // Reset the controlled select to the current active course.
-        setPendingValue(activeCourse?.localId ?? null);
+        // Controlled select already binds to activeCourse; force a reset so
+        // the cancelled option does not stick visually.
         event.target.value = activeCourse?.localId
           ? String(activeCourse.localId)
           : "";
@@ -93,13 +80,8 @@ export function ActiveCourseSelector({
       }
     }
 
-    void applyCourse(value);
+    void selectActiveCourse(value);
   };
-
-  const selectValue =
-    pendingValue != null
-      ? String(pendingValue)
-      : (activeCourse?.localId ?? "");
 
   return (
     <div className={cn("flex min-w-0 items-center gap-2", className)}>
@@ -112,7 +94,7 @@ export function ActiveCourseSelector({
       />
       <select
         id={id}
-        value={selectValue}
+        value={activeCourse?.localId ?? ""}
         onChange={handleChange}
         disabled={isDisabled}
         className={selectClassName}
