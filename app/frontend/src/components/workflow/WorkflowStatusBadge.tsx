@@ -11,12 +11,15 @@ const badgeStyles: Record<WorkflowStatus, string> = {
   rejected: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300",
   pending:
     "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
+  paused:
+    "bg-slate-100 text-slate-800 dark:bg-slate-900/40 dark:text-slate-300",
 };
 
 const labels: Record<WorkflowStatus, string> = {
   approved: "Approved",
   rejected: "Rejected",
   pending: "Pending",
+  paused: "Paused",
 };
 
 export function WorkflowStatusBadge({ status }: WorkflowStatusBadgeProps) {
