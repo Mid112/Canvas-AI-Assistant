@@ -2,7 +2,10 @@ import { AlertTriangle, CloudOff, ShieldAlert } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
-import { classifyErrorMessage } from "@/lib/error-classification";
+import {
+  classifyErrorMessage,
+  recoverySuggestionForCategory,
+} from "@/lib/error-classification";
 import { cn } from "@/lib/utils";
 import { instructorSettingsPath } from "@/routes/paths";
 
@@ -26,6 +29,20 @@ const STYLES = {
     text: "text-amber-900",
     iconColor: "text-amber-600",
   },
+  "duplicate-in-flight": {
+    icon: AlertTriangle,
+    border: "border-amber-300/60",
+    bg: "bg-amber-50",
+    text: "text-amber-900",
+    iconColor: "text-amber-600",
+  },
+  validation: {
+    icon: AlertTriangle,
+    border: "border-amber-300/60",
+    bg: "bg-amber-50",
+    text: "text-amber-900",
+    iconColor: "text-amber-600",
+  },
   generic: {
     icon: AlertTriangle,
     border: "border-destructive/30",
@@ -43,6 +60,7 @@ export function ErrorAlert({ message, className }: ErrorAlertProps) {
   const category = classifyErrorMessage(message);
   const style = STYLES[category];
   const Icon = style.icon;
+  const recovery = recoverySuggestionForCategory(category);
 
   return (
     <div
@@ -58,10 +76,8 @@ export function ErrorAlert({ message, className }: ErrorAlertProps) {
         <Icon className={cn("mt-0.5 size-5 shrink-0", style.iconColor)} aria-hidden="true" />
         <div className="space-y-0.5">
           <p className={cn("text-sm", style.text)}>{message}</p>
-          {category === "canvas-outage" ? (
-            <p className="text-xs text-amber-700">
-              This is usually temporary — wait a moment and try again.
-            </p>
+          {recovery ? (
+            <p className="text-xs text-amber-700">{recovery}</p>
           ) : null}
         </div>
       </div>

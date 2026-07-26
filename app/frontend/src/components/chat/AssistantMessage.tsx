@@ -12,9 +12,13 @@ interface AssistantMessageProps {
   message: ChatMessage;
   isResolvingPendingAction?: boolean;
   pendingActionError?: string | null;
+  confirmBlockedReason?: string | null;
   onConfirmPendingAction?: () => void;
   onCancelPendingAction?: () => void;
   onModifyPendingAction?: () => void;
+  onPausePendingAction?: () => void;
+  onResumePendingAction?: () => void;
+  onRenamePendingAction?: (displayName: string) => void;
   onDismissHandoff?: () => void;
   isReversingAction?: boolean;
   reversedWorkflowIds?: ReadonlySet<number>;
@@ -32,9 +36,13 @@ export function AssistantMessage({
   message,
   isResolvingPendingAction = false,
   pendingActionError = null,
+  confirmBlockedReason = null,
   onConfirmPendingAction,
   onCancelPendingAction,
   onModifyPendingAction,
+  onPausePendingAction,
+  onResumePendingAction,
+  onRenamePendingAction,
   onDismissHandoff,
   isReversingAction = false,
   reversedWorkflowIds,
@@ -44,6 +52,9 @@ export function AssistantMessage({
     message.pendingMessageId !== undefined && message.pendingActionStatus;
   const showActionOffer =
     !message.handoffDismissed && Boolean(message.interpretedAction);
+  const canActOnPending =
+    message.pendingActionStatus === "pending" ||
+    message.pendingActionStatus === "paused";
 
   return (
     <div className="flex gap-3">
@@ -119,6 +130,8 @@ export function AssistantMessage({
           <PendingActionControls
             status={message.pendingActionStatus}
             risk={message.interpretedAction?.risk}
+            displayName={message.workflowDisplayName}
+            confirmBlockedReason={confirmBlockedReason}
             isLoading={isResolvingPendingAction}
             onConfirm={
               message.pendingActionStatus === "pending"
@@ -135,6 +148,17 @@ export function AssistantMessage({
                 ? onModifyPendingAction
                 : undefined
             }
+            onPause={
+              message.pendingActionStatus === "pending"
+                ? onPausePendingAction
+                : undefined
+            }
+            onResume={
+              message.pendingActionStatus === "paused"
+                ? onResumePendingAction
+                : undefined
+            }
+            onRename={canActOnPending ? onRenamePendingAction : undefined}
           />
         ) : null}
 
