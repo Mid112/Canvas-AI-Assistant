@@ -5,6 +5,7 @@ import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRe
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
+import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import {
   filterInstructorCourses,
   sortInstructorCourses,
@@ -17,10 +18,12 @@ import {
   InstructorCoursesSection,
 } from "@/pages/Instructor/InstructorCourses/InstructorCoursesSection";
 import { useCanvasInstructorCourses } from "@/pages/Instructor/InstructorCourses/useCanvasInstructorCourses";
+import { CanvasApiError, setCoursePublished } from "@/services/canvas";
 import type { CoursePublishFilter, CourseViewMode } from "@/types/course";
 
 export function InstructorCoursesPage() {
-  const { user } = useAuth();
+  const { accessToken, user } = useAuth();
+  const connectionUrl = useCanvasConnectionUrl();
   const {
     activeCourse,
     error: activeCourseError,
@@ -40,6 +43,10 @@ export function InstructorCoursesPage() {
   const [settingActiveCourseId, setSettingActiveCourseId] = useState<number | null>(
     null,
   );
+  const [togglingPublishCourseId, setTogglingPublishCourseId] = useState<
+    number | null
+  >(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   const filteredCourses = useMemo(() => {
     const filtered = filterInstructorCourses(courses, search, publishFilter);
@@ -66,6 +73,33 @@ export function InstructorCoursesPage() {
       await selectActiveCourse(courseId, course);
     } finally {
       setSettingActiveCourseId(null);
+    }
+  };
+
+  const handleTogglePublish = async (courseId: number, published: boolean) => {
+    const course = courses.find((item) => item.id === courseId);
+    if (!course || !accessToken) {
+      return;
+    }
+
+    setPublishError(null);
+    setTogglingPublishCourseId(courseId);
+    try {
+      await setCoursePublished(
+        courseId,
+        published,
+        accessToken,
+        course.canvasUrl ?? connectionUrl,
+      );
+      await reloadCourses();
+    } catch (err) {
+      setPublishError(
+        err instanceof CanvasApiError
+          ? err.message
+          : "Unable to update course publish status. Please try again.",
+      );
+    } finally {
+      setTogglingPublishCourseId(null);
     }
   };
 
@@ -108,6 +142,14 @@ export function InstructorCoursesPage() {
           {activeCourseError}
         </p>
       ) : null}
+      {publishError ? (
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+        >
+          {publishError}
+        </p>
+      ) : null}
 
       {activeCourse ? (
         <p className="text-sm text-muted-foreground">
@@ -145,6 +187,10 @@ export function InstructorCoursesPage() {
           activeCourseId={activeCourse?.localId ?? null}
           onSetActiveCourse={(courseId) => void handleSetActiveCourse(courseId)}
           settingActiveCourseId={settingActiveCourseId}
+          onTogglePublish={(courseId, published) =>
+            void handleTogglePublish(courseId, published)
+          }
+          togglingPublishCourseId={togglingPublishCourseId}
         />
       )}
     </div>

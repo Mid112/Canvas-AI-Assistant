@@ -17,11 +17,27 @@ import { formatInstructorCourseTitle } from "@/lib/format-course-title";
 import { cn } from "@/lib/utils";
 import type { InstructorCourse } from "@/types/course";
 
+function coursePublishAction(course: InstructorCourse): {
+  label: string;
+  published: boolean;
+} | null {
+  // Completed courses are concluded on Canvas — publish state is frozen.
+  if (course.isPublished && !course.isWritable) {
+    return null;
+  }
+  if (!course.isPublished) {
+    return { label: "Publish", published: true };
+  }
+  return { label: "Unpublish", published: false };
+}
+
 interface InstructorCoursesCardProps {
   course: InstructorCourse;
   isActive: boolean;
   onSetActive: () => void;
   isSettingActive: boolean;
+  onTogglePublish: (published: boolean) => void;
+  isTogglingPublish: boolean;
 }
 
 export function InstructorCoursesCard({
@@ -29,8 +45,11 @@ export function InstructorCoursesCard({
   isActive,
   onSetActive,
   isSettingActive,
+  onTogglePublish,
+  isTogglingPublish,
 }: InstructorCoursesCardProps) {
   const isUnpublished = !course.isPublished;
+  const publishAction = coursePublishAction(course);
 
   return (
     <Card
@@ -104,10 +123,29 @@ export function InstructorCoursesCard({
         >
           View Course
         </Link>
+        {publishAction ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => onTogglePublish(publishAction.published)}
+            disabled={isTogglingPublish}
+            aria-busy={isTogglingPublish}
+          >
+            {isTogglingPublish ? (
+              <>
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                Updating...
+              </>
+            ) : (
+              publishAction.label
+            )}
+          </Button>
+        ) : null}
         <Button
           type="button"
           variant={isActive ? "secondary" : "outline"}
-          className="col-span-2 w-full"
+          className={cn("w-full", !publishAction && "col-span-2")}
           onClick={onSetActive}
           disabled={isActive || isSettingActive || !course.isPublished}
           aria-busy={isSettingActive && !isActive}
@@ -141,6 +179,8 @@ interface InstructorCoursesListProps {
   activeCourseId: number | null;
   onSetActiveCourse: (courseId: number) => void;
   settingActiveCourseId: number | null;
+  onTogglePublish: (courseId: number, published: boolean) => void;
+  togglingPublishCourseId: number | null;
 }
 
 export function InstructorCoursesList({
@@ -148,73 +188,102 @@ export function InstructorCoursesList({
   activeCourseId,
   onSetActiveCourse,
   settingActiveCourseId,
+  onTogglePublish,
+  togglingPublishCourseId,
 }: InstructorCoursesListProps) {
   return (
     <div className="overflow-hidden rounded-xl border bg-card">
       <ul className="divide-y">
-        {courses.map((course) => (
-          <li
-            key={course.id}
-            className="flex flex-wrap items-center justify-between gap-4 px-4 py-4"
-          >
-            <div className="min-w-0 space-y-1">
-              <p className="flex flex-wrap items-center gap-2 font-medium">
-                <span>{formatInstructorCourseTitle(course)}</span>
-                <CoursePublishBadge course={course} />
-                {activeCourseId === course.id ? (
-                  <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                    Active
-                  </span>
+        {courses.map((course) => {
+          const publishAction = coursePublishAction(course);
+          const isTogglingPublish = togglingPublishCourseId === course.id;
+          return (
+            <li
+              key={course.id}
+              className="flex flex-wrap items-center justify-between gap-4 px-4 py-4"
+            >
+              <div className="min-w-0 space-y-1">
+                <p className="flex flex-wrap items-center gap-2 font-medium">
+                  <span>{formatInstructorCourseTitle(course)}</span>
+                  <CoursePublishBadge course={course} />
+                  {activeCourseId === course.id ? (
+                    <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+                      Active
+                    </span>
+                  ) : null}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  {course.studentCount} students · {course.assignmentCount}{" "}
+                  assignments · Last activity: {course.lastActivity}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-medium tabular-nums">
+                  {course.progress}%
+                </span>
+                <Link
+                  to={instructorCoursePath(course.id)}
+                  className={buttonVariants({ size: "sm" })}
+                >
+                  View Course
+                </Link>
+                {publishAction ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      onTogglePublish(course.id, publishAction.published)
+                    }
+                    disabled={isTogglingPublish}
+                    aria-busy={isTogglingPublish}
+                  >
+                    {isTogglingPublish ? (
+                      <>
+                        <Loader2
+                          className="size-4 animate-spin"
+                          aria-hidden="true"
+                        />
+                        Updating...
+                      </>
+                    ) : (
+                      publishAction.label
+                    )}
+                  </Button>
                 ) : null}
-              </p>
-              <p className="text-sm text-muted-foreground">
-                {course.studentCount} students · {course.assignmentCount}{" "}
-                assignments · Last activity: {course.lastActivity}
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium tabular-nums">
-                {course.progress}%
-              </span>
-              <Link
-                to={instructorCoursePath(course.id)}
-                className={buttonVariants({ size: "sm" })}
-              >
-                View Course
-              </Link>
-              <Button
-                size="sm"
-                variant={activeCourseId === course.id ? "secondary" : "outline"}
-                onClick={() => onSetActiveCourse(course.id)}
-                disabled={
-                  activeCourseId === course.id ||
-                  settingActiveCourseId !== null ||
-                  !course.isPublished
-                }
-                aria-busy={settingActiveCourseId === course.id}
-                title={
-                  !course.isPublished
-                    ? "Unpublished courses can't be set as the active course"
-                    : undefined
-                }
-              >
-                {settingActiveCourseId === course.id ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                    Setting...
-                  </>
-                ) : activeCourseId === course.id ? (
-                  <>
-                    <CheckCircle2 className="size-4" aria-hidden="true" />
-                    Active
-                  </>
-                ) : (
-                  "Set Active"
-                )}
-              </Button>
-            </div>
-          </li>
-        ))}
+                <Button
+                  size="sm"
+                  variant={activeCourseId === course.id ? "secondary" : "outline"}
+                  onClick={() => onSetActiveCourse(course.id)}
+                  disabled={
+                    activeCourseId === course.id ||
+                    settingActiveCourseId !== null ||
+                    !course.isPublished
+                  }
+                  aria-busy={settingActiveCourseId === course.id}
+                  title={
+                    !course.isPublished
+                      ? "Unpublished courses can't be set as the active course"
+                      : undefined
+                  }
+                >
+                  {settingActiveCourseId === course.id ? (
+                    <>
+                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                      Setting...
+                    </>
+                  ) : activeCourseId === course.id ? (
+                    <>
+                      <CheckCircle2 className="size-4" aria-hidden="true" />
+                      Active
+                    </>
+                  ) : (
+                    "Set Active"
+                  )}
+                </Button>
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -227,6 +296,8 @@ interface InstructorCoursesSectionProps {
   activeCourseId: number | null;
   onSetActiveCourse: (courseId: number) => void;
   settingActiveCourseId: number | null;
+  onTogglePublish: (courseId: number, published: boolean) => void;
+  togglingPublishCourseId: number | null;
 }
 
 export function InstructorCoursesSection({
@@ -236,6 +307,8 @@ export function InstructorCoursesSection({
   activeCourseId,
   onSetActiveCourse,
   settingActiveCourseId,
+  onTogglePublish,
+  togglingPublishCourseId,
 }: InstructorCoursesSectionProps) {
   return (
     <section aria-labelledby="your-courses-heading" className="space-y-4">
@@ -276,6 +349,10 @@ export function InstructorCoursesSection({
               isActive={activeCourseId === course.id}
               onSetActive={() => onSetActiveCourse(course.id)}
               isSettingActive={settingActiveCourseId === course.id}
+              onTogglePublish={(published) =>
+                onTogglePublish(course.id, published)
+              }
+              isTogglingPublish={togglingPublishCourseId === course.id}
             />
           ))}
         </div>
@@ -285,6 +362,8 @@ export function InstructorCoursesSection({
           activeCourseId={activeCourseId}
           onSetActiveCourse={onSetActiveCourse}
           settingActiveCourseId={settingActiveCourseId}
+          onTogglePublish={onTogglePublish}
+          togglingPublishCourseId={togglingPublishCourseId}
         />
       )}
     </section>
