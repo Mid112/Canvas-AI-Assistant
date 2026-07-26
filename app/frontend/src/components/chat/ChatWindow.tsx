@@ -121,6 +121,8 @@ interface ChatWindowProps {
   onDeferredRequest?: () => void;
   onDeferredResumeComplete?: () => void;
   onLoadingChange?: (isLoading: boolean) => void;
+  /** True while a reply is streaming or a preview awaits confirm/cancel. */
+  onPendingWorkChange?: (hasPendingWork: boolean) => void;
   onStartNewChat?: () => void;
   modelSettings?: LlmProviderSettings | null;
   llmProviders?: InstructorLlmProvider[];
@@ -144,6 +146,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   onDeferredRequest,
   onDeferredResumeComplete,
   onLoadingChange,
+  onPendingWorkChange,
   onStartNewChat,
   modelSettings = null,
   llmProviders = [],
@@ -258,6 +261,12 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   useEffect(() => {
     onLoadingChange?.(isLoading);
   }, [isLoading, onLoadingChange]);
+
+  useEffect(() => {
+    onPendingWorkChange?.(
+      isLoading || activePendingMessageIds.length > 0,
+    );
+  }, [isLoading, activePendingMessageIds, onPendingWorkChange]);
 
   useEffect(() => {
     if (

@@ -87,6 +87,13 @@ export function FeedbackReviewApproveStep({
 
           <div className="space-y-2">
             <Label htmlFor="feedback-grade">Grade</Label>
+            {draft.currentGrade ? (
+              <p className="text-xs text-muted-foreground">
+                Current grade: <span className="font-medium text-foreground">{draft.currentGrade}</span>
+                {" → "}
+                proposed below
+              </p>
+            ) : null}
             <Input
               id="feedback-grade"
               aria-invalid={Boolean(errors.newGrade)}

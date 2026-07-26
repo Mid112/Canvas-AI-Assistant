@@ -627,7 +627,7 @@ export function InstructorCourseGradesPage() {
                 )}
               >
                 <AlertTriangle className="size-4" aria-hidden="true" />
-                {isFeedbackOnly ? "Low Risk" : "High Risk"}
+                {isFeedbackOnly ? "Medium Risk" : "High Risk"}
               </Badge>
             </CardTitle>
           </CardHeader>
