@@ -10,6 +10,10 @@ export class ApiRequestError extends Error {
   }
 }
 
+export function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
 export async function parseApiError(response: Response): Promise<string> {
   if (response.status === 404) {
     return "Something went wrong on our end. Please try again in a moment.";
@@ -49,10 +53,18 @@ export async function apiRequest<T>(
   headers.set("Content-Type", "application/json");
   headers.set("Authorization", `Bearer ${accessToken}`);
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error;
+    }
+    throw error;
+  }
 
   if (!response.ok) {
     throw new ApiRequestError(await parseApiError(response), response.status);
