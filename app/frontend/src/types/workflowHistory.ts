@@ -1,4 +1,4 @@
-export type WorkflowStatus = "approved" | "rejected" | "pending";
+export type WorkflowStatus = "approved" | "rejected" | "pending" | "paused";
 
 export interface WorkflowHistoryEntry {
   id: string;
@@ -77,12 +77,18 @@ export interface WorkflowStatusCounts {
   approved: number;
   rejected: number;
   pending: number;
+  paused: number;
 }
 
 export const WORKFLOW_HISTORY_PAGE_SIZE = 10;
 
 export function isWorkflowStatus(value: unknown): value is WorkflowStatus {
-  return value === "approved" || value === "rejected" || value === "pending";
+  return (
+    value === "approved" ||
+    value === "rejected" ||
+    value === "pending" ||
+    value === "paused"
+  );
 }
 
 export function hasActiveWorkflowHistoryFilters(
