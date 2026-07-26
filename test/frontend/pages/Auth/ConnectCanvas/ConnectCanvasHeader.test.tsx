@@ -14,7 +14,7 @@ describe("ConnectCanvasHeader", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /Add one or more Canvas API tokens to connect institution workflows/i,
+        /continue in limited mode for general assistant questions/i,
       ),
     ).toBeInTheDocument();
   });

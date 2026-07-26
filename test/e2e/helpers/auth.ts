@@ -76,6 +76,22 @@ export async function registerAndConnectCanvas(page: Page) {
   return { email, password };
 }
 
+export async function completeOnboardingWithoutCanvas(page: Page) {
+  await expect(page).toHaveURL(/\/canvas-info/);
+  await page.getByRole("button", { name: "Proceed to Connect" }).click();
+  await expect(page).toHaveURL(/\/connect-canvas/);
+  await page.getByRole("button", { name: "Continue without connecting" }).click();
+  await expect(page).toHaveURL(/\/instructor\/assistant/);
+}
+
+export async function registerAndSkipCanvas(page: Page) {
+  const email = uniqueEmail("e2e_inst");
+  const password = "Secret123!";
+  await registerInstructor(page, email, password);
+  await completeOnboardingWithoutCanvas(page);
+  return { email, password };
+}
+
 export async function loginAsAdmin(page: Page) {
   await login(page, ADMIN_EMAIL, ADMIN_PASSWORD);
   await expect(page).toHaveURL(/\/admin\/dashboard/);
