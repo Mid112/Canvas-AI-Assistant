@@ -220,11 +220,13 @@ CREATE TABLE workflows (
     preview_message_id       INTEGER REFERENCES messages(id) ON DELETE CASCADE,
     result_message_id        INTEGER REFERENCES messages(id) ON DELETE SET NULL,
     action_name              VARCHAR NOT NULL,
+    -- Optional instructor-facing label for multi-workflow switching (#1237).
+    display_name             TEXT,
     user_prompt              TEXT NOT NULL,
     proposed_action          JSONB NOT NULL,
     affected_resources       JSONB NOT NULL DEFAULT '[]'::jsonb,
     status                   VARCHAR NOT NULL DEFAULT 'pending'
-                             CHECK (status IN ('pending', 'executing', 'executed', 'failed', 'cancelled', 'superseded')),
+                             CHECK (status IN ('pending', 'paused', 'executing', 'executed', 'failed', 'cancelled', 'superseded')),
     error_detail             TEXT,
     executed_at              TIMESTAMPTZ,
     -- Set when a reversible action (currently update_assignment only) has
@@ -596,4 +598,6 @@ INSERT INTO schema_migrations (filename) VALUES
     ('029_canvas_connection_last_sync_error.sql'),
     ('030_ai_call_health.sql'),
     ('031_canvas_idempotency_keys.sql'),
-    ('034_canvas_idempotency_claim_and_retention.sql');
+    ('033_workflow_paused_status.sql'),
+    ('034_canvas_idempotency_claim_and_retention.sql'),
+    ('035_workflow_display_name.sql');
