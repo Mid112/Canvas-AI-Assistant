@@ -68,6 +68,7 @@ from app.services.llm.response_cache import (
 )
 from app.services.llm.student_context import (
     format_llm_student_listing,
+    ground_assistant_result,
     llm_student_candidates,
 )
 from app.services.quiz_validation import validate_quiz_for_create
@@ -3146,6 +3147,22 @@ async def handle_chat_message(
         if step >= MAX_TURN_STEPS:
             result = _step_budget_exhausted_response(loop_steps)
             break
+
+    # Feature 13 (#855 / #856): strip Canvas ID / grade / title claims that
+    # were never present in this-turn tool payloads (non-retrieved data).
+    tool_payloads = [step["result"] for step in loop_steps]
+    if result.get("action") not in {
+        "respond",
+        "clarify",
+        "out_of_scope",
+        "intent_preview",
+    }:
+        tool_payloads.append(result)
+    result = ground_assistant_result(
+        result,
+        tool_results=tool_payloads,
+        field_memory=None,
+    )
 
     # Only terminal conversational responses are cacheable. Canvas reads,
     # writes, previews, clarification flows, and multi-step turns always bypass
