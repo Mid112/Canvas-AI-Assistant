@@ -3166,8 +3166,13 @@ async def handle_chat_message(
             result = _step_budget_exhausted_response(loop_steps)
             break
 
+<<<<<<< HEAD
     # Feature 13 (#855): strip Canvas ID claims / invented refs that were
     # never present in tool payloads from this turn (or field memory).
+=======
+    # Feature 13 (#855 / #856): strip Canvas ID / grade / title claims that
+    # were never present in this-turn tool payloads (non-retrieved data).
+>>>>>>> origin/develop
     tool_payloads = [step["result"] for step in loop_steps]
     if result.get("action") not in {
         "respond",
@@ -3179,7 +3184,11 @@ async def handle_chat_message(
     result = ground_assistant_result(
         result,
         tool_results=tool_payloads,
+<<<<<<< HEAD
         field_memory=conversation.field_memory,
+=======
+        field_memory=None,
+>>>>>>> origin/develop
     )
 
     # Only terminal conversational responses are cacheable. Canvas reads,
