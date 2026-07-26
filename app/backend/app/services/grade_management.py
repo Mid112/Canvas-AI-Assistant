@@ -12,11 +12,16 @@ from app.models.user import User
 from app.models.workflow import Workflow
 from app.schemas.canvas import GradePreviewResponse, GradeUpdateRequest, GradeUpdateResponse
 from app.services.canvas import (
+    _assert_no_executing_write,
     _fill_submission_contact_fields,
     _parse_submission,
     get_owned_course,
     require_canvas_token,
     require_writable_course,
+)
+from app.services.canvas_idempotency import (
+    build_idempotency_key,
+    run_idempotent_canvas_write,
 )
 
 IRREVERSIBLE_GRADE_WARNING = (
@@ -26,7 +31,7 @@ ROLLBACK_MESSAGE = (
     "History is recorded for audit context; use a new grade change for any manual correction."
 )
 FEEDBACK_ONLY_WARNING = (
-    "Feedback only is medium risk because it adds a Canvas comment without changing the official grade."
+    "Feedback only is medium risk because it posts a Canvas comment that students can see immediately."
 )
 FEEDBACK_ONLY_ROLLBACK_MESSAGE = (
     "History is recorded; no grade correction is needed because this action does not change the student's grade."
@@ -80,6 +85,46 @@ def _submission_from_snapshot(body: GradeUpdateRequest):
         grade=snapshot.get("grade"),
         status=str(snapshot.get("status") or "unknown"),
         points_possible=snapshot.get("assignment_points_possible"),
+    )
+
+
+def _normalize_grade_value(value) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _normalize_score_value(value) -> str | None:
+    decimal_value = _coerce_decimal(value)
+    if decimal_value is None:
+        return None
+    return _format_decimal(decimal_value)
+
+
+def _assert_snapshot_matches_live(body: GradeUpdateRequest, live_submission) -> None:
+    """Feature 14 (#909): reject submits when the instructor's preview snapshot
+    no longer matches live Canvas grade/score (someone else graded, or the
+    page was stale). No snapshot means we already re-fetched live state and
+    that is the source of truth."""
+    snapshot = body.current_submission
+    if not isinstance(snapshot, dict):
+        return
+
+    snap_grade = _normalize_grade_value(snapshot.get("grade"))
+    live_grade = _normalize_grade_value(getattr(live_submission, "grade", None))
+    snap_score = _normalize_score_value(snapshot.get("score"))
+    live_score = _normalize_score_value(getattr(live_submission, "score", None))
+
+    if snap_grade == live_grade and snap_score == live_score:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            "This student's Canvas grade changed since you previewed. "
+            "Refresh the Grades tab and preview again before submitting."
+        ),
     )
 
 
@@ -215,7 +260,7 @@ def _build_grade_preview(course, body: GradeUpdateRequest, submission) -> GradeP
     )
     return GradePreviewResponse(
         risk_level="medium" if feedback_only else "high",
-        requires_approval=not feedback_only,
+        requires_approval=True,
         irreversible_warning=FEEDBACK_ONLY_WARNING if feedback_only else IRREVERSIBLE_GRADE_WARNING,
         rollback_available=False,
         rollback_message=FEEDBACK_ONLY_ROLLBACK_MESSAGE if feedback_only else ROLLBACK_MESSAGE,
@@ -274,6 +319,7 @@ async def submit_grade_update(
     db: AsyncSession,
     *,
     record_workflow_audit: bool = True,
+    exclude_workflow_id: int | None = None,
 ) -> GradeUpdateResponse:
     course, token, submission = await _find_submission(
         local_course_id=local_course_id,
@@ -282,18 +328,51 @@ async def submit_grade_update(
         canvas_url=canvas_url,
         db=db,
     )
+    # Re-fetched live submission must still match the preview snapshot when
+    # the client sent one — blocks stale Canvas-modifying submits (#909).
+    _assert_snapshot_matches_live(body, submission)
     preview = _build_grade_preview(course, body, submission)
     proposed_grade = body.posted_grade.strip()
     feedback = (body.reason or "").strip()
     feedback_only = not proposed_grade and bool(feedback)
-    raw = await update_submission_grade(
-        int(course.canvas_course_id),
+
+    # Feature Reliability (#1188): same user-scoped mutex as other Canvas writes
+    # so a grade confirm cannot race an in-flight assignment/quiz/message write.
+    await _assert_no_executing_write(
+        db,
+        user_id=user.id,
+        action_name="update_grade",
+        local_course_id=course.id,
+        exclude_workflow_id=exclude_workflow_id,
+    )
+
+    idem_key = build_idempotency_key(
+        "update_grade",
+        user.id,
+        course.id,
         body.assignment_id,
         body.user_id,
-        proposed_grade or None,
-        token,
-        feedback or None,
-        course.canvas_url,
+        proposed_grade,
+        feedback,
+    )
+
+    async def _write():
+        return await update_submission_grade(
+            int(course.canvas_course_id),
+            body.assignment_id,
+            body.user_id,
+            proposed_grade or None,
+            token,
+            feedback or None,
+            course.canvas_url,
+        )
+
+    raw = await run_idempotent_canvas_write(
+        db,
+        user_id=user.id,
+        operation="update_grade",
+        idempotency_key=idem_key,
+        write=_write,
     )
     updated = _parse_submission(raw)
     history = GradeHistory(

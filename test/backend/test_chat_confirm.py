@@ -121,6 +121,50 @@ def test_confirm_replay_is_rejected(client):
         mock_create.assert_called_once()
 
 
+# Verifies: Confirm executes write without self-deadlocking on own executing workflow.
+def test_confirm_executes_write_without_self_deadlock(client):
+    """handle_confirmed_action commits the workflow as ``executing`` before
+    execute_tool. The in-flight guard must exclude that workflow id so the
+    confirm path does not 409 against itself when create_course_assignment
+    (not a dispatcher-level mock) runs the real guard.
+    """
+    headers, local_course_id = _register_with_canvas(client)
+    conversation_id, pending_message_id = _propose_create_assignment(
+        client, headers, local_course_id
+    )
+
+    canvas_payload = {
+        "id": 42,
+        "name": "Midterm Exam",
+        "description": "Covers chapters 1 through 5",
+        "due_at": "2030-01-01T00:00:00",
+        "points_possible": 100.0,
+        "course_id": 9999,
+        "published": False,
+    }
+    # Mock only the Canvas HTTP layer — leave create_course_assignment and
+    # _assert_no_executing_write real so a self-deadlock surfaces here.
+    with patch(
+        "app.services.canvas.create_assignment",
+        new=AsyncMock(return_value=canvas_payload),
+    ) as mock_create:
+        response = client.post(
+            "/api/v1/chat/confirm",
+            json={
+                "conversation_id": conversation_id,
+                "pending_message_id": pending_message_id,
+            },
+            headers=headers,
+        )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body.get("is_error") is not True
+    assert body["reply"]["success"] is True
+    assert body["reply"]["action"] == "create_assignment"
+    mock_create.assert_awaited_once()
+
+
 # Verifies: Confirm unknown pending message id 404s.
 def test_confirm_unknown_pending_message_id_404s(client):
     headers, local_course_id = _register_with_canvas(client)

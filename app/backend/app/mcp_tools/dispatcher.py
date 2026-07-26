@@ -1,6 +1,7 @@
 # app/backend/app/mcp_tools/dispatcher.py
 import json
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import Any
 
 from dateutil import parser as date_parser
@@ -8,6 +9,8 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
+from app.integrations.mcp_client import MCPClientError, call_tool
 from app.mcp_tools.schemas import ACTION_SCHEMAS, WRITE_ACTIONS, is_reversible
 from app.models.course import Course
 from app.models.user import User
@@ -27,6 +30,7 @@ from app.services.assignment_validation import (
     validate_assignment_for_update,
 )
 from app.services.canvas import (
+    _assert_no_executing_write,
     create_course_assignment,
     create_course_quiz,
     get_active_course,
@@ -35,10 +39,14 @@ from app.services.canvas import (
     get_course_quizzes,
     get_courses,
     get_submissions,
+    require_canvas_token,
     send_course_message,
     set_active_course,
     update_course_assignment,
-    update_course_grade,
+)
+from app.services.canvas_idempotency import (
+    build_idempotency_key,
+    run_idempotent_canvas_write,
 )
 from app.services.canvas_status import CanvasWriteResult
 from app.services.course_access import get_owned_course_or_404
@@ -114,6 +122,163 @@ _CREATE_ASSIGNMENT_FIELD_QUESTIONS = {
 # Kept for call-site compatibility; quiz field gathering happens in the
 # dedicated quiz creation form, not via chat clarify turns.
 _CREATE_QUIZ_FIELD_QUESTIONS: dict[str, str] = {}
+
+
+async def _call_mcp_tool(
+    user: User,
+    canvas_url: str,
+    tool_name: str,
+    arguments: dict[str, Any],
+) -> dict[str, Any]:
+    """Call MCP when enabled. Raises ToolExecutionError on failure — no
+    silent direct-Canvas fallback for MCP-routed actions (Feature 13 #860)."""
+    if not settings.MCP_ENABLED:
+        raise MCPClientError("MCP integration is disabled.")
+    try:
+        token = require_canvas_token(user, canvas_url)
+        return await call_tool(
+            tool_name,
+            arguments,
+            canvas_token=token,
+            canvas_url=canvas_url,
+        )
+    except MCPClientError as exc:
+        raise ToolExecutionError(
+            "The Canvas MCP service could not complete this action. "
+            "Check that the MCP server is running, then try again.",
+            log_detail=f"MCP tool {tool_name!r} failed: {exc}",
+        ) from exc
+
+
+def _mcp_enabled() -> bool:
+    return bool(settings.MCP_ENABLED)
+
+
+async def _run_guarded_write(
+    db: AsyncSession,
+    *,
+    user: User,
+    action_name: str,
+    local_course_id: int,
+    operation: str,
+    idempotency_parts: tuple[object, ...],
+    write,
+    exclude_workflow_id: int | None = None,
+) -> dict[str, Any]:
+    """Apply in-flight + reserve-first idempotency around a Canvas/MCP write.
+
+    MCP-enabled dispatcher branches previously called `_call_mcp_tool` directly
+    and skipped the service-layer guards. Routing every mutating path through
+    this helper keeps #1188 / #1189 active whether MCP is on or off.
+
+    ``exclude_workflow_id`` lets the confirm path ignore its own
+    ``status='executing'`` workflow row (see ``_assert_no_executing_write``).
+    """
+    await _assert_no_executing_write(
+        db,
+        user_id=user.id,
+        action_name=action_name,
+        local_course_id=local_course_id,
+        exclude_workflow_id=exclude_workflow_id,
+    )
+    return await run_idempotent_canvas_write(
+        db,
+        user_id=user.id,
+        operation=operation,
+        idempotency_key=build_idempotency_key(*idempotency_parts),
+        write=write,
+    )
+
+
+def _tag_via_mcp(payload: dict[str, Any]) -> dict[str, Any]:
+    out = dict(payload)
+    out["via_mcp"] = True
+    return out
+
+
+def _map_mcp_courses_result(mcp_result: dict[str, Any]) -> dict[str, Any]:
+    courses = []
+    for item in mcp_result.get("courses", []):
+        if not isinstance(item, dict):
+            continue
+        courses.append(
+            {
+                "canvas_id": item.get("id"),
+                "name": item.get("name") or "",
+                "course_code": item.get("course_code") or "",
+                "workflow_state": item.get("workflow_state") or "available",
+                "enrollment_term_id": item.get("enrollment_term_id"),
+            }
+        )
+    return {"courses": courses}
+
+
+def _map_mcp_assignments_result(mcp_result: dict[str, Any]) -> dict[str, Any]:
+    assignments = []
+    course_id = mcp_result.get("course_id")
+    for item in mcp_result.get("assignments", []):
+        if not isinstance(item, dict):
+            continue
+        assignments.append(
+            {
+                "id": item.get("id"),
+                "name": item.get("name") or "",
+                "description": item.get("description"),
+                "due_at": item.get("due_at"),
+                "points_possible": item.get("points_possible"),
+                "course_id": item.get("course_id") or course_id,
+            }
+        )
+    return {"assignments": assignments}
+
+
+def _map_mcp_submissions_result(mcp_result: dict[str, Any]) -> dict[str, Any]:
+    from app.services.llm.student_context import llm_safe_submission_dict
+
+    groups: dict[str, list[dict]] = {status.value: [] for status in SubmissionStatus}
+    submissions = []
+    for item in mcp_result.get("submissions", []):
+        if not isinstance(item, dict):
+            continue
+        workflow_state = item.get("workflow_state") or "unsubmitted"
+        if item.get("missing") or workflow_state == "unsubmitted":
+            status = SubmissionStatus.missing if item.get("missing") else SubmissionStatus.unsubmitted
+        elif item.get("late"):
+            status = SubmissionStatus.late
+        elif workflow_state == "graded":
+            status = SubmissionStatus.graded
+        elif workflow_state == "submitted":
+            status = SubmissionStatus.submitted
+        else:
+            status = SubmissionStatus.unsubmitted
+        safe = llm_safe_submission_dict(
+            {
+                "id": item.get("id"),
+                "assignment_id": mcp_result.get("assignment_id"),
+                "user_id": item.get("user_id"),
+                "student_name": f"Student {item.get('user_id')}",
+                "submitted_at": item.get("submitted_at"),
+                "workflow_state": workflow_state,
+                "status": status.value,
+                "score": item.get("score"),
+                "grade": item.get("grade"),
+            }
+        )
+        submissions.append(safe)
+        name = safe.get("student_name") or f"Student {safe.get('user_id')}"
+        groups[status.value].append({"user_id": safe.get("user_id"), "name": name})
+
+    counts = {status: len(students) for status, students in groups.items()}
+    pending_students = groups["missing"] + groups["unsubmitted"]
+    return {
+        "submissions": submissions,
+        "counts": counts,
+        "pending_students": pending_students,
+        "submitted_students": groups["submitted"],
+        "late_students": groups["late"],
+        "graded_students": groups["graded"],
+        "excused_students": groups["excused"],
+    }
 
 
 def _create_assignment_missing_field(proposed: dict) -> str | None:
@@ -207,10 +372,12 @@ def _build_submissions_result(submissions: list[SubmissionResponse]) -> dict:
     compute_submissions_by_status's status="missing" uses (see
     services/resolved_set.py), kept consistent across both code paths.
 
-    Names are assembled here for display — the LLM never sees or
-    generates student PII directly. student_name is already populated on
-    each submission by get_submissions (services/canvas.py), which
-    requests Canvas's include[]=user."""
+    Feature 14 (#908): tool results fed back to the LLM keep name + Canvas
+    user_id only — email/login_id are stripped via llm_safe_submission_dict.
+    student_name is already populated on each submission by get_submissions
+    (services/canvas.py), which requests Canvas's include[]=user."""
+    from app.services.llm.student_context import llm_safe_submission_dict
+
     groups: dict[str, list[dict]] = {status.value: [] for status in SubmissionStatus}
     for s in submissions:
         name = s.student_name or f"Student {s.user_id}"
@@ -220,7 +387,7 @@ def _build_submissions_result(submissions: list[SubmissionResponse]) -> dict:
     pending_students = groups["missing"] + groups["unsubmitted"]
 
     return {
-        "submissions": [s.model_dump() for s in submissions],
+        "submissions": [llm_safe_submission_dict(s) for s in submissions],
         "counts": counts,
         "pending_students": pending_students,
         "submitted_students": groups["submitted"],
@@ -242,7 +409,13 @@ def _merge_assignment_update(current: AssignmentResponse, action: Any) -> Assign
     )
 
 
-async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
+async def execute_tool(
+    db: AsyncSession,
+    user: User,
+    action: Any,
+    *,
+    exclude_workflow_id: int | None = None,
+) -> dict:
     """Dispatch on the validated action's type.
 
     Architecture note — two distinct call paths:
@@ -263,17 +436,33 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
 
     This separation means write action cases ONLY call Canvas — they never
     generate previews. Preview generation ONLY happens in case 'intent_preview':.
-    This is the SRP boundary."""
+    This is the SRP boundary.
+
+    ``exclude_workflow_id`` is set on PATH B so the in-flight write guard
+    does not treat the confirming workflow as a competing write.
+    """
 
     match action.action:
 
         # ── Read actions ──────────────────────────────────────────────
         case "fetch_courses":
-            courses = await get_courses(user, _default_canvas_url(user), db)
+            canvas_url = _default_canvas_url(user)
+            if _mcp_enabled():
+                mcp_result = await _call_mcp_tool(user, canvas_url, "fetch_courses", {})
+                return _tag_via_mcp(_map_mcp_courses_result(mcp_result))
+            courses = await get_courses(user, canvas_url, db)
             return {"courses": [c.model_dump() for c in courses]}
 
         case "fetch_assignments":
             course = await _resolve_course(db, user, action.local_course_id)
+            if _mcp_enabled():
+                mcp_result = await _call_mcp_tool(
+                    user,
+                    course.canvas_url,
+                    "fetch_assignments",
+                    {"course_id": int(course.canvas_course_id)},
+                )
+                return _tag_via_mcp(_map_mcp_assignments_result(mcp_result))
             assignments = await get_assignments(
                 course.id, user, course.canvas_url, db
             )
@@ -281,13 +470,56 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
 
         case "fetch_submissions":
             course = await _resolve_course(db, user, action.local_course_id)
+            if _mcp_enabled():
+                mcp_result = await _call_mcp_tool(
+                    user,
+                    course.canvas_url,
+                    "fetch_submissions",
+                    {
+                        "course_id": int(course.canvas_course_id),
+                        "assignment_id": action.assignment_id,
+                    },
+                )
+                mapped = _map_mcp_submissions_result(mcp_result)
+                mapped["assignment"] = {"assignment_id": action.assignment_id}
+                return _tag_via_mcp(mapped)
             submissions = await get_submissions(
                 course.id, action.assignment_id, user, course.canvas_url, db
             )
             return _build_submissions_result(submissions)
 
         case "fetch_students":
+            # Feature 14 (#908): strip email/login_id before this tool result
+            # is echoed back into the LLM context.
+            from app.services.llm.student_context import llm_safe_student_dict
+
             course = await _resolve_course(db, user, action.local_course_id)
+            if _mcp_enabled():
+                mcp_result = await _call_mcp_tool(
+                    user,
+                    course.canvas_url,
+                    "fetch_students",
+                    {"course_id": int(course.canvas_course_id)},
+                )
+                students = [
+                    llm_safe_student_dict(item)
+                    for item in mcp_result.get("students", [])
+                    if isinstance(item, dict)
+                ]
+                active_count = sum(
+                    1 for s in students if s.get("enrollment_state") == "active"
+                )
+                return _tag_via_mcp(
+                    {
+                        "students": students,
+                        "count": len(students),
+                        "active_count": active_count,
+                        "summary": (
+                            f"{course.name} has {active_count} active students "
+                            f"and {len(students)} total enrollments."
+                        ),
+                    }
+                )
             students = await get_students(
                 course.id, user, course.canvas_url, db
             )
@@ -295,7 +527,7 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 student for student in students if student.enrollment_state == "active"
             ]
             return {
-                "students": [student.model_dump() for student in students],
+                "students": [llm_safe_student_dict(student) for student in students],
                 "count": len(students),
                 "active_count": len(active_students),
                 "summary": (
@@ -306,6 +538,25 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
 
         case "fetch_quizzes":
             course = await _resolve_course(db, user, action.local_course_id)
+            if _mcp_enabled():
+                mcp_result = await _call_mcp_tool(
+                    user,
+                    course.canvas_url,
+                    "fetch_quizzes",
+                    {"course_id": int(course.canvas_course_id)},
+                )
+                quizzes = [
+                    item
+                    for item in mcp_result.get("quizzes", [])
+                    if isinstance(item, dict)
+                ]
+                return _tag_via_mcp(
+                    {
+                        "quizzes": quizzes,
+                        "count": len(quizzes),
+                        "summary": f"{course.name} has {len(quizzes)} quiz(zes).",
+                    }
+                )
             quizzes = await get_course_quizzes(
                 course.id, user, course.canvas_url, db
             )
@@ -350,11 +601,65 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 due_at=action.due_date,
                 points_possible=action.points_possible,
             )
-            # services/canvas.py raises HTTPException on any Canvas error,
-            # so a returned object always means success
-            assignment = await create_course_assignment(
-                course.id, payload, user, course.canvas_url, db
-            )
+            if _mcp_enabled():
+                async def _mcp_create_assignment() -> dict[str, Any]:
+                    mcp_result = await _call_mcp_tool(
+                        user,
+                        course.canvas_url,
+                        "create_assignment",
+                        {
+                            "course_id": int(course.canvas_course_id),
+                            "name": action.title,
+                            "points_possible": action.points_possible,
+                            "due_at": action.due_date,
+                            "description": action.description,
+                        },
+                    )
+                    if not mcp_result.get("success") or not mcp_result.get("assignment"):
+                        raise ToolExecutionError(
+                            "Canvas did not create the assignment via MCP.",
+                            log_detail=f"MCP create_assignment response: {mcp_result!r}",
+                        )
+                    created = mcp_result["assignment"]
+                    return AssignmentResponse(
+                        id=int(created.get("id")),
+                        name=created.get("name") or action.title,
+                        description=action.description,
+                        due_at=created.get("due_at"),
+                        points_possible=created.get("points_possible")
+                        or action.points_possible,
+                        course_id=int(course.canvas_course_id),
+                        published=bool(created.get("published", False)),
+                    ).model_dump(mode="json")
+
+                assignment = AssignmentResponse(
+                    **(
+                        await _run_guarded_write(
+                            db,
+                            user=user,
+                            action_name="create_assignment",
+                            local_course_id=course.id,
+                            operation="create_assignment",
+                            idempotency_parts=(
+                                "create_assignment",
+                                user.id,
+                                course.id,
+                                payload.model_dump(mode="json"),
+                            ),
+                            write=_mcp_create_assignment,
+                            exclude_workflow_id=exclude_workflow_id,
+                        )
+                    )
+                )
+            else:
+                assignment = await create_course_assignment(
+                    course.id,
+                    payload,
+                    user,
+                    course.canvas_url,
+                    db,
+                    exclude_workflow_id=exclude_workflow_id,
+                )
             result = CanvasWriteResult(
                 action="create_assignment",
                 data=assignment,
@@ -364,9 +669,17 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                     {"type": "assignment", "id": assignment.id, "name": assignment.name, "status": "created"},
                 ],
             )
-            return result.to_dict()
+            out = result.to_dict()
+            if _mcp_enabled():
+                out["via_mcp"] = True
+            return out
 
         case "create_quiz":
+            # Intentionally not MCP-routed: classic/New Quizzes creation is a
+            # multi-step Canvas flow (quiz shell + questions / bank groups) that
+            # the MCP sidecar does not expose. When MCP_ENABLED, quiz writes stay
+            # on create_course_quiz (direct Canvas) with the same in-flight +
+            # idempotency guards — see MCP_REQUIRED_ACTIONS in mcp_client.py.
             course = await _resolve_course(db, user, action.local_course_id)
             questions = [
                 q.model_dump() if hasattr(q, "model_dump") else q
@@ -415,7 +728,12 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 ],
             )
             quiz = await create_course_quiz(
-                course.id, payload, user, course.canvas_url, db
+                course.id,
+                payload,
+                user,
+                course.canvas_url,
+                db,
+                exclude_workflow_id=exclude_workflow_id,
             )
             result = CanvasWriteResult(
                 action="create_quiz",
@@ -449,9 +767,78 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
             )
             payload = _merge_assignment_update(current, action)
 
-            assignment = await update_course_assignment(
-                course.id, action.assignment_id, payload, user, course.canvas_url, db
-            )
+            if _mcp_enabled():
+                async def _mcp_update_assignment() -> dict[str, Any]:
+                    mcp_result = await _call_mcp_tool(
+                        user,
+                        course.canvas_url,
+                        "update_assignment",
+                        {
+                            "course_id": int(course.canvas_course_id),
+                            "assignment_id": action.assignment_id,
+                            "name": payload.name,
+                            "points_possible": payload.points_possible,
+                            "due_at": payload.due_at.isoformat()
+                            if getattr(payload, "due_at", None) is not None
+                            and hasattr(payload.due_at, "isoformat")
+                            else payload.due_at,
+                            "description": payload.description,
+                        },
+                    )
+                    if not mcp_result.get("success") or not mcp_result.get("assignment"):
+                        raise ToolExecutionError(
+                            "Canvas did not update the assignment via MCP.",
+                            log_detail=f"MCP update_assignment response: {mcp_result!r}",
+                        )
+                    created = mcp_result["assignment"]
+                    return AssignmentResponse(
+                        id=int(created.get("id") or action.assignment_id),
+                        name=created.get("name") or current.name,
+                        description=created.get("description")
+                        if created.get("description") is not None
+                        else current.description,
+                        due_at=created.get("due_at"),
+                        points_possible=created.get("points_possible")
+                        if created.get("points_possible") is not None
+                        else current.points_possible,
+                        course_id=int(course.canvas_course_id),
+                        published=bool(
+                            created.get(
+                                "published", getattr(current, "published", False)
+                            )
+                        ),
+                    ).model_dump(mode="json")
+
+                assignment = AssignmentResponse(
+                    **(
+                        await _run_guarded_write(
+                            db,
+                            user=user,
+                            action_name="update_assignment",
+                            local_course_id=course.id,
+                            operation="update_assignment",
+                            idempotency_parts=(
+                                "update_assignment",
+                                user.id,
+                                course.id,
+                                action.assignment_id,
+                                payload.model_dump(mode="json"),
+                            ),
+                            write=_mcp_update_assignment,
+                            exclude_workflow_id=exclude_workflow_id,
+                        )
+                    )
+                )
+            else:
+                assignment = await update_course_assignment(
+                    course.id,
+                    action.assignment_id,
+                    payload,
+                    user,
+                    course.canvas_url,
+                    db,
+                    exclude_workflow_id=exclude_workflow_id,
+                )
             changed_fields = [
                 field
                 for field, value in (
@@ -478,49 +865,113 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 ],
                 previous_data=current,
             )
-            return result.to_dict()
+            out = result.to_dict()
+            if _mcp_enabled():
+                out["via_mcp"] = True
+            return out
 
         case "update_grade":
             course = await _resolve_course(db, user, action.local_course_id)
-            if action.assignment_id is None or action.student_id is None:
+            student_id = getattr(action, "student_id", None)
+            assignment_id = getattr(action, "assignment_id", None)
+            if assignment_id is None or student_id is None:
                 raise ToolExecutionError(
-                    "The assignment and student must be resolved before updating a grade."
+                    "The assistant needs to resolve the assignment and student before updating a grade.",
+                    log_detail=f"Unresolved update_grade action reached dispatcher: {action.model_dump()}",
                 )
-            if not action.new_grade.strip():
-                raise ToolExecutionError("The new grade cannot be empty.")
+            new_grade = (getattr(action, "new_grade", None) or "").strip()
+            feedback = getattr(action, "feedback", None) or getattr(action, "reason", None)
 
-            submission = await update_course_grade(
+            if _mcp_enabled():
+                async def _mcp_update_grade() -> dict[str, Any]:
+                    mcp_result = await _call_mcp_tool(
+                        user,
+                        course.canvas_url,
+                        "update_grade",
+                        {
+                            "course_id": int(course.canvas_course_id),
+                            "assignment_id": assignment_id,
+                            "user_id": student_id,
+                            "posted_grade": new_grade or None,
+                            "comment": feedback,
+                        },
+                    )
+                    if not mcp_result.get("success"):
+                        raise ToolExecutionError(
+                            "Canvas did not update the grade via MCP.",
+                            log_detail=f"MCP update_grade response: {mcp_result!r}",
+                        )
+                    submission = mcp_result.get("submission") or {}
+                    if not isinstance(submission, dict):
+                        submission = {}
+                    return submission
+
+                submission = await _run_guarded_write(
+                    db,
+                    user=user,
+                    action_name="update_grade",
+                    local_course_id=course.id,
+                    operation="update_grade",
+                    idempotency_parts=(
+                        "update_grade",
+                        user.id,
+                        course.id,
+                        assignment_id,
+                        student_id,
+                        new_grade,
+                        (feedback or "").strip(),
+                    ),
+                    write=_mcp_update_grade,
+                    exclude_workflow_id=exclude_workflow_id,
+                )
+                result = CanvasWriteResult(
+                    action="update_grade",
+                    data=submission,
+                    reversible=is_reversible("update_grade"),
+                    affected_resources=[
+                        {
+                            "type": "course",
+                            "id": course.id,
+                            "name": course.name,
+                            "status": "unchanged",
+                        },
+                        {
+                            "type": "submission",
+                            "id": submission.get("id"),
+                            "name": getattr(action, "student_reference", None)
+                            or "Student grade",
+                            "status": "modified",
+                            "changed_fields": [
+                                *(["grade"] if new_grade else []),
+                                *(["feedback"] if feedback else []),
+                            ],
+                        },
+                    ],
+                )
+                out = result.to_dict()
+                out["via_mcp"] = True
+                return out
+
+            grade_result = await submit_grade_update(
                 course.id,
-                action.assignment_id,
-                action.student_id,
-                action.new_grade.strip(),
+                GradeUpdateRequest(
+                    assignment_id=assignment_id,
+                    user_id=student_id,
+                    posted_grade=new_grade,
+                    reason=feedback,
+                ),
                 user,
                 course.canvas_url,
                 db,
-                feedback=action.feedback,
+                record_workflow_audit=False,
+                exclude_workflow_id=exclude_workflow_id,
             )
             result = CanvasWriteResult(
                 action="update_grade",
-                data=submission,
+                data=grade_result.canvas_submission,
                 reversible=is_reversible("update_grade"),
-                affected_resources=[
-                    {
-                        "type": "course",
-                        "id": course.id,
-                        "name": course.name,
-                        "status": "unchanged",
-                    },
-                    {
-                        "type": "submission",
-                        "id": submission.get("id"),
-                        "name": action.student_reference or "Student grade",
-                        "status": "modified",
-                        "changed_fields": [
-                            "grade",
-                            *(["feedback"] if action.feedback else []),
-                        ],
-                    },
-                ],
+                affected_resources=grade_result.affected_resources,
+                previous_data=grade_result.current,
             )
             return result.to_dict()
 
@@ -537,15 +988,75 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                 recipient_canvas_user_ids=action.recipient_canvas_user_ids,
             )
 
-            message_result = await send_course_message(
-                course.id,
-                action.subject,
-                action.body,
-                user,
-                course.canvas_url,
-                db,
-                recipient_canvas_user_ids=action.recipient_canvas_user_ids,
-            )
+            recipients = list(action.recipient_canvas_user_ids or [])
+            if _mcp_enabled():
+                async def _mcp_send_message() -> dict[str, Any]:
+                    if recipients:
+                        mcp_result = await _call_mcp_tool(
+                            user,
+                            course.canvas_url,
+                            "send_message_to_students",
+                            {
+                                "course_id": int(course.canvas_course_id),
+                                "subject": action.subject,
+                                "body": action.body,
+                                "recipient_ids": recipients,
+                            },
+                        )
+                        delivery_mode = "conversation"
+                    else:
+                        mcp_result = await _call_mcp_tool(
+                            user,
+                            course.canvas_url,
+                            "create_announcement",
+                            {
+                                "course_id": int(course.canvas_course_id),
+                                "subject": action.subject,
+                                "body": action.body,
+                            },
+                        )
+                        delivery_mode = "announcement"
+                    if not mcp_result.get("success"):
+                        raise ToolExecutionError(
+                            "Canvas did not send the message via MCP.",
+                            log_detail=f"MCP send_message response: {mcp_result!r}",
+                        )
+                    return {
+                        "delivery_mode": delivery_mode,
+                        "subject": action.subject,
+                        "recipient_count": mcp_result.get("recipient_count")
+                        or len(recipients),
+                    }
+
+                message_payload = await _run_guarded_write(
+                    db,
+                    user=user,
+                    action_name="send_message",
+                    local_course_id=course.id,
+                    operation="send_message",
+                    idempotency_parts=(
+                        "send_message",
+                        user.id,
+                        course.id,
+                        action.subject,
+                        action.body,
+                        recipients,
+                    ),
+                    write=_mcp_send_message,
+                    exclude_workflow_id=exclude_workflow_id,
+                )
+                message_result = SimpleNamespace(**message_payload)
+            else:
+                message_result = await send_course_message(
+                    course.id,
+                    action.subject,
+                    action.body,
+                    user,
+                    course.canvas_url,
+                    db,
+                    recipient_canvas_user_ids=action.recipient_canvas_user_ids,
+                    exclude_workflow_id=exclude_workflow_id,
+                )
             resource_type = (
                 "conversation"
                 if message_result.delivery_mode == "conversation"
@@ -565,36 +1076,10 @@ async def execute_tool(db: AsyncSession, user: User, action: Any) -> dict:
                     },
                 ],
             )
-            return result.to_dict()
-
-        case "update_grade":
-            course = await _resolve_course(db, user, action.local_course_id)
-            if action.assignment_id is None or action.student_id is None:
-                raise ToolExecutionError(
-                    "The assistant needs to resolve the assignment and student before updating a grade.",
-                    log_detail=f"Unresolved update_grade action reached dispatcher: {action.model_dump()}",
-                )
-            grade_result = await submit_grade_update(
-                course.id,
-                GradeUpdateRequest(
-                    assignment_id=action.assignment_id,
-                    user_id=action.student_id,
-                    posted_grade=action.new_grade,
-                    reason=action.reason,
-                ),
-                user,
-                course.canvas_url,
-                db,
-                record_workflow_audit=False,
-            )
-            result = CanvasWriteResult(
-                action="update_grade",
-                data=grade_result.canvas_submission,
-                reversible=is_reversible("update_grade"),
-                affected_resources=grade_result.affected_resources,
-                previous_data=grade_result.current,
-            )
-            return result.to_dict()
+            out = result.to_dict()
+            if _mcp_enabled():
+                out["via_mcp"] = True
+            return out
 
         # ── Conversational actions ────────────────────────────────────
         # These results are logged verbatim as the assistant's message
