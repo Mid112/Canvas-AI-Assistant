@@ -46,7 +46,6 @@ export interface FetchAuditLogsResponse {
 }
 
 export interface AuditLogFilters {
-  date: string;
   user: string;
   action: string;
   result: "" | AuditLogResult;
@@ -54,12 +53,34 @@ export interface AuditLogFilters {
 }
 
 export const emptyAuditLogFilters: AuditLogFilters = {
-  date: "",
   user: "",
   action: "",
   result: "",
   search: "",
 };
+
+/**
+ * How far back the Audit Logs page's range filter looks — sent to the
+ * backend as `range_days` so audit_logs and audit_logs_session are both
+ * filtered (and their totals both counted) server-side, rather than
+ * filtering only whatever's already been fetched into the browser.
+ * `null` means all time.
+ */
+export type AuditLogRangeDays = 7 | 30 | 90 | null;
+
+export const defaultAuditLogRangeDays: AuditLogRangeDays = null;
+
+export interface AuditLogRangeOption {
+  value: AuditLogRangeDays;
+  label: string;
+}
+
+export const AUDIT_LOG_RANGE_OPTIONS: AuditLogRangeOption[] = [
+  { value: null, label: "All time" },
+  { value: 7, label: "Last 7 days" },
+  { value: 30, label: "Last 30 days" },
+  { value: 90, label: "Last 3 months" },
+];
 
 export type AuditLogSortField =
   | "timestamp"
@@ -84,10 +105,6 @@ export const AUDIT_LOG_PAGE_SIZE = 10;
 
 export function hasActiveAuditLogFilters(filters: AuditLogFilters): boolean {
   return Boolean(
-    filters.date ||
-      filters.user ||
-      filters.action ||
-      filters.result ||
-      filters.search,
+    filters.user || filters.action || filters.result || filters.search,
   );
 }

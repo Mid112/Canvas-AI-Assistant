@@ -106,6 +106,26 @@ def test_admin_can_read_audit_logs(client, admin_headers):
     assert isinstance(resp.json()["items"], list)
 
 
+# Verifies: The Audit Logs page's range filter (7d/30d/3mo) is wired through
+# to the query the same way whichever routes the frontend actually calls.
+def test_admin_audit_logs_range_filter(client, admin_headers):
+    unfiltered = client.get("/api/v1/audit/logs", headers=admin_headers)
+    assert unfiltered.status_code == 200
+    unfiltered_total = unfiltered.json()["total"]
+
+    ranged = client.get(
+        "/api/v1/audit/logs", params={"range_days": 7}, headers=admin_headers
+    )
+    assert ranged.status_code == 200
+    # A 7-day window can't include more rows than all-time.
+    assert ranged.json()["total"] <= unfiltered_total
+
+    invalid = client.get(
+        "/api/v1/audit/logs", params={"range_days": 0}, headers=admin_headers
+    )
+    assert invalid.status_code == 422
+
+
 # Verifies: Admin can update organization settings.
 def test_admin_settings_round_trip(client, admin_headers):
     original = client.get("/api/v1/admin/settings", headers=admin_headers)

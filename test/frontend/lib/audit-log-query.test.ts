@@ -6,11 +6,7 @@ import {
   paginateAuditLogs,
   sortAuditLogs,
 } from "@/lib/audit-log-query";
-import {
-  defaultAuditLogSort,
-  emptyAuditLogFilters,
-  type AuditLogEntry,
-} from "@/types/auditLog";
+import { defaultAuditLogSort, emptyAuditLogFilters } from "@/types/auditLog";
 
 describe("filterAuditLogs", () => {
   // Verifies: Returns all logs when filters are empty.
@@ -49,36 +45,6 @@ describe("filterAuditLogs", () => {
 
     expect(filtered).toHaveLength(1);
     expect(filtered[0]?.result).toBe("failed");
-  });
-
-  // Verifies: Filters by date using local time (matching displayed date).
-  it("filters by date using local time (matching displayed date)", () => {
-    const filtered = filterAuditLogs(mockAuditLogs, {
-      ...emptyAuditLogFilters,
-      date: "2026-05-31",
-    });
-
-    expect(filtered).toHaveLength(5);
-  });
-
-  // Verifies: Matches date filter against local time, not UTC.
-  it("matches date filter against local time, not UTC", () => {
-    const lateUtcLog: AuditLogEntry = {
-      ...mockAuditLogs[0]!,
-      id: "audit-late-utc",
-      timestamp: "2026-05-31T23:50:00.000Z",
-    };
-
-    const localDate = new Date("2026-05-31T23:50:00.000Z");
-    const pad = (v: number) => String(v).padStart(2, "0");
-    const expectedLocalDate = `${localDate.getFullYear()}-${pad(localDate.getMonth() + 1)}-${pad(localDate.getDate())}`;
-
-    const filtered = filterAuditLogs([lateUtcLog], {
-      ...emptyAuditLogFilters,
-      date: expectedLocalDate,
-    });
-
-    expect(filtered).toHaveLength(1);
   });
 });
 

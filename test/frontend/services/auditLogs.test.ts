@@ -60,6 +60,38 @@ describe("auditLogs service", () => {
     expect(batch.total).toBe(250);
   });
 
+  // Verifies: Appends range_days when a date range filter is selected.
+  it("appends range_days when a date range filter is selected", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    );
+
+    await fetchAuditLogs("access-token", { rangeDays: 30 });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `http://localhost:8000/api/v1${AUDIT_LOGS_ADMIN_PATH}?limit=200&offset=0&range_days=30`,
+      expect.objectContaining({
+        headers: expect.any(Headers),
+      }),
+    );
+  });
+
+  // Verifies: Omits range_days entirely for "all time" (null).
+  it("omits range_days for all time", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    );
+
+    await fetchAuditLogs("access-token", { rangeDays: null });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `http://localhost:8000/api/v1${AUDIT_LOGS_ADMIN_PATH}?limit=200&offset=0`,
+      expect.objectContaining({
+        headers: expect.any(Headers),
+      }),
+    );
+  });
+
   // Verifies: Builds a CSV export with headers and rows.
   it("builds a CSV export with headers and rows", () => {
     const csv = buildAuditLogsCsv(mockAuditLogs.slice(0, 2));

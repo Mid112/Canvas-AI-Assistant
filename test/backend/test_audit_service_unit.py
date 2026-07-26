@@ -73,6 +73,36 @@ async def test_list_audit_logs_negates_session_ids_to_avoid_collision():
 
 
 @pytest.mark.asyncio
+async def test_list_audit_logs_applies_since_to_both_sources_and_their_counts():
+    """The range filter (Audit Logs page's 7d/30d/3mo selector) must be
+    applied to audit_logs AND audit_logs_session, and to their count queries
+    too — otherwise the merged feed's rows would be in-range but its `total`
+    (used for pagination and the "N of M" label) would still be the all-time
+    count, or the two sources would disagree about what's in range."""
+    since = datetime(2026, 1, 1, tzinfo=UTC)
+    db = _db(scalar_results=[0, 0], scalars_results=[[], []])
+
+    await list_audit_logs(db, limit=10, offset=0, since=since)
+
+    scalar_queries = [str(call.args[0]) for call in db.scalar.call_args_list]
+    scalars_queries = [str(call.args[0]) for call in db.scalars.call_args_list]
+    assert all("timestamp >=" in q for q in scalar_queries)
+    assert all("timestamp >=" in q for q in scalars_queries)
+
+
+@pytest.mark.asyncio
+async def test_list_audit_logs_omits_range_filter_when_since_not_given():
+    db = _db(scalar_results=[0, 0], scalars_results=[[], []])
+
+    await list_audit_logs(db, limit=10, offset=0)
+
+    scalar_queries = [str(call.args[0]) for call in db.scalar.call_args_list]
+    scalars_queries = [str(call.args[0]) for call in db.scalars.call_args_list]
+    assert not any("timestamp >=" in q for q in scalar_queries)
+    assert not any("timestamp >=" in q for q in scalars_queries)
+
+
+@pytest.mark.asyncio
 async def test_list_audit_logs_paginates_across_merged_sources():
     t1, t2, t3 = (datetime(2026, 1, d, tzinfo=UTC) for d in (1, 2, 3))
     db = _db(

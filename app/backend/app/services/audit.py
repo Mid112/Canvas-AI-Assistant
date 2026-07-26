@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -83,6 +84,7 @@ async def list_audit_logs(
     limit: int = 50,
     offset: int = 0,
     user_id: int | None = None,
+    since: datetime | None = None,
 ) -> AuditLogListResponse:
     workflow_query = select(AuditLog).options(joinedload(AuditLog.user))
     workflow_count_query = select(func.count()).select_from(AuditLog)
@@ -94,6 +96,16 @@ async def list_audit_logs(
         workflow_count_query = workflow_count_query.where(AuditLog.user_id == user_id)
         session_query = session_query.where(AuditLogSession.user_id == user_id)
         session_count_query = session_count_query.where(AuditLogSession.user_id == user_id)
+
+    # Applied to both sources so the merged feed, its total, and its
+    # pagination all agree — the point of doing this server-side rather than
+    # in the frontend's client-side filterAuditLogs is that "total" is then
+    # actually the total *within the selected range*, not the all-time total.
+    if since is not None:
+        workflow_query = workflow_query.where(AuditLog.timestamp >= since)
+        workflow_count_query = workflow_count_query.where(AuditLog.timestamp >= since)
+        session_query = session_query.where(AuditLogSession.timestamp >= since)
+        session_count_query = session_count_query.where(AuditLogSession.timestamp >= since)
 
     workflow_total = int(await db.scalar(workflow_count_query) or 0)
     session_total = int(await db.scalar(session_count_query) or 0)

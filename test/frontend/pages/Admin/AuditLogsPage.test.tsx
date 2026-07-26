@@ -302,7 +302,10 @@ describe("AuditLogsPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Audit logs (7)")).toBeInTheDocument();
     });
-    expect(fetchSpy).toHaveBeenLastCalledWith("access-token", { offset: 5 });
+    expect(fetchSpy).toHaveBeenLastCalledWith("access-token", {
+      offset: 5,
+      rangeDays: null,
+    });
     expect(
       screen.queryByRole("button", { name: "Load more" }),
     ).not.toBeInTheDocument();
@@ -332,17 +335,27 @@ describe("AuditLogsPage", () => {
   });
 
   // Verifies: Filters audit logs by date.
-  it("filters audit logs by date", async () => {
+  it("selects a date range and refetches from the server", async () => {
+    const fetchSpy = vi.spyOn(auditLogsService, "fetchAuditLogs");
     renderWithRouter(<AuditLogsPage />);
 
     await waitForLoaded();
+    expect(fetchSpy).toHaveBeenLastCalledWith("access-token", { rangeDays: null });
 
-    await user.type(screen.getByLabelText("Filter by date"), "2026-05-31");
+    const rangedLogs = [mockAuditLogs[0]!];
+    fetchSpy.mockResolvedValueOnce(toBatch(rangedLogs));
 
-    expect(tableScope().getByText("jane.doe@university.edu")).toBeInTheDocument();
-    expect(
-      screen.getByText("Showing 1–5 of 5 audit logs"),
-    ).toBeInTheDocument();
+    await user.selectOptions(
+      screen.getByLabelText("Filter by date range"),
+      "7",
+    );
+
+    // The range is a server-side query param, not a client-side re-filter
+    // of what's already loaded — selecting it must trigger a fresh fetch.
+    expect(fetchSpy).toHaveBeenLastCalledWith("access-token", { rangeDays: 7 });
+    await waitFor(() => {
+      expect(screen.getByText("Audit logs (1)")).toBeInTheDocument();
+    });
   });
 
   // Verifies: Clears active filters.

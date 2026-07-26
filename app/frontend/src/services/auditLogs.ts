@@ -4,6 +4,7 @@ import { apiRequest } from "@/lib/api-request";
 import type {
   AuditLogApiRecord,
   AuditLogEntry,
+  AuditLogRangeDays,
   AuditLogResult,
   FetchAuditLogsResponse,
 } from "@/types/auditLog";
@@ -24,10 +25,15 @@ export interface AuditLogsBatch {
 
 export async function fetchAuditLogs(
   accessToken: string,
-  { offset = 0, limit = AUDIT_LOGS_BATCH_SIZE }: { offset?: number; limit?: number } = {},
+  {
+    offset = 0,
+    limit = AUDIT_LOGS_BATCH_SIZE,
+    rangeDays = null,
+  }: { offset?: number; limit?: number; rangeDays?: AuditLogRangeDays } = {},
 ): Promise<AuditLogsBatch> {
+  const rangeParam = rangeDays ? `&range_days=${rangeDays}` : "";
   const response = await apiRequest<FetchAuditLogsResponse | AuditLogApiRecord[]>(
-    `${AUDIT_LOGS_ADMIN_PATH}?limit=${limit}&offset=${offset}`,
+    `${AUDIT_LOGS_ADMIN_PATH}?limit=${limit}&offset=${offset}${rangeParam}`,
     accessToken,
   );
 

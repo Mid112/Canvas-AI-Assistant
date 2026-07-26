@@ -3,10 +3,13 @@ import { Filter, Search, User, X } from "lucide-react";
 import { SearchCombobox } from "@/components/admin/SearchCombobox";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import {
+  AUDIT_LOG_RANGE_OPTIONS,
   emptyAuditLogFilters,
   hasActiveAuditLogFilters,
   type AuditLogFilters,
+  type AuditLogRangeDays,
 } from "@/types/auditLog";
 
 interface AuditLogFiltersProps {
@@ -14,6 +17,26 @@ interface AuditLogFiltersProps {
   userOptions: string[];
   actionOptions: string[];
   onChange: (filters: AuditLogFilters) => void;
+  rangeDays: AuditLogRangeDays;
+  onRangeDaysChange: (rangeDays: AuditLogRangeDays) => void;
+}
+
+const rangeSelectClassName = cn(
+  "h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none",
+  "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+);
+
+/** "" for all time, else the numeric range as a string — <select> values are always strings. */
+function rangeDaysToSelectValue(rangeDays: AuditLogRangeDays): string {
+  return rangeDays === null ? "" : String(rangeDays);
+}
+
+function selectValueToRangeDays(value: string): AuditLogRangeDays {
+  if (value === "") {
+    return null;
+  }
+  const parsed = Number(value);
+  return parsed === 7 || parsed === 30 || parsed === 90 ? parsed : null;
 }
 
 function updateFilter(
@@ -29,21 +52,31 @@ export function AuditLogFiltersBar({
   userOptions,
   actionOptions,
   onChange,
+  rangeDays,
+  onRangeDaysChange,
 }: AuditLogFiltersProps) {
-  const showClear = hasActiveAuditLogFilters(filters);
+  const showClear = hasActiveAuditLogFilters(filters) || rangeDays !== null;
 
   return (
     <div className="flex flex-col gap-3">
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[9.5rem_minmax(10rem,0.9fr)_minmax(13rem,1.3fr)_minmax(9rem,1fr)]">
-        <Input
-          type="date"
-          aria-label="Filter by date"
-          title="yyyy-mm-dd"
-          value={filters.date}
+        <select
+          aria-label="Filter by date range"
+          value={rangeDaysToSelectValue(rangeDays)}
           onChange={(event) =>
-            onChange(updateFilter(filters, "date", event.target.value))
+            onRangeDaysChange(selectValueToRangeDays(event.target.value))
           }
-        />
+          className={rangeSelectClassName}
+        >
+          {AUDIT_LOG_RANGE_OPTIONS.map((option) => (
+            <option
+              key={option.label}
+              value={rangeDaysToSelectValue(option.value)}
+            >
+              {option.label}
+            </option>
+          ))}
+        </select>
 
         <SearchCombobox
           value={filters.user}
@@ -92,7 +125,10 @@ export function AuditLogFiltersBar({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => onChange(emptyAuditLogFilters)}
+            onClick={() => {
+              onChange(emptyAuditLogFilters);
+              onRangeDaysChange(null);
+            }}
           >
             <X className="size-4" aria-hidden="true" />
             Clear filters
