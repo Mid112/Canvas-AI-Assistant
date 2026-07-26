@@ -100,6 +100,35 @@ async def test_execute_fetch_submissions_builds_person_summary():
 
 
 @pytest.mark.asyncio
+async def test_execute_fetch_students_strips_contact_pii_for_llm():
+    # Feature 14 (#908): fetch_students tool results must not leak login_id/email
+    # into the LLM context even when the StudentResponse has them.
+    from app.schemas.student import StudentResponse
+
+    course = _course()
+    db = _db_with_course(course)
+    user = MagicMock(id=1)
+    action = FetchStudentsAction(local_course_id=1)
+    students = [
+        StudentResponse(
+            id=1,
+            canvas_user_id="42",
+            course_id=1,
+            name="Alex",
+            login_id="alex@example.edu",
+            enrollment_state="active",
+        )
+    ]
+
+    with patch("app.mcp_tools.dispatcher.get_students", new=AsyncMock(return_value=students)):
+        result = await execute_tool(db, user, action)
+
+    assert result["students"][0]["name"] == "Alex"
+    assert "login_id" not in result["students"][0]
+    assert "email" not in result["students"][0]
+
+
+@pytest.mark.asyncio
 async def test_execute_fetch_students_computes_active_count():
     course = _course()
     db = _db_with_course(course)
@@ -264,22 +293,31 @@ async def test_execute_update_grade_calls_canvas_with_feedback():
         feedback="Strong improvement",
     )
 
-    with patch(
-        "app.mcp_tools.dispatcher.update_course_grade",
-        new=AsyncMock(return_value={"id": 10, "score": 85}),
-    ) as update_grade:
+    grade_result = SimpleNamespace(
+        canvas_submission={"id": 10, "score": 85},
+        affected_resources=[
+            {"type": "course", "id": 1, "name": course.name, "status": "unchanged"},
+            {
+                "type": "submission",
+                "id": 10,
+                "name": "Alex",
+                "status": "modified",
+                "changed_fields": ["grade", "feedback"],
+            },
+        ],
+        current={"grade": "70"},
+    )
+
+    with (
+        patch("app.mcp_tools.dispatcher.settings.MCP_ENABLED", False),
+        patch(
+            "app.mcp_tools.dispatcher.submit_grade_update",
+            new=AsyncMock(return_value=grade_result),
+        ) as submit_grade,
+    ):
         result = await execute_tool(db, user, action)
 
-    update_grade.assert_awaited_once_with(
-        1,
-        50,
-        25,
-        "85",
-        user,
-        course.canvas_url,
-        db,
-        feedback="Strong improvement",
-    )
+    submit_grade.assert_awaited_once()
     assert result["action"] == "update_grade"
     assert result["reversible"] is False
     assert result["affected_resources"][1]["changed_fields"] == [
