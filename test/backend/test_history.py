@@ -190,7 +190,8 @@ def test_admin_audit_logs_include_anonymous_failed_login(client, admin_credentia
     item = next(
         row
         for row in resp.json()["items"]
-        if row["action"] == "login_failed" and row["details"]["email"] == attempted_email
+        if row.get("action") == "login_failed"
+        and (row.get("details") or {}).get("email") == attempted_email
     )
     assert item["user_id"] is None
     assert item["user_email"] == attempted_email
