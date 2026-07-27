@@ -389,7 +389,7 @@ jobs:
           context: ./app/frontend
           push: false
           tags: app-frontend:test
-      # MCP service build
+      # Feature 13 (#862): verify the Dockerized MCP image still builds in CI.
       - name: Build MCP image
         uses: docker/build-push-action@v5
         with:
