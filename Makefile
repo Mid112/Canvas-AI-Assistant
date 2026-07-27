@@ -1,4 +1,4 @@
-.PHONY: install install-vllm install-ollama lint lint-fix test test-windows test-llm test-llm-windows test-ollama test-ollama-windows test-vague-llm test-vague-llm-windows test-e2e test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset db-ensure run-vllm run-ollama dev e2e-up reload
+.PHONY: install install-vllm install-ollama lint lint-fix test test-windows test-llm test-llm-windows test-ollama test-ollama-windows test-vague-llm test-vague-llm-windows test-e2e test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset db-ensure seed-canvas-students run-vllm run-ollama dev e2e-up reload
 
 # ── Install ──────────────────────────────────
 # Creates a venv (if one doesn't exist) and installs backend deps
@@ -178,6 +178,33 @@ test-fresh:
 	cd app/backend && .venv/bin/pip install -r requirements.txt
 	make test
 
+# ── Seed Canvas students ─────────────────────
+# Upserts two Canvas sandbox student logins (not app users) and enrolls
+# them as active students in the first Canvas course (or CANVAS_SEED_COURSE_ID).
+# Requires canvas_lms on :3000. Override URL/token/emails via env vars
+# documented in test/e2e/seed_canvas_students.py.
+seed-canvas-students:
+	@echo "Waiting for Canvas sandbox on :3000..."
+	@for i in $$(seq 1 60); do \
+		if curl -sf -H "Authorization: Bearer $${E2E_CANVAS_TOKEN:-canvas-docker}" \
+			"$${E2E_CANVAS_URL:-http://127.0.0.1:3000}/api/v1/users/self" >/dev/null; then \
+			break; \
+		fi; \
+		if [ $$i -eq 60 ]; then \
+			echo "Canvas sandbox not ready. Start it with:"; \
+			echo "  docker compose -f docker-compose.dev.yml up -d canvas-docker"; \
+			exit 1; \
+		fi; \
+		sleep 2; \
+	done
+	E2E_CANVAS_URL=$${E2E_CANVAS_URL:-http://localhost:3000} \
+	E2E_CANVAS_TOKEN=$${E2E_CANVAS_TOKEN:-canvas-docker} \
+	python3 test/e2e/seed_canvas_students.py
+	@echo ""
+	@echo "Instructor Canvas login: canvas@example.edu / canvas-docker"
+	@echo "Student Canvas logins:   student1@example.edu / canvas-docker"
+	@echo "                         student2@example.edu / canvas-docker"
+
 # ── Dev ──────────────────────────────────────
 # Starts the full local dev environment in one command:
 # Postgres (Docker), Canvas sandbox (Docker), and the FastAPI backend
@@ -224,6 +251,7 @@ e2e-up:
 	fi
 	@echo "Starting backend on http://localhost:8000 and frontend on http://localhost:5173"
 	@echo "Default e2e admin seed: admin@example.com / AdminPass123!"
+	@echo "Canvas students (optional): make seed-canvas-students"
 	@trap 'kill 0' INT TERM EXIT; \
 	(cd app/backend && \
 		DATABASE_URL=$${DATABASE_URL:-postgresql+asyncpg://appuser:localdev@localhost:5433/appdb} \

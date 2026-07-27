@@ -26,6 +26,16 @@ Or via `make test` / `make test-windows` (same coverage thresholds as CI).
 
 Full-app UI coverage for #711–#714. Requires Postgres (`:5433`).
 
+### Canvas sandbox logins
+
+| Email | Password | Role |
+|---|---|---|
+| `canvas@example.edu` | `canvas-docker` | instructor/admin (ships with image) |
+| `student1@example.edu` | `canvas-docker` | student (via `make seed-canvas-students`) |
+| `student2@example.edu` | `canvas-docker` | student (via `make seed-canvas-students`) |
+
+`make seed-canvas-students` upserts the two students and enrolls them in the first Canvas course (or `CANVAS_SEED_COURSE_ID`).
+
 ```bash
 make test-e2e
 ```

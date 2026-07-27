@@ -21,6 +21,13 @@ Covers full-app UI flows for Integration Testing (#687):
 6. Live Canvas API token for instructor onboarding:
    - Default sandbox token: `canvas-docker` (lbjay/canvas-docker)
    - Override with `E2E_CANVAS_TOKEN` / `E2E_CANVAS_URL` (default URL `http://localhost:3000`)
+7. Optional Canvas student logins (sandbox web UI, not app users):
+   `make seed-canvas-students`
+   - Instructor: `canvas@example.edu` / `canvas-docker`
+   - Students: `student1@example.edu` / `canvas-docker`,
+     `student2@example.edu` / `canvas-docker`
+   - Both students are enrolled active in the first Canvas course
+     (override with `CANVAS_SEED_COURSE_ID`)
 
 Instructor e2e covers both skip/limited-mode onboarding (“Continue without connecting” /
 `completeOnboardingWithoutCanvas`) and live Canvas-connected onboarding. A live Canvas
