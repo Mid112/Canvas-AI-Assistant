@@ -155,12 +155,12 @@ describe("InstructorCourseGradesPage", () => {
     expect(screen.getByRole("button", { name: "Preview change" })).toBeEnabled();
   });
 
-  it("rejects unsupported grade text before preview", async () => {
+  it.each(["Z", "excused", "0x10"])("rejects unsupported grade value %s before preview", async (grade) => {
     const user = userEvent.setup();
     renderPage();
 
     await screen.findByRole("cell", { name: "Coin" });
-    await user.type(screen.getByLabelText("New grade"), "Z");
+    await user.type(screen.getByLabelText("New grade"), grade);
 
     expect(screen.getByText(/Use a numeric grade or a supported Canvas grade/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Preview change" })).toBeDisabled();

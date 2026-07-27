@@ -40,5 +40,5 @@ BEGIN
     END IF;
 END $$;
 
-CREATE INDEX IF NOT EXISTS ix_grade_history_local_assignment_id ON grade_history(local_assignment_id);
-CREATE INDEX IF NOT EXISTS ix_grade_history_student_id ON grade_history(student_id);
+CREATE INDEX IF NOT EXISTS idx_grade_history_local_assignment_id ON grade_history(local_assignment_id);
+CREATE INDEX IF NOT EXISTS idx_grade_history_student_id ON grade_history(student_id);

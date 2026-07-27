@@ -54,7 +54,6 @@ CANVAS_TEXT_GRADES = frozenset(
         "np",
         "satisfactory",
         "unsatisfactory",
-        "excused",
     }
 )
 

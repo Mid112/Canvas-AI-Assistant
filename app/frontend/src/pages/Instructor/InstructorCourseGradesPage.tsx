@@ -42,11 +42,11 @@ const supportedTextGrades = new Set([
   "np",
   "satisfactory",
   "unsatisfactory",
-  "excused",
 ]);
 // Mirror the backend allow-list so invalid grade text is caught before preview,
 // while still allowing common Canvas grading schemes.
 const letterGradePattern = /^(?:A|B|C|D)[+-]?$|^F$/i;
+const decimalGradePattern = /^(?:\d+(?:\.\d+)?|\.\d+)$/;
 
 async function runSequentially<T, R>(
   items: T[],
@@ -120,8 +120,8 @@ function getGradeValidationError(value: string) {
   if (!grade) {
     return null;
   }
-  const numericGrade = Number(grade);
-  if (Number.isFinite(numericGrade)) {
+  if (decimalGradePattern.test(grade)) {
+    const numericGrade = Number(grade);
     if (numericGrade < 0) {
       return "Grade cannot be negative.";
     }

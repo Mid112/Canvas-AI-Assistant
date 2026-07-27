@@ -84,6 +84,8 @@ def test_preview_requires_grade_or_feedback():
         ("95\nEX", "Grade cannot contain line breaks or control characters."),
         ("<script>", "Grade must be numeric or a supported grading-scheme value."),
         ("Z", "Grade must be numeric or a supported grading-scheme value."),
+        ("excused", "Grade must be numeric or a supported grading-scheme value."),
+        ("0x10", "Grade must be numeric or a supported grading-scheme value."),
     ],
 )
 def test_preview_rejects_invalid_grade_payloads(posted_grade, detail):
