@@ -78,7 +78,7 @@ async def logout(
     if current_user.role == "admin":
         await logout_admin(db, credentials.credentials, current_user)
     else:
-        await logout_user(db, credentials.credentials)
+        await logout_user(db, credentials.credentials, current_user)
 
 
 @router.post("/password-reset/request", status_code=status.HTTP_204_NO_CONTENT)

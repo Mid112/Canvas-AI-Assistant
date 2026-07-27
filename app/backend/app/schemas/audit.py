@@ -6,7 +6,9 @@ from pydantic import BaseModel
 class AuditLogResponse(BaseModel):
     id: int
     user_id: int
-    workflow_id: int
+    # Nullable because rows sourced from audit_logs_session (admin/security
+    # events) have no associated Workflow.
+    workflow_id: int | None
     course_id: int | None
     action: str
     resource_type: str
@@ -16,6 +18,9 @@ class AuditLogResponse(BaseModel):
     timestamp: datetime
     user_email: str
     user_role: str
+    # Passthrough context: audit_logs_session.details for session-sourced
+    # rows, unset for workflow-sourced rows.
+    details: dict | None = None
 
 
 class AuditLogListResponse(BaseModel):

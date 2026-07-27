@@ -7,6 +7,7 @@ import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboar
 interface MessageToolbarProps {
   onCancel: () => void;
   onSend: () => void;
+  onSaveDraft?: () => void;
   isSending?: boolean;
   isValid?: boolean;
   disabled?: boolean;
@@ -15,6 +16,7 @@ interface MessageToolbarProps {
 export function MessageToolbar({
   onCancel,
   onSend,
+  onSaveDraft,
   isSending = false,
   isValid = true,
   disabled = false,
@@ -23,15 +25,27 @@ export function MessageToolbar({
 
   return (
     <div className="flex flex-col-reverse gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <Button
-        type="button"
-        variant="outline"
-        onClick={onCancel}
-        disabled={actionsDisabled}
-      >
-        <X className="size-4" aria-hidden="true" />
-        Cancel
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+          disabled={actionsDisabled}
+        >
+          <X className="size-4" aria-hidden="true" />
+          Cancel
+        </Button>
+        {onSaveDraft ? (
+          <Button
+            type="button"
+            variant="outline"
+            onClick={onSaveDraft}
+            disabled={actionsDisabled}
+          >
+            Save draft
+          </Button>
+        ) : null}
+      </div>
 
       <Button
         type="button"

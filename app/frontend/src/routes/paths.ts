@@ -39,8 +39,21 @@ export const paths = {
     settings: "/admin/settings",
     profile: "/admin/profile",
     systemHealth: "/admin/system-health",
+    troubleshooting: "/admin/troubleshooting",
+    // Drill-in destination reached via the "View failed operations" button
+    // on Troubleshooting -- not a peer nav item (avoids duplicating that
+    // page's entry point).
+    failedOperations: "/admin/failed-operations",
   },
 } as const;
+
+/** Deep-links /admin/users pre-filtered to just the instructors with a
+ * failing Canvas connection -- reached via "Manage instructors" on
+ * Troubleshooting's Instructor Canvas connections card, so it lands on
+ * exactly who that card named instead of the full roster. */
+export function adminInstructorsFailingCanvasPath() {
+  return `${paths.admin.users}?canvasStatus=failing`;
+}
 
 export function instructorSettingsPath(
   tab?: "canvas" | "notifications" | "security" | "ai-models",
@@ -138,6 +151,8 @@ export function instructorMessagesPath(options?: {
 
 /** Location state used when opening the message draft from the AI assistant. */
 export interface AiMessageDraftLocationState {
+  /** When set, discard this typed draft after a successful Canvas send. */
+  typedDraftId?: string;
   aiMessageDraft?: {
     subject?: string;
     body?: string;
@@ -152,12 +167,16 @@ export interface AiMessageDraftLocationState {
  * dedicated validated review forms. */
 export interface AiActionDraftLocationState {
   returnTo?: string;
+  /** When set, discard this typed draft after a successful Canvas confirm. */
+  typedDraftId?: string;
   aiAssignmentDraft?: {
     courseId?: number;
     name?: string;
     description?: string;
     dueDate?: string;
     pointsPossible?: unknown;
+    /** Describe-step seed when no generated title/description exists yet. */
+    prompt?: string;
   };
   aiQuizDraft?: {
     courseId?: number;
@@ -169,6 +188,8 @@ export interface AiActionDraftLocationState {
     timeLimit?: unknown;
     quizEngine?: "classic" | "new_quizzes";
     conversationId?: number;
+    /** Describe-step seed when structured questions are missing. */
+    prompt?: string;
     questionBankGroups?: Array<{
       bankId: number;
       bankName: string;
@@ -195,6 +216,8 @@ export interface AiActionDraftLocationState {
     newGrade?: string;
     feedback?: string;
     conversationId?: number;
+    /** Describe-step seed when assignment/student ids are missing. */
+    prompt?: string;
   };
 }
 

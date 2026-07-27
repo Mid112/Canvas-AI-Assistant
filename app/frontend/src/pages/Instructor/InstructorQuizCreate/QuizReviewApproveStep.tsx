@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
@@ -15,7 +15,10 @@ import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboar
 import type {
   GeneratedQuizDraft,
   QuizCapabilities,
+  QuizEngine,
   QuizQuestionBank,
+  QuizQuestionBankGroup,
+  QuizQuestionDraft,
 } from "@/types/quizCreate";
 
 import {
@@ -23,6 +26,78 @@ import {
   type QuizReviewFormInput,
   type QuizReviewFormSchema,
 } from "./quizCreateSchema";
+
+const QUIZ_QUESTION_TYPES: QuizQuestionDraft["questionType"][] = [
+  "multiple_choice_question",
+  "true_false_question",
+  "short_answer_question",
+  "essay_question",
+];
+
+function normalizeQuizQuestions(
+  value: unknown,
+  fallback: QuizQuestionDraft[],
+): QuizQuestionDraft[] {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+
+  return value.map((raw, index) => {
+    const question = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+    const prior = fallback[index];
+    const questionType = QUIZ_QUESTION_TYPES.includes(
+      question.questionType as QuizQuestionDraft["questionType"],
+    )
+      ? (question.questionType as QuizQuestionDraft["questionType"])
+      : (prior?.questionType ?? "multiple_choice_question");
+    const answersRaw = Array.isArray(question.answers) ? question.answers : prior?.answers;
+
+    return {
+      questionText: String(question.questionText ?? prior?.questionText ?? ""),
+      questionType,
+      pointsPossible:
+        typeof question.pointsPossible === "number"
+          ? question.pointsPossible
+          : (prior?.pointsPossible ?? 1),
+      answers: Array.isArray(answersRaw)
+        ? answersRaw.map((answer) => {
+            const row =
+              answer && typeof answer === "object"
+                ? (answer as Record<string, unknown>)
+                : {};
+            return {
+              text: String(row.text ?? ""),
+              weight: typeof row.weight === "number" ? row.weight : 0,
+            };
+          })
+        : [],
+    };
+  });
+}
+
+function normalizeQuestionBankGroups(
+  value: unknown,
+  fallback: QuizQuestionBankGroup[] | undefined,
+): QuizQuestionBankGroup[] | undefined {
+  if (!Array.isArray(value)) {
+    return fallback;
+  }
+
+  return value.map((raw, index) => {
+    const group = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+    const prior = fallback?.[index];
+    return {
+      bankId: typeof group.bankId === "number" ? group.bankId : (prior?.bankId ?? 0),
+      bankName: String(group.bankName ?? prior?.bankName ?? ""),
+      pickCount:
+        typeof group.pickCount === "number" ? group.pickCount : (prior?.pickCount ?? 1),
+      questionPoints:
+        typeof group.questionPoints === "number"
+          ? group.questionPoints
+          : (prior?.questionPoints ?? 1),
+    };
+  });
+}
 
 interface QuizReviewApproveStepProps {
   courseLabel: string;
@@ -35,6 +110,8 @@ interface QuizReviewApproveStepProps {
   questionBanks?: QuizQuestionBank[];
   isLoadingQuestionBanks?: boolean;
   onLoadQuestionBanks?: () => void;
+  /** Keep parent draft state in sync with form edits (for Save draft). */
+  onDraftChange?: (values: GeneratedQuizDraft) => void;
 }
 
 export function QuizReviewApproveStep({
@@ -48,6 +125,7 @@ export function QuizReviewApproveStep({
   questionBanks = [],
   isLoadingQuestionBanks = false,
   onLoadQuestionBanks,
+  onDraftChange,
 }: QuizReviewApproveStepProps) {
   const {
     register,
@@ -80,6 +158,7 @@ export function QuizReviewApproveStep({
     remove: removeBankGroup,
   } = useFieldArray({ control, name: "questionBankGroups" });
 
+  const watchedValues = useWatch({ control });
   const dueDateValue = useWatch({
     control,
     name: "dueDate",
@@ -94,6 +173,47 @@ export function QuizReviewApproveStep({
   useEffect(() => {
     void trigger();
   }, [trigger]);
+
+  const lastSyncedDraftKey = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!onDraftChange) return;
+    const next: GeneratedQuizDraft = {
+      name: String(watchedValues.name ?? draft.name),
+      description: String(watchedValues.description ?? draft.description),
+      dueDate: String(watchedValues.dueDate ?? draft.dueDate),
+      pointsPossible:
+        typeof watchedValues.pointsPossible === "number"
+          ? watchedValues.pointsPossible
+          : draft.pointsPossible,
+      allowedAttempts:
+        watchedValues.allowedAttempts === null ||
+        typeof watchedValues.allowedAttempts === "number"
+          ? watchedValues.allowedAttempts
+          : draft.allowedAttempts,
+      timeLimit:
+        watchedValues.timeLimit === null ||
+        typeof watchedValues.timeLimit === "number"
+          ? watchedValues.timeLimit
+          : draft.timeLimit,
+      quizEngine:
+        watchedValues.quizEngine === "classic" ||
+        watchedValues.quizEngine === "new_quizzes"
+          ? (watchedValues.quizEngine as QuizEngine)
+          : draft.quizEngine,
+      questions: normalizeQuizQuestions(watchedValues.questions, draft.questions),
+      questionBankGroups: normalizeQuestionBankGroups(
+        watchedValues.questionBankGroups,
+        draft.questionBankGroups,
+      ),
+    };
+    // normalize* always returns new arrays; skip parent sync when content is unchanged
+    // so the page doesn't setDraft → re-render → effect forever.
+    const key = JSON.stringify(next);
+    if (key === lastSyncedDraftKey.current) return;
+    lastSyncedDraftKey.current = key;
+    onDraftChange(next);
+  }, [onDraftChange, watchedValues, draft.name, draft.description, draft.dueDate, draft.pointsPossible, draft.allowedAttempts, draft.timeLimit, draft.quizEngine, draft.questions, draft.questionBankGroups]);
 
   return (
     <Card className="shadow-sm ring-1 ring-border/60">

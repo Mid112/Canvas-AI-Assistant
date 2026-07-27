@@ -36,6 +36,14 @@ describe("navigation helpers", () => {
     expect(systemHealthItem).toBeDefined();
     expect(systemHealthItem?.href).toBe(paths.admin.systemHealth);
   });
+
+  it("includes a Troubleshooting nav entry (Feature 11's failed operations live here)", () => {
+    const troubleshootingItem = adminNavItems.find(
+      (item) => item.title === "Troubleshooting",
+    );
+    expect(troubleshootingItem).toBeDefined();
+    expect(troubleshootingItem?.href).toBe(paths.admin.troubleshooting);
+  });
 });
 
 describe("decorateNavItemsWithHealth", () => {

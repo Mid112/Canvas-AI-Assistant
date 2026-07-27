@@ -9,6 +9,7 @@ from app.models.canvas_idempotency_key import CanvasIdempotencyKey
 from app.models.conversation import Conversation
 from app.models.course import Course
 from app.models.deferred_assistant_request import DeferredAssistantRequest
+from app.models.failed_operation import FailedOperation
 from app.models.grade_history import GradeHistory
 from app.models.health_check import HealthCheck
 from app.models.instructor_llm_connection import InstructorLlmConnection
@@ -21,6 +22,7 @@ from app.models.resolved_set import ResolvedSet
 from app.models.session import Session
 from app.models.student import Student
 from app.models.submission import Submission
+from app.models.support_ticket import SupportTicket
 from app.models.system_setting import SystemSetting
 from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
@@ -38,6 +40,7 @@ __all__ = [
     "Conversation",
     "Course",
     "DeferredAssistantRequest",
+    "FailedOperation",
     "GradeHistory",
     "HealthCheck",
     "InstructorLlmConnection",
@@ -50,6 +53,7 @@ __all__ = [
     "Session",
     "Student",
     "Submission",
+    "SupportTicket",
     "SystemSetting",
     "ToolCallLog",
     "User",
