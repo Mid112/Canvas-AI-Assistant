@@ -29,6 +29,7 @@ interface InstructorTableProps {
   onEnable: (instructor: Instructor) => void;
   onDisable: (instructor: Instructor) => void;
   onRevoke: (instructor: Instructor) => void;
+  onManageCanvasConnections: (instructor: Instructor) => void;
 }
 
 export function InstructorTable({
@@ -46,6 +47,7 @@ export function InstructorTable({
   onEnable,
   onDisable,
   onRevoke,
+  onManageCanvasConnections,
 }: InstructorTableProps) {
   if (isLoading) {
     return (
@@ -106,6 +108,7 @@ export function InstructorTable({
                   onEnable={onEnable}
                   onDisable={onDisable}
                   onRevoke={onRevoke}
+                  onManageCanvasConnections={onManageCanvasConnections}
                 />
               ))}
             </TableBody>

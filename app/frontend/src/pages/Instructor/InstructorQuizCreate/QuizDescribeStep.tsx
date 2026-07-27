@@ -1,5 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
+import { useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
@@ -27,6 +28,7 @@ interface QuizDescribeStepProps {
   courseLoadError?: string | null;
   isLoadingCourses?: boolean;
   onGenerate: (values: QuizDescribeValues) => void;
+  onValuesChange?: (values: QuizDescribeValues) => void;
 }
 
 const selectClassName = cn(
@@ -43,6 +45,7 @@ export function QuizDescribeStep({
   courseLoadError = null,
   isLoadingCourses = false,
   onGenerate,
+  onValuesChange,
 }: QuizDescribeStepProps) {
   const {
     register,
@@ -56,11 +59,20 @@ export function QuizDescribeStep({
     mode: "onChange",
   });
 
+  const watchedValues = useWatch({ control });
   const promptValue = useWatch({
     control,
     name: "prompt",
     defaultValue: defaultValues.prompt,
   });
+
+  useEffect(() => {
+    if (!onValuesChange) return;
+    onValuesChange({
+      courseId: String(watchedValues.courseId ?? ""),
+      prompt: String(watchedValues.prompt ?? ""),
+    });
+  }, [onValuesChange, watchedValues]);
 
   const applySuggestedPrompt = (text: string) => {
     setValue("prompt", text, { shouldValidate: true, shouldDirty: true });

@@ -108,10 +108,11 @@ def test_user_audit_logs_are_scoped_to_current_user(client):
     resp = client.get("/api/v1/audit/logs", headers=_auth(user_a["token"]))
 
     assert resp.status_code == 200
-    ids = {item["id"] for item in resp.json()}
+    items = resp.json()["items"]
+    ids = {item["id"] for item in items}
     assert audit_a in ids
     assert audit_b not in ids
-    assert all(item["user_email"] == user_a["email"] for item in resp.json())
+    assert all(item["user_email"] == user_a["email"] for item in items)
 
 
 # Verifies: Admin audit logs requires admin.
@@ -136,4 +137,36 @@ def test_admin_can_list_audit_logs(client, admin_credentials):
     resp = client.get("/api/v1/admin/audit/logs", headers=_auth(login.json()["access_token"]))
 
     assert resp.status_code == 200
-    assert audit_id in {item["id"] for item in resp.json()}
+    assert audit_id in {item["id"] for item in resp.json()["items"]}
+
+
+# Verifies: the merged feed surfaces audit_logs_session events (e.g. the
+# admin_login this test's own login just wrote) alongside audit_logs
+# workflow events, not just the latter.
+def test_admin_audit_logs_include_session_sourced_security_events(client, admin_credentials):
+    instructor = _register(client)
+    workflow_id, audit_id = asyncio.run(_create_workflow_and_audit(instructor["email"]))
+    login = client.post("/api/v1/auth/admin/login", json=admin_credentials)
+    assert login.status_code == 200
+    token = login.json()["access_token"]
+
+    resp = client.get("/api/v1/admin/audit/logs", headers=_auth(token))
+    assert resp.status_code == 200
+
+    body = resp.json()
+    assert body["total"] >= 2
+    items = body["items"]
+
+    workflow_item = next(item for item in items if item["id"] == audit_id)
+    assert workflow_item["workflow_id"] == workflow_id
+
+    login_item = next(item for item in items if item["action"] == "admin_login")
+    assert login_item["resource_type"] == "session"
+    assert login_item["operation"] == "login"
+    assert login_item["workflow_id"] is None
+    assert login_item["id"] < 0  # negated to avoid colliding with audit_logs ids
+    assert login_item["details"]["email"] == admin_credentials["email"]
+
+    # Merged feed stays sorted desc by timestamp across both sources.
+    timestamps = [item["timestamp"] for item in items]
+    assert timestamps == sorted(timestamps, reverse=True)

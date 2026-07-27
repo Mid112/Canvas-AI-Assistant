@@ -103,7 +103,24 @@ def test_admin_can_read_audit_logs(client, admin_headers):
 
     resp = client.get("/api/v1/admin/audit/logs", headers=admin_headers)
     assert resp.status_code == 200
-    assert isinstance(resp.json(), list)
+    assert isinstance(resp.json()["items"], list)
+
+
+# Verifies: audit log sort params are a true global sort, not client-side
+# re-ordering of one page — see services/audit.py::list_audit_logs.
+def test_admin_audit_logs_accepts_sort_params(client, admin_headers):
+    resp = client.get(
+        "/api/v1/admin/audit/logs?sort_field=user&sort_direction=asc",
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200
+    assert isinstance(resp.json()["items"], list)
+
+    rejected = client.get(
+        "/api/v1/admin/audit/logs?sort_field=not_a_field",
+        headers=admin_headers,
+    )
+    assert rejected.status_code == 422
 
 
 # Verifies: Admin can update organization settings.

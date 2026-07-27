@@ -1,9 +1,13 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Route, Routes } from "react-router-dom";
 
 import { InstructorAssignmentCreatePage } from "@/pages/Instructor/InstructorAssignmentCreatePage";
+import {
+  listTypedDrafts,
+  saveTypedDraft,
+} from "@/lib/typed-draft-storage";
 import {
   approveAssignmentDraft,
   generateAssignmentDraft,
@@ -76,7 +80,7 @@ const mockedGenerate = vi.mocked(generateAssignmentDraft);
 const mockedPreview = vi.mocked(previewAssignmentDraft);
 const mockedApprove = vi.mocked(approveAssignmentDraft);
 
-function renderPage() {
+function renderPage(state?: Record<string, unknown>) {
   return renderWithRouter(
     <Routes>
       <Route
@@ -86,7 +90,12 @@ function renderPage() {
     </Routes>,
     {
       routerProps: {
-        initialEntries: ["/instructor/assignments/create"],
+        initialEntries: [
+          {
+            pathname: "/instructor/assignments/create",
+            state,
+          },
+        ],
       },
     },
   );
@@ -95,6 +104,7 @@ function renderPage() {
 describe("InstructorAssignmentCreatePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mockedGenerate.mockResolvedValue({
       name: "Python Functions Quiz",
       description: "Complete a short quiz covering functions.",
@@ -317,5 +327,75 @@ describe("InstructorAssignmentCreatePage", () => {
       await screen.findByText(/assignment generator is temporarily unavailable/i),
     ).toBeInTheDocument();
     expect(screen.getByText("Describe Your Assignment")).toBeInTheDocument();
+  });
+
+  it("saves a describe-step prompt as a typed draft and resumes to describe", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(
+      screen.getByLabelText("Assignment Prompt"),
+      "Raw prompt before generation",
+    );
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+
+    await screen.findByText(/Draft saved/i);
+    const drafts = listTypedDrafts(1);
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]?.content).toEqual({ body: "Raw prompt before generation" });
+
+    cleanup();
+    renderPage({
+      typedDraftId: drafts[0]!.id,
+      aiAssignmentDraft: {
+        courseId: 42,
+        name: "",
+        description: "",
+        prompt: "Raw prompt before generation",
+      },
+    });
+
+    expect(screen.getByText("Describe Your Assignment")).toBeInTheDocument();
+    expect(screen.getByLabelText("Assignment Prompt")).toHaveValue(
+      "Raw prompt before generation",
+    );
+    expect(screen.queryByLabelText("Assignment title")).not.toBeInTheDocument();
+  });
+
+  it("saves edited review fields and discards the typed draft after Canvas confirm", async () => {
+    const user = userEvent.setup();
+    const existing = saveTypedDraft(1, {
+      kind: "assignment",
+      content: { title: "Old Title", body: "Old body" },
+    });
+
+    renderPage({
+      typedDraftId: existing.id,
+      aiAssignmentDraft: {
+        courseId: 42,
+        name: "Old Title",
+        description: "Old body",
+        dueDate: "2026-12-15T23:59",
+        pointsPossible: 50,
+      },
+    });
+
+    const titleInput = await screen.findByLabelText("Assignment title");
+    await user.clear(titleInput);
+    await user.type(titleInput, "Edited Saved Title");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await screen.findByText(/Draft saved/i);
+
+    const saved = listTypedDrafts(1);
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.content.title).toBe("Edited Saved Title");
+
+    await user.click(screen.getByRole("button", { name: "Approve Assignment" }));
+    await user.click(await screen.findByRole("button", { name: "Confirm & Create" }));
+
+    await waitFor(() => {
+      expect(mockedApprove).toHaveBeenCalled();
+    });
+    expect(listTypedDrafts(1)).toHaveLength(0);
   });
 });

@@ -45,12 +45,17 @@ from app.models.user import User
 from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
 from app.services.assignment_rate import find_assignments_by_submission_rate
-from app.services.canvas import CanvasTokenRequiredError, sync_courses_if_stale
+from app.services.canvas import (
+    CanvasTokenRequiredError,
+    _is_expected_canvas_token_sync_error,
+    sync_courses_if_stale,
+)
 from app.services.canvas_assistant_gate import (
     classify_action_for_limited_mode,
     user_has_canvas_credentials,
 )
 from app.services.deferred_assistant import defer_assistant_request, mark_deferred_request_resumed
+from app.services.failed_operations import record_failed_operation
 from app.services.field_memory import (
     format_field_memory_for_prompt,
     merge_field_memory,
@@ -86,6 +91,50 @@ from app.services.student import get_submission_derived_students
 from app.services.write_preview import generate_write_preview
 
 logger = logging.getLogger(__name__)
+
+
+def _is_expected_canvas_reconnect_failure(exc: BaseException) -> bool:
+    """Match sweep policy: missing/invalid/corrupted tokens are account state,
+    not monitored infrastructure failures (avoids spam on retries)."""
+    if isinstance(exc, CanvasTokenRequiredError):
+        return True
+    if _is_expected_canvas_token_sync_error(exc):
+        return True
+    text = ""
+    if isinstance(exc, ToolExecutionError):
+        text = exc.log_detail or exc.user_message or ""
+    elif isinstance(exc, HTTPException) and isinstance(exc.detail, str):
+        text = exc.detail
+    else:
+        text = str(exc)
+    return (
+        "Invalid Canvas API token" in text
+        or "No Canvas token" in text
+        or "Canvas token is corrupted" in text
+    )
+
+
+def _is_transient_canvas_outage(exc: BaseException) -> bool:
+    """Canvas 5xx / timeouts / reachability — not actionable instructor failures."""
+    if isinstance(exc, HTTPException) and exc.status_code in {502, 503, 504}:
+        return True
+    text = ""
+    if isinstance(exc, ToolExecutionError):
+        text = exc.log_detail or exc.user_message or ""
+    elif isinstance(exc, HTTPException) and isinstance(exc.detail, str):
+        text = exc.detail
+    else:
+        text = str(exc)
+    lowered = text.lower()
+    return (
+        "canvas server error" in lowered
+        or "canvas api timed out" in lowered
+        or "could not reach canvas" in lowered
+        or "timed out" in lowered
+        or "502" in text
+        or "503" in text
+        or "504" in text
+    )
 
 LLM_TIMEOUT_SECONDS = 90.0
 HISTORY_WINDOW = 10
@@ -637,6 +686,24 @@ async def _run_tracked_read(
         call_log.status = "failed"
         call_log.error_detail = safe_exception_text(e)
         await db.flush()
+        if not (
+            _is_expected_canvas_reconnect_failure(e) or _is_transient_canvas_outage(e)
+        ):
+            await record_failed_operation(
+                db,
+                source="canvas",
+                operation=action_name,
+                error_detail=call_log.error_detail,
+                user_id=user.id,
+                course_id=parameters.get("local_course_id"),
+                conversation_id=conversation.id,
+                tool_call_id=call_log.id,
+                context_json={"parameters": parameters},
+            )
+            # Persist monitoring rows even when the caller re-raises and the
+            # request aborts before its own commit (otherwise the row is lost
+            # on session close / rollback).
+            await db.commit()
         raise
     call_log.status = "executed"
     call_log.completed_at = datetime.now(UTC)
@@ -2700,11 +2767,20 @@ async def handle_chat_message(
                 fallback = None
         adapter = ObservableAdapter(primary, fallback)
     except (KeyError, ValueError) as e:
+        provider_error = safe_exception_text(e)
+        await record_failed_operation(
+            db,
+            source="ai",
+            operation="assistant_chat",
+            error_detail=provider_error,
+            user_id=user.id,
+            conversation_id=conversation.id,
+        )
         await log_message(
             db,
             conversation,
             role="assistant",
-            content=f"LLM provider error: {safe_exception_text(e)}",
+            content=f"LLM provider error: {provider_error}",
         )
         await db.commit()
         return conversation, {
@@ -2867,6 +2943,15 @@ async def handle_chat_message(
                 )
         except TimeoutError:
             log_detail = f"LLM request timed out after {LLM_TIMEOUT_SECONDS}s"
+            await record_failed_operation(
+                db,
+                source="ai",
+                operation="assistant_chat",
+                error_detail=log_detail,
+                user_id=user.id,
+                conversation_id=conversation.id,
+                provider=selected_provider,
+            )
             await log_message(db, conversation, role="assistant", content=log_detail)
             await db.commit()
             return (
@@ -2881,11 +2966,29 @@ async def handle_chat_message(
             else:
                 log_detail = f"LLM API error: {e.response.status_code}"
                 user_message = "The assistant service returned an error. Please try again shortly."
+            await record_failed_operation(
+                db,
+                source="ai",
+                operation="assistant_chat",
+                error_detail=log_detail,
+                user_id=user.id,
+                conversation_id=conversation.id,
+                provider=selected_provider,
+            )
             await log_message(db, conversation, role="assistant", content=log_detail)
             await db.commit()
             return conversation, {"error": user_message}, True
         except Exception as e:
             log_detail = f"LLM request failed: {safe_exception_text(e)}"
+            await record_failed_operation(
+                db,
+                source="ai",
+                operation="assistant_chat",
+                error_detail=log_detail,
+                user_id=user.id,
+                conversation_id=conversation.id,
+                provider=selected_provider,
+            )
             await log_message(db, conversation, role="assistant", content=log_detail)
             await db.commit()
             return (
@@ -3580,12 +3683,26 @@ async def handle_confirmed_action(
         )
     except ToolExecutionError as e:
         safe_detail = redact_secrets(e.log_detail)
+        if not (
+            _is_expected_canvas_reconnect_failure(e) or _is_transient_canvas_outage(e)
+        ):
+            await record_failed_operation(
+                db,
+                source="canvas",
+                operation=workflow.action_name,
+                error_detail=safe_detail,
+                user_id=user.id,
+                course_id=workflow.course_id,
+                conversation_id=conversation.id,
+                workflow_id=workflow.id,
+            )
         await log_message(db, conversation, role="assistant", content=safe_detail)
         workflow.status = "failed"
         workflow.error_detail = safe_detail
         await db.commit()
         return conversation, {"error": e.user_message}, True
     except CanvasTokenRequiredError as e:
+        # Expected reconnect state — surface in chat, do not flood monitoring.
         safe_detail = redact_secrets(str(e.detail))
         await log_message(db, conversation, role="assistant", content=safe_detail)
         workflow.status = "failed"
@@ -3601,6 +3718,19 @@ async def handle_confirmed_action(
         # so the user actually sees why the confirmed action failed.
         detail = e.detail if isinstance(e.detail, str) else str(e.detail)
         error_detail = redact_secrets(f"HTTPException {e.status_code}: {detail}")
+        if not (
+            _is_expected_canvas_reconnect_failure(e) or _is_transient_canvas_outage(e)
+        ):
+            await record_failed_operation(
+                db,
+                source="canvas",
+                operation=workflow.action_name,
+                error_detail=error_detail,
+                user_id=user.id,
+                course_id=workflow.course_id,
+                conversation_id=conversation.id,
+                workflow_id=workflow.id,
+            )
         await log_message(db, conversation, role="assistant", content=error_detail)
         workflow.status = "failed"
         workflow.error_detail = error_detail
@@ -3653,7 +3783,26 @@ async def handle_confirmed_action(
                 )
                 if connection is not None:
                     try:
-                        await sync_courses_if_stale(sync_user, connection, sync_db)
+                        did_sync = await sync_courses_if_stale(
+                            sync_user, connection, sync_db
+                        )
+                        # Same clearing rule as run_course_sync_sweep /
+                        # set_active_course — a successful real sync should
+                        # drop a stale last_sync_error so Troubleshooting
+                        # stops listing this instructor as failing.
+                        if did_sync:
+                            previous_error = await sync_db.scalar(
+                                select(CanvasConnection.last_sync_error).where(
+                                    CanvasConnection.id == connection.id
+                                )
+                            )
+                            if previous_error is not None:
+                                await sync_db.execute(
+                                    sa_update(CanvasConnection)
+                                    .where(CanvasConnection.id == connection.id)
+                                    .values(last_sync_error=None)
+                                )
+                                await sync_db.commit()
                     except Exception:
                         logger.warning(
                             "post-write sync_courses_if_stale failed for canvas_connection_id=%s user_id=%s",

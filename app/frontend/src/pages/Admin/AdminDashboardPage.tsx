@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, FileText, Users } from "lucide-react";
+import { Activity, FileText, Users, Wrench } from "lucide-react";
 import { Link } from "react-router-dom";
 
 import { buttonVariants } from "@/components/ui/button";
@@ -119,6 +119,13 @@ export function AdminDashboardPage() {
             >
               <Activity data-icon="inline-start" />
               View system health
+            </Link>
+            <Link
+              to={paths.admin.troubleshooting}
+              className={cn(buttonVariants({ variant: "outline" }))}
+            >
+              <Wrench data-icon="inline-start" />
+              View troubleshooting
             </Link>
           </CardContent>
         </Card>

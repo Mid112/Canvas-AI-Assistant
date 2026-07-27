@@ -210,7 +210,7 @@ def test_create_quiz_creates_quiz_and_questions(client):
         and item["resource_type"] == "quiz"
         and item["resource_id"] == "555"
         and item["operation"] == "create"
-        for item in audit.json()
+        for item in audit.json()["items"]
     )
 
 

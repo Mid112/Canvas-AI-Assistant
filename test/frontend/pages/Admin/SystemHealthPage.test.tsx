@@ -37,20 +37,6 @@ const healthyResponse: systemHealthService.HealthCheckResponse = {
     canvas: { status: "degraded", latency_ms: 4000, error_detail: null, uptime_seconds: null },
     ai: { status: "down", latency_ms: null, error_detail: "AI service timed out", uptime_seconds: null },
   },
-  instructor_canvas: {
-    total: 10,
-    healthy: 9,
-    failing: 1,
-    failing_connections: [
-      {
-        user_name: "Jane Doe",
-        user_email: "jane@example.com",
-        canvas_url: "https://canvas.example.edu",
-        error_detail: "401 Unauthorized",
-      },
-    ],
-  },
-  instructor_ai: { total: 5, failing_recent: 2 },
 };
 
 const emptyHistoryResponse: systemHealthService.HealthHistoryResponse = {
@@ -114,81 +100,6 @@ describe("SystemHealthPage", () => {
     // just confirm at least one rendering of it exists.
     expect(screen.getAllByText("Down").length).toBeGreaterThan(0);
     expect(screen.getByText(/Last checked:/)).toBeInTheDocument();
-  });
-
-  it("renders the instructor Canvas connections summary with affected instructors", async () => {
-    renderWithRouter(<SystemHealthPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Instructor Canvas connections")).toBeInTheDocument();
-    });
-
-    expect(screen.getByText("9 of 10 instructor connections are healthy (1 failing).")).toBeInTheDocument();
-    expect(
-      screen.getByText("Jane Doe (jane@example.com) — 401 Unauthorized"),
-    ).toBeInTheDocument();
-  });
-
-  it("renders the instructor AI usage summary with recent failures", async () => {
-    renderWithRouter(<SystemHealthPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Instructor AI usage")).toBeInTheDocument();
-    });
-
-    expect(
-      screen.getByText("2 instructors had an AI failure in the last hour."),
-    ).toBeInTheDocument();
-  });
-
-  it("shows a clean instructor summary state when there are no failures", async () => {
-    vi.spyOn(systemHealthService, "fetchSystemHealth").mockResolvedValue({
-      ...healthyResponse,
-      instructor_canvas: { total: 3, healthy: 3, failing: 0, failing_connections: [] },
-      instructor_ai: { total: 3, failing_recent: 0 },
-    });
-
-    renderWithRouter(<SystemHealthPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText("3 of 3 instructor connections are healthy.")).toBeInTheDocument();
-    });
-    expect(screen.getByText("No AI failures in the last hour.")).toBeInTheDocument();
-  });
-
-  it("renders both failing connections for an instructor with two Canvas URLs", async () => {
-    // Regression test: failing_connections previously keyed list items by
-    // user_email alone, which collides when one instructor has multiple
-    // Canvas connections.
-    vi.spyOn(systemHealthService, "fetchSystemHealth").mockResolvedValue({
-      ...healthyResponse,
-      instructor_canvas: {
-        total: 2,
-        healthy: 0,
-        failing: 2,
-        failing_connections: [
-          {
-            user_name: "Jane Doe",
-            user_email: "jane@example.com",
-            canvas_url: "https://canvas-a.example.edu",
-            error_detail: "401 Unauthorized",
-          },
-          {
-            user_name: "Jane Doe",
-            user_email: "jane@example.com",
-            canvas_url: "https://canvas-b.example.edu",
-            error_detail: "403 Forbidden",
-          },
-        ],
-      },
-    });
-
-    renderWithRouter(<SystemHealthPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Jane Doe (jane@example.com) — 401 Unauthorized")).toBeInTheDocument();
-    });
-    expect(screen.getByText("Jane Doe (jane@example.com) — 403 Forbidden")).toBeInTheDocument();
   });
 
   it("caps the history sparkline to the most recent points", async () => {

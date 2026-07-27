@@ -10,10 +10,23 @@ async def record_ai_call_outcome(
     user_id: int,
     provider: str,
     error_detail: str | None = None,
+    *,
+    operation: str = "ai_draft",
 ) -> None:
     """Passively records the outcome of a real generate() call — never
     triggers an AI call itself, just observes one that already happened.
     One row per user, always the latest known outcome (not a log)."""
+    if error_detail:
+        from app.services.failed_operations import record_failed_operation
+
+        await record_failed_operation(
+            db,
+            source="ai",
+            operation=operation,
+            error_detail=error_detail,
+            user_id=user_id,
+            provider=provider,
+        )
     stmt = pg_insert(AiCallHealth).values(
         user_id=user_id,
         provider=provider,
