@@ -118,7 +118,9 @@ async def test_create_message_draft_records_success_without_changing_output():
 
     assert draft.subject == "Midterm Reminder"
     assert draft.body == "Don't forget the midterm."
-    mock_record.assert_awaited_once_with(db, user.id, _ACTIVE_LLM_CONFIG.provider)
+    mock_record.assert_awaited_once_with(
+        db, user.id, _ACTIVE_LLM_CONFIG.provider, operation="message_draft"
+    )
 
 
 @pytest.mark.asyncio
@@ -149,6 +151,7 @@ async def test_create_message_draft_records_failure_without_changing_fallback():
     assert args[2] == _ACTIVE_LLM_CONFIG.provider
     kwargs = mock_record.await_args.kwargs
     assert "LLM unavailable" in kwargs["error_detail"]
+    assert kwargs["operation"] == "message_draft"
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +180,9 @@ async def test_generate_assignment_draft_records_success_without_changing_output
 
     assert result.title == "Recursion Quiz"
     assert result.points_possible == 20
-    mock_record.assert_awaited_once_with(db, 42, _ACTIVE_LLM_CONFIG.provider)
+    mock_record.assert_awaited_once_with(
+        db, 42, _ACTIVE_LLM_CONFIG.provider, operation="assignment_draft"
+    )
 
 
 @pytest.mark.asyncio
@@ -205,7 +210,11 @@ async def test_generate_assignment_draft_records_failure_when_response_is_unpars
 
     assert exc_info.value.status_code == 502
     mock_record.assert_awaited_once_with(
-        db, 42, _ACTIVE_LLM_CONFIG.provider, error_detail="Unparseable model response"
+        db,
+        42,
+        _ACTIVE_LLM_CONFIG.provider,
+        error_detail="Unparseable model response",
+        operation="assignment_draft",
     )
 
 
@@ -239,3 +248,4 @@ async def test_generate_assignment_draft_records_failure_and_still_raises_http_e
     mock_record.assert_awaited_once()
     kwargs = mock_record.await_args.kwargs
     assert "429" in kwargs["error_detail"]
+    assert kwargs["operation"] == "assignment_draft"

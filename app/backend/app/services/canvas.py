@@ -160,19 +160,27 @@ def require_canvas_token(user: User, canvas_url: str) -> str:
 
 
 def _is_expected_canvas_token_sync_error(exc: Exception) -> bool:
-    """Background sync treats missing/corrupted Canvas tokens as expected
-    account state, not infrastructure failure. Interactive endpoints still
-    raise the original 403, but sweeps should only log a concise reconnect
-    warning so stack startup is not flooded with tracebacks."""
-    return (
-        isinstance(exc, HTTPException)
-        and exc.status_code == status.HTTP_403_FORBIDDEN
-        and isinstance(exc.detail, str)
-        and (
-            exc.detail.startswith("No Canvas token")
-            or exc.detail.startswith("Canvas token is corrupted")
-        )
-    )
+    """Background sync treats missing/invalid/corrupted Canvas tokens as
+    expected account state, not infrastructure failure. Interactive endpoints
+    still raise the original status, but sweeps should only log a concise
+    reconnect warning — and must not append failed_operations rows — so one
+    sweep over many stale connections cannot flood admin monitoring.
+    """
+    if not isinstance(exc, HTTPException) or not isinstance(exc.detail, str):
+        return False
+    detail = exc.detail
+    if exc.status_code == status.HTTP_403_FORBIDDEN and (
+        detail.startswith("No Canvas token")
+        or detail.startswith("Canvas token is corrupted")
+    ):
+        return True
+    # Canvas 401 is remapped to 422 by integrations/canvas.py.
+    if (
+        exc.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+        and detail.startswith("Invalid Canvas API token")
+    ):
+        return True
+    return False
 
 
 async def get_owned_course(
@@ -1311,7 +1319,7 @@ async def _cache_submissions(
         raise
 
 
-async def sync_courses_if_stale(user: User, connection: CanvasConnection, db: AsyncSession) -> None:
+async def sync_courses_if_stale(user: User, connection: CanvasConnection, db: AsyncSession) -> bool:
     """Refreshes this connection's course list from Canvas, gated by
     CANVAS_COURSE_SYNC_COOLDOWN_SECONDS so a real Canvas round-trip only
     happens once per window. Callers: the periodic sweep
@@ -1331,13 +1339,18 @@ async def sync_courses_if_stale(user: User, connection: CanvasConnection, db: As
     (ON CONFLICT DO NOTHING) — see CanvasCourseName's docstring for why.
 
     get_courses() itself is unmodified; this wrapper only adds the
-    cooldown gate and the name-index upsert around it."""
+    cooldown gate and the name-index upsert around it.
+
+    Returns True when a real Canvas sync ran and committed, False when
+    skipped due to cooldown. Callers must not treat a cooldown skip as
+    proof the connection is healthy (e.g. clearing last_sync_error).
+    """
     now = datetime.now(UTC)
     if (
         connection.courses_synced_at is not None
         and (now - connection.courses_synced_at).total_seconds() < settings.CANVAS_COURSE_SYNC_COOLDOWN_SECONDS
     ):
-        return
+        return False
 
     courses = await get_courses(user, connection.canvas_url, db)
     if courses:
@@ -1360,6 +1373,7 @@ async def sync_courses_if_stale(user: User, connection: CanvasConnection, db: As
 
     connection.courses_synced_at = now
     await db.commit()
+    return True
 
 
 async def run_course_sync_sweep(db: AsyncSession) -> None:
@@ -1406,19 +1420,29 @@ async def run_course_sync_sweep(db: AsyncSession) -> None:
             if user is None or connection is None:
                 continue
             try:
-                await sync_courses_if_stale(user, connection, conn_db)
-                # A skip-due-to-cooldown is just as valid a "healthy" signal
-                # as a genuine successful attempt: only a successful sync
-                # ever advances courses_synced_at, so a connection can only
-                # be skipped here if its last real attempt already
-                # succeeded. Backs the admin System Health page's
-                # per-instructor Canvas connectivity summary (Feature 9
-                # Phase 2) at zero new Canvas calls.
-                if connection.last_sync_error is not None:
-                    connection.last_sync_error = None
-                    await conn_db.commit()
+                did_sync = await sync_courses_if_stale(user, connection, conn_db)
+                # Only clear last_sync_error after a real successful Canvas
+                # round-trip. A cooldown skip means we did not re-verify the
+                # token — clearing here used to reopen the failed_operations
+                # flood on the next failing tick (previous_error became NULL).
+                if did_sync:
+                    # Reload by id: the in-memory connection may be stale
+                    # relative to last_sync_error written on a prior failure.
+                    previous_error = await conn_db.scalar(
+                        select(CanvasConnection.last_sync_error).where(
+                            CanvasConnection.id == connection_id
+                        )
+                    )
+                    if previous_error is not None:
+                        await conn_db.execute(
+                            update(CanvasConnection)
+                            .where(CanvasConnection.id == connection_id)
+                            .values(last_sync_error=None)
+                        )
+                        await conn_db.commit()
             except Exception as exc:
-                if _is_expected_canvas_token_sync_error(exc):
+                expected_token_issue = _is_expected_canvas_token_sync_error(exc)
+                if expected_token_issue:
                     logger.warning(
                         "course sync sweep skipped canvas_connection_id=%s user_id=%s: %s",
                         connection_id, user_id, exc.detail,
@@ -1434,11 +1458,43 @@ async def run_course_sync_sweep(db: AsyncSession) -> None:
                 # would need an implicit reload of its current state first.
                 # Update by id directly instead, so this doesn't depend on
                 # SQLAlchemy's expire-on-rollback internals at all.
+                from app.core.secret_redaction import redact_secrets
+
+                # Normalize before compare/store so minor formatting noise and
+                # secrets cannot re-open a failed_operations row every tick.
+                error_detail = redact_secrets(str(exc))[:500]
+                previous_error = await conn_db.scalar(
+                    select(CanvasConnection.last_sync_error).where(
+                        CanvasConnection.id == connection_id
+                    )
+                )
                 await conn_db.execute(
                     update(CanvasConnection)
                     .where(CanvasConnection.id == connection_id)
-                    .values(last_sync_error=str(exc)[:500])
+                    .values(last_sync_error=error_detail)
                 )
+                # Background sweeps run every ~60s. Do not append a failed_operations
+                # row for expected missing/corrupted tokens (Feature 9 already
+                # surfaces those), or for the same ongoing unexpected failure —
+                # otherwise admin monitoring floods with duplicate course_sync rows.
+                from app.services.failed_operations import (
+                    record_failed_operation,
+                    should_record_course_sync_failure,
+                )
+
+                if should_record_course_sync_failure(
+                    expected_token_issue=expected_token_issue,
+                    previous_error=previous_error,
+                    error_detail=error_detail,
+                ):
+                    await record_failed_operation(
+                        conn_db,
+                        source="canvas",
+                        operation="course_sync",
+                        error_detail=error_detail,
+                        user_id=user_id,
+                        context_json={"canvas_connection_id": connection_id},
+                    )
                 await conn_db.commit()
 
 

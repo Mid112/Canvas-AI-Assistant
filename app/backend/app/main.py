@@ -17,7 +17,7 @@ from app.core.limiter import limiter
 from app.core.migrations import run_pending_migrations
 from app.core.secret_redaction import install_secret_redaction_logging
 from app.core.seeder import seed_admin
-from app.routers import admin, audit, auth, canvas, chat, history, llm, message_templates, messages
+from app.routers import admin, audit, auth, canvas, chat, failed_operations, history, llm, message_templates, messages
 from app.services.canvas import run_course_sync_sweep
 
 # Feature 14 (#906): scrub API keys / bearer tokens from every log record,
@@ -124,6 +124,7 @@ app.include_router(messages.router, prefix=settings.API_V1_PREFIX)
 app.include_router(history.router, prefix=settings.API_V1_PREFIX)
 app.include_router(audit.router, prefix=settings.API_V1_PREFIX)
 app.include_router(audit.admin_router, prefix=settings.API_V1_PREFIX)
+app.include_router(failed_operations.router, prefix=settings.API_V1_PREFIX)
 app.include_router(message_templates.router, prefix=settings.API_V1_PREFIX)
 
 

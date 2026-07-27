@@ -1,5 +1,6 @@
 import {
   Activity,
+  AlertTriangle,
   BookOpen,
   Bot,
   FileText,
@@ -32,6 +33,7 @@ export const adminNavItems: NavItem[] = [
   { title: "Users", href: paths.admin.users, icon: Users },
   { title: "Audit Logs", href: paths.admin.audit, icon: FileText },
   { title: "System Health", href: paths.admin.systemHealth, icon: Activity },
+  { title: "Failed Operations", href: paths.admin.failedOperations, icon: AlertTriangle },
   { title: "Settings", href: paths.admin.settings, icon: Settings },
 ];
 
