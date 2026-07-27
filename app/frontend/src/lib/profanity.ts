@@ -23,7 +23,9 @@ const HOMOGLYPHS: Record<string, string> = {
   ј: "j",
 };
 
-const ZERO_WIDTH = /[\u200b\u200c\u200d\ufeff\u00ad]/g;
+// Alternation (not a character class) — eslint no-misleading-character-class
+// flags ZWJ/ZWNJ inside `[]` because they can join grapheme clusters.
+const ZERO_WIDTH = /\u200b|\u200c|\u200d|\ufeff|\u00ad/g;
 const SPACED_LETTERS = /(?<![a-z0-9])([a-z](?:[\s._-]+[a-z])+)(?![a-z0-9])/g;
 
 function normalizeForProfanity(text: string): string {
