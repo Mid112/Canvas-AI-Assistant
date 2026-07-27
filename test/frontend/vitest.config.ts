@@ -6,6 +6,14 @@ const frontendDir = path.resolve(appDir, "frontend");
 const frontendNodeModules = path.resolve(frontendDir, "node_modules");
 const isCi = process.env.CI === "true";
 
+// Coverage include/exclude are glob patterns, which always use "/" —
+// path.join() on Windows returns "\"-separated paths, which silently match
+// zero files (0% coverage reported, no threshold failure, no error) instead
+// of throwing. Normalize separately from the OS-native paths above, which
+// are fine as-is since aliasing/fs.allow aren't glob matching.
+const toGlobPath = (value: string) => value.split(path.sep).join("/");
+const frontendGlobDir = toGlobPath(frontendDir);
+
 export default defineConfig({
   esbuild: {
     jsx: "automatic",
@@ -45,11 +53,11 @@ export default defineConfig({
       allowExternal: true,
       reportsDirectory: "./coverage",
       reporter: ["text", "html", "lcov", "json-summary"],
-      include: [path.join(frontendDir, "src/**/*.{ts,tsx}")],
+      include: [`${frontendGlobDir}/src/**/*.{ts,tsx}`],
       exclude: [
         "**/*.{test,spec}.{ts,tsx}",
         "**/*.d.ts",
-        path.join(frontendDir, "src/main.tsx"),
+        `${frontendGlobDir}/src/main.tsx`,
       ],
       thresholds: {
         lines: 80,
