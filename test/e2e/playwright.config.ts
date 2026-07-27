@@ -73,6 +73,9 @@ export default defineConfig({
           "CANVAS_TOKEN_ENCRYPTION_KEY",
           "ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=",
         ),
+        // Live Canvas sandbox token used by instructor onboarding e2e.
+        E2E_CANVAS_URL: envOr("E2E_CANVAS_URL", "http://localhost:3000"),
+        E2E_CANVAS_TOKEN: envOr("E2E_CANVAS_TOKEN", "canvas-docker"),
         ADMIN_EMAIL: envOr("ADMIN_EMAIL", "admin@example.com"),
         ADMIN_PASSWORD: envOr("ADMIN_PASSWORD", "AdminPass123!"),
         ADMIN_NAME: envOr("ADMIN_NAME", "Administrator"),

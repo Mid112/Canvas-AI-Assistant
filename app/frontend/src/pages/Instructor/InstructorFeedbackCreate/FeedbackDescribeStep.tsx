@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,8 @@ interface FeedbackDescribeStepProps {
   courseLoadError?: string | null;
   isLoadingCourses?: boolean;
   onGenerate: (values: FeedbackDescribeValues) => void;
+  /** Keep parent describe state in sync (for Save draft before generate). */
+  onValuesChange?: (values: FeedbackDescribeValues) => void;
 }
 
 const selectClassName = cn(
@@ -41,6 +43,9 @@ const selectClassName = cn(
   "transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
   "disabled:cursor-not-allowed disabled:opacity-50",
 );
+
+const EMPTY_ASSIGNMENTS: FeedbackAssignmentOption[] = [];
+const EMPTY_STUDENTS: FeedbackStudentOption[] = [];
 
 export function FeedbackDescribeStep({
   defaultValues,
@@ -52,6 +57,7 @@ export function FeedbackDescribeStep({
   courseLoadError = null,
   isLoadingCourses = false,
   onGenerate,
+  onValuesChange,
 }: FeedbackDescribeStepProps) {
   const [loadedContext, setLoadedContext] = useState<{
     courseId: number;
@@ -73,17 +79,49 @@ export function FeedbackDescribeStep({
     mode: "onChange",
   });
 
+  const watchedValues = useWatch({ control });
   const courseId = useWatch({ control, name: "courseId", defaultValue: defaultValues.courseId });
   const promptValue = useWatch({ control, name: "prompt", defaultValue: defaultValues.prompt });
   const numericCourseId = courseId ? Number(courseId) : null;
-  const assignments =
-    numericCourseId != null && loadedContext?.courseId === numericCourseId
-      ? loadedContext.assignments
-      : [];
-  const students =
-    numericCourseId != null && loadedContext?.courseId === numericCourseId
-      ? loadedContext.students
-      : [];
+  const assignments = useMemo(
+    () =>
+      numericCourseId != null && loadedContext?.courseId === numericCourseId
+        ? loadedContext.assignments
+        : EMPTY_ASSIGNMENTS,
+    [loadedContext, numericCourseId],
+  );
+  const students = useMemo(
+    () =>
+      numericCourseId != null && loadedContext?.courseId === numericCourseId
+        ? loadedContext.students
+        : EMPTY_STUDENTS,
+    [loadedContext, numericCourseId],
+  );
+
+  useEffect(() => {
+    if (!onValuesChange) return;
+    const assignmentId = String(watchedValues.assignmentId ?? "");
+    const studentId = String(watchedValues.studentId ?? "");
+    onValuesChange({
+      courseId: String(watchedValues.courseId ?? ""),
+      assignmentId,
+      studentId,
+      assignmentName:
+        assignments.find((assignment) => String(assignment.id) === assignmentId)?.name ??
+        defaultValues.assignmentName,
+      studentName:
+        students.find((student) => String(student.id) === studentId)?.name ??
+        defaultValues.studentName,
+      prompt: String(watchedValues.prompt ?? ""),
+    });
+  }, [
+    onValuesChange,
+    watchedValues,
+    assignments,
+    students,
+    defaultValues.assignmentName,
+    defaultValues.studentName,
+  ]);
 
   useEffect(() => {
     if (!courseId || !accessToken) {
