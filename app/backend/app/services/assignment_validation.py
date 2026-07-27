@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.course import Course
 from app.models.user import User
 from app.services.course_access import get_owned_course_or_404
+from app.services.profanity import check_message_profanity
 
 
 def _check_title(title: str) -> None:
@@ -15,6 +16,7 @@ def _check_title(title: str) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Assignment title cannot be empty.",
         )
+    check_message_profanity(title, content_label="Assignment title")
 
 
 def _check_description(description: str) -> None:
@@ -23,6 +25,7 @@ def _check_description(description: str) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Assignment description cannot be empty.",
         )
+    check_message_profanity(description, content_label="Assignment description")
 
 
 def _check_due_date(due_date: str) -> None:

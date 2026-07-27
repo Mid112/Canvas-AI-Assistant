@@ -80,6 +80,35 @@ async def test_send_rejects_profanity_in_body():
 
 
 @pytest.mark.asyncio
+async def test_send_rejects_plural_and_obfuscated_profanity():
+    """Plurals, spaced letters, ZWSP, punctuation, and Cyrillic lookalikes."""
+    payloads = [
+        "Please ignore these bastards in the sample.",
+        "Do not write f u c k in feedback.",
+        "Hidden: f\u200bu\u200bc\u200bk",
+        "Obfuscated f.u.c.k text",
+        "Cyrillic fuсk",  # Cyrillic с (U+0441)
+        "Accented fùck slips past ASCII \\b",
+    ]
+    with patch(
+        "app.services.message_validation.get_owned_course_or_404",
+        new=AsyncMock(return_value=COURSE),
+    ):
+        for body in payloads:
+            with pytest.raises(HTTPException) as exc:
+                await validate_message_for_send(
+                    COURSE.id,
+                    USER,
+                    "Subject",
+                    body,
+                    AsyncMock(),
+                    canvas_url=CANVAS_URL,
+                )
+            assert exc.value.status_code == 422, body
+            assert "appropriate" in exc.value.detail.lower(), body
+
+
+@pytest.mark.asyncio
 async def test_send_without_recipients_skips_roster_lookup():
     with (
         patch(
