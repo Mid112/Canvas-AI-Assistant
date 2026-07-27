@@ -21,7 +21,6 @@ ALLOWED_TOOLS = frozenset(
         "update_grade",
         "create_announcement",
         "send_message_to_students",
-        "get_audit_logs",
     }
 )
 

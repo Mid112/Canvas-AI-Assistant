@@ -1,5 +1,5 @@
 # Canvas MCP server implementation using FastMCP.
-# Exposes tools for reading/writing Canvas data and fetching audit logs.
+# Exposes tools for reading/writing Canvas data.
 
 import os
 import secrets
@@ -12,13 +12,13 @@ import uvicorn
 from mcp.server.fastmcp import FastMCP
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 # ── Config from environment ────────────────────────────────────────────────
 CANVAS_API_URL = os.getenv("CANVAS_API_URL", "http://localhost:4000/api/v1")
 CANVAS_API_TOKEN = os.getenv("CANVAS_API_TOKEN", "placeholder")
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 MCP_PORT = int(os.getenv("MCP_PORT", "8001"))
-# Shared with the backend — /tools/call rejects callers without this secret.
+# Shared with the backend — /tools/call and /mcp reject callers without this secret.
 MCP_SHARED_SECRET = os.getenv("MCP_SHARED_SECRET", "").strip()
 
 _request_canvas_token: ContextVar[str | None] = ContextVar("canvas_token", default=None)
@@ -52,25 +52,72 @@ def _canvas_url_allowed(canvas_url: str | None) -> bool:
     return bool(allowed) and host in allowed
 
 
-def _request_shared_secret(request: Request) -> str | None:
-    auth = request.headers.get("authorization") or ""
-    if auth.lower().startswith("bearer "):
-        return auth[7:].strip()
-    header = request.headers.get("x-mcp-shared-secret")
-    return header.strip() if isinstance(header, str) else None
+def _header_value(scope: Scope, name: str) -> str | None:
+    target = name.lower().encode("latin-1")
+    for key, value in scope.get("headers") or []:
+        if key == target:
+            return value.decode("latin-1").strip()
+    return None
 
 
-def _authorize_tools_call(request: Request) -> JSONResponse | None:
-    """Require MCP_SHARED_SECRET so /tools/call is not an open Canvas proxy."""
+def _shared_secret_from_headers(authorization: str | None, x_secret: str | None) -> str | None:
+    if authorization and authorization.lower().startswith("bearer "):
+        return authorization[7:].strip()
+    if isinstance(x_secret, str) and x_secret.strip():
+        return x_secret.strip()
+    return None
+
+
+def _authorize_shared_secret(
+    *,
+    authorization: str | None,
+    x_secret: str | None,
+) -> JSONResponse | None:
+    """Require MCP_SHARED_SECRET so MCP HTTP surfaces are not open proxies."""
     if not MCP_SHARED_SECRET:
         return JSONResponse(
             {"error": "MCP_SHARED_SECRET is not configured on the MCP server"},
             status_code=503,
         )
-    provided = _request_shared_secret(request)
+    provided = _shared_secret_from_headers(authorization, x_secret)
     if provided is None or not secrets.compare_digest(provided, MCP_SHARED_SECRET):
         return JSONResponse({"error": "Unauthorized"}, status_code=401)
     return None
+
+
+def _authorize_tools_call(request: Request) -> JSONResponse | None:
+    return _authorize_shared_secret(
+        authorization=request.headers.get("authorization"),
+        x_secret=request.headers.get("x-mcp-shared-secret"),
+    )
+
+
+class SharedSecretASGIMiddleware:
+    """Gate /mcp and /tools/call with the shared secret (pure ASGI — safe with SSE)."""
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path") or ""
+        if path == "/health" or path.endswith("/health"):
+            await self.app(scope, receive, send)
+            return
+
+        if path.startswith("/mcp") or path.startswith("/tools/call"):
+            auth_error = _authorize_shared_secret(
+                authorization=_header_value(scope, "authorization"),
+                x_secret=_header_value(scope, "x-mcp-shared-secret"),
+            )
+            if auth_error is not None:
+                await auth_error(scope, receive, send)
+                return
+
+        await self.app(scope, receive, send)
 
 
 ALLOWED_TOOLS = frozenset(
@@ -86,7 +133,6 @@ ALLOWED_TOOLS = frozenset(
         "update_grade",
         "create_announcement",
         "send_message_to_students",
-        "get_audit_logs",
     }
 )
 
@@ -580,32 +626,9 @@ async def send_message_to_students(
         return {"error": f"Could not reach Canvas: {str(e)}", "sent": False}
 
 
-# read-only tool to fetch recent audit log entries for a user.
-
-@mcp.tool()
-async def get_audit_logs(user_id: int, limit: int = 20) -> dict[str, Any]:
-    """
-    Retrieve recent audit log entries for a user.
-    Read-only — MCP never writes to the audit log directly.
-    The FastAPI backend writes audit entries; MCP only reads them.
-
-    Args:
-        user_id: The user whose audit logs to retrieve.
-        limit: Maximum number of entries to return. Defaults to 20.
-    """
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{BACKEND_URL}/api/v1/audit/logs",
-                params={"user_id": user_id, "limit": limit},
-                timeout=5.0,
-            )
-        if response.is_error:
-            return {"error": f"Backend error: {response.status_code}", "logs": []}
-        return {"logs": response.json()}
-    except httpx.RequestError as e:
-        return {"error": str(e), "logs": []}
-
+# Audit logs stay on the authenticated backend (/api/v1/audit/logs). The MCP
+# sidecar previously exposed get_audit_logs without a backend token and with a
+# misleading user_id query — removed rather than paper over confused auth.
 
 _TOOL_DISPATCH: dict[str, Callable[..., Awaitable[dict[str, Any]]]] = {
     "fetch_courses": fetch_courses,
@@ -619,7 +642,6 @@ _TOOL_DISPATCH: dict[str, Callable[..., Awaitable[dict[str, Any]]]] = {
     "update_grade": update_grade,
     "create_announcement": create_announcement,
     "send_message_to_students": send_message_to_students,
-    "get_audit_logs": get_audit_logs,
 }
 
 
@@ -676,5 +698,5 @@ async def health(request: Request) -> JSONResponse:
 
 
 if __name__ == "__main__":
-    app = mcp.streamable_http_app()
+    app = SharedSecretASGIMiddleware(mcp.streamable_http_app())
     uvicorn.run(app, host="0.0.0.0", port=MCP_PORT)

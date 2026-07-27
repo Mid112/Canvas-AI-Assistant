@@ -121,11 +121,10 @@ services:
     environment:
       CANVAS_API_URL: ${CANVAS_API_URL:-http://canvas_lms:3000}
       CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-}
-      BACKEND_URL: http://backend:8000
       MCP_SHARED_SECRET: ${MCP_SHARED_SECRET:-local-mcp-shared-secret}
       MCP_ALLOWED_CANVAS_HOSTS: ${MCP_ALLOWED_CANVAS_HOSTS:-canvas_lms,localhost}
-    # Host publish is for local debugging only; /tools/call still requires
-    # MCP_SHARED_SECRET so the port is not an open proxy.
+    # Host publish is for local debugging only; /tools/call and /mcp still
+    # require MCP_SHARED_SECRET so the port is not an open proxy.
     ports:
       - "8001:8001"
     depends_on:

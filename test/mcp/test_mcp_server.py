@@ -22,6 +22,7 @@ from mcp.client.session import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
 MCP_URL = os.getenv("MCP_URL", "http://localhost:8001")
+MCP_SHARED_SECRET = os.getenv("MCP_SHARED_SECRET", "local-mcp-shared-secret").strip()
 CANVAS_AVAILABLE = (
     bool(os.getenv("CANVAS_API_TOKEN"))
     and os.getenv("CANVAS_API_TOKEN") != "placeholder"
@@ -39,8 +40,16 @@ EXPECTED_TOOLS = {
     "update_grade",
     "create_announcement",
     "send_message_to_students",
-    "get_audit_logs",
 }
+
+
+def _mcp_http_client() -> httpx.AsyncClient:
+    """Authenticated client — /mcp requires MCP_SHARED_SECRET (#1273)."""
+    return httpx.AsyncClient(
+        headers={"Authorization": f"Bearer {MCP_SHARED_SECRET}"},
+        follow_redirects=True,
+        timeout=httpx.Timeout(30.0, read=300.0),
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -48,21 +57,27 @@ EXPECTED_TOOLS = {
 # ══════════════════════════════════════════════════════════════════════════
 
 async def list_tools_async() -> list:
-    async with streamable_http_client(f"{MCP_URL}/mcp") as (read, write, _):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            result = await session.list_tools()
-            return result.tools
+    async with _mcp_http_client() as http_client:
+        async with streamable_http_client(
+            f"{MCP_URL}/mcp", http_client=http_client
+        ) as (read, write, _):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.list_tools()
+                return result.tools
 
 
 async def call_tool(tool_name: str, arguments: dict) -> dict:
-    async with streamable_http_client(f"{MCP_URL}/mcp") as (read, write, _):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            result = await session.call_tool(tool_name, arguments=arguments)
-            if result.content and hasattr(result.content[0], "text"):
-                return json.loads(result.content[0].text)
-            return {}
+    async with _mcp_http_client() as http_client:
+        async with streamable_http_client(
+            f"{MCP_URL}/mcp", http_client=http_client
+        ) as (read, write, _):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                result = await session.call_tool(tool_name, arguments=arguments)
+                if result.content and hasattr(result.content[0], "text"):
+                    return json.loads(result.content[0].text)
+                return {}
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -71,12 +86,23 @@ async def call_tool(tool_name: str, arguments: dict) -> dict:
 
 # Verifies: Mcp server health.
 def test_mcp_server_health():
-    """MCP server health endpoint returns ok."""
+    """MCP server health endpoint returns ok (public, no shared secret)."""
     response = httpx.get(f"{MCP_URL}/health")
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
     assert data["service"] == "canvas-mcp"
+
+
+# Verifies: /mcp rejects missing shared secret.
+def test_mcp_transport_requires_shared_secret():
+    """Unauthenticated /mcp callers get 401."""
+    response = httpx.post(
+        f"{MCP_URL}/mcp",
+        headers={"Accept": "application/json, text/event-stream"},
+        json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+    )
+    assert response.status_code == 401
 
 
 # Verifies: Mcp server lists tools.
@@ -161,14 +187,12 @@ def test_send_message_has_required_params():
     assert "course_id" in props
 
 
-# Verifies: Get audit logs requires user id.
-def test_get_audit_logs_requires_user_id():
-    """get_audit_logs declares user_id as a required parameter."""
+# Verifies: Audit logs tool is not exposed on MCP.
+def test_get_audit_logs_not_registered():
+    """Audit logs stay on the authenticated backend — not an MCP tool."""
     tools = asyncio.run(list_tools_async())
-    tool = next(t for t in tools if t.name == "get_audit_logs")
-    props = tool.inputSchema.get("properties", {})
-    assert "user_id" in props
-    assert "limit" in props
+    registered = {t.name for t in tools}
+    assert "get_audit_logs" not in registered
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -209,13 +233,6 @@ def test_fetch_missing_submissions_returns_counts():
     )
     # with bad IDs we get either error or the count fields
     assert ("missing_count" in result and "late_count" in result) or "error" in result
-
-
-# Verifies: Get audit logs returns logs key.
-def test_get_audit_logs_returns_logs_key():
-    """get_audit_logs returns a dict with a logs key regardless of backend state."""
-    result = asyncio.run(call_tool("get_audit_logs", {"user_id": 1}))
-    assert "logs" in result or "error" in result
 
 
 # ══════════════════════════════════════════════════════════════════════════
