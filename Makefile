@@ -1,4 +1,4 @@
-.PHONY: install install-vllm install-ollama lint lint-fix test test-windows test-llm test-llm-windows test-ollama test-ollama-windows test-vague-llm test-vague-llm-windows test-e2e test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset run-vllm run-ollama dev e2e-up reload
+.PHONY: install install-vllm install-ollama lint lint-fix test test-windows test-llm test-llm-windows test-ollama test-ollama-windows test-vague-llm test-vague-llm-windows test-e2e test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset db-ensure seed-canvas-students run-vllm run-ollama dev e2e-up reload
 
 # ── Install ──────────────────────────────────
 # Creates a venv (if one doesn't exist) and installs backend deps
@@ -45,6 +45,23 @@ lint-fix:
 	cd app/backend && .venv/bin/ruff format .
 	cd app/frontend && npm run lint -- --fix
 
+# ── DB ensure (dev Postgres) ──────────────────
+# Starts docker-compose.dev.yml postgres and re-applies the idempotent
+# submissions grading migration. The startup migrator never re-runs
+# 002_submission_status_and_grading.sql (pre-convention stamp), so an
+# ancient local volume can have that filename recorded while still
+# missing submissions.grade — which makes overview/dashboard tests fail
+# with UndefinedColumnError. Safe to run repeatedly (ADD COLUMN IF NOT
+# EXISTS). For a fully wiped volume use `make db-reset` / `make test-fresh`.
+# `--wait` blocks on the compose healthcheck (pg_isready), matching CI's
+# readiness poll — a fixed sleep is not enough on cold image pull / fresh
+# volume init.
+db-ensure:
+	docker compose -f docker-compose.dev.yml up -d --wait postgres
+	docker compose -f docker-compose.dev.yml exec -T postgres \
+		psql -U appuser -d appdb -v ON_ERROR_STOP=1 \
+		< db/migrations/002_submission_status_and_grading.sql
+
 # ── Test (macOS / Linux) ──────────────────────
 # Mirrors .github/workflows/ci.yml's backend-test and frontend-test jobs
 # so a local `make test` catches what CI catches:
@@ -55,11 +72,21 @@ lint-fix:
 #     resolves even though the tests themselves live in test/backend/.
 #   - Frontend: test:coverage (not plain test) so the vitest coverage
 #     thresholds CI enforces also run locally.
-# Assumes dev postgres (docker-compose.dev.yml) is already running.
+# Starts / repairs dev postgres via `db-ensure` first (CI uses a fresh DB).
+# SECRET_KEY / CANVAS_TOKEN_ENCRYPTION_KEY / HF_TOKEN use the same local /
+# e2e Fernet defaults as `e2e-up` so an empty or missing app/backend/.env
+# still collects cleanly (Settings validates the Fernet key at import time).
 # Windows: use `make test-windows` instead (same commands, .venv/Scripts
 # instead of .venv/bin).
-test:
-	cd app/backend && PYTHONPATH=. DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb .venv/bin/pytest ../../test/backend/ -v --cov --cov-report=term-missing
+test: db-ensure
+	cd app/backend && \
+		PYTHONPATH=. \
+		DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
+		ENVIRONMENT=test \
+		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
+		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
+		HF_TOKEN=$${HF_TOKEN:-test-hf-token} \
+		.venv/bin/pytest ../../test/backend/ -v --cov --cov-report=term-missing
 	cd app/frontend && npm run test:coverage
 
 # ── Test (Windows) ────────────────────────────
@@ -68,8 +95,15 @@ test:
 # Windows vs .venv/bin on macOS/Linux) is explicit rather than magic.
 # Run from Git Bash (the rest of this Makefile already assumes a POSIX
 # shell, e.g. dev/e2e-up's use of lsof/trap) or WSL.
-test-windows:
-	cd app/backend && PYTHONPATH=. DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb .venv/Scripts/pytest ../../test/backend/ -v --cov --cov-report=term-missing
+test-windows: db-ensure
+	cd app/backend && \
+		PYTHONPATH=. \
+		DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
+		ENVIRONMENT=test \
+		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
+		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
+		HF_TOKEN=$${HF_TOKEN:-test-hf-token} \
+		.venv/Scripts/pytest ../../test/backend/ -v --cov --cov-report=term-missing
 	cd app/frontend && npm run test:coverage
 
 # ── Browser E2E (Playwright) ─────────────────
@@ -88,22 +122,44 @@ test-e2e:
 # Runs the LLM adapter test (test/backend/llm_test.py). This test mocks
 # the httpx call to the LLM, so it does NOT require vLLM running — it
 # verifies the adapter's request/response handling logic in isolation.
-# Windows: use `make test-llm-windows` instead.
-test-llm:
-	PYTHONPATH=./app/backend app/backend/.venv/bin/pytest test/backend/llm_test.py -v
+# Still needs Postgres: conftest's module-scoped LLM settings reset is
+# autouse and opens a DB connection. Windows: use `make test-llm-windows`.
+test-llm: db-ensure
+	cd app/backend && \
+		PYTHONPATH=. \
+		DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
+		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
+		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
+		.venv/bin/pytest ../../test/backend/llm_test.py -v
 
-test-llm-windows:
-	PYTHONPATH=./app/backend app/backend/.venv/Scripts/pytest test/backend/llm_test.py -v
+test-llm-windows: db-ensure
+	cd app/backend && \
+		PYTHONPATH=. \
+		DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
+		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
+		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
+		.venv/Scripts/pytest ../../test/backend/llm_test.py -v
 
 # ── Test Ollama ──────────────────────────────
 # Integration test against a running Ollama server. Requires:
 # make install-ollama && make run-ollama
+# Also needs Postgres (same conftest autouse DB fixture as test-llm).
 # Windows: use `make test-ollama-windows` instead.
-test-ollama:
-	PYTHONPATH=./app/backend app/backend/.venv/bin/pytest test/ollama/test_ollama.py -v
+test-ollama: db-ensure
+	cd app/backend && \
+		PYTHONPATH=. \
+		DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
+		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
+		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
+		.venv/bin/pytest ../../test/ollama/test_ollama.py -v
 
-test-ollama-windows:
-	PYTHONPATH=./app/backend app/backend/.venv/Scripts/pytest test/ollama/test_ollama.py -v
+test-ollama-windows: db-ensure
+	cd app/backend && \
+		PYTHONPATH=. \
+		DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
+		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
+		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
+		.venv/Scripts/pytest ../../test/ollama/test_ollama.py -v
 
 # ── Test from scratch ─────────────────────────
 # Full reset: tears down any running stack (dev or prod), starts
@@ -121,6 +177,33 @@ test-fresh:
 	cd app/backend && .venv/bin/pip install --upgrade pip
 	cd app/backend && .venv/bin/pip install -r requirements.txt
 	make test
+
+# ── Seed Canvas students ─────────────────────
+# Upserts two Canvas sandbox student logins (not app users), creates/reuses
+# a dedicated Capstone Project course (code COSC 499), and enrolls them only there.
+# Requires canvas_lms on :3000. Override URL/token/emails via env vars
+# documented in test/e2e/seed_canvas_students.py.
+seed-canvas-students:
+	@echo "Waiting for Canvas sandbox on :3000..."
+	@for i in $$(seq 1 60); do \
+		if curl -sf -H "Authorization: Bearer $${E2E_CANVAS_TOKEN:-canvas-docker}" \
+			"$${E2E_CANVAS_URL:-http://127.0.0.1:3000}/api/v1/users/self" >/dev/null; then \
+			break; \
+		fi; \
+		if [ $$i -eq 60 ]; then \
+			echo "Canvas sandbox not ready. Start it with:"; \
+			echo "  docker compose -f docker-compose.dev.yml up -d canvas-docker"; \
+			exit 1; \
+		fi; \
+		sleep 2; \
+	done
+	E2E_CANVAS_URL=$${E2E_CANVAS_URL:-http://localhost:3000} \
+	E2E_CANVAS_TOKEN=$${E2E_CANVAS_TOKEN:-canvas-docker} \
+	python3 test/e2e/seed_canvas_students.py
+	@echo ""
+	@echo "Instructor Canvas login: canvas@example.edu / canvas-docker"
+	@echo "Student Canvas logins:   student1@example.edu / canvas-docker"
+	@echo "                         student2@example.edu / canvas-docker"
 
 # ── Dev ──────────────────────────────────────
 # Starts the full local dev environment in one command:
@@ -168,6 +251,7 @@ e2e-up:
 	fi
 	@echo "Starting backend on http://localhost:8000 and frontend on http://localhost:5173"
 	@echo "Default e2e admin seed: admin@example.com / AdminPass123!"
+	@echo "Canvas students (optional): make seed-canvas-students"
 	@trap 'kill 0' INT TERM EXIT; \
 	(cd app/backend && \
 		DATABASE_URL=$${DATABASE_URL:-postgresql+asyncpg://appuser:localdev@localhost:5433/appdb} \
