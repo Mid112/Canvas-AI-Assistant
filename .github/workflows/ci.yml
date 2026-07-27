@@ -280,6 +280,26 @@ jobs:
         run: |
           npm ci
           npx playwright install --with-deps chromium
+      - name: Ensure Canvas sandbox
+        run: |
+          # Instructor e2e onboarding requires a live Canvas API token against
+          # the local sandbox (default token: canvas-docker).
+          if docker inspect canvas_lms >/dev/null 2>&1; then
+            docker start canvas_lms >/dev/null || true
+          else
+            docker compose -f docker-compose.dev.yml up -d canvas-docker
+          fi
+          for i in $(seq 1 60); do
+            if curl -sf -H "Authorization: Bearer ${E2E_CANVAS_TOKEN:-canvas-docker}" \
+              "http://127.0.0.1:3000/api/v1/users/self" >/dev/null; then
+              echo "Canvas sandbox ready on :3000"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Canvas sandbox failed to become ready on :3000"
+          docker ps -a --filter name=canvas
+          exit 1
       - name: Free E2E ports
         # Self-hosted runners can retain stale backend/frontend processes from
         # prior runs; Playwright sets reuseExistingServer=false in CI.
@@ -304,7 +324,10 @@ jobs:
           ADMIN_EMAIL: admin@example.com
           ADMIN_PASSWORD: AdminPass123!
           SECRET_KEY: ci-e2e-secret
+          CANVAS_API_URL: http://127.0.0.1:3000
           CANVAS_TOKEN_ENCRYPTION_KEY: ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=
+          E2E_CANVAS_URL: http://127.0.0.1:3000
+          E2E_CANVAS_TOKEN: canvas-docker
         run: |
           if [[ ! "${E2E_DB_PORT:-}" =~ ^[0-9]+$ ]]; then
             echo "E2E_DB_PORT is missing or invalid: '${E2E_DB_PORT:-}'"
