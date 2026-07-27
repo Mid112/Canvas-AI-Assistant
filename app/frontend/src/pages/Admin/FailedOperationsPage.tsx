@@ -21,8 +21,10 @@ import {
 } from "@/services/failedOperations";
 import {
   createTicket,
+  fetchAssignableAdmins,
   fetchTicketForFailedOperation,
   updateTicket,
+  type AssignableAdmin,
   type SupportTicket,
   type TicketStatus,
 } from "@/services/supportTickets";
@@ -129,12 +131,14 @@ const TICKET_STATUS_BADGE_VARIANT: Record<TicketStatus, "default" | "secondary" 
 };
 
 /** Admin-side escalation tracking for one failed operation — get-or-create
- * a ticket, then track status/notes. No retry/re-trigger action: read-only +
- * escalate-to-dev-team only, per the team's Canvas-write risk framework. */
+ * a ticket, then track status/notes/assignee. No retry/re-trigger action:
+ * read-only + escalate-to-dev-team only, per the team's Canvas-write risk
+ * framework. */
 function TicketPanel({ failedOperationId }: { failedOperationId: number }) {
   const { accessToken } = useAuth();
   const [ticket, setTicket] = useState<SupportTicket | null>(null);
   const [notesDraft, setNotesDraft] = useState("");
+  const [admins, setAdmins] = useState<AssignableAdmin[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -149,13 +153,17 @@ function TicketPanel({ failedOperationId }: { failedOperationId: number }) {
     setIsLoading(true);
     setError(null);
 
-    void fetchTicketForFailedOperation(accessToken, failedOperationId)
-      .then((result) => {
+    void Promise.all([
+      fetchTicketForFailedOperation(accessToken, failedOperationId),
+      fetchAssignableAdmins(accessToken),
+    ])
+      .then(([result, adminList]) => {
         if (cancelled) {
           return;
         }
         setTicket(result);
         setNotesDraft(result?.admin_notes ?? "");
+        setAdmins(adminList);
       })
       .catch(() => {
         if (!cancelled) {
@@ -225,8 +233,28 @@ function TicketPanel({ failedOperationId }: { failedOperationId: number }) {
     }
   }, [accessToken, ticket, notesDraft]);
 
+  const handleAssigneeChange = useCallback(
+    async (rawValue: string) => {
+      if (!accessToken || !ticket) {
+        return;
+      }
+      const assignedTo = rawValue === "" ? null : Number(rawValue);
+      setIsSaving(true);
+      setError(null);
+      try {
+        const updated = await updateTicket(accessToken, ticket.id, { assigned_to: assignedTo });
+        setTicket(updated);
+      } catch {
+        setError("Unable to assign ticket.");
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [accessToken, ticket],
+  );
+
   return (
-    <div className="space-y-2 border-t pt-3">
+    <div className="space-y-3 border-t pt-3">
       <div className="flex items-center justify-between gap-2">
         <p className="font-medium">Ticket</p>
         {ticket ? (
@@ -245,7 +273,37 @@ function TicketPanel({ failedOperationId }: { failedOperationId: number }) {
           Escalate to ticket
         </Button>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
+          {/* Saved notes, rendered read-only right below the ticket header so
+              whoever opens this doesn't have to scroll past status controls
+              and the edit box just to see what the last admin already wrote. */}
+          {ticket.admin_notes ? (
+            <div className="rounded-md border bg-muted/40 p-3">
+              <p className="text-xs font-medium text-muted-foreground">Saved notes</p>
+              <p className="whitespace-pre-wrap text-sm">{ticket.admin_notes}</p>
+            </div>
+          ) : null}
+
+          <div className="space-y-1">
+            <label htmlFor={`ticket-assignee-${ticket.id}`} className="text-xs font-medium text-muted-foreground">
+              Assigned to
+            </label>
+            <select
+              id={`ticket-assignee-${ticket.id}`}
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={ticket.assigned_to ?? ""}
+              disabled={isSaving}
+              onChange={(event) => void handleAssigneeChange(event.target.value)}
+            >
+              <option value="">Unassigned</option>
+              {admins.map((admin) => (
+                <option key={admin.id} value={admin.id}>
+                  {admin.name} ({admin.email})
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="flex flex-wrap gap-2">
             {(Object.keys(TICKET_STATUS_LABELS) as TicketStatus[]).map((status) => (
               <Button

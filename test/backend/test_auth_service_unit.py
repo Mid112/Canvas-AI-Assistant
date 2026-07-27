@@ -125,13 +125,19 @@ async def test_login_user_rejects_wrong_password():
 
 @pytest.mark.asyncio
 async def test_login_user_rejects_unknown_email():
-    db = AsyncMock()
+    db = _db_assigning_ids()
     db.scalar = AsyncMock(return_value=None)
 
     with pytest.raises(HTTPException) as exc_info:
         await login_user(db, "nobody@example.com", "whatever")
 
     assert exc_info.value.status_code == 401
+    db.add.assert_called_once()
+    logged = db.add.call_args.args[0]
+    assert logged.user_id is None
+    assert logged.action == "login_failed"
+    assert logged.details == {"email": "nobody@example.com", "reason": "unknown_email"}
+    db.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -147,6 +153,21 @@ async def test_login_user_rejects_disabled_account():
 
 
 @pytest.mark.asyncio
+async def test_login_user_disabled_account_does_not_verify_password():
+    db = _db_assigning_ids()
+    user = SimpleNamespace(id=1, hashed_password=hash_password("correct"), is_active=False, role="instructor", email="user@example.com")
+    db.scalar = AsyncMock(return_value=user)
+
+    with (
+        patch("app.services.auth.verify_password") as mock_verify,
+        pytest.raises(HTTPException),
+    ):
+        await login_user(db, "user@example.com", "correct")
+
+    mock_verify.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_login_user_admin_writes_audit_log():
     db = _db_assigning_ids()
     user = SimpleNamespace(id=1, hashed_password=hash_password("correct"), is_active=True, role="admin", email="a@example.com")
@@ -157,7 +178,7 @@ async def test_login_user_admin_writes_audit_log():
 
     assert result.access_token == "fake-jwt"
     db.add.assert_called_once()
-    db.commit.assert_awaited_once()
+    db.commit.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -209,13 +230,19 @@ async def test_login_user_disabled_account_writes_login_failed():
 
 @pytest.mark.asyncio
 async def test_admin_login_user_rejects_unknown_email():
-    db = AsyncMock()
+    db = _db_assigning_ids()
     db.scalar = AsyncMock(return_value=None)
 
     with pytest.raises(HTTPException) as exc_info:
         await admin_login_user(db, "nobody@example.com", "whatever")
 
     assert exc_info.value.status_code == 401
+    db.add.assert_called_once()
+    logged = db.add.call_args.args[0]
+    assert logged.user_id is None
+    assert logged.action == "login_failed"
+    assert logged.details == {"email": "nobody@example.com", "reason": "unknown_email"}
+    db.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -244,6 +271,21 @@ async def test_admin_login_user_rejects_disabled_admin():
         await admin_login_user(db, "a@example.com", "correct")
 
     assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_login_user_disabled_admin_does_not_verify_password():
+    db = _db_assigning_ids()
+    user = SimpleNamespace(id=1, hashed_password=hash_password("correct"), is_active=False, role="admin", email="a@example.com")
+    db.scalar = AsyncMock(return_value=user)
+
+    with (
+        patch("app.services.auth.verify_password") as mock_verify,
+        pytest.raises(HTTPException),
+    ):
+        await admin_login_user(db, "a@example.com", "correct")
+
+    mock_verify.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -280,7 +322,7 @@ async def test_logout_admin_revokes_session_and_audits():
     with patch("app.services.auth.revoke_session", new=AsyncMock()):
         await logout_admin(db, "some-token", user)
     db.add.assert_called_once()
-    db.commit.assert_awaited_once()
+    db.commit.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

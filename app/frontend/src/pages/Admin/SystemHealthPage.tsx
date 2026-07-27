@@ -32,15 +32,21 @@ const STATUS_LABELS: Record<HealthStatus, string> = {
   down: "Down",
 };
 
-const STATUS_BADGE_VARIANT: Record<HealthStatus, "default" | "secondary" | "destructive"> = {
-  healthy: "default",
-  degraded: "secondary",
-  down: "destructive",
+// Deliberately independent of the Badge component's default/secondary/
+// destructive variants -- this app's --primary token is the same brand red
+// as --destructive (see index.css), so variant="default" rendered "Healthy"
+// in red. Health status needs its own green/grey/red scale regardless of
+// brand color.
+const STATUS_BADGE_CLASS: Record<HealthStatus, string> = {
+  healthy:
+    "border-transparent bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
+  degraded: "border-transparent bg-muted text-muted-foreground",
+  down: "border-transparent bg-destructive/10 text-destructive dark:bg-destructive/20",
 };
 
 const STATUS_DOT_CLASS: Record<HealthStatus, string> = {
-  healthy: "bg-primary",
-  degraded: "bg-amber-500",
+  healthy: "bg-emerald-500",
+  degraded: "bg-muted-foreground/50",
   down: "bg-destructive",
 };
 
@@ -85,7 +91,7 @@ function ServiceStatusCard({
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {title}
         </CardTitle>
-        <Badge variant={STATUS_BADGE_VARIANT[health.status]}>
+        <Badge variant="outline" className={STATUS_BADGE_CLASS[health.status]}>
           {STATUS_LABELS[health.status]}
         </Badge>
       </CardHeader>
@@ -182,7 +188,7 @@ export function SystemHealthPage() {
           <Card className="shadow-sm ring-1 ring-border/60">
             <CardHeader className="flex flex-row items-center justify-between gap-2">
               <CardTitle>Overall status</CardTitle>
-              <Badge variant={STATUS_BADGE_VARIANT[health.overall_status]}>
+              <Badge variant="outline" className={STATUS_BADGE_CLASS[health.overall_status]}>
                 {STATUS_LABELS[health.overall_status]}
               </Badge>
             </CardHeader>

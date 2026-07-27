@@ -42,8 +42,18 @@ export function AuditLogsPage() {
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const loadRequestId = useRef(0);
+  // Guards handleLoadMore and handleExport against each other as well as
+  // against themselves -- both append to `logs` by offset, so letting two
+  // rapid clicks (or a click on each within the same render) run
+  // concurrently could interleave requests and produce duplicate or
+  // missing rows. A ref (not the isLoadingMore/isExporting state) because
+  // React batches state updates, so two synchronous calls could both read
+  // the old state value before either setState commits; the ref updates
+  // immediately.
+  const isFetchingMoreRef = useRef(false);
 
   const userOptions = useMemo(() => getUniqueAuditLogUsers(optionsSample), [optionsSample]);
   const actionOptions = useMemo(() => getUniqueAuditLogActions(optionsSample), [optionsSample]);
@@ -126,10 +136,11 @@ export function AuditLogsPage() {
   }, [accessToken]);
 
   const handleLoadMore = useCallback(async () => {
-    if (!accessToken || isLoadingMore) {
+    if (!accessToken || isFetchingMoreRef.current) {
       return;
     }
 
+    isFetchingMoreRef.current = true;
     setIsLoadingMore(true);
     try {
       const batch = await fetchAuditLogs(accessToken, {
@@ -143,9 +154,51 @@ export function AuditLogsPage() {
     } catch {
       setLoadError("Unable to load more audit logs. Please try again.");
     } finally {
+      isFetchingMoreRef.current = false;
       setIsLoadingMore(false);
     }
-  }, [accessToken, isLoadingMore, logs.length, filters, sort]);
+  }, [accessToken, logs.length, filters, sort]);
+
+  // Export must reflect every matching row on the server, not just what's
+  // currently loaded into `logs` (the initial page plus whatever "Load
+  // more" happened to fetch) -- otherwise it silently truncates once
+  // hasMore is true. Fetches whatever's missing first, then exports the
+  // complete set.
+  const handleExport = useCallback(async () => {
+    if (!accessToken || isFetchingMoreRef.current) {
+      return;
+    }
+
+    isFetchingMoreRef.current = true;
+    setIsExporting(true);
+    try {
+      let entries = logs;
+      let currentTotal = total;
+      while (entries.length < currentTotal) {
+        const batch = await fetchAuditLogs(accessToken, {
+          ...auditLogFiltersToQueryParams(filters),
+          offset: entries.length,
+          sortField: sort.field,
+          sortDirection: sort.direction,
+        });
+        if (batch.entries.length === 0) {
+          // Server has fewer rows than `total` claimed (e.g. a concurrent
+          // deletion) -- stop instead of looping forever.
+          break;
+        }
+        entries = [...entries, ...batch.entries];
+        currentTotal = batch.total;
+      }
+      setLogs(entries);
+      setTotal(currentTotal);
+      downloadAuditLogsCsv(entries);
+    } catch {
+      setLoadError("Unable to export all matching audit logs. Please try again.");
+    } finally {
+      isFetchingMoreRef.current = false;
+      setIsExporting(false);
+    }
+  }, [accessToken, logs, total, filters, sort]);
 
   const signedOutError = accessToken
     ? null
@@ -153,10 +206,6 @@ export function AuditLogsPage() {
   const effectiveLoading = accessToken ? isLoading : false;
   const effectiveError = signedOutError ?? loadError;
   const hasMore = logs.length < total;
-
-  const handleExport = () => {
-    downloadAuditLogsCsv(sortedLogs);
-  };
 
   return (
     <div className={pageShellXWide}>
@@ -171,11 +220,11 @@ export function AuditLogsPage() {
         </div>
         <Button
           type="button"
-          onClick={handleExport}
-          disabled={effectiveLoading || sortedLogs.length === 0}
+          onClick={() => void handleExport()}
+          disabled={effectiveLoading || isExporting || isLoadingMore || total === 0}
         >
           <Download className="size-4" aria-hidden="true" />
-          Export
+          {isExporting ? "Exporting…" : "Export"}
         </Button>
       </header>
 
@@ -190,7 +239,7 @@ export function AuditLogsPage() {
               variant="outline"
               size="sm"
               onClick={() => void handleLoadMore()}
-              disabled={isLoadingMore}
+              disabled={isLoadingMore || isExporting}
             >
               {isLoadingMore ? "Loading more..." : "Load more"}
             </Button>

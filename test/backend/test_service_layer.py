@@ -38,8 +38,10 @@ def test_build_action_preview_for_send_message_is_irreversible():
 @pytest.mark.asyncio
 async def test_get_dashboard_stats_shape():
     db = AsyncMock()
-    # scalar is awaited four times for the four counts
-    db.scalar = AsyncMock(side_effect=[3, 2, 1, 5])
+    # scalar is awaited five times: instructor_count, admin_count,
+    # active_workflows, then the audit_logs and audit_logs_session counts
+    # that get summed into audit_events_last_7_days.
+    db.scalar = AsyncMock(side_effect=[3, 2, 1, 4, 1])
 
     stats = await get_dashboard_stats(db)
 
@@ -49,7 +51,7 @@ async def test_get_dashboard_stats_shape():
         "active_workflows": 1,
         "audit_events_last_7_days": 5,
     }
-    assert db.scalar.await_count == 4
+    assert db.scalar.await_count == 5
 
 
 def test_default_admin_settings_keys():

@@ -15,8 +15,21 @@ export interface SupportTicket {
   created_by_email: string | null;
   resolved_by: number | null;
   resolved_by_email: string | null;
+  assigned_to: number | null;
+  assigned_to_name: string | null;
+  assigned_to_email: string | null;
   created_at: string;
   resolved_at: string | null;
+}
+
+export interface AssignableAdmin {
+  id: number;
+  name: string;
+  email: string;
+}
+
+export async function fetchAssignableAdmins(accessToken: string): Promise<AssignableAdmin[]> {
+  return apiRequest<AssignableAdmin[]>(`${SUPPORT_TICKETS_PATH}/assignable-admins`, accessToken);
 }
 
 export async function fetchTicketForFailedOperation(
@@ -42,7 +55,7 @@ export async function createTicket(
 export async function updateTicket(
   accessToken: string,
   ticketId: number,
-  updates: { status?: TicketStatus; admin_notes?: string },
+  updates: { status?: TicketStatus; admin_notes?: string; assigned_to?: number | null },
 ): Promise<SupportTicket> {
   return apiRequest<SupportTicket>(`${SUPPORT_TICKETS_PATH}/${ticketId}`, accessToken, {
     method: "PATCH",
