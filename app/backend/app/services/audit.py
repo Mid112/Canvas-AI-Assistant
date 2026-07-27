@@ -1,9 +1,9 @@
 import logging
 from datetime import datetime
 
-from sqlalchemy import String, asc, cast, desc, func, or_, select
+from sqlalchemy import Integer, String, asc, case, cast, desc, func, literal, or_, select, union_all
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import contains_eager
 
 from app.models.audit_log import AuditLog
 from app.models.audit_log_session import AuditLogSession
@@ -12,33 +12,13 @@ from app.schemas.audit import AuditLogListResponse, AuditLogResponse
 
 logger = logging.getLogger(__name__)
 
-# Safety cap on per-source rows fetched when sorting by a field other than
-# timestamp (see list_audit_logs) — a non-timestamp global sort needs the
-# full filtered result set fetched before it can be sorted/sliced correctly
-# (unlike timestamp, which both tables are already indexed/ordered by), so
-# this bounds how large that single query can get when few/no filters are
-# active. Fine at this app's scale; revisit with a real per-field SQL sort
-# if this ever becomes a bottleneck.
-_MAX_SORT_ROWS = 5000
-
-
-def _sort_key(item: AuditLogResponse, field: str) -> tuple[str, str] | str | datetime:
-    if field == "user":
-        return (item.user_email, item.user_role)
-    if field == "action":
-        return item.action
-    if field == "resource":
-        return item.resource_type
-    if field == "result":
-        return item.status
-    return item.timestamp
-
 # AuditLogSession.action -> (resource_type, operation, status), so session
 # rows render through the same AuditLogResponse shape as audit_logs rows.
 # Every action written anywhere via `AuditLogSession(...)` must be listed
 # here (services/auth.py, services/admin.py, core/seeder.py) — an omission
-# doesn't error, it just falls back to _DEFAULT_SESSION_META (with a log
-# warning), so check the logs after adding a new action string.
+# doesn't error, it just falls back to _DEFAULT_SESSION_META (flagged after
+# the fact via the unmapped-action warning below), so check the logs after
+# adding a new action string.
 SESSION_ACTION_META: dict[str, tuple[str, str, str]] = {
     "admin_login": ("session", "login", "success"),
     "admin_logout": ("session", "logout", "success"),
@@ -76,49 +56,30 @@ _DEFAULT_SESSION_META: tuple[str, str, str] = ("account", "update", "success")
 _SESSION_RESOURCE_ID_KEYS = ("instructor_id", "new_admin_id")
 
 # audit_logs_session has no `status` column -- its status is derived from
-# SESSION_ACTION_META at read time (see _session_row_to_response above), so
+# SESSION_ACTION_META at read time (see _session_meta_case below), so
 # filtering/searching by result needs the reverse mapping: which actions
 # produce a given status.
 _SESSION_ACTIONS_BY_STATUS: dict[str, set[str]] = {}
 for _action_name, (_resource_type, _operation, _status) in SESSION_ACTION_META.items():
     _SESSION_ACTIONS_BY_STATUS.setdefault(_status, set()).add(_action_name)
 
+# sort_field (validated by the router's Literal) -> the merged subquery
+# column it corresponds to.
+_SORT_COLUMNS: dict[str, str] = {
+    "timestamp": "timestamp",
+    "user": "user_email",
+    "action": "action",
+    "resource": "resource_type",
+    "result": "status",
+}
 
-def _session_row_to_response(row: AuditLogSession) -> AuditLogResponse:
-    meta = SESSION_ACTION_META.get(row.action)
-    if meta is None:
-        logger.warning("Unmapped audit_logs_session action %r; add it to SESSION_ACTION_META", row.action)
-        meta = _DEFAULT_SESSION_META
-    resource_type, operation, row_status = meta
-    details = row.details or {}
-    resource_id = next(
-        (str(details[key]) for key in _SESSION_RESOURCE_ID_KEYS if key in details),
-        None,
-    )
 
-    # row.user is None for anonymous failed-login attempts against unknown
-    # emails (user_id nullable, see 036_audit_log_session_nullable_user.sql)
-    # — fall back to the attempted email captured in details.
-    user_email = row.user.email if row.user is not None else str(details.get("email", "unknown"))
-    user_role = row.user.role if row.user is not None else "unknown"
-
-    return AuditLogResponse(
-        # Negate: audit_logs and audit_logs_session are independent id
-        # sequences, and the frontend uses this as a React list key.
-        id=-row.id,
-        user_id=row.user_id,
-        workflow_id=row.workflow_id,
-        course_id=None,
-        action=row.action,
-        resource_type=resource_type,
-        resource_id=resource_id,
-        operation=operation,
-        status=row_status,
-        timestamp=row.timestamp,
-        user_email=user_email,
-        user_role=user_role,
-        details=row.details,
-    )
+def _session_meta_case(index: int, label: str):
+    return case(
+        {action: meta[index] for action, meta in SESSION_ACTION_META.items()},
+        value=AuditLogSession.action,
+        else_=_DEFAULT_SESSION_META[index],
+    ).label(label)
 
 
 async def list_audit_logs(
@@ -136,25 +97,75 @@ async def list_audit_logs(
     sort_field: str = "timestamp",
     sort_direction: str = "desc",
 ) -> AuditLogListResponse:
-    """Server-side search/filter over both audit sources, so results are
-    correct against the full table rather than whatever page happened to be
-    loaded client-side (audit_logs/audit_logs_session can run into the tens
-    or hundreds of thousands of rows)."""
-    # Joined (not joinedload'd) so User columns are available to filter on;
-    # contains_eager reuses that same join for eager-loading .user instead
-    # of adding a second one.
-    workflow_query = select(AuditLog).join(AuditLog.user).options(contains_eager(AuditLog.user))
-    workflow_count_query = select(func.count()).select_from(AuditLog).join(AuditLog.user)
+    """Server-side search/filter/sort over both audit sources, merged via a
+    single SQL UNION ALL with one ORDER BY/LIMIT/OFFSET over the combined
+    result.
+
+    A prior version fetched the top (offset + limit) rows from each source
+    by timestamp and merged/sliced in Python for the timestamp-sort case —
+    that's actually correct (any row within the global top K must be within
+    its own source's top K too, so the two per-source top-K lists always
+    contain every candidate for a [0, K) window), just an optimization over
+    a real UNION ALL. The real gap was the *other* branch, for non-timestamp
+    sorts: it fetched up to `_MAX_SORT_ROWS` (5000) full rows per source and
+    sorted in Python, silently omitting anything beyond that cap once a
+    source's filtered total passed it. A single UNION ALL/ORDER BY/LIMIT/
+    OFFSET is correct for every sort field with no such cap, and replaces
+    both branches with one simpler, cheaper-per-request query.
+    """
+    workflow_query = (
+        select(
+            AuditLog.id.label("id"),
+            AuditLog.user_id.label("user_id"),
+            AuditLog.workflow_id.label("workflow_id"),
+            AuditLog.course_id.label("course_id"),
+            AuditLog.action.label("action"),
+            AuditLog.resource_type.label("resource_type"),
+            AuditLog.resource_id.label("resource_id"),
+            AuditLog.operation.label("operation"),
+            AuditLog.status.label("status"),
+            AuditLog.timestamp.label("timestamp"),
+            User.email.label("user_email"),
+            User.role.label("user_role"),
+            cast(literal(None), JSONB).label("details"),
+        )
+        .join(User, AuditLog.user_id == User.id)
+    )
+    workflow_count_query = select(func.count()).select_from(AuditLog).join(User, AuditLog.user_id == User.id)
+
+    session_resource_id = func.coalesce(
+        AuditLogSession.details["instructor_id"].as_string(),
+        AuditLogSession.details["new_admin_id"].as_string(),
+    )
     # Outer join: audit_logs_session.user_id is nullable for anonymous
     # failed-login attempts against unknown emails (see
     # 036_audit_log_session_nullable_user.sql) — an inner join would
-    # silently drop those rows from the audit trail entirely.
+    # silently drop those rows from the audit trail entirely. user_email/
+    # user_role fall back to the attempted email (from details) and
+    # "unknown" so those rows still render.
     session_query = (
-        select(AuditLogSession)
-        .outerjoin(AuditLogSession.user)
-        .options(contains_eager(AuditLogSession.user))
+        select(
+            (-AuditLogSession.id).label("id"),
+            AuditLogSession.user_id.label("user_id"),
+            AuditLogSession.workflow_id.label("workflow_id"),
+            cast(literal(None), Integer).label("course_id"),
+            AuditLogSession.action.label("action"),
+            _session_meta_case(0, "resource_type"),
+            session_resource_id.label("resource_id"),
+            _session_meta_case(1, "operation"),
+            _session_meta_case(2, "status"),
+            AuditLogSession.timestamp.label("timestamp"),
+            func.coalesce(
+                User.email, AuditLogSession.details["email"].as_string(), literal("unknown")
+            ).label("user_email"),
+            func.coalesce(User.role, literal("unknown")).label("user_role"),
+            AuditLogSession.details.label("details"),
+        )
+        .outerjoin(User, AuditLogSession.user_id == User.id)
     )
-    session_count_query = select(func.count()).select_from(AuditLogSession).outerjoin(AuditLogSession.user)
+    session_count_query = (
+        select(func.count()).select_from(AuditLogSession).outerjoin(User, AuditLogSession.user_id == User.id)
+    )
 
     if user_id is not None:
         workflow_query = workflow_query.where(AuditLog.user_id == user_id)
@@ -217,65 +228,41 @@ async def list_audit_logs(
     workflow_total = int(await db.scalar(workflow_count_query) or 0)
     session_total = int(await db.scalar(session_count_query) or 0)
 
-    descending = sort_direction != "asc"
-
-    if sort_field == "timestamp":
-        # Both sources are already indexed/ordered by timestamp, so the top
-        # (offset + limit) rows from each in the requested direction is
-        # enough to merge-sort and slice the correct global window below —
-        # a simple fetch-then-merge rather than a SQL UNION ALL, fine at
-        # this app's scale.
-        fetch_cap = offset + limit
-        order = desc if descending else asc
-        workflow_rows = await db.scalars(
-            workflow_query.order_by(order(AuditLog.timestamp)).limit(fetch_cap)
+    combined = union_all(workflow_query, session_query).subquery()
+    sort_column = combined.c[_SORT_COLUMNS.get(sort_field, "timestamp")]
+    order = desc if sort_direction != "asc" else asc
+    rows = (
+        await db.execute(
+            select(combined)
+            .order_by(order(sort_column), order(combined.c.id))
+            .offset(offset)
+            .limit(limit)
         )
-        session_rows = await db.scalars(
-            session_query.order_by(order(AuditLogSession.timestamp)).limit(fetch_cap)
-        )
-    else:
-        # A non-timestamp global sort can't be answered from a
-        # timestamp-ordered prefix — the row that belongs at a given offset
-        # depends on every filtered row, not just the most recent ones — so
-        # fetch the full filtered set from each source (capped defensively,
-        # see _MAX_SORT_ROWS) and sort in Python below instead.
-        workflow_rows = await db.scalars(workflow_query.limit(_MAX_SORT_ROWS))
-        session_rows = await db.scalars(session_query.limit(_MAX_SORT_ROWS))
-        if workflow_total > _MAX_SORT_ROWS or session_total > _MAX_SORT_ROWS:
-            logger.warning(
-                "audit log non-timestamp sort capped at %s rows per source "
-                "(workflow_total=%s session_total=%s sort_field=%s); "
-                "results may omit rows beyond the cap",
-                _MAX_SORT_ROWS,
-                workflow_total,
-                session_total,
-                sort_field,
-            )
+    ).mappings()
 
-    workflow_items = [
+    items = [
         AuditLogResponse(
-            id=row.id,
-            user_id=row.user_id,
-            workflow_id=row.workflow_id,
-            course_id=row.course_id,
-            action=row.action,
-            resource_type=row.resource_type,
-            resource_id=row.resource_id,
-            operation=row.operation,
-            status=row.status,
-            timestamp=row.timestamp,
-            user_email=row.user.email,
-            user_role=row.user.role,
+            id=row["id"],
+            user_id=row["user_id"],
+            workflow_id=row["workflow_id"],
+            course_id=row["course_id"],
+            action=row["action"],
+            resource_type=row["resource_type"],
+            resource_id=row["resource_id"],
+            operation=row["operation"],
+            status=row["status"],
+            timestamp=row["timestamp"],
+            user_email=row["user_email"],
+            user_role=row["user_role"],
+            details=row["details"],
         )
-        for row in workflow_rows
+        for row in rows
     ]
-    session_items = [_session_row_to_response(row) for row in session_rows]
 
-    merged = sorted(
-        workflow_items + session_items,
-        key=lambda item: _sort_key(item, sort_field),
-        reverse=descending,
-    )
-    items = merged[offset : offset + limit]
+    unmapped_actions = {
+        item.action for item in items if item.id < 0 and item.action not in SESSION_ACTION_META
+    }
+    for unmapped_action in unmapped_actions:
+        logger.warning("Unmapped audit_logs_session action %r; add it to SESSION_ACTION_META", unmapped_action)
 
     return AuditLogListResponse(items=items, total=workflow_total + session_total)
