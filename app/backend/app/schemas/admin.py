@@ -46,6 +46,16 @@ class InstructorResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class AdminCanvasConnectionResponse(BaseModel):
+    id: int
+    canvas_url: str
+    last_sync_error: str | None
+    courses_synced_at: datetime | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 class AdminUserResponse(BaseModel):
     id: int
     name: str

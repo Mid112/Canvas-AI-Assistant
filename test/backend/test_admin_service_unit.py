@@ -52,12 +52,13 @@ async def test_get_admin_settings_merges_stored_over_defaults():
 
 @pytest.mark.asyncio
 async def test_update_admin_settings_updates_existing_key():
-    db = AsyncMock()
+    db = _db_assigning_ids()
     existing = SimpleNamespace(key="organization_name", value="Old Org", updated_at=None)
     db.get = AsyncMock(return_value=existing)
     db.scalars = AsyncMock(return_value=[])
+    admin = SimpleNamespace(id=1)
 
-    await update_admin_settings(db, {"organization_name": "New Org"})
+    await update_admin_settings(db, {"organization_name": "New Org"}, admin)
 
     assert existing.value == "New Org"
     assert existing.updated_at is not None
@@ -69,11 +70,30 @@ async def test_update_admin_settings_inserts_new_key():
     db = _db_assigning_ids()
     db.get = AsyncMock(return_value=None)
     db.scalars = AsyncMock(return_value=[])
+    admin = SimpleNamespace(id=1)
 
-    await update_admin_settings(db, {"new_setting": "value"})
+    await update_admin_settings(db, {"new_setting": "value"}, admin)
 
-    db.add.assert_called_once()
+    # One add() for the new SystemSetting row, one for the audit log entry.
+    assert db.add.call_count == 2
     db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_update_admin_settings_writes_audit_log():
+    db = _db_assigning_ids()
+    db.get = AsyncMock(return_value=None)
+    db.scalars = AsyncMock(return_value=[])
+    admin = SimpleNamespace(id=7)
+
+    await update_admin_settings(db, {"organization_name": "New Org"}, admin)
+
+    audit_entry = next(
+        c.args[0] for c in db.add.call_args_list if getattr(c.args[0], "action", None) == "admin_settings_updated"
+    )
+    assert audit_entry.user_id == 7
+    assert audit_entry.details["changed_keys"] == ["organization_name"]
+    assert "values" not in audit_entry.details
 
 
 # ---------------------------------------------------------------------------

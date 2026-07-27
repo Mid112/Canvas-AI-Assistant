@@ -22,6 +22,7 @@ from app.models.resolved_set import ResolvedSet
 from app.models.session import Session
 from app.models.student import Student
 from app.models.submission import Submission
+from app.models.support_ticket import SupportTicket
 from app.models.system_setting import SystemSetting
 from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
@@ -52,6 +53,7 @@ __all__ = [
     "Session",
     "Student",
     "Submission",
+    "SupportTicket",
     "SystemSetting",
     "ToolCallLog",
     "User",

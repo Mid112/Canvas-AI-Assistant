@@ -7,6 +7,7 @@ through the API under test.
 """
 import asyncio
 import uuid
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,6 +17,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.config import settings
 from app.main import app
 from app.models.audit_log_session import AuditLogSession
+from app.models.canvas_connection import CanvasConnection
 
 
 def _make_session():
@@ -402,3 +404,279 @@ class TestAuditLog:
 
         log = asyncio.run(_check())
         assert log is not None
+
+
+# ── canvas_status=failing instructor filter (Feature 12, Secure Troubleshooting)
+
+class TestListInstructorsCanvasStatusFilter:
+    def _seed_connection(self, user_id: int, *, canvas_url: str, last_sync_error: str | None) -> None:
+        async def _seed():
+            engine, Session = _make_session()
+            try:
+                async with Session() as db:
+                    db.add(
+                        CanvasConnection(
+                            user_id=user_id,
+                            canvas_url=canvas_url,
+                            encrypted_token="dummy",
+                            last_sync_error=last_sync_error,
+                        )
+                    )
+                    await db.commit()
+            finally:
+                await engine.dispose()
+
+        asyncio.run(_seed())
+
+    # Verifies: canvas_status=failing scopes to only instructors with a failing connection.
+    def test_canvas_status_failing_filter(self, client, admin_token):
+        healthy_id = client.post(
+            BASE,
+            json={"name": "Healthy Filter Instructor", "email": _new_email(), "password": "Pass123!"},
+            headers=_auth(admin_token),
+        ).json()["id"]
+        failing_id = client.post(
+            BASE,
+            json={"name": "Failing Filter Instructor", "email": _new_email(), "password": "Pass123!"},
+            headers=_auth(admin_token),
+        ).json()["id"]
+
+        self._seed_connection(healthy_id, canvas_url="https://canvas.example.edu", last_sync_error=None)
+        self._seed_connection(
+            failing_id, canvas_url="https://canvas.example.edu", last_sync_error="401 Unauthorized"
+        )
+
+        resp = client.get(f"{BASE}?canvas_status=failing", headers=_auth(admin_token))
+        assert resp.status_code == 200
+        ids = {item["id"] for item in resp.json()}
+        assert failing_id in ids
+        assert healthy_id not in ids
+
+    # Verifies: an instructor with 2 failing connections appears exactly once (no join duplicates).
+    def test_canvas_status_failing_dedupes_multiple_connections(self, client, admin_token):
+        iid = client.post(
+            BASE,
+            json={"name": "Multi Failing Instructor", "email": _new_email(), "password": "Pass123!"},
+            headers=_auth(admin_token),
+        ).json()["id"]
+
+        self._seed_connection(iid, canvas_url="https://school-one.example.edu", last_sync_error="401")
+        self._seed_connection(iid, canvas_url="https://school-two.example.edu", last_sync_error="500")
+
+        resp = client.get(f"{BASE}?canvas_status=failing", headers=_auth(admin_token))
+        matches = [item for item in resp.json() if item["id"] == iid]
+        assert len(matches) == 1
+
+    # Verifies: without the filter, both healthy and failing instructors are listed.
+    def test_no_filter_returns_all_instructors(self, client, admin_token):
+        iid = client.post(
+            BASE,
+            json={"name": "Unfiltered Instructor", "email": _new_email(), "password": "Pass123!"},
+            headers=_auth(admin_token),
+        ).json()["id"]
+        self._seed_connection(iid, canvas_url="https://canvas.example.edu", last_sync_error=None)
+
+        resp = client.get(BASE, headers=_auth(admin_token))
+        assert resp.status_code == 200
+        assert any(item["id"] == iid for item in resp.json())
+
+
+# ── Admin-initiated Canvas token reset, scoped by canvas_url (Feature 12) ─────
+
+class TestInstructorCanvasConnections:
+    @pytest.fixture()
+    def instructor_id(self, client, admin_token):
+        resp = client.post(BASE, json={
+            "name": "Canvas Connections Instructor",
+            "email": _new_email(),
+            "password": "Pass123!",
+        }, headers=_auth(admin_token))
+        return resp.json()["id"]
+
+    # Verifies: a new instructor has no Canvas connections yet.
+    def test_list_connections_empty_for_new_instructor(self, client, admin_token, instructor_id):
+        resp = client.get(f"{BASE}/{instructor_id}/canvas-connections", headers=_auth(admin_token))
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    # Verifies: listing connections for an unknown instructor 404s.
+    def test_list_connections_unknown_instructor(self, client, admin_token):
+        resp = client.get(f"{BASE}/999999/canvas-connections", headers=_auth(admin_token))
+        assert resp.status_code == 404
+
+    # Verifies: an instructor cannot use this admin-only route.
+    def test_instructor_cannot_list_connections(self, client, instructor_token, instructor_id):
+        resp = client.get(f"{BASE}/{instructor_id}/canvas-connections", headers=_auth(instructor_token))
+        assert resp.status_code == 403
+
+    # Verifies: no token rejected.
+    def test_list_connections_no_token_rejected(self, client, instructor_id):
+        resp = client.get(f"{BASE}/{instructor_id}/canvas-connections")
+        assert resp.status_code == 401
+
+    # Verifies: resetting a token validates against Canvas, then creates a connection.
+    def test_admin_can_reset_canvas_token(self, client, admin_token, instructor_id):
+        with patch("app.integrations.canvas.validate_token", new_callable=AsyncMock):
+            resp = client.patch(
+                f"{BASE}/{instructor_id}/canvas-token",
+                json={"canvas_url": "https://canvas.example.edu", "canvas_token": "new-token-value"},
+                headers=_auth(admin_token),
+            )
+        assert resp.status_code == 200
+        connections = resp.json()
+        assert len(connections) == 1
+        assert connections[0]["canvas_url"] == "https://canvas.example.edu"
+        assert connections[0]["last_sync_error"] is None
+        # Raw token never round-trips into the response.
+        assert "new-token-value" not in resp.text
+
+    # Verifies: resetting the same canvas_url again updates in place (no duplicate row).
+    def test_reset_token_upserts_existing_connection(self, client, admin_token, instructor_id):
+        with patch("app.integrations.canvas.validate_token", new_callable=AsyncMock):
+            client.patch(
+                f"{BASE}/{instructor_id}/canvas-token",
+                json={"canvas_url": "https://canvas.example.edu", "canvas_token": "first-token"},
+                headers=_auth(admin_token),
+            )
+            resp = client.patch(
+                f"{BASE}/{instructor_id}/canvas-token",
+                json={"canvas_url": "https://canvas.example.edu", "canvas_token": "second-token"},
+                headers=_auth(admin_token),
+            )
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+
+    # Verifies: a different canvas_url adds a second connection (multi-connection support).
+    def test_reset_token_adds_second_connection_for_new_url(self, client, admin_token, instructor_id):
+        with patch("app.integrations.canvas.validate_token", new_callable=AsyncMock):
+            client.patch(
+                f"{BASE}/{instructor_id}/canvas-token",
+                json={"canvas_url": "https://school-one.example.edu", "canvas_token": "token-1"},
+                headers=_auth(admin_token),
+            )
+            resp = client.patch(
+                f"{BASE}/{instructor_id}/canvas-token",
+                json={"canvas_url": "https://school-two.example.edu", "canvas_token": "token-2"},
+                headers=_auth(admin_token),
+            )
+        assert resp.status_code == 200
+        urls = {c["canvas_url"] for c in resp.json()}
+        assert urls == {"https://school-one.example.edu", "https://school-two.example.edu"}
+
+    # Verifies: resetting a failing connection's token clears last_sync_error immediately.
+    def test_reset_token_clears_last_sync_error(self, client, admin_token, instructor_id):
+        async def _seed():
+            engine, Session = _make_session()
+            try:
+                async with Session() as db:
+                    db.add(CanvasConnection(
+                        user_id=instructor_id,
+                        canvas_url="https://canvas.example.edu",
+                        encrypted_token="dummy",
+                        last_sync_error="401 Unauthorized",
+                    ))
+                    await db.commit()
+            finally:
+                await engine.dispose()
+
+        asyncio.run(_seed())
+
+        with patch("app.integrations.canvas.validate_token", new_callable=AsyncMock):
+            resp = client.patch(
+                f"{BASE}/{instructor_id}/canvas-token",
+                json={"canvas_url": "https://canvas.example.edu", "canvas_token": "fresh-token"},
+                headers=_auth(admin_token),
+            )
+        assert resp.status_code == 200
+        connection = next(c for c in resp.json() if c["canvas_url"] == "https://canvas.example.edu")
+        assert connection["last_sync_error"] is None
+
+    # Verifies: resetting a token for an unknown instructor 404s.
+    def test_reset_token_unknown_instructor(self, client, admin_token):
+        with patch("app.integrations.canvas.validate_token", new_callable=AsyncMock):
+            resp = client.patch(
+                f"{BASE}/999999/canvas-token",
+                json={"canvas_url": "https://canvas.example.edu", "canvas_token": "token"},
+                headers=_auth(admin_token),
+            )
+        assert resp.status_code == 404
+
+    # Verifies: an instructor cannot reset a token via the admin route.
+    def test_instructor_cannot_reset_token(self, client, instructor_token, instructor_id):
+        resp = client.patch(
+            f"{BASE}/{instructor_id}/canvas-token",
+            json={"canvas_url": "https://canvas.example.edu", "canvas_token": "token"},
+            headers=_auth(instructor_token),
+        )
+        assert resp.status_code == 403
+
+    # Verifies: an invalid/unreachable token surfaces a clean error and persists nothing.
+    def test_reset_token_rejects_invalid_token(self, client, admin_token, instructor_id):
+        from fastapi import HTTPException
+        from fastapi import status as http_status
+
+        with patch(
+            "app.integrations.canvas.validate_token",
+            new=AsyncMock(
+                side_effect=HTTPException(
+                    status_code=http_status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail="Invalid Canvas API token",
+                )
+            ),
+        ):
+            resp = client.patch(
+                f"{BASE}/{instructor_id}/canvas-token",
+                json={"canvas_url": "https://canvas.example.edu", "canvas_token": "bad-token"},
+                headers=_auth(admin_token),
+            )
+        assert resp.status_code == 422
+
+        list_resp = client.get(f"{BASE}/{instructor_id}/canvas-connections", headers=_auth(admin_token))
+        assert list_resp.json() == []
+
+    # Verifies: reset writes an audit log row (visible in Audit Logs).
+    def test_reset_token_writes_audit_log(self, client, admin_token, instructor_id):
+        with patch("app.integrations.canvas.validate_token", new_callable=AsyncMock):
+            client.patch(
+                f"{BASE}/{instructor_id}/canvas-token",
+                json={"canvas_url": "https://canvas.example.edu", "canvas_token": "token-value"},
+                headers=_auth(admin_token),
+            )
+
+        async def _check():
+            engine, Session = _make_session()
+            try:
+                async with Session() as db:
+                    return await db.scalar(
+                        select(AuditLogSession).where(
+                            AuditLogSession.action == "instructor_canvas_token_reset",
+                            AuditLogSession.details["instructor_id"].as_integer() == instructor_id,
+                        )
+                    )
+            finally:
+                await engine.dispose()
+
+        log = asyncio.run(_check())
+        assert log is not None
+
+    # Verifies: last_sync_error is redacted if it contains a secret-shaped string.
+    def test_list_connections_redacts_secrets_in_last_sync_error(self, client, admin_token, instructor_id):
+        async def _seed():
+            engine, Session = _make_session()
+            try:
+                async with Session() as db:
+                    db.add(CanvasConnection(
+                        user_id=instructor_id,
+                        canvas_url="https://canvas.example.edu",
+                        encrypted_token="dummy",
+                        last_sync_error="401 Unauthorized: Authorization: Bearer sk-ant-abc12345secret",
+                    ))
+                    await db.commit()
+            finally:
+                await engine.dispose()
+
+        asyncio.run(_seed())
+
+        resp = client.get(f"{BASE}/{instructor_id}/canvas-connections", headers=_auth(admin_token))
+        assert "sk-ant-abc12345secret" not in resp.text
+        assert "[REDACTED" in resp.json()[0]["last_sync_error"]

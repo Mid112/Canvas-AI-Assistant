@@ -4,6 +4,10 @@ export const FAILED_OPERATIONS_PATH = "/admin/failed-operations";
 
 export type FailedOperationSource = "canvas" | "ai";
 
+/** List-endpoint shape — metadata + a plain-language summary only. Raw
+ * error_detail/context_json are FERPA-sensitive and only ever returned by
+ * the single-item detail endpoint (see FailedOperationDetail below), which
+ * access-logs the view server-side. */
 export interface FailedOperation {
   id: number;
   source: FailedOperationSource;
@@ -15,9 +19,15 @@ export interface FailedOperation {
   workflow_id: number | null;
   tool_call_id: number | null;
   provider: string | null;
+  human_summary: string;
+  created_at: string;
+}
+
+/** GET /admin/failed-operations/{id} response shape — adds the raw fields.
+ * Fetching this is itself an access-logged action on the backend. */
+export interface FailedOperationDetail extends FailedOperation {
   error_detail: string;
   context_json: Record<string, unknown>;
-  created_at: string;
 }
 
 export interface FailedOperationListResponse {
@@ -77,6 +87,6 @@ export async function fetchFailedOperations(
 export async function fetchFailedOperation(
   accessToken: string,
   id: number,
-): Promise<FailedOperation> {
-  return apiRequest<FailedOperation>(`${FAILED_OPERATIONS_PATH}/${id}`, accessToken);
+): Promise<FailedOperationDetail> {
+  return apiRequest<FailedOperationDetail>(`${FAILED_OPERATIONS_PATH}/${id}`, accessToken);
 }

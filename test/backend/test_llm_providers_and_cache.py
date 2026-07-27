@@ -1,4 +1,5 @@
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
@@ -206,6 +207,7 @@ def test_generic_admin_settings_cannot_bypass_provider_validation():
             update_admin_settings(
                 AsyncMock(),
                 {"active_llm_provider": "attacker-controlled-provider"},
+                SimpleNamespace(id=1),
             )
         )
 

@@ -2,8 +2,10 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { paths } from "@/routes/paths";
 import { FailedOperationsPage } from "@/pages/Admin/FailedOperationsPage";
 import * as failedOperationsService from "@/services/failedOperations";
+import * as supportTicketsService from "@/services/supportTickets";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 const mockUseAuth = vi.fn();
@@ -26,6 +28,8 @@ const summary: failedOperationsService.FailedOperationSummaryResponse = {
   hours: 24,
 };
 
+// List shape: metadata + human_summary only, no raw error_detail/context_json
+// (see FailedOperationDetail below for the gated detail shape).
 const items: failedOperationsService.FailedOperation[] = [
   {
     id: 1,
@@ -38,8 +42,7 @@ const items: failedOperationsService.FailedOperation[] = [
     workflow_id: null,
     tool_call_id: 99,
     provider: null,
-    error_detail: "Canvas 401 Unauthorized",
-    context_json: { canvas_connection_id: 3 },
+    human_summary: "Canvas couldn't fetch assignments.",
     created_at: "2026-07-21T18:00:00Z",
   },
   {
@@ -53,11 +56,23 @@ const items: failedOperationsService.FailedOperation[] = [
     workflow_id: null,
     tool_call_id: null,
     provider: "openai",
-    error_detail: "LLM request timed out after 60s",
-    context_json: {},
+    human_summary: "The AI assistant couldn't complete this request.",
     created_at: "2026-07-21T17:00:00Z",
   },
 ];
+
+const details: Record<number, failedOperationsService.FailedOperationDetail> = {
+  1: {
+    ...items[0],
+    error_detail: "Canvas 401 Unauthorized",
+    context_json: { canvas_connection_id: 3 },
+  },
+  2: {
+    ...items[1],
+    error_detail: "LLM request timed out after 60s",
+    context_json: {},
+  },
+};
 
 describe("FailedOperationsPage", () => {
   const user = userEvent.setup();
@@ -82,8 +97,13 @@ describe("FailedOperationsPage", () => {
       ai_count: 1,
     });
     vi.spyOn(failedOperationsService, "fetchFailedOperation").mockImplementation(
-      async (_token, id) => items.find((item) => item.id === id)!,
+      async (_token, id) => details[id],
     );
+    // No ticket exists by default — TicketPanel is mounted for every
+    // selected item, so this must be stubbed for every test.
+    vi.spyOn(supportTicketsService, "fetchTicketForFailedOperation").mockResolvedValue(null);
+    vi.spyOn(supportTicketsService, "createTicket");
+    vi.spyOn(supportTicketsService, "updateTicket");
   });
 
   it("renders summary cards and the failure list", async () => {
@@ -96,8 +116,21 @@ describe("FailedOperationsPage", () => {
     expect(screen.getByText("Total failures")).toBeInTheDocument();
     expect(screen.getByText("Canvas failures")).toBeInTheDocument();
     expect(screen.getByText("AI failures")).toBeInTheDocument();
-    expect(screen.getAllByText("Canvas 401 Unauthorized").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("LLM request timed out after 60s").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Canvas couldn't fetch assignments.").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("The AI assistant couldn't complete this request.").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("links back to Troubleshooting", async () => {
+    renderWithRouter(<FailedOperationsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Failed Operations")).toBeInTheDocument();
+    });
+
+    const backLink = screen.getByRole("link", { name: /back to troubleshooting/i });
+    expect(backLink).toHaveAttribute("href", paths.admin.troubleshooting);
   });
 
   it("filters the list when a source tab is selected", async () => {
@@ -167,5 +200,104 @@ describe("FailedOperationsPage", () => {
 
     expect(await screen.findByText("Provider: openai")).toBeInTheDocument();
     expect(screen.getByText("User: John Smith")).toBeInTheDocument();
+    expect(screen.getByText("LLM request timed out after 60s")).toBeInTheDocument();
+  });
+
+  it("shows a Load more control when more failures exist than were fetched", async () => {
+    vi.spyOn(failedOperationsService, "fetchFailedOperations").mockResolvedValue({
+      items,
+      total: 5,
+      canvas_count: 3,
+      ai_count: 2,
+    });
+
+    renderWithRouter(<FailedOperationsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Load more" })).toBeInTheDocument();
+    });
+  });
+
+  it("offers to escalate to a ticket when none exists, and creates one on click", async () => {
+    vi.spyOn(supportTicketsService, "createTicket").mockResolvedValue({
+      id: 42,
+      failed_operation_id: 1,
+      user_id: 10,
+      user_name: "Jane Doe",
+      status: "open",
+      admin_notes: null,
+      created_by: 1,
+      created_by_email: "admin@system.local",
+      resolved_by: null,
+      resolved_by_email: null,
+      created_at: "2026-07-21T18:05:00Z",
+      resolved_at: null,
+    });
+
+    renderWithRouter(<FailedOperationsPage />);
+
+    await user.click(await screen.findByText("fetch_assignments"));
+
+    const escalateButton = await screen.findByRole("button", { name: "Escalate to ticket" });
+    await user.click(escalateButton);
+
+    await waitFor(() => {
+      expect(supportTicketsService.createTicket).toHaveBeenCalledWith("access-token", 1);
+    });
+    // Scoped to the status badge -- "Open" also appears as one of the three
+    // always-rendered status buttons (Open/Investigating/Resolved).
+    expect(
+      await screen.findByText("Open", { selector: '[data-slot="badge"]' }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows existing ticket status and lets an admin resolve it", async () => {
+    vi.spyOn(supportTicketsService, "fetchTicketForFailedOperation").mockResolvedValue({
+      id: 7,
+      failed_operation_id: 1,
+      user_id: 10,
+      user_name: "Jane Doe",
+      status: "investigating",
+      admin_notes: "Looking into it",
+      created_by: 1,
+      created_by_email: "admin@system.local",
+      resolved_by: null,
+      resolved_by_email: null,
+      created_at: "2026-07-21T18:05:00Z",
+      resolved_at: null,
+    });
+    vi.spyOn(supportTicketsService, "updateTicket").mockResolvedValue({
+      id: 7,
+      failed_operation_id: 1,
+      user_id: 10,
+      user_name: "Jane Doe",
+      status: "resolved",
+      admin_notes: "Looking into it",
+      created_by: 1,
+      created_by_email: "admin@system.local",
+      resolved_by: 1,
+      resolved_by_email: "admin@system.local",
+      created_at: "2026-07-21T18:05:00Z",
+      resolved_at: "2026-07-21T18:10:00Z",
+    });
+
+    renderWithRouter(<FailedOperationsPage />);
+
+    await user.click(await screen.findByText("fetch_assignments"));
+
+    // Scoped to the status badge -- "Investigating" also appears as one of
+    // the three always-rendered status buttons.
+    expect(
+      await screen.findByText("Investigating", { selector: '[data-slot="badge"]' }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Resolved" }));
+
+    await waitFor(() => {
+      expect(supportTicketsService.updateTicket).toHaveBeenCalledWith("access-token", 7, {
+        status: "resolved",
+      });
+    });
+    expect(await screen.findByText(/Resolved by admin@system.local/)).toBeInTheDocument();
   });
 });

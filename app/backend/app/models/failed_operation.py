@@ -52,6 +52,11 @@ class FailedOperation(Base):
     provider: Mapped[str | None] = mapped_column(String, nullable=True)
     error_detail: Mapped[str] = mapped_column(Text, nullable=False)
     context_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    # Plain-language description generated at write time by
+    # summarize_failure() — the admin dashboard's default view, so raw
+    # error_detail/context_json never render without the explicit,
+    # access-logged "view detail" action (see routers/failed_operations.py).
+    human_summary: Mapped[str] = mapped_column(String, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
