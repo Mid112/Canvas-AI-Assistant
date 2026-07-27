@@ -100,8 +100,15 @@ describe("FailedOperationsPage", () => {
       async (_token, id) => details[id],
     );
     // No ticket exists by default — TicketPanel is mounted for every
-    // selected item, so this must be stubbed for every test.
+    // selected item, so this must be stubbed for every test. Same for
+    // fetchAssignableAdmins: TicketPanel loads it via Promise.all alongside
+    // fetchTicketForFailedOperation, so an unmocked (rejecting) call here
+    // fails that whole Promise.all and silently leaves `ticket` null --
+    // masked in most tests because a null ticket renders the same
+    // "Escalate to ticket" button whether from a real empty response or
+    // from this catch path, but not in tests asserting actual ticket state.
     vi.spyOn(supportTicketsService, "fetchTicketForFailedOperation").mockResolvedValue(null);
+    vi.spyOn(supportTicketsService, "fetchAssignableAdmins").mockResolvedValue([]);
     vi.spyOn(supportTicketsService, "createTicket");
     vi.spyOn(supportTicketsService, "updateTicket");
   });
