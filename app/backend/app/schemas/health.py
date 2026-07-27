@@ -17,31 +17,10 @@ class ServiceHealth(BaseModel):
     uptime_seconds: int | None = None  # backend only
 
 
-class FailingCanvasConnection(BaseModel):
-    user_name: str
-    user_email: str
-    canvas_url: str
-    error_detail: str | None = None
-
-
-class InstructorCanvasSummary(BaseModel):
-    total: int
-    healthy: int
-    failing: int
-    failing_connections: list[FailingCanvasConnection]
-
-
-class InstructorAiSummary(BaseModel):
-    total: int
-    failing_recent: int
-
-
 class HealthCheckResponse(BaseModel):
     overall_status: HealthStatus
     checked_at: datetime
     services: dict[str, ServiceHealth]
-    instructor_canvas: InstructorCanvasSummary
-    instructor_ai: InstructorAiSummary
 
 
 class LatestHealthResponse(BaseModel):

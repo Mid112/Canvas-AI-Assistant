@@ -5,8 +5,8 @@ from app.core.database import get_db
 from app.dependencies import get_admin_user
 from app.models.user import User
 from app.schemas.failed_operations import (
+    FailedOperationDetailResponse,
     FailedOperationListResponse,
-    FailedOperationResponse,
     FailedOperationSummaryResponse,
 )
 from app.services.failed_operations import (
@@ -49,10 +49,10 @@ async def list_failed_operations_route(
     )
 
 
-@router.get("/{failed_operation_id}", response_model=FailedOperationResponse)
+@router.get("/{failed_operation_id}", response_model=FailedOperationDetailResponse)
 async def get_failed_operation_route(
     failed_operation_id: int,
     current_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await get_failed_operation(db, failed_operation_id)
+    return await get_failed_operation(db, failed_operation_id, viewer=current_user)

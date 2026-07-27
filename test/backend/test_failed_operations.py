@@ -10,17 +10,19 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config import settings
 from app.main import app
+from app.models.audit_log_session import AuditLogSession
 from app.models.failed_operation import FailedOperation
 from app.models.user import User
 from app.services.ai_health import record_ai_call_outcome
 from app.services.failed_operations import (
     record_failed_operation,
     should_record_course_sync_failure,
+    summarize_failure,
 )
 
 
@@ -85,6 +87,29 @@ async def test_record_failed_operation_redacts_secrets_in_context_json():
 
 
 @pytest.mark.asyncio
+async def test_record_failed_operation_redacts_message_body_fields():
+    db = _db_mock()
+    row = await record_failed_operation(
+        db,
+        source="canvas",
+        operation="send_message",
+        error_detail="Canvas 500",
+        context_json={
+            "parameters": {
+                "body": "Student Jane Doe failed the midterm",
+                "subject": "Grade concern",
+                "local_course_id": 12,
+            }
+        },
+    )
+
+    params = row.context_json["parameters"]
+    assert params["body"] == "[REDACTED]"
+    assert params["subject"] == "[REDACTED]"
+    assert params["local_course_id"] == 12
+
+
+@pytest.mark.asyncio
 async def test_record_failed_operation_rejects_invalid_source():
     db = _db_mock()
     with pytest.raises(ValueError, match="source must be"):
@@ -108,6 +133,36 @@ async def test_record_failed_operation_empty_error_becomes_unknown():
     )
     assert row.operation == "unknown"
     assert row.error_detail == "Unknown error"
+
+
+def test_summarize_failure_known_pairs():
+    assert summarize_failure("canvas", "course_sync") == (
+        "This course couldn't be synced from Canvas."
+    )
+    assert summarize_failure("ai", "assistant_chat") == (
+        "The AI assistant couldn't complete this request."
+    )
+
+
+def test_summarize_failure_falls_back_to_humanized_operation():
+    assert summarize_failure("canvas", "update_assignment") == (
+        "Canvas couldn't update assignment."
+    )
+    assert summarize_failure("ai", "ai_draft") == (
+        "The AI assistant couldn't generate a draft."
+    )
+
+
+@pytest.mark.asyncio
+async def test_record_failed_operation_generates_human_summary():
+    db = _db_mock()
+    row = await record_failed_operation(
+        db,
+        source="canvas",
+        operation="create_quiz",
+        error_detail="Canvas 500",
+    )
+    assert row.human_summary == "Canvas couldn't create quiz."
 
 
 @pytest.mark.asyncio
@@ -246,9 +301,17 @@ async def test_record_and_list_failed_operations_against_db():
                 hashed_password="x",
                 role="instructor",
             )
+            admin_viewer = User(
+                name="Failed Ops Admin Viewer",
+                email=f"failedops_admin_{uuid.uuid4()}@example.com",
+                hashed_password="x",
+                role="admin",
+            )
             db.add(user)
+            db.add(admin_viewer)
             await db.commit()
             await db.refresh(user)
+            await db.refresh(admin_viewer)
 
             canvas_row = await record_failed_operation(
                 db,
@@ -280,6 +343,13 @@ async def test_record_and_list_failed_operations_against_db():
             assert listing.ai_count == 1
             assert {item.id for item in listing.items} == {canvas_row.id, ai_row.id}
             assert all(item.user_name == "Failed Ops Filter User" for item in listing.items)
+            # List responses are the FERPA-gated summary shape: no raw
+            # error_detail/context_json, only the plain-language summary.
+            assert all(not hasattr(item, "error_detail") for item in listing.items)
+            assert {item.human_summary for item in listing.items} == {
+                "This course couldn't be synced from Canvas.",
+                "The AI assistant couldn't complete this request.",
+            }
 
             canvas_only = await list_failed_operations(
                 db, user_id=user.id, source="canvas", hours=24
@@ -288,9 +358,21 @@ async def test_record_and_list_failed_operations_against_db():
             assert canvas_only.items[0].operation == "course_sync"
             assert canvas_only.ai_count == 0
 
-            detail = await get_failed_operation(db, canvas_row.id)
+            detail = await get_failed_operation(db, canvas_row.id, viewer=admin_viewer)
             assert detail.context_json["canvas_connection_id"] == 42
             assert detail.user_name == "Failed Ops Filter User"
+            assert detail.error_detail == "Canvas 502 Bad Gateway"
+
+            # Viewing detail wrote an access-log row — the audit trail of
+            # the audit tool (see SESSION_ACTION_META["failed_operation_viewed"]).
+            access_log = await db.scalar(
+                select(AuditLogSession).where(
+                    AuditLogSession.user_id == admin_viewer.id,
+                    AuditLogSession.action == "failed_operation_viewed",
+                )
+            )
+            assert access_log is not None
+            assert access_log.details == {"failed_operation_id": canvas_row.id}
 
             summary = await get_failed_operations_summary(db, hours=24)
             assert summary.total >= 2
@@ -298,9 +380,14 @@ async def test_record_and_list_failed_operations_against_db():
             assert summary.ai_count >= 1
 
             await db.execute(
+                delete(AuditLogSession).where(
+                    AuditLogSession.user_id.in_([user.id, admin_viewer.id])
+                )
+            )
+            await db.execute(
                 delete(FailedOperation).where(FailedOperation.user_id == user.id)
             )
-            await db.execute(delete(User).where(User.id == user.id))
+            await db.execute(delete(User).where(User.id.in_([user.id, admin_viewer.id])))
             await db.commit()
     finally:
         await engine.dispose()
@@ -414,10 +501,25 @@ async def test_admin_list_endpoint_returns_seeded_rows(client, admin_headers):
         body = listing.json()
         assert body["total"] >= 1
         assert any(item["id"] == row_id for item in body["items"])
+        seeded_item = next(item for item in body["items"] if item["id"] == row_id)
+        assert "error_detail" not in seeded_item
+        assert "context_json" not in seeded_item
+        assert seeded_item["human_summary"]
 
         detail = client.get(f"/api/v1/admin/failed-operations/{row_id}", headers=admin_headers)
         assert detail.status_code == 200
-        assert detail.json()["operation"] == marker
+        detail_body = detail.json()
+        assert detail_body["operation"] == marker
+        assert detail_body["error_detail"] == "seeded failure for admin list"
+        assert detail_body["human_summary"]
+
+        # Viewing detail is an access-logged action, visible in Audit Logs.
+        audit = client.get(
+            "/api/v1/admin/audit/logs?action=failed_operation_viewed",
+            headers=admin_headers,
+        )
+        assert audit.status_code == 200
+        assert audit.json()["total"] >= 1
 
         async with Session() as db:
             await db.execute(delete(FailedOperation).where(FailedOperation.id == row_id))

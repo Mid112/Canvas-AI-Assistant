@@ -13,25 +13,6 @@ export interface ServiceHealth {
   uptime_seconds: number | null;
 }
 
-export interface FailingCanvasConnection {
-  user_name: string;
-  user_email: string;
-  canvas_url: string;
-  error_detail: string | null;
-}
-
-export interface InstructorCanvasSummary {
-  total: number;
-  healthy: number;
-  failing: number;
-  failing_connections: FailingCanvasConnection[];
-}
-
-export interface InstructorAiSummary {
-  total: number;
-  failing_recent: number;
-}
-
 export interface ServiceMap {
   backend: ServiceHealth;
   database: ServiceHealth;
@@ -43,8 +24,6 @@ export interface HealthCheckResponse {
   overall_status: HealthStatus;
   checked_at: string;
   services: ServiceMap;
-  instructor_canvas: InstructorCanvasSummary;
-  instructor_ai: InstructorAiSummary;
 }
 
 // Only ever returned by GET /admin/health/latest, for a fresh deploy (or

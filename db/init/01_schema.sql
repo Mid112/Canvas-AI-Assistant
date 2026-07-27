@@ -568,9 +568,9 @@ CREATE TABLE failed_operations (
     workflow_id      INTEGER REFERENCES workflows(id) ON DELETE SET NULL,
     tool_call_id     INTEGER REFERENCES tool_call_logs(id) ON DELETE SET NULL,
     provider         VARCHAR,
-    human_summary    TEXT NOT NULL DEFAULT 'Operation failed',
     error_detail     TEXT NOT NULL,
     context_json     JSONB NOT NULL DEFAULT '{}',
+    human_summary    VARCHAR NOT NULL,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -582,6 +582,27 @@ CREATE INDEX idx_failed_operations_source_created_at
 
 CREATE INDEX idx_failed_operations_user_created_at
     ON failed_operations(user_id, created_at DESC);
+
+-- ─────────────────────────────────────────────
+-- Support Tickets
+-- Admin-side escalation tracking for failed operations (Feature 12, Secure
+-- Troubleshooting). One ticket per failed_operation.
+-- ─────────────────────────────────────────────
+CREATE TABLE support_tickets (
+    id                  SERIAL PRIMARY KEY,
+    failed_operation_id INTEGER NOT NULL UNIQUE REFERENCES failed_operations(id) ON DELETE CASCADE,
+    user_id             INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    status              VARCHAR NOT NULL DEFAULT 'open'
+                            CHECK (status IN ('open', 'investigating', 'resolved')),
+    admin_notes         TEXT,
+    created_by          INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    resolved_by         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_at         TIMESTAMPTZ
+);
+
+CREATE INDEX idx_support_tickets_status_created_at
+    ON support_tickets(status, created_at DESC);
 
 -- ─────────────────────────────────────────────
 -- Schema Migrations
@@ -640,4 +661,6 @@ INSERT INTO schema_migrations (filename) VALUES
     ('034_canvas_idempotency_claim_and_retention.sql'),
     ('035_workflow_display_name.sql'),
     ('036_failed_operations.sql'),
-    ('037_grade_history_local_relationships.sql');
+    ('037_failed_operations_human_summary.sql'),
+    ('038_support_tickets.sql'),
+    ('039_grade_history_local_relationships.sql');

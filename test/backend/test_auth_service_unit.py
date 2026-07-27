@@ -99,7 +99,12 @@ async def test_register_user_success_issues_token():
         result = await register_user(db, body)
 
     assert result.access_token == "fake-jwt"
-    db.add.assert_called_once()
+    # One add() for the new User, one for the audit log entry.
+    assert db.add.call_count == 2
+    audit_entry = next(
+        c.args[0] for c in db.add.call_args_list if getattr(c.args[0], "action", None) == "instructor_registered"
+    )
+    assert audit_entry.details["email"] == "new@example.com"
 
 
 # ---------------------------------------------------------------------------
@@ -108,8 +113,8 @@ async def test_register_user_success_issues_token():
 
 @pytest.mark.asyncio
 async def test_login_user_rejects_wrong_password():
-    db = AsyncMock()
-    user = SimpleNamespace(id=1, hashed_password=hash_password("correct"), is_active=True, role="instructor")
+    db = _db_assigning_ids()
+    user = SimpleNamespace(id=1, hashed_password=hash_password("correct"), is_active=True, role="instructor", email="user@example.com")
     db.scalar = AsyncMock(return_value=user)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -131,8 +136,8 @@ async def test_login_user_rejects_unknown_email():
 
 @pytest.mark.asyncio
 async def test_login_user_rejects_disabled_account():
-    db = AsyncMock()
-    user = SimpleNamespace(id=1, hashed_password=hash_password("correct"), is_active=False, role="instructor")
+    db = _db_assigning_ids()
+    user = SimpleNamespace(id=1, hashed_password=hash_password("correct"), is_active=False, role="instructor", email="user@example.com")
     db.scalar = AsyncMock(return_value=user)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -156,7 +161,7 @@ async def test_login_user_admin_writes_audit_log():
 
 
 @pytest.mark.asyncio
-async def test_login_user_instructor_does_not_write_audit_log():
+async def test_login_user_instructor_writes_audit_log():
     db = _db_assigning_ids()
     user = SimpleNamespace(id=1, hashed_password=hash_password("correct"), is_active=True, role="instructor", email="i@example.com")
     db.scalar = AsyncMock(return_value=user)
@@ -164,7 +169,38 @@ async def test_login_user_instructor_does_not_write_audit_log():
     with _issue_token_patch():
         await login_user(db, "i@example.com", "correct")
 
-    db.add.assert_not_called()
+    db.add.assert_called_once()
+    assert db.add.call_args.args[0].action == "instructor_login"
+
+
+@pytest.mark.asyncio
+async def test_login_user_wrong_password_writes_login_failed():
+    db = _db_assigning_ids()
+    user = SimpleNamespace(id=1, hashed_password=hash_password("correct"), is_active=True, role="instructor", email="i@example.com")
+    db.scalar = AsyncMock(return_value=user)
+
+    with pytest.raises(HTTPException):
+        await login_user(db, "i@example.com", "wrong")
+
+    db.add.assert_called_once()
+    logged = db.add.call_args.args[0]
+    assert logged.action == "login_failed"
+    assert logged.details["reason"] == "invalid_credentials"
+
+
+@pytest.mark.asyncio
+async def test_login_user_disabled_account_writes_login_failed():
+    db = _db_assigning_ids()
+    user = SimpleNamespace(id=1, hashed_password=hash_password("correct"), is_active=False, role="instructor", email="i@example.com")
+    db.scalar = AsyncMock(return_value=user)
+
+    with pytest.raises(HTTPException):
+        await login_user(db, "i@example.com", "correct")
+
+    db.add.assert_called_once()
+    logged = db.add.call_args.args[0]
+    assert logged.action == "login_failed"
+    assert logged.details["reason"] == "account_disabled"
 
 
 # ---------------------------------------------------------------------------
@@ -184,20 +220,24 @@ async def test_admin_login_user_rejects_unknown_email():
 
 @pytest.mark.asyncio
 async def test_admin_login_user_rejects_non_admin():
-    db = AsyncMock()
-    user = SimpleNamespace(id=1, hashed_password=hash_password("correct"), is_active=True, role="instructor")
+    db = _db_assigning_ids()
+    user = SimpleNamespace(id=1, hashed_password=hash_password("correct"), is_active=True, role="instructor", email="i@example.com")
     db.scalar = AsyncMock(return_value=user)
 
     with pytest.raises(HTTPException) as exc_info:
         await admin_login_user(db, "i@example.com", "correct")
 
     assert exc_info.value.status_code == 403
+    db.add.assert_called_once()
+    logged = db.add.call_args.args[0]
+    assert logged.action == "login_failed"
+    assert logged.details["reason"] == "not_admin"
 
 
 @pytest.mark.asyncio
 async def test_admin_login_user_rejects_disabled_admin():
-    db = AsyncMock()
-    user = SimpleNamespace(id=1, hashed_password=hash_password("correct"), is_active=False, role="admin")
+    db = _db_assigning_ids()
+    user = SimpleNamespace(id=1, hashed_password=hash_password("correct"), is_active=False, role="admin", email="a@example.com")
     db.scalar = AsyncMock(return_value=user)
 
     with pytest.raises(HTTPException) as exc_info:
@@ -224,11 +264,13 @@ async def test_admin_login_user_success():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_logout_user_revokes_session():
-    db = AsyncMock()
+async def test_logout_user_revokes_session_and_audits():
+    db = _db_assigning_ids()
+    user = SimpleNamespace(id=1, email="i@example.com")
     with patch("app.services.auth.revoke_session", new=AsyncMock()) as mock_revoke:
-        await logout_user(db, "some-token")
+        await logout_user(db, "some-token", user)
     mock_revoke.assert_awaited_once_with(db, "some-token")
+    db.add.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -356,7 +398,12 @@ async def test_request_password_reset_creates_token_for_known_user():
     result = await request_password_reset(db, "a@example.com")
 
     assert isinstance(result, str) and len(result) > 0
-    db.add.assert_called_once()
+    # One add() for the PasswordResetToken, one for the audit log entry.
+    assert db.add.call_count == 2
+    audit_entry = next(
+        c.args[0] for c in db.add.call_args_list if getattr(c.args[0], "action", None) == "password_reset_requested"
+    )
+    assert audit_entry.user_id == 1
 
 
 @pytest.mark.asyncio
@@ -520,8 +567,8 @@ async def test_remove_canvas_connection_not_found_raises_404():
 
 @pytest.mark.asyncio
 async def test_remove_canvas_connection_success():
-    db = AsyncMock()
-    conn = SimpleNamespace(id=5)
+    db = _db_assigning_ids()
+    conn = SimpleNamespace(id=5, canvas_url="https://canvas.ubc.ca")
     db.scalar = AsyncMock(return_value=conn)
     user = SimpleNamespace(id=1)
 
@@ -529,6 +576,8 @@ async def test_remove_canvas_connection_success():
 
     db.delete.assert_awaited_once_with(conn)
     db.commit.assert_awaited_once()
+    db.add.assert_called_once()
+    assert db.add.call_args.args[0].action == "canvas_connection_removed"
 
 
 @pytest.mark.asyncio
@@ -543,7 +592,12 @@ async def test_update_canvas_token_creates_new_connection():
     ):
         result = await update_canvas_token(db, user, "raw-token", "https://canvas.ubc.ca")
 
-    db.add.assert_called_once()
+    # One add() for the new CanvasConnection, one for the audit log entry.
+    assert db.add.call_count == 2
+    audit_entry = next(
+        c.args[0] for c in db.add.call_args_list if getattr(c.args[0], "action", None) == "canvas_connection_added"
+    )
+    assert audit_entry.user_id == 1
     assert result.id == 1
 
 
@@ -561,4 +615,6 @@ async def test_update_canvas_token_replaces_existing_connection_token():
         await update_canvas_token(db, user, "raw-token", "https://canvas.ubc.ca")
 
     assert existing.encrypted_token == "new-encrypted"
-    db.add.assert_not_called()
+    # No new CanvasConnection row, but the audit log entry still gets added.
+    db.add.assert_called_once()
+    assert db.add.call_args.args[0].action == "canvas_connection_updated"

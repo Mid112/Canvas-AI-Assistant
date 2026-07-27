@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mockInstructors } from "@/data/mockInstructors";
 import { InstructorManagementPage } from "@/pages/Admin/InstructorManagementPage";
+import * as adminCanvasConnectionsService from "@/services/adminCanvasConnections";
 import * as instructorAccountsService from "@/services/instructorAccounts";
 import type { Instructor } from "@/types/instructor";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
@@ -67,6 +68,10 @@ describe("InstructorManagementPage", () => {
         return { ...instructor, status: "disabled" };
       },
     );
+    vi.spyOn(adminCanvasConnectionsService, "fetchInstructorCanvasConnections").mockResolvedValue(
+      [],
+    );
+    vi.spyOn(adminCanvasConnectionsService, "resetInstructorCanvasToken");
   });
 
   async function waitForLoaded() {
@@ -341,5 +346,158 @@ describe("InstructorManagementPage", () => {
 
     expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
     expect(screen.getByText("Showing 1–25 of 30")).toBeInTheDocument();
+  });
+
+  // Verifies: deep-linking from Troubleshooting's "Manage instructors"
+  // button (?canvasStatus=failing) fetches the filtered roster and shows a
+  // banner with an escape hatch back to the full list.
+  it("shows a filter banner and fetches only failing instructors when canvasStatus=failing", async () => {
+    renderWithRouter(<InstructorManagementPage />, {
+      routerProps: { initialEntries: ["/admin/users?canvasStatus=failing"] },
+    });
+
+    await waitForLoaded();
+
+    expect(
+      screen.getByText("Showing only instructors with a failing Canvas connection."),
+    ).toBeInTheDocument();
+    const clearLink = screen.getByRole("link", { name: "Show all instructors" });
+    expect(clearLink).toHaveAttribute("href", "/admin/users");
+
+    expect(instructorAccountsService.fetchInstructors).toHaveBeenCalledWith("access-token", {
+      canvasStatus: "failing",
+    });
+  });
+
+  it("does not show the filter banner or pass canvasStatus with no query param", async () => {
+    renderWithRouter(<InstructorManagementPage />);
+
+    await waitForLoaded();
+
+    expect(
+      screen.queryByText("Showing only instructors with a failing Canvas connection."),
+    ).not.toBeInTheDocument();
+    expect(instructorAccountsService.fetchInstructors).toHaveBeenCalledWith("access-token", {
+      canvasStatus: undefined,
+    });
+  });
+
+  // Verifies: "Canvas connections" action opens the connections dialog and
+  // lists what the admin has for that instructor.
+  it("opens the Canvas connections dialog and lists connections", async () => {
+    vi.spyOn(adminCanvasConnectionsService, "fetchInstructorCanvasConnections").mockResolvedValue([
+      {
+        id: 1,
+        canvas_url: "https://canvas.example.edu",
+        last_sync_error: "401 Unauthorized",
+        courses_synced_at: null,
+        created_at: "2026-07-01T00:00:00Z",
+      },
+    ]);
+
+    renderWithRouter(<InstructorManagementPage />);
+
+    await waitForLoaded();
+
+    await openActionMenu("Dr. Jane Doe");
+    await user.click(screen.getByText("Canvas connections"));
+
+    expect(
+      await screen.findByRole("heading", { name: "Canvas connections" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("https://canvas.example.edu")).toBeInTheDocument();
+    expect(screen.getByText("Needs reconnect")).toBeInTheDocument();
+    expect(
+      adminCanvasConnectionsService.fetchInstructorCanvasConnections,
+    ).toHaveBeenCalledWith("access-token", "instructor-1");
+  });
+
+  it("shows an empty state when an instructor has no Canvas connections", async () => {
+    renderWithRouter(<InstructorManagementPage />);
+
+    await waitForLoaded();
+
+    await openActionMenu("Dr. Jane Doe");
+    await user.click(screen.getByText("Canvas connections"));
+
+    expect(await screen.findByText("No Canvas connections yet.")).toBeInTheDocument();
+  });
+
+  // Verifies: resetting a connection's token from the dialog updates its
+  // status in place once the (validated, server-side) reset succeeds.
+  it("resets a Canvas connection's token from the dialog", async () => {
+    vi.spyOn(adminCanvasConnectionsService, "fetchInstructorCanvasConnections").mockResolvedValue([
+      {
+        id: 1,
+        canvas_url: "https://canvas.example.edu",
+        last_sync_error: "401 Unauthorized",
+        courses_synced_at: null,
+        created_at: "2026-07-01T00:00:00Z",
+      },
+    ]);
+    vi.spyOn(adminCanvasConnectionsService, "resetInstructorCanvasToken").mockResolvedValue([
+      {
+        id: 1,
+        canvas_url: "https://canvas.example.edu",
+        last_sync_error: null,
+        courses_synced_at: null,
+        created_at: "2026-07-01T00:00:00Z",
+      },
+    ]);
+
+    renderWithRouter(<InstructorManagementPage />);
+
+    await waitForLoaded();
+
+    await openActionMenu("Dr. Jane Doe");
+    await user.click(screen.getByText("Canvas connections"));
+    await screen.findByText("Needs reconnect");
+
+    await user.click(screen.getByRole("button", { name: "Reset token" }));
+    await user.type(screen.getByLabelText("New Canvas API token"), "fresh-token-value");
+    await user.click(screen.getByRole("button", { name: "Update token" }));
+
+    await waitFor(() => {
+      expect(adminCanvasConnectionsService.resetInstructorCanvasToken).toHaveBeenCalledWith(
+        "access-token",
+        "instructor-1",
+        { canvasUrl: "https://canvas.example.edu", canvasToken: "fresh-token-value" },
+      );
+    });
+    expect(await screen.findByText("Healthy")).toBeInTheDocument();
+  });
+
+  it("adds a new Canvas connection from the dialog", async () => {
+    vi.spyOn(adminCanvasConnectionsService, "resetInstructorCanvasToken").mockResolvedValue([
+      {
+        id: 9,
+        canvas_url: "https://new-school.example.edu",
+        last_sync_error: null,
+        courses_synced_at: null,
+        created_at: "2026-07-01T00:00:00Z",
+      },
+    ]);
+
+    renderWithRouter(<InstructorManagementPage />);
+
+    await waitForLoaded();
+
+    await openActionMenu("Dr. Jane Doe");
+    await user.click(screen.getByText("Canvas connections"));
+    await screen.findByText("No Canvas connections yet.");
+
+    await user.click(screen.getByRole("button", { name: "Add Canvas connection" }));
+    await user.type(screen.getByLabelText("Canvas URL"), "https://new-school.example.edu");
+    await user.type(screen.getByLabelText("New Canvas API token"), "brand-new-token");
+    await user.click(screen.getByRole("button", { name: "Update token" }));
+
+    await waitFor(() => {
+      expect(adminCanvasConnectionsService.resetInstructorCanvasToken).toHaveBeenCalledWith(
+        "access-token",
+        "instructor-1",
+        { canvasUrl: "https://new-school.example.edu", canvasToken: "brand-new-token" },
+      );
+    });
+    expect(await screen.findByText("https://new-school.example.edu")).toBeInTheDocument();
   });
 });

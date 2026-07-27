@@ -22,8 +22,6 @@ const healthResponse = {
     canvas: { status: "healthy", latency_ms: 50, error_detail: null, uptime_seconds: null },
     ai: { status: "healthy", latency_ms: 400, error_detail: null, uptime_seconds: null },
   },
-  instructor_canvas: { total: 10, healthy: 9, failing: 1, failing_connections: [] },
-  instructor_ai: { total: 5, failing_recent: 0 },
 };
 
 describe("systemHealth service", () => {
