@@ -366,11 +366,10 @@ jobs:
           context: ./app/frontend
           push: false
           tags: app-frontend:test
-      # MCP commented out until app/mcp/ has a Dockerfile.
-      # Uncomment once MCP service is implemented.
-      # - name: Build MCP image
-      #   uses: docker/build-push-action@v5
-      #   with:
-      #     context: ./app/mcp
-      #     push: false
-      #     tags: app-mcp:test
+      # Feature 13 (#862): verify the Dockerized MCP image still builds in CI.
+      - name: Build MCP image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./app/mcp
+          push: false
+          tags: app-mcp:test
