@@ -16,8 +16,12 @@ Covers full-app UI flows for Integration Testing (#687):
 2. **Canvas sandbox** on `:3000` (`canvas_lms` / `make e2e-up`)
 3. Backend Python venv at `app/backend/.venv`
 4. Frontend deps installed (`cd app/frontend && npm ci`)
-5. Default admin seed available: `admin@example.com` / `AdminPass123!`
-   (created on first backend boot when no admin exists)
+5. Demo logins (optional, for manual login): `make seed-demo-users`
+   - `admin@example.com` / `AdminPass123!` (admin)
+   - `instructor@example.com` / `InstructorPass123!` (instructor)
+   - `student1@example.com` / `StudentPass123!` (instructor demo login)
+   - `student2@example.com` / `StudentPass123!` (instructor demo login)
+   Admin is also created on first backend boot when no admin exists (`ensure_admin.py` / env seed).
 6. Live Canvas API token for instructor onboarding:
    - Default sandbox token: `canvas-docker` (lbjay/canvas-docker)
    - Override with `E2E_CANVAS_TOKEN` / `E2E_CANVAS_URL` (default URL `http://localhost:3000`)
