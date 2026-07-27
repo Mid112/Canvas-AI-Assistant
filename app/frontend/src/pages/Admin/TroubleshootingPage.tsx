@@ -21,11 +21,15 @@ import {
   type LlmProviderStatus,
 } from "@/services/troubleshoot";
 
-const HEALTH_STATUS_BADGE_VARIANT: Record<string, "default" | "secondary" | "destructive"> = {
-  healthy: "default",
-  degraded: "secondary",
-  down: "destructive",
-  unknown: "secondary",
+// Independent of Badge's default/secondary/destructive variants -- --primary
+// and --destructive share the same brand red (index.css), so variant="default"
+// rendered "Healthy" in red. Same fix as SystemHealthPage.tsx.
+const HEALTH_STATUS_BADGE_CLASS: Record<string, string> = {
+  healthy:
+    "border-transparent bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
+  degraded: "border-transparent bg-muted text-muted-foreground",
+  down: "border-transparent bg-destructive/10 text-destructive dark:bg-destructive/20",
+  unknown: "border-transparent bg-muted text-muted-foreground",
 };
 
 const HEALTH_STATUS_LABEL: Record<string, string> = {
@@ -62,7 +66,10 @@ function DiagnosticsOverview({ diagnostics }: { diagnostics: DiagnosticsResponse
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Badge variant={HEALTH_STATUS_BADGE_VARIANT[diagnostics.health.overall_status]}>
+          <Badge
+            variant="outline"
+            className={HEALTH_STATUS_BADGE_CLASS[diagnostics.health.overall_status]}
+          >
             {HEALTH_STATUS_LABEL[diagnostics.health.overall_status] ?? diagnostics.health.overall_status}
           </Badge>
         </CardContent>

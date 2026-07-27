@@ -119,6 +119,8 @@ async def test_create_ticket_recovers_from_unique_constraint_race():
         creator=SimpleNamespace(email="admin@example.com"),
         resolved_by=None,
         resolver=None,
+        assigned_to=None,
+        assignee=None,
         created_at=datetime.now(UTC),
         resolved_at=None,
     )

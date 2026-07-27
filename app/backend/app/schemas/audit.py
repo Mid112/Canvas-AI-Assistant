@@ -5,7 +5,8 @@ from pydantic import BaseModel
 
 class AuditLogResponse(BaseModel):
     id: int
-    user_id: int
+    # Nullable for anonymous failed-login attempts against unknown emails.
+    user_id: int | None
     # Nullable because rows sourced from audit_logs_session (admin/security
     # events) have no associated Workflow.
     workflow_id: int | None

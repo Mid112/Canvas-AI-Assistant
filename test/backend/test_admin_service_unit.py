@@ -13,6 +13,7 @@ from app.services.admin import (
     disable_instructor,
     enable_instructor,
     get_admin_settings,
+    get_dashboard_stats,
     list_instructors,
     revoke_instructor_access,
     update_admin_settings,
@@ -31,6 +32,28 @@ def _db_assigning_ids() -> AsyncMock:
 
     db.refresh = AsyncMock(side_effect=_refresh)
     return db
+
+
+# ---------------------------------------------------------------------------
+# get_dashboard_stats
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_get_dashboard_stats_sums_audit_logs_and_audit_logs_session():
+    """The audit viewer (services/audit.py's list_audit_logs) merges rows from
+    both audit_logs (workflow events) and audit_logs_session (session/admin/
+    security events) into one feed. The dashboard's audit_events_last_7_days
+    must count both, or it undercounts relative to what the admin sees when
+    they actually open the audit log page."""
+    db = AsyncMock()
+    # Order matches get_dashboard_stats: instructor_count, admin_count,
+    # active_workflows, workflow (audit_logs) events, session
+    # (audit_logs_session) events.
+    db.scalar = AsyncMock(side_effect=[5, 2, 3, 4, 6])
+
+    stats = await get_dashboard_stats(db)
+
+    assert stats["audit_events_last_7_days"] == 10
 
 
 # ---------------------------------------------------------------------------

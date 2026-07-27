@@ -108,7 +108,7 @@ describe("TroubleshootingPage", () => {
       expect(screen.getByText("Instructor Canvas connections")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("Jane Doe")).toBeInTheDocument();
+    expect(await screen.findByText("Jane Doe")).toBeInTheDocument();
     expect(screen.getByText(/jane@example\.com/)).toBeInTheDocument();
     expect(
       screen.getByText("Canvas isn't responding for this instructor right now."),
