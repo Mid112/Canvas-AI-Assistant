@@ -31,18 +31,3 @@ make test-e2e
 ```
 
 See `test/e2e/README.md`.
-
-## Demo logins (`make seed-demo-users`)
-
-Upserts stable local accounts (admin + instructor + two instructor-role demo logins named student1/student2 — the app has no student login role):
-
-| Email | Password | Role |
-|---|---|---|
-| `admin@example.com` | `AdminPass123!` | admin |
-| `instructor@example.com` | `InstructorPass123!` | instructor |
-| `student1@example.com` | `StudentPass123!` | instructor |
-| `student2@example.com` | `StudentPass123!` | instructor |
-
-```bash
-make seed-demo-users
-```

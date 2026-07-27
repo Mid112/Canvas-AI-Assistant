@@ -1,4 +1,4 @@
-.PHONY: install install-vllm install-ollama lint lint-fix test test-windows test-llm test-llm-windows test-ollama test-ollama-windows test-vague-llm test-vague-llm-windows test-e2e test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset db-ensure seed-demo-users run-vllm run-ollama dev e2e-up reload
+.PHONY: install install-vllm install-ollama lint lint-fix test test-windows test-llm test-llm-windows test-ollama test-ollama-windows test-vague-llm test-vague-llm-windows test-e2e test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset db-ensure run-vllm run-ollama dev e2e-up reload
 
 # ── Install ──────────────────────────────────
 # Creates a venv (if one doesn't exist) and installs backend deps
@@ -61,25 +61,6 @@ db-ensure:
 	docker compose -f docker-compose.dev.yml exec -T postgres \
 		psql -U appuser -d appdb -v ON_ERROR_STOP=1 \
 		< db/migrations/002_submission_status_and_grading.sql
-
-# ── Seed demo logins ──────────────────────────
-# Upserts stable local accounts for manual / e2e login testing.
-# App roles are only admin|instructor — student1/student2 are instructor
-# accounts with fixed credentials (there is no student login role).
-# Requires Postgres (via db-ensure). Override emails/passwords with env
-# vars documented in test/e2e/ensure_demo_users.py.
-seed-demo-users: db-ensure
-	cd app/backend && \
-		DATABASE_URL=$${DATABASE_URL:-postgresql+asyncpg://appuser:localdev@localhost:5433/appdb} \
-		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
-		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
-		.venv/bin/python ../../test/e2e/ensure_demo_users.py
-	@echo ""
-	@echo "Demo logins (password in parentheses):"
-	@echo "  admin@example.com      (AdminPass123!)      — admin"
-	@echo "  instructor@example.com (InstructorPass123!) — instructor"
-	@echo "  student1@example.com   (StudentPass123!)    — instructor demo #1"
-	@echo "  student2@example.com   (StudentPass123!)    — instructor demo #2"
 
 # ── Test (macOS / Linux) ──────────────────────
 # Mirrors .github/workflows/ci.yml's backend-test and frontend-test jobs
@@ -242,7 +223,7 @@ e2e-up:
 		if [ -n "$$stuck" ]; then kill -9 $$stuck 2>/dev/null || true; fi; \
 	fi
 	@echo "Starting backend on http://localhost:8000 and frontend on http://localhost:5173"
-	@echo "Demo logins: make seed-demo-users  (admin / instructor / student1 / student2)"
+	@echo "Default e2e admin seed: admin@example.com / AdminPass123!"
 	@trap 'kill 0' INT TERM EXIT; \
 	(cd app/backend && \
 		DATABASE_URL=$${DATABASE_URL:-postgresql+asyncpg://appuser:localdev@localhost:5433/appdb} \
