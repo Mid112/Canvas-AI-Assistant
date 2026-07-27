@@ -97,6 +97,52 @@ async def test_create_ticket_is_idempotent_per_failed_operation():
 
 
 @pytest.mark.asyncio
+async def test_create_ticket_recovers_from_unique_constraint_race():
+    """Concurrent escalate of the same failed_operation_id: loser of the UNIQUE
+    race must return the winner's ticket, not a 500 (#1284 review)."""
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    from sqlalchemy.exc import IntegrityError
+
+    from app.services import support_tickets as support_tickets_service
+
+    existing = SimpleNamespace(
+        id=7,
+        failed_operation_id=42,
+        user_id=3,
+        user=SimpleNamespace(name="Reporter"),
+        status="open",
+        admin_notes=None,
+        created_by=1,
+        creator=SimpleNamespace(email="admin@example.com"),
+        resolved_by=None,
+        resolver=None,
+        created_at=datetime.now(UTC),
+        resolved_at=None,
+    )
+    db = AsyncMock()
+    db.scalar = AsyncMock(side_effect=[None, existing])
+    db.get = AsyncMock(return_value=SimpleNamespace(user_id=3))
+    db.add = MagicMock()
+    db.commit = AsyncMock(
+        side_effect=IntegrityError("INSERT", {}, Exception("unique"))
+    )
+    db.rollback = AsyncMock()
+
+    result = await support_tickets_service.create_ticket(
+        db,
+        SupportTicketCreate(failed_operation_id=42),
+        created_by=SimpleNamespace(id=1),
+    )
+
+    assert result.id == 7
+    assert result.failed_operation_id == 42
+    db.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_update_ticket_resolves_and_reopens():
     engine, Session = _make_session()
     try:

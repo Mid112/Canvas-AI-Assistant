@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy import desc, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -56,7 +57,9 @@ async def create_ticket(
 ) -> SupportTicketResponse:
     """Get-or-create: escalating the same failed operation twice returns the
     existing ticket rather than creating a duplicate (support_tickets.failed_operation_id
-    is UNIQUE)."""
+    is UNIQUE). Concurrent creates race through the pre-check; catch the unique
+    violation and return the winner's row instead of a 500.
+    """
     existing = await db.scalar(
         _load_options(select(SupportTicket)).where(
             SupportTicket.failed_operation_id == payload.failed_operation_id
@@ -79,7 +82,18 @@ async def create_ticket(
         created_by=created_by.id,
     )
     db.add(row)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raced = await db.scalar(
+            _load_options(select(SupportTicket)).where(
+                SupportTicket.failed_operation_id == payload.failed_operation_id
+            )
+        )
+        if raced is not None:
+            return _to_response(raced)
+        raise
 
     row = await db.scalar(_load_options(select(SupportTicket)).where(SupportTicket.id == row.id))
     assert row is not None
