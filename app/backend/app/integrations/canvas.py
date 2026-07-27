@@ -18,6 +18,24 @@ def _headers(token: str) -> dict:
 
 
 def _canvas_error_detail(response: httpx.Response) -> str:
+    def flatten(value) -> str:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            return "; ".join(message for item in value if (message := flatten(item)))
+        if isinstance(value, dict):
+            for key in ("message", "error"):
+                nested = value.get(key)
+                if isinstance(nested, str):
+                    return nested
+            messages = []
+            for field, nested in value.items():
+                message = flatten(nested)
+                if message:
+                    messages.append(f"{field}: {message}")
+            return "; ".join(messages)
+        return str(value) if value is not None else ""
+
     try:
         data = response.json()
     except ValueError:
@@ -26,22 +44,8 @@ def _canvas_error_detail(response: httpx.Response) -> str:
     if isinstance(data, dict):
         for key in ("message", "error", "errors"):
             value = data.get(key)
-            if isinstance(value, str):
-                return value
-            if isinstance(value, list) and value:
-                # Canvas often returns errors as [{"message": "..."}].
-                # Flatten that shape so UI banners show the actionable text,
-                # not a Python dict representation that hides the real cause.
-                messages: list[str] = []
-                for item in value:
-                    if isinstance(item, dict):
-                        nested = item.get("message") or item.get("error")
-                        messages.append(str(nested if nested is not None else item))
-                    else:
-                        messages.append(str(item))
-                return "; ".join(messages)
-            if isinstance(value, dict):
-                return "; ".join(f"{field}: {message}" for field, message in value.items())
+            if value:
+                return flatten(value)
 
     return str(data)
 

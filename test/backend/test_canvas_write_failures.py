@@ -332,6 +332,20 @@ def test_canvas_error_detail_flattens_errors_list():
     assert _canvas_error_detail(response) == "a; b"
 
 
+def test_canvas_error_detail_flattens_nested_grade_errors():
+    response = _fake_response(
+        400,
+        json_data={
+            "errors": {
+                "posted_grade": [{"message": "Grade must be less than or equal to 100"}],
+            },
+        },
+    )
+    assert _canvas_error_detail(response) == (
+        "posted_grade: Grade must be less than or equal to 100"
+    )
+
+
 def test_parse_next_link():
     header = (
         '<https://canvas.ubc.ca/api/v1/courses?page=2&per_page=10>; rel="next", '

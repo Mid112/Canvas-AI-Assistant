@@ -74,4 +74,39 @@ describe("gradeManagement service", () => {
       }),
     );
   });
+
+  it("surfaces nested grade API errors instead of the generic fallback", async () => {
+    const json = async () => ({
+      detail: {
+        posted_grade: [{ message: "Grade must be less than or equal to 100" }],
+      },
+    });
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+      status: 502,
+      clone: () => ({ json }),
+      json,
+    } as unknown as Response);
+
+    await expect(submitGradeUpdate(5, payload, "access-token")).rejects.toThrow(
+      "posted_grade: Grade must be less than or equal to 100",
+    );
+  });
+
+  it("surfaces non-json grade API errors when the backend returns plain text", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+      status: 500,
+      clone: () => ({
+        json: async () => {
+          throw new Error("not json");
+        },
+      }),
+      text: async () => "Internal Server Error",
+    } as unknown as Response);
+
+    await expect(submitGradeUpdate(5, payload, "access-token")).rejects.toThrow(
+      "Internal Server Error",
+    );
+  });
 });
