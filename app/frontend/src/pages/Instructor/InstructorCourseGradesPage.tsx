@@ -33,6 +33,19 @@ import type { ApiSubmission } from "@/types/submission";
 
 type GradeStatusFilter = "all" | "graded" | "submitted" | "unsubmitted";
 
+const supportedTextGrades = new Set([
+  "complete",
+  "incomplete",
+  "pass",
+  "fail",
+  "p",
+  "np",
+  "satisfactory",
+  "unsatisfactory",
+  "excused",
+]);
+const letterGradePattern = /^(?:A|B|C|D)[+-]?$|^F$/i;
+
 async function runSequentially<T, R>(
   items: T[],
   task: (item: T) => Promise<R>,
@@ -98,6 +111,27 @@ function formatSubmissionStatus(submission: ApiSubmission) {
   return statuses
     .map((status) => status.charAt(0).toUpperCase() + status.slice(1))
     .join(", ");
+}
+
+function getGradeValidationError(value: string) {
+  const grade = value.trim();
+  if (!grade) {
+    return null;
+  }
+  const numericGrade = Number(grade);
+  if (Number.isFinite(numericGrade)) {
+    if (numericGrade < 0) {
+      return "Grade cannot be negative.";
+    }
+    if (numericGrade > 10000) {
+      return "Grade is outside the supported range.";
+    }
+    return null;
+  }
+  if (letterGradePattern.test(grade) || supportedTextGrades.has(grade.toLowerCase())) {
+    return null;
+  }
+  return "Use a numeric grade or a supported Canvas grade such as A-, complete, or pass.";
 }
 
 export function InstructorCourseGradesPage() {
@@ -289,6 +323,7 @@ export function InstructorCourseGradesPage() {
   ).length;
   const numericPostedGrade = Number(postedGrade);
   const hasGradeChange = postedGrade.trim().length > 0;
+  const gradeValidationError = getGradeValidationError(postedGrade);
   const hasFeedback = reason.trim().length > 0;
   const isFeedbackOnly = !hasGradeChange && hasFeedback;
   const exceedsPointsPossible =
@@ -358,6 +393,10 @@ export function InstructorCourseGradesPage() {
     if (payloads.length === 0 || !accessToken) {
       return;
     }
+    if (gradeValidationError) {
+      setError(gradeValidationError);
+      return;
+    }
     setIsSubmitting(true);
     try {
       const results = await Promise.all(
@@ -378,6 +417,10 @@ export function InstructorCourseGradesPage() {
   async function handleSubmit() {
     if (!previewMatchesSelection) {
       setError("Preview the selected grade changes before submitting.");
+      return;
+    }
+    if (gradeValidationError) {
+      setError(gradeValidationError);
       return;
     }
     if (
@@ -491,6 +534,7 @@ export function InstructorCourseGradesPage() {
                 <Input
                   id="new-grade"
                   className="h-11"
+                  aria-invalid={Boolean(gradeValidationError)}
                   value={postedGrade}
                   onChange={(event) => {
                     setPostedGrade(event.target.value);
@@ -498,6 +542,11 @@ export function InstructorCourseGradesPage() {
                   }}
                   placeholder="92, A-, or complete/incomplete"
                 />
+                {gradeValidationError && (
+                  <p className="text-xs font-medium text-destructive">
+                    {gradeValidationError}
+                  </p>
+                )}
               </div>
             </div>
             <div className="grid gap-3 border-t pt-4 md:grid-cols-[1fr_12rem_10rem]">
@@ -717,7 +766,7 @@ export function InstructorCourseGradesPage() {
               type="button"
               variant="outline"
               onClick={handlePreview}
-              disabled={payloads.length === 0 || (!hasGradeChange && !hasFeedback) || isSubmitting}
+              disabled={payloads.length === 0 || (!hasGradeChange && !hasFeedback) || Boolean(gradeValidationError) || isSubmitting}
             >
               {isFeedbackOnly ? "Preview feedback" : "Preview change"}
             </Button>

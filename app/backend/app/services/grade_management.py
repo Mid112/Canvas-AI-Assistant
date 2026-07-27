@@ -1,13 +1,17 @@
 import json
+import re
 from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.canvas import fetch_submissions, update_submission_grade
+from app.models.assignment import Assignment
 from app.models.audit_log import AuditLog
 from app.models.grade_history import GradeHistory
+from app.models.student import Student
 from app.models.user import User
 from app.models.workflow import Workflow
 from app.schemas.canvas import GradePreviewResponse, GradeUpdateRequest, GradeUpdateResponse
@@ -37,7 +41,20 @@ FEEDBACK_ONLY_ROLLBACK_MESSAGE = (
     "History is recorded; no grade correction is needed because this action does not change the student's grade."
 )
 MAX_REASONABLE_NUMERIC_GRADE = Decimal("10000")
-CANVAS_TEXT_GRADE_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 +-./_%")
+CANVAS_LETTER_GRADE_RE = re.compile(r"^(?:A|B|C|D)[+-]?$|^F$", re.IGNORECASE)
+CANVAS_TEXT_GRADES = frozenset(
+    {
+        "complete",
+        "incomplete",
+        "pass",
+        "fail",
+        "p",
+        "np",
+        "satisfactory",
+        "unsatisfactory",
+        "excused",
+    }
+)
 
 
 async def _find_submission(
@@ -211,12 +228,36 @@ def _validate_grade_payload(body: GradeUpdateRequest) -> str:
             )
         return posted_grade
 
-    if not all(char in CANVAS_TEXT_GRADE_CHARS for char in posted_grade):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Grade contains unsupported characters.",
+    normalized_text_grade = posted_grade.lower()
+    if CANVAS_LETTER_GRADE_RE.fullmatch(posted_grade) or normalized_text_grade in CANVAS_TEXT_GRADES:
+        return posted_grade
+
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail="Grade must be numeric or a supported grading-scheme value.",
+    )
+
+
+async def _grade_history_relationship_ids(
+    *,
+    db: AsyncSession,
+    course_id: int,
+    assignment_canvas_id: int,
+    student_canvas_id: int,
+) -> tuple[int | None, int | None]:
+    local_assignment_id = await db.scalar(
+        select(Assignment.id).where(
+            Assignment.course_id == course_id,
+            Assignment.canvas_assignment_id == str(assignment_canvas_id),
         )
-    return posted_grade
+    )
+    local_student_id = await db.scalar(
+        select(Student.id).where(
+            Student.course_id == course_id,
+            Student.canvas_user_id == str(student_canvas_id),
+        )
+    )
+    return local_assignment_id, local_student_id
 
 
 def _grade_warnings(body: GradeUpdateRequest, submission) -> list[str]:
@@ -375,10 +416,18 @@ async def submit_grade_update(
         write=_write,
     )
     updated = _parse_submission(raw)
+    local_assignment_id, local_student_id = await _grade_history_relationship_ids(
+        db=db,
+        course_id=course.id,
+        assignment_canvas_id=body.assignment_id,
+        student_canvas_id=body.user_id,
+    )
     history = GradeHistory(
         user_id=user.id,
         course_id=course.id,
+        local_assignment_id=local_assignment_id,
         assignment_id=str(body.assignment_id),
+        student_id=local_student_id,
         student_canvas_id=str(body.user_id),
         previous_grade=submission.grade,
         previous_score=submission.score,

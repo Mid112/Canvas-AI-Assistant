@@ -49,3 +49,4 @@ If you have a genuinely ancient local database (created before the `ta` role was
 | `033_workflow_paused_status.sql` | Adds `paused` to `workflows.status` check constraint for multi-preview pause/resume (#1237) |
 | `034_canvas_idempotency_claim_and_retention.sql` | Adds `status` (`pending`/`completed`) and nullable `response_json` for reserve-first idempotency claims; indexes `created_at` for 7-day completed / 5-minute pending TTL pruning (#1189) |
 | `035_workflow_display_name.sql` | Adds `workflows.display_name` for instructor-facing rename of open multi-workflows (#1237) |
+| `036_grade_history_local_relationships.sql` | Adds nullable local `assignments`/`students` foreign keys to `grade_history` and backfills them from the existing Canvas assignment/student IDs when local mirror rows exist. |

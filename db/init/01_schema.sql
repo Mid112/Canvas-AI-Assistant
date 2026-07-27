@@ -422,7 +422,9 @@ CREATE TABLE grade_history (
     id                  SERIAL PRIMARY KEY,
     user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     course_id           INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    local_assignment_id INTEGER REFERENCES assignments(id) ON DELETE SET NULL,
     assignment_id       VARCHAR NOT NULL,
+    student_id          INTEGER REFERENCES students(id) ON DELETE SET NULL,
     student_canvas_id   VARCHAR NOT NULL,
     previous_grade      VARCHAR,
     new_grade           VARCHAR NOT NULL,
@@ -436,7 +438,9 @@ CREATE TABLE grade_history (
 
 CREATE INDEX idx_grade_history_user_id ON grade_history(user_id);
 CREATE INDEX idx_grade_history_course_id ON grade_history(course_id);
+CREATE INDEX idx_grade_history_local_assignment_id ON grade_history(local_assignment_id);
 CREATE INDEX idx_grade_history_assignment_id ON grade_history(assignment_id);
+CREATE INDEX idx_grade_history_student_id ON grade_history(student_id);
 CREATE INDEX idx_grade_history_student_canvas_id ON grade_history(student_canvas_id);
 CREATE INDEX idx_grade_history_created_at ON grade_history(created_at);
 
@@ -602,4 +606,5 @@ INSERT INTO schema_migrations (filename) VALUES
     ('032_conversation_field_memory.sql'),
     ('033_workflow_paused_status.sql'),
     ('034_canvas_idempotency_claim_and_retention.sql'),
-    ('035_workflow_display_name.sql');
+    ('035_workflow_display_name.sql'),
+    ('036_grade_history_local_relationships.sql');
