@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { loginAsAdmin, registerAndSkipCanvas } from "../helpers/auth";
+import { loginAsAdmin, registerAndConnectCanvas } from "../helpers/auth";
 
 test.describe("Role-based access control (#714)", () => {
   test("instructor is redirected away from admin routes", async ({ page }) => {
-    await registerAndSkipCanvas(page);
+    await registerAndConnectCanvas(page);
 
     await page.goto("/admin/dashboard");
     await expect(page).not.toHaveURL(/\/admin\//);
