@@ -118,18 +118,13 @@ export async function sendMessageDraft(
   accessToken: string,
   payload: SendMessageDraftPayload,
 ): Promise<void> {
-  if (payload.recipientIds.length === 0) {
-    throw new MessageDraftApiError(
-      "At least one recipient is required to send a message.",
-    );
-  }
-
   if (
-    !payload.recipients ||
+    payload.recipientIds.length > 0 &&
+    (!payload.recipients ||
     payload.recipients.length !== payload.recipientIds.length ||
     payload.recipients.some(
       (recipient) => !payload.recipientIds.includes(recipient.id),
-    )
+    ))
   ) {
     // Sending uses the stored draft recipients on the backend. If the UI has
     // ids but not matching recipient objects, PATCH would persist the wrong
@@ -150,8 +145,9 @@ export async function sendMessageDraft(
           body: payload.body,
           // The backend sends whatever recipients are stored on the draft.
           // Persist the UI selection first so sending one student does not
-          // accidentally send to the originally loaded full roster.
-          recipients: payload.recipients,
+          // accidentally send to the originally loaded full roster. An empty
+          // list intentionally posts a course announcement.
+          recipients: payload.recipients ?? [],
         }),
       },
     );

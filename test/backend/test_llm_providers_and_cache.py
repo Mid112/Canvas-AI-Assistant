@@ -483,6 +483,35 @@ def test_secret_redaction_logging_filter_scrubs_logger_output(caplog):
     assert "[REDACTED" in caplog.text or "REDACTED" in caplog.text
 
 
+def test_secret_redaction_preserves_uvicorn_access_log_args_shape():
+    # Uvicorn's AccessFormatter unpacks record.args directly, so the global
+    # redaction hook must not collapse args after formatting.
+    import logging
+
+    from app.core.secret_redaction import _scrub_log_record
+
+    record = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        __file__,
+        1,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1:54723", "POST", "/api/v1/auth/login", "1.1", 401),
+        None,
+    )
+
+    scrubbed = _scrub_log_record(record)
+
+    assert scrubbed.args == (
+        "127.0.0.1:54723",
+        "POST",
+        "/api/v1/auth/login",
+        "1.1",
+        401,
+    )
+    assert scrubbed.getMessage() == '127.0.0.1:54723 - "POST /api/v1/auth/login HTTP/1.1" 401'
+
+
 def test_chat_model_settings_reject_client_api_key():
     from pydantic import ValidationError
 

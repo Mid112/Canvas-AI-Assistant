@@ -9,7 +9,6 @@ interface MessageToolbarProps {
   onSend: () => void;
   isSending?: boolean;
   isValid?: boolean;
-  hasRecipients?: boolean;
   disabled?: boolean;
 }
 
@@ -18,7 +17,6 @@ export function MessageToolbar({
   onSend,
   isSending = false,
   isValid = true,
-  hasRecipients = true,
   disabled = false,
 }: MessageToolbarProps) {
   const actionsDisabled = disabled || isSending;
@@ -39,7 +37,7 @@ export function MessageToolbar({
         type="button"
         className={cn(dashboardColors.blue.button)}
         onClick={onSend}
-        disabled={actionsDisabled || !isValid || !hasRecipients}
+        disabled={actionsDisabled || !isValid}
       >
         {isSending ? (
           <>

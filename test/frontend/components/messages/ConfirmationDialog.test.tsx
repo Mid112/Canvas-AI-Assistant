@@ -58,7 +58,10 @@ describe("ConfirmationDialog", () => {
     expect(onConfirm).toHaveBeenCalledOnce();
   });
 
-  it("disables confirm when there are no selected recipients", () => {
+  it("allows confirm with no selected recipients for course announcements", async () => {
+    const user = userEvent.setup();
+    const onConfirm = vi.fn();
+
     render(
       <ConfirmationDialog
         open
@@ -70,11 +73,15 @@ describe("ConfirmationDialog", () => {
         subject="Subject"
         body="Body"
         isSending={false}
-        onConfirm={vi.fn()}
+        onConfirm={onConfirm}
       />,
     );
 
-    expect(screen.getByRole("button", { name: "Confirm Send" })).toBeDisabled();
+    expect(
+      screen.getByText(/whole course as an announcement/i),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Confirm Send" }));
+    expect(onConfirm).toHaveBeenCalledOnce();
   });
 
   it("lets the user deselect and remove a recipient from within the dialog", async () => {

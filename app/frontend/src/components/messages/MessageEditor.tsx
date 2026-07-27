@@ -12,6 +12,8 @@ interface MessageEditorProps {
   register: UseFormRegister<MessageDraftFormSchema>;
   errors: FieldErrors<MessageDraftFormSchema>;
   bodyValue: string;
+  subjectPlaceholder?: string;
+  bodyPlaceholder?: string;
   hasUnsavedChanges?: boolean;
   showCharacterCount?: boolean;
   disabled?: boolean;
@@ -21,6 +23,8 @@ export function MessageEditor({
   register,
   errors,
   bodyValue,
+  subjectPlaceholder,
+  bodyPlaceholder,
   hasUnsavedChanges = false,
   showCharacterCount = true,
   disabled = false,
@@ -57,6 +61,7 @@ export function MessageEditor({
           aria-invalid={Boolean(errors.subject)}
           aria-describedby={errors.subject ? "message-subject-error" : undefined}
           disabled={disabled}
+          placeholder={subjectPlaceholder}
           className="bg-white"
           {...register("subject")}
         />
@@ -90,6 +95,7 @@ export function MessageEditor({
           aria-invalid={Boolean(errors.body)}
           aria-describedby={errors.body ? "message-body-error" : undefined}
           disabled={disabled}
+          placeholder={bodyPlaceholder}
           className="min-h-64 resize-none overflow-hidden bg-white"
           ref={(element) => {
             bodyRegisterRef(element);

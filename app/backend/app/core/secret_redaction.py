@@ -38,18 +38,28 @@ def safe_exception_text(exc: BaseException) -> str:
     return redact_secrets(f"{type(exc).__name__}: {exc}")
 
 
-def _scrub_log_record(record: logging.LogRecord) -> logging.LogRecord:
-    """Format the record, scrub secrets, then clear args.
+def _redact_log_arg(value):
+    if isinstance(value, str):
+        return redact_secrets(value)
+    return value
 
-    Scrubbing `msg` before `%` interpolation would eat placeholders like
-    `api_key=%s` (the `api_key=` pattern matches the template itself).
+
+def _scrub_log_record(record: logging.LogRecord) -> logging.LogRecord:
+    """Scrub secrets without changing the record's formatting contract.
+
+    Uvicorn's access formatter unpacks ``record.args`` directly instead of
+    calling ``record.getMessage()``. Preserve the args shape so access logs
+    can still render 4xx/5xx responses cleanly.
     """
-    try:
-        message = record.getMessage()
-    except Exception:
-        message = str(record.msg) if record.msg is not None else ""
-    record.msg = redact_secrets(message)
-    record.args = ()
+    if isinstance(record.msg, str) and not record.args:
+        record.msg = redact_secrets(record.msg)
+    if isinstance(record.args, tuple):
+        record.args = tuple(_redact_log_arg(arg) for arg in record.args)
+    elif isinstance(record.args, dict):
+        record.args = {
+            key: _redact_log_arg(value)
+            for key, value in record.args.items()
+        }
     return record
 
 
