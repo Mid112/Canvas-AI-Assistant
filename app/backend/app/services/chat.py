@@ -56,6 +56,41 @@ from app.services.canvas_assistant_gate import (
 )
 from app.services.deferred_assistant import defer_assistant_request, mark_deferred_request_resumed
 from app.services.failed_operations import record_failed_operation
+from app.services.field_memory import (
+    format_field_memory_for_prompt,
+    merge_field_memory,
+    trim_tool_dump_for_history,
+)
+from app.services.llm.base import LLMAdapter
+from app.services.llm.json_extraction import extract_json_object
+from app.services.llm.llm_connections import resolve_instructor_llm_request
+from app.services.llm.llm_setting import get_llm_adapter
+from app.services.llm.provider_registry import (
+    ObservableAdapter,
+    get_active_llm_config,
+)
+from app.services.llm.response_cache import (
+    build_cache_key,
+    get_cached_response,
+    is_safe_cache_candidate,
+    is_safe_cache_response,
+    store_cached_response,
+)
+from app.services.llm.student_context import (
+    format_llm_student_listing,
+    ground_assistant_result,
+    llm_student_candidates,
+)
+from app.services.quiz_validation import validate_quiz_for_create
+from app.services.resolved_set import (
+    compute_submissions_by_status,
+    create_resolved_set,
+    materialize_resolved_set,
+)
+from app.services.student import get_submission_derived_students
+from app.services.write_preview import generate_write_preview
+
+logger = logging.getLogger(__name__)
 
 
 def _is_expected_canvas_reconnect_failure(exc: BaseException) -> bool:
@@ -77,35 +112,6 @@ def _is_expected_canvas_reconnect_failure(exc: BaseException) -> bool:
         or "No Canvas token" in text
         or "Canvas token is corrupted" in text
     )
-from app.services.llm.base import LLMAdapter
-from app.services.llm.json_extraction import extract_json_object
-from app.services.llm.llm_connections import resolve_instructor_llm_request
-from app.services.llm.llm_setting import get_llm_adapter
-from app.services.llm.provider_registry import (
-    ObservableAdapter,
-    get_active_llm_config,
-)
-from app.services.llm.response_cache import (
-    build_cache_key,
-    get_cached_response,
-    is_safe_cache_candidate,
-    is_safe_cache_response,
-    store_cached_response,
-)
-from app.services.llm.student_context import (
-    format_llm_student_listing,
-    llm_student_candidates,
-)
-from app.services.quiz_validation import validate_quiz_for_create
-from app.services.resolved_set import (
-    compute_submissions_by_status,
-    create_resolved_set,
-    materialize_resolved_set,
-)
-from app.services.student import get_submission_derived_students
-from app.services.write_preview import generate_write_preview
-
-logger = logging.getLogger(__name__)
 
 LLM_TIMEOUT_SECONDS = 90.0
 HISTORY_WINDOW = 10
@@ -1911,7 +1917,8 @@ def _build_llm_message(
 
     if loop_steps:
         steps_text = "\n\n".join(
-            f'Step {i + 1} result ({step["action"]}):\n{json.dumps(step["result"])}'
+            f'Step {i + 1} result ({step["action"]}):\n'
+            f'{json.dumps(trim_tool_dump_for_history(step["result"]))}'
             for i, step in enumerate(loop_steps)
         )
         parts.append(
@@ -2388,6 +2395,15 @@ message) — copy the name exactly as given, character for character.
 Never invent a course name, never output a course ID (local or Canvas),
 and never ask the user for one — they only know their courses by name,
 never by an internal ID.
+
+GROUNDING — retrieved Canvas data only (Feature 13 #855):
+Never invent Canvas facts that were not returned by a tool in this
+conversation (assignment/student/course IDs, grades, scores, due dates,
+roster names, submission status). If you need a fact you do not have,
+call the appropriate read tool or ask a clarify question — do not guess.
+When summarizing a tool result, only cite fields present in that result.
+Never fabricate numeric Canvas IDs.
+
 - If the message clearly names one of YOUR COURSES, even a partial name
   (e.g. "Intro to Programming" for "COSC 111 - Introduction to
   Programming with Java"), set course_name to that course's exact full
@@ -2822,6 +2838,9 @@ async def handle_chat_message(
             current_proposed_action = stored_preview.get("proposed_action")
 
     system_prompt = build_system_prompt(has_canvas_token=bool(user.canvas_connections))
+    field_memory_block = format_field_memory_for_prompt(conversation.field_memory)
+    if field_memory_block:
+        system_prompt = f"{system_prompt}\n\n{field_memory_block}"
     first_llm_message = _build_llm_message(
         message,
         course_names,
@@ -3221,6 +3240,22 @@ async def handle_chat_message(
             result = _step_budget_exhausted_response(loop_steps)
             break
 
+    # Feature 13 (#855 / #856): strip Canvas ID / grade / title claims that
+    # were never present in this-turn tool payloads (or field memory).
+    tool_payloads = [step["result"] for step in loop_steps]
+    if result.get("action") not in {
+        "respond",
+        "clarify",
+        "out_of_scope",
+        "intent_preview",
+    }:
+        tool_payloads.append(result)
+    result = ground_assistant_result(
+        result,
+        tool_results=tool_payloads,
+        field_memory=conversation.field_memory,
+    )
+
     # Only terminal conversational responses are cacheable. Canvas reads,
     # writes, previews, clarification flows, and multi-step turns always bypass
     # storage even if their initial wording looked harmless.
@@ -3265,6 +3300,7 @@ async def handle_chat_message(
 
     if result.get("intent_preview"):
         proposed_action = result.get("proposed_action", {})
+        merge_field_memory(conversation, proposed_action)
         # Form-handoff actions redirect to dedicated UIs that record audit on
         # approve — skip creating a pending Workflow here.
         if proposed_action.get("action") not in {
@@ -3283,6 +3319,8 @@ async def handle_chat_message(
                 affected_resources=preview_metadata.get("affected_resources", []),
             )
     else:
+        if result.get("action") == "clarify":
+            merge_field_memory(conversation, result.get("partial_plan"))
         await _supersede_pending_workflow(
             db,
             conversation.id,
@@ -3607,7 +3645,13 @@ async def handle_confirmed_action(
             )
             await db.commit()
             return conversation, reply, True
-        result = await execute_tool(db, user, action)
+        result = await execute_tool(
+            db, user, action, exclude_workflow_id=workflow.id
+        )
+        merge_field_memory(
+            conversation,
+            workflow.proposed_action if isinstance(workflow.proposed_action, dict) else None,
+        )
     except ToolExecutionError as e:
         safe_detail = redact_secrets(e.log_detail)
         if not _is_expected_canvas_reconnect_failure(e):

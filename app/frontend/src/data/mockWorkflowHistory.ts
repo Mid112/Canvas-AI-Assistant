@@ -107,6 +107,6 @@ export function getWorkflowStatusCounts(
       counts[entry.status] += 1;
       return counts;
     },
-    { approved: 0, rejected: 0, pending: 0 },
+    { approved: 0, rejected: 0, pending: 0, paused: 0 },
   );
 }

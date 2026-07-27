@@ -1,4 +1,4 @@
-import { CheckCircle2, Clock, XCircle } from "lucide-react";
+import { CheckCircle2, Clock, PauseCircle, XCircle } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import type { WorkflowStatusCounts } from "@/types/workflowHistory";
@@ -32,11 +32,19 @@ const statusConfig = [
     bgClass: "bg-amber-50 dark:bg-amber-950/30",
     borderClass: "border-amber-200 dark:border-amber-800",
   },
+  {
+    key: "paused" as const,
+    label: "Paused",
+    icon: PauseCircle,
+    iconClass: "text-slate-600",
+    bgClass: "bg-slate-50 dark:bg-slate-950/30",
+    borderClass: "border-slate-200 dark:border-slate-800",
+  },
 ];
 
 export function WorkflowStatusSummary({ counts }: WorkflowStatusSummaryProps) {
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
       {statusConfig.map(
         ({ key, label, icon: Icon, iconClass, bgClass, borderClass }) => (
           <Card

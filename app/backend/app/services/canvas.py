@@ -43,6 +43,7 @@ from app.models.canvas_course_name import CanvasCourseName
 from app.models.course import Course
 from app.models.user import User
 from app.models.user_preference import UserPreference
+from app.models.workflow import Workflow
 from app.schemas.canvas import (
     ActiveCourseResponse,
     AssignmentCreate,
@@ -56,6 +57,11 @@ from app.schemas.canvas import (
     QuizResponse,
     SubmissionResponse,
     SubmissionStatus,
+)
+from app.services.canvas_idempotency import (
+    build_idempotency_key,
+    duplicate_in_flight_http_exception,
+    run_idempotent_canvas_write,
 )
 from app.services.quiz_validation import short_answer_new_quiz_warnings
 
@@ -74,6 +80,37 @@ WRITABLE_WORKFLOW_STATE = "available"
 # rejection check so the two can't drift apart. Mirrored on the frontend in
 # mapCanvasCourse.ts's SELECTABLE_WORKFLOW_STATES — keep both in sync.
 SELECTABLE_WORKFLOW_STATES = frozenset({WRITABLE_WORKFLOW_STATE, "completed"})
+
+
+async def _assert_no_executing_write(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    action_name: str,
+    local_course_id: int,
+    exclude_workflow_id: int | None = None,
+) -> None:
+    """Refuse a second Canvas write while any approved write is already
+    executing for this instructor (Feature Reliability #1188 / #1237).
+
+    ``action_name`` and ``local_course_id`` remain in the signature for call
+    sites / logging, but the mutex is user-scoped so only one confirmed
+    Canvas write runs at a time.
+
+    ``exclude_workflow_id`` skips the caller's own row: ``handle_confirmed_action``
+    commits the workflow as ``executing`` *before* ``execute_tool``, so without
+    this exclusion the guard self-deadlocks on that same row.
+    """
+    del action_name, local_course_id
+    stmt = select(Workflow).where(
+        Workflow.user_id == user_id,
+        Workflow.status == "executing",
+    )
+    if exclude_workflow_id is not None:
+        stmt = stmt.where(Workflow.id != exclude_workflow_id)
+    executing = list(await db.scalars(stmt))
+    if executing:
+        raise duplicate_in_flight_http_exception()
 
 
 def require_writable_course(course: Course) -> None:
@@ -389,15 +426,42 @@ async def create_course_assignment(
     user: User,
     canvas_url: str,
     db: AsyncSession,
+    *,
+    idempotency_key: str | None = None,
+    exclude_workflow_id: int | None = None,
 ) -> AssignmentResponse:
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     require_writable_course(course)
-    data = await create_assignment(
-        int(course.canvas_course_id),
+    await _assert_no_executing_write(
+        db,
+        user_id=user.id,
+        action_name="create_assignment",
+        local_course_id=course.id,
+        exclude_workflow_id=exclude_workflow_id,
+    )
+
+    key = idempotency_key or build_idempotency_key(
+        "create_assignment",
+        user.id,
+        course.id,
         payload.model_dump(mode="json"),
-        token,
-        canvas_url,
+    )
+
+    async def _write() -> dict:
+        return await create_assignment(
+            int(course.canvas_course_id),
+            payload.model_dump(mode="json"),
+            token,
+            canvas_url,
+        )
+
+    data = await run_idempotent_canvas_write(
+        db,
+        user_id=user.id,
+        operation="create_assignment",
+        idempotency_key=key,
+        write=_write,
     )
     return AssignmentResponse(**data)
 
@@ -639,10 +703,54 @@ async def create_course_quiz(
     user: User,
     canvas_url: str,
     db: AsyncSession,
+    *,
+    idempotency_key: str | None = None,
+    exclude_workflow_id: int | None = None,
 ) -> QuizResponse:
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     require_writable_course(course)
+    await _assert_no_executing_write(
+        db,
+        user_id=user.id,
+        action_name="create_quiz",
+        local_course_id=course.id,
+        exclude_workflow_id=exclude_workflow_id,
+    )
+
+    key = idempotency_key or build_idempotency_key(
+        "create_quiz",
+        user.id,
+        course.id,
+        payload.model_dump(mode="json"),
+    )
+
+    async def _write() -> dict:
+        quiz = await _create_course_quiz_uncached(
+            course=course,
+            payload=payload,
+            token=token,
+            canvas_url=canvas_url,
+        )
+        return quiz.model_dump(mode="json")
+
+    data = await run_idempotent_canvas_write(
+        db,
+        user_id=user.id,
+        operation="create_quiz",
+        idempotency_key=key,
+        write=_write,
+    )
+    return QuizResponse(**data)
+
+
+async def _create_course_quiz_uncached(
+    *,
+    course: Course,
+    payload: QuizCreate,
+    token: str,
+    canvas_url: str,
+) -> QuizResponse:
     canvas_course_id = int(course.canvas_course_id)
 
     if payload.quiz_engine == "new_quizzes":
@@ -852,16 +960,44 @@ async def update_course_assignment(
     user: User,
     canvas_url: str,
     db: AsyncSession,
+    *,
+    idempotency_key: str | None = None,
+    exclude_workflow_id: int | None = None,
 ) -> AssignmentResponse:
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     require_writable_course(course)
-    data = await update_assignment(
-        int(course.canvas_course_id),
+    await _assert_no_executing_write(
+        db,
+        user_id=user.id,
+        action_name="update_assignment",
+        local_course_id=course.id,
+        exclude_workflow_id=exclude_workflow_id,
+    )
+
+    key = idempotency_key or build_idempotency_key(
+        "update_assignment",
+        user.id,
+        course.id,
         assignment_id,
         payload.model_dump(mode="json"),
-        token,
-        canvas_url,
+    )
+
+    async def _write() -> dict:
+        return await update_assignment(
+            int(course.canvas_course_id),
+            assignment_id,
+            payload.model_dump(mode="json"),
+            token,
+            canvas_url,
+        )
+
+    data = await run_idempotent_canvas_write(
+        db,
+        user_id=user.id,
+        operation="update_assignment",
+        idempotency_key=key,
+        write=_write,
     )
     return AssignmentResponse(**data)
 
@@ -927,6 +1063,9 @@ async def send_course_message(
     canvas_url: str,
     db: AsyncSession,
     recipient_canvas_user_ids: list[int] | None = None,
+    *,
+    idempotency_key: str | None = None,
+    exclude_workflow_id: int | None = None,
 ) -> MessageSendResult:
     # Local import — services/student.py imports require_canvas_token from
     # this module, so importing get_students at module level here would
@@ -937,38 +1076,65 @@ async def send_course_message(
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     require_writable_course(course)
+    await _assert_no_executing_write(
+        db,
+        user_id=user.id,
+        action_name="send_message",
+        local_course_id=course.id,
+        exclude_workflow_id=exclude_workflow_id,
+    )
     canvas_course_id = int(course.canvas_course_id)
+    recipients = list(recipient_canvas_user_ids or [])
 
-    if recipient_canvas_user_ids:
-        # A non-empty recipient list means a private Canvas Conversation.
-        # No recipient list falls through to the public course announcement path.
-        await send_conversation(
-            canvas_course_id,
-            recipient_canvas_user_ids,
-            subject,
-            body,
-            token,
-            canvas_url,
-        )
-        return MessageSendResult(
+    key = idempotency_key or build_idempotency_key(
+        "send_message",
+        user.id,
+        course.id,
+        subject,
+        body,
+        recipients,
+    )
+
+    async def _write() -> dict:
+        if recipients:
+            await send_conversation(
+                canvas_course_id,
+                recipients,
+                subject,
+                body,
+                token,
+                canvas_url,
+            )
+            result = MessageSendResult(
+                course_id=canvas_course_id,
+                subject=subject,
+                body=body,
+                audience_size=len(recipients),
+                delivery_mode="conversation",
+                recipient_canvas_user_ids=recipients,
+            )
+            return result.model_dump(mode="json")
+
+        await create_announcement(canvas_course_id, subject, body, token, canvas_url)
+        roster = await get_students(local_course_id, user, canvas_url, db)
+        result = MessageSendResult(
             course_id=canvas_course_id,
             subject=subject,
             body=body,
-            audience_size=len(recipient_canvas_user_ids),
-            delivery_mode="conversation",
-            recipient_canvas_user_ids=recipient_canvas_user_ids,
+            audience_size=len(roster),
+            delivery_mode="announcement",
+            recipient_canvas_user_ids=[],
         )
+        return result.model_dump(mode="json")
 
-    await create_announcement(canvas_course_id, subject, body, token, canvas_url)
-    roster = await get_students(local_course_id, user, canvas_url, db)
-    return MessageSendResult(
-        course_id=canvas_course_id,
-        subject=subject,
-        body=body,
-        audience_size=len(roster),
-        delivery_mode="announcement",
-        recipient_canvas_user_ids=[],
+    data = await run_idempotent_canvas_write(
+        db,
+        user_id=user.id,
+        operation="send_message",
+        idempotency_key=key,
+        write=_write,
     )
+    return MessageSendResult(**data)
 
 
 def _parse_submission_status(raw: dict) -> SubmissionStatus:

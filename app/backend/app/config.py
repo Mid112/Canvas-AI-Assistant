@@ -118,6 +118,10 @@ class Settings(BaseSettings):
     HEALTH_CHECK_TIMEOUT_SECONDS: float = 5.0
     HEALTH_CHECK_AI_TIMEOUT_SECONDS: float = 8.0
 
+    # MCP integration (optional — disabled by default for unit tests)
+    MCP_SERVER_URL: str = ""
+    MCP_ENABLED: bool = False
+
     @field_validator("CANVAS_TOKEN_ENCRYPTION_KEY", mode="before")
     @classmethod
     def _validate_encryption_key(cls, v: str) -> str:

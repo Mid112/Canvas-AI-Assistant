@@ -469,6 +469,22 @@ def test_redact_secrets_strips_common_api_key_shapes():
     assert "RuntimeError" in message
 
 
+def test_secret_redaction_logging_filter_scrubs_logger_output(caplog):
+    # Feature 14 (#906): credentials must not survive ordinary logger.* calls,
+    # not only the chat paths that call redact_secrets explicitly.
+    import logging
+
+    from app.core.secret_redaction import install_secret_redaction_logging
+
+    install_secret_redaction_logging()
+    logger = logging.getLogger("test.secret_redaction_filter")
+    with caplog.at_level(logging.INFO, logger="test.secret_redaction_filter"):
+        logger.info("upstream failed with api_key=%s", "sk-live-abcdefghijklmnopqrst")
+
+    assert "sk-live-abcdefghijklmnopqrst" not in caplog.text
+    assert "[REDACTED" in caplog.text or "REDACTED" in caplog.text
+
+
 def test_chat_model_settings_reject_client_api_key():
     from pydantic import ValidationError
 

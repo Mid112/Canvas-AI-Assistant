@@ -86,6 +86,23 @@ describe("mapWorkflowHistoryApiToEntry", () => {
     expect(cancelled.workflowName).toBe("Update Assignment");
   });
 
+  it("maps paused workflows to paused (not pending)", () => {
+    const entry = mapWorkflowHistoryApiToEntry({
+      id: 7,
+      conversation_id: 16,
+      action_name: "create_assignment",
+      user_prompt: "create a midterm exam",
+      status: "paused",
+      proposed_action: { action: "create_assignment" },
+      affected_resources: [],
+      created_at: "2026-05-01T12:00:00.000Z",
+      executed_at: null,
+      user_name: "Dr. Jane Doe",
+    });
+
+    expect(entry.status).toBe("paused");
+  });
+
   // Verifies: Maps undoable/undone_at through to the domain shape.
   it("maps undoable and undone_at through", () => {
     const undoneEntry = mapWorkflowHistoryApiToEntry({

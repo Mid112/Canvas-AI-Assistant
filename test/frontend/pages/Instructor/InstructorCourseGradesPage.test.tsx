@@ -309,6 +309,7 @@ describe("InstructorCourseGradesPage", () => {
     expect(screen.getByLabelText("Feedback")).toHaveValue("");
     expect(screen.getByText("High Risk")).toBeInTheDocument();
     expect(screen.queryByText("Low Risk")).not.toBeInTheDocument();
+    expect(screen.queryByText("Medium Risk")).not.toBeInTheDocument();
     const coinRow = screen.getByRole("row", { name: /Coin Unsubmitted, Graded 110 110 -/i });
     expect(coinRow).toBeInTheDocument();
   });
@@ -435,14 +436,14 @@ describe("InstructorCourseGradesPage", () => {
   });
 
   it("allows feedback-only submissions without typed grade approval", async () => {
-    // Covers the low-risk feedback path: comments can be previewed and sent
+    // Covers the medium-risk feedback path: comments can be previewed and sent
     // without a posted grade or the typed UPDATE confirmation.
     const user = userEvent.setup();
     mockedPreviewGradeUpdate.mockResolvedValueOnce({
       action: "update_grade",
-      risk_level: "low",
-      requires_approval: false,
-      irreversible_warning: "Feedback only is low risk.",
+      risk_level: "medium",
+      requires_approval: true,
+      irreversible_warning: "Feedback only is medium risk.",
       rollback_available: false,
       rollback_message: "History is recorded; no grade correction is needed.",
       summary: "Send feedback to Coin without changing the grade.",
@@ -461,9 +462,9 @@ describe("InstructorCourseGradesPage", () => {
     });
     mockedSubmitGradeUpdate.mockResolvedValueOnce({
       action: "update_grade",
-      risk_level: "low",
-      requires_approval: false,
-      irreversible_warning: "Feedback only is low risk.",
+      risk_level: "medium",
+      requires_approval: true,
+      irreversible_warning: "Feedback only is medium risk.",
       rollback_available: false,
       rollback_message: "History is recorded; no grade correction is needed.",
       summary: "Send feedback to Coin without changing the grade.",
@@ -501,7 +502,7 @@ describe("InstructorCourseGradesPage", () => {
     await screen.findByRole("cell", { name: "Coin" });
     await user.type(screen.getByLabelText("Feedback"), "Work changes. You can do it.");
 
-    expect(screen.getByText("Low Risk")).toBeInTheDocument();
+    expect(screen.getByText("Medium Risk")).toBeInTheDocument();
     expect(screen.queryByLabelText("Type UPDATE to approve")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Preview feedback" }));
 

@@ -15,6 +15,7 @@ from app.config import settings
 from app.core.database import AsyncSessionLocal, Base, engine
 from app.core.limiter import limiter
 from app.core.migrations import run_pending_migrations
+from app.core.secret_redaction import install_secret_redaction_logging
 from app.core.seeder import seed_admin
 from app.routers import (
     admin,
@@ -31,6 +32,10 @@ from app.routers import (
     troubleshoot,
 )
 from app.services.canvas import run_course_sync_sweep
+
+# Feature 14 (#906): scrub API keys / bearer tokens from every log record,
+# not only the chat paths that call redact_secrets explicitly.
+install_secret_redaction_logging()
 
 logger = logging.getLogger(__name__)
 
