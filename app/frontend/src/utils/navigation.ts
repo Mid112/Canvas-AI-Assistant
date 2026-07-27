@@ -8,6 +8,7 @@ import {
   MessageSquare,
   Settings,
   Users,
+  Wrench,
 } from "lucide-react";
 
 import type { NavItem } from "@/types/navigation";
@@ -32,6 +33,7 @@ export const adminNavItems: NavItem[] = [
   { title: "Users", href: paths.admin.users, icon: Users },
   { title: "Audit Logs", href: paths.admin.audit, icon: FileText },
   { title: "System Health", href: paths.admin.systemHealth, icon: Activity },
+  { title: "Troubleshooting", href: paths.admin.troubleshooting, icon: Wrench },
   { title: "Settings", href: paths.admin.settings, icon: Settings },
 ];
 

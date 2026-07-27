@@ -334,7 +334,7 @@ CREATE INDEX idx_audit_logs_timestamp ON audit_logs(timestamp);
 -- ─────────────────────────────────────────────
 CREATE TABLE audit_logs_session (
     id           SERIAL PRIMARY KEY,
-    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    user_id      INTEGER REFERENCES users(id) ON DELETE RESTRICT,
     workflow_id  INTEGER REFERENCES workflows(id) ON DELETE SET NULL,
     action       VARCHAR NOT NULL,
     details      JSONB,
@@ -548,6 +548,61 @@ CREATE INDEX idx_canvas_idempotency_keys_created_at
     ON canvas_idempotency_keys(created_at);
 
 -- ─────────────────────────────────────────────
+-- Failed Operations
+-- Append-only log of Canvas and AI failures for the admin Failed
+-- Operations dashboard (Feature 11, UR1.6).
+-- ─────────────────────────────────────────────
+CREATE TABLE failed_operations (
+    id               SERIAL PRIMARY KEY,
+    source           VARCHAR NOT NULL CHECK (source IN ('canvas', 'ai')),
+    operation        VARCHAR NOT NULL,
+    user_id          INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    course_id        INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    conversation_id  INTEGER REFERENCES conversations(id) ON DELETE SET NULL,
+    workflow_id      INTEGER REFERENCES workflows(id) ON DELETE SET NULL,
+    tool_call_id     INTEGER REFERENCES tool_call_logs(id) ON DELETE SET NULL,
+    provider         VARCHAR,
+    error_detail     TEXT NOT NULL,
+    context_json     JSONB NOT NULL DEFAULT '{}',
+    human_summary    VARCHAR NOT NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_failed_operations_created_at
+    ON failed_operations(created_at DESC);
+
+CREATE INDEX idx_failed_operations_source_created_at
+    ON failed_operations(source, created_at DESC);
+
+CREATE INDEX idx_failed_operations_user_created_at
+    ON failed_operations(user_id, created_at DESC);
+
+-- ─────────────────────────────────────────────
+-- Support Tickets
+-- Admin-side escalation tracking for failed operations (Feature 12, Secure
+-- Troubleshooting). One ticket per failed_operation.
+-- ─────────────────────────────────────────────
+CREATE TABLE support_tickets (
+    id                  SERIAL PRIMARY KEY,
+    failed_operation_id INTEGER NOT NULL UNIQUE REFERENCES failed_operations(id) ON DELETE CASCADE,
+    user_id             INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    status              VARCHAR NOT NULL DEFAULT 'open'
+                            CHECK (status IN ('open', 'investigating', 'resolved')),
+    admin_notes         TEXT,
+    created_by          INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    resolved_by         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    assigned_to         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    resolved_at         TIMESTAMPTZ
+);
+
+CREATE INDEX idx_support_tickets_status_created_at
+    ON support_tickets(status, created_at DESC);
+
+CREATE INDEX idx_support_tickets_assigned_to
+    ON support_tickets(assigned_to);
+
+-- ─────────────────────────────────────────────
 -- Schema Migrations
 -- Tracks which db/migrations/*.sql files have been applied — read and
 -- written by app/backend/app/core/migrations.py on every backend startup,
@@ -602,4 +657,9 @@ INSERT INTO schema_migrations (filename) VALUES
     ('032_conversation_field_memory.sql'),
     ('033_workflow_paused_status.sql'),
     ('034_canvas_idempotency_claim_and_retention.sql'),
-    ('035_workflow_display_name.sql');
+    ('035_workflow_display_name.sql'),
+    ('036_audit_log_session_nullable_user.sql'),
+    ('036_failed_operations.sql'),
+    ('037_failed_operations_human_summary.sql'),
+    ('038_support_tickets.sql'),
+    ('039_support_ticket_assigned_admin.sql');

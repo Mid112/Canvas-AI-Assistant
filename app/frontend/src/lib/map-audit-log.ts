@@ -1,17 +1,20 @@
-import type { UserRole } from "@/types/user";
 import type {
   AuditLogApiRecord,
   AuditLogEntry,
   AuditLogResult,
+  AuditLogUserRole,
 } from "@/types/auditLog";
 
-/** Display label for roles stored as instructor | admin in the API/DB. */
-export function formatAuditLogUserRole(role: UserRole): string {
+/** Display label for roles stored as instructor | admin in the API/DB, or
+ * "unknown" for anonymous failed-login rows with no matching account. */
+export function formatAuditLogUserRole(role: AuditLogUserRole): string {
   switch (role) {
     case "instructor":
       return "Instructor";
     case "admin":
       return "Administrator";
+    case "unknown":
+      return "Unknown";
   }
 }
 
@@ -36,7 +39,18 @@ export function mapAuditLogApiToEntry(record: AuditLogApiRecord): AuditLogEntry 
     uiDetails.courseId = record.course_id;
   }
 
-  uiDetails.workflowId = record.workflow_id;
+  if (record.workflow_id != null) {
+    uiDetails.workflowId = record.workflow_id;
+  }
+
+  for (const [key, value] of Object.entries(record.details ?? {})) {
+    if (key in uiDetails) {
+      continue; // Don't let a details field shadow the canonical columns above.
+    }
+    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean" || value === null) {
+      uiDetails[key] = value;
+    }
+  }
 
   return {
     id: String(record.id),
@@ -48,21 +62,5 @@ export function mapAuditLogApiToEntry(record: AuditLogApiRecord): AuditLogEntry 
     result,
     details: uiDetails,
   };
-}
-
-export function auditLogUserSearchText(log: AuditLogEntry): string {
-  return `${log.userEmail} ${formatAuditLogUserRole(log.userRole)} ${log.userRole}`;
-}
-
-export function auditLogSearchText(log: AuditLogEntry): string {
-  return [
-    log.timestamp,
-    log.userEmail,
-    formatAuditLogUserRole(log.userRole),
-    log.userRole,
-    log.action,
-    log.resource,
-    log.result,
-  ].join(" ");
 }
 

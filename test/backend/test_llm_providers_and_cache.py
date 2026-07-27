@@ -1,5 +1,6 @@
 import asyncio
-from unittest.mock import AsyncMock
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -24,6 +25,7 @@ from app.services.llm.provider_registry import (
     ProviderDefinition,
     check_provider_health,
     get_active_llm_config,
+    validate_api_key,
 )
 from app.services.llm.response_cache import (
     build_cache_key,
@@ -126,6 +128,127 @@ def test_observable_adapter_does_not_fail_over_on_validation_error():
     assert fallback.calls == 0
 
 
+def _client_returning(status_code: int) -> MagicMock:
+    """A mock httpx.AsyncClient() context manager whose GET returns `status_code`."""
+    response = MagicMock()
+    response.status_code = status_code
+    client = AsyncMock()
+    client.get = AsyncMock(return_value=response)
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=client)
+    cm.__aexit__ = AsyncMock(return_value=False)
+    return cm
+
+
+def _client_raising(exc: Exception) -> MagicMock:
+    client = AsyncMock()
+    client.get = AsyncMock(side_effect=exc)
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=client)
+    cm.__aexit__ = AsyncMock(return_value=False)
+    return cm
+
+
+def test_validate_api_key_rejects_401_from_provider(monkeypatch):
+    provider = ProviderDefinition(
+        id="openai",
+        name="OpenAI",
+        hosting="internet",
+        default_model="model",
+        base_url="https://api.openai.com/v1",
+        api_key="",
+    )
+    monkeypatch.setattr(
+        "app.services.llm.provider_registry.httpx.AsyncClient",
+        lambda **kwargs: _client_returning(401),
+    )
+
+    is_valid, detail = asyncio.run(validate_api_key(provider, "sk-bad"))
+
+    assert is_valid is False
+    assert detail
+
+
+def test_validate_api_key_accepts_200_from_provider(monkeypatch):
+    provider = ProviderDefinition(
+        id="openai",
+        name="OpenAI",
+        hosting="internet",
+        default_model="model",
+        base_url="https://api.openai.com/v1",
+        api_key="",
+    )
+    monkeypatch.setattr(
+        "app.services.llm.provider_registry.httpx.AsyncClient",
+        lambda **kwargs: _client_returning(200),
+    )
+
+    is_valid, detail = asyncio.run(validate_api_key(provider, "sk-good"))
+
+    assert is_valid is True
+    assert detail is None
+
+
+def test_validate_api_key_uses_anthropic_headers_and_endpoint(monkeypatch):
+    provider = ProviderDefinition(
+        id="anthropic",
+        name="Anthropic",
+        hosting="internet",
+        default_model="model",
+        base_url="https://api.anthropic.com/v1",
+        api_key="",
+        supports_model_discovery=False,
+    )
+    captured = {}
+
+    def _client_factory(**kwargs):
+        client = AsyncMock()
+
+        async def _get(url, headers=None):
+            captured["url"] = url
+            captured["headers"] = headers
+            response = MagicMock()
+            response.status_code = 200
+            return response
+
+        client.get = _get
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=client)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        return cm
+
+    monkeypatch.setattr(
+        "app.services.llm.provider_registry.httpx.AsyncClient", _client_factory
+    )
+
+    is_valid, _ = asyncio.run(validate_api_key(provider, "sk-ant-test"))
+
+    assert is_valid is True
+    assert captured["url"] == "https://api.anthropic.com/v1/models"
+    assert captured["headers"]["x-api-key"] == "sk-ant-test"
+
+
+def test_validate_api_key_treats_network_error_as_inconclusive(monkeypatch):
+    provider = ProviderDefinition(
+        id="openai",
+        name="OpenAI",
+        hosting="internet",
+        default_model="model",
+        base_url="https://api.openai.com/v1",
+        api_key="",
+    )
+    request = httpx.Request("GET", "https://api.openai.com/v1/models")
+    monkeypatch.setattr(
+        "app.services.llm.provider_registry.httpx.AsyncClient",
+        lambda **kwargs: _client_raising(httpx.ConnectError("offline", request=request)),
+    )
+
+    is_valid, detail = asyncio.run(validate_api_key(provider, "sk-unknown"))
+
+    assert is_valid is True
+    assert detail is None
+
+
 def test_unconfigured_hosted_provider_health_does_not_make_request():
     provider = ProviderDefinition(
         id="hosted",
@@ -206,6 +329,7 @@ def test_generic_admin_settings_cannot_bypass_provider_validation():
             update_admin_settings(
                 AsyncMock(),
                 {"active_llm_provider": "attacker-controlled-provider"},
+                SimpleNamespace(id=1),
             )
         )
 
@@ -281,6 +405,58 @@ def test_personal_key_marks_hosted_provider_connected_without_server_health():
     assert is_provider_connected(definition, connection, "unavailable")
 
 
+def test_personal_key_marked_disconnected_once_provider_rejects_it():
+    definition = ProviderDefinition(
+        id="openai",
+        name="OpenAI",
+        hosting="internet",
+        default_model="gpt-4o-mini",
+        base_url="https://api.openai.com/v1",
+        api_key="",
+    )
+    connection = type(
+        "Conn",
+        (),
+        {"encrypted_api_key": "enc", "base_url": None, "model": None},
+    )()
+
+    assert not is_provider_connected(definition, connection, "unauthorized")
+
+
+def test_resolve_connection_health_flags_revoked_personal_key():
+    from unittest.mock import patch
+
+    from app.services.llm.llm_connections import _resolve_connection_health
+
+    definition = ProviderDefinition(
+        id="openai",
+        name="OpenAI",
+        hosting="internet",
+        default_model="gpt-4o-mini",
+        base_url="https://api.openai.com/v1",
+        api_key="",
+    )
+    connection = type(
+        "Conn",
+        (),
+        {
+            "encrypted_api_key": encrypt_llm_api_key("sk-revoked"),
+            "base_url": None,
+            "model": "gpt-4o-mini",
+        },
+    )()
+
+    with patch(
+        "app.services.llm.llm_connections.validate_api_key",
+        new_callable=AsyncMock,
+        return_value=(False, "The provider rejected this API key."),
+    ):
+        result = asyncio.run(_resolve_connection_health(definition, connection))
+
+    assert result["status"] == "unauthorized"
+    assert result["detail"] == "The provider rejected this API key."
+
+
 def test_server_configured_hosted_provider_connected_even_if_discovery_fails():
     definition = ProviderDefinition(
         id="groq",
@@ -339,6 +515,31 @@ def test_build_adapter_settings_rejects_unconnected_provider():
         asyncio.run(
             build_adapter_settings(db, 1, "openai", "gpt-4o-mini")
         )
+
+
+def test_build_adapter_settings_rejects_revoked_personal_key():
+    from unittest.mock import patch
+
+    connection = type(
+        "Conn",
+        (),
+        {
+            "provider_id": "openai",
+            "encrypted_api_key": encrypt_llm_api_key("sk-revoked"),
+            "base_url": None,
+            "model": "gpt-4o-mini",
+        },
+    )()
+    db = AsyncMock()
+    db.scalars = AsyncMock(return_value=[connection])
+
+    with patch(
+        "app.services.llm.llm_connections.validate_api_key",
+        new_callable=AsyncMock,
+        return_value=(False, "The provider rejected this API key."),
+    ):
+        with pytest.raises(ValueError, match="rejected your saved API key"):
+            asyncio.run(build_adapter_settings(db, 1, "openai", "gpt-4o-mini"))
 
 
 def test_llm_api_key_uses_same_fernet_roundtrip_as_canvas_tokens():

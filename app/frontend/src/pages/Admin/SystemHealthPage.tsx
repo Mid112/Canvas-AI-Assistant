@@ -32,15 +32,21 @@ const STATUS_LABELS: Record<HealthStatus, string> = {
   down: "Down",
 };
 
-const STATUS_BADGE_VARIANT: Record<HealthStatus, "default" | "secondary" | "destructive"> = {
-  healthy: "default",
-  degraded: "secondary",
-  down: "destructive",
+// Deliberately independent of the Badge component's default/secondary/
+// destructive variants -- this app's --primary token is the same brand red
+// as --destructive (see index.css), so variant="default" rendered "Healthy"
+// in red. Health status needs its own green/grey/red scale regardless of
+// brand color.
+const STATUS_BADGE_CLASS: Record<HealthStatus, string> = {
+  healthy:
+    "border-transparent bg-emerald-500/15 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400",
+  degraded: "border-transparent bg-muted text-muted-foreground",
+  down: "border-transparent bg-destructive/10 text-destructive dark:bg-destructive/20",
 };
 
 const STATUS_DOT_CLASS: Record<HealthStatus, string> = {
-  healthy: "bg-primary",
-  degraded: "bg-amber-500",
+  healthy: "bg-emerald-500",
+  degraded: "bg-muted-foreground/50",
   down: "bg-destructive",
 };
 
@@ -85,7 +91,7 @@ function ServiceStatusCard({
         <CardTitle className="text-sm font-medium text-muted-foreground">
           {title}
         </CardTitle>
-        <Badge variant={STATUS_BADGE_VARIANT[health.status]}>
+        <Badge variant="outline" className={STATUS_BADGE_CLASS[health.status]}>
           {STATUS_LABELS[health.status]}
         </Badge>
       </CardHeader>
@@ -98,65 +104,6 @@ function ServiceStatusCard({
           <p className="text-destructive">{health.error_detail}</p>
         ) : null}
         <HistorySparkline entries={history} />
-      </CardContent>
-    </Card>
-  );
-}
-
-function InstructorCanvasCard({ health }: { health: HealthCheckResponse }) {
-  const { instructor_canvas: summary } = health;
-
-  return (
-    <Card className="shadow-sm ring-1 ring-border/60">
-      <CardHeader>
-        <CardTitle>Instructor Canvas connections</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2 text-sm text-muted-foreground">
-        <p>
-          {summary.healthy} of {summary.total} instructor connections are healthy
-          {summary.failing > 0 ? ` (${summary.failing} failing)` : ""}.
-        </p>
-        {summary.failing_connections.length > 0 ? (
-          <ul className="space-y-1">
-            {summary.failing_connections.map((connection) => (
-              // One instructor can have multiple Canvas connections (different
-              // canvas_url per row) -- email alone can collide.
-              <li
-                key={`${connection.user_email}-${connection.canvas_url}`}
-                className="text-destructive"
-              >
-                {connection.user_name} ({connection.user_email}) — {connection.error_detail}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </CardContent>
-    </Card>
-  );
-}
-
-function InstructorAiCard({ health }: { health: HealthCheckResponse }) {
-  const { instructor_ai: summary } = health;
-
-  return (
-    <Card className="shadow-sm ring-1 ring-border/60">
-      <CardHeader>
-        <CardTitle>Instructor AI usage</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-1 text-sm text-muted-foreground">
-        <p>{summary.total} instructors have used AI drafting so far.</p>
-        {summary.failing_recent > 0 ? (
-          <p className="text-destructive">
-            {summary.failing_recent} instructor{summary.failing_recent === 1 ? "" : "s"} had an AI
-            failure in the last hour.
-          </p>
-        ) : (
-          <p>No AI failures in the last hour.</p>
-        )}
-        <p className="text-xs text-muted-foreground/80">
-          Covers message-draft and assignment-draft generation only — the main AI assistant chat
-          isn&apos;t instrumented yet.
-        </p>
       </CardContent>
     </Card>
   );
@@ -241,7 +188,7 @@ export function SystemHealthPage() {
           <Card className="shadow-sm ring-1 ring-border/60">
             <CardHeader className="flex flex-row items-center justify-between gap-2">
               <CardTitle>Overall status</CardTitle>
-              <Badge variant={STATUS_BADGE_VARIANT[health.overall_status]}>
+              <Badge variant="outline" className={STATUS_BADGE_CLASS[health.overall_status]}>
                 {STATUS_LABELS[health.overall_status]}
               </Badge>
             </CardHeader>
@@ -261,11 +208,6 @@ export function SystemHealthPage() {
                 history={history?.services[service] ?? []}
               />
             ))}
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <InstructorCanvasCard health={health} />
-            <InstructorAiCard health={health} />
           </div>
         </>
       ) : null}

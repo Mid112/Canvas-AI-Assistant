@@ -51,6 +51,7 @@ async def register_user(db: AsyncSession, body: RegisterRequest) -> TokenRespons
     )
     db.add(user)
     await db.flush()
+    db.add(AuditLogSession(user_id=user.id, action="instructor_registered", details={"email": user.email}))
     token, _ = await issue_token_for_user(db, user)
     return TokenResponse(access_token=token)
 
@@ -58,22 +59,33 @@ async def register_user(db: AsyncSession, body: RegisterRequest) -> TokenRespons
 async def login_user(db: AsyncSession, email: str, password: str) -> TokenResponse:
     user = await db.scalar(select(User).where(User.email == email))
 
-    if not user or not verify_password(password, user.hashed_password):
+    if not user:
+        db.add(AuditLogSession(user_id=None, action="login_failed", details={"email": email, "reason": "unknown_email"}))
+        await db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if not user.is_active:
+        db.add(AuditLogSession(
+            user_id=user.id, action="login_failed", details={"email": email, "reason": "account_disabled"}
+        ))
+        await db.commit()
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
 
-    token, _ = await issue_token_for_user(db, user)
-
-    # Admins and instructors share this one login path; audit-log admin sign-ins
-    # specifically since that account type is the higher-value target. This is
-    # the same record admin_login_user (the separate, rate-limited /admin/login
-    # endpoint) writes — the audit trail no longer depends on which endpoint an
-    # admin happens to sign in through.
-    if user.role == "admin":
-        db.add(AuditLogSession(user_id=user.id, action="admin_login", details={"email": user.email}))
+    if not verify_password(password, user.hashed_password):
+        db.add(AuditLogSession(
+            user_id=user.id, action="login_failed", details={"email": email, "reason": "invalid_credentials"}
+        ))
         await db.commit()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+
+    # Same "admin_login" record admin_login_user (the separate, rate-limited
+    # /admin/login endpoint) writes, so the audit trail doesn't depend on
+    # which endpoint an admin happens to sign in through. Add it before
+    # issue_token_for_user(), whose commit persists both the Session and this
+    # audit row atomically.
+    action = "admin_login" if user.role == "admin" else "instructor_login"
+    db.add(AuditLogSession(user_id=user.id, action=action, details={"email": user.email}))
+    token, _ = await issue_token_for_user(db, user)
 
     return TokenResponse(access_token=token)
 
@@ -81,38 +93,54 @@ async def login_user(db: AsyncSession, email: str, password: str) -> TokenRespon
 async def admin_login_user(db: AsyncSession, email: str, password: str) -> TokenResponse:
     user = await db.scalar(select(User).where(User.email == email))
 
-    if not user or not verify_password(password, user.hashed_password):
+    if not user:
+        db.add(AuditLogSession(user_id=None, action="login_failed", details={"email": email, "reason": "unknown_email"}))
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
         )
 
     if user.role != "admin":
+        db.add(AuditLogSession(
+            user_id=user.id, action="login_failed", details={"email": email, "reason": "not_admin"}
+        ))
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin access required",
         )
 
     if not user.is_active:
+        db.add(AuditLogSession(
+            user_id=user.id, action="login_failed", details={"email": email, "reason": "account_disabled"}
+        ))
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+
+    if not verify_password(password, user.hashed_password):
+        db.add(AuditLogSession(
+            user_id=user.id, action="login_failed", details={"email": email, "reason": "invalid_credentials"}
+        ))
+        await db.commit()
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is disabled",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
         )
 
-    token, _ = await issue_token_for_user(db, user)
     db.add(AuditLogSession(user_id=user.id, action="admin_login", details={"email": user.email}))
-    await db.commit()
+    token, _ = await issue_token_for_user(db, user)
     return TokenResponse(access_token=token)
 
 
-async def logout_user(db: AsyncSession, token: str) -> None:
+async def logout_user(db: AsyncSession, token: str, user: User) -> None:
+    db.add(AuditLogSession(user_id=user.id, action="instructor_logout", details={"email": user.email}))
     await revoke_session(db, token)
 
 
 async def logout_admin(db: AsyncSession, token: str, user: User) -> None:
-    await revoke_session(db, token)
     db.add(AuditLogSession(user_id=user.id, action="admin_logout", details={"email": user.email}))
-    await db.commit()
+    await revoke_session(db, token)
 
 
 async def update_profile(db: AsyncSession, user: User, body: ProfileUpdateRequest) -> User:
@@ -178,6 +206,7 @@ async def request_password_reset(db: AsyncSession, email: str) -> str | None:
             expires_at=datetime.now(UTC) + timedelta(hours=1),
         )
     )
+    db.add(AuditLogSession(user_id=user.id, action="password_reset_requested", details={"email": email}))
     await db.commit()
     return raw_token
 
@@ -259,6 +288,9 @@ async def remove_canvas_connection(db: AsyncSession, user: User, connection_id: 
     )
     if not conn:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Canvas connection not found")
+    db.add(AuditLogSession(
+        user_id=user.id, action="canvas_connection_removed", details={"canvas_url": conn.canvas_url}
+    ))
     await db.delete(conn)
     await db.commit()
 
@@ -273,11 +305,13 @@ async def update_canvas_token(db: AsyncSession, user: User, canvas_token: str, c
             CanvasConnection.canvas_url == canvas_url,
         )
     )
+    action = "canvas_connection_updated" if existing else "canvas_connection_added"
     if existing:
         existing.encrypted_token = encrypted
     else:
         db.add(CanvasConnection(user_id=user.id, canvas_url=canvas_url, encrypted_token=encrypted))
 
+    db.add(AuditLogSession(user_id=user.id, action=action, details={"canvas_url": canvas_url}))
     await db.commit()
 
     return await db.scalar(

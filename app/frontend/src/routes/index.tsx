@@ -36,6 +36,8 @@ import { AdminUsersPage } from "@/pages/Admin/AdminUsersPage";
 import { AdminAuditPage } from "@/pages/Admin/AdminAuditPage";
 import { AdminSettingsPage } from "@/pages/Admin/AdminSettingsPage";
 import { SystemHealthPage } from "@/pages/Admin/SystemHealthPage";
+import { TroubleshootingPage } from "@/pages/Admin/TroubleshootingPage";
+import { FailedOperationsPage } from "@/pages/Admin/FailedOperationsPage";
 import { ProfilePage } from "@/pages/Profile/ProfilePage";
 import { GuestRoute } from "@/routes/GuestRoute";
 import { ProtectedRoute } from "@/routes/ProtectedRoute";
@@ -181,6 +183,14 @@ export const router = createBrowserRouter([
                   {
                     path: paths.admin.systemHealth,
                     element: <SystemHealthPage />,
+                  },
+                  {
+                    path: paths.admin.troubleshooting,
+                    element: <TroubleshootingPage />,
+                  },
+                  {
+                    path: paths.admin.failedOperations,
+                    element: <FailedOperationsPage />,
                   },
                   { path: paths.admin.settings, element: <AdminSettingsPage /> },
                   { path: paths.admin.profile, element: <ProfilePage /> },

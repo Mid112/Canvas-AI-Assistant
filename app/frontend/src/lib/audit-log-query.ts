@@ -1,60 +1,36 @@
-import { formatAuditTimestamp } from "@/lib/format-audit-timestamp";
-import {
-  auditLogSearchText,
-  auditLogUserSearchText,
-} from "@/lib/map-audit-log";
-import type {
-  AuditLogEntry,
-  AuditLogFilters,
-  AuditLogSort,
-} from "@/types/auditLog";
+import type { FetchAuditLogsParams } from "@/services/auditLogs";
+import type { AuditLogEntry, AuditLogFilters, AuditLogSort } from "@/types/auditLog";
 
-function matchesQuery(haystack: string, query: string): boolean {
-  return haystack.toLowerCase().includes(query.trim().toLowerCase());
+/** Converts a local-time YYYY-MM-DD day (as picked in the date filter) into
+ * the UTC instant range [start of that local day, start of the next local
+ * day) -- so "date" filtering matches the calendar day the user actually
+ * sees, not the UTC day the timestamp happens to fall on. */
+function localDateToUtcRange(date: string): { startTime: string; endTime: string } {
+  const [year, month, day] = date.split("-").map(Number) as [number, number, number];
+  const start = new Date(year, month - 1, day, 0, 0, 0, 0);
+  const end = new Date(year, month - 1, day + 1, 0, 0, 0, 0);
+  return { startTime: start.toISOString(), endTime: end.toISOString() };
 }
 
-/** Returns the local-time date string (YYYY-MM-DD) matching what the user sees. */
-function toLocalDateString(isoDate: string): string {
-  const d = new Date(isoDate);
-  const pad = (v: number) => String(v).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-/** Client-side filter used until the audit API supports query parameters. */
-export function filterAuditLogs(
-  logs: AuditLogEntry[],
+/** Maps the audit log filter bar's state onto the server's query params --
+ * search now runs against the full audit table server-side rather than
+ * whatever page happened to already be loaded client-side. */
+export function auditLogFiltersToQueryParams(
   filters: AuditLogFilters,
-): AuditLogEntry[] {
-  return logs.filter((log) => {
-    if (filters.date && toLocalDateString(log.timestamp) !== filters.date) {
-      return false;
-    }
+): Omit<FetchAuditLogsParams, "offset" | "limit"> {
+  const params: Omit<FetchAuditLogsParams, "offset" | "limit"> = {};
 
-    if (filters.user && !matchesQuery(auditLogUserSearchText(log), filters.user)) {
-      return false;
-    }
+  if (filters.search) params.search = filters.search;
+  if (filters.action) params.action = filters.action;
+  if (filters.user) params.user = filters.user;
+  if (filters.result) params.result = filters.result;
+  if (filters.date) {
+    const { startTime, endTime } = localDateToUtcRange(filters.date);
+    params.startTime = startTime;
+    params.endTime = endTime;
+  }
 
-    if (filters.action && !matchesQuery(log.action, filters.action)) {
-      return false;
-    }
-
-    if (filters.result && log.result !== filters.result) {
-      return false;
-    }
-
-    if (filters.search) {
-      const haystack = [
-        formatAuditTimestamp(log.timestamp),
-        auditLogSearchText(log),
-      ].join(" ");
-
-      if (!matchesQuery(haystack, filters.search)) {
-        return false;
-      }
-    }
-
-    return true;
-  });
+  return params;
 }
 
 export function sortAuditLogs(

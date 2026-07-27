@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
 
-import { registerAndSkipCanvas } from "../helpers/auth";
+import { registerAndConnectCanvas } from "../helpers/auth";
 
 test.describe("Preview & confirmation workflows (#713)", () => {
   test("mock dry-run preview loads and can be approved", async ({ page }) => {
-    await registerAndSkipCanvas(page);
+    await registerAndConnectCanvas(page);
 
     await page.goto("/instructor/actions/preview");
     await expect(
@@ -22,7 +22,7 @@ test.describe("Preview & confirmation workflows (#713)", () => {
   });
 
   test("reject returns to the assistant gate", async ({ page }) => {
-    await registerAndSkipCanvas(page);
+    await registerAndConnectCanvas(page);
     await page.goto("/instructor/actions/preview");
     await expect(
       page.getByRole("main").getByRole("heading", { name: "Workflow Preview" }),
