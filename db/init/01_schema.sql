@@ -548,6 +548,35 @@ CREATE INDEX idx_canvas_idempotency_keys_created_at
     ON canvas_idempotency_keys(created_at);
 
 -- ─────────────────────────────────────────────
+-- Failed Operations
+-- Append-only log of Canvas and AI failures for the admin Failed
+-- Operations dashboard (Feature 11, UR1.6).
+-- ─────────────────────────────────────────────
+CREATE TABLE failed_operations (
+    id               SERIAL PRIMARY KEY,
+    source           VARCHAR NOT NULL CHECK (source IN ('canvas', 'ai')),
+    operation        VARCHAR NOT NULL,
+    user_id          INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    course_id        INTEGER REFERENCES courses(id) ON DELETE SET NULL,
+    conversation_id  INTEGER REFERENCES conversations(id) ON DELETE SET NULL,
+    workflow_id      INTEGER REFERENCES workflows(id) ON DELETE SET NULL,
+    tool_call_id     INTEGER REFERENCES tool_call_logs(id) ON DELETE SET NULL,
+    provider         VARCHAR,
+    error_detail     TEXT NOT NULL,
+    context_json     JSONB NOT NULL DEFAULT '{}',
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_failed_operations_created_at
+    ON failed_operations(created_at DESC);
+
+CREATE INDEX idx_failed_operations_source_created_at
+    ON failed_operations(source, created_at DESC);
+
+CREATE INDEX idx_failed_operations_user_created_at
+    ON failed_operations(user_id, created_at DESC);
+
+-- ─────────────────────────────────────────────
 -- Schema Migrations
 -- Tracks which db/migrations/*.sql files have been applied — read and
 -- written by app/backend/app/core/migrations.py on every backend startup,
@@ -603,4 +632,5 @@ INSERT INTO schema_migrations (filename) VALUES
     ('033_workflow_paused_status.sql'),
     ('034_canvas_idempotency_claim_and_retention.sql'),
     ('035_workflow_display_name.sql'),
-    ('036_audit_log_session_nullable_user.sql');
+    ('036_audit_log_session_nullable_user.sql'),
+    ('036_failed_operations.sql');

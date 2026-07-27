@@ -58,11 +58,17 @@ async def create_message_draft(db: AsyncSession, user: User, body: MessageDraftC
             subject, content = await _generate_draft_content(
                 body.prompt, body.template_name, db
             )
-            await record_ai_call_outcome(db, user.id, llm_config.provider)
+            await record_ai_call_outcome(db, user.id, llm_config.provider, operation="message_draft")
         except Exception as e:
             subject = body.subject or f"{body.template_name or 'Course'} Announcement"
             content = body.prompt
-            await record_ai_call_outcome(db, user.id, llm_config.provider, error_detail=str(e)[:500])
+            await record_ai_call_outcome(
+                db,
+                user.id,
+                llm_config.provider,
+                error_detail=str(e)[:500],
+                operation="message_draft",
+            )
 
     draft = MessageDraft(
         user_id=user.id,
