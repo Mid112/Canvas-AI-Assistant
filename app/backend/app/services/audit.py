@@ -96,6 +96,12 @@ def _session_row_to_response(row: AuditLogSession) -> AuditLogResponse:
         None,
     )
 
+    # row.user is None for anonymous failed-login attempts against unknown
+    # emails (user_id nullable, see 036_audit_log_session_nullable_user.sql)
+    # — fall back to the attempted email captured in details.
+    user_email = row.user.email if row.user is not None else str(details.get("email", "unknown"))
+    user_role = row.user.role if row.user is not None else "unknown"
+
     return AuditLogResponse(
         # Negate: audit_logs and audit_logs_session are independent id
         # sequences, and the frontend uses this as a React list key.
@@ -109,8 +115,8 @@ def _session_row_to_response(row: AuditLogSession) -> AuditLogResponse:
         operation=operation,
         status=row_status,
         timestamp=row.timestamp,
-        user_email=row.user.email,
-        user_role=row.user.role,
+        user_email=user_email,
+        user_role=user_role,
         details=row.details,
     )
 
@@ -139,10 +145,16 @@ async def list_audit_logs(
     # of adding a second one.
     workflow_query = select(AuditLog).join(AuditLog.user).options(contains_eager(AuditLog.user))
     workflow_count_query = select(func.count()).select_from(AuditLog).join(AuditLog.user)
+    # Outer join: audit_logs_session.user_id is nullable for anonymous
+    # failed-login attempts against unknown emails (see
+    # 036_audit_log_session_nullable_user.sql) — an inner join would
+    # silently drop those rows from the audit trail entirely.
     session_query = (
-        select(AuditLogSession).join(AuditLogSession.user).options(contains_eager(AuditLogSession.user))
+        select(AuditLogSession)
+        .outerjoin(AuditLogSession.user)
+        .options(contains_eager(AuditLogSession.user))
     )
-    session_count_query = select(func.count()).select_from(AuditLogSession).join(AuditLogSession.user)
+    session_count_query = select(func.count()).select_from(AuditLogSession).outerjoin(AuditLogSession.user)
 
     if user_id is not None:
         workflow_query = workflow_query.where(AuditLog.user_id == user_id)

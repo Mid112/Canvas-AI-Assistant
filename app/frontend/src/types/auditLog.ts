@@ -1,5 +1,11 @@
 import type { UserRole } from "@/types/user";
 
+/**
+ * Rows sourced from audit_logs_session can be anonymous (failed login
+ * against an email with no matching account — user_id is nullable, see
+ * db/migrations/036_audit_log_session_nullable_user.sql), so the role is
+ * unknown rather than absent.
+ */
 export type AuditLogUserRole = UserRole | "unknown";
 
 /** Outcome of an audited action — stored in audit_logs.details.result (JSONB). */
@@ -9,7 +15,7 @@ export interface AuditLogEntry {
   id: string;
   timestamp: string;
   userEmail: string;
-  /** Matches users.role in the backend: instructor | admin. */
+  /** Matches users.role in the backend: instructor | admin | unknown (anonymous). */
   userRole: AuditLogUserRole;
   action: string;
   /** Stored in audit_logs.details.resource (JSONB) until a dedicated column exists. */
@@ -26,6 +32,7 @@ export interface AuditLogEntry {
  */
 export interface AuditLogApiRecord {
   id: number;
+  /** Null for anonymous failed-login attempts against unknown emails. */
   user_id: number | null;
   /** Null for rows sourced from audit_logs_session (admin/security events). */
   workflow_id: number | null;
@@ -48,6 +55,7 @@ export interface FetchAuditLogsResponse {
 }
 
 export interface AuditLogFilters {
+  date: string;
   user: string;
   action: string;
   result: "" | AuditLogResult;
@@ -55,34 +63,12 @@ export interface AuditLogFilters {
 }
 
 export const emptyAuditLogFilters: AuditLogFilters = {
+  date: "",
   user: "",
   action: "",
   result: "",
   search: "",
 };
-
-/**
- * How far back the Audit Logs page's range filter looks — sent to the
- * backend as `range_days` so audit_logs and audit_logs_session are both
- * filtered (and their totals both counted) server-side, rather than
- * filtering only whatever's already been fetched into the browser.
- * `null` means all time.
- */
-export type AuditLogRangeDays = 7 | 30 | 90 | null;
-
-export const defaultAuditLogRangeDays: AuditLogRangeDays = null;
-
-export interface AuditLogRangeOption {
-  value: AuditLogRangeDays;
-  label: string;
-}
-
-export const AUDIT_LOG_RANGE_OPTIONS: AuditLogRangeOption[] = [
-  { value: null, label: "All time" },
-  { value: 7, label: "Last 7 days" },
-  { value: 30, label: "Last 30 days" },
-  { value: 90, label: "Last 3 months" },
-];
 
 export type AuditLogSortField =
   | "timestamp"
@@ -107,6 +93,6 @@ export const AUDIT_LOG_PAGE_SIZE = 10;
 
 export function hasActiveAuditLogFilters(filters: AuditLogFilters): boolean {
   return Boolean(
-    filters.user || filters.action || filters.result || filters.search,
+    filters.date || filters.user || filters.action || filters.result || filters.search,
   );
 }
