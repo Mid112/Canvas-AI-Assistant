@@ -53,10 +53,11 @@ lint-fix:
 # missing submissions.grade — which makes overview/dashboard tests fail
 # with UndefinedColumnError. Safe to run repeatedly (ADD COLUMN IF NOT
 # EXISTS). For a fully wiped volume use `make db-reset` / `make test-fresh`.
+# `--wait` blocks on the compose healthcheck (pg_isready), matching CI's
+# readiness poll — a fixed sleep is not enough on cold image pull / fresh
+# volume init.
 db-ensure:
-	docker compose -f docker-compose.dev.yml up -d postgres
-	@echo "Waiting for Postgres..."
-	@sleep 3
+	docker compose -f docker-compose.dev.yml up -d --wait postgres
 	docker compose -f docker-compose.dev.yml exec -T postgres \
 		psql -U appuser -d appdb -v ON_ERROR_STOP=1 \
 		< db/migrations/002_submission_status_and_grading.sql
@@ -72,9 +73,9 @@ db-ensure:
 #   - Frontend: test:coverage (not plain test) so the vitest coverage
 #     thresholds CI enforces also run locally.
 # Starts / repairs dev postgres via `db-ensure` first (CI uses a fresh DB).
-# SECRET_KEY / CANVAS_TOKEN_ENCRYPTION_KEY / HF_TOKEN match CI's injected
-# test env so an empty or missing app/backend/.env still collects cleanly
-# (Settings validates the Fernet key at import time).
+# SECRET_KEY / CANVAS_TOKEN_ENCRYPTION_KEY / HF_TOKEN use the same local /
+# e2e Fernet defaults as `e2e-up` so an empty or missing app/backend/.env
+# still collects cleanly (Settings validates the Fernet key at import time).
 # Windows: use `make test-windows` instead (same commands, .venv/Scripts
 # instead of .venv/bin).
 test: db-ensure
@@ -121,8 +122,9 @@ test-e2e:
 # Runs the LLM adapter test (test/backend/llm_test.py). This test mocks
 # the httpx call to the LLM, so it does NOT require vLLM running — it
 # verifies the adapter's request/response handling logic in isolation.
-# Windows: use `make test-llm-windows` instead.
-test-llm:
+# Still needs Postgres: conftest's module-scoped LLM settings reset is
+# autouse and opens a DB connection. Windows: use `make test-llm-windows`.
+test-llm: db-ensure
 	cd app/backend && \
 		PYTHONPATH=. \
 		DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
@@ -130,7 +132,7 @@ test-llm:
 		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
 		.venv/bin/pytest ../../test/backend/llm_test.py -v
 
-test-llm-windows:
+test-llm-windows: db-ensure
 	cd app/backend && \
 		PYTHONPATH=. \
 		DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
@@ -141,8 +143,9 @@ test-llm-windows:
 # ── Test Ollama ──────────────────────────────
 # Integration test against a running Ollama server. Requires:
 # make install-ollama && make run-ollama
+# Also needs Postgres (same conftest autouse DB fixture as test-llm).
 # Windows: use `make test-ollama-windows` instead.
-test-ollama:
+test-ollama: db-ensure
 	cd app/backend && \
 		PYTHONPATH=. \
 		DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
@@ -150,7 +153,7 @@ test-ollama:
 		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
 		.venv/bin/pytest ../../test/ollama/test_ollama.py -v
 
-test-ollama-windows:
+test-ollama-windows: db-ensure
 	cd app/backend && \
 		PYTHONPATH=. \
 		DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
