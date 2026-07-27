@@ -405,6 +405,58 @@ def test_personal_key_marks_hosted_provider_connected_without_server_health():
     assert is_provider_connected(definition, connection, "unavailable")
 
 
+def test_personal_key_marked_disconnected_once_provider_rejects_it():
+    definition = ProviderDefinition(
+        id="openai",
+        name="OpenAI",
+        hosting="internet",
+        default_model="gpt-4o-mini",
+        base_url="https://api.openai.com/v1",
+        api_key="",
+    )
+    connection = type(
+        "Conn",
+        (),
+        {"encrypted_api_key": "enc", "base_url": None, "model": None},
+    )()
+
+    assert not is_provider_connected(definition, connection, "unauthorized")
+
+
+def test_resolve_connection_health_flags_revoked_personal_key():
+    from unittest.mock import patch
+
+    from app.services.llm.llm_connections import _resolve_connection_health
+
+    definition = ProviderDefinition(
+        id="openai",
+        name="OpenAI",
+        hosting="internet",
+        default_model="gpt-4o-mini",
+        base_url="https://api.openai.com/v1",
+        api_key="",
+    )
+    connection = type(
+        "Conn",
+        (),
+        {
+            "encrypted_api_key": encrypt_llm_api_key("sk-revoked"),
+            "base_url": None,
+            "model": "gpt-4o-mini",
+        },
+    )()
+
+    with patch(
+        "app.services.llm.llm_connections.validate_api_key",
+        new_callable=AsyncMock,
+        return_value=(False, "The provider rejected this API key."),
+    ):
+        result = asyncio.run(_resolve_connection_health(definition, connection))
+
+    assert result["status"] == "unauthorized"
+    assert result["detail"] == "The provider rejected this API key."
+
+
 def test_server_configured_hosted_provider_connected_even_if_discovery_fails():
     definition = ProviderDefinition(
         id="groq",
@@ -463,6 +515,31 @@ def test_build_adapter_settings_rejects_unconnected_provider():
         asyncio.run(
             build_adapter_settings(db, 1, "openai", "gpt-4o-mini")
         )
+
+
+def test_build_adapter_settings_rejects_revoked_personal_key():
+    from unittest.mock import patch
+
+    connection = type(
+        "Conn",
+        (),
+        {
+            "provider_id": "openai",
+            "encrypted_api_key": encrypt_llm_api_key("sk-revoked"),
+            "base_url": None,
+            "model": "gpt-4o-mini",
+        },
+    )()
+    db = AsyncMock()
+    db.scalars = AsyncMock(return_value=[connection])
+
+    with patch(
+        "app.services.llm.llm_connections.validate_api_key",
+        new_callable=AsyncMock,
+        return_value=(False, "The provider rejected this API key."),
+    ):
+        with pytest.raises(ValueError, match="rejected your saved API key"):
+            asyncio.run(build_adapter_settings(db, 1, "openai", "gpt-4o-mini"))
 
 
 def test_llm_api_key_uses_same_fernet_roundtrip_as_canvas_tokens():

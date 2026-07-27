@@ -2783,11 +2783,14 @@ async def handle_chat_message(
             content=f"LLM provider error: {provider_error}",
         )
         await db.commit()
-        return conversation, {
-            "error": (
-                "That AI model is not connected. Connect it in Settings and try again."
-            ),
-        }, True
+        # build_adapter_settings/get_llm_adapter raise plain, hand-written
+        # messages (e.g. "OpenAI rejected your saved API key. Reconnect it in
+        # Settings.") with no secrets in them, so show the instructor the
+        # actual reason instead of a one-size-fits-all "not connected" line.
+        user_facing_error = redact_secrets(str(e)).strip() or (
+            "That AI model is not connected. Connect it in Settings and try again."
+        )
+        return conversation, {"error": user_facing_error}, True
 
     if pending_message_id is None and local_course_id is None:
         selected_course = _resolve_course_context_statement(course_names, message)

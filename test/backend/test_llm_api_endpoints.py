@@ -124,10 +124,17 @@ def test_save_llm_connection_stores_encrypted_key_and_never_returns_it(client):
 
     asyncio.run(_read_row())
 
-    with patch(
-        "app.services.llm.llm_connections.check_provider_health",
-        new_callable=AsyncMock,
-    ) as health:
+    with (
+        patch(
+            "app.services.llm.llm_connections.validate_api_key",
+            new_callable=AsyncMock,
+            return_value=(True, None),
+        ),
+        patch(
+            "app.services.llm.llm_connections.check_provider_health",
+            new_callable=AsyncMock,
+        ) as health,
+    ):
         health.return_value = {
             "status": "unconfigured",
             "models": ["gpt-4o-mini"],
@@ -301,6 +308,11 @@ def test_chat_uses_connected_provider_with_stored_instructor_key(client):
     mock_adapter.generate.return_value = "Hello from the connected provider."
 
     with (
+        patch(
+            "app.services.llm.llm_connections.validate_api_key",
+            new_callable=AsyncMock,
+            return_value=(True, None),
+        ),
         patch(
             "app.services.llm.llm_connections.check_provider_health",
             new_callable=AsyncMock,

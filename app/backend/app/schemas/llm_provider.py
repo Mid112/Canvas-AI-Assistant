@@ -42,7 +42,9 @@ class InstructorLlmProvider(BaseModel):
     hosting: Literal["local", "internet", "custom"]
     default_model: str
     configured: bool
-    status: Literal["available", "configured", "unavailable", "unconfigured"]
+    status: Literal[
+        "available", "configured", "unavailable", "unconfigured", "unauthorized"
+    ]
     models: list[str] = Field(default_factory=list)
     detail: str | None = None
     connected: bool
