@@ -176,4 +176,19 @@ describe("messageDraft service", () => {
       }),
     ).rejects.toThrow(/out of sync/i);
   });
+
+  // Verifies: Announcement sends cannot carry stale recipient objects.
+  it("rejects announcement send when recipient details are non-empty", async () => {
+    await expect(
+      sendMessageDraft("access-token", {
+        draftId: "7",
+        subject: "Announcement",
+        body: "Course-wide update.",
+        recipientIds: [],
+        recipients: [
+          { id: "student-1", name: "Alex Thompson", email: "alex.t@university.edu" },
+        ],
+      }),
+    ).rejects.toThrow(/out of sync/i);
+  });
 });

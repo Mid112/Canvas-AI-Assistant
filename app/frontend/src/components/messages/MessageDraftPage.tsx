@@ -80,11 +80,7 @@ function canReplaceSubject(value: string): boolean {
 
 function canReplaceBody(value: string): boolean {
   const trimmed = value.trim();
-  return (
-    !trimmed ||
-    TEMPLATE_BODIES.has(trimmed) ||
-    trimmed.toLowerCase().startsWith("draft a message for students")
-  );
+  return !trimmed || TEMPLATE_BODIES.has(trimmed);
 }
 
 export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPageProps) {
@@ -134,22 +130,37 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
 
       const loadedDraft = await fetchMessageDraft(accessToken, fetchOptions);
       setDraft(loadedDraft);
-      setSelectedTemplateId(loadedDraft.templateId);
-      setSelectedTemplateName(loadedDraft.templateName);
       setRecipients(loadedDraft.recipients);
       const preferred = fetchOptions?.preSelectedIds;
-      setSelectedRecipientIds(
+      const initialSelectedRecipientIds =
         preferred && preferred.length > 0
           ? new Set(
-              loadedDraft.recipients
-                .map((recipient) => recipient.id)
-                .filter((id) => preferred.includes(id)),
-            )
-          : new Set(),
-      );
+            loadedDraft.recipients
+              .map((recipient) => recipient.id)
+              .filter((id) => preferred.includes(id)),
+          )
+          : new Set<string>();
+      const initialTemplateId: MessageTemplateId =
+        initialSelectedRecipientIds.size === 0
+          ? "course-announcement"
+          : isMessageTemplateId(loadedDraft.templateId)
+            ? loadedDraft.templateId
+            : "assignment-reminder";
+      const initialPreset = TEMPLATE_PRESETS[initialTemplateId];
+      const canUseTemplateDefault = !fetchOptions?.subject && !fetchOptions?.body;
+
+      setSelectedTemplateId(initialTemplateId);
+      setSelectedTemplateName(initialPreset.name);
+      setSelectedRecipientIds(initialSelectedRecipientIds);
       reset({
-        subject: loadedDraft.subject,
-        body: loadedDraft.body,
+        subject:
+          canUseTemplateDefault || canReplaceSubject(loadedDraft.subject)
+            ? initialPreset.subject
+            : loadedDraft.subject,
+        body:
+          canUseTemplateDefault || canReplaceBody(loadedDraft.body)
+            ? initialPreset.body
+            : loadedDraft.body,
       });
       setPageState("editing");
       void trigger();
@@ -185,35 +196,6 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     ? TEMPLATE_PRESETS[selectedTemplateId]
     : undefined;
 
-  const handleToggleRecipient = (recipientId: string) => {
-    setSelectedRecipientIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(recipientId)) {
-        next.delete(recipientId);
-      } else {
-        next.add(recipientId);
-      }
-      return next;
-    });
-  };
-
-  const handleRemoveRecipient = (recipientId: string) => {
-    setRecipients((prev) => prev.filter((recipient) => recipient.id !== recipientId));
-    setSelectedRecipientIds((prev) => {
-      const next = new Set(prev);
-      next.delete(recipientId);
-      return next;
-    });
-  };
-
-  const handleSelectAllRecipients = () => {
-    setSelectedRecipientIds((prev) =>
-      prev.size === recipients.length
-        ? new Set()
-        : new Set(recipients.map((recipient) => recipient.id)),
-    );
-  };
-
   const applyTemplatePreset = useCallback((
     templateId: MessageTemplateId,
     options: { force?: boolean } = {},
@@ -237,6 +219,53 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     }
   }, [bodyValue, setValue, subjectValue]);
 
+  const syncTemplateForRecipientSelection = useCallback((
+    nextSelectedRecipientIds: ReadonlySet<string>,
+  ) => {
+    if (
+      nextSelectedRecipientIds.size === 0 &&
+      selectedTemplateId !== "course-announcement"
+    ) {
+      applyTemplatePreset("course-announcement");
+      return;
+    }
+
+    if (
+      nextSelectedRecipientIds.size > 0 &&
+      selectedTemplateId === "course-announcement"
+    ) {
+      applyTemplatePreset("assignment-reminder");
+    }
+  }, [applyTemplatePreset, selectedTemplateId]);
+
+  const handleToggleRecipient = (recipientId: string) => {
+    const next = new Set(selectedRecipientIds);
+    if (next.has(recipientId)) {
+      next.delete(recipientId);
+    } else {
+      next.add(recipientId);
+    }
+    setSelectedRecipientIds(next);
+    syncTemplateForRecipientSelection(next);
+  };
+
+  const handleRemoveRecipient = (recipientId: string) => {
+    setRecipients((prev) => prev.filter((recipient) => recipient.id !== recipientId));
+    const next = new Set(selectedRecipientIds);
+    next.delete(recipientId);
+    setSelectedRecipientIds(next);
+    syncTemplateForRecipientSelection(next);
+  };
+
+  const handleSelectAllRecipients = () => {
+    const next =
+      selectedRecipientIds.size === recipients.length
+        ? new Set<string>()
+        : new Set(recipients.map((recipient) => recipient.id));
+    setSelectedRecipientIds(next);
+    syncTemplateForRecipientSelection(next);
+  };
+
   const handleSelectTemplate = (templateId: string) => {
     const template = mockMessageTemplates.find((item) => item.id === templateId);
     setSelectedTemplateId(template?.id);
@@ -246,32 +275,17 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
       return;
     }
 
+    if (templateId !== "course-announcement" && selectedRecipientIds.size === 0) {
+      applyTemplatePreset("course-announcement");
+      return;
+    }
+
     if (templateId === "course-announcement") {
       setSelectedRecipientIds(new Set());
     }
 
     applyTemplatePreset(templateId, { force: true });
   };
-
-  useEffect(() => {
-    if (pageState === "loading") {
-      return;
-    }
-
-    if (selectedRecipientIds.size === 0 && selectedTemplateId !== "course-announcement") {
-      applyTemplatePreset("course-announcement");
-      return;
-    }
-
-    if (selectedRecipientIds.size > 0 && selectedTemplateId === "course-announcement") {
-      applyTemplatePreset("assignment-reminder");
-    }
-  }, [
-    applyTemplatePreset,
-    pageState,
-    selectedRecipientIds.size,
-    selectedTemplateId,
-  ]);
 
   const handleCancel = () => {
     if (onCancel) {

@@ -11,11 +11,11 @@ import logging
 import re
 
 _REDACTION_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"(?i)(authorization\s*[:=]\s*bearer\s+)\S+"), r"\1[REDACTED]"),
-    (re.compile(r"(?i)(\bx-api-key\s*[:=]\s*)\S+"), r"\1[REDACTED]"),
-    (re.compile(r"(?i)(\bapi[_-]?key\s*[:=]\s*)\S+"), r"\1[REDACTED]"),
-    (re.compile(r"(?i)(\b(?:access_)?token\s*[:=]\s*)\S+"), r"\1[REDACTED]"),
-    (re.compile(r"(?i)(\bbearer\s+)\S+"), r"\1[REDACTED]"),
+    (re.compile(r"(?i)(authorization\s*[:=]\s*bearer\s+)(?!%[a-zA-Z])\S+"), r"\1[REDACTED]"),
+    (re.compile(r"(?i)(\bx-api-key\s*[:=]\s*)(?!%[a-zA-Z])\S+"), r"\1[REDACTED]"),
+    (re.compile(r"(?i)(\bapi[_-]?key\s*[:=]\s*)(?!%[a-zA-Z])\S+"), r"\1[REDACTED]"),
+    (re.compile(r"(?i)(\b(?:access_)?token\s*[:=]\s*)(?!%[a-zA-Z])\S+"), r"\1[REDACTED]"),
+    (re.compile(r"(?i)(\bbearer\s+)(?!%[a-zA-Z])\S+"), r"\1[REDACTED]"),
     # Common hosted-provider key shapes (OpenAI, Anthropic, Hugging Face, Groq).
     (re.compile(r"\b(sk-(?:ant-)?[A-Za-z0-9_-]{8,})\b"), "[REDACTED_API_KEY]"),
     (re.compile(r"\b(hf_[A-Za-z0-9]{8,})\b"), "[REDACTED_API_KEY]"),
@@ -41,6 +41,15 @@ def safe_exception_text(exc: BaseException) -> str:
 def _redact_log_arg(value):
     if isinstance(value, str):
         return redact_secrets(value)
+    if isinstance(value, tuple):
+        return tuple(_redact_log_arg(item) for item in value)
+    if isinstance(value, list):
+        return [_redact_log_arg(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _redact_log_arg(item)
+            for key, item in value.items()
+        }
     return value
 
 
@@ -51,7 +60,7 @@ def _scrub_log_record(record: logging.LogRecord) -> logging.LogRecord:
     calling ``record.getMessage()``. Preserve the args shape so access logs
     can still render 4xx/5xx responses cleanly.
     """
-    if isinstance(record.msg, str) and not record.args:
+    if isinstance(record.msg, str):
         record.msg = redact_secrets(record.msg)
     if isinstance(record.args, tuple):
         record.args = tuple(_redact_log_arg(arg) for arg in record.args)

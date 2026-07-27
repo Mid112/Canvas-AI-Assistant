@@ -118,13 +118,13 @@ export async function sendMessageDraft(
   accessToken: string,
   payload: SendMessageDraftPayload,
 ): Promise<void> {
+  const selectedRecipients = payload.recipients ?? [];
+
   if (
-    payload.recipientIds.length > 0 &&
-    (!payload.recipients ||
-    payload.recipients.length !== payload.recipientIds.length ||
-    payload.recipients.some(
+    selectedRecipients.length !== payload.recipientIds.length ||
+    selectedRecipients.some(
       (recipient) => !payload.recipientIds.includes(recipient.id),
-    ))
+    )
   ) {
     // Sending uses the stored draft recipients on the backend. If the UI has
     // ids but not matching recipient objects, PATCH would persist the wrong
@@ -147,7 +147,7 @@ export async function sendMessageDraft(
           // Persist the UI selection first so sending one student does not
           // accidentally send to the originally loaded full roster. An empty
           // list intentionally posts a course announcement.
-          recipients: payload.recipients ?? [],
+          recipients: selectedRecipients,
         }),
       },
     );

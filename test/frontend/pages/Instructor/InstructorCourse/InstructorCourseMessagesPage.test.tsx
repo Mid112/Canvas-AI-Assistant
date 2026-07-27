@@ -115,7 +115,7 @@ describe("InstructorCourseMessagesPage", () => {
     ).toBeInTheDocument();
 
     expect(await screen.findByLabelText("Subject")).toHaveValue(
-      mockMessageDraft.subject,
+      "Course Announcement",
     );
     expect(screen.getByText("Alex Student")).toBeInTheDocument();
     await waitFor(() => {
