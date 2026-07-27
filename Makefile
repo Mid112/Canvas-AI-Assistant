@@ -179,8 +179,8 @@ test-fresh:
 	make test
 
 # ── Seed Canvas students ─────────────────────
-# Upserts two Canvas sandbox student logins (not app users) and enrolls
-# them as active students in the first Canvas course (or CANVAS_SEED_COURSE_ID).
+# Upserts two Canvas sandbox student logins (not app users), creates/reuses
+# a dedicated Capstone Project course (code COSC 499), and enrolls them only there.
 # Requires canvas_lms on :3000. Override URL/token/emails via env vars
 # documented in test/e2e/seed_canvas_students.py.
 seed-canvas-students:

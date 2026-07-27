@@ -26,8 +26,10 @@ Covers full-app UI flows for Integration Testing (#687):
    - Instructor: `canvas@example.edu` / `canvas-docker`
    - Students: `student1@example.edu` / `canvas-docker`,
      `student2@example.edu` / `canvas-docker`
-   - Both students are enrolled active in the first Canvas course
-     (override with `CANVAS_SEED_COURSE_ID`)
+   - Creates/reuses course code `COSC 499` ("Capstone Project")
+     and enrolls both students only in that course
+     (override name/code with `CANVAS_SEED_COURSE_NAME` /
+     `CANVAS_SEED_COURSE_CODE`)
 
 Instructor e2e covers both skip/limited-mode onboarding (“Continue without connecting” /
 `completeOnboardingWithoutCanvas`) and live Canvas-connected onboarding. A live Canvas

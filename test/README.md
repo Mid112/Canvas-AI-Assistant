@@ -34,7 +34,7 @@ Full-app UI coverage for #711–#714. Requires Postgres (`:5433`).
 | `student1@example.edu` | `canvas-docker` | student (via `make seed-canvas-students`) |
 | `student2@example.edu` | `canvas-docker` | student (via `make seed-canvas-students`) |
 
-`make seed-canvas-students` upserts the two students and enrolls them in the first Canvas course (or `CANVAS_SEED_COURSE_ID`).
+`make seed-canvas-students` upserts the two students, creates/reuses **Capstone Project** (`COSC 499`), and enrolls them only in that course.
 
 ```bash
 make test-e2e
