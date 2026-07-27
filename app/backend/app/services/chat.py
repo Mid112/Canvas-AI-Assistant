@@ -3683,7 +3683,9 @@ async def handle_confirmed_action(
         )
     except ToolExecutionError as e:
         safe_detail = redact_secrets(e.log_detail)
-        if not _is_expected_canvas_reconnect_failure(e):
+        if not (
+            _is_expected_canvas_reconnect_failure(e) or _is_transient_canvas_outage(e)
+        ):
             await record_failed_operation(
                 db,
                 source="canvas",
@@ -3716,7 +3718,9 @@ async def handle_confirmed_action(
         # so the user actually sees why the confirmed action failed.
         detail = e.detail if isinstance(e.detail, str) else str(e.detail)
         error_detail = redact_secrets(f"HTTPException {e.status_code}: {detail}")
-        if not _is_expected_canvas_reconnect_failure(e):
+        if not (
+            _is_expected_canvas_reconnect_failure(e) or _is_transient_canvas_outage(e)
+        ):
             await record_failed_operation(
                 db,
                 source="canvas",
