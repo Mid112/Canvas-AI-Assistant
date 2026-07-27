@@ -84,12 +84,15 @@ def test_plain_text_model_reply_is_returned(client):
     }
 
 
-# Verifies: Malformed json still returns safe error.
-def test_malformed_json_still_returns_safe_error(client):
+# Verifies: Malformed json soft-degrades to a respond action after retry (#1304).
+def test_malformed_json_soft_degrades_after_retry(client):
     headers = _register(client)
 
     mock_adapter = AsyncMock()
-    mock_adapter.generate.return_value = '{"action": "respond",'
+    mock_adapter.generate.side_effect = [
+        '{"action": "respond",',
+        '{"action": "respond",',
+    ]
 
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
         response = client.post(
@@ -100,8 +103,35 @@ def test_malformed_json_still_returns_safe_error(client):
 
     assert response.status_code == 200
     body = response.json()
-    assert body["is_error"] is True
-    assert "could not be understood" in body["reply"]["error"]
+    assert body["is_error"] is False
+    assert body["reply"]["action"] == "respond"
+    assert "trouble formatting" in body["reply"]["message"].lower()
+    assert mock_adapter.generate.await_count == 2
+
+
+def test_malformed_json_recovers_when_retry_returns_valid_action(client):
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.side_effect = [
+        '{"action": "respond",',
+        '{"action": "respond", "message": "Here are your courses."}',
+    ]
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "List my courses"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_error"] is False
+    assert body["reply"] == {
+        "action": "respond",
+        "message": "Here are your courses.",
+    }
 
 
 # Verifies: User log.

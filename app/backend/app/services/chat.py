@@ -59,6 +59,8 @@ from app.services.failed_operations import record_failed_operation
 from app.services.field_memory import (
     format_field_memory_for_prompt,
     merge_field_memory,
+    merge_grounded_facts_into_memory,
+    merge_read_result_into_field_memory,
     trim_tool_dump_for_history,
 )
 from app.services.llm.base import LLMAdapter
@@ -1979,6 +1981,85 @@ def _plain_text_response(raw_output: str) -> dict | None:
     return None
 
 
+_STRICT_JSON_RETRY_INSTRUCTION = (
+    "Your previous reply was not valid JSON for this assistant. "
+    "Reply with ONLY one JSON object that matches the action schema "
+    '(for example {"action":"respond","message":"..."}). '
+    "No markdown fences and no commentary outside the JSON object."
+)
+
+_MALFORMED_ACTION_DEGRADE_MESSAGE = (
+    "I had trouble formatting that reply as a structured action. "
+    "Could you ask again, or rephrase your question?"
+)
+
+
+def _is_malformed_action_parse_error(exc: ToolExecutionError) -> bool:
+    """JSON decode / missing-action failures are soft-recoverable (#1304).
+    Unknown-action and schema validation stay hard errors."""
+    message = (exc.user_message or "").lower()
+    return (
+        "could not be understood" in message
+        or "missing required information" in message
+    )
+
+
+async def _parse_model_action_with_recovery(
+    *,
+    adapter: LLMAdapter,
+    system_prompt: str,
+    llm_message: str,
+    history: list[dict],
+    raw_output: str,
+) -> tuple[Any | None, dict | None, str]:
+    """Parse model output; on malformed JSON retry once, then soft-respond.
+
+    Returns ``(action, respond_dict, raw_output_used)``. Exactly one of
+    ``action`` / ``respond_dict`` is set.
+    """
+    text_reply = _plain_text_response(raw_output)
+    if text_reply is not None:
+        return None, text_reply, raw_output
+
+    try:
+        return parse_action(raw_output), None, raw_output
+    except ToolExecutionError as parse_error:
+        if not _is_malformed_action_parse_error(parse_error):
+            raise
+
+    retry_message = (
+        f"{_STRICT_JSON_RETRY_INSTRUCTION}\n\n"
+        f"Original user request:\n{llm_message}"
+    )
+    try:
+        retry_raw = await asyncio.wait_for(
+            adapter.generate(
+                system_prompt,
+                retry_message,
+                history=history,
+                timeout=LLM_TIMEOUT_SECONDS,
+            ),
+            timeout=LLM_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        logger.warning("Strict JSON parse retry failed", exc_info=True)
+        return None, {"action": "respond", "message": _MALFORMED_ACTION_DEGRADE_MESSAGE}, raw_output
+
+    text_retry = _plain_text_response(retry_raw)
+    if text_retry is not None:
+        return None, text_retry, retry_raw
+    try:
+        return parse_action(retry_raw), None, retry_raw
+    except ToolExecutionError as retry_error:
+        if _is_malformed_action_parse_error(retry_error):
+            logger.info(
+                "Malformed LLM action after retry; degrading to respond: %s",
+                redact_secrets(retry_error.log_detail),
+            )
+            return None, {"action": "respond", "message": _MALFORMED_ACTION_DEGRADE_MESSAGE}, retry_raw
+        raise
+
+
 def _step_budget_exhausted_response(loop_steps: list[dict]) -> dict:
     """Terminal fallback when MAX_TURN_STEPS is reached mid-chain without
     the model ever reaching a write/respond/clarify — surfaces whatever
@@ -3096,11 +3177,27 @@ async def handle_chat_message(
             raw_output = json.dumps(parsed_envelope)
 
         try:
-            text_reply = _plain_text_response(raw_output)
+            action, text_reply, raw_output = await _parse_model_action_with_recovery(
+                adapter=adapter,
+                system_prompt=system_prompt,
+                llm_message=(
+                    first_llm_message
+                    if step == 1
+                    else _build_llm_message(
+                        message,
+                        course_names,
+                        conversation.course_name,
+                        current_proposed_action,
+                        loop_steps,
+                    )
+                ),
+                history=history,
+                raw_output=raw_output,
+            )
             if text_reply is not None:
                 result = text_reply
                 break
-            action = parse_action(raw_output)
+            assert action is not None
             needs_unwrap = False
             if action.action == "intent_preview":
                 proposed = action.proposed_action
@@ -3232,6 +3329,20 @@ async def handle_chat_message(
                 result = await execute_tool(db, user, action)
             else:
                 result = await execute_tool(db, user, action)
+
+            # #1302: persist resolved assignment/student refs from successful reads
+            # so later turns can reuse "the first assignment" without re-asking.
+            if (
+                action.action in READ_ACTIONS
+                and isinstance(result, dict)
+                and not result.get("clarify")
+                and not result.get("error")
+            ):
+                merge_read_result_into_field_memory(
+                    conversation,
+                    action.model_dump(),
+                    result,
+                )
         except ToolExecutionError as e:
             await log_message(
                 db, conversation, role="assistant", content=redact_secrets(e.log_detail)
@@ -3272,8 +3383,9 @@ async def handle_chat_message(
             result = _step_budget_exhausted_response(loop_steps)
             break
 
-    # Feature 13 (#855 / #856): strip Canvas ID / grade / title claims that
-    # were never present in this-turn tool payloads (or field memory).
+    # Feature 13 (#855 / #856) + #1303: strip Canvas ID / grade / title claims
+    # that were never present in this-turn tool payloads or prior tool-derived
+    # grounded_facts accumulated on the conversation.
     tool_payloads = [step["result"] for step in loop_steps]
     if result.get("action") not in {
         "respond",
@@ -3282,10 +3394,17 @@ async def handle_chat_message(
         "intent_preview",
     }:
         tool_payloads.append(result)
-    result = ground_assistant_result(
+    result, new_tool_facts = ground_assistant_result(
         result,
         tool_results=tool_payloads,
         field_memory=conversation.field_memory,
+    )
+    merge_grounded_facts_into_memory(
+        conversation,
+        ids=new_tool_facts.ids,
+        names=new_tool_facts.names,
+        grades=new_tool_facts.grades,
+        dates=new_tool_facts.dates,
     )
 
     # Only terminal conversational responses are cacheable. Canvas reads,

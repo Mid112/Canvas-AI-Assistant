@@ -145,7 +145,7 @@ def test_ground_assistant_result_scrubs_respond_and_proposed_action():
         "assignments": [{"id": 10, "name": "HW1", "course_id": 3}],
         "submissions": [{"user_id": 77, "grade": "88", "score": 88}],
     }
-    result = ground_assistant_result(
+    result, tool_facts = ground_assistant_result(
         {
             "action": "respond",
             "message": (
@@ -171,12 +171,14 @@ def test_ground_assistant_result_scrubs_respond_and_proposed_action():
     assert result["proposed_action"]["assignment_id"] == 10
     assert "student_id" not in result["proposed_action"]
     assert result["grounded"] is True
+    assert 10 in tool_facts.ids
+    assert "hw1" in tool_facts.names
 
 
-def test_ground_assistant_result_ignores_field_memory_as_retrieval_source():
+def test_ground_assistant_result_ignores_scalar_field_memory_as_retrieval_source():
     from app.services.llm.student_context import ground_assistant_result
 
-    result = ground_assistant_result(
+    result, _tool_facts = ground_assistant_result(
         {
             "action": "respond",
             "message": 'Student scored 99 on "Remembered Homework".',
@@ -193,10 +195,35 @@ def test_ground_assistant_result_ignores_field_memory_as_retrieval_source():
     assert "grounded" not in result
 
 
+def test_ground_assistant_result_reuses_prior_tool_grounded_facts():
+    """#1303: prior tool-derived grounded_facts authorize later-turn titles."""
+    from app.services.llm.student_context import ground_assistant_result
+
+    result, _tool_facts = ground_assistant_result(
+        {
+            "action": "respond",
+            "message": 'Yes — "HW1" scored 88 for that student.',
+        },
+        tool_results=[],
+        field_memory={
+            "grounded_facts": {
+                "ids": [10, 77],
+                "names": ["hw1"],
+                "grades": ["88"],
+                "dates": [],
+            }
+        },
+    )
+    assert '"HW1"' in result["message"]
+    assert "scored 88" in result["message"]
+    assert "[name redacted]" not in result["message"]
+    assert "[grade redacted]" not in result["message"]
+
+
 def test_ground_assistant_result_scrubs_invented_claims_without_tools():
     from app.services.llm.student_context import ground_assistant_result
 
-    result = ground_assistant_result(
+    result, _tool_facts = ground_assistant_result(
         {
             "action": "respond",
             "message": 'Assignment id 42 "Invented Title" scored 77.',

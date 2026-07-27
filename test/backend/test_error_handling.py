@@ -81,16 +81,17 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     return headers, local_course_id
 
 
-# Verifies: Malformed llm json returns safe message without leaking raw output.
+# Verifies: Malformed llm json soft-degrades without leaking raw output (#1304).
 def test_malformed_llm_json_returns_safe_message_without_leaking_raw_output(client):
     """parse_action's JSON-decode failure path: log_detail embeds the raw
     LLM output verbatim (f"...Raw output: {raw_llm_output!r}") — that must
-    never reach the client."""
+    never reach the client. After a failed strict-JSON retry we degrade to
+    a respond action (is_error false) instead of a hard error."""
     headers = _register(client)
     raw_output = "SECRET_INTERNAL_TOKEN_xyz not-json-at-all{{{"
 
     mock_adapter = AsyncMock()
-    mock_adapter.generate.return_value = raw_output
+    mock_adapter.generate.side_effect = [raw_output, raw_output]
 
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
         response = client.post(
@@ -101,8 +102,9 @@ def test_malformed_llm_json_returns_safe_message_without_leaking_raw_output(clie
 
     assert response.status_code == 200
     body = response.json()
-    assert body["is_error"] is True
-    assert "could not be understood" in body["reply"]["error"]
+    assert body["is_error"] is False
+    assert body["reply"]["action"] == "respond"
+    assert "trouble formatting" in body["reply"]["message"].lower()
     # The raw LLM output (and any internal detail) must not leak into the
     # response body at all.
     assert "SECRET_INTERNAL_TOKEN_xyz" not in response.text
