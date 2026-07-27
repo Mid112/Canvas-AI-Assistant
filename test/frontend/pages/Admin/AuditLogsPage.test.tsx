@@ -358,6 +358,42 @@ describe("AuditLogsPage", () => {
     });
   });
 
+  // Verifies: If a client-side filter is already active, changing the
+  // server-side range still loads every remaining ranged row before applying
+  // that filter.
+  it("loads remaining ranged rows when range changes with an active filter", async () => {
+    const firstRangedLog = {
+      ...mockAuditLogs[0]!,
+      id: "range-first",
+      userEmail: "first@university.edu",
+    };
+    const olderMatchingLog = {
+      ...mockAuditLogs[0]!,
+      id: "range-older-match",
+      userEmail: "older-match@university.edu",
+    };
+    const fetchSpy = vi
+      .spyOn(auditLogsService, "fetchAuditLogs")
+      .mockResolvedValueOnce({ entries: mockAuditLogs, total: mockAuditLogs.length })
+      .mockResolvedValueOnce({ entries: [firstRangedLog], total: 2 })
+      .mockResolvedValueOnce({ entries: [olderMatchingLog], total: 2 });
+
+    renderWithRouter(<AuditLogsPage />);
+
+    await waitForLoaded();
+    await user.type(screen.getByLabelText("Search logs"), "older-match");
+    await user.selectOptions(screen.getByLabelText("Filter by date range"), "7");
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenLastCalledWith("access-token", {
+        offset: 1,
+        rangeDays: 7,
+      });
+    });
+    expect(tableScope().getByText("older-match@university.edu")).toBeInTheDocument();
+    expect(screen.getByText("Audit logs (2)")).toBeInTheDocument();
+  });
+
   // Verifies: Clears active filters.
   it("clears active filters", async () => {
     renderWithRouter(<AuditLogsPage />);

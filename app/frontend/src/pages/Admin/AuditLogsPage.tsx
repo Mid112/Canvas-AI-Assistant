@@ -35,6 +35,7 @@ export function AuditLogsPage() {
   const [total, setTotal] = useState(0);
   const [filters, setFilters] = useState<AuditLogFilters>(emptyAuditLogFilters);
   const [rangeDays, setRangeDays] = useState<AuditLogRangeDays>(defaultAuditLogRangeDays);
+  const [loadedRangeDays, setLoadedRangeDays] = useState<AuditLogRangeDays>(defaultAuditLogRangeDays);
   const [sort, setSort] = useState<AuditLogSort>(defaultAuditLogSort);
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
@@ -87,12 +88,14 @@ export function AuditLogsPage() {
       if (loadRequestId.current === requestId) {
         setLogs(batch.entries);
         setTotal(batch.total);
+        setLoadedRangeDays(rangeDays);
       }
     } catch {
       if (loadRequestId.current === requestId) {
         setLoadError("Unable to load audit logs. Please try again.");
         setLogs([]);
         setTotal(0);
+        setLoadedRangeDays(rangeDays);
       }
     } finally {
       if (loadRequestId.current === requestId) {
@@ -143,6 +146,7 @@ export function AuditLogsPage() {
     }
 
     loadingAllRef.current = true;
+    const requestId = loadRequestId.current;
     setIsLoadingAll(true);
     try {
       let entries = logs;
@@ -157,8 +161,11 @@ export function AuditLogsPage() {
         entries = [...entries, ...batch.entries];
         currentTotal = batch.total;
       }
-      setLogs(entries);
-      setTotal(currentTotal);
+      if (loadRequestId.current === requestId) {
+        setLogs(entries);
+        setTotal(currentTotal);
+        setLoadedRangeDays(rangeDays);
+      }
       return entries;
     } catch {
       setLoadError("Unable to load all audit logs. Please try again.");
@@ -170,15 +177,15 @@ export function AuditLogsPage() {
   }, [accessToken, logs, total, rangeDays]);
 
   useEffect(() => {
-    if (hasActiveAuditLogFilters(filters) && logs.length < total) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- async completion fetch triggered by a filter change, mirrors loadLogs' mount effect above
+    if (
+      hasActiveAuditLogFilters(filters) &&
+      loadedRangeDays === rangeDays &&
+      logs.length < total
+    ) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- async completion fetch triggered by filter/range state, mirrors loadLogs' mount effect above
       void loadAllRemaining();
     }
-    // Only re-run on filter changes — loadAllRemaining/logs/total change on
-    // every fetch it triggers, which would otherwise re-fire this effect
-    // mid-load.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- see comment above
-  }, [filters]);
+  }, [filters, loadedRangeDays, rangeDays, logs.length, total, loadAllRemaining]);
 
   const signedOutError = accessToken
     ? null
