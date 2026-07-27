@@ -41,6 +41,8 @@ FEEDBACK_ONLY_ROLLBACK_MESSAGE = (
     "History is recorded; no grade correction is needed because this action does not change the student's grade."
 )
 MAX_REASONABLE_NUMERIC_GRADE = Decimal("10000")
+# Keep text grades intentionally allow-listed: Canvas can accept grading-scheme
+# values, but arbitrary letters or words are too easy to submit by mistake.
 CANVAS_LETTER_GRADE_RE = re.compile(r"^(?:A|B|C|D)[+-]?$|^F$", re.IGNORECASE)
 CANVAS_TEXT_GRADES = frozenset(
     {
@@ -229,7 +231,10 @@ def _validate_grade_payload(body: GradeUpdateRequest) -> str:
         return posted_grade
 
     normalized_text_grade = posted_grade.lower()
-    if CANVAS_LETTER_GRADE_RE.fullmatch(posted_grade) or normalized_text_grade in CANVAS_TEXT_GRADES:
+    if (
+        CANVAS_LETTER_GRADE_RE.fullmatch(posted_grade)
+        or normalized_text_grade in CANVAS_TEXT_GRADES
+    ):
         return posted_grade
 
     raise HTTPException(
@@ -245,6 +250,9 @@ async def _grade_history_relationship_ids(
     assignment_canvas_id: int,
     student_canvas_id: int,
 ) -> tuple[int | None, int | None]:
+    # Grade update requests use Canvas ids because that is what the Canvas API
+    # mutates. Store nullable local FKs too when our mirror has matching rows so
+    # audit/history queries can join through the normal app relationships.
     local_assignment_id = await db.scalar(
         select(Assignment.id).where(
             Assignment.course_id == course_id,

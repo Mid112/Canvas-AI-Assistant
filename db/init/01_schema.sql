@@ -422,6 +422,8 @@ CREATE TABLE grade_history (
     id                  SERIAL PRIMARY KEY,
     user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     course_id           INTEGER NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    -- Canvas ids remain the durable external references; nullable local FKs let
+    -- internal history/audit views join to cached assignment and student rows.
     local_assignment_id INTEGER REFERENCES assignments(id) ON DELETE SET NULL,
     assignment_id       VARCHAR NOT NULL,
     student_id          INTEGER REFERENCES students(id) ON DELETE SET NULL,

@@ -1,6 +1,8 @@
 ALTER TABLE grade_history ADD COLUMN IF NOT EXISTS local_assignment_id INTEGER;
 ALTER TABLE grade_history ADD COLUMN IF NOT EXISTS student_id INTEGER;
 
+-- Preserve existing Canvas-id history while adding local relationships for
+-- rows whose assignment/student mirror records already exist.
 UPDATE grade_history gh
 SET local_assignment_id = a.id
 FROM assignments a

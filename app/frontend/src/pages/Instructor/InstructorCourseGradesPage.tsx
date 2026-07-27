@@ -44,6 +44,8 @@ const supportedTextGrades = new Set([
   "unsatisfactory",
   "excused",
 ]);
+// Mirror the backend allow-list so invalid grade text is caught before preview,
+// while still allowing common Canvas grading schemes.
 const letterGradePattern = /^(?:A|B|C|D)[+-]?$|^F$/i;
 
 async function runSequentially<T, R>(
