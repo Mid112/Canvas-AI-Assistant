@@ -1,6 +1,6 @@
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -25,6 +25,7 @@ from app.services.llm.provider_registry import (
     ProviderDefinition,
     check_provider_health,
     get_active_llm_config,
+    validate_api_key,
 )
 from app.services.llm.response_cache import (
     build_cache_key,
@@ -125,6 +126,127 @@ def test_observable_adapter_does_not_fail_over_on_validation_error():
         asyncio.run(adapter.generate("system", "hello"))
 
     assert fallback.calls == 0
+
+
+def _client_returning(status_code: int) -> MagicMock:
+    """A mock httpx.AsyncClient() context manager whose GET returns `status_code`."""
+    response = MagicMock()
+    response.status_code = status_code
+    client = AsyncMock()
+    client.get = AsyncMock(return_value=response)
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=client)
+    cm.__aexit__ = AsyncMock(return_value=False)
+    return cm
+
+
+def _client_raising(exc: Exception) -> MagicMock:
+    client = AsyncMock()
+    client.get = AsyncMock(side_effect=exc)
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=client)
+    cm.__aexit__ = AsyncMock(return_value=False)
+    return cm
+
+
+def test_validate_api_key_rejects_401_from_provider(monkeypatch):
+    provider = ProviderDefinition(
+        id="openai",
+        name="OpenAI",
+        hosting="internet",
+        default_model="model",
+        base_url="https://api.openai.com/v1",
+        api_key="",
+    )
+    monkeypatch.setattr(
+        "app.services.llm.provider_registry.httpx.AsyncClient",
+        lambda **kwargs: _client_returning(401),
+    )
+
+    is_valid, detail = asyncio.run(validate_api_key(provider, "sk-bad"))
+
+    assert is_valid is False
+    assert detail
+
+
+def test_validate_api_key_accepts_200_from_provider(monkeypatch):
+    provider = ProviderDefinition(
+        id="openai",
+        name="OpenAI",
+        hosting="internet",
+        default_model="model",
+        base_url="https://api.openai.com/v1",
+        api_key="",
+    )
+    monkeypatch.setattr(
+        "app.services.llm.provider_registry.httpx.AsyncClient",
+        lambda **kwargs: _client_returning(200),
+    )
+
+    is_valid, detail = asyncio.run(validate_api_key(provider, "sk-good"))
+
+    assert is_valid is True
+    assert detail is None
+
+
+def test_validate_api_key_uses_anthropic_headers_and_endpoint(monkeypatch):
+    provider = ProviderDefinition(
+        id="anthropic",
+        name="Anthropic",
+        hosting="internet",
+        default_model="model",
+        base_url="https://api.anthropic.com/v1",
+        api_key="",
+        supports_model_discovery=False,
+    )
+    captured = {}
+
+    def _client_factory(**kwargs):
+        client = AsyncMock()
+
+        async def _get(url, headers=None):
+            captured["url"] = url
+            captured["headers"] = headers
+            response = MagicMock()
+            response.status_code = 200
+            return response
+
+        client.get = _get
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=client)
+        cm.__aexit__ = AsyncMock(return_value=False)
+        return cm
+
+    monkeypatch.setattr(
+        "app.services.llm.provider_registry.httpx.AsyncClient", _client_factory
+    )
+
+    is_valid, _ = asyncio.run(validate_api_key(provider, "sk-ant-test"))
+
+    assert is_valid is True
+    assert captured["url"] == "https://api.anthropic.com/v1/models"
+    assert captured["headers"]["x-api-key"] == "sk-ant-test"
+
+
+def test_validate_api_key_treats_network_error_as_inconclusive(monkeypatch):
+    provider = ProviderDefinition(
+        id="openai",
+        name="OpenAI",
+        hosting="internet",
+        default_model="model",
+        base_url="https://api.openai.com/v1",
+        api_key="",
+    )
+    request = httpx.Request("GET", "https://api.openai.com/v1/models")
+    monkeypatch.setattr(
+        "app.services.llm.provider_registry.httpx.AsyncClient",
+        lambda **kwargs: _client_raising(httpx.ConnectError("offline", request=request)),
+    )
+
+    is_valid, detail = asyncio.run(validate_api_key(provider, "sk-unknown"))
+
+    assert is_valid is True
+    assert detail is None
 
 
 def test_unconfigured_hosted_provider_health_does_not_make_request():

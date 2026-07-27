@@ -339,6 +339,44 @@ async def check_provider_health(
         }
 
 
+async def validate_api_key(
+    definition: ProviderDefinition,
+    api_key: str,
+    base_url: str | None = None,
+    timeout: float = 5.0,
+) -> tuple[bool, str | None]:
+    """Probe a candidate API key against the real provider before it is stored.
+
+    Returns (is_valid, error_detail). Only an explicit 401/403 from the
+    provider counts as invalid — network errors and timeouts are inconclusive
+    (treated as valid) so a flaky connection can't block a real key.
+    """
+    if definition.id == "anthropic":
+        url = "https://api.anthropic.com/v1/models"
+        headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01"}
+    else:
+        target_base = (base_url or definition.base_url or "").rstrip("/")
+        if not target_base:
+            return True, None
+        url = f"{target_base}/models"
+        headers = {"Authorization": f"Bearer {api_key}"}
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get(url, headers=headers)
+    except httpx.HTTPError as error:
+        logger.info(
+            "llm_key_validation provider=%s outcome=inconclusive error=%s",
+            definition.id,
+            type(error).__name__,
+        )
+        return True, None
+
+    if response.status_code in (401, 403):
+        return False, "The provider rejected this API key."
+    return True, None
+
+
 async def get_provider_statuses() -> list[dict[str, Any]]:
     definitions = list_provider_definitions()
     health = await asyncio.gather(

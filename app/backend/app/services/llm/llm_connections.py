@@ -17,6 +17,7 @@ from app.services.llm.provider_registry import (
     check_provider_health,
     get_provider_definition,
     list_provider_definitions,
+    validate_api_key,
 )
 
 
@@ -273,6 +274,18 @@ async def upsert_llm_connection(
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail="An API key is required to connect this provider.",
                 )
+
+    if normalized_api_key:
+        is_valid, error_detail = await validate_api_key(
+            definition,
+            normalized_api_key,
+            base_url=normalized_base_url if provider_id == "openai_compatible_custom" else None,
+        )
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=error_detail or "The provider rejected this API key.",
+            )
 
     if connection is None:
         connection = InstructorLlmConnection(
