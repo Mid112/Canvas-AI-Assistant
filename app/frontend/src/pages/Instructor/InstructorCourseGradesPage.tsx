@@ -20,6 +20,10 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useResolvedInstructorCourse } from "@/hooks/useResolvedInstructorCourse";
 import { pageShell } from "@/lib/page-shell";
+import {
+  STUDENT_COMMUNICATION_PROFANITY_MESSAGE,
+  containsProfanity,
+} from "@/lib/profanity";
 import { cn } from "@/lib/utils";
 import { fetchCourseAssignments } from "@/services/assignments";
 import {
@@ -291,6 +295,7 @@ export function InstructorCourseGradesPage() {
   const hasGradeChange = postedGrade.trim().length > 0;
   const hasFeedback = reason.trim().length > 0;
   const isFeedbackOnly = !hasGradeChange && hasFeedback;
+  const feedbackHasProfanity = containsProfanity(reason);
   const exceedsPointsPossible =
     hasGradeChange &&
     Number.isFinite(numericPostedGrade) &&
@@ -358,6 +363,11 @@ export function InstructorCourseGradesPage() {
     if (payloads.length === 0 || !accessToken) {
       return;
     }
+    if (feedbackHasProfanity) {
+      setError(STUDENT_COMMUNICATION_PROFANITY_MESSAGE);
+      setPreviews([]);
+      return;
+    }
     setIsSubmitting(true);
     try {
       const results = await Promise.all(
@@ -385,6 +395,10 @@ export function InstructorCourseGradesPage() {
       !accessToken ||
       (!isFeedbackOnly && confirmation !== "UPDATE")
     ) {
+      return;
+    }
+    if (feedbackHasProfanity) {
+      setError(STUDENT_COMMUNICATION_PROFANITY_MESSAGE);
       return;
     }
     setIsSubmitting(true);
@@ -452,7 +466,11 @@ export function InstructorCourseGradesPage() {
         </div>
       </div>
 
-      {error && <p className="text-sm font-medium text-destructive">{error}</p>}
+      {error ? (
+        <p role="alert" className="text-sm font-medium text-destructive">
+          {error}
+        </p>
+      ) : null}
       {notice && (
         <p className="flex items-center gap-2 text-sm font-medium text-emerald-700">
           <CheckCircle2 className="size-4" aria-hidden="true" />
@@ -672,9 +690,16 @@ export function InstructorCourseGradesPage() {
                 onChange={(event) => {
                   setReason(event.target.value);
                   setPreviews([]);
+                  setError(null);
                 }}
                 placeholder="Feedback shown as a Canvas comment"
+                aria-invalid={feedbackHasProfanity || undefined}
               />
+              {feedbackHasProfanity ? (
+                <p role="alert" className="text-sm text-destructive">
+                  {STUDENT_COMMUNICATION_PROFANITY_MESSAGE}
+                </p>
+              ) : null}
             </div>
             {selectedSubmissions.length > 0 && (
               <p className="text-sm text-muted-foreground">
@@ -717,7 +742,12 @@ export function InstructorCourseGradesPage() {
               type="button"
               variant="outline"
               onClick={handlePreview}
-              disabled={payloads.length === 0 || (!hasGradeChange && !hasFeedback) || isSubmitting}
+              disabled={
+                payloads.length === 0 ||
+                (!hasGradeChange && !hasFeedback) ||
+                feedbackHasProfanity ||
+                isSubmitting
+              }
             >
               {isFeedbackOnly ? "Preview feedback" : "Preview change"}
             </Button>
@@ -736,7 +766,12 @@ export function InstructorCourseGradesPage() {
               type="button"
               variant={isFeedbackOnly ? "default" : "destructive"}
               onClick={handleSubmit}
-              disabled={!previewMatchesSelection || (!isFeedbackOnly && confirmation !== "UPDATE") || isSubmitting}
+              disabled={
+                !previewMatchesSelection ||
+                (!isFeedbackOnly && confirmation !== "UPDATE") ||
+                feedbackHasProfanity ||
+                isSubmitting
+              }
             >
               {isSubmitting
                 ? "Submitting..."

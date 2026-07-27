@@ -522,4 +522,25 @@ describe("InstructorCourseGradesPage", () => {
     await waitFor(() => expect(mockedSubmitGradeUpdate).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(/Feedback sent. History record #12./)).toBeInTheDocument();
   });
+
+  it("blocks preview when feedback contains profanity before calling the API", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByRole("cell", { name: "Coin" });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Select Coin")).toBeChecked();
+    });
+
+    await user.type(
+      screen.getByLabelText("Feedback"),
+      "Please revise this shitty draft carefully.",
+    );
+
+    expect(
+      await screen.findByRole("alert"),
+    ).toHaveTextContent(/not appropriate for student communication/i);
+    expect(screen.getByRole("button", { name: "Preview feedback" })).toBeDisabled();
+    expect(mockedPreviewGradeUpdate).not.toHaveBeenCalled();
+  });
 });
