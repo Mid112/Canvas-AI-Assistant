@@ -94,7 +94,11 @@ jobs:
         # CI log and job summary, but won't block merges yet. Remove
         # this once the codebase has been typed-checked end to end
         # and you're ready to enforce it strictly.
+        # Cap runtime: unbounded mypy on this self-hosted Mac has repeatedly
+        # caused the runner to lose heartbeat ("lost communication") and mark
+        # the whole backend-lint job failed even when ruff already passed.
         continue-on-error: true
+        timeout-minutes: 5
         env:
           PYTHONNOUSERSITE: 1
         run: python -m mypy . --ignore-missing-imports
@@ -205,10 +209,10 @@ jobs:
       - name: Start isolated PostgreSQL
         run: |
           CONTAINER="ci-e2e-postgres-${{ github.run_id }}-${{ github.run_attempt }}"
-          # Fixed host port avoids fragile `docker port` multi-line parsing on
-          # Docker Desktop (IPv4+IPv6 lines can corrupt GITHUB_ENV). Offset by
-          # run_attempt so a retried job does not collide with a dying container.
-          HOST_PORT=$((15432 + (${{ github.run_attempt }} % 50)))
+          # Unique host port per workflow run — using only run_attempt made
+          # concurrent PR e2e jobs fight over the same 15433 binding.
+          # Keep the range in 15432–17431 so it stays clear of local :5433.
+          HOST_PORT=$((15432 + (${{ github.run_id }} % 2000)))
 
           docker rm -f "$CONTAINER" 2>/dev/null || true
           # Drop any stale listener on the chosen host port.
@@ -231,7 +235,7 @@ jobs:
             -e POSTGRES_DB=appdb \
             postgres:16-alpine
 
-          for i in $(seq 1 60); do
+          for i in $(seq 1 90); do
             if docker exec "$CONTAINER" pg_isready -U appuser -d appdb >/dev/null 2>&1; then
               # pg_isready inside the container is not enough on Docker Desktop —
               # wait until the published host port actually accepts TCP.
@@ -242,6 +246,13 @@ jobs:
                 echo "E2E_DB_PORT=$HOST_PORT" >> "$GITHUB_ENV"
                 exit 0
               fi
+            fi
+            # Surface early if the container already crashed (e.g. disk full).
+            if ! docker ps -q --filter "name=^/${CONTAINER}$" --filter "status=running" | grep -q .; then
+              echo "PostgreSQL container exited before becoming ready"
+              docker ps -a --filter "name=$CONTAINER"
+              docker logs "$CONTAINER" || true
+              exit 1
             fi
             sleep 1
           done
@@ -355,11 +366,10 @@ jobs:
           context: ./app/frontend
           push: false
           tags: app-frontend:test
-      # MCP commented out until app/mcp/ has a Dockerfile.
-      # Uncomment once MCP service is implemented.
-      # - name: Build MCP image
-      #   uses: docker/build-push-action@v5
-      #   with:
-      #     context: ./app/mcp
-      #     push: false
-      #     tags: app-mcp:test
+      # Feature 13 (#862): verify the Dockerized MCP image still builds in CI.
+      - name: Build MCP image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./app/mcp
+          push: false
+          tags: app-mcp:test

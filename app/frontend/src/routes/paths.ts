@@ -138,6 +138,8 @@ export function instructorMessagesPath(options?: {
 
 /** Location state used when opening the message draft from the AI assistant. */
 export interface AiMessageDraftLocationState {
+  /** When set, discard this typed draft after a successful Canvas send. */
+  typedDraftId?: string;
   aiMessageDraft?: {
     subject?: string;
     body?: string;
@@ -152,12 +154,16 @@ export interface AiMessageDraftLocationState {
  * dedicated validated review forms. */
 export interface AiActionDraftLocationState {
   returnTo?: string;
+  /** When set, discard this typed draft after a successful Canvas confirm. */
+  typedDraftId?: string;
   aiAssignmentDraft?: {
     courseId?: number;
     name?: string;
     description?: string;
     dueDate?: string;
     pointsPossible?: unknown;
+    /** Describe-step seed when no generated title/description exists yet. */
+    prompt?: string;
   };
   aiQuizDraft?: {
     courseId?: number;
@@ -169,6 +175,8 @@ export interface AiActionDraftLocationState {
     timeLimit?: unknown;
     quizEngine?: "classic" | "new_quizzes";
     conversationId?: number;
+    /** Describe-step seed when structured questions are missing. */
+    prompt?: string;
     questionBankGroups?: Array<{
       bankId: number;
       bankName: string;
@@ -195,6 +203,8 @@ export interface AiActionDraftLocationState {
     newGrade?: string;
     feedback?: string;
     conversationId?: number;
+    /** Describe-step seed when assignment/student ids are missing. */
+    prompt?: string;
   };
 }
 

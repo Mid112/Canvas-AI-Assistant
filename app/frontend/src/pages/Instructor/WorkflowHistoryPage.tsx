@@ -311,7 +311,7 @@ export function WorkflowHistoryPage() {
             />
           </div>
           <div className="flex gap-1">
-            {(["", "approved", "rejected", "pending"] as const).map(
+            {(["", "approved", "rejected", "pending", "paused"] as const).map(
               (status) => (
                 <Button
                   key={status || "all"}

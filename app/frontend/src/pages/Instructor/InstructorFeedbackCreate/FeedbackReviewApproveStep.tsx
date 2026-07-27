@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,8 @@ interface FeedbackReviewApproveStepProps {
   isApproving: boolean;
   onApprove: (values: FeedbackReviewFormSchema) => void;
   onBack: () => void;
+  /** Keep parent draft state in sync with form edits (for Save draft). */
+  onDraftChange?: (values: GeneratedFeedbackDraft) => void;
 }
 
 export function FeedbackReviewApproveStep({
@@ -34,10 +36,12 @@ export function FeedbackReviewApproveStep({
   isApproving,
   onApprove,
   onBack,
+  onDraftChange,
 }: FeedbackReviewApproveStepProps) {
   const {
     register,
     handleSubmit,
+    control,
     trigger,
     formState: { errors, isValid },
   } = useForm<FeedbackReviewFormSchema>({
@@ -51,9 +55,34 @@ export function FeedbackReviewApproveStep({
     mode: "onChange",
   });
 
+  const watchedValues = useWatch({ control });
+
   useEffect(() => {
     void trigger();
   }, [trigger]);
+
+  useEffect(() => {
+    if (!onDraftChange) return;
+    onDraftChange({
+      assignmentId: draft.assignmentId,
+      studentId: draft.studentId,
+      assignmentName: String(
+        watchedValues.assignmentName ?? draft.assignmentName,
+      ),
+      studentName: String(watchedValues.studentName ?? draft.studentName),
+      newGrade: String(watchedValues.newGrade ?? draft.newGrade),
+      feedback: String(watchedValues.feedback ?? draft.feedback),
+    });
+  }, [
+    onDraftChange,
+    watchedValues,
+    draft.assignmentId,
+    draft.studentId,
+    draft.assignmentName,
+    draft.studentName,
+    draft.newGrade,
+    draft.feedback,
+  ]);
 
   return (
     <Card className="shadow-sm ring-1 ring-border/60">
@@ -87,6 +116,13 @@ export function FeedbackReviewApproveStep({
 
           <div className="space-y-2">
             <Label htmlFor="feedback-grade">Grade</Label>
+            {draft.currentGrade ? (
+              <p className="text-xs text-muted-foreground">
+                Current grade: <span className="font-medium text-foreground">{draft.currentGrade}</span>
+                {" → "}
+                proposed below
+              </p>
+            ) : null}
             <Input
               id="feedback-grade"
               aria-invalid={Boolean(errors.newGrade)}
