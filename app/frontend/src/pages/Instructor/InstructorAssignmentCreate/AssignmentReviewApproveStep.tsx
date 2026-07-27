@@ -27,6 +27,8 @@ interface AssignmentReviewApproveStepProps {
   isApproving: boolean;
   onApprove: (values: AssignmentReviewFormSchema) => void;
   onBack: () => void;
+  /** Keep parent draft state in sync with form edits (for Save draft). */
+  onDraftChange?: (values: GeneratedAssignmentDraft) => void;
 }
 
 export function AssignmentReviewApproveStep({
@@ -36,6 +38,7 @@ export function AssignmentReviewApproveStep({
   isApproving,
   onApprove,
   onBack,
+  onDraftChange,
 }: AssignmentReviewApproveStepProps) {
   const {
     register,
@@ -54,6 +57,7 @@ export function AssignmentReviewApproveStep({
     mode: "onChange",
   });
 
+  const watchedValues = useWatch({ control });
   const dueDateValue = useWatch({
     control,
     name: "dueDate",
@@ -63,6 +67,19 @@ export function AssignmentReviewApproveStep({
   useEffect(() => {
     void trigger();
   }, [trigger]);
+
+  useEffect(() => {
+    if (!onDraftChange) return;
+    onDraftChange({
+      name: String(watchedValues.name ?? ""),
+      description: String(watchedValues.description ?? ""),
+      dueDate: String(watchedValues.dueDate ?? ""),
+      pointsPossible:
+        typeof watchedValues.pointsPossible === "number"
+          ? watchedValues.pointsPossible
+          : draft.pointsPossible,
+    });
+  }, [onDraftChange, watchedValues, draft.pointsPossible]);
 
   return (
     <Card className="shadow-sm ring-1 ring-border/60">

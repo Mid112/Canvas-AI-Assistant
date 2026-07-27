@@ -1,5 +1,5 @@
 import { CheckCircle2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
@@ -11,6 +11,12 @@ import { useInstitution } from "@/contexts/useInstitution";
 import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
 import { disambiguateCourseLabels } from "@/lib/disambiguate-course-labels";
+import { pageShellNarrow } from "@/lib/page-shell";
+import type { AiActionDraftLocationState } from "@/routes/paths";
+import {
+  discardTypedDraft,
+  saveTypedDraft,
+} from "@/lib/typed-draft-storage";
 import {
   approveAssignmentDraft,
   generateAssignmentDraft,
@@ -29,8 +35,6 @@ import { AssignmentDescribeStep } from "./InstructorAssignmentCreate/AssignmentD
 import { AssignmentPreviewDialog } from "./InstructorAssignmentCreate/AssignmentPreviewDialog";
 import { AssignmentReviewApproveStep } from "./InstructorAssignmentCreate/AssignmentReviewApproveStep";
 import type { AssignmentReviewFormSchema } from "./InstructorAssignmentCreate/assignmentCreateSchema";
-import { pageShellNarrow } from "@/lib/page-shell";
-import type { AiActionDraftLocationState } from "@/routes/paths";
 
 const initialDescribeValues: AssignmentDescribeValues = {
   courseId: "",
@@ -39,23 +43,29 @@ const initialDescribeValues: AssignmentDescribeValues = {
 
 export function InstructorAssignmentCreatePage() {
   const location = useLocation();
-  const seededDraft = (location.state as AiActionDraftLocationState | null)
-    ?.aiAssignmentDraft;
+  const locationState = location.state as AiActionDraftLocationState | null;
+  const seededDraft = locationState?.aiAssignmentDraft;
+  const typedDraftId = locationState?.typedDraftId;
+  const hasGeneratedAssignment = Boolean(seededDraft?.name?.trim());
   const { accessToken, user } = useAuth();
   const [step, setStep] = useState<AssignmentCreateStep>(
-    seededDraft ? "review" : "describe",
+    hasGeneratedAssignment ? "review" : "describe",
   );
   const [describeValues, setDescribeValues] =
     useState<AssignmentDescribeValues>(
       seededDraft
         ? {
             courseId: String(seededDraft.courseId ?? ""),
-            prompt: "Drafted in the AI Assistant",
+            prompt: hasGeneratedAssignment
+              ? "Drafted in the AI Assistant"
+              : seededDraft.prompt?.trim() ||
+                seededDraft.description?.trim() ||
+                "",
           }
         : initialDescribeValues,
     );
   const [draft, setDraft] = useState<GeneratedAssignmentDraft | null>(
-    seededDraft
+    hasGeneratedAssignment && seededDraft
       ? {
           name: seededDraft.name ?? "",
           description: seededDraft.description ?? "",
@@ -78,6 +88,10 @@ export function InstructorAssignmentCreatePage() {
   const [preview, setPreview] = useState<AssignmentPreviewSummary | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [draftSaveStatus, setDraftSaveStatus] = useState<string | null>(null);
+  const [savedTypedDraftId, setSavedTypedDraftId] = useState<string | undefined>(
+    typedDraftId,
+  );
 
   const canvasUrl = useCanvasConnectionUrl();
   const {
@@ -115,6 +129,52 @@ export function InstructorAssignmentCreatePage() {
   const effectiveCourseLoadError = needsCanvasConnection
     ? "Connect your Canvas account to load courses."
     : courseLoadError;
+
+  const handleDescribeValuesChange = useCallback((values: AssignmentDescribeValues) => {
+    setDescribeValues((current) =>
+      current.courseId === values.courseId && current.prompt === values.prompt
+        ? current
+        : values,
+    );
+  }, []);
+
+  const handleReviewDraftChange = useCallback((values: GeneratedAssignmentDraft) => {
+    setDraft((current) => {
+      if (
+        current &&
+        current.name === values.name &&
+        current.description === values.description &&
+        current.dueDate === values.dueDate &&
+        current.pointsPossible === values.pointsPossible
+      ) {
+        return current;
+      }
+      return values;
+    });
+  }, []);
+
+  const handleSaveTypedDraft = () => {
+    if (!user?.id) return;
+    const content = draft
+      ? {
+          title: draft.name,
+          body: draft.description,
+        }
+      : describeValues.prompt.trim()
+        ? { body: describeValues.prompt.trim() }
+        : null;
+    if (!content || (!content.title?.trim() && !content.body?.trim())) {
+      setDraftSaveStatus("Add a title or description before saving a draft.");
+      return;
+    }
+    const saved = saveTypedDraft(user.id, {
+      id: savedTypedDraftId,
+      kind: "assignment",
+      content,
+    });
+    setSavedTypedDraftId(saved.id);
+    setDraftSaveStatus("Draft saved. Resume it anytime from the assistant.");
+  };
 
   const handleGenerate = async (values: AssignmentDescribeValues) => {
     if (!accessToken) {
@@ -206,6 +266,10 @@ export function InstructorAssignmentCreatePage() {
         accessToken,
         canvasUrl,
       });
+      if (user?.id && savedTypedDraftId) {
+        discardTypedDraft(user.id, savedTypedDraftId);
+        setSavedTypedDraftId(undefined);
+      }
       setApprovedValues(pendingApproval);
       setIsPreviewOpen(false);
       // This wizard commits straight to Canvas rather than going through the
@@ -250,6 +314,8 @@ export function InstructorAssignmentCreatePage() {
     setPendingApproval(null);
     setPreview(null);
     setIsPreviewOpen(false);
+    setDraftSaveStatus(null);
+    setSavedTypedDraftId(undefined);
   };
 
   if (approvedValues) {
@@ -311,6 +377,17 @@ export function InstructorAssignmentCreatePage() {
 
       <AssignmentCreateStepper currentStep={step} />
 
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={handleSaveTypedDraft}>
+          Save draft
+        </Button>
+        {draftSaveStatus ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            {draftSaveStatus}
+          </p>
+        ) : null}
+      </div>
+
       {step === "describe" ? (
         <AssignmentDescribeStep
           defaultValues={describeValues}
@@ -320,6 +397,7 @@ export function InstructorAssignmentCreatePage() {
           courseLoadError={effectiveCourseLoadError}
           isLoadingCourses={isLoadingCourses}
           onGenerate={handleGenerate}
+          onValuesChange={handleDescribeValuesChange}
         />
       ) : draft ? (
         <AssignmentReviewApproveStep
@@ -329,6 +407,7 @@ export function InstructorAssignmentCreatePage() {
           isApproving={isPreviewLoading}
           onApprove={handleRequestApproval}
           onBack={handleBack}
+          onDraftChange={handleReviewDraftChange}
         />
       ) : null}
 
