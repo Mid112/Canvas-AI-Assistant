@@ -22,6 +22,9 @@ test.describe("Administrator workflows (#712)", () => {
 
     await page.goto("/admin/profile");
     await expect(mainHeading(page, "Profile")).toBeVisible();
+
+    await page.goto("/admin/system-health");
+    await expect(mainHeading(page, /System Health/i)).toBeVisible();
   });
 
   test("admin can create an instructor account from User Management", async ({ page }) => {

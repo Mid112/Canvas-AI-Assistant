@@ -1,8 +1,9 @@
 import { History, Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { AssistantLimitedModeBanner } from "@/components/chat/AssistantLimitedModeBanner";
+import { DraftWorkspacePanel } from "@/components/chat/DraftWorkspacePanel";
 import { ChatWindow, type ChatWindowHandle } from "@/components/chat/ChatWindow";
 import { ActiveCourseContextBar } from "@/components/courses/ActiveCourseContextBar";
 import { Button } from "@/components/ui/button";
@@ -22,12 +23,19 @@ import {
   setStoredLlmProviderSettings,
 } from "@/lib/llm-provider-storage";
 import {
+  buildTypedDraftResumeTarget,
+  discardTypedDraft,
+  listTypedDrafts,
+  type TypedDraft,
+} from "@/lib/typed-draft-storage";
+import {
   fetchInstructorLlmProviders,
   resolveConnectedSettings,
   type InstructorLlmProvider,
 } from "@/services/instructorLlmProviders";
 import {
   AssistantApiError,
+  cancelDeferredAssistantRequest,
   fetchConversation,
   listAssistantConversations,
   listDeferredAssistantRequests,
@@ -83,6 +91,7 @@ function formatConversationPreview(preview: string | null): string {
 
 export function InstructorAssistantPage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { accessToken, user } = useAuth();
   const { activeCourse } = useActiveCourse();
   const suggestedActions = useMemo(
@@ -129,9 +138,24 @@ export function InstructorAssistantPage() {
   const [pendingDeferredRequestId, setPendingDeferredRequestId] = useState<
     number | null
   >(null);
+  const [discardingDeferredId, setDiscardingDeferredId] = useState<
+    number | null
+  >(null);
+  const [typedDraftRevision, setTypedDraftRevision] = useState(0);
+  const [discardingTypedId, setDiscardingTypedId] = useState<string | null>(
+    null,
+  );
   const chatWindowRef = useRef<ChatWindowHandle>(null);
   const conversationLoadRequestRef = useRef(0);
   const limitedMode = Boolean(user && !user.has_canvas_token);
+  const typedDrafts = useMemo(() => {
+    if (!user?.id) {
+      return [] as TypedDraft[];
+    }
+    // typedDraftRevision is a cache buster after localStorage mutations.
+    void typedDraftRevision;
+    return listTypedDrafts(user.id);
+  }, [user?.id, typedDraftRevision]);
 
   const loadConversationList = useCallback(async () => {
     if (!accessToken) {
@@ -309,15 +333,19 @@ export function InstructorAssistantPage() {
     void loadConversationList();
   };
 
-  const handleResumeDeferred = async () => {
+  const handleResumeDeferred = async (deferredId?: number) => {
     if (!accessToken || deferredRequests.length === 0) {
+      return;
+    }
+
+    const targetId = deferredId ?? deferredRequests[0]?.id;
+    if (targetId == null) {
       return;
     }
 
     setIsResumingDeferred(true);
     try {
-      const [first] = deferredRequests;
-      const resumed = await resumeDeferredAssistantRequest(accessToken, first.id);
+      const resumed = await resumeDeferredAssistantRequest(accessToken, targetId);
       setPendingPrompt(resumed.message);
       setPendingDeferredRequestId(resumed.id);
       if (resumed.conversation_id != null) {
@@ -339,8 +367,52 @@ export function InstructorAssistantPage() {
     }
   };
 
+  const handleDiscardDeferred = async (deferredId: number) => {
+    if (!accessToken) {
+      return;
+    }
+
+    setDiscardingDeferredId(deferredId);
+    setHistoryError(null);
+    try {
+      await cancelDeferredAssistantRequest(accessToken, deferredId);
+      if (pendingDeferredRequestId === deferredId) {
+        setPendingDeferredRequestId(null);
+      }
+      await loadDeferredRequests();
+    } catch (requestError) {
+      setHistoryError(
+        requestError instanceof AssistantApiError
+          ? requestError.message
+          : "Unable to discard this saved request.",
+      );
+    } finally {
+      setDiscardingDeferredId(null);
+    }
+  };
+
+  const handleResumeTypedDraft = (draftId: string) => {
+    if (!user?.id) return;
+    if (!activeCourse) return;
+    const draft = typedDrafts.find((entry) => entry.id === draftId);
+    if (!draft) return;
+    // Keep the draft until Canvas confirm/submit on the target create page.
+    const target = buildTypedDraftResumeTarget(draft, {
+      courseId: activeCourse.localId,
+    });
+    navigate(target.path, { state: target.state });
+  };
+
+  const handleDiscardTypedDraft = (draftId: string) => {
+    if (!user?.id) return;
+    setDiscardingTypedId(draftId);
+    discardTypedDraft(user.id, draftId);
+    setTypedDraftRevision((current) => current + 1);
+    setDiscardingTypedId(null);
+  };
+
   return (
-    <div className="flex min-h-full flex-1 flex-col gap-4 overflow-y-auto p-4 md:p-5 lg:p-6">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 md:p-5 lg:p-6">
       <InstructorAssistantHeader />
 
       {limitedMode ? (
@@ -351,6 +423,21 @@ export function InstructorAssistantPage() {
           deferredCount={deferredRequests.length}
           onResumeNext={() => void handleResumeDeferred()}
           isResuming={isResumingDeferred}
+        />
+      ) : null}
+
+      {deferredRequests.length > 0 || typedDrafts.length > 0 ? (
+        <DraftWorkspacePanel
+          items={deferredRequests}
+          typedDrafts={typedDrafts}
+          onResume={(deferredId) => void handleResumeDeferred(deferredId)}
+          onDiscard={(deferredId) => void handleDiscardDeferred(deferredId)}
+          onResumeTypedDraft={handleResumeTypedDraft}
+          onDiscardTypedDraft={handleDiscardTypedDraft}
+          isResuming={isResumingDeferred}
+          discardingId={discardingDeferredId}
+          discardingTypedId={discardingTypedId}
+          requiresCourseSelection={!activeCourse}
         />
       ) : null}
 
@@ -366,7 +453,7 @@ export function InstructorAssistantPage() {
         disabled={isLoading}
       />
 
-      <div className="grid min-h-[38rem] gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid min-h-0 flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_20rem]">
         <ChatWindow
           ref={chatWindowRef}
           key={chatSessionKey}
@@ -398,7 +485,7 @@ export function InstructorAssistantPage() {
 
         <section
           aria-labelledby="assistant-history-heading"
-          className="flex min-h-[24rem] flex-col rounded-lg border border-border/70 bg-background p-4 shadow-sm"
+          className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border/70 bg-background p-4 shadow-sm"
         >
           <div className="mb-3 flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">

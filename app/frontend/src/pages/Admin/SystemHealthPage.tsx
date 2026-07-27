@@ -103,65 +103,6 @@ function ServiceStatusCard({
   );
 }
 
-function InstructorCanvasCard({ health }: { health: HealthCheckResponse }) {
-  const { instructor_canvas: summary } = health;
-
-  return (
-    <Card className="shadow-sm ring-1 ring-border/60">
-      <CardHeader>
-        <CardTitle>Instructor Canvas connections</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2 text-sm text-muted-foreground">
-        <p>
-          {summary.healthy} of {summary.total} instructor connections are healthy
-          {summary.failing > 0 ? ` (${summary.failing} failing)` : ""}.
-        </p>
-        {summary.failing_connections.length > 0 ? (
-          <ul className="space-y-1">
-            {summary.failing_connections.map((connection) => (
-              // One instructor can have multiple Canvas connections (different
-              // canvas_url per row) -- email alone can collide.
-              <li
-                key={`${connection.user_email}-${connection.canvas_url}`}
-                className="text-destructive"
-              >
-                {connection.user_name} ({connection.user_email}) — {connection.error_detail}
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </CardContent>
-    </Card>
-  );
-}
-
-function InstructorAiCard({ health }: { health: HealthCheckResponse }) {
-  const { instructor_ai: summary } = health;
-
-  return (
-    <Card className="shadow-sm ring-1 ring-border/60">
-      <CardHeader>
-        <CardTitle>Instructor AI usage</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-1 text-sm text-muted-foreground">
-        <p>{summary.total} instructors have used AI drafting so far.</p>
-        {summary.failing_recent > 0 ? (
-          <p className="text-destructive">
-            {summary.failing_recent} instructor{summary.failing_recent === 1 ? "" : "s"} had an AI
-            failure in the last hour.
-          </p>
-        ) : (
-          <p>No AI failures in the last hour.</p>
-        )}
-        <p className="text-xs text-muted-foreground/80">
-          Covers message-draft and assignment-draft generation only — the main AI assistant chat
-          isn&apos;t instrumented yet.
-        </p>
-      </CardContent>
-    </Card>
-  );
-}
-
 export function SystemHealthPage() {
   const { accessToken } = useAuth();
   const { setStatus: setBadgeStatus } = useSystemHealthBadge();
@@ -261,11 +202,6 @@ export function SystemHealthPage() {
                 history={history?.services[service] ?? []}
               />
             ))}
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <InstructorCanvasCard health={health} />
-            <InstructorAiCard health={health} />
           </div>
         </>
       ) : null}

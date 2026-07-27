@@ -4,23 +4,17 @@ import time
 from datetime import UTC, datetime, timedelta
 
 import httpx
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.canvas_url import resolve_server_canvas_url
-from app.models.ai_call_health import AiCallHealth
-from app.models.canvas_connection import CanvasConnection
 from app.models.health_check import HealthCheck
-from app.models.user import User
 from app.schemas.health import (
-    FailingCanvasConnection,
     HealthCheckResponse,
     HealthHistoryEntry,
     HealthHistoryResponse,
     HealthStatus,
-    InstructorAiSummary,
-    InstructorCanvasSummary,
     LatestHealthResponse,
     ServiceHealth,
 )
@@ -38,11 +32,6 @@ _DEGRADED_LATENCY_RATIO = 0.5
 # it's an audit trail for "verify monitoring" + the history sparkline, not
 # something that needs unbounded retention.
 _HEALTH_CHECK_RETENTION_DAYS = 30
-# AI instructor failures are only counted as "recent" within this window —
-# an outage from last week shouldn't still show as an active problem today.
-_AI_FAILURE_RECENT_HOURS = 1
-# Bounded so the admin page never renders an unbounded list of instructors.
-_FAILING_CANVAS_CONNECTIONS_LIMIT = 10
 # Bounds the history sparkline. Every run_health_checks call inserts exactly
 # one row per monitored service in lockstep, so capping total rows (instead
 # of a per-service window-function query) still keeps services balanced.
@@ -58,25 +47,6 @@ def _status_for_latency(latency_ms: int, timeout_seconds: float) -> HealthStatus
 
 def _overall_status(statuses: list[HealthStatus]) -> HealthStatus:
     return max(statuses, key=lambda status: _STATUS_SEVERITY[status])
-
-
-def _apply_instructor_severity(
-    overall_status: HealthStatus,
-    instructor_canvas: InstructorCanvasSummary,
-    instructor_ai: InstructorAiSummary,
-) -> HealthStatus:
-    """Fold instructor-facing failures into the platform-wide signal.
-
-    Phase 2 added per-instructor Canvas/AI summaries specifically to close
-    the "shared infra only" gap, but overall_status previously ignored them
-    entirely -- every instructor connection could be broken and the nav
-    badge/overall chip would still read "healthy". Any failing Canvas
-    connection or recent AI failure now floors the status at "degraded";
-    infra checks can still independently push it to "down".
-    """
-    if instructor_canvas.failing > 0 or instructor_ai.failing_recent > 0:
-        return _overall_status([overall_status, "degraded"])
-    return overall_status
 
 
 async def check_backend(started_at: float) -> ServiceHealth:
@@ -116,8 +86,9 @@ async def check_canvas() -> ServiceHealth:
     # itself is reachable for real users. /login is Canvas's public,
     # unauthenticated landing page -- any response proves the host is up;
     # only a timeout/connection error or a 5xx means it's actually down.
-    # Per-instructor Canvas connectivity is a separate signal — see
-    # get_instructor_canvas_summary below.
+    # Per-instructor Canvas connectivity is a separate signal, surfaced only
+    # in the Troubleshooting dashboard (services/troubleshoot.py) — it's
+    # deep-dive detail, not part of the at-a-glance platform status.
     canvas_url = resolve_server_canvas_url(settings.CANVAS_API_URL)
     start = time.monotonic()
     try:
@@ -186,76 +157,20 @@ async def check_ai(db: AsyncSession) -> ServiceHealth:
     )
 
 
-async def get_instructor_canvas_summary(db: AsyncSession) -> InstructorCanvasSummary:
-    """Real per-instructor Canvas connectivity, derived from
-    run_course_sync_sweep's already-happening ~60s sweep (services/canvas.py)
-    -- no new Canvas calls. Distinct from check_canvas() above, which only
-    tests whether the Canvas host itself is reachable."""
-    total = await db.scalar(select(func.count()).select_from(CanvasConnection)) or 0
-    failing = (
-        await db.scalar(
-            select(func.count())
-            .select_from(CanvasConnection)
-            .where(CanvasConnection.last_sync_error.is_not(None))
-        )
-        or 0
-    )
-    rows = await db.execute(
-        select(
-            User.name, User.email, CanvasConnection.canvas_url, CanvasConnection.last_sync_error
-        )
-        .join(User, User.id == CanvasConnection.user_id)
-        .where(CanvasConnection.last_sync_error.is_not(None))
-        .limit(_FAILING_CANVAS_CONNECTIONS_LIMIT)
-    )
-    failing_connections = [
-        FailingCanvasConnection(
-            user_name=name, user_email=email, canvas_url=canvas_url, error_detail=error_detail
-        )
-        for name, email, canvas_url, error_detail in rows
-    ]
-    return InstructorCanvasSummary(
-        total=total,
-        healthy=total - failing,
-        failing=failing,
-        failing_connections=failing_connections,
-    )
-
-
-async def get_instructor_ai_summary(db: AsyncSession) -> InstructorAiSummary:
-    """Real per-instructor AI usage, passively observed from message-draft
-    and assignment-draft generation (services/messages.py,
-    services/assignment_draft.py) — not a synthetic ping. The main chat
-    assistant isn't instrumented yet (see PR description)."""
-    total = await db.scalar(select(func.count()).select_from(AiCallHealth)) or 0
-    recent_cutoff = datetime.now(UTC) - timedelta(hours=_AI_FAILURE_RECENT_HOURS)
-    failing_recent = (
-        await db.scalar(
-            select(func.count())
-            .select_from(AiCallHealth)
-            .where(AiCallHealth.status == "failed", AiCallHealth.last_called_at >= recent_cutoff)
-        )
-        or 0
-    )
-    return InstructorAiSummary(total=total, failing_recent=failing_recent)
-
-
 async def run_health_checks(db: AsyncSession, backend_started_at: float) -> HealthCheckResponse:
     # Only check_backend and check_canvas touch nothing but the network, so
-    # only those two are safe to run concurrently. check_database, check_ai
-    # (needs db to resolve the admin's active provider), and the instructor
-    # summaries all use this request's AsyncSession, and SQLAlchemy's
-    # asyncio docs are explicit that one AsyncSession is not safe for
-    # concurrent tasks -- gathering those together caused intermittent
-    # failures/corrupted results under load. Run them sequentially instead.
+    # only those two are safe to run concurrently. check_database and
+    # check_ai (needs db to resolve the admin's active provider) both use
+    # this request's AsyncSession, and SQLAlchemy's asyncio docs are explicit
+    # that one AsyncSession is not safe for concurrent tasks -- gathering
+    # those together caused intermittent failures/corrupted results under
+    # load. Run them sequentially instead.
     backend, canvas = await asyncio.gather(
         check_backend(backend_started_at),
         check_canvas(),
     )
     database = await check_database(db)
     ai = await check_ai(db)
-    instructor_canvas = await get_instructor_canvas_summary(db)
-    instructor_ai = await get_instructor_ai_summary(db)
     services = {"backend": backend, "database": database, "canvas": canvas, "ai": ai}
 
     for service_name, health in services.items():
@@ -278,17 +193,10 @@ async def run_health_checks(db: AsyncSession, backend_started_at: float) -> Heal
     )
     await db.commit()
 
-    overall_status = _apply_instructor_severity(
-        _overall_status([health.status for health in services.values()]),
-        instructor_canvas,
-        instructor_ai,
-    )
     return HealthCheckResponse(
-        overall_status=overall_status,
+        overall_status=_overall_status([health.status for health in services.values()]),
         checked_at=datetime.now(UTC),
         services=services,
-        instructor_canvas=instructor_canvas,
-        instructor_ai=instructor_ai,
     )
 
 
@@ -317,13 +225,8 @@ async def get_latest_health_status(db: AsyncSession) -> LatestHealthResponse:
         )
         for row in rows
     }
-    instructor_canvas = await get_instructor_canvas_summary(db)
-    instructor_ai = await get_instructor_ai_summary(db)
-    overall_status = _apply_instructor_severity(
-        _overall_status([row.status for row in rows]), instructor_canvas, instructor_ai
-    )
     return LatestHealthResponse(
-        overall_status=overall_status,
+        overall_status=_overall_status([row.status for row in rows]),
         checked_at=max(row.checked_at for row in rows),
         services=services,
     )

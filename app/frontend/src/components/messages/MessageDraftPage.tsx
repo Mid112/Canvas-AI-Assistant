@@ -2,6 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertCircle, Bot, CheckCircle2, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
+import { useLocation } from "react-router-dom";
 
 import { ConfirmationDialog } from "@/components/messages/ConfirmationDialog";
 import { MessageEditor } from "@/components/messages/MessageEditor";
@@ -17,7 +18,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import {
+  discardTypedDraft,
+  saveTypedDraft,
+} from "@/lib/typed-draft-storage";
 import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
+import type { AiMessageDraftLocationState } from "@/routes/paths";
 import {
   fetchMessageDraft,
   isMessageDraftSendMocked,
@@ -36,7 +42,14 @@ interface MessageDraftPageProps {
 }
 
 export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPageProps) {
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
+  const location = useLocation();
+  const typedDraftId = (location.state as AiMessageDraftLocationState | null)
+    ?.typedDraftId;
+  const [savedTypedDraftId, setSavedTypedDraftId] = useState<string | undefined>(
+    typedDraftId,
+  );
+  const [draftSaveStatus, setDraftSaveStatus] = useState<string | null>(null);
   const [pageState, setPageState] = useState<MessageDraftPageState>("loading");
   const [draft, setDraft] = useState<MessageDraft | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -177,6 +190,26 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     setIsConfirmOpen(true);
   };
 
+  const handleSaveTypedDraft = () => {
+    if (!user?.id) return;
+    const subject = subjectValue.trim();
+    const body = bodyValue.trim();
+    if (!subject && !body) {
+      setDraftSaveStatus("Add a subject or body before saving a draft.");
+      return;
+    }
+    const saved = saveTypedDraft(user.id, {
+      id: savedTypedDraftId,
+      kind: "message",
+      content: {
+        ...(subject ? { title: subject } : {}),
+        ...(body ? { body } : {}),
+      },
+    });
+    setSavedTypedDraftId(saved.id);
+    setDraftSaveStatus("Draft saved. Resume it anytime from the assistant.");
+  };
+
   const handleConfirmSend = async () => {
     if (!draft) {
       return;
@@ -198,6 +231,11 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
         recipients: selectedRecipients,
         conversationId: fetchOptions?.conversationId,
       });
+
+      if (user?.id && savedTypedDraftId) {
+        discardTypedDraft(user.id, savedTypedDraftId);
+        setSavedTypedDraftId(undefined);
+      }
 
       setIsConfirmOpen(false);
       setSuccessMessage(
@@ -354,10 +392,16 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
                     disabled={pageState === "sending"}
                   />
                 </CardContent>
-                <CardFooter className="mt-auto flex-col gap-0 border-t bg-muted/20 px-6 py-4">
+                <CardFooter className="mt-auto flex-col gap-3 border-t bg-muted/20 px-6 py-4">
+                  {draftSaveStatus ? (
+                    <p role="status" className="w-full text-sm text-muted-foreground">
+                      {draftSaveStatus}
+                    </p>
+                  ) : null}
                   <MessageToolbar
                     onCancel={handleCancel}
                     onSend={handleSendClick}
+                    onSaveDraft={handleSaveTypedDraft}
                     isSending={pageState === "sending"}
                     isValid={isValid}
                     hasRecipients={recipientCount > 0}

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -5,6 +7,7 @@ from app.core.database import get_db
 from app.dependencies import get_admin_user
 from app.models.user import User
 from app.schemas.admin import (
+    AdminCanvasConnectionResponse,
     AdminDashboardResponse,
     AdminSettingsResponse,
     AdminSettingsUpdate,
@@ -14,6 +17,7 @@ from app.schemas.admin import (
     InstructorResponse,
     UpdateInstructorRequest,
 )
+from app.schemas.auth import CanvasTokenRequest
 from app.schemas.health import HealthCheckResponse, HealthHistoryResponse, LatestHealthResponse
 from app.schemas.llm_provider import LlmProviderConfig, LlmProviderConfigResponse
 from app.services.admin import (
@@ -24,7 +28,9 @@ from app.services.admin import (
     get_admin_settings,
     get_dashboard_stats,
     get_llm_provider_config,
+    list_instructor_canvas_connections,
     list_instructors,
+    reset_instructor_canvas_token,
     revoke_instructor_access,
     update_admin_settings,
     update_instructor,
@@ -88,7 +94,7 @@ async def update_settings(
     current_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    settings = await update_admin_settings(db, body.settings)
+    settings = await update_admin_settings(db, body.settings, current_user)
     return AdminSettingsResponse(settings=settings)
 
 
@@ -127,10 +133,11 @@ async def create_admin(
 
 @router.get("/instructors", response_model=list[InstructorResponse])
 async def list_instructor_accounts(
+    canvas_status: Literal["failing"] | None = Query(default=None),
     current_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await list_instructors(db)
+    return await list_instructors(db, canvas_status=canvas_status)
 
 
 @router.post("/instructors", response_model=InstructorResponse, status_code=status.HTTP_201_CREATED)
@@ -177,3 +184,34 @@ async def revoke_instructor_canvas_access(
     db: AsyncSession = Depends(get_db),
 ):
     await revoke_instructor_access(db, instructor_id, current_user)
+
+
+@router.get(
+    "/instructors/{instructor_id}/canvas-connections",
+    response_model=list[AdminCanvasConnectionResponse],
+)
+async def list_instructor_canvas_connections_route(
+    instructor_id: int,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await list_instructor_canvas_connections(db, instructor_id)
+
+
+@router.patch(
+    "/instructors/{instructor_id}/canvas-token",
+    response_model=list[AdminCanvasConnectionResponse],
+)
+async def reset_instructor_canvas_token_route(
+    instructor_id: int,
+    body: CanvasTokenRequest,
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await reset_instructor_canvas_token(
+        db,
+        instructor_id,
+        canvas_token=body.canvas_token,
+        canvas_url=body.canvas_url,
+        admin=current_user,
+    )

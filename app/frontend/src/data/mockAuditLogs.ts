@@ -91,5 +91,3 @@ export const mockAuditLogApiRecords: AuditLogApiRecord[] = [
     user_role: "instructor",
   },
 ];
-
-export { filterAuditLogs } from "@/lib/audit-log-query";
