@@ -229,6 +229,16 @@ async def list_audit_logs(
         # see _MAX_SORT_ROWS) and sort in Python below instead.
         workflow_rows = await db.scalars(workflow_query.limit(_MAX_SORT_ROWS))
         session_rows = await db.scalars(session_query.limit(_MAX_SORT_ROWS))
+        if workflow_total > _MAX_SORT_ROWS or session_total > _MAX_SORT_ROWS:
+            logger.warning(
+                "audit log non-timestamp sort capped at %s rows per source "
+                "(workflow_total=%s session_total=%s sort_field=%s); "
+                "results may omit rows beyond the cap",
+                _MAX_SORT_ROWS,
+                workflow_total,
+                session_total,
+                sort_field,
+            )
 
     workflow_items = [
         AuditLogResponse(

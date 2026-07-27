@@ -92,7 +92,11 @@ async def update_admin_settings(db: AsyncSession, new_settings: dict, admin: Use
     db.add(AuditLogSession(
         user_id=admin.id,
         action="admin_settings_updated",
-        details={"changed_keys": list(new_settings.keys()), "values": new_settings},
+        # changed_keys only — deliberately not the values themselves. LLM keys
+        # are blocked above, but a future admin setting could hold something
+        # sensitive, and persisting whatever's passed in verbatim would leak
+        # it into the audit trail (and CSV exports).
+        details={"changed_keys": list(new_settings.keys())},
     ))
     await db.commit()
     return await get_admin_settings(db)

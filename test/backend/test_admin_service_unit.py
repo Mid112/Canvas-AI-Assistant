@@ -93,6 +93,7 @@ async def test_update_admin_settings_writes_audit_log():
     )
     assert audit_entry.user_id == 7
     assert audit_entry.details["changed_keys"] == ["organization_name"]
+    assert "values" not in audit_entry.details
 
 
 # ---------------------------------------------------------------------------

@@ -87,6 +87,29 @@ async def test_record_failed_operation_redacts_secrets_in_context_json():
 
 
 @pytest.mark.asyncio
+async def test_record_failed_operation_redacts_message_body_fields():
+    db = _db_mock()
+    row = await record_failed_operation(
+        db,
+        source="canvas",
+        operation="send_message",
+        error_detail="Canvas 500",
+        context_json={
+            "parameters": {
+                "body": "Student Jane Doe failed the midterm",
+                "subject": "Grade concern",
+                "local_course_id": 12,
+            }
+        },
+    )
+
+    params = row.context_json["parameters"]
+    assert params["body"] == "[REDACTED]"
+    assert params["subject"] == "[REDACTED]"
+    assert params["local_course_id"] == 12
+
+
+@pytest.mark.asyncio
 async def test_record_failed_operation_rejects_invalid_source():
     db = _db_mock()
     with pytest.raises(ValueError, match="source must be"):

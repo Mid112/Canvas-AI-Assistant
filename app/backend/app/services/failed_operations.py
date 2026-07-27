@@ -42,6 +42,7 @@ def should_record_course_sync_failure(
     return previous_error != error_detail
 
 
+# Substring match — safe for long secret-ish tokens (e.g. "canvas_access_token").
 _SENSITIVE_CONTEXT_KEYS = (
     "token",
     "access_token",
@@ -54,9 +55,25 @@ _SENSITIVE_CONTEXT_KEYS = (
     "credential",
 )
 
+# Exact key match only — short free-text / PII fields (substring would false-
+# positive on keys like "context" matching "text").
+_SENSITIVE_EXACT_CONTEXT_KEYS = frozenset({
+    "body",
+    "subject",
+    "message",
+    "content",
+    "text",
+    "prompt",
+    "description",
+    "admin_notes",
+    "reason",
+})
+
 
 def _is_sensitive_context_key(key: str) -> bool:
     lowered = key.lower()
+    if lowered in _SENSITIVE_EXACT_CONTEXT_KEYS:
+        return True
     return any(part in lowered for part in _SENSITIVE_CONTEXT_KEYS)
 
 
@@ -324,6 +341,9 @@ async def get_failed_operation(
             detail="Failed operation not found.",
         )
 
+    # Build the response before committing the view audit so a serialization
+    # failure cannot leave a "viewed" row for a detail that never rendered.
+    response = _to_detail_response(row)
     db.add(
         AuditLogSession(
             user_id=viewer.id,
@@ -333,8 +353,7 @@ async def get_failed_operation(
         )
     )
     await db.commit()
-
-    return _to_detail_response(row)
+    return response
 
 
 async def get_failed_operations_summary(
