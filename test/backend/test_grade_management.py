@@ -230,6 +230,7 @@ async def test_grade_submit_records_workflow_audit_and_history_in_one_commit():
         "user": {"name": "Coin"},
     }
 
+    mock_update = AsyncMock(return_value=raw_submission)
     with (
         patch(
             "app.services.grade_management._find_submission",
@@ -237,7 +238,7 @@ async def test_grade_submit_records_workflow_audit_and_history_in_one_commit():
         ),
         patch(
             "app.services.grade_management.update_submission_grade",
-            new=AsyncMock(return_value=raw_submission),
+            new=mock_update,
         ),
     ):
         result = await submit_grade_update(
@@ -265,6 +266,15 @@ async def test_grade_submit_records_workflow_audit_and_history_in_one_commit():
     assert audit.workflow_id == 501
     assert audit.resource_type == "submission"
     assert audit.before_data["student_canvas_id"] == 42
+    mock_update.assert_awaited_once_with(
+        77,
+        10,
+        42,
+        "95",
+        "token",
+        "https://canvas.ubc.ca",
+        feedback="Rubric correction",
+    )
     db.commit.assert_awaited_once()
 
 

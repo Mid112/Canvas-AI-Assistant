@@ -411,8 +411,8 @@ async def submit_grade_update(
             body.user_id,
             proposed_grade or None,
             token,
-            feedback or None,
             course.canvas_url,
+            feedback=feedback or None,
         )
 
     raw = await run_idempotent_canvas_write(
