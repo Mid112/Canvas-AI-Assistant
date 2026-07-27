@@ -21,7 +21,6 @@ ALLOWED_TOOLS = frozenset(
         "update_grade",
         "create_announcement",
         "send_message_to_students",
-        "get_audit_logs",
     }
 )
 
@@ -66,6 +65,9 @@ async def call_tool(
     if name not in ALLOWED_TOOLS:
         raise MCPClientError(f"Tool {name!r} is not allowed via MCP client.")
 
+    if not settings.MCP_SHARED_SECRET.strip():
+        raise MCPClientError("MCP_SHARED_SECRET is not configured.")
+
     url = f"{settings.MCP_SERVER_URL.rstrip('/')}/tools/call"
     payload = {
         "name": name,
@@ -73,10 +75,11 @@ async def call_tool(
         "canvas_token": canvas_token,
         "canvas_url": canvas_url,
     }
+    headers = {"Authorization": f"Bearer {settings.MCP_SHARED_SECRET.strip()}"}
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(url, json=payload)
+            response = await client.post(url, json=payload, headers=headers)
     except httpx.RequestError as exc:
         raise MCPClientError(f"MCP server unreachable: {exc}") from exc
 
