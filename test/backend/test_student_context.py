@@ -206,3 +206,34 @@ def test_ground_assistant_result_scrubs_invented_claims_without_tools():
     assert "[ID redacted]" in result["message"]
     assert "[grade redacted]" in result["message"]
     assert "[name redacted]" in result["message"]
+
+
+def test_quoted_title_fuzzy_allows_unambiguous_abbreviation_only():
+    """#1301: short/generic fragments must not authorize invented titles."""
+    from app.services.llm.student_context import (
+        GroundedFacts,
+        _quoted_title_is_grounded,
+        strip_ungrounded_canvas_facts,
+    )
+
+    names = {"hw1: python functions quiz", "lab 2: recursion"}
+    assert _quoted_title_is_grounded("Python Functions", names) is True
+    assert _quoted_title_is_grounded("HW1: Python Functions Quiz", names) is True
+    # Short grounded-looking generics must not unlock a long invented quote.
+    assert _quoted_title_is_grounded("Quiz about dragons and unicorns", {"quiz"}) is False
+    assert _quoted_title_is_grounded("lab", names) is False
+    # Ambiguous abbreviation across two retrieved titles → redact.
+    assert (
+        _quoted_title_is_grounded(
+            "Functions",
+            {"hw1: python functions quiz", "hw2: functions review"},
+        )
+        is False
+    )
+
+    scrubbed = strip_ungrounded_canvas_facts(
+        'See "Quiz about dragons" then "Python Functions".',
+        GroundedFacts(ids=set(), names=names, grades=set(), dates=set()),
+    )
+    assert "[name redacted]" in scrubbed
+    assert '"Python Functions"' in scrubbed

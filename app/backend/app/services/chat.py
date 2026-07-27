@@ -460,11 +460,19 @@ def _match_course_name(course_names: list[CanvasCourseName], course_name: str | 
 
     if len(normalized_target) < _COURSE_NAME_FUZZY_MATCH_MIN_LENGTH:
         return None
-    substring_matches = [
-        cn for cn in course_names
-        if normalized_target in _normalize_course_text(cn.name)
-        or _normalize_course_text(cn.name) in normalized_target
-    ]
+    # Abbreviation / paraphrase only: the model string must be a substring of
+    # the stored name (or vice versa), and the match must be unique. Reject
+    # when either side of a hit is shorter than the floor so a 4-char fragment
+    # cannot ride on a longer stored name while a shorter stored name also
+    # authorizes a long invented paraphrase (same class of “fuzzies” bug as
+    # quoted-title grounding).
+    substring_matches = []
+    for cn in course_names:
+        stored = _normalize_course_text(cn.name)
+        if len(stored) < _COURSE_NAME_FUZZY_MATCH_MIN_LENGTH:
+            continue
+        if normalized_target in stored or stored in normalized_target:
+            substring_matches.append(cn)
     if len(substring_matches) == 1:
         return substring_matches[0]
     if len(substring_matches) > 1:

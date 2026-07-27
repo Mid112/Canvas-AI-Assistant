@@ -265,19 +265,38 @@ def strip_ungrounded_canvas_facts(text: str, facts: GroundedFacts) -> str:
 
     def _title_replace(match: re.Match[str]) -> str:
         title = match.group(1).strip()
-        if not facts.names:
-            return '"[name redacted]"'
-        if title.casefold() in facts.names:
-            return match.group(0)
-        # Allow substring match against retrieved names (partial titles).
-        folded = title.casefold()
-        if any(folded in name or name in folded for name in facts.names):
+        if _quoted_title_is_grounded(title, facts.names):
             return match.group(0)
         return '"[name redacted]"'
 
     scrubbed = _QUOTED_TITLE_PATTERN.sub(_title_replace, scrubbed)
 
     return scrubbed
+
+
+# Partial title matches must be long enough that a generic fragment ("lab",
+# "quiz", "hw") cannot authorize an invented quote against a longer retrieved
+# name. Same floor as course-name fuzzy matching in services/chat.py.
+_NAME_FUZZY_MATCH_MIN_LENGTH = 4
+
+
+def _quoted_title_is_grounded(title: str, names: set[str]) -> bool:
+    """Exact match, or an unambiguous abbreviation of a retrieved title.
+
+    Bidirectional substring matching used to let a short grounded name
+    (e.g. \"Quiz\") authorize a long invented quote that merely contained
+    it — the “fuzzies” footgun. Only allow the quoted text to be a
+    substring of exactly one grounded name (model abbreviated a real title).
+    """
+    folded = title.casefold().strip()
+    if not folded or not names:
+        return False
+    if folded in names:
+        return True
+    if len(folded) < _NAME_FUZZY_MATCH_MIN_LENGTH:
+        return False
+    hits = [name for name in names if folded in name]
+    return len(hits) == 1
 
 
 def filter_grounded_dict_fields(
