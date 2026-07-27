@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -34,6 +34,8 @@ export function CreateCourseDialog({
   const [publish, setPublish] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Sync guard — React state alone can miss a second click before re-render.
+  const isSubmittingRef = useRef(false);
 
   const canvasCoursesUrl =
     connectionUrl != null
@@ -46,6 +48,7 @@ export function CreateCourseDialog({
     setPublish(false);
     setError(null);
     setIsSubmitting(false);
+    isSubmittingRef.current = false;
   };
 
   const handleOpenChange = (nextOpen: boolean) => {
@@ -60,6 +63,9 @@ export function CreateCourseDialog({
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (isSubmittingRef.current) {
+      return;
+    }
     const trimmedName = name.trim();
     if (!trimmedName) {
       setError("Course name is required.");
@@ -70,6 +76,7 @@ export function CreateCourseDialog({
       return;
     }
 
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     setError(null);
     try {
@@ -91,6 +98,7 @@ export function CreateCourseDialog({
           ? err.message
           : "Unable to create the course. Please try again.",
       );
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };

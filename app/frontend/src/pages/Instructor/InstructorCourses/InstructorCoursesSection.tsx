@@ -152,7 +152,9 @@ export function InstructorCoursesCard({
           title={
             !course.isPublished
               ? "Unpublished courses can't be set as the active course"
-              : undefined
+              : course.isPublished && !course.isWritable
+                ? "Completed courses can't be published or unpublished"
+                : undefined
           }
         >
           {isSettingActive ? (

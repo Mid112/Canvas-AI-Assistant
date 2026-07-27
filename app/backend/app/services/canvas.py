@@ -232,7 +232,9 @@ async def _resolve_course_create_account_id(token: str, canvas_url: str) -> int:
         )
 
     for account in accounts:
-        if account.get("parent_account_id") in (None, ""):
+        parent = account.get("parent_account_id")
+        # Canvas usually returns null for the root; some installs use 0 / "0".
+        if parent in (None, "", 0, "0"):
             return int(account["id"])
     return int(accounts[0]["id"])
 
@@ -307,7 +309,6 @@ async def create_canvas_course(
         )
         db.add(course)
 
-    await db.flush()
     await db.commit()
 
     return CourseResponse.model_validate(
@@ -370,6 +371,9 @@ async def set_course_published(
     workflow_state = data.get("workflow_state") or (
         WRITABLE_WORKFLOW_STATE if payload.published else "unpublished"
     )
+    # Capture selectability from the local row *before* we overwrite it with
+    # Canvas's response — used only to decide whether to clear the active-course
+    # preference when this write removes selectability.
     was_selectable = course.workflow_state in SELECTABLE_WORKFLOW_STATES
     course.name = data.get("name") or course.name
     course.course_code = data.get("course_code", course.course_code)

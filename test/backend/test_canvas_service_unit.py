@@ -136,13 +136,13 @@ async def test_create_canvas_course_posts_to_canvas_and_upserts_local():
         "total_students": 0,
     }
 
-    async def _flush_side_effect():
+    async def _commit_side_effect():
         for call in db.add.call_args_list:
             candidate = call.args[0]
             if getattr(candidate, "id", None) is None:
                 candidate.id = 42
 
-    db.flush = AsyncMock(side_effect=_flush_side_effect)
+    db.commit = AsyncMock(side_effect=_commit_side_effect)
 
     with (
         patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
@@ -174,6 +174,7 @@ async def test_create_canvas_course_posts_to_canvas_and_upserts_local():
     assert result.local_id == 42
     assert result.name == "COSC 499"
     db.commit.assert_awaited_once()
+    db.flush.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -208,13 +209,13 @@ async def test_create_canvas_course_does_not_rewrite_other_canvas_url():
         "total_students": 0,
     }
 
-    async def _flush_side_effect():
+    async def _commit_side_effect():
         for call in db.add.call_args_list:
             candidate = call.args[0]
             if getattr(candidate, "id", None) is None:
                 candidate.id = 99
 
-    db.flush = AsyncMock(side_effect=_flush_side_effect)
+    db.commit = AsyncMock(side_effect=_commit_side_effect)
 
     with (
         patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
@@ -269,6 +270,57 @@ async def test_create_canvas_course_no_accounts_raises_403():
             )
 
     assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_create_canvas_course_treats_zero_parent_account_as_root():
+    """Some Canvas installs return parent_account_id 0 / '0' for the root."""
+    db = _db_assigning_ids()
+    db.scalars = AsyncMock(return_value=[])
+    user = SimpleNamespace(
+        id=1, canvas_connections=[_connection("https://canvas.ubc.ca")]
+    )
+    created = {
+        "id": 7,
+        "name": "Root Course",
+        "course_code": "ROOT",
+        "workflow_state": "unpublished",
+        "total_students": 0,
+    }
+
+    async def _commit_side_effect():
+        for call in db.add.call_args_list:
+            candidate = call.args[0]
+            if getattr(candidate, "id", None) is None:
+                candidate.id = 3
+
+    db.commit = AsyncMock(side_effect=_commit_side_effect)
+
+    with (
+        patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
+        patch(
+            "app.services.canvas.fetch_accounts",
+            new=AsyncMock(
+                return_value=[
+                    {"id": 99, "parent_account_id": 5},
+                    {"id": 1, "parent_account_id": 0},
+                ]
+            ),
+        ),
+        patch(
+            "app.services.canvas.create_course",
+            new=AsyncMock(return_value=created),
+        ) as mock_create,
+    ):
+        await create_canvas_course(
+            CourseCreate(name="Root Course"),
+            user,
+            "https://canvas.ubc.ca",
+            db,
+        )
+
+    mock_create.assert_awaited_once()
+    assert mock_create.await_args.args[0] == 1
 
 
 # ---------------------------------------------------------------------------
