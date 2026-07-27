@@ -259,11 +259,22 @@ async def create_canvas_course(
         WRITABLE_WORKFLOW_STATE if payload.publish else "unpublished"
     )
 
-    existing = await db.scalar(
+    # Canvas course IDs are only unique within one Canvas instance — an instructor
+    # with multiple connections must not have institution B's create rewrite the
+    # local row for the same numeric id on institution A (see get_courses sync).
+    rows = await db.scalars(
         select(Course).where(
             Course.canvas_course_id == cid,
             Course.instructor_id == user.id,
         )
+    )
+    existing = next(
+        (
+            course
+            for course in rows
+            if canvas_urls_equivalent(course.canvas_url, normalized_sync_url)
+        ),
+        None,
     )
     if existing:
         existing.name = data["name"]
