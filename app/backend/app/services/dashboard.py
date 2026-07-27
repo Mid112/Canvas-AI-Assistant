@@ -15,7 +15,13 @@ from app.schemas.dashboard import (
     InstructorDashboardResponse,
     RecentWorkflowSummary,
 )
-from app.services.canvas import SELECTABLE_WORKFLOW_STATES, get_active_course, get_assignments
+from app.services.canvas import (
+    SELECTABLE_WORKFLOW_STATES,
+    _is_expected_canvas_token_sync_error,
+    _is_transient_canvas_outage,
+    get_active_course,
+    get_assignments,
+)
 from app.services.student import get_students
 
 logger = logging.getLogger(__name__)
@@ -46,12 +52,26 @@ async def _refresh_course_mirror(
         try:
             await get_assignments(course_id, user, canvas_url, session)
             await get_students(course_id, user, canvas_url, session)
-        except Exception:
-            logger.warning(
-                "Dashboard refresh failed for course_id=%s; showing last-synced data for this course.",
-                course_id,
-                exc_info=True,
-            )
+        except Exception as exc:
+            # Token reconnect / transient Canvas outages are expected: keep the
+            # cached mirror and log one quiet line (no traceback flood).
+            if _is_expected_canvas_token_sync_error(exc) or _is_transient_canvas_outage(
+                exc
+            ):
+                detail = getattr(exc, "detail", None) or str(exc)
+                logger.info(
+                    "Dashboard refresh skipped for course_id=%s (%s); "
+                    "showing last-synced data for this course.",
+                    course_id,
+                    detail,
+                )
+            else:
+                logger.warning(
+                    "Dashboard refresh failed for course_id=%s; "
+                    "showing last-synced data for this course.",
+                    course_id,
+                    exc_info=True,
+                )
 
 
 async def get_instructor_dashboard(

@@ -155,3 +155,96 @@ async def test_get_instructor_dashboard_includes_active_course():
     assert result.active_course is not None
     assert result.active_course.local_id == 7
     assert result.active_course.name == "COSC 310"
+
+
+@pytest.mark.asyncio
+async def test_refresh_course_mirror_logs_quietly_on_transient_canvas_outage(caplog):
+    """#1295: Canvas 502/timeouts must not spam warning+traceback; dashboard
+    keeps last-synced local data."""
+    import logging
+
+    from fastapi import HTTPException, status
+
+    from app.services.dashboard import _refresh_course_mirror
+
+    user = SimpleNamespace(id=1)
+    semaphore = __import__("asyncio").Semaphore(1)
+
+    with (
+        patch(
+            "app.services.dashboard.get_assignments",
+            new=AsyncMock(
+                side_effect=HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Could not reach Canvas at https://canvas.ubc.ca",
+                )
+            ),
+        ),
+        patch("app.services.dashboard.get_students", new=AsyncMock()),
+        caplog.at_level(logging.INFO),
+    ):
+        await _refresh_course_mirror(42, "https://canvas.ubc.ca", user, semaphore)
+
+    assert any(
+        "Dashboard refresh skipped for course_id=42" in record.message
+        for record in caplog.records
+    )
+    assert not any(
+        record.levelno >= logging.WARNING and record.exc_info
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_refresh_course_mirror_logs_quietly_on_token_reconnect(caplog):
+    import logging
+
+    from fastapi import HTTPException, status
+
+    from app.services.dashboard import _refresh_course_mirror
+
+    user = SimpleNamespace(id=1)
+    semaphore = __import__("asyncio").Semaphore(1)
+
+    with (
+        patch(
+            "app.services.dashboard.get_assignments",
+            new=AsyncMock(
+                side_effect=HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="No Canvas token found for this user.",
+                )
+            ),
+        ),
+        patch("app.services.dashboard.get_students", new=AsyncMock()),
+        caplog.at_level(logging.INFO),
+    ):
+        await _refresh_course_mirror(7, "https://canvas.ubc.ca", user, semaphore)
+
+    assert any("Dashboard refresh skipped for course_id=7" in r.message for r in caplog.records)
+    assert not any(r.levelno >= logging.WARNING and r.exc_info for r in caplog.records)
+
+
+@pytest.mark.asyncio
+async def test_refresh_course_mirror_keeps_traceback_for_unexpected_errors(caplog):
+    import logging
+
+    from app.services.dashboard import _refresh_course_mirror
+
+    user = SimpleNamespace(id=1)
+    semaphore = __import__("asyncio").Semaphore(1)
+
+    with (
+        patch(
+            "app.services.dashboard.get_assignments",
+            new=AsyncMock(side_effect=RuntimeError("unexpected boom")),
+        ),
+        patch("app.services.dashboard.get_students", new=AsyncMock()),
+        caplog.at_level(logging.WARNING),
+    ):
+        await _refresh_course_mirror(9, "https://canvas.ubc.ca", user, semaphore)
+
+    assert any(
+        "Dashboard refresh failed for course_id=9" in record.message and record.exc_info
+        for record in caplog.records
+    )

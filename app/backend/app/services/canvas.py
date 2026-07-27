@@ -183,6 +183,25 @@ def _is_expected_canvas_token_sync_error(exc: Exception) -> bool:
     return False
 
 
+def _is_transient_canvas_outage(exc: BaseException) -> bool:
+    """Canvas 5xx / timeouts / reachability — expected when falling back to
+    last-synced local data (dashboard mirror refresh, chat monitoring)."""
+    if isinstance(exc, HTTPException) and exc.status_code in {502, 503, 504}:
+        return True
+    text = (
+        exc.detail
+        if isinstance(exc, HTTPException) and isinstance(exc.detail, str)
+        else str(exc)
+    )
+    lowered = text.lower()
+    return (
+        "canvas server error" in lowered
+        or "canvas api timed out" in lowered
+        or "could not reach canvas" in lowered
+        or "timed out" in lowered
+    )
+
+
 async def get_owned_course(
     local_course_id: int,
     user: User,
