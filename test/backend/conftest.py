@@ -20,6 +20,17 @@ load_dotenv(backend_path / ".env")
 if not os.environ.get("HF_TOKEN"):
     os.environ["HF_TOKEN"] = "test-hf-token-for-pytest"
 
+# Settings validates CANVAS_TOKEN_ENCRYPTION_KEY at import time. An empty
+# value in .env (common before first setup) still lands in os.environ as "",
+# which fails collection — same default Fernet key as make e2e-up / local
+# Makefile test targets so bare `pytest` matches CI/make test.
+if not os.environ.get("CANVAS_TOKEN_ENCRYPTION_KEY"):
+    os.environ["CANVAS_TOKEN_ENCRYPTION_KEY"] = (
+        "ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4="
+    )
+if not os.environ.get("SECRET_KEY"):
+    os.environ["SECRET_KEY"] = "localdevsecret"
+
 # ---------------------------------------------------------------------------
 # Shared fixtures (available to all test modules)
 # ---------------------------------------------------------------------------

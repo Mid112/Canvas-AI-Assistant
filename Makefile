@@ -1,4 +1,4 @@
-.PHONY: install install-vllm install-ollama lint lint-fix test test-llm test-ollama test-vague-llm test-e2e test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset run-vllm run-ollama dev e2e-up reload
+.PHONY: install install-vllm install-ollama lint lint-fix test test-windows test-llm test-llm-windows test-ollama test-ollama-windows test-vague-llm test-vague-llm-windows test-e2e test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset db-ensure run-vllm run-ollama dev e2e-up reload
 
 # ── Install ──────────────────────────────────
 # Creates a venv (if one doesn't exist) and installs backend deps
@@ -45,15 +45,65 @@ lint-fix:
 	cd app/backend && .venv/bin/ruff format .
 	cd app/frontend && npm run lint -- --fix
 
-# ── Test ─────────────────────────────────────
-# Runs backend tests (pytest, against test/backend/) and
-# frontend tests (vitest, proxied via package.json).
-# PYTHONPATH points at app/backend so `from app.main import app`
-# resolves correctly even though tests live in test/backend/.
-# Assumes dev postgres (docker-compose.dev.yml) is already running.
-test:
-	PYTHONPATH=./app/backend DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb app/backend/.venv/bin/pytest test/backend/ -v
-	cd app/frontend && npm run test
+# ── DB ensure (dev Postgres) ──────────────────
+# Starts docker-compose.dev.yml postgres and re-applies the idempotent
+# submissions grading migration. The startup migrator never re-runs
+# 002_submission_status_and_grading.sql (pre-convention stamp), so an
+# ancient local volume can have that filename recorded while still
+# missing submissions.grade — which makes overview/dashboard tests fail
+# with UndefinedColumnError. Safe to run repeatedly (ADD COLUMN IF NOT
+# EXISTS). For a fully wiped volume use `make db-reset` / `make test-fresh`.
+db-ensure:
+	docker compose -f docker-compose.dev.yml up -d postgres
+	@echo "Waiting for Postgres..."
+	@sleep 3
+	docker compose -f docker-compose.dev.yml exec -T postgres \
+		psql -U appuser -d appdb -v ON_ERROR_STOP=1 \
+		< db/migrations/002_submission_status_and_grading.sql
+
+# ── Test (macOS / Linux) ──────────────────────
+# Mirrors .github/workflows/ci.yml's backend-test and frontend-test jobs
+# so a local `make test` catches what CI catches:
+#   - Backend: run from app/backend (not the repo root) so pytest-cov
+#     picks up the coverage config — including fail_under — in
+#     app/backend/pyproject.toml, same as CI's "Run tests with coverage"
+#     step. PYTHONPATH points at app/backend so `from app.main import app`
+#     resolves even though the tests themselves live in test/backend/.
+#   - Frontend: test:coverage (not plain test) so the vitest coverage
+#     thresholds CI enforces also run locally.
+# Starts / repairs dev postgres via `db-ensure` first (CI uses a fresh DB).
+# SECRET_KEY / CANVAS_TOKEN_ENCRYPTION_KEY / HF_TOKEN match CI's injected
+# test env so an empty or missing app/backend/.env still collects cleanly
+# (Settings validates the Fernet key at import time).
+# Windows: use `make test-windows` instead (same commands, .venv/Scripts
+# instead of .venv/bin).
+test: db-ensure
+	cd app/backend && \
+		PYTHONPATH=. \
+		DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
+		ENVIRONMENT=test \
+		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
+		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
+		HF_TOKEN=$${HF_TOKEN:-test-hf-token} \
+		.venv/bin/pytest ../../test/backend/ -v --cov --cov-report=term-missing
+	cd app/frontend && npm run test:coverage
+
+# ── Test (Windows) ────────────────────────────
+# Same as `test` above — kept as a separate target rather than
+# auto-detecting the OS so the venv path difference (.venv/Scripts on
+# Windows vs .venv/bin on macOS/Linux) is explicit rather than magic.
+# Run from Git Bash (the rest of this Makefile already assumes a POSIX
+# shell, e.g. dev/e2e-up's use of lsof/trap) or WSL.
+test-windows: db-ensure
+	cd app/backend && \
+		PYTHONPATH=. \
+		DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
+		ENVIRONMENT=test \
+		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
+		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
+		HF_TOKEN=$${HF_TOKEN:-test-hf-token} \
+		.venv/Scripts/pytest ../../test/backend/ -v --cov --cov-report=term-missing
+	cd app/frontend && npm run test:coverage
 
 # ── Browser E2E (Playwright) ─────────────────
 # Full-app UI flows for #687 / #711–#714. Requires Postgres on :5433.
@@ -71,14 +121,42 @@ test-e2e:
 # Runs the LLM adapter test (test/backend/llm_test.py). This test mocks
 # the httpx call to the LLM, so it does NOT require vLLM running — it
 # verifies the adapter's request/response handling logic in isolation.
+# Windows: use `make test-llm-windows` instead.
 test-llm:
-	PYTHONPATH=./app/backend app/backend/.venv/bin/pytest test/backend/llm_test.py -v
+	cd app/backend && \
+		PYTHONPATH=. \
+		DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
+		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
+		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
+		.venv/bin/pytest ../../test/backend/llm_test.py -v
+
+test-llm-windows:
+	cd app/backend && \
+		PYTHONPATH=. \
+		DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
+		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
+		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
+		.venv/Scripts/pytest ../../test/backend/llm_test.py -v
 
 # ── Test Ollama ──────────────────────────────
 # Integration test against a running Ollama server. Requires:
 # make install-ollama && make run-ollama
+# Windows: use `make test-ollama-windows` instead.
 test-ollama:
-	PYTHONPATH=./app/backend app/backend/.venv/bin/pytest test/ollama/test_ollama.py -v
+	cd app/backend && \
+		PYTHONPATH=. \
+		DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
+		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
+		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
+		.venv/bin/pytest ../../test/ollama/test_ollama.py -v
+
+test-ollama-windows:
+	cd app/backend && \
+		PYTHONPATH=. \
+		DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
+		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
+		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
+		.venv/Scripts/pytest ../../test/ollama/test_ollama.py -v
 
 # ── Test from scratch ─────────────────────────
 # Full reset: tears down any running stack (dev or prod), starts
@@ -194,8 +272,16 @@ run-vllm:
 run-ollama:
 	ollama serve
 
+# ── Test vague LLM instructions ───────────────
+# Manual/exploratory script (not part of the pytest suite or CI) that
+# hits a locally running backend (`make dev`) to see how the model
+# handles vague instructions without UI guardrails.
+# Windows: use `make test-vague-llm-windows` instead.
 test-vague-llm:
 	app/backend/.venv/bin/python app/backend/app/non_unit_test/test_vague_llm.py
+
+test-vague-llm-windows:
+	app/backend/.venv/Scripts/python app/backend/app/non_unit_test/test_vague_llm.py
 
 # ── Docker ───────────────────────────────────
 build:
