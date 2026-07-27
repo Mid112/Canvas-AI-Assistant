@@ -36,7 +36,11 @@ function selectValueToRangeDays(value: string): AuditLogRangeDays {
     return null;
   }
   const parsed = Number(value);
-  return parsed === 7 || parsed === 30 || parsed === 90 ? parsed : null;
+  if (parsed === 7 || parsed === 30 || parsed === 90) {
+    return parsed;
+  }
+  console.warn(`Unsupported audit log range_days value: ${value}`);
+  return null;
 }
 
 function updateFilter(

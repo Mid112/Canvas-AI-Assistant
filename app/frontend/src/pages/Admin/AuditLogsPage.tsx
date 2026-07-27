@@ -43,6 +43,7 @@ export function AuditLogsPage() {
   const [isLoadingAll, setIsLoadingAll] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const loadRequestId = useRef(0);
+  const loadingMoreRef = useRef(false);
   const loadingAllRef = useRef(false);
 
   const userOptions = useMemo(() => getUniqueAuditLogUsers(logs), [logs]);
@@ -114,21 +115,29 @@ export function AuditLogsPage() {
   }, [loadLogs]);
 
   const handleLoadMore = useCallback(async () => {
-    if (!accessToken || isLoadingMore) {
+    if (!accessToken || loadingMoreRef.current) {
       return;
     }
 
+    loadingMoreRef.current = true;
     setIsLoadingMore(true);
+    const requestId = loadRequestId.current;
     try {
       const batch = await fetchAuditLogs(accessToken, { offset: logs.length, rangeDays });
-      setLogs((current) => [...current, ...batch.entries]);
-      setTotal(batch.total);
+      if (loadRequestId.current === requestId) {
+        setLogs((current) => [...current, ...batch.entries]);
+        setTotal(batch.total);
+        setLoadedRangeDays(rangeDays);
+      }
     } catch {
-      setLoadError("Unable to load more audit logs. Please try again.");
+      if (loadRequestId.current === requestId) {
+        setLoadError("Unable to load more audit logs. Please try again.");
+      }
     } finally {
+      loadingMoreRef.current = false;
       setIsLoadingMore(false);
     }
-  }, [accessToken, isLoadingMore, logs.length, rangeDays]);
+  }, [accessToken, logs.length, rangeDays]);
 
   // The date-range dimension (rangeDays) is applied server-side and doesn't
   // need this — a range change refetches from scratch via loadLogs. But

@@ -92,6 +92,24 @@ describe("auditLogs service", () => {
     );
   });
 
+  // Verifies: Runtime-invalid range values don't accidentally append a broad or unsupported query.
+  it("warns and omits range_days for unsupported runtime values", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
+    );
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    await fetchAuditLogs("access-token", { rangeDays: 0 as never });
+
+    expect(warnSpy).toHaveBeenCalledWith("Unsupported audit log range_days value: 0");
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `http://localhost:8000/api/v1${AUDIT_LOGS_ADMIN_PATH}?limit=200&offset=0`,
+      expect.objectContaining({
+        headers: expect.any(Headers),
+      }),
+    );
+  });
+
   // Verifies: Builds a CSV export with headers and rows.
   it("builds a CSV export with headers and rows", () => {
     const csv = buildAuditLogsCsv(mockAuditLogs.slice(0, 2));

@@ -1,12 +1,13 @@
 import logging
 from datetime import datetime
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import Integer, case, cast, desc, func, literal, select, union_all
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
 
 from app.models.audit_log import AuditLog
 from app.models.audit_log_session import AuditLogSession
+from app.models.user import User
 from app.schemas.audit import AuditLogListResponse, AuditLogResponse
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,14 @@ _DEFAULT_SESSION_META: tuple[str, str, str] = ("account", "update", "success")
 _SESSION_RESOURCE_ID_KEYS = ("instructor_id", "new_admin_id")
 
 
+def _session_meta_case(index: int, label: str):
+    return case(
+        {action: meta[index] for action, meta in SESSION_ACTION_META.items()},
+        value=AuditLogSession.action,
+        else_=_DEFAULT_SESSION_META[index],
+    ).label(label)
+
+
 def _session_row_to_response(row: AuditLogSession) -> AuditLogResponse:
     meta = SESSION_ACTION_META.get(row.action)
     if meta is None:
@@ -72,8 +81,8 @@ def _session_row_to_response(row: AuditLogSession) -> AuditLogResponse:
         operation=operation,
         status=row_status,
         timestamp=row.timestamp,
-        user_email=row.user.email,
-        user_role=row.user.role,
+        user_email=row.user.email if row.user else str(details.get("email", "unknown")),
+        user_role=row.user.role if row.user else "unknown",
         details=row.details,
     )
 
@@ -86,9 +95,49 @@ async def list_audit_logs(
     user_id: int | None = None,
     since: datetime | None = None,
 ) -> AuditLogListResponse:
-    workflow_query = select(AuditLog).options(joinedload(AuditLog.user))
+    workflow_query = (
+        select(
+            AuditLog.id.label("id"),
+            AuditLog.user_id.label("user_id"),
+            AuditLog.workflow_id.label("workflow_id"),
+            AuditLog.course_id.label("course_id"),
+            AuditLog.action.label("action"),
+            AuditLog.resource_type.label("resource_type"),
+            AuditLog.resource_id.label("resource_id"),
+            AuditLog.operation.label("operation"),
+            AuditLog.status.label("status"),
+            AuditLog.timestamp.label("timestamp"),
+            User.email.label("user_email"),
+            User.role.label("user_role"),
+            cast(literal(None), JSONB).label("details"),
+        )
+        .join(User, AuditLog.user_id == User.id)
+    )
     workflow_count_query = select(func.count()).select_from(AuditLog)
-    session_query = select(AuditLogSession).options(joinedload(AuditLogSession.user))
+    session_resource_id = func.coalesce(
+        AuditLogSession.details["instructor_id"].as_string(),
+        AuditLogSession.details["new_admin_id"].as_string(),
+    )
+    session_query = (
+        select(
+            (-AuditLogSession.id).label("id"),
+            AuditLogSession.user_id.label("user_id"),
+            AuditLogSession.workflow_id.label("workflow_id"),
+            cast(literal(None), Integer).label("course_id"),
+            AuditLogSession.action.label("action"),
+            _session_meta_case(0, "resource_type"),
+            session_resource_id.label("resource_id"),
+            _session_meta_case(1, "operation"),
+            _session_meta_case(2, "status"),
+            AuditLogSession.timestamp.label("timestamp"),
+            func.coalesce(User.email, AuditLogSession.details["email"].as_string(), literal("unknown")).label(
+                "user_email"
+            ),
+            func.coalesce(User.role, literal("unknown")).label("user_role"),
+            AuditLogSession.details.label("details"),
+        )
+        .outerjoin(User, AuditLogSession.user_id == User.id)
+    )
     session_count_query = select(func.count()).select_from(AuditLogSession)
 
     if user_id is not None:
@@ -110,38 +159,41 @@ async def list_audit_logs(
     workflow_total = int(await db.scalar(workflow_count_query) or 0)
     session_total = int(await db.scalar(session_count_query) or 0)
 
-    # Both sources are already sorted desc by timestamp, so the top
-    # (offset + limit) rows from each is enough to merge-sort and slice the
-    # correct global window below — a simple fetch-then-merge rather than a
-    # SQL UNION ALL, fine at this app's scale.
-    fetch_cap = offset + limit
-    workflow_rows = await db.scalars(
-        workflow_query.order_by(desc(AuditLog.timestamp)).limit(fetch_cap)
-    )
-    session_rows = await db.scalars(
-        session_query.order_by(desc(AuditLogSession.timestamp)).limit(fetch_cap)
-    )
-
-    workflow_items = [
-        AuditLogResponse(
-            id=row.id,
-            user_id=row.user_id,
-            workflow_id=row.workflow_id,
-            course_id=row.course_id,
-            action=row.action,
-            resource_type=row.resource_type,
-            resource_id=row.resource_id,
-            operation=row.operation,
-            status=row.status,
-            timestamp=row.timestamp,
-            user_email=row.user.email,
-            user_role=row.user.role,
+    combined = union_all(workflow_query, session_query).subquery()
+    rows = (
+        await db.execute(
+            select(combined)
+            .order_by(desc(combined.c.timestamp))
+            .offset(offset)
+            .limit(limit)
         )
-        for row in workflow_rows
-    ]
-    session_items = [_session_row_to_response(row) for row in session_rows]
+    ).mappings()
 
-    merged = sorted(workflow_items + session_items, key=lambda item: item.timestamp, reverse=True)
-    items = merged[offset : offset + limit]
+    items = [
+        AuditLogResponse(
+            id=row["id"],
+            user_id=row["user_id"],
+            workflow_id=row["workflow_id"],
+            course_id=row["course_id"],
+            action=row["action"],
+            resource_type=row["resource_type"],
+            resource_id=row["resource_id"],
+            operation=row["operation"],
+            status=row["status"],
+            timestamp=row["timestamp"],
+            user_email=row["user_email"],
+            user_role=row["user_role"],
+            details=row["details"],
+        )
+        for row in rows
+    ]
+
+    unmapped_actions = {
+        item.action
+        for item in items
+        if item.id < 0 and item.action not in SESSION_ACTION_META
+    }
+    for action in unmapped_actions:
+        logger.warning("Unmapped audit_logs_session action %r; add it to SESSION_ACTION_META", action)
 
     return AuditLogListResponse(items=items, total=workflow_total + session_total)

@@ -1,5 +1,7 @@
 import type { UserRole } from "@/types/user";
 
+export type AuditLogUserRole = UserRole | "unknown";
+
 /** Outcome of an audited action — stored in audit_logs.details.result (JSONB). */
 export type AuditLogResult = "success" | "failed" | "unknown";
 
@@ -8,7 +10,7 @@ export interface AuditLogEntry {
   timestamp: string;
   userEmail: string;
   /** Matches users.role in the backend: instructor | admin. */
-  userRole: UserRole;
+  userRole: AuditLogUserRole;
   action: string;
   /** Stored in audit_logs.details.resource (JSONB) until a dedicated column exists. */
   resource: string;
@@ -24,7 +26,7 @@ export interface AuditLogEntry {
  */
 export interface AuditLogApiRecord {
   id: number;
-  user_id: number;
+  user_id: number | null;
   /** Null for rows sourced from audit_logs_session (admin/security events). */
   workflow_id: number | null;
   course_id: number | null;
@@ -35,7 +37,7 @@ export interface AuditLogApiRecord {
   status: string;
   timestamp: string;
   user_email: string;
-  user_role: UserRole;
+  user_role: AuditLogUserRole;
   details?: Record<string, unknown> | null;
 }
 

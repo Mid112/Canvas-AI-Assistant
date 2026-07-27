@@ -23,6 +23,17 @@ export interface AuditLogsBatch {
   total: number;
 }
 
+function rangeDaysQueryParam(rangeDays: AuditLogRangeDays): string {
+  if (rangeDays === null) {
+    return "";
+  }
+  if (rangeDays === 7 || rangeDays === 30 || rangeDays === 90) {
+    return `&range_days=${rangeDays}`;
+  }
+  console.warn(`Unsupported audit log range_days value: ${String(rangeDays)}`);
+  return "";
+}
+
 export async function fetchAuditLogs(
   accessToken: string,
   {
@@ -31,7 +42,7 @@ export async function fetchAuditLogs(
     rangeDays = null,
   }: { offset?: number; limit?: number; rangeDays?: AuditLogRangeDays } = {},
 ): Promise<AuditLogsBatch> {
-  const rangeParam = rangeDays ? `&range_days=${rangeDays}` : "";
+  const rangeParam = rangeDaysQueryParam(rangeDays);
   const response = await apiRequest<FetchAuditLogsResponse | AuditLogApiRecord[]>(
     `${AUDIT_LOGS_ADMIN_PATH}?limit=${limit}&offset=${offset}${rangeParam}`,
     accessToken,

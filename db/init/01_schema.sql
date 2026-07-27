@@ -334,7 +334,7 @@ CREATE INDEX idx_audit_logs_timestamp ON audit_logs(timestamp);
 -- ─────────────────────────────────────────────
 CREATE TABLE audit_logs_session (
     id           SERIAL PRIMARY KEY,
-    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    user_id      INTEGER REFERENCES users(id) ON DELETE RESTRICT,
     workflow_id  INTEGER REFERENCES workflows(id) ON DELETE SET NULL,
     action       VARCHAR NOT NULL,
     details      JSONB,
@@ -602,4 +602,5 @@ INSERT INTO schema_migrations (filename) VALUES
     ('032_conversation_field_memory.sql'),
     ('033_workflow_paused_status.sql'),
     ('034_canvas_idempotency_claim_and_retention.sql'),
-    ('035_workflow_display_name.sql');
+    ('035_workflow_display_name.sql'),
+    ('036_audit_log_session_nullable_user.sql');

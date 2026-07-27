@@ -170,3 +170,29 @@ def test_admin_audit_logs_include_session_sourced_security_events(client, admin_
     # Merged feed stays sorted desc by timestamp across both sources.
     timestamps = [item["timestamp"] for item in items]
     assert timestamps == sorted(timestamps, reverse=True)
+
+
+# Verifies: Unknown-email failed logins still leave an admin-visible audit trail.
+def test_admin_audit_logs_include_anonymous_failed_login(client, admin_credentials):
+    attempted_email = f"missing_{uuid.uuid4()}@example.com"
+    failed = client.post(
+        "/api/v1/auth/login",
+        json={"email": attempted_email, "password": "wrong-password"},
+    )
+    assert failed.status_code == 401
+
+    login = client.post("/api/v1/auth/admin/login", json=admin_credentials)
+    assert login.status_code == 200
+
+    resp = client.get("/api/v1/admin/audit/logs", headers=_auth(login.json()["access_token"]))
+    assert resp.status_code == 200
+
+    item = next(
+        row
+        for row in resp.json()["items"]
+        if row["action"] == "login_failed" and row["details"]["email"] == attempted_email
+    )
+    assert item["user_id"] is None
+    assert item["user_email"] == attempted_email
+    assert item["user_role"] == "unknown"
+    assert item["status"] == "failed"
