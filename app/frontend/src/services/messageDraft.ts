@@ -120,6 +120,9 @@ export async function sendMessageDraft(
 ): Promise<void> {
   const selectedRecipients = payload.recipients ?? [];
 
+  // Keep recipientIds and recipient objects in lockstep. For announcements
+  // both must be empty, otherwise stale private recipients could be PATCHed
+  // onto a draft that the UI intends to send course-wide.
   if (
     selectedRecipients.length !== payload.recipientIds.length ||
     selectedRecipients.some(

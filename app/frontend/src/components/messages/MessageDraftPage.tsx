@@ -141,6 +141,8 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
           )
           : new Set<string>();
       const initialTemplateId: MessageTemplateId =
+        // Delivery scope is encoded by recipient selection: no selected
+        // students means the backend will post a course announcement.
         initialSelectedRecipientIds.size === 0
           ? "course-announcement"
           : isMessageTemplateId(loadedDraft.templateId)
@@ -222,6 +224,8 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
   const syncTemplateForRecipientSelection = useCallback((
     nextSelectedRecipientIds: ReadonlySet<string>,
   ) => {
+    // Keep template selection aligned with delivery scope without using an
+    // effect that sets state during render cleanup/lint-sensitive phases.
     if (
       nextSelectedRecipientIds.size === 0 &&
       selectedTemplateId !== "course-announcement"
@@ -276,6 +280,8 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     }
 
     if (templateId !== "course-announcement" && selectedRecipientIds.size === 0) {
+      // Student-message templates need at least one selected student. With an
+      // empty audience, stay in the explicit announcement path.
       applyTemplatePreset("course-announcement");
       return;
     }

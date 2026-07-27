@@ -11,6 +11,8 @@ import logging
 import re
 
 _REDACTION_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    # Do not treat logging placeholders like "api_key=%s" as secret values;
+    # the corresponding args are scrubbed recursively below.
     (re.compile(r"(?i)(authorization\s*[:=]\s*bearer\s+)(?!%[a-zA-Z])\S+"), r"\1[REDACTED]"),
     (re.compile(r"(?i)(\bx-api-key\s*[:=]\s*)(?!%[a-zA-Z])\S+"), r"\1[REDACTED]"),
     (re.compile(r"(?i)(\bapi[_-]?key\s*[:=]\s*)(?!%[a-zA-Z])\S+"), r"\1[REDACTED]"),
@@ -39,6 +41,7 @@ def safe_exception_text(exc: BaseException) -> str:
 
 
 def _redact_log_arg(value):
+    """Redact strings nested inside structured logging args."""
     if isinstance(value, str):
         return redact_secrets(value)
     if isinstance(value, tuple):
