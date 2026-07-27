@@ -88,7 +88,7 @@ export function Sidebar({
                 aria-label={`${item.title} status: ${item.badge}`}
                 className={cn(
                   "ml-auto size-2 shrink-0 rounded-full",
-                  item.badge === "down" ? "bg-destructive" : "bg-amber-500",
+                  item.badge === "down" ? "bg-destructive" : "bg-muted-foreground/50",
                 )}
               />
             ) : null}
