@@ -282,9 +282,14 @@ describe("InstructorAssignmentCreatePage", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(mockedApprove).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText(
+        "Create assignment 'Python Functions Quiz' in CS 101: Introduction to Programming",
+      ),
+    ).not.toBeInTheDocument();
   });
 
-  it("returns to describe step from review", async () => {
+  it("returns to describe step from review through step navigation", async () => {
     const user = userEvent.setup();
     renderPage();
 
@@ -299,9 +304,58 @@ describe("InstructorAssignmentCreatePage", () => {
     await user.click(screen.getByRole("button", { name: "Generate Assignment" }));
 
     await screen.findByLabelText("Assignment title");
-    await user.click(screen.getByRole("button", { name: "Back to Describe" }));
+    await user.click(screen.getByRole("button", { name: "Go to Describe Assignment" }));
 
     expect(screen.getByText("Describe Your Assignment")).toBeInTheDocument();
+  });
+
+  it("clears stale preview when review fields change before previewing again", async () => {
+    const user = userEvent.setup();
+    mockedPreview
+      .mockResolvedValueOnce({
+        summary: "Create assignment 'Python Functions Quiz' in CS 101: Introduction to Programming",
+        reversible: true,
+        affectedResources: [{ type: "assignment", name: "Python Functions Quiz" }],
+      })
+      .mockResolvedValueOnce({
+        summary: "Create assignment 'Edited Quiz Title' in CS 101: Introduction to Programming",
+        reversible: true,
+        affectedResources: [{ type: "assignment", name: "Edited Quiz Title" }],
+      });
+
+    renderPage();
+
+    await screen.findByRole("option", {
+      name: "CS 101: Introduction to Programming",
+    });
+    await user.selectOptions(screen.getByLabelText("Select Course"), "42");
+    await user.type(
+      screen.getByLabelText("Assignment Prompt"),
+      "Create a quiz on Python functions and parameters for beginners.",
+    );
+    await user.click(screen.getByRole("button", { name: "Generate Assignment" }));
+    const titleInput = await screen.findByLabelText("Assignment title");
+
+    await user.click(screen.getByRole("button", { name: "Approve Assignment" }));
+    await screen.findByText(
+      "Create assignment 'Python Functions Quiz' in CS 101: Introduction to Programming",
+    );
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+    await user.clear(titleInput);
+    await user.type(titleInput, "Edited Quiz Title");
+    expect(
+      screen.queryByText(
+        "Create assignment 'Python Functions Quiz' in CS 101: Introduction to Programming",
+      ),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Approve Assignment" }));
+    expect(
+      await screen.findByText(
+        "Create assignment 'Edited Quiz Title' in CS 101: Introduction to Programming",
+      ),
+    ).toBeInTheDocument();
   });
 
   // Verifies: Shows an error when assignment generation fails.
