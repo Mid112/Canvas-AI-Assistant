@@ -60,54 +60,49 @@ describe("auditLogs service", () => {
     expect(batch.total).toBe(250);
   });
 
-  // Verifies: Appends range_days when a date range filter is selected.
-  it("appends range_days when a date range filter is selected", async () => {
+  // Verifies: Forwards search/filter params as query string params.
+  it("forwards search/filter params to the server", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
     );
 
-    await fetchAuditLogs("access-token", { rangeDays: 30 });
+    await fetchAuditLogs("access-token", {
+      search: "bearer sk-",
+      action: "delete",
+      user: "jane",
+      result: "failed",
+      startTime: "2026-05-31T00:00:00.000Z",
+      endTime: "2026-06-01T00:00:00.000Z",
+    });
 
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      `http://localhost:8000/api/v1${AUDIT_LOGS_ADMIN_PATH}?limit=200&offset=0&range_days=30`,
-      expect.objectContaining({
-        headers: expect.any(Headers),
-      }),
-    );
+    const calledUrl = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock
+      .calls[0]?.[0] as string;
+    const query = new URL(calledUrl).searchParams;
+    expect(query.get("search")).toBe("bearer sk-");
+    expect(query.get("action")).toBe("delete");
+    expect(query.get("user")).toBe("jane");
+    expect(query.get("result")).toBe("failed");
+    expect(query.get("start_time")).toBe("2026-05-31T00:00:00.000Z");
+    expect(query.get("end_time")).toBe("2026-06-01T00:00:00.000Z");
   });
 
-  // Verifies: Omits range_days entirely for "all time" (null).
-  it("omits range_days for all time", async () => {
+  // Verifies: Omits empty filter params rather than sending blank values.
+  it("omits filter params that are not provided", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
     );
 
-    await fetchAuditLogs("access-token", { rangeDays: null });
+    await fetchAuditLogs("access-token");
 
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      `http://localhost:8000/api/v1${AUDIT_LOGS_ADMIN_PATH}?limit=200&offset=0`,
-      expect.objectContaining({
-        headers: expect.any(Headers),
-      }),
-    );
-  });
-
-  // Verifies: Runtime-invalid range values don't accidentally append a broad or unsupported query.
-  it("warns and omits range_days for unsupported runtime values", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
-      new Response(JSON.stringify({ items: [], total: 0 }), { status: 200 }),
-    );
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    await fetchAuditLogs("access-token", { rangeDays: 0 as never });
-
-    expect(warnSpy).toHaveBeenCalledWith("Unsupported audit log range_days value: 0");
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      `http://localhost:8000/api/v1${AUDIT_LOGS_ADMIN_PATH}?limit=200&offset=0`,
-      expect.objectContaining({
-        headers: expect.any(Headers),
-      }),
-    );
+    const calledUrl = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock
+      .calls[0]?.[0] as string;
+    const query = new URL(calledUrl).searchParams;
+    expect(query.has("search")).toBe(false);
+    expect(query.has("action")).toBe(false);
+    expect(query.has("user")).toBe(false);
+    expect(query.has("result")).toBe(false);
+    expect(query.has("start_time")).toBe(false);
+    expect(query.has("end_time")).toBe(false);
   });
 
   // Verifies: Builds a CSV export with headers and rows.

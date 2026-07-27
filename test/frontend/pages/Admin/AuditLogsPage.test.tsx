@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mockAuditLogs } from "@/data/mockAuditLogs";
+import { sortAuditLogs } from "@/lib/audit-log-query";
 import { AuditLogsPage } from "@/pages/Admin/AuditLogsPage";
 import * as auditLogsService from "@/services/auditLogs";
 import type { AuditLogEntry } from "@/types/auditLog";
@@ -13,6 +14,70 @@ const mockUseAuth = vi.fn();
 /** fetchAuditLogs now resolves a {entries, total} batch rather than a bare array. */
 function toBatch(entries: AuditLogEntry[]): auditLogsService.AuditLogsBatch {
   return { entries, total: entries.length };
+}
+
+function matchesQuery(haystack: string, query: string): boolean {
+  return haystack.toLowerCase().includes(query.trim().toLowerCase());
+}
+
+/** Stands in for the real backend's search/filter/sort logic
+ * (services/audit.py) so tests can drive the same filter bar and column-sort
+ * interactions as before -- just now routed through the (mocked) server call
+ * instead of client-side filtering/sorting, matching the true-global-sort
+ * contract the real backend now provides. */
+function fakeServerFetch(all: AuditLogEntry[]) {
+  return async (
+    _accessToken: string,
+    params: auditLogsService.FetchAuditLogsParams = {},
+  ): Promise<auditLogsService.AuditLogsBatch> => {
+    const {
+      search,
+      action,
+      user,
+      result,
+      startTime,
+      endTime,
+      offset = 0,
+      limit = all.length,
+      sortField,
+      sortDirection,
+    } = params;
+
+    let filtered = all;
+    if (action) {
+      filtered = filtered.filter((log) => matchesQuery(log.action, action));
+    }
+    if (user) {
+      filtered = filtered.filter((log) =>
+        matchesQuery(`${log.userEmail} ${log.userRole}`, user),
+      );
+    }
+    if (result) {
+      filtered = filtered.filter((log) => log.result === result);
+    }
+    if (startTime) {
+      filtered = filtered.filter((log) => log.timestamp >= startTime);
+    }
+    if (endTime) {
+      filtered = filtered.filter((log) => log.timestamp < endTime);
+    }
+    if (search) {
+      filtered = filtered.filter((log) =>
+        matchesQuery(
+          [log.userEmail, log.userRole, log.action, log.resource, log.result].join(" "),
+          search,
+        ),
+      );
+    }
+    if (sortField) {
+      filtered = sortAuditLogs(filtered, {
+        field: sortField,
+        direction: sortDirection ?? "desc",
+      });
+    }
+
+    return { entries: filtered.slice(offset, offset + limit), total: filtered.length };
+  };
 }
 
 vi.mock("@/contexts/AuthContext", async () => {
@@ -40,7 +105,9 @@ describe("AuditLogsPage", () => {
       logout: vi.fn(),
       refreshUser: vi.fn(),
     });
-    vi.spyOn(auditLogsService, "fetchAuditLogs").mockResolvedValue(toBatch(mockAuditLogs));
+    vi.spyOn(auditLogsService, "fetchAuditLogs").mockImplementation(
+      fakeServerFetch(mockAuditLogs),
+    );
   });
 
   async function waitForLoaded() {
@@ -69,7 +136,7 @@ describe("AuditLogsPage", () => {
     expect(screen.getByText("Showing 1–5 of 5 audit logs")).toBeInTheDocument();
   });
 
-  // Verifies: Filters audit logs by user.
+  // Verifies: Filters audit logs by user (server-side, debounced).
   it("filters audit logs by user", async () => {
     renderWithRouter(<AuditLogsPage />);
 
@@ -77,11 +144,14 @@ describe("AuditLogsPage", () => {
 
     await user.type(screen.getByLabelText("Filter by user"), "admin@system");
 
+    // "admin@system.local" is present both before and after filtering (it's
+    // one of the 5 seed rows), so wait on a count that can only be true
+    // once the debounced server fetch has actually narrowed the results.
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
+    });
     expect(tableScope().getByText("admin@system.local")).toBeInTheDocument();
     expect(tableScope().queryByText("jane.doe@university.edu")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Showing 1 of 1 matching audit logs (5 total)"),
-    ).toBeInTheDocument();
   });
 
   // Verifies: Filters audit logs by typing in the action combobox.
@@ -92,10 +162,10 @@ describe("AuditLogsPage", () => {
 
     await user.type(screen.getByLabelText("Filter by action"), "Delete");
 
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
+    });
     expect(tableScope().queryByText("Create Message Draft")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Showing 1 of 1 matching audit logs (5 total)"),
-    ).toBeInTheDocument();
   });
 
   // Verifies: Filters audit logs by selecting an action from the dropdown.
@@ -107,11 +177,13 @@ describe("AuditLogsPage", () => {
     await user.click(screen.getByLabelText("Filter by action"));
     await user.click(screen.getByRole("button", { name: "Export Report" }));
 
+    // "Missing Work Report - CS 201" is also present before filtering (one
+    // of the 5 seed rows), so wait on the narrowed count instead.
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
+    });
     expect(tableScope().getByText("Missing Work Report - CS 201")).toBeInTheDocument();
     expect(tableScope().queryByText("Message Draft #4521")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Showing 1 of 1 matching audit logs (5 total)"),
-    ).toBeInTheDocument();
   });
 
   // Verifies: Filters audit logs by search query.
@@ -122,11 +194,13 @@ describe("AuditLogsPage", () => {
 
     await user.type(screen.getByLabelText("Search logs"), "Quiz 5");
 
+    // "Assignment: Quiz 5" is also present before filtering (one of the 5
+    // seed rows), so wait on the narrowed count instead.
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
+    });
     expect(tableScope().getByText("Assignment: Quiz 5")).toBeInTheDocument();
     expect(tableScope().queryByText("Message Draft #4521")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Showing 1 of 1 matching audit logs (5 total)"),
-    ).toBeInTheDocument();
   });
 
   // Verifies: Expands a row to show additional details.
@@ -156,6 +230,10 @@ describe("AuditLogsPage", () => {
     await waitForLoaded();
 
     await user.type(screen.getByLabelText("Filter by user"), "jane.doe");
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
+    });
+
     await user.click(screen.getByRole("button", { name: "Export" }));
 
     expect(downloadSpy).toHaveBeenCalledTimes(1);
@@ -175,9 +253,13 @@ describe("AuditLogsPage", () => {
 
     await user.type(screen.getByLabelText("Search logs"), "no matching logs");
 
+    await waitFor(() => {
+      expect(screen.getByText("No audit logs found.")).toBeInTheDocument();
+    });
     expect(screen.getByRole("button", { name: "Export" })).toBeDisabled();
-    expect(screen.getByText("Showing 0 of 5 audit logs")).toBeInTheDocument();
-    expect(screen.getByText("No audit logs found.")).toBeInTheDocument();
+    // Server-side filtering means there's no separate "loaded but
+    // unfiltered" count anymore -- both matching and total collapse to 0.
+    expect(screen.getByText("Showing 0 of 0 audit logs")).toBeInTheDocument();
   });
 
   // Verifies: Filters audit logs by selecting a user from the dropdown.
@@ -189,11 +271,13 @@ describe("AuditLogsPage", () => {
     await user.click(screen.getByLabelText("Filter by user"));
     await user.click(screen.getByRole("button", { name: "jane.doe@university.edu" }));
 
+    // "Message Draft #4521" is also present before filtering (one of the 5
+    // seed rows), so wait on the narrowed count instead.
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
+    });
     expect(tableScope().getByText("Message Draft #4521")).toBeInTheDocument();
     expect(tableScope().queryByText("admin@system.local")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Showing 1 of 1 matching audit logs (5 total)"),
-    ).toBeInTheDocument();
   });
 
   // Verifies: Resets to default timestamp sort from another column.
@@ -205,18 +289,24 @@ describe("AuditLogsPage", () => {
     await user.click(screen.getByLabelText("Filter user column"));
     await user.click(await screen.findByText("A to Z"));
 
-    const emailsAfterUserSort = tableScope()
-      .getAllByText(/@/)
-      .map((element) => element.textContent);
-    expect(emailsAfterUserSort[0]).toBe("admin@system.local");
+    // Sort is now a server round-trip (debounced), not an instant client-side
+    // re-sort -- wait for the re-fetched, re-sorted rows to land.
+    await waitFor(() => {
+      const emailsAfterUserSort = tableScope()
+        .getAllByText(/@/)
+        .map((element) => element.textContent);
+      expect(emailsAfterUserSort[0]).toBe("admin@system.local");
+    });
 
     await user.click(screen.getByLabelText("Filter timestamp column"));
     await user.click(await screen.findByText("Newest first"));
 
-    const emailsAfterDefault = tableScope()
-      .getAllByText(/@/)
-      .map((element) => element.textContent);
-    expect(emailsAfterDefault[0]).toBe("jane.doe@university.edu");
+    await waitFor(() => {
+      const emailsAfterDefault = tableScope()
+        .getAllByText(/@/)
+        .map((element) => element.textContent);
+      expect(emailsAfterDefault[0]).toBe("jane.doe@university.edu");
+    });
   }, 10000);
 
   // Verifies: Sorts audit logs by user alphabetically.
@@ -228,12 +318,15 @@ describe("AuditLogsPage", () => {
     await user.click(screen.getByLabelText("Filter user column"));
     await user.click(await screen.findByText("A to Z"));
 
-    const emails = tableScope()
-      .getAllByText(/@/)
-      .map((element) => element.textContent)
-      .filter((text) => text?.includes("@"));
-
-    expect(emails[0]).toBe("admin@system.local");
+    // Sort is now a server round-trip (debounced), not an instant client-side
+    // re-sort -- wait for the re-fetched, re-sorted rows to land.
+    await waitFor(() => {
+      const emails = tableScope()
+        .getAllByText(/@/)
+        .map((element) => element.textContent)
+        .filter((text) => text?.includes("@"));
+      expect(emails[0]).toBe("admin@system.local");
+    });
   });
 
   // Verifies: Filters audit logs by result.
@@ -245,11 +338,13 @@ describe("AuditLogsPage", () => {
     await user.click(screen.getByLabelText("Filter result column"));
     await user.click(await screen.findByText("Failed only"));
 
+    // "Assignment: Quiz 5" is also present before filtering (one of the 5
+    // seed rows), so wait on the narrowed count instead.
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
+    });
     expect(tableScope().getByText("Assignment: Quiz 5")).toBeInTheDocument();
     expect(tableScope().queryByText("Message Draft #4521")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Showing 1 of 1 matching audit logs (5 total)"),
-    ).toBeInTheDocument();
   });
 
   // Verifies: Shows action and result badges in each row.
@@ -282,20 +377,26 @@ describe("AuditLogsPage", () => {
 
   // Verifies: Offers a "Load more" control when more rows exist on the server than were fetched.
   it("loads the next batch when total exceeds what's already loaded", async () => {
+    const extraLogs = [
+      { ...mockAuditLogs[0]!, id: "audit-extra-1", userEmail: "extra1@university.edu" },
+      { ...mockAuditLogs[0]!, id: "audit-extra-2", userEmail: "extra2@university.edu" },
+    ];
+    // Keyed by offset (not call order) -- the page also fires an
+    // unfiltered "options sample" fetch on mount, so relying on
+    // mockResolvedValueOnce's call-order queue would be a race.
     const fetchSpy = vi
       .spyOn(auditLogsService, "fetchAuditLogs")
-      .mockResolvedValueOnce({ entries: mockAuditLogs, total: 7 });
+      .mockImplementation(async (_token, params: auditLogsService.FetchAuditLogsParams = {}) => {
+        if (params.offset === 5) {
+          return { entries: extraLogs, total: 7 };
+        }
+        return { entries: mockAuditLogs, total: 7 };
+      });
 
     renderWithRouter(<AuditLogsPage />);
 
     await waitForLoaded();
     expect(screen.getByText("Audit logs (5 of 7)")).toBeInTheDocument();
-
-    const extraLogs = [
-      { ...mockAuditLogs[0]!, id: "audit-extra-1", userEmail: "extra1@university.edu" },
-      { ...mockAuditLogs[0]!, id: "audit-extra-2", userEmail: "extra2@university.edu" },
-    ];
-    fetchSpy.mockResolvedValueOnce({ entries: extraLogs, total: 7 });
 
     await user.click(screen.getByRole("button", { name: "Load more" }));
 
@@ -304,7 +405,8 @@ describe("AuditLogsPage", () => {
     });
     expect(fetchSpy).toHaveBeenLastCalledWith("access-token", {
       offset: 5,
-      rangeDays: null,
+      sortField: "timestamp",
+      sortDirection: "desc",
     });
     expect(
       screen.queryByRole("button", { name: "Load more" }),
@@ -313,7 +415,10 @@ describe("AuditLogsPage", () => {
 
   // Verifies: Shows a load error with retry.
   it("shows a load error with retry", async () => {
-    vi.spyOn(auditLogsService, "fetchAuditLogs").mockRejectedValueOnce(
+    // mockRejectedValue (not "Once") so both the options-sample fetch and
+    // the main load fail regardless of which one the runtime happens to
+    // resolve first.
+    vi.spyOn(auditLogsService, "fetchAuditLogs").mockRejectedValue(
       new Error("Network error"),
     );
 
@@ -325,7 +430,7 @@ describe("AuditLogsPage", () => {
 
     const retrySpy = vi
       .spyOn(auditLogsService, "fetchAuditLogs")
-      .mockResolvedValueOnce(toBatch([]));
+      .mockResolvedValue(toBatch([]));
 
     await user.click(screen.getByRole("button", { name: "Try again" }));
 
@@ -335,63 +440,17 @@ describe("AuditLogsPage", () => {
   });
 
   // Verifies: Filters audit logs by date.
-  it("selects a date range and refetches from the server", async () => {
-    const fetchSpy = vi.spyOn(auditLogsService, "fetchAuditLogs");
+  it("filters audit logs by date", async () => {
     renderWithRouter(<AuditLogsPage />);
 
     await waitForLoaded();
-    expect(fetchSpy).toHaveBeenLastCalledWith("access-token", { rangeDays: null });
 
-    const rangedLogs = [mockAuditLogs[0]!];
-    fetchSpy.mockResolvedValueOnce(toBatch(rangedLogs));
-
-    await user.selectOptions(
-      screen.getByLabelText("Filter by date range"),
-      "7",
-    );
-
-    // The range is a server-side query param, not a client-side re-filter
-    // of what's already loaded — selecting it must trigger a fresh fetch.
-    expect(fetchSpy).toHaveBeenLastCalledWith("access-token", { rangeDays: 7 });
-    await waitFor(() => {
-      expect(screen.getByText("Audit logs (1)")).toBeInTheDocument();
-    });
-  });
-
-  // Verifies: If a client-side filter is already active, changing the
-  // server-side range still loads every remaining ranged row before applying
-  // that filter.
-  it("loads remaining ranged rows when range changes with an active filter", async () => {
-    const firstRangedLog = {
-      ...mockAuditLogs[0]!,
-      id: "range-first",
-      userEmail: "first@university.edu",
-    };
-    const olderMatchingLog = {
-      ...mockAuditLogs[0]!,
-      id: "range-older-match",
-      userEmail: "older-match@university.edu",
-    };
-    const fetchSpy = vi
-      .spyOn(auditLogsService, "fetchAuditLogs")
-      .mockResolvedValueOnce({ entries: mockAuditLogs, total: mockAuditLogs.length })
-      .mockResolvedValueOnce({ entries: [firstRangedLog], total: 2 })
-      .mockResolvedValueOnce({ entries: [olderMatchingLog], total: 2 });
-
-    renderWithRouter(<AuditLogsPage />);
-
-    await waitForLoaded();
-    await user.type(screen.getByLabelText("Search logs"), "older-match");
-    await user.selectOptions(screen.getByLabelText("Filter by date range"), "7");
+    await user.type(screen.getByLabelText("Filter by date"), "2026-05-31");
 
     await waitFor(() => {
-      expect(fetchSpy).toHaveBeenLastCalledWith("access-token", {
-        offset: 1,
-        rangeDays: 7,
-      });
+      expect(screen.getByText("Showing 1–5 of 5 audit logs")).toBeInTheDocument();
     });
-    expect(tableScope().getByText("older-match@university.edu")).toBeInTheDocument();
-    expect(screen.getByText("Audit logs (2)")).toBeInTheDocument();
+    expect(tableScope().getByText("jane.doe@university.edu")).toBeInTheDocument();
   });
 
   // Verifies: Clears active filters.
@@ -401,12 +460,16 @@ describe("AuditLogsPage", () => {
     await waitForLoaded();
 
     await user.type(screen.getByLabelText("Search logs"), "Quiz 5");
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1 of 1 audit logs")).toBeInTheDocument();
+    });
     expect(screen.getByRole("button", { name: "Clear filters" })).toBeInTheDocument();
-    expect(screen.getByText("Showing 1 of 1 matching audit logs (5 total)")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Clear filters" }));
 
-    expect(screen.getByText("Showing 1–5 of 5 audit logs")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Showing 1–5 of 5 audit logs")).toBeInTheDocument();
+    });
     expect(screen.queryByRole("button", { name: "Clear filters" })).not.toBeInTheDocument();
   });
 
@@ -420,7 +483,9 @@ describe("AuditLogsPage", () => {
       resource: `Resource ${index}`,
     }));
 
-    vi.spyOn(auditLogsService, "fetchAuditLogs").mockResolvedValueOnce(toBatch(manyLogs));
+    // mockResolvedValue (not "Once") -- the page also fires an unfiltered
+    // "options sample" fetch on mount, so a call-order queue would race.
+    vi.spyOn(auditLogsService, "fetchAuditLogs").mockResolvedValue(toBatch(manyLogs));
 
     renderWithRouter(<AuditLogsPage />);
 
@@ -447,7 +512,7 @@ describe("AuditLogsPage", () => {
       resource: `Resource ${index}`,
     }));
 
-    vi.spyOn(auditLogsService, "fetchAuditLogs").mockResolvedValueOnce(toBatch(manyLogs));
+    vi.spyOn(auditLogsService, "fetchAuditLogs").mockResolvedValue(toBatch(manyLogs));
     const downloadSpy = vi
       .spyOn(auditLogsService, "downloadAuditLogsCsv")
       .mockImplementation(() => {});

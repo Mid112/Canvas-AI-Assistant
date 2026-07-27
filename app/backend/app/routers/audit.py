@@ -1,4 +1,5 @@
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,19 +14,22 @@ router = APIRouter(prefix="/audit", tags=["audit"])
 admin_router = APIRouter(prefix="/admin/audit", tags=["audit"])
 
 
-def _since_from_range_days(range_days: int | None) -> datetime | None:
-    if range_days is None:
-        return None
-    return datetime.now(UTC) - timedelta(days=range_days)
+AuditLogSortField = Literal["timestamp", "user", "action", "resource", "result"]
+AuditLogSortDirection = Literal["asc", "desc"]
 
 
 @router.get("/logs", response_model=AuditLogListResponse)
 async def get_audit_logs(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    # Bounds how far back the audit feed looks (e.g. 7/30/90) — the Audit
-    # Logs page's range filter. Omitted means all time.
-    range_days: int | None = Query(default=None, ge=1, le=3650),
+    search: str | None = Query(default=None, max_length=200),
+    action: str | None = Query(default=None, max_length=200),
+    user: str | None = Query(default=None, max_length=200),
+    result: Literal["success", "failed", "unknown"] | None = Query(default=None),
+    start_time: datetime | None = Query(default=None),
+    end_time: datetime | None = Query(default=None),
+    sort_field: AuditLogSortField = Query(default="timestamp"),
+    sort_direction: AuditLogSortDirection = Query(default="desc"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -35,7 +39,14 @@ async def get_audit_logs(
         limit=limit,
         offset=offset,
         user_id=user_id,
-        since=_since_from_range_days(range_days),
+        search=search,
+        action=action,
+        user_search=user,
+        result=result,
+        start_time=start_time,
+        end_time=end_time,
+        sort_field=sort_field,
+        sort_direction=sort_direction,
     )
 
 
@@ -43,10 +54,27 @@ async def get_audit_logs(
 async def get_admin_audit_logs_alias(
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
-    range_days: int | None = Query(default=None, ge=1, le=3650),
+    search: str | None = Query(default=None, max_length=200),
+    action: str | None = Query(default=None, max_length=200),
+    user: str | None = Query(default=None, max_length=200),
+    result: Literal["success", "failed", "unknown"] | None = Query(default=None),
+    start_time: datetime | None = Query(default=None),
+    end_time: datetime | None = Query(default=None),
+    sort_field: AuditLogSortField = Query(default="timestamp"),
+    sort_direction: AuditLogSortDirection = Query(default="desc"),
     current_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
     return await list_audit_logs(
-        db, limit=limit, offset=offset, since=_since_from_range_days(range_days)
+        db,
+        limit=limit,
+        offset=offset,
+        search=search,
+        action=action,
+        user_search=user,
+        result=result,
+        start_time=start_time,
+        end_time=end_time,
+        sort_field=sort_field,
+        sort_direction=sort_direction,
     )

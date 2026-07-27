@@ -113,6 +113,29 @@ def _is_expected_canvas_reconnect_failure(exc: BaseException) -> bool:
         or "Canvas token is corrupted" in text
     )
 
+
+def _is_transient_canvas_outage(exc: BaseException) -> bool:
+    """Canvas 5xx / timeouts / reachability — not actionable instructor failures."""
+    if isinstance(exc, HTTPException) and exc.status_code in {502, 503, 504}:
+        return True
+    text = ""
+    if isinstance(exc, ToolExecutionError):
+        text = exc.log_detail or exc.user_message or ""
+    elif isinstance(exc, HTTPException) and isinstance(exc.detail, str):
+        text = exc.detail
+    else:
+        text = str(exc)
+    lowered = text.lower()
+    return (
+        "canvas server error" in lowered
+        or "canvas api timed out" in lowered
+        or "could not reach canvas" in lowered
+        or "timed out" in lowered
+        or "502" in text
+        or "503" in text
+        or "504" in text
+    )
+
 LLM_TIMEOUT_SECONDS = 90.0
 HISTORY_WINDOW = 10
 CANVAS_TOKEN_REQUIRED_MESSAGE = (
@@ -663,7 +686,9 @@ async def _run_tracked_read(
         call_log.status = "failed"
         call_log.error_detail = safe_exception_text(e)
         await db.flush()
-        if not _is_expected_canvas_reconnect_failure(e):
+        if not (
+            _is_expected_canvas_reconnect_failure(e) or _is_transient_canvas_outage(e)
+        ):
             await record_failed_operation(
                 db,
                 source="canvas",
@@ -675,6 +700,10 @@ async def _run_tracked_read(
                 tool_call_id=call_log.id,
                 context_json={"parameters": parameters},
             )
+            # Persist monitoring rows even when the caller re-raises and the
+            # request aborts before its own commit (otherwise the row is lost
+            # on session close / rollback).
+            await db.commit()
         raise
     call_log.status = "executed"
     call_log.completed_at = datetime.now(UTC)
@@ -3654,7 +3683,9 @@ async def handle_confirmed_action(
         )
     except ToolExecutionError as e:
         safe_detail = redact_secrets(e.log_detail)
-        if not _is_expected_canvas_reconnect_failure(e):
+        if not (
+            _is_expected_canvas_reconnect_failure(e) or _is_transient_canvas_outage(e)
+        ):
             await record_failed_operation(
                 db,
                 source="canvas",
@@ -3687,7 +3718,9 @@ async def handle_confirmed_action(
         # so the user actually sees why the confirmed action failed.
         detail = e.detail if isinstance(e.detail, str) else str(e.detail)
         error_detail = redact_secrets(f"HTTPException {e.status_code}: {detail}")
-        if not _is_expected_canvas_reconnect_failure(e):
+        if not (
+            _is_expected_canvas_reconnect_failure(e) or _is_transient_canvas_outage(e)
+        ):
             await record_failed_operation(
                 db,
                 source="canvas",
@@ -3750,7 +3783,26 @@ async def handle_confirmed_action(
                 )
                 if connection is not None:
                     try:
-                        await sync_courses_if_stale(sync_user, connection, sync_db)
+                        did_sync = await sync_courses_if_stale(
+                            sync_user, connection, sync_db
+                        )
+                        # Same clearing rule as run_course_sync_sweep /
+                        # set_active_course — a successful real sync should
+                        # drop a stale last_sync_error so Troubleshooting
+                        # stops listing this instructor as failing.
+                        if did_sync:
+                            previous_error = await sync_db.scalar(
+                                select(CanvasConnection.last_sync_error).where(
+                                    CanvasConnection.id == connection.id
+                                )
+                            )
+                            if previous_error is not None:
+                                await sync_db.execute(
+                                    sa_update(CanvasConnection)
+                                    .where(CanvasConnection.id == connection.id)
+                                    .values(last_sync_error=None)
+                                )
+                                await sync_db.commit()
                     except Exception:
                         logger.warning(
                             "post-write sync_courses_if_stale failed for canvas_connection_id=%s user_id=%s",

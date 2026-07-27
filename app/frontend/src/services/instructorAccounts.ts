@@ -14,9 +14,13 @@ const INSTRUCTORS_PATH = "/admin/instructors";
 
 export async function fetchInstructors(
   accessToken: string,
+  options?: { canvasStatus?: "failing" },
 ): Promise<Instructor[]> {
+  const query = options?.canvasStatus
+    ? `?canvas_status=${options.canvasStatus}`
+    : "";
   const records = await apiRequest<InstructorApiRecord[]>(
-    INSTRUCTORS_PATH,
+    `${INSTRUCTORS_PATH}${query}`,
     accessToken,
   );
 

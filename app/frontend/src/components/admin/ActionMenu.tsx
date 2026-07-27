@@ -1,4 +1,4 @@
-import { Ban, MoreHorizontal, Pencil, Trash2, UserCheck } from "lucide-react";
+import { Ban, MoreHorizontal, Pencil, Trash2, UserCheck, Wifi } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +16,7 @@ interface ActionMenuProps {
   onEnable: (instructor: Instructor) => void;
   onDisable: (instructor: Instructor) => void;
   onRevoke: (instructor: Instructor) => void;
+  onManageCanvasConnections: (instructor: Instructor) => void;
 }
 
 export function ActionMenu({
@@ -24,6 +25,7 @@ export function ActionMenu({
   onEnable,
   onDisable,
   onRevoke,
+  onManageCanvasConnections,
 }: ActionMenuProps) {
   const fullName = getInstructorFullName(instructor);
 
@@ -57,6 +59,10 @@ export function ActionMenu({
             Disable
           </DropdownMenuItem>
         )}
+        <DropdownMenuItem onClick={() => onManageCanvasConnections(instructor)}>
+          <Wifi className="size-4" aria-hidden="true" />
+          Canvas connections
+        </DropdownMenuItem>
         <DropdownMenuItem
           variant="destructive"
           onClick={() => onRevoke(instructor)}

@@ -6,11 +6,7 @@ import { AuditLogTable } from "@/components/admin/AuditLogTable";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { getUniqueAuditLogActions } from "@/lib/audit-log-actions";
-import {
-  filterAuditLogs,
-  paginateAuditLogs,
-  sortAuditLogs,
-} from "@/lib/audit-log-query";
+import { auditLogFiltersToQueryParams, paginateAuditLogs } from "@/lib/audit-log-query";
 import { getUniqueAuditLogUsers } from "@/lib/audit-log-users";
 import {
   downloadAuditLogsCsv,
@@ -18,54 +14,52 @@ import {
 } from "@/services/auditLogs";
 import {
   AUDIT_LOG_PAGE_SIZE,
-  defaultAuditLogRangeDays,
   defaultAuditLogSort,
   emptyAuditLogFilters,
-  hasActiveAuditLogFilters,
   type AuditLogEntry,
   type AuditLogFilters,
-  type AuditLogRangeDays,
   type AuditLogSort,
 } from "@/types/auditLog";
 import { pageShellXWide } from "@/lib/page-shell";
+
+// Debounces every filter keystroke (search/user/action are all free-typed,
+// firing onChange per character) into a single server request instead of
+// one per keystroke.
+const FILTER_DEBOUNCE_MS = 300;
+
+// Seeds the filter bar's suggestion dropdowns from a modest, unfiltered
+// recent sample -- independent of the main (filtered, paginated) fetch, so
+// the suggestion pool doesn't shrink to just the current page's rows.
+const OPTIONS_SAMPLE_SIZE = 200;
 
 export function AuditLogsPage() {
   const { accessToken } = useAuth();
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [total, setTotal] = useState(0);
+  const [optionsSample, setOptionsSample] = useState<AuditLogEntry[]>([]);
   const [filters, setFilters] = useState<AuditLogFilters>(emptyAuditLogFilters);
-  const [rangeDays, setRangeDays] = useState<AuditLogRangeDays>(defaultAuditLogRangeDays);
-  const [loadedRangeDays, setLoadedRangeDays] = useState<AuditLogRangeDays>(defaultAuditLogRangeDays);
   const [sort, setSort] = useState<AuditLogSort>(defaultAuditLogSort);
   const [page, setPage] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [isLoadingAll, setIsLoadingAll] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const loadRequestId = useRef(0);
-  const loadingMoreRef = useRef(false);
-  const loadingAllRef = useRef(false);
 
-  const userOptions = useMemo(() => getUniqueAuditLogUsers(logs), [logs]);
-  const actionOptions = useMemo(() => getUniqueAuditLogActions(logs), [logs]);
+  const userOptions = useMemo(() => getUniqueAuditLogUsers(optionsSample), [optionsSample]);
+  const actionOptions = useMemo(() => getUniqueAuditLogActions(optionsSample), [optionsSample]);
 
-  const filteredLogs = useMemo(
-    () => sortAuditLogs(filterAuditLogs(logs, filters), sort),
-    [logs, filters, sort],
-  );
+  // Rows already arrive sorted from the server (see loadLogs below, which
+  // sends `sort` as sort_field/sort_direction) — a true global sort across
+  // the full table, not just whatever's been loaded into `logs` so far.
+  const sortedLogs = logs;
 
   const pagination = useMemo(
-    () => paginateAuditLogs(filteredLogs, page, AUDIT_LOG_PAGE_SIZE),
-    [filteredLogs, page],
+    () => paginateAuditLogs(sortedLogs, page, AUDIT_LOG_PAGE_SIZE),
+    [sortedLogs, page],
   );
 
   const handleFiltersChange = useCallback((next: AuditLogFilters) => {
     setFilters(next);
-    setPage(1);
-  }, []);
-
-  const handleRangeDaysChange = useCallback((next: AuditLogRangeDays) => {
-    setRangeDays(next);
     setPage(1);
   }, []);
 
@@ -74,6 +68,11 @@ export function AuditLogsPage() {
     setPage(1);
   }, []);
 
+  // The actual search/filter/sort query -- runs server-side against the
+  // full audit table (see services/audit.py::list_audit_logs), not just
+  // whatever page happened to already be loaded here. Changing `sort`
+  // refetches from offset 0, replacing `logs` outright (below), since the
+  // server is now the source of truth for ordering.
   const loadLogs = useCallback(async () => {
     if (!accessToken) {
       return;
@@ -85,116 +84,68 @@ export function AuditLogsPage() {
     setLoadError(null);
 
     try {
-      const batch = await fetchAuditLogs(accessToken, { rangeDays });
+      const batch = await fetchAuditLogs(accessToken, {
+        ...auditLogFiltersToQueryParams(filters),
+        sortField: sort.field,
+        sortDirection: sort.direction,
+      });
       if (loadRequestId.current === requestId) {
         setLogs(batch.entries);
         setTotal(batch.total);
-        setLoadedRangeDays(rangeDays);
       }
     } catch {
       if (loadRequestId.current === requestId) {
         setLoadError("Unable to load audit logs. Please try again.");
         setLogs([]);
         setTotal(0);
-        setLoadedRangeDays(rangeDays);
       }
     } finally {
       if (loadRequestId.current === requestId) {
         setIsLoading(false);
       }
     }
-  }, [accessToken, rangeDays]);
+  }, [accessToken, filters, sort]);
 
   useEffect(() => {
-    // The leading await defers the effect's first setState past the current
-    // tick (react-hooks/set-state-in-effect) without changing behavior.
-    void (async () => {
-      await Promise.resolve();
-      await loadLogs();
-    })();
+    const timer = setTimeout(() => {
+      void loadLogs();
+    }, FILTER_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
   }, [loadLogs]);
 
+  useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+    void fetchAuditLogs(accessToken, { limit: OPTIONS_SAMPLE_SIZE })
+      .then((batch) => setOptionsSample(batch.entries))
+      .catch(() => {
+        // Suggestion dropdowns are a convenience, not core functionality --
+        // free-typed filter values still work even with no options loaded.
+      });
+  }, [accessToken]);
+
   const handleLoadMore = useCallback(async () => {
-    if (!accessToken || loadingMoreRef.current) {
+    if (!accessToken || isLoadingMore) {
       return;
     }
 
-    loadingMoreRef.current = true;
     setIsLoadingMore(true);
-    const requestId = loadRequestId.current;
     try {
-      const batch = await fetchAuditLogs(accessToken, { offset: logs.length, rangeDays });
-      if (loadRequestId.current === requestId) {
-        setLogs((current) => [...current, ...batch.entries]);
-        setTotal(batch.total);
-        setLoadedRangeDays(rangeDays);
-      }
+      const batch = await fetchAuditLogs(accessToken, {
+        ...auditLogFiltersToQueryParams(filters),
+        offset: logs.length,
+        sortField: sort.field,
+        sortDirection: sort.direction,
+      });
+      setLogs((current) => [...current, ...batch.entries]);
+      setTotal(batch.total);
     } catch {
-      if (loadRequestId.current === requestId) {
-        setLoadError("Unable to load more audit logs. Please try again.");
-      }
+      setLoadError("Unable to load more audit logs. Please try again.");
     } finally {
-      loadingMoreRef.current = false;
       setIsLoadingMore(false);
     }
-  }, [accessToken, logs.length, rangeDays]);
-
-  // The date-range dimension (rangeDays) is applied server-side and doesn't
-  // need this — a range change refetches from scratch via loadLogs. But
-  // user/action/result/search still run against `logs` — only what's been
-  // fetched so far within that range — while the count shown alongside them
-  // is the server-wide total for the range. With more rows in range than
-  // loaded, that silently misses older matching entries instead of
-  // surfacing an error, which is worse than slow for an audit trail. So
-  // fetch every remaining page whenever one of those filters is active or
-  // an export is requested, so what's displayed/exported is always
-  // complete rather than "whatever happened to be loaded already."
-  const loadAllRemaining = useCallback(async (): Promise<AuditLogEntry[]> => {
-    if (!accessToken || loadingAllRef.current) {
-      return logs;
-    }
-
-    loadingAllRef.current = true;
-    const requestId = loadRequestId.current;
-    setIsLoadingAll(true);
-    try {
-      let entries = logs;
-      let currentTotal = total;
-      while (entries.length < currentTotal) {
-        const batch = await fetchAuditLogs(accessToken, { offset: entries.length, rangeDays });
-        if (batch.entries.length === 0) {
-          // Server has fewer rows than `total` claimed (e.g. a concurrent
-          // deletion) — stop instead of looping forever.
-          break;
-        }
-        entries = [...entries, ...batch.entries];
-        currentTotal = batch.total;
-      }
-      if (loadRequestId.current === requestId) {
-        setLogs(entries);
-        setTotal(currentTotal);
-        setLoadedRangeDays(rangeDays);
-      }
-      return entries;
-    } catch {
-      setLoadError("Unable to load all audit logs. Please try again.");
-      return logs;
-    } finally {
-      loadingAllRef.current = false;
-      setIsLoadingAll(false);
-    }
-  }, [accessToken, logs, total, rangeDays]);
-
-  useEffect(() => {
-    if (
-      hasActiveAuditLogFilters(filters) &&
-      loadedRangeDays === rangeDays &&
-      logs.length < total
-    ) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- async completion fetch triggered by filter/range state, mirrors loadLogs' mount effect above
-      void loadAllRemaining();
-    }
-  }, [filters, loadedRangeDays, rangeDays, logs.length, total, loadAllRemaining]);
+  }, [accessToken, isLoadingMore, logs.length, filters, sort]);
 
   const signedOutError = accessToken
     ? null
@@ -203,13 +154,8 @@ export function AuditLogsPage() {
   const effectiveError = signedOutError ?? loadError;
   const hasMore = logs.length < total;
 
-  const handleExport = async () => {
-    // Export must reflect every matching row on the server, not just what's
-    // been fetched so far — recompute against the freshly-completed set
-    // directly rather than the `filteredLogs` memo, which won't reflect
-    // loadAllRemaining's state update until the next render.
-    const allEntries = hasMore ? await loadAllRemaining() : logs;
-    downloadAuditLogsCsv(sortAuditLogs(filterAuditLogs(allEntries, filters), sort));
+  const handleExport = () => {
+    downloadAuditLogsCsv(sortedLogs);
   };
 
   return (
@@ -225,11 +171,11 @@ export function AuditLogsPage() {
         </div>
         <Button
           type="button"
-          onClick={() => void handleExport()}
-          disabled={effectiveLoading || isLoadingAll || filteredLogs.length === 0}
+          onClick={handleExport}
+          disabled={effectiveLoading || sortedLogs.length === 0}
         >
           <Download className="size-4" aria-hidden="true" />
-          {isLoadingAll ? "Loading…" : "Export"}
+          Export
         </Button>
       </header>
 
@@ -238,15 +184,7 @@ export function AuditLogsPage() {
           <div className="inline-flex w-fit items-center rounded-lg border border-primary/20 bg-primary/5 px-3 py-1.5 text-sm font-medium text-primary">
             {hasMore ? `Audit logs (${logs.length} of ${total})` : `Audit logs (${logs.length})`}
           </div>
-          {isLoadingAll ? (
-            <span className="text-sm text-muted-foreground">
-              Loading all matching logs so filtering and export stay accurate…
-            </span>
-          ) : hasMore && !hasActiveAuditLogFilters(filters) ? (
-            // Hidden once a filter is active — loadAllRemaining takes over
-            // fetching every remaining page automatically at that point, and
-            // letting this button fire a second, independent fetch at the
-            // same time could interleave with it and drop rows.
+          {hasMore ? (
             <Button
               type="button"
               variant="outline"
@@ -263,15 +201,13 @@ export function AuditLogsPage() {
           userOptions={userOptions}
           actionOptions={actionOptions}
           onChange={handleFiltersChange}
-          rangeDays={rangeDays}
-          onRangeDaysChange={handleRangeDaysChange}
         />
       </div>
 
       <AuditLogTable
         logs={pagination.items}
-        matchingCount={filteredLogs.length}
-        totalCount={logs.length}
+        matchingCount={sortedLogs.length}
+        totalCount={sortedLogs.length}
         startIndex={pagination.startIndex}
         endIndex={pagination.endIndex}
         page={pagination.page}

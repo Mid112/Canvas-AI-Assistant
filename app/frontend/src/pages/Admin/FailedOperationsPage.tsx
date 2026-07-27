@@ -1,27 +1,40 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
-import { pageShell } from "@/lib/page-shell";
+import { pageShellXWide } from "@/lib/page-shell";
+import { paths } from "@/routes/paths";
 import {
   fetchFailedOperation,
   fetchFailedOperations,
   fetchFailedOperationsSummary,
   type FailedOperation,
+  type FailedOperationDetail,
   type FailedOperationSource,
   type FailedOperationSummaryResponse,
 } from "@/services/failedOperations";
+import {
+  createTicket,
+  fetchTicketForFailedOperation,
+  updateTicket,
+  type SupportTicket,
+  type TicketStatus,
+} from "@/services/supportTickets";
 
-type SourceFilter = "all" | FailedOperationSource;
+const FAILED_OPS_PAGE_SIZE = 50;
 
 const SOURCE_LABELS: Record<FailedOperationSource, string> = {
   canvas: "Canvas",
   ai: "AI",
 };
+
+type SourceFilter = "all" | FailedOperationSource;
 
 function SummaryCards({ summary }: { summary: FailedOperationSummaryResponse }) {
   const cards = [
@@ -49,7 +62,7 @@ function SummaryCards({ summary }: { summary: FailedOperationSummaryResponse }) 
   );
 }
 
-function DetailPanel({ item }: { item: FailedOperation | null }) {
+function DetailPanel({ item }: { item: FailedOperationDetail | null }) {
   if (!item) {
     return (
       <Card className="shadow-sm ring-1 ring-border/60">
@@ -76,6 +89,7 @@ function DetailPanel({ item }: { item: FailedOperation | null }) {
         <p className="text-muted-foreground">
           {new Date(item.created_at).toLocaleString()}
         </p>
+        <p className="font-medium">{item.human_summary}</p>
         {item.user_name ? <p>User: {item.user_name}</p> : null}
         {item.provider ? <p>Provider: {item.provider}</p> : null}
         {item.course_id !== null ? <p>Course ID: {item.course_id}</p> : null}
@@ -85,19 +99,185 @@ function DetailPanel({ item }: { item: FailedOperation | null }) {
         {item.workflow_id !== null ? <p>Workflow ID: {item.workflow_id}</p> : null}
         {item.tool_call_id !== null ? <p>Tool call ID: {item.tool_call_id}</p> : null}
         <div>
-          <p className="font-medium">Error</p>
+          <p className="font-medium">Raw error detail</p>
           <p className="whitespace-pre-wrap text-destructive">{item.error_detail}</p>
         </div>
         {contextEntries.length > 0 ? (
           <div>
-            <p className="font-medium">Context</p>
+            <p className="font-medium">Raw context</p>
             <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs">
               {JSON.stringify(item.context_json, null, 2)}
             </pre>
           </div>
         ) : null}
+        <TicketPanel failedOperationId={item.id} />
       </CardContent>
     </Card>
+  );
+}
+
+const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
+  open: "Open",
+  investigating: "Investigating",
+  resolved: "Resolved",
+};
+
+const TICKET_STATUS_BADGE_VARIANT: Record<TicketStatus, "default" | "secondary" | "outline"> = {
+  open: "default",
+  investigating: "secondary",
+  resolved: "outline",
+};
+
+/** Admin-side escalation tracking for one failed operation — get-or-create
+ * a ticket, then track status/notes. No retry/re-trigger action: read-only +
+ * escalate-to-dev-team only, per the team's Canvas-write risk framework. */
+function TicketPanel({ failedOperationId }: { failedOperationId: number }) {
+  const { accessToken } = useAuth();
+  const [ticket, setTicket] = useState<SupportTicket | null>(null);
+  const [notesDraft, setNotesDraft] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!accessToken) {
+      return;
+    }
+
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async ticket load on mount/failedOperationId change
+    setIsLoading(true);
+    setError(null);
+
+    void fetchTicketForFailedOperation(accessToken, failedOperationId)
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        setTicket(result);
+        setNotesDraft(result?.admin_notes ?? "");
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError("Unable to load ticket status.");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, failedOperationId]);
+
+  const handleEscalate = useCallback(async () => {
+    if (!accessToken) {
+      return;
+    }
+    setIsSaving(true);
+    setError(null);
+    try {
+      const created = await createTicket(accessToken, failedOperationId);
+      setTicket(created);
+      setNotesDraft(created.admin_notes ?? "");
+    } catch {
+      setError("Unable to create ticket.");
+    } finally {
+      setIsSaving(false);
+    }
+  }, [accessToken, failedOperationId]);
+
+  const handleStatusChange = useCallback(
+    async (status: TicketStatus) => {
+      if (!accessToken || !ticket) {
+        return;
+      }
+      setIsSaving(true);
+      setError(null);
+      try {
+        const updated = await updateTicket(accessToken, ticket.id, { status });
+        setTicket(updated);
+      } catch {
+        setError("Unable to update ticket status.");
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [accessToken, ticket],
+  );
+
+  const handleSaveNotes = useCallback(async () => {
+    if (!accessToken || !ticket) {
+      return;
+    }
+    setIsSaving(true);
+    setError(null);
+    try {
+      const updated = await updateTicket(accessToken, ticket.id, { admin_notes: notesDraft });
+      setTicket(updated);
+    } catch {
+      setError("Unable to save ticket notes.");
+    } finally {
+      setIsSaving(false);
+    }
+  }, [accessToken, ticket, notesDraft]);
+
+  return (
+    <div className="space-y-2 border-t pt-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-medium">Ticket</p>
+        {ticket ? (
+          <Badge variant={TICKET_STATUS_BADGE_VARIANT[ticket.status]}>
+            {TICKET_STATUS_LABELS[ticket.status]}
+          </Badge>
+        ) : null}
+      </div>
+
+      {error ? <p className="text-xs text-destructive">{error}</p> : null}
+
+      {isLoading ? (
+        <p className="text-xs text-muted-foreground">Loading ticket status…</p>
+      ) : !ticket ? (
+        <Button type="button" size="sm" variant="outline" disabled={isSaving} onClick={() => void handleEscalate()}>
+          Escalate to ticket
+        </Button>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex flex-wrap gap-2">
+            {(Object.keys(TICKET_STATUS_LABELS) as TicketStatus[]).map((status) => (
+              <Button
+                key={status}
+                type="button"
+                size="sm"
+                variant={ticket.status === status ? "default" : "outline"}
+                disabled={isSaving}
+                onClick={() => void handleStatusChange(status)}
+              >
+                {TICKET_STATUS_LABELS[status]}
+              </Button>
+            ))}
+          </div>
+          {ticket.resolved_by_email ? (
+            <p className="text-xs text-muted-foreground">
+              Resolved by {ticket.resolved_by_email}
+              {ticket.resolved_at ? ` on ${new Date(ticket.resolved_at).toLocaleString()}` : ""}
+            </p>
+          ) : null}
+          <Textarea
+            value={notesDraft}
+            onChange={(event) => setNotesDraft(event.target.value)}
+            placeholder="Notes for whoever picks this up…"
+            rows={3}
+          />
+          <Button type="button" size="sm" variant="outline" disabled={isSaving} onClick={() => void handleSaveNotes()}>
+            Save notes
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -108,8 +288,9 @@ export function FailedOperationsPage() {
   const [items, setItems] = useState<FailedOperation[]>([]);
   const [total, setTotal] = useState(0);
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [selectedItem, setSelectedItem] = useState<FailedOperation | null>(null);
+  const [selectedItem, setSelectedItem] = useState<FailedOperationDetail | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const loadRequestId = useRef(0);
 
@@ -127,8 +308,7 @@ export function FailedOperationsPage() {
         fetchFailedOperationsSummary(accessToken),
         fetchFailedOperations(accessToken, {
           source: sourceFilter === "all" ? undefined : sourceFilter,
-          hours: 24,
-          limit: 100,
+          limit: FAILED_OPS_PAGE_SIZE,
         }),
       ]);
       if (requestId !== loadRequestId.current) {
@@ -180,9 +360,12 @@ export function FailedOperationsPage() {
           setSelectedItem(detail);
         }
       } catch {
+        // No meaningful fallback: the list shape no longer carries
+        // error_detail/context_json (see FailedOperation vs
+        // FailedOperationDetail), so a failed detail fetch just clears
+        // the panel rather than showing a fake partial one.
         if (!cancelled) {
-          const fallback = items.find((item) => item.id === selectedId) ?? null;
-          setSelectedItem(fallback);
+          setSelectedItem(null);
         }
       }
     })();
@@ -190,7 +373,28 @@ export function FailedOperationsPage() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, selectedId, items]);
+  }, [accessToken, selectedId]);
+
+  const handleLoadMore = useCallback(async () => {
+    if (!accessToken || isLoadingMore) {
+      return;
+    }
+
+    setIsLoadingMore(true);
+    try {
+      const batch = await fetchFailedOperations(accessToken, {
+        source: sourceFilter === "all" ? undefined : sourceFilter,
+        limit: FAILED_OPS_PAGE_SIZE,
+        offset: items.length,
+      });
+      setItems((current) => [...current, ...batch.items]);
+      setTotal(batch.total);
+    } catch {
+      setLoadError("Unable to load more failed operations.");
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [accessToken, isLoadingMore, items.length, sourceFilter]);
 
   const filterButtons: Array<{ key: SourceFilter; label: string }> = [
     { key: "all", label: "All" },
@@ -199,9 +403,16 @@ export function FailedOperationsPage() {
   ];
 
   return (
-    <div className={pageShell}>
+    <div className={pageShellXWide}>
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
+          <Link
+            to={paths.admin.troubleshooting}
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="size-3.5" aria-hidden="true" />
+            Back to Troubleshooting
+          </Link>
           <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
             Failed Operations
           </h1>
@@ -297,7 +508,7 @@ export function FailedOperationsPage() {
                         {new Date(item.created_at).toLocaleString()}
                       </span>
                       <span className="line-clamp-2 text-sm text-destructive">
-                        {item.error_detail}
+                        {item.human_summary}
                       </span>
                     </button>
                   </li>
@@ -305,6 +516,19 @@ export function FailedOperationsPage() {
               </ul>
             )}
           </CardContent>
+          {total > items.length ? (
+            <div className="px-6 pb-6">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void handleLoadMore()}
+                disabled={isLoadingMore}
+              >
+                {isLoadingMore ? "Loading more..." : "Load more"}
+              </Button>
+            </div>
+          ) : null}
         </Card>
 
         <DetailPanel item={selectedItem} />

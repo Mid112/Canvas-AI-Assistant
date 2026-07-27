@@ -5,6 +5,12 @@ from pydantic import BaseModel, ConfigDict
 
 
 class FailedOperationResponse(BaseModel):
+    """Summary shape returned by the list endpoint — metadata + a
+    plain-language `human_summary` only. Raw `error_detail`/`context_json`
+    are FERPA-sensitive (may echo student data) and are only ever returned
+    by the single-item detail endpoint, which access-logs the view (see
+    FailedOperationDetailResponse and routers/failed_operations.py)."""
+
     model_config = ConfigDict(from_attributes=True)
 
     id: int
@@ -17,9 +23,17 @@ class FailedOperationResponse(BaseModel):
     workflow_id: int | None
     tool_call_id: int | None
     provider: str | None
+    human_summary: str
+    created_at: datetime
+
+
+class FailedOperationDetailResponse(FailedOperationResponse):
+    """Full detail shape — only returned by GET /admin/failed-operations/{id},
+    which writes an access-log row (AuditLogSession action
+    "failed_operation_viewed") before responding."""
+
     error_detail: str
     context_json: dict[str, Any]
-    created_at: datetime
 
 
 class FailedOperationListResponse(BaseModel):

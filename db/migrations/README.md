@@ -51,3 +51,5 @@ If you have a genuinely ancient local database (created before the `ta` role was
 | `035_workflow_display_name.sql` | Adds `workflows.display_name` for instructor-facing rename of open multi-workflows (#1237) |
 | `036_audit_log_session_nullable_user.sql` | Allows `audit_logs_session.user_id` to be null so failed login attempts against unknown emails can still be audited |
 | `036_failed_operations.sql` | Creates `failed_operations`, an append-only log of Canvas read/write failures and AI call failures — backs the admin Failed Operations dashboard (Feature 11, UR1.6) |
+| `037_failed_operations_human_summary.sql` | Adds `failed_operations.human_summary`, a plain-language description generated at write time so the admin dashboard doesn't translate raw error text at render time (Feature 12, Secure Troubleshooting) |
+| `038_support_tickets.sql` | Creates `support_tickets`, one-per-`failed_operation` admin escalation tracking (status/notes/resolved_by) for the Secure Troubleshooting ticket workflow (Feature 12) |

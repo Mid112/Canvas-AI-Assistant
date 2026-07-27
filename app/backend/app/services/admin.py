@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.secret_redaction import redact_secrets
 from app.core.security import hash_password
 from app.models.audit_log import AuditLog
 from app.models.audit_log_session import AuditLogSession
@@ -11,7 +12,12 @@ from app.models.canvas_connection import CanvasConnection
 from app.models.system_setting import SystemSetting
 from app.models.user import User
 from app.models.workflow import Workflow
-from app.schemas.admin import CreateAdminRequest, CreateInstructorRequest, UpdateInstructorRequest
+from app.schemas.admin import (
+    AdminCanvasConnectionResponse,
+    CreateAdminRequest,
+    CreateInstructorRequest,
+    UpdateInstructorRequest,
+)
 from app.schemas.llm_provider import LlmProviderConfig
 from app.services.llm.provider_registry import (
     ACTIVE_MODEL_KEY,
@@ -174,10 +180,22 @@ async def update_llm_provider_config(
     return await get_llm_provider_config(db)
 
 
-async def list_instructors(db: AsyncSession) -> list[User]:
-    result = await db.scalars(
-        select(User).where(User.role == "instructor").order_by(User.created_at.desc())
-    )
+async def list_instructors(
+    db: AsyncSession, *, canvas_status: str | None = None
+) -> list[User]:
+    """canvas_status="failing" scopes to instructors with at least one
+    CanvasConnection.last_sync_error set — the same live data source
+    Troubleshooting's failing-connections list reads from (services/
+    troubleshoot.py::list_failing_canvas_connections), so "Manage
+    instructors" from that page lands on exactly the instructors it named,
+    not the full roster."""
+    query = select(User).where(User.role == "instructor")
+    if canvas_status == "failing":
+        query = query.join(CanvasConnection, CanvasConnection.user_id == User.id).where(
+            CanvasConnection.last_sync_error.is_not(None)
+        )
+    query = query.order_by(User.created_at.desc()).distinct()
+    result = await db.scalars(query)
     return list(result)
 
 
@@ -302,6 +320,85 @@ async def revoke_instructor_access(db: AsyncSession, instructor_id: int, admin: 
         details={"instructor_id": instructor_id, "connections_removed": len(connections)},
     ))
     await db.commit()
+
+
+def _to_connection_response(conn: CanvasConnection) -> AdminCanvasConnectionResponse:
+    return AdminCanvasConnectionResponse(
+        id=conn.id,
+        canvas_url=conn.canvas_url,
+        # last_sync_error is free-form text from an HTTP client failure -- it
+        # could echo a bearer token/API key back from a raw request error,
+        # so scrub before this ever reaches an admin-facing response (same
+        # treatment as services/troubleshoot.py's failing-connections list).
+        last_sync_error=redact_secrets(conn.last_sync_error) if conn.last_sync_error else None,
+        courses_synced_at=conn.courses_synced_at,
+        created_at=conn.created_at,
+    )
+
+
+async def list_instructor_canvas_connections(
+    db: AsyncSession, instructor_id: int
+) -> list[AdminCanvasConnectionResponse]:
+    """Every Canvas connection for one instructor, by (user_id, canvas_url) —
+    an instructor can have more than one (see uq_user_canvas_url), so a
+    support request needs the specific canvas_url identified before an admin
+    can act on it (see reset_instructor_canvas_token)."""
+    await _get_instructor(db, instructor_id)  # validates existence
+    rows = (
+        await db.scalars(
+            select(CanvasConnection)
+            .where(CanvasConnection.user_id == instructor_id)
+            .order_by(CanvasConnection.canvas_url)
+        )
+    ).all()
+    return [_to_connection_response(row) for row in rows]
+
+
+async def reset_instructor_canvas_token(
+    db: AsyncSession,
+    instructor_id: int,
+    *,
+    canvas_token: str,
+    canvas_url: str,
+    admin: User,
+) -> list[AdminCanvasConnectionResponse]:
+    """Admin-initiated equivalent of the instructor's own PATCH
+    /auth/me/canvas-token (services/auth.py::update_canvas_token) — same
+    live-validate-then-encrypt-then-upsert flow, scoped to one instructor's
+    (user_id, canvas_url) pair so a multi-connection instructor's other
+    schools are untouched. Clears last_sync_error immediately on success so
+    the Troubleshooting page reflects the fix without waiting on the next
+    ~60s sync sweep."""
+    await _get_instructor(db, instructor_id)  # validates existence
+
+    from app.core.security import encrypt_canvas_token
+    from app.integrations.canvas import validate_token
+
+    await validate_token(canvas_token, canvas_url)
+    encrypted = encrypt_canvas_token(canvas_token)
+
+    existing = await db.scalar(
+        select(CanvasConnection).where(
+            CanvasConnection.user_id == instructor_id,
+            CanvasConnection.canvas_url == canvas_url,
+        )
+    )
+    if existing:
+        existing.encrypted_token = encrypted
+        existing.last_sync_error = None
+    else:
+        db.add(
+            CanvasConnection(user_id=instructor_id, canvas_url=canvas_url, encrypted_token=encrypted)
+        )
+
+    db.add(AuditLogSession(
+        user_id=admin.id,
+        action="instructor_canvas_token_reset",
+        details={"instructor_id": instructor_id, "canvas_url": canvas_url},
+    ))
+    await db.commit()
+
+    return await list_instructor_canvas_connections(db, instructor_id)
 
 
 async def _get_instructor(db: AsyncSession, instructor_id: int) -> User:

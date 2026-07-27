@@ -1555,7 +1555,25 @@ async def set_active_course(user: User, local_course_id: int, db: AsyncSession) 
             )
             if sync_connection is not None and sync_user is not None:
                 try:
-                    await sync_courses_if_stale(sync_user, sync_connection, sync_db)
+                    did_sync = await sync_courses_if_stale(
+                        sync_user, sync_connection, sync_db
+                    )
+                    # Mirror run_course_sync_sweep: only clear after a real
+                    # Canvas round-trip so a cooldown skip cannot hide a
+                    # still-unverified last_sync_error on Troubleshooting.
+                    if did_sync:
+                        previous_error = await sync_db.scalar(
+                            select(CanvasConnection.last_sync_error).where(
+                                CanvasConnection.id == connection.id
+                            )
+                        )
+                        if previous_error is not None:
+                            await sync_db.execute(
+                                update(CanvasConnection)
+                                .where(CanvasConnection.id == connection.id)
+                                .values(last_sync_error=None)
+                            )
+                            await sync_db.commit()
                 except Exception as exc:
                     if _is_expected_canvas_token_sync_error(exc):
                         logger.warning(

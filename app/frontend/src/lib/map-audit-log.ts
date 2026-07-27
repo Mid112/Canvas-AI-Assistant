@@ -1,19 +1,17 @@
+import type { UserRole } from "@/types/user";
 import type {
   AuditLogApiRecord,
   AuditLogEntry,
   AuditLogResult,
-  AuditLogUserRole,
 } from "@/types/auditLog";
 
-/** Display label for roles stored as instructor | admin, plus anonymous audit rows. */
-export function formatAuditLogUserRole(role: AuditLogUserRole): string {
+/** Display label for roles stored as instructor | admin in the API/DB. */
+export function formatAuditLogUserRole(role: UserRole): string {
   switch (role) {
     case "instructor":
       return "Instructor";
     case "admin":
       return "Administrator";
-    case "unknown":
-      return "Unknown";
   }
 }
 
@@ -63,18 +61,3 @@ export function mapAuditLogApiToEntry(record: AuditLogApiRecord): AuditLogEntry 
   };
 }
 
-export function auditLogUserSearchText(log: AuditLogEntry): string {
-  return `${log.userEmail} ${formatAuditLogUserRole(log.userRole)} ${log.userRole}`;
-}
-
-export function auditLogSearchText(log: AuditLogEntry): string {
-  return [
-    log.timestamp,
-    log.userEmail,
-    formatAuditLogUserRole(log.userRole),
-    log.userRole,
-    log.action,
-    log.resource,
-    log.result,
-  ].join(" ");
-}

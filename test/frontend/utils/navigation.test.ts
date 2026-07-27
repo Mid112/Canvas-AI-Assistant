@@ -37,12 +37,12 @@ describe("navigation helpers", () => {
     expect(systemHealthItem?.href).toBe(paths.admin.systemHealth);
   });
 
-  it("includes a Failed Operations nav entry for Feature 11", () => {
-    const failedOpsItem = adminNavItems.find(
-      (item) => item.title === "Failed Operations",
+  it("includes a Troubleshooting nav entry (Feature 11's failed operations live here)", () => {
+    const troubleshootingItem = adminNavItems.find(
+      (item) => item.title === "Troubleshooting",
     );
-    expect(failedOpsItem).toBeDefined();
-    expect(failedOpsItem?.href).toBe(paths.admin.failedOperations);
+    expect(troubleshootingItem).toBeDefined();
+    expect(troubleshootingItem?.href).toBe(paths.admin.troubleshooting);
   });
 });
 
