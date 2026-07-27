@@ -49,6 +49,12 @@ class SupportTicket(Base):
     resolved_by: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    # Who currently owns resolving this ticket -- distinct from resolved_by
+    # (set only once the ticket is actually marked resolved). Nullable: a
+    # freshly-escalated ticket starts unclaimed.
+    assigned_to: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -61,3 +67,4 @@ class SupportTicket(Base):
     user: Mapped[User | None] = relationship("User", foreign_keys=[user_id])
     creator: Mapped[User] = relationship("User", foreign_keys=[created_by])
     resolver: Mapped[User | None] = relationship("User", foreign_keys=[resolved_by])
+    assignee: Mapped[User | None] = relationship("User", foreign_keys=[assigned_to])
