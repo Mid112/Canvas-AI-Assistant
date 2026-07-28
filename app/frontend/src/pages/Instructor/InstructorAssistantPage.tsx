@@ -485,7 +485,7 @@ export function InstructorAssistantPage() {
 
         <section
           aria-labelledby="assistant-history-heading"
-          className="flex min-h-0 max-h-[calc(100vh-24.5rem)] flex-col overflow-hidden rounded-lg border border-border/70 bg-background p-3 shadow-sm"
+          className="flex min-h-0 max-h-[calc(100vh-24.5rem)] flex-col overflow-hidden rounded-lg border border-border/70 bg-background p-2.5 shadow-sm"
         >
           <div className="mb-2 flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">

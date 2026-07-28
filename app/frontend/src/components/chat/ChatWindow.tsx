@@ -996,7 +996,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
 
   return (
     <Card className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden shadow-sm ring-1 ring-border/60">
-      <CardContent className="flex min-h-0 flex-1 flex-col gap-3 p-3 md:p-4">
+      <CardContent className="flex min-h-0 flex-1 flex-col gap-2 p-2.5 md:p-3">
         {onStartNewChat ? (
           <div className="flex shrink-0 justify-end">
             <Button
