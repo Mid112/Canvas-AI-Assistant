@@ -1994,12 +1994,20 @@ async def _parse_model_action_with_recovery(
     llm_message: str,
     history: list[dict],
     raw_output: str,
+    resolved_local_course_id: int | None = None,
 ) -> tuple[Any | None, dict | None, str]:
     """Parse model output; on malformed JSON retry once, then soft-respond.
 
     Returns ``(action, respond_dict, raw_output_used)``. Exactly one of
     ``action`` / ``respond_dict`` is set.
+
+    ``resolved_local_course_id`` is injected into the parsed envelope before
+    parsing, and also into any retry output, so a retry that omits
+    ``local_course_id`` doesn't fail validation (#1310).
     """
+    # Inject course into the raw output before parsing
+    raw_output = _inject_course_into_raw_output(raw_output, resolved_local_course_id)
+
     text_reply = _plain_text_response(raw_output)
     if text_reply is not None:
         return None, text_reply, raw_output
@@ -2028,6 +2036,8 @@ async def _parse_model_action_with_recovery(
         logger.warning("Strict JSON parse retry failed", exc_info=True)
         return None, {"action": "respond", "message": _MALFORMED_ACTION_DEGRADE_MESSAGE}, raw_output
 
+    # Inject course into retry output too
+    retry_raw = _inject_course_into_raw_output(retry_raw, resolved_local_course_id)
     text_retry = _plain_text_response(retry_raw)
     if text_retry is not None:
         return None, text_retry, retry_raw
@@ -2041,6 +2051,19 @@ async def _parse_model_action_with_recovery(
             )
             return None, {"action": "respond", "message": _MALFORMED_ACTION_DEGRADE_MESSAGE}, retry_raw
         raise
+
+
+def _inject_course_into_raw_output(raw_output: str, local_course_id: int | None) -> str:
+    """Parse raw LLM output, inject local_course_id, re-serialize.
+    If parsing fails or the action doesn't need a course, return unchanged."""
+    try:
+        parsed = json.loads(extract_json_object(raw_output))
+    except (json.JSONDecodeError, Exception):
+        return raw_output
+    if not isinstance(parsed, dict):
+        return raw_output
+    injected = _inject_course_into_envelope(parsed, local_course_id)
+    return json.dumps(injected)
 
 
 def _step_budget_exhausted_response(loop_steps: list[dict]) -> dict:
@@ -3215,6 +3238,7 @@ async def handle_chat_message(
                 ),
                 history=history,
                 raw_output=raw_output,
+                resolved_local_course_id=resolved_local_course_id,
             )
             if text_reply is not None:
                 result = text_reply
