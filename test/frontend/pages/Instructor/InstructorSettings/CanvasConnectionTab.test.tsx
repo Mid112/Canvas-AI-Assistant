@@ -130,7 +130,7 @@ describe("CanvasConnectionTab", () => {
     expect(screen.getByLabelText(/Canvas API Token/i)).toBeInTheDocument();
   });
 
-  it("shows saved connections and always allows adding more", () => {
+  it("shows saved connections without a duplicate empty connection card", () => {
     renderWithRouter(<CanvasConnectionTab />);
 
     expect(screen.getByText("Saved connections")).toBeInTheDocument();
@@ -140,12 +140,29 @@ describe("CanvasConnectionTab", () => {
     expect(
       screen.getByRole("button", { name: "Add another institution" }),
     ).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Canvas URL/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Canvas API Token/i)).not.toBeInTheDocument();
+  });
+
+  it("reveals the add-connection form only after clicking add", async () => {
+    const user = userEvent.setup();
+    renderWithRouter(<CanvasConnectionTab />);
+
+    await user.click(
+      screen.getByRole("button", { name: "Add another institution" }),
+    );
+
+    expect(screen.getByLabelText(/Canvas URL/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Canvas API Token/i)).toBeInTheDocument();
   });
 
   it("saves multiple new connections with token validation", async () => {
     const user = userEvent.setup();
     renderWithRouter(<CanvasConnectionTab />);
 
+    await user.click(
+      screen.getByRole("button", { name: "Add another institution" }),
+    );
     await fillValidNewConnection(user);
 
     await user.click(
