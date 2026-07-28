@@ -20,6 +20,10 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useResolvedInstructorCourse } from "@/hooks/useResolvedInstructorCourse";
 import { pageShell } from "@/lib/page-shell";
+import {
+  STUDENT_COMMUNICATION_PROFANITY_MESSAGE,
+  containsProfanity,
+} from "@/lib/profanity";
 import { cn } from "@/lib/utils";
 import { fetchCourseAssignments } from "@/services/assignments";
 import {
@@ -32,6 +36,21 @@ import type { GradePreview } from "@/types/gradeManagement";
 import type { ApiSubmission } from "@/types/submission";
 
 type GradeStatusFilter = "all" | "graded" | "submitted" | "unsubmitted";
+
+const supportedTextGrades = new Set([
+  "complete",
+  "incomplete",
+  "pass",
+  "fail",
+  "p",
+  "np",
+  "satisfactory",
+  "unsatisfactory",
+]);
+// Mirror the backend allow-list so invalid grade text is caught before preview.
+// Canvas handles "excused" through a separate boolean action, not posted_grade.
+const letterGradePattern = /^(?:A|B|C|D)[+-]?$|^F$/i;
+const decimalGradePattern = /^(?:\d+(?:\.\d+)?|\.\d+)$/;
 
 async function runSequentially<T, R>(
   items: T[],
@@ -98,6 +117,27 @@ function formatSubmissionStatus(submission: ApiSubmission) {
   return statuses
     .map((status) => status.charAt(0).toUpperCase() + status.slice(1))
     .join(", ");
+}
+
+function getGradeValidationError(value: string) {
+  const grade = value.trim();
+  if (!grade) {
+    return null;
+  }
+  if (decimalGradePattern.test(grade)) {
+    const numericGrade = Number(grade);
+    if (numericGrade < 0) {
+      return "Grade cannot be negative.";
+    }
+    if (numericGrade > 10000) {
+      return "Grade is outside the supported range.";
+    }
+    return null;
+  }
+  if (letterGradePattern.test(grade) || supportedTextGrades.has(grade.toLowerCase())) {
+    return null;
+  }
+  return "Use a numeric grade or a supported Canvas grade such as A-, complete, or pass.";
 }
 
 export function InstructorCourseGradesPage() {
@@ -289,8 +329,10 @@ export function InstructorCourseGradesPage() {
   ).length;
   const numericPostedGrade = Number(postedGrade);
   const hasGradeChange = postedGrade.trim().length > 0;
+  const gradeValidationError = getGradeValidationError(postedGrade);
   const hasFeedback = reason.trim().length > 0;
   const isFeedbackOnly = !hasGradeChange && hasFeedback;
+  const feedbackHasProfanity = containsProfanity(reason);
   const exceedsPointsPossible =
     hasGradeChange &&
     Number.isFinite(numericPostedGrade) &&
@@ -331,6 +373,8 @@ export function InstructorCourseGradesPage() {
     payloads.length > 0 &&
     previews.length === payloads.length &&
     payloads.every((payload) => {
+      // A submit is only valid for the exact grade value the instructor just
+      // previewed; changing the field intentionally locks submit again.
       const preview = previewByUserId.get(payload.user_id);
       return preview?.proposed.posted_grade === payload.posted_grade.trim();
     });
@@ -358,6 +402,18 @@ export function InstructorCourseGradesPage() {
     if (payloads.length === 0 || !accessToken) {
       return;
     }
+    // Preview and submit share these client-side blockers so the UI never
+    // green-lights a request the API would reject.
+    if (gradeValidationError) {
+      setError(gradeValidationError);
+      setPreviews([]);
+      return;
+    }
+    if (feedbackHasProfanity) {
+      setError(STUDENT_COMMUNICATION_PROFANITY_MESSAGE);
+      setPreviews([]);
+      return;
+    }
     setIsSubmitting(true);
     try {
       const results = await Promise.all(
@@ -380,11 +436,19 @@ export function InstructorCourseGradesPage() {
       setError("Preview the selected grade changes before submitting.");
       return;
     }
+    if (gradeValidationError) {
+      setError(gradeValidationError);
+      return;
+    }
     if (
       payloads.length === 0 ||
       !accessToken ||
       (!isFeedbackOnly && confirmation !== "UPDATE")
     ) {
+      return;
+    }
+    if (feedbackHasProfanity) {
+      setError(STUDENT_COMMUNICATION_PROFANITY_MESSAGE);
       return;
     }
     setIsSubmitting(true);
@@ -452,7 +516,11 @@ export function InstructorCourseGradesPage() {
         </div>
       </div>
 
-      {error && <p className="text-sm font-medium text-destructive">{error}</p>}
+      {error ? (
+        <p role="alert" className="text-sm font-medium text-destructive">
+          {error}
+        </p>
+      ) : null}
       {notice && (
         <p className="flex items-center gap-2 text-sm font-medium text-emerald-700">
           <CheckCircle2 className="size-4" aria-hidden="true" />
@@ -491,6 +559,7 @@ export function InstructorCourseGradesPage() {
                 <Input
                   id="new-grade"
                   className="h-11"
+                  aria-invalid={Boolean(gradeValidationError)}
                   value={postedGrade}
                   onChange={(event) => {
                     setPostedGrade(event.target.value);
@@ -498,6 +567,11 @@ export function InstructorCourseGradesPage() {
                   }}
                   placeholder="92, A-, or complete/incomplete"
                 />
+                {gradeValidationError && (
+                  <p className="text-xs font-medium text-destructive">
+                    {gradeValidationError}
+                  </p>
+                )}
               </div>
             </div>
             <div className="grid gap-3 border-t pt-4 md:grid-cols-[1fr_12rem_10rem]">
@@ -672,9 +746,16 @@ export function InstructorCourseGradesPage() {
                 onChange={(event) => {
                   setReason(event.target.value);
                   setPreviews([]);
+                  setError(null);
                 }}
                 placeholder="Feedback shown as a Canvas comment"
+                aria-invalid={feedbackHasProfanity || undefined}
               />
+              {feedbackHasProfanity ? (
+                <p role="alert" className="text-sm text-destructive">
+                  {STUDENT_COMMUNICATION_PROFANITY_MESSAGE}
+                </p>
+              ) : null}
             </div>
             {selectedSubmissions.length > 0 && (
               <p className="text-sm text-muted-foreground">
@@ -717,7 +798,13 @@ export function InstructorCourseGradesPage() {
               type="button"
               variant="outline"
               onClick={handlePreview}
-              disabled={payloads.length === 0 || (!hasGradeChange && !hasFeedback) || isSubmitting}
+              disabled={
+                payloads.length === 0 ||
+                (!hasGradeChange && !hasFeedback) ||
+                Boolean(gradeValidationError) ||
+                feedbackHasProfanity ||
+                isSubmitting
+              }
             >
               {isFeedbackOnly ? "Preview feedback" : "Preview change"}
             </Button>
@@ -736,7 +823,12 @@ export function InstructorCourseGradesPage() {
               type="button"
               variant={isFeedbackOnly ? "default" : "destructive"}
               onClick={handleSubmit}
-              disabled={!previewMatchesSelection || (!isFeedbackOnly && confirmation !== "UPDATE") || isSubmitting}
+              disabled={
+                !previewMatchesSelection ||
+                (!isFeedbackOnly && confirmation !== "UPDATE") ||
+                feedbackHasProfanity ||
+                isSubmitting
+              }
             >
               {isSubmitting
                 ? "Submitting..."

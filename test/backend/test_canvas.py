@@ -198,6 +198,102 @@ def test_list_courses_empty_canvas_returns_empty_list(client, auth_headers):
     assert response.json() == []
 
 
+# ---------------------------------------------------------------------------
+# POST /canvas/courses
+# ---------------------------------------------------------------------------
+
+
+# Verifies: Create course via Canvas and return upserted local course (#1285).
+def test_create_course(client, auth_headers):
+    created = {
+        "id": 777,
+        "name": "New Capstone",
+        "course_code": "CAPSTONE",
+        "workflow_state": "available",
+        "total_students": 0,
+    }
+    with (
+        patch(
+            "app.services.canvas.fetch_accounts",
+            new_callable=AsyncMock,
+            return_value=[{"id": 1, "parent_account_id": None}],
+        ),
+        patch(
+            "app.services.canvas.create_course",
+            new_callable=AsyncMock,
+            return_value=created,
+        ) as mock_create,
+    ):
+        response = client.post(
+            f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}",
+            json={"name": "New Capstone", "course_code": "CAPSTONE", "publish": True},
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["canvas_id"] == 777
+    assert body["local_id"] is not None
+    assert body["name"] == "New Capstone"
+    mock_create.assert_awaited_once()
+    assert mock_create.await_args.kwargs["offer"] is True
+
+
+# Verifies: Create course rejects empty name.
+def test_create_course_requires_name(client, auth_headers):
+    response = client.post(
+        f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}",
+        json={"name": ""},
+        headers=auth_headers,
+    )
+    assert response.status_code == 422
+
+
+# Verifies: Publish course via Canvas event=offer.
+def test_publish_course(client, auth_headers):
+    from types import SimpleNamespace
+
+    local_id = _sync_local_course(client, auth_headers, canvas_id=888)
+    with (
+        patch(
+            "app.services.canvas.get_owned_course",
+            new_callable=AsyncMock,
+            return_value=SimpleNamespace(
+                id=local_id,
+                canvas_course_id="888",
+                canvas_url=CANVAS_URL,
+                name="CPSC 310",
+                course_code="CPSC310",
+                workflow_state="unpublished",
+                term=None,
+                total_students=0,
+                synced_at=None,
+            ),
+        ),
+        patch(
+            "app.services.canvas.update_course",
+            new_callable=AsyncMock,
+            return_value={
+                "id": 888,
+                "name": "CPSC 310",
+                "course_code": "CPSC310",
+                "workflow_state": "available",
+                "total_students": 0,
+            },
+        ) as mock_update,
+    ):
+        response = client.patch(
+            f"/api/v1/canvas/courses/{local_id}/publish?canvas_url={CANVAS_URL}",
+            json={"published": True},
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 200
+    assert response.json()["workflow_state"] == "available"
+    mock_update.assert_awaited_once()
+    assert mock_update.await_args.args[1] == {"event": "offer"}
+
+
 # Verifies: List courses invalid canvas token.
 def test_list_courses_invalid_canvas_token(client, auth_headers):
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:

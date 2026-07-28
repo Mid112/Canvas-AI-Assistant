@@ -53,3 +53,5 @@ If you have a genuinely ancient local database (created before the `ta` role was
 | `036_failed_operations.sql` | Creates `failed_operations`, an append-only log of Canvas read/write failures and AI call failures — backs the admin Failed Operations dashboard (Feature 11, UR1.6) |
 | `037_failed_operations_human_summary.sql` | Adds `failed_operations.human_summary`, a plain-language description generated at write time so the admin dashboard doesn't translate raw error text at render time (Feature 12, Secure Troubleshooting) |
 | `038_support_tickets.sql` | Creates `support_tickets`, one-per-`failed_operation` admin escalation tracking (status/notes/resolved_by) for the Secure Troubleshooting ticket workflow (Feature 12) |
+| `039_support_ticket_assigned_admin.sql` | Adds `support_tickets.assigned_to` so admins can claim escalated support tickets before resolving them |
+| `040_grade_history_local_relationships.sql` | Adds nullable local `assignments`/`students` foreign keys to `grade_history` and backfills them from the existing Canvas assignment/student IDs when local mirror rows exist. |

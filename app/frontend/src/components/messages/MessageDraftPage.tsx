@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { mockMessageTemplates } from "@/data/mockMessageDraft";
 import {
   discardTypedDraft,
   saveTypedDraft,
@@ -41,6 +42,53 @@ interface MessageDraftPageProps {
   onCancel?: () => void;
 }
 
+const TEMPLATE_PRESETS = {
+  "assignment-reminder": {
+    name: "Assignment Reminder",
+    subject: "Assignment Reminder: Course Update",
+    body: "Remind students about the assignment, due date, and any next steps.",
+    subjectPlaceholder: "Reminder: Assignment due Friday",
+    bodyPlaceholder: "Hi everyone, this is a reminder that...",
+  },
+  encouragement: {
+    name: "Encouragement",
+    subject: "Keep Going",
+    body: "Write an encouraging note that helps students stay engaged.",
+    subjectPlaceholder: "A quick note of encouragement",
+    bodyPlaceholder: "Hi everyone, I wanted to recognize your effort...",
+  },
+  "course-announcement": {
+    name: "Course Announcement",
+    subject: "Course Announcement",
+    body: "Share an important update with your class.",
+    subjectPlaceholder: "Important course update",
+    bodyPlaceholder: "Hi everyone, I’m sharing an update about...",
+  },
+} as const;
+
+type MessageTemplateId = keyof typeof TEMPLATE_PRESETS;
+
+const TEMPLATE_SUBJECTS = new Set(
+  Object.values(TEMPLATE_PRESETS).map((preset) => preset.subject),
+);
+const TEMPLATE_BODIES = new Set(
+  Object.values(TEMPLATE_PRESETS).map((preset) => preset.body),
+);
+
+function isMessageTemplateId(templateId: string | undefined): templateId is MessageTemplateId {
+  return Boolean(templateId && templateId in TEMPLATE_PRESETS);
+}
+
+function canReplaceSubject(value: string): boolean {
+  const trimmed = value.trim();
+  return !trimmed || TEMPLATE_SUBJECTS.has(trimmed);
+}
+
+function canReplaceBody(value: string): boolean {
+  const trimmed = value.trim();
+  return !trimmed || TEMPLATE_BODIES.has(trimmed);
+}
+
 export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPageProps) {
   const { accessToken, user } = useAuth();
   const location = useLocation();
@@ -57,6 +105,8 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [recipients, setRecipients] = useState<MessageRecipient[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>();
+  const [selectedTemplateName, setSelectedTemplateName] = useState<string | undefined>();
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<Set<string>>(
     new Set(),
   );
@@ -65,6 +115,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     register,
     control,
     reset,
+    setValue,
     trigger,
     formState: { errors, isValid, isDirty },
   } = useForm<MessageDraftFormSchema>({
@@ -94,18 +145,37 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
       setDraft(loadedDraft);
       setRecipients(loadedDraft.recipients);
       const preferred = fetchOptions?.preSelectedIds;
-      setSelectedRecipientIds(
+      const initialSelectedRecipientIds =
         preferred && preferred.length > 0
           ? new Set(
-              loadedDraft.recipients
-                .map((recipient) => recipient.id)
-                .filter((id) => preferred.includes(id)),
-            )
-          : new Set(loadedDraft.recipients.map((recipient) => recipient.id)),
-      );
+            loadedDraft.recipients
+              .map((recipient) => recipient.id)
+              .filter((id) => preferred.includes(id)),
+          )
+          : new Set<string>();
+      const initialTemplateId: MessageTemplateId =
+        // Delivery scope is encoded by recipient selection: no selected
+        // students means the backend will post a course announcement.
+        initialSelectedRecipientIds.size === 0
+          ? "course-announcement"
+          : isMessageTemplateId(loadedDraft.templateId)
+            ? loadedDraft.templateId
+            : "assignment-reminder";
+      const initialPreset = TEMPLATE_PRESETS[initialTemplateId];
+      const canUseTemplateDefault = !fetchOptions?.subject && !fetchOptions?.body;
+
+      setSelectedTemplateId(initialTemplateId);
+      setSelectedTemplateName(initialPreset.name);
+      setSelectedRecipientIds(initialSelectedRecipientIds);
       reset({
-        subject: loadedDraft.subject,
-        body: loadedDraft.body,
+        subject:
+          canUseTemplateDefault || canReplaceSubject(loadedDraft.subject)
+            ? initialPreset.subject
+            : loadedDraft.subject,
+        body:
+          canUseTemplateDefault || canReplaceBody(loadedDraft.body)
+            ? initialPreset.body
+            : loadedDraft.body,
       });
       setPageState("editing");
       void trigger();
@@ -137,33 +207,103 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     [recipients, selectedRecipientIds],
   );
 
+  const selectedPreset = isMessageTemplateId(selectedTemplateId)
+    ? TEMPLATE_PRESETS[selectedTemplateId]
+    : undefined;
+
+  const applyTemplatePreset = useCallback((
+    templateId: MessageTemplateId,
+    options: { force?: boolean } = {},
+  ) => {
+    const preset = TEMPLATE_PRESETS[templateId];
+    setSelectedTemplateId(templateId);
+    setSelectedTemplateName(preset.name);
+
+    if (options.force || canReplaceSubject(subjectValue)) {
+      setValue("subject", preset.subject, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+
+    if (options.force || canReplaceBody(bodyValue)) {
+      setValue("body", preset.body, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  }, [bodyValue, setValue, subjectValue]);
+
+  const syncTemplateForRecipientSelection = useCallback((
+    nextSelectedRecipientIds: ReadonlySet<string>,
+  ) => {
+    // Keep template selection aligned with delivery scope without using an
+    // effect that sets state during render cleanup/lint-sensitive phases.
+    if (
+      nextSelectedRecipientIds.size === 0 &&
+      selectedTemplateId !== "course-announcement"
+    ) {
+      applyTemplatePreset("course-announcement");
+      return;
+    }
+
+    if (
+      nextSelectedRecipientIds.size > 0 &&
+      selectedTemplateId === "course-announcement"
+    ) {
+      applyTemplatePreset("assignment-reminder");
+    }
+  }, [applyTemplatePreset, selectedTemplateId]);
+
   const handleToggleRecipient = (recipientId: string) => {
-    setSelectedRecipientIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(recipientId)) {
-        next.delete(recipientId);
-      } else {
-        next.add(recipientId);
-      }
-      return next;
-    });
+    const next = new Set(selectedRecipientIds);
+    if (next.has(recipientId)) {
+      next.delete(recipientId);
+    } else {
+      next.add(recipientId);
+    }
+    setSelectedRecipientIds(next);
+    syncTemplateForRecipientSelection(next);
   };
 
   const handleRemoveRecipient = (recipientId: string) => {
     setRecipients((prev) => prev.filter((recipient) => recipient.id !== recipientId));
-    setSelectedRecipientIds((prev) => {
-      const next = new Set(prev);
-      next.delete(recipientId);
-      return next;
-    });
+    const next = new Set(selectedRecipientIds);
+    next.delete(recipientId);
+    setSelectedRecipientIds(next);
+    syncTemplateForRecipientSelection(next);
   };
 
   const handleSelectAllRecipients = () => {
-    setSelectedRecipientIds((prev) =>
-      prev.size === recipients.length
-        ? new Set()
-        : new Set(recipients.map((recipient) => recipient.id)),
-    );
+    const next =
+      selectedRecipientIds.size === recipients.length
+        ? new Set<string>()
+        : new Set(recipients.map((recipient) => recipient.id));
+    setSelectedRecipientIds(next);
+    syncTemplateForRecipientSelection(next);
+  };
+
+  const handleSelectTemplate = (templateId: string) => {
+    const template = mockMessageTemplates.find((item) => item.id === templateId);
+    setSelectedTemplateId(template?.id);
+    setSelectedTemplateName(template?.name);
+
+    if (!isMessageTemplateId(templateId)) {
+      return;
+    }
+
+    if (templateId !== "course-announcement" && selectedRecipientIds.size === 0) {
+      // Student-message templates need at least one selected student. With an
+      // empty audience, stay in the explicit announcement path.
+      applyTemplatePreset("course-announcement");
+      return;
+    }
+
+    if (templateId === "course-announcement") {
+      setSelectedRecipientIds(new Set());
+    }
+
+    applyTemplatePreset(templateId, { force: true });
   };
 
   const handleCancel = () => {
@@ -240,12 +380,16 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
       setIsConfirmOpen(false);
       setSuccessMessage(
         isMessageDraftSendMocked
-          ? `Draft approved for ${selectedRecipients.length} student${
-              selectedRecipients.length === 1 ? "" : "s"
-            }. No message has been sent through Canvas yet.`
-          : `Message sent successfully to ${selectedRecipients.length} student${
-              selectedRecipients.length === 1 ? "" : "s"
-            }.`,
+          ? selectedRecipients.length === 0
+            ? "Course announcement draft approved. No announcement has been posted through Canvas yet."
+            : `Draft approved for ${selectedRecipients.length} student${
+                selectedRecipients.length === 1 ? "" : "s"
+              }. No message has been sent through Canvas yet.`
+          : selectedRecipients.length === 0
+            ? "Course announcement posted successfully."
+            : `Message sent successfully to ${selectedRecipients.length} student${
+                selectedRecipients.length === 1 ? "" : "s"
+              }.`,
       );
       setPageState("success");
     } catch (error) {
@@ -310,7 +454,6 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
   }
 
   const isLoading = pageState === "loading";
-  const recipientCount = selectedRecipients.length;
 
   return (
     <div className="space-y-6">
@@ -355,8 +498,9 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
             onSelectAll={handleSelectAllRecipients}
           />
           <MessageTemplateSummary
-            selectedTemplateId={draft?.templateId}
-            selectedTemplateName={draft?.templateName}
+            selectedTemplateId={selectedTemplateId}
+            selectedTemplateName={selectedTemplateName}
+            onSelectTemplate={handleSelectTemplate}
           />
         </aside>
 
@@ -388,6 +532,8 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
                     register={register}
                     errors={errors}
                     bodyValue={bodyValue}
+                    subjectPlaceholder={selectedPreset?.subjectPlaceholder}
+                    bodyPlaceholder={selectedPreset?.bodyPlaceholder}
                     hasUnsavedChanges={isDirty}
                     disabled={pageState === "sending"}
                   />
@@ -404,7 +550,6 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
                     onSaveDraft={handleSaveTypedDraft}
                     isSending={pageState === "sending"}
                     isValid={isValid}
-                    hasRecipients={recipientCount > 0}
                     disabled={isLoading}
                   />
                 </CardFooter>

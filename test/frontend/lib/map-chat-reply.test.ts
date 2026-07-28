@@ -424,7 +424,7 @@ describe("mapChatReply", () => {
     });
   });
 
-  it("auto-redirects send_message to the Messages compose tab", () => {
+  it("offers send_message draft handoff without auto-redirecting", () => {
     const result = mapChatReply(
       {
         intent_preview: true,
@@ -449,8 +449,14 @@ describe("mapChatReply", () => {
     );
 
     expect(result.pendingMessageId).toBeUndefined();
-    expect(result.navigateTo?.path).toBe("/instructor/messages?tab=compose");
-    expect(result.navigateTo?.state).toMatchObject({
+    expect(result.navigateTo).toBeUndefined();
+    expect(result.interpretedAction?.primaryLink?.label).toBe(
+      "Open message draft",
+    );
+    expect(result.interpretedAction?.primaryLink?.href).toBe(
+      "/instructor/messages?tab=compose",
+    );
+    expect(result.interpretedAction?.primaryLink?.state).toMatchObject({
       returnTo: "/instructor/assistant",
       aiMessageDraft: {
         subject: "Deadline Reminder",
@@ -460,9 +466,6 @@ describe("mapChatReply", () => {
         conversationId: 3,
       },
     });
-    expect(result.interpretedAction?.primaryLink?.label).toBe(
-      "Open message draft",
-    );
     expect(result.interpretedAction?.secondaryLink).toBeUndefined();
   });
 

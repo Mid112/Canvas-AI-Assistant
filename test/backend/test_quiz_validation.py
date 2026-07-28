@@ -26,6 +26,31 @@ def test_quiz_description_requires_minimum_length():
     _check_description("Check understanding of recursive functions.")
 
 
+def test_quiz_rejects_profanity_in_title_and_questions():
+    with pytest.raises(HTTPException) as exc:
+        _check_title("Fucking midterm quiz")
+    assert exc.value.status_code == 422
+    assert "appropriate" in exc.value.detail.lower()
+
+    with pytest.raises(HTTPException) as exc:
+        _check_description("This quiz covers shitty edge cases in recursion.")
+    assert exc.value.status_code == 422
+    assert "appropriate" in exc.value.detail.lower()
+
+    with pytest.raises(HTTPException) as exc:
+        _check_questions(
+            [
+                {
+                    "question_text": "Explain this bitch of a proof.",
+                    "question_type": "essay_question",
+                    "points_possible": 2,
+                }
+            ]
+        )
+    assert exc.value.status_code == 422
+    assert "appropriate" in exc.value.detail.lower()
+
+
 def test_quiz_points_must_be_positive():
     with pytest.raises(HTTPException) as exc:
         _check_points_possible(0)

@@ -8,7 +8,12 @@ from app.models.audit_log import AuditLog
 from app.models.grade_history import GradeHistory
 from app.models.workflow import Workflow
 from app.schemas.canvas import GradeUpdateRequest, SubmissionStatus
-from app.services.grade_management import _build_grade_preview, preview_grade_update, submit_grade_update
+from app.services.grade_management import (
+    _build_grade_preview,
+    _grade_history_relationship_ids,
+    preview_grade_update,
+    submit_grade_update,
+)
 
 
 def _submission():
@@ -71,13 +76,33 @@ def test_preview_requires_grade_or_feedback():
     assert exc.value.detail == "Enter a new grade or feedback before previewing."
 
 
+def test_preview_rejects_profanity_in_feedback_reason():
+    with pytest.raises(HTTPException) as exc:
+        _build_grade_preview(
+            SimpleNamespace(id=7, name="COSC 777"),
+            GradeUpdateRequest(
+                assignment_id=10,
+                user_id=42,
+                posted_grade="85",
+                reason="This is fucking inappropriate",
+            ),
+            _submission(),
+        )
+
+    assert exc.value.status_code == 422
+    assert "appropriate" in exc.value.detail.lower()
+
+
 @pytest.mark.parametrize(
     "posted_grade,detail",
     [
         ("-1", "Grade cannot be negative."),
         ("100000", "Grade is outside the supported range."),
         ("95\nEX", "Grade cannot contain line breaks or control characters."),
-        ("<script>", "Grade contains unsupported characters."),
+        ("<script>", "Grade must be numeric or a supported grading-scheme value."),
+        ("Z", "Grade must be numeric or a supported grading-scheme value."),
+        ("excused", "Grade must be numeric or a supported grading-scheme value."),
+        ("0x10", "Grade must be numeric or a supported grading-scheme value."),
     ],
 )
 def test_preview_rejects_invalid_grade_payloads(posted_grade, detail):
@@ -92,6 +117,31 @@ def test_preview_rejects_invalid_grade_payloads(posted_grade, detail):
 
     assert exc.value.status_code == 422
     assert exc.value.detail == detail
+
+
+@pytest.mark.parametrize(
+    "posted_grade",
+    [
+        "95",
+        "A",
+        "C-",
+        "F",
+        "complete",
+        "incomplete",
+        "pass",
+        "np",
+        "satisfactory",
+        "unsatisfactory",
+    ],
+)
+def test_preview_allows_supported_grade_formats(posted_grade):
+    preview = _build_grade_preview(
+        SimpleNamespace(id=7, name="COSC 777"),
+        GradeUpdateRequest(assignment_id=10, user_id=42, posted_grade=posted_grade),
+        _submission(),
+    )
+
+    assert preview.proposed["posted_grade"] == posted_grade
 
 
 def test_preview_allows_bonus_grade_but_returns_server_warning():
@@ -179,6 +229,7 @@ async def test_grade_submit_records_workflow_audit_and_history_in_one_commit():
     # workflow row, grade history row, and admin audit row before one DB commit.
     db = AsyncMock()
     db.add = MagicMock()
+    db.scalar = AsyncMock(side_effect=[None, None])
     added = []
 
     def add_row(row):
@@ -210,6 +261,7 @@ async def test_grade_submit_records_workflow_audit_and_history_in_one_commit():
         "user": {"name": "Coin"},
     }
 
+    mock_update = AsyncMock(return_value=raw_submission)
     with (
         patch(
             "app.services.grade_management._find_submission",
@@ -217,7 +269,7 @@ async def test_grade_submit_records_workflow_audit_and_history_in_one_commit():
         ),
         patch(
             "app.services.grade_management.update_submission_grade",
-            new=AsyncMock(return_value=raw_submission),
+            new=mock_update,
         ),
     ):
         result = await submit_grade_update(
@@ -239,11 +291,39 @@ async def test_grade_submit_records_workflow_audit_and_history_in_one_commit():
     assert result.history_id == 601
     assert workflow.status == "executed"
     assert workflow.action_name == "update_grade"
+    assert history.local_assignment_id is None
+    assert history.student_id is None
     assert history.rollback_available is False
     assert audit.workflow_id == 501
     assert audit.resource_type == "submission"
     assert audit.before_data["student_canvas_id"] == 42
+    mock_update.assert_awaited_once_with(
+        77,
+        10,
+        42,
+        "95",
+        "token",
+        "https://canvas.ubc.ca",
+        feedback="Rubric correction",
+    )
     db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_grade_history_relationship_lookup_uses_local_course_scope():
+    db = AsyncMock()
+    db.scalar = AsyncMock(side_effect=[17, 29])
+
+    local_assignment_id, local_student_id = await _grade_history_relationship_ids(
+        db=db,
+        course_id=7,
+        assignment_canvas_id=10,
+        student_canvas_id=42,
+    )
+
+    assert local_assignment_id == 17
+    assert local_student_id == 29
+    assert db.scalar.await_count == 2
 
 
 @pytest.mark.asyncio

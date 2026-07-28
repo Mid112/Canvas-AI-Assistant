@@ -9,6 +9,7 @@ const CANVAS_URL = "https://canvas.ubc.ca";
 
 const mockUseCanvasConnectionUrl = vi.fn(() => CANVAS_URL);
 const mockUseAuth = vi.fn();
+const mockCreateCourse = vi.fn();
 
 vi.mock("@/hooks/useCanvasConnectionUrl", () => ({
   useCanvasConnectionUrl: () => mockUseCanvasConnectionUrl(),
@@ -25,21 +26,32 @@ vi.mock("@/contexts/AuthContext", async () => {
   };
 });
 
+vi.mock("@/services/canvas", async () => {
+  const actual = await vi.importActual<typeof import("@/services/canvas")>(
+    "@/services/canvas",
+  );
+  return {
+    ...actual,
+    createCourse: (...args: unknown[]) => mockCreateCourse(...args),
+  };
+});
+
 beforeEach(() => {
+  mockCreateCourse.mockReset();
   mockUseAuth.mockReturnValue({
+    accessToken: "tok",
     user: {
       id: 1,
       has_canvas_token: true,
       canvas_connections: [{ id: 1, canvas_url: CANVAS_URL, created_at: "" }],
     },
   });
+  mockUseCanvasConnectionUrl.mockReturnValue(CANVAS_URL);
 });
 
 describe("InstructorCoursesHeader", () => {
   // Verifies: Renders the course management heading and institution context.
   it("renders the course management heading and institution context", () => {
-    mockUseCanvasConnectionUrl.mockReturnValue(CANVAS_URL);
-
     renderWithInstitution(<InstructorCoursesHeader />);
 
     expect(
@@ -51,15 +63,14 @@ describe("InstructorCoursesHeader", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "New Course" }),
-    ).toHaveAttribute("href", `${CANVAS_URL}/courses`);
+      screen.getByRole("button", { name: "New Course" }),
+    ).toBeInTheDocument();
   });
 
   // Verifies: Hides New Course when Canvas is not connected.
   it("hides New Course when Canvas is not connected", () => {
-    vi.stubEnv("VITE_CANVAS_UBC_URL", CANVAS_URL);
-    mockUseCanvasConnectionUrl.mockReturnValue(undefined);
     mockUseAuth.mockReturnValue({
+      accessToken: null,
       user: {
         id: 1,
         has_canvas_token: false,
@@ -69,20 +80,48 @@ describe("InstructorCoursesHeader", () => {
 
     renderWithInstitution(<InstructorCoursesHeader />);
 
-    expect(screen.queryByRole("link", { name: "New Course" })).not.toBeInTheDocument();
-
-    vi.unstubAllEnvs();
+    expect(
+      screen.queryByRole("button", { name: "New Course" }),
+    ).not.toBeInTheDocument();
   });
 
-  // Verifies: Strips a trailing slash from the Canvas host before building the new course URL.
-  it("strips a trailing slash from the Canvas host before building the new course URL", () => {
-    mockUseCanvasConnectionUrl.mockReturnValue(`${CANVAS_URL}/`);
+  // Verifies: Opens an in-app create dialog and creates a course (#1285).
+  it("opens an in-app create dialog and creates a course", async () => {
+    const user = userEvent.setup();
+    const onRefreshCourses = vi.fn();
+    mockCreateCourse.mockResolvedValue({
+      canvas_id: 9,
+      local_id: 1,
+      name: "COSC 499",
+      course_code: "COSC499",
+      workflow_state: "unpublished",
+      total_students: null,
+      term_name: null,
+    });
 
-    renderWithInstitution(<InstructorCoursesHeader />);
+    renderWithInstitution(
+      <InstructorCoursesHeader onRefreshCourses={onRefreshCourses} />,
+    );
 
+    await user.click(screen.getByRole("button", { name: "New Course" }));
     expect(
-      screen.getByRole("link", { name: "New Course" }),
-    ).toHaveAttribute("href", `${CANVAS_URL}/courses`);
+      screen.getByRole("heading", { name: "Create course" }),
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Course name"), "COSC 499");
+    await user.type(screen.getByLabelText("Course code (optional)"), "COSC499");
+    await user.click(screen.getByRole("button", { name: "Create course" }));
+
+    expect(mockCreateCourse).toHaveBeenCalledWith(
+      {
+        name: "COSC 499",
+        course_code: "COSC499",
+        publish: false,
+      },
+      "tok",
+      CANVAS_URL,
+    );
+    expect(onRefreshCourses).toHaveBeenCalledTimes(1);
   });
 
   // Verifies: Renders a sync button when refresh is available.

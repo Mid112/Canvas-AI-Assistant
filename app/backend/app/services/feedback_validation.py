@@ -6,6 +6,7 @@ from app.models.course import Course
 from app.models.user import User
 from app.services.canvas import get_assignment, require_canvas_token
 from app.services.course_access import get_owned_course_or_404
+from app.services.message_validation import check_message_profanity
 
 
 async def verify_canvas_student_in_course(
@@ -69,6 +70,10 @@ def _check_feedback(feedback: str | None) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Feedback cannot be blank when provided.",
         )
+    if feedback:
+        # Same blocklist as instructor messaging (#1300) — student-facing comments
+        # should not ship with clearly inappropriate language.
+        check_message_profanity(str(feedback), content_label="Feedback")
 
 
 async def validate_feedback_for_post(
