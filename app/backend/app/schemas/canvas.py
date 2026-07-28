@@ -29,6 +29,21 @@ class CourseResponse(BaseModel):
     total_students: int | None = None
 
 
+class CourseCreate(BaseModel):
+    """In-app Canvas course creation (#1285) — maps to POST /accounts/:id/courses."""
+
+    name: str = Field(min_length=1, max_length=255)
+    course_code: str | None = Field(default=None, max_length=100)
+    # When true, Canvas publishes the course immediately (`offer=true`).
+    publish: bool = False
+
+
+class CoursePublishUpdate(BaseModel):
+    """Publish (`offer`) or unpublish (`claim`) a Canvas course from Course Management."""
+
+    published: bool
+
+
 class AssignmentResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
