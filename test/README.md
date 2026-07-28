@@ -14,6 +14,16 @@ Feature suites for #687: `test_integration_*.py` (instructor, admin, preview, RB
 
 Windows: `make test-windows`.
 
+### Fuzz / property-based (`make test-fuzz`)
+
+Hypothesis harness for pure parsers and validators (JSON extraction, MCP
+`parse_action`, Canvas URL normalize, secret redaction). Marked `fuzz` and
+excluded from default `make test` / CI so random runs stay opt-in (#1301):
+
+```bash
+make test-fuzz
+```
+
 ## Frontend unit/component (`test/frontend/`)
 
 ```bash
