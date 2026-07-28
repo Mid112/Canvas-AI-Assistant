@@ -108,8 +108,8 @@ def test_merge_fetch_students_list_populates_recent_students():
         },
     )
     recent = conversation.field_memory["recent_students"]
-    assert recent[0] == {"id": 12, "name": "Alex"}
-    assert recent[1] == {"id": 13, "name": "Sam"}
+    assert recent[0] == {"id": 77, "name": "Alex"}
+    assert recent[1] == {"id": 88, "name": "Sam"}
 
 
 def test_merge_fetch_submissions_nested_assignment_id_shape():
