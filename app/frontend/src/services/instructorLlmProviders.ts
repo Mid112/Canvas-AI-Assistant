@@ -7,7 +7,12 @@ export interface InstructorLlmProvider {
   hosting: "local" | "internet" | "custom";
   default_model: string;
   configured: boolean;
-  status: "available" | "configured" | "unavailable" | "unconfigured";
+  status:
+    | "available"
+    | "configured"
+    | "unavailable"
+    | "unconfigured"
+    | "unauthorized";
   models: string[];
   detail: string | null;
   connected: boolean;

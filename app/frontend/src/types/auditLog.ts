@@ -1,5 +1,13 @@
 import type { UserRole } from "@/types/user";
 
+/**
+ * Rows sourced from audit_logs_session can be anonymous (failed login
+ * against an email with no matching account — user_id is nullable, see
+ * db/migrations/036_audit_log_session_nullable_user.sql), so the role is
+ * unknown rather than absent.
+ */
+export type AuditLogUserRole = UserRole | "unknown";
+
 /** Outcome of an audited action — stored in audit_logs.details.result (JSONB). */
 export type AuditLogResult = "success" | "failed" | "unknown";
 
@@ -7,8 +15,8 @@ export interface AuditLogEntry {
   id: string;
   timestamp: string;
   userEmail: string;
-  /** Matches users.role in the backend: instructor | admin. */
-  userRole: UserRole;
+  /** Matches users.role in the backend: instructor | admin | unknown (anonymous). */
+  userRole: AuditLogUserRole;
   action: string;
   /** Stored in audit_logs.details.resource (JSONB) until a dedicated column exists. */
   resource: string;
@@ -24,7 +32,8 @@ export interface AuditLogEntry {
  */
 export interface AuditLogApiRecord {
   id: number;
-  user_id: number;
+  /** Null for anonymous failed-login attempts against unknown emails. */
+  user_id: number | null;
   /** Null for rows sourced from audit_logs_session (admin/security events). */
   workflow_id: number | null;
   course_id: number | null;
@@ -35,7 +44,7 @@ export interface AuditLogApiRecord {
   status: string;
   timestamp: string;
   user_email: string;
-  user_role: UserRole;
+  user_role: AuditLogUserRole;
   details?: Record<string, unknown> | null;
 }
 
@@ -84,10 +93,6 @@ export const AUDIT_LOG_PAGE_SIZE = 10;
 
 export function hasActiveAuditLogFilters(filters: AuditLogFilters): boolean {
   return Boolean(
-    filters.date ||
-      filters.user ||
-      filters.action ||
-      filters.result ||
-      filters.search,
+    filters.date || filters.user || filters.action || filters.result || filters.search,
   );
 }

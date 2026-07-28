@@ -5,6 +5,7 @@ from app.core.database import get_db
 from app.dependencies import get_admin_user
 from app.models.user import User
 from app.schemas.support_ticket import (
+    AssignableAdmin,
     SupportTicketCreate,
     SupportTicketListResponse,
     SupportTicketResponse,
@@ -15,11 +16,20 @@ from app.services.support_tickets import (
     create_ticket,
     get_ticket,
     get_ticket_for_failed_operation,
+    list_assignable_admins,
     list_tickets,
     update_ticket,
 )
 
 router = APIRouter(prefix="/admin/support-tickets", tags=["support-tickets"])
+
+
+@router.get("/assignable-admins", response_model=list[AssignableAdmin])
+async def list_assignable_admins_route(
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await list_assignable_admins(db)
 
 
 @router.post("", response_model=SupportTicketResponse)

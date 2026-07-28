@@ -245,6 +245,46 @@ describe("AuditLogsPage", () => {
     downloadSpy.mockRestore();
   });
 
+  // Verifies: Export fetches whatever hasn't been loaded yet (server-side
+  // "hasMore") before downloading, rather than silently truncating to
+  // whatever's already in `logs`.
+  it("fetches remaining server-side rows before exporting when hasMore is true", async () => {
+    const extraLogs = [
+      { ...mockAuditLogs[0]!, id: "audit-extra-1", userEmail: "extra1@university.edu" },
+      { ...mockAuditLogs[0]!, id: "audit-extra-2", userEmail: "extra2@university.edu" },
+    ];
+    const fetchSpy = vi
+      .spyOn(auditLogsService, "fetchAuditLogs")
+      .mockImplementation(async (_token, params: auditLogsService.FetchAuditLogsParams = {}) => {
+        if (params.offset === 5) {
+          return { entries: extraLogs, total: 7 };
+        }
+        return { entries: mockAuditLogs, total: 7 };
+      });
+    const downloadSpy = vi
+      .spyOn(auditLogsService, "downloadAuditLogsCsv")
+      .mockImplementation(() => {});
+
+    renderWithRouter(<AuditLogsPage />);
+
+    await waitForLoaded();
+    expect(screen.getByText("Audit logs (5 of 7)")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Export" }));
+
+    await waitFor(() => {
+      expect(downloadSpy).toHaveBeenCalledTimes(1);
+    });
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "access-token",
+      expect.objectContaining({ offset: 5 }),
+    );
+    expect(downloadSpy.mock.calls[0]?.[0]).toHaveLength(7);
+    expect(screen.getByText("Audit logs (7)")).toBeInTheDocument();
+
+    downloadSpy.mockRestore();
+  });
+
   // Verifies: Disables export when no logs match filters.
   it("disables export when no logs match filters", async () => {
     renderWithRouter(<AuditLogsPage />);

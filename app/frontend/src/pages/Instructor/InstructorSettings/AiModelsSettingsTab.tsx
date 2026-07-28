@@ -422,6 +422,18 @@ export function AiModelsSettingsTab() {
                         >
                           {provider.description}
                         </p>
+                        {!isConnected && provider.has_api_key && provider.detail ? (
+                          <p
+                            className="flex items-start gap-1 text-sm text-destructive"
+                            role="alert"
+                          >
+                            <AlertTriangle
+                              className="mt-0.5 size-3.5 shrink-0"
+                              aria-hidden="true"
+                            />
+                            {provider.detail}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
                         {isPreferred ? (
@@ -440,6 +452,10 @@ export function AiModelsSettingsTab() {
                               aria-hidden="true"
                             />
                             Connected
+                          </Badge>
+                        ) : provider.has_api_key && provider.status === "unauthorized" ? (
+                          <Badge className="gap-1 border-transparent bg-destructive text-white hover:bg-destructive/90">
+                            Key rejected
                           </Badge>
                         ) : (
                           <Badge

@@ -91,5 +91,6 @@ describe("formatAuditLogUserRole", () => {
   it("maps backend roles to display labels", () => {
     expect(formatAuditLogUserRole("instructor")).toBe("Instructor");
     expect(formatAuditLogUserRole("admin")).toBe("Administrator");
+    expect(formatAuditLogUserRole("unknown")).toBe("Unknown");
   });
 });

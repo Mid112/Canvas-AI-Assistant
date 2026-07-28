@@ -16,6 +16,7 @@ from app.models.failed_operation import FailedOperation
 from app.models.support_ticket import SupportTicket
 from app.models.user import User
 from app.schemas.support_ticket import (
+    AssignableAdmin,
     SupportTicketCreate,
     SupportTicketListResponse,
     SupportTicketResponse,
@@ -36,6 +37,9 @@ def _to_response(row: SupportTicket) -> SupportTicketResponse:
         created_by_email=row.creator.email if row.creator is not None else None,
         resolved_by=row.resolved_by,
         resolved_by_email=row.resolver.email if row.resolver is not None else None,
+        assigned_to=row.assigned_to,
+        assigned_to_name=row.assignee.name if row.assignee is not None else None,
+        assigned_to_email=row.assignee.email if row.assignee is not None else None,
         created_at=row.created_at,
         resolved_at=row.resolved_at,
     )
@@ -46,6 +50,7 @@ def _load_options(query):
         selectinload(SupportTicket.user),
         selectinload(SupportTicket.creator),
         selectinload(SupportTicket.resolver),
+        selectinload(SupportTicket.assignee),
     )
 
 
@@ -162,5 +167,28 @@ async def update_ticket(
             row.resolved_by = None
             row.resolved_at = None
 
+    # "assigned_to" sent explicitly (including null, to unassign) vs. simply
+    # absent from the request body aren't the same thing -- model_fields_set
+    # is how Pydantic distinguishes them; `is not None` would treat an
+    # explicit unassign the same as "field wasn't sent at all".
+    if "assigned_to" in payload.model_fields_set:
+        if payload.assigned_to is not None:
+            assignee = await db.get(User, payload.assigned_to)
+            if assignee is None or assignee.role != "admin":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="assigned_to must be an existing admin user.",
+                )
+        row.assigned_to = payload.assigned_to
+
     await db.commit()
+    row = await db.scalar(_load_options(select(SupportTicket)).where(SupportTicket.id == ticket_id))
+    assert row is not None
     return _to_response(row)
+
+
+async def list_assignable_admins(db: AsyncSession) -> list[AssignableAdmin]:
+    rows = await db.scalars(
+        select(User).where(User.role == "admin", User.is_active.is_(True)).order_by(User.name)
+    )
+    return [AssignableAdmin.model_validate(row) for row in rows]

@@ -26,4 +26,17 @@ describe("feedbackCreateSchema", () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it("rejects feedback comments that contain profanity", () => {
+    const result = feedbackReviewSchema.safeParse({
+      assignmentName: "Recursion Homework",
+      studentName: "Alex Chen",
+      newGrade: "85",
+      feedback: "This is fucking inappropriate feedback",
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.message).toMatch(/appropriate/i);
+    }
+  });
 });

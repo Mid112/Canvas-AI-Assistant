@@ -2,6 +2,7 @@ import { API_BASE_URL } from "@/config/api";
 import type {
   ActiveCourseResponse,
   CanvasCourse,
+  CanvasCourseCreateRequest,
   CanvasTokenUpdateRequest,
   CanvasTokenUpdateResponse,
   CanvasTokenValidationResponse,
@@ -238,6 +239,69 @@ export async function fetchCourses(
   }
 
   return response.json() as Promise<CanvasCourse[]>;
+}
+
+/** Create a course in Canvas from the app (#1285). */
+export async function createCourse(
+  body: CanvasCourseCreateRequest,
+  accessToken: string,
+  canvasUrl?: string,
+): Promise<CanvasCourse> {
+  const params = new URLSearchParams();
+  if (canvasUrl) {
+    params.set("canvas_url", canvasUrl);
+  }
+
+  const query = params.toString();
+  const response = await fetch(
+    `${API_BASE_URL}/canvas/courses${query ? `?${query}` : ""}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(body),
+    },
+  );
+
+  if (!response.ok) {
+    throw new CanvasApiError(await parseError(response), response.status);
+  }
+
+  return response.json() as Promise<CanvasCourse>;
+}
+
+/** Publish or unpublish a course in Canvas from Course Management. */
+export async function setCoursePublished(
+  localCourseId: number,
+  published: boolean,
+  accessToken: string,
+  canvasUrl?: string,
+): Promise<CanvasCourse> {
+  const params = new URLSearchParams();
+  if (canvasUrl) {
+    params.set("canvas_url", canvasUrl);
+  }
+
+  const query = params.toString();
+  const response = await fetch(
+    `${API_BASE_URL}/canvas/courses/${localCourseId}/publish${query ? `?${query}` : ""}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ published }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new CanvasApiError(await parseError(response), response.status);
+  }
+
+  return response.json() as Promise<CanvasCourse>;
 }
 
 export async function fetchCachedCourses(

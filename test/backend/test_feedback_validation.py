@@ -21,6 +21,18 @@ def test_feedback_text_cannot_be_blank():
     assert exc.value.status_code == 422
 
 
+def test_feedback_rejects_profanity():
+    with pytest.raises(HTTPException) as exc:
+        _check_feedback("This is fucking inappropriate feedback")
+    assert exc.value.status_code == 422
+    assert "appropriate" in exc.value.detail.lower()
+    assert "feedback" in exc.value.detail.lower()
+
+
+def test_feedback_allows_clean_comment():
+    _check_feedback("Strong work explaining the base case clearly.")
+
+
 @pytest.mark.asyncio
 async def test_verify_canvas_student_in_course_rejects_outside_roster():
     db = AsyncMock()

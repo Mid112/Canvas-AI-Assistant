@@ -82,11 +82,16 @@ def test_save_llm_connection_stores_encrypted_key_and_never_returns_it(client):
     headers = reg["headers"]
     user_id = _user_id_from_me(client, headers)
 
-    resp = client.put(
-        "/api/v1/llm/connections/openai",
-        headers=headers,
-        json={"api_key": "sk-test-secret", "model": "gpt-4o-mini"},
-    )
+    with patch(
+        "app.services.llm.llm_connections.validate_api_key",
+        new_callable=AsyncMock,
+        return_value=(True, None),
+    ):
+        resp = client.put(
+            "/api/v1/llm/connections/openai",
+            headers=headers,
+            json={"api_key": "sk-test-secret", "model": "gpt-4o-mini"},
+        )
     assert resp.status_code == 200, resp.json()
     body = resp.json()
     assert body["provider_id"] == "openai"
@@ -119,10 +124,17 @@ def test_save_llm_connection_stores_encrypted_key_and_never_returns_it(client):
 
     asyncio.run(_read_row())
 
-    with patch(
-        "app.services.llm.llm_connections.check_provider_health",
-        new_callable=AsyncMock,
-    ) as health:
+    with (
+        patch(
+            "app.services.llm.llm_connections.validate_api_key",
+            new_callable=AsyncMock,
+            return_value=(True, None),
+        ),
+        patch(
+            "app.services.llm.llm_connections.check_provider_health",
+            new_callable=AsyncMock,
+        ) as health,
+    ):
         health.return_value = {
             "status": "unconfigured",
             "models": ["gpt-4o-mini"],
@@ -140,15 +152,40 @@ def test_save_llm_connection_stores_encrypted_key_and_never_returns_it(client):
     assert openai["has_api_key"] is True
 
 
+def test_save_llm_connection_rejects_key_the_provider_does_not_recognize(client):
+    reg = _register(client)
+    headers = reg["headers"]
+
+    with patch(
+        "app.services.llm.llm_connections.validate_api_key",
+        new_callable=AsyncMock,
+        return_value=(False, "The provider rejected this API key."),
+    ) as validate:
+        resp = client.put(
+            "/api/v1/llm/connections/openai",
+            headers=headers,
+            json={"api_key": "sk-invalid", "model": "gpt-4o-mini"},
+        )
+
+    assert resp.status_code == 422, resp.json()
+    assert "rejected" in resp.json()["detail"].lower()
+    validate.assert_called()
+
+
 def test_delete_llm_connection_removes_stored_key(client):
     reg = _register(client)
     headers = reg["headers"]
 
-    save = client.put(
-        "/api/v1/llm/connections/openai",
-        headers=headers,
-        json={"api_key": "sk-to-delete", "model": "gpt-4o-mini"},
-    )
+    with patch(
+        "app.services.llm.llm_connections.validate_api_key",
+        new_callable=AsyncMock,
+        return_value=(True, None),
+    ):
+        save = client.put(
+            "/api/v1/llm/connections/openai",
+            headers=headers,
+            json={"api_key": "sk-to-delete", "model": "gpt-4o-mini"},
+        )
     assert save.status_code == 200, save.json()
 
     deleted = client.delete("/api/v1/llm/connections/openai", headers=headers)
@@ -203,15 +240,20 @@ def test_custom_provider_requires_base_url_and_key(client):
     )
     assert missing_url.status_code == 422
 
-    created = client.put(
-        "/api/v1/llm/connections/openai_compatible_custom",
-        headers=headers,
-        json={
-            "api_key": "sk-custom",
-            "model": "custom-model",
-            "base_url": "https://api.example.com/v1",
-        },
-    )
+    with patch(
+        "app.services.llm.llm_connections.validate_api_key",
+        new_callable=AsyncMock,
+        return_value=(True, None),
+    ):
+        created = client.put(
+            "/api/v1/llm/connections/openai_compatible_custom",
+            headers=headers,
+            json={
+                "api_key": "sk-custom",
+                "model": "custom-model",
+                "base_url": "https://api.example.com/v1",
+            },
+        )
     assert created.status_code == 200, created.json()
     assert created.json()["base_url"] == "https://api.example.com/v1"
     assert created.json()["has_api_key"] is True
@@ -250,17 +292,27 @@ def test_chat_uses_connected_provider_with_stored_instructor_key(client):
     reg = _register(client)
     headers = reg["headers"]
 
-    save = client.put(
-        "/api/v1/llm/connections/openai",
-        headers=headers,
-        json={"api_key": "sk-chat-test", "model": "gpt-4o-mini"},
-    )
+    with patch(
+        "app.services.llm.llm_connections.validate_api_key",
+        new_callable=AsyncMock,
+        return_value=(True, None),
+    ):
+        save = client.put(
+            "/api/v1/llm/connections/openai",
+            headers=headers,
+            json={"api_key": "sk-chat-test", "model": "gpt-4o-mini"},
+        )
     assert save.status_code == 200, save.json()
 
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = "Hello from the connected provider."
 
     with (
+        patch(
+            "app.services.llm.llm_connections.validate_api_key",
+            new_callable=AsyncMock,
+            return_value=(True, None),
+        ),
         patch(
             "app.services.llm.llm_connections.check_provider_health",
             new_callable=AsyncMock,
