@@ -91,6 +91,18 @@ def parse_action(raw_llm_output: str) -> Any:
         )
 
     action_name = data["action"]
+    # LLM JSON can put a nested object/array in "action"; dict/list keys are
+    # unhashable and would crash ACTION_SCHEMAS.get with TypeError — callers
+    # only catch ToolExecutionError, so coerce that into a user-safe failure.
+    if not isinstance(action_name, str):
+        raise ToolExecutionError(
+            "The assistant's response could not be understood. Please try rephrasing.",
+            log_detail=(
+                f"Non-string action field: {action_name!r}. "
+                f"Raw output: {raw_llm_output!r}"
+            ),
+        )
+
     schema_cls = ACTION_SCHEMAS.get(action_name)
     if schema_cls is None:
         raise ToolExecutionError(
