@@ -94,16 +94,37 @@ describe("messageDraft service", () => {
     ).rejects.toBeInstanceOf(MessageDraftApiError);
   });
 
-  // Verifies: Throws when sending with no recipients.
-  it("throws when sending with no recipients", async () => {
-    await expect(
-      sendMessageDraft("access-token", {
-        draftId: "1",
-        subject: "Hello",
-        body: "World",
-        recipientIds: [],
-      }),
-    ).rejects.toThrow(/At least one recipient/i);
+  // Verifies: Sends an announcement when no recipients are selected.
+  it("sends an announcement when no recipients are selected", async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ ...draftResponse, recipients: [] }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ...draftResponse, status: "sent" }), {
+          status: 200,
+        }),
+      );
+
+    await sendMessageDraft("access-token", {
+      draftId: "1",
+      subject: "Hello",
+      body: "World",
+      recipientIds: [],
+    });
+
+    expect(JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body))).toEqual({
+      subject: "Hello",
+      body: "World",
+      recipients: [],
+    });
+    expect(fetchSpy.mock.calls[1]?.[0]).toBe(
+      "http://localhost:8000/api/v1/messages/drafts/1/send",
+    );
   });
 
   // Verifies: Persists selected recipients before sending.
@@ -152,6 +173,21 @@ describe("messageDraft service", () => {
         subject: "Reminder",
         body: "Please submit.",
         recipientIds: ["student-1"],
+      }),
+    ).rejects.toThrow(/out of sync/i);
+  });
+
+  // Verifies: Announcement sends cannot carry stale recipient objects.
+  it("rejects announcement send when recipient details are non-empty", async () => {
+    await expect(
+      sendMessageDraft("access-token", {
+        draftId: "7",
+        subject: "Announcement",
+        body: "Course-wide update.",
+        recipientIds: [],
+        recipients: [
+          { id: "student-1", name: "Alex Thompson", email: "alex.t@university.edu" },
+        ],
       }),
     ).rejects.toThrow(/out of sync/i);
   });

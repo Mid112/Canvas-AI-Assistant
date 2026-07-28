@@ -684,6 +684,92 @@ def test_secret_redaction_logging_filter_scrubs_logger_output(caplog):
     assert "[REDACTED" in caplog.text or "REDACTED" in caplog.text
 
 
+def test_secret_redaction_preserves_uvicorn_access_log_args_shape():
+    # Uvicorn's AccessFormatter unpacks record.args directly, so the global
+    # redaction hook must not collapse args after formatting.
+    import logging
+
+    from app.core.secret_redaction import _scrub_log_record
+
+    record = logging.LogRecord(
+        "uvicorn.access",
+        logging.INFO,
+        __file__,
+        1,
+        '%s - "%s %s HTTP/%s" %d',
+        ("127.0.0.1:54723", "POST", "/api/v1/auth/login", "1.1", 401),
+        None,
+    )
+
+    scrubbed = _scrub_log_record(record)
+
+    assert scrubbed.args == (
+        "127.0.0.1:54723",
+        "POST",
+        "/api/v1/auth/login",
+        "1.1",
+        401,
+    )
+    assert scrubbed.getMessage() == '127.0.0.1:54723 - "POST /api/v1/auth/login HTTP/1.1" 401'
+
+
+def test_secret_redaction_scrubs_literal_msg_with_args_without_breaking_placeholders():
+    import logging
+
+    from app.core.secret_redaction import _scrub_log_record
+
+    record = logging.LogRecord(
+        "test.secret_redaction",
+        logging.INFO,
+        __file__,
+        1,
+        "Auth failed for %s: Bearer token_abc123456",
+        ("student@example.edu",),
+        None,
+    )
+
+    scrubbed = _scrub_log_record(record)
+
+    assert "token_abc123456" not in scrubbed.getMessage()
+    assert "student@example.edu" in scrubbed.getMessage()
+
+    placeholder_record = logging.LogRecord(
+        "test.secret_redaction",
+        logging.INFO,
+        __file__,
+        1,
+        "upstream failed with api_key=%s",
+        ("sk-live-abcdefghijklmnopqrst",),
+        None,
+    )
+
+    scrubbed_placeholder = _scrub_log_record(placeholder_record)
+
+    assert "sk-live-abcdefghijklmnopqrst" not in scrubbed_placeholder.getMessage()
+    assert "api_key=[REDACTED" in scrubbed_placeholder.getMessage()
+
+
+def test_secret_redaction_scrubs_nested_log_args():
+    import logging
+
+    from app.core.secret_redaction import _scrub_log_record
+
+    record = logging.LogRecord(
+        "test.secret_redaction",
+        logging.INFO,
+        __file__,
+        1,
+        "payload=%s",
+        (({"token": "sk-live-abcdefghijklmnopqrst"},),),
+        None,
+    )
+
+    scrubbed = _scrub_log_record(record)
+
+    assert "sk-live-abcdefghijklmnopqrst" not in scrubbed.getMessage()
+    assert "[REDACTED" in scrubbed.getMessage()
+
+
 def test_chat_model_settings_reject_client_api_key():
     from pydantic import ValidationError
 

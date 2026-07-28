@@ -163,7 +163,10 @@ export function AssistantMessage({
         ) : null}
 
         {message.handoffDismissed && !showPendingControls ? (
-          <p className="text-sm text-muted-foreground">
+          <p
+            role="status"
+            className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-950"
+          >
             This action was cancelled.
           </p>
         ) : null}

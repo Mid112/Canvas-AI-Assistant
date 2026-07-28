@@ -102,6 +102,21 @@ def reset_llm_system_settings_module():
     _reset_llm_system_settings()
 
 
+@pytest.fixture(autouse=True)
+def reset_rate_limiter_state():
+    """Keep in-memory SlowAPI counters from leaking across test cases.
+
+    Individual tests can still exercise rate limits within one request burst;
+    this only prevents unrelated modules from inheriting a saturated
+    ``testclient`` bucket.
+    """
+    from app.main import app
+
+    app.state.limiter.reset()
+    yield
+    app.state.limiter.reset()
+
+
 @pytest.fixture(scope="module")
 def admin_credentials():
     """Create a fresh admin user directly in the DB and return its credentials.

@@ -333,10 +333,11 @@ describe("InstructorAssignmentCreatePage", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.type(
-      screen.getByLabelText("Assignment Prompt"),
-      "Raw prompt before generation",
-    );
+    const promptField = screen.getByLabelText("Assignment Prompt");
+    // Suggested prompts can prefill this field; clear first so this assertion
+    // covers the typed draft text only.
+    await user.clear(promptField);
+    await user.type(promptField, "Raw prompt before generation");
     await user.click(screen.getByRole("button", { name: "Save draft" }));
 
     await screen.findByText(/Draft saved/i);

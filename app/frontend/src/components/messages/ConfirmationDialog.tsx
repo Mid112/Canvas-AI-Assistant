@@ -45,6 +45,8 @@ export function ConfirmationDialog({
   ).length;
   const recipientText =
     selectedCount === 1 ? "1 student" : `${selectedCount} students`;
+  const deliveryText =
+    selectedCount === 0 ? "the whole course as an announcement" : recipientText;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -52,9 +54,8 @@ export function ConfirmationDialog({
         <DialogHeader>
           <DialogTitle>Send Message?</DialogTitle>
           <DialogDescription>
-            Review exactly what will be sent to{" "}
-            {selectedCount === 0 ? "no recipients" : recipientText} before
-            confirming. Uncheck or remove anyone who shouldn&apos;t receive it.
+            Review exactly what will be sent to {deliveryText} before confirming.
+            Uncheck or remove anyone who shouldn&apos;t receive a private message.
             This action cannot be undone.
           </DialogDescription>
         </DialogHeader>
@@ -89,7 +90,7 @@ export function ConfirmationDialog({
             type="button"
             className={cn(dashboardColors.blue.button)}
             onClick={onConfirm}
-            disabled={isSending || selectedCount === 0}
+            disabled={isSending}
           >
             {isSending ? (
               <>
