@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config import settings
 from app.main import app
+from app.models.assignment import Assignment
 from app.models.audit_log import AuditLog
 from app.models.message import Message
 from app.models.workflow import Workflow
@@ -25,6 +26,37 @@ CANVAS_URL = "https://canvas.ubc.ca"
 def _make_session():
     engine = create_async_engine(settings.DATABASE_URL)
     return engine, async_sessionmaker(engine, expire_on_commit=False)
+
+
+def _seed_local_assignment(
+    local_course_id: int,
+    canvas_assignment_id: int,
+    *,
+    title: str = "Seeded Assignment",
+) -> None:
+    """Mirror an assignment locally so update_assignment resolver can verify
+    a known assignment_id without calling Canvas."""
+
+    async def _insert():
+        engine, Session = _make_session()
+        try:
+            async with Session() as db:
+                db.add(
+                    Assignment(
+                        canvas_assignment_id=str(canvas_assignment_id),
+                        title=title,
+                        course_id=local_course_id,
+                    )
+                )
+                await db.commit()
+        finally:
+            await engine.dispose()
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(_insert())
+    finally:
+        loop.close()
 
 
 @pytest.fixture(scope="module")
@@ -83,6 +115,8 @@ def _create_executed_update_assignment_workflow(
     update_assignment action, mocking the pre-update fetch and the actual
     Canvas write. Returns (workflow_id, assignment_id)."""
     aid = assignment_id if assignment_id is not None else uuid.uuid4().int % 10_000_000
+    # Resolver always verifies assignment_id against the local mirror.
+    _seed_local_assignment(local_course_id, aid, title="Old Title")
 
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = (
@@ -422,11 +456,13 @@ def test_undo_only_available_for_executed_status(client):
     assert cancel.status_code == 409  # already executed, can't cancel — sanity check only
 
     # Use a genuinely pending workflow instead: propose but never confirm.
+    pending_assignment_id = 999
+    _seed_local_assignment(local_course_id, pending_assignment_id, title="Pending Source")
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = (
         '{"action": "intent_preview", "summary": "Rename assignment", '
         '"proposed_action": {"action": "update_assignment", '
-        f'"local_course_id": {local_course_id}, "assignment_id": 999, '
+        f'"local_course_id": {local_course_id}, "assignment_id": {pending_assignment_id}, '
         '"title": "Pending Title"}}'
     )
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
@@ -435,7 +471,10 @@ def test_undo_only_available_for_executed_status(client):
             json={"message": "rename to Pending Title"},
             headers=headers,
         )
-    conversation_id = preview.json()["conversation_id"]
+    assert preview.status_code == 200, preview.text
+    body = preview.json()
+    assert body["is_error"] is False, body
+    conversation_id = body["conversation_id"]
     history = client.get("/api/v1/history/workflows", headers=headers)
     pending_workflow_id = next(
         item["id"] for item in history.json()["items"]

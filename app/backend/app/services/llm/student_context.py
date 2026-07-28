@@ -327,34 +327,42 @@ def ground_assistant_result(
     *,
     tool_results: list[Any] | None = None,
     field_memory: dict[str, Any] | None = None,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], GroundedFacts]:
     """Prevent assistant replies from citing Canvas data that was never
     retrieved (Feature 13 #855 / #856).
 
-    Scrubs ungrounded ID claims, grade/score claims, and quoted titles that
-    do not appear in **this-turn** tool payloads. ``field_memory`` is accepted
-    for call-site compatibility (prompts / proposed defaults use it elsewhere)
-    but is intentionally not treated as a retrieval source here — remembered
-    fields must not authorize ID/grade/title claims without a tool fetch.
+    Scrubs ungrounded ID claims, grade/score claims, and quoted titles.
+    Facts come from this-turn tool payloads unioned with the append-only
+    ``grounded_facts`` accumulator in field_memory (prior real tool
+    fetches — #1303). Scalar field_memory keys alone never authorize
+    claims. Returns ``(scrubbed_result, unioned_tool_facts)`` so the
+    caller can persist newly observed tool facts.
     """
-    del field_memory  # Not a grounding authority; kept in the signature only.
-
     sources: list[Any] = list(tool_results or [])
     if result.get("action") not in {"respond", "clarify", "out_of_scope", "intent_preview"}:
         # Direct tool echo — the payload itself is the retrieval source.
         sources.append(result)
 
-    facts = collect_grounded_facts(sources)
-    tool_facts = collect_grounded_facts(tool_results or [])
+    tool_facts = collect_grounded_facts(sources)
+    prior_facts = grounded_facts_from_field_memory(field_memory)
+    facts = union_grounded_facts(prior_facts, tool_facts)
     out = dict(result)
 
-    # Always scrub prose against this-turn tool facts (possibly empty), so a
-    # no-tool turn cannot invent grade/title/ID claims that look grounded.
+    # Prose scrubbing uses the union of prior + this-turn facts so a
+    # follow-up turn can reference "HW1" from an earlier fetch without
+    # re-fetching. This is safe — the user sees and reviews prose.
     for prose_key in ("message", "summary", "question"):
         value = out.get(prose_key)
         if isinstance(value, str):
             out[prose_key] = strip_ungrounded_canvas_facts(value, facts)
 
+    # proposed_action scrubbing uses ONLY this-turn tool_facts — never
+    # prior accumulated facts. A prior-turn ID (e.g. student 123 from
+    # assignment A's submissions) must NOT authorize the same ID in a
+    # proposed_action targeting assignment B, since the ID may not be
+    # valid for the new context. The resolver chains (_resolve_grade_target,
+    # _run_update_assignment_chain) already validate IDs server-side, so
+    # this is defense-in-depth, not the primary guard.
     proposed = out.get("proposed_action")
     if isinstance(proposed, dict) and tool_facts.ids:
         cleaned = dict(proposed)
@@ -365,17 +373,46 @@ def ground_assistant_result(
                 numeric = int(cleaned[key])
             except (TypeError, ValueError):
                 continue
-            if numeric not in facts.ids:
+            if numeric not in tool_facts.ids:
                 cleaned.pop(key, None)
         out["proposed_action"] = cleaned
 
     # Structured read echoes: drop ungrounded id fields if somehow mixed in.
-    if tool_facts.ids and out.get("action") == "respond" and isinstance(
-        out.get("data"), dict
-    ):
-        out["data"] = filter_grounded_dict_fields(out["data"], facts.ids)
+    # Uses this-turn tool_facts only — same reasoning as proposed_action.
+    if tool_facts.ids and out.get("action") == "respond" and isinstance(out.get("data"), dict):
+        out["data"] = filter_grounded_dict_fields(out["data"], tool_facts.ids)
 
     if tool_facts.ids or tool_facts.names or tool_facts.grades:
         out["grounded"] = True
 
-    return out
+    # Only newly observed tool facts should be appended; prior_facts are
+    # already stored. Callers merge tool_facts into memory.
+    return out, tool_facts
+
+
+def grounded_facts_from_field_memory(field_memory: dict[str, Any] | None) -> GroundedFacts:
+    """Load prior tool-derived facts from the field_memory accumulator."""
+    raw = (field_memory or {}).get("grounded_facts") or {}
+    if not isinstance(raw, dict):
+        return GroundedFacts(ids=set(), names=set(), grades=set(), dates=set())
+    ids: set[int] = set()
+    for value in raw.get("ids") or []:
+        try:
+            ids.add(int(value))
+        except (TypeError, ValueError):
+            continue
+    return GroundedFacts(
+        ids=ids,
+        names={str(v).casefold() for v in (raw.get("names") or []) if str(v).strip()},
+        grades={str(v).casefold() for v in (raw.get("grades") or []) if str(v).strip()},
+        dates={str(v).casefold() for v in (raw.get("dates") or []) if str(v).strip()},
+    )
+
+
+def union_grounded_facts(left: GroundedFacts, right: GroundedFacts) -> GroundedFacts:
+    return GroundedFacts(
+        ids=left.ids | right.ids,
+        names=left.names | right.names,
+        grades=left.grades | right.grades,
+        dates=left.dates | right.dates,
+    )

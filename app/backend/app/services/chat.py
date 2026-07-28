@@ -58,8 +58,12 @@ from app.services.canvas_assistant_gate import (
 from app.services.deferred_assistant import defer_assistant_request, mark_deferred_request_resumed
 from app.services.failed_operations import record_failed_operation
 from app.services.field_memory import (
+    _PARTIAL_PLAN_SAFE_KEYS,
+    clear_course_scoped_field_memory,
     format_field_memory_for_prompt,
     merge_field_memory,
+    merge_grounded_facts_into_memory,
+    merge_read_result_into_field_memory,
     trim_tool_dump_for_history,
 )
 from app.services.llm.base import LLMAdapter
@@ -1162,11 +1166,12 @@ async def _run_update_assignment_chain(
     """update_assignment needs an exact Canvas assignment_id before a
     preview can be built, but — like fetch_submissions,
     resolve_missing_submissions, and find_assignment_by_submission_rate —
-    the model doesn't need to know it itself. Only reached when
-    assignment_id is unset and assignment_reference is given; resolves it
-    server-side via _resolve_course_and_assignment (the exact same shared
-    helper those other chains use) and builds the intent_preview directly
-    — one user turn, no loop needed — the same way
+    the model doesn't need to know it itself. Resolves it server-side via
+    _resolve_course_and_assignment (the exact same shared helper those
+    other chains use), which verifies a provided assignment_id against
+    this course's synced assignments and re-resolves if it's hallucinated,
+    stale, or belongs to a different course. Builds the intent_preview
+    directly — one user turn, no loop needed — the same way
     _build_grouped_send_message_result builds a preview without routing
     back through execute_tool's own intent_preview case."""
     resolved = await _resolve_course_and_assignment(
@@ -1956,6 +1961,85 @@ def _plain_text_response(raw_output: str) -> dict | None:
     if stripped and "{" not in stripped and "}" not in stripped:
         return {"action": "respond", "message": stripped}
     return None
+
+
+_STRICT_JSON_RETRY_INSTRUCTION = (
+    "Your previous reply was not valid JSON for this assistant. "
+    "Reply with ONLY one JSON object that matches the action schema "
+    '(for example {"action":"respond","message":"..."}). '
+    "No markdown fences and no commentary outside the JSON object."
+)
+
+_MALFORMED_ACTION_DEGRADE_MESSAGE = (
+    "I had trouble formatting that reply as a structured action. "
+    "Could you ask again, or rephrase your question?"
+)
+
+
+def _is_malformed_action_parse_error(exc: ToolExecutionError) -> bool:
+    """JSON decode / missing-action failures are soft-recoverable (#1304).
+    Unknown-action and schema validation stay hard errors."""
+    message = (exc.user_message or "").lower()
+    return (
+        "could not be understood" in message
+        or "missing required information" in message
+    )
+
+
+async def _parse_model_action_with_recovery(
+    *,
+    adapter: LLMAdapter,
+    system_prompt: str,
+    llm_message: str,
+    history: list[dict],
+    raw_output: str,
+) -> tuple[Any | None, dict | None, str]:
+    """Parse model output; on malformed JSON retry once, then soft-respond.
+
+    Returns ``(action, respond_dict, raw_output_used)``. Exactly one of
+    ``action`` / ``respond_dict`` is set.
+    """
+    text_reply = _plain_text_response(raw_output)
+    if text_reply is not None:
+        return None, text_reply, raw_output
+
+    try:
+        return parse_action(raw_output), None, raw_output
+    except ToolExecutionError as parse_error:
+        if not _is_malformed_action_parse_error(parse_error):
+            raise
+
+    retry_message = (
+        f"{_STRICT_JSON_RETRY_INSTRUCTION}\n\n"
+        f"Original user request:\n{llm_message}"
+    )
+    try:
+        retry_raw = await asyncio.wait_for(
+            adapter.generate(
+                system_prompt,
+                retry_message,
+                history=history,
+                timeout=LLM_TIMEOUT_SECONDS,
+            ),
+            timeout=LLM_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        logger.warning("Strict JSON parse retry failed", exc_info=True)
+        return None, {"action": "respond", "message": _MALFORMED_ACTION_DEGRADE_MESSAGE}, raw_output
+
+    text_retry = _plain_text_response(retry_raw)
+    if text_retry is not None:
+        return None, text_retry, retry_raw
+    try:
+        return parse_action(retry_raw), None, retry_raw
+    except ToolExecutionError as retry_error:
+        if _is_malformed_action_parse_error(retry_error):
+            logger.info(
+                "Malformed LLM action after retry; degrading to respond: %s",
+                redact_secrets(retry_error.log_detail),
+            )
+            return None, {"action": "respond", "message": _MALFORMED_ACTION_DEGRADE_MESSAGE}, retry_raw
+        raise
 
 
 def _step_budget_exhausted_response(loop_steps: list[dict]) -> dict:
@@ -3023,6 +3107,15 @@ async def handle_chat_message(
                     # re-parent that only message away, leaving the
                     # preference-seeded conversation permanently empty and
                     # orphaned.
+                    if (
+                        conversation.course_id is not None
+                        and conversation.course_id != matched_local_course_id
+                    ):
+                        # Switching a preference-seeded conversation to a
+                        # different course before any history — clear
+                        # course-scoped field memory so stale IDs from the
+                        # seeded course don't leak into the new one (#1306).
+                        clear_course_scoped_field_memory(conversation)
                     conversation.course_id = matched_local_course_id
                     conversation.course_name = matched.name
                     resolved_local_course_id = matched_local_course_id
@@ -3075,11 +3168,36 @@ async def handle_chat_message(
             raw_output = json.dumps(parsed_envelope)
 
         try:
-            text_reply = _plain_text_response(raw_output)
+            action, text_reply, raw_output = await _parse_model_action_with_recovery(
+                adapter=adapter,
+                system_prompt=system_prompt,
+                llm_message=(
+                    first_llm_message
+                    if step == 1
+                    else _build_llm_message(
+                        message,
+                        course_names,
+                        conversation.course_name,
+                        current_proposed_action,
+                        loop_steps,
+                    )
+                ),
+                history=history,
+                raw_output=raw_output,
+            )
             if text_reply is not None:
                 result = text_reply
                 break
-            action = parse_action(raw_output)
+            if action is None:
+                # Defensive: _parse_model_action_with_recovery should always
+                # return one of (action, text_reply), but if a future change
+                # breaks that invariant, degrade to a safe respond instead
+                # of crashing with an AssertionError.
+                result = {
+                    "action": "respond",
+                    "message": _MALFORMED_ACTION_DEGRADE_MESSAGE,
+                }
+                break
             needs_unwrap = False
             if action.action == "intent_preview":
                 proposed = action.proposed_action
@@ -3091,21 +3209,7 @@ async def handle_chat_message(
                         or proposed.get("broadcast_to_all_students")
                         or proposed.get("recipient_handle")
                     )
-                ) or (
-                    proposed_name == "update_assignment"
-                    and proposed.get("assignment_id") is None
-                    and bool(proposed.get("assignment_reference"))
-                ) or (
-                    proposed_name == "update_grade"
-                    and (
-                        proposed.get("assignment_id") is None
-                        or proposed.get("student_id") is None
-                    )
-                    and (
-                        bool(proposed.get("assignment_reference"))
-                        or bool(proposed.get("student_reference"))
-                    )
-                )
+                ) or proposed_name in ("update_assignment", "update_grade")
             if needs_unwrap:
                 # Defensive: the model wrapped a read, a send_message that
                 # still needs server-side recipient resolution, or an
@@ -3152,20 +3256,21 @@ async def handle_chat_message(
                 result = await _run_find_assignment_by_submission_rate_chain(
                     db, user, conversation, user_msg, action, message
                 )
-            elif action.action == "update_assignment" and action.assignment_id is None and action.assignment_reference:
-                # Same assignment-resolution need as fetch_submissions —
-                # resolve the reference server-side and build the preview
-                # directly, in this same turn, rather than making the user
-                # ask again once a fetch_assignments result is in history.
+            elif action.action == "update_assignment":
+                # Always route through the resolver chain — even when the
+                # model provides assignment_id directly, _resolve_course_and_assignment
+                # verifies it against this course's synced assignments and
+                # re-resolves if it's hallucinated, stale, or belongs to a
+                # different course. Never trust a bare ID from the model.
                 result = await _run_update_assignment_chain(
                     db, user, conversation, user_msg, action, message, adapter
                 )
-            elif action.action == "update_grade" and (
-                action.assignment_id is None
-                or action.student_id is None
-                or action.assignment_reference
-                or action.student_reference
-            ):
+            elif action.action == "update_grade":
+                # Always route through _resolve_grade_target — it fetches
+                # real submissions and validates assignment_id and
+                # student_id against them, so a hallucinated or stale ID
+                # is caught and re-resolved instead of passing through to
+                # a preview with unverified targets.
                 result = await _resolve_grade_target(
                     db, user, conversation, user_msg, action, message, adapter
                 )
@@ -3211,6 +3316,20 @@ async def handle_chat_message(
                 result = await execute_tool(db, user, action)
             else:
                 result = await execute_tool(db, user, action)
+
+            # #1302: persist resolved assignment/student refs from successful reads
+            # so later turns can reuse "the first assignment" without re-asking.
+            if (
+                action.action in READ_ACTIONS
+                and isinstance(result, dict)
+                and not result.get("clarify")
+                and not result.get("error")
+            ):
+                merge_read_result_into_field_memory(
+                    conversation,
+                    action.model_dump(),
+                    result,
+                )
         except ToolExecutionError as e:
             await log_message(
                 db, conversation, role="assistant", content=redact_secrets(e.log_detail)
@@ -3251,8 +3370,9 @@ async def handle_chat_message(
             result = _step_budget_exhausted_response(loop_steps)
             break
 
-    # Feature 13 (#855 / #856): strip Canvas ID / grade / title claims that
-    # were never present in this-turn tool payloads (or field memory).
+    # Feature 13 (#855 / #856) + #1303: strip Canvas ID / grade / title claims
+    # that were never present in this-turn tool payloads or prior tool-derived
+    # grounded_facts accumulated on the conversation.
     tool_payloads = [step["result"] for step in loop_steps]
     if result.get("action") not in {
         "respond",
@@ -3261,10 +3381,17 @@ async def handle_chat_message(
         "intent_preview",
     }:
         tool_payloads.append(result)
-    result = ground_assistant_result(
+    result, new_tool_facts = ground_assistant_result(
         result,
         tool_results=tool_payloads,
         field_memory=conversation.field_memory,
+    )
+    merge_grounded_facts_into_memory(
+        conversation,
+        ids=new_tool_facts.ids,
+        names=new_tool_facts.names,
+        grades=new_tool_facts.grades,
+        dates=new_tool_facts.dates,
     )
 
     # Only terminal conversational responses are cacheable. Canvas reads,
@@ -3331,7 +3458,16 @@ async def handle_chat_message(
             )
     else:
         if result.get("action") == "clarify":
-            merge_field_memory(conversation, result.get("partial_plan"))
+            # Use _PARTIAL_PLAN_SAFE_KEYS so raw Canvas IDs (assignment_id,
+            # student_id) from the LLM's parsed action are NOT persisted —
+            # they may be hallucinated. Only reference strings and non-ID
+            # fields are carried forward; the resolver chains re-resolve
+            # IDs server-side on the next turn (see #1305).
+            merge_field_memory(
+                conversation,
+                result.get("partial_plan"),
+                allowed_keys=_PARTIAL_PLAN_SAFE_KEYS,
+            )
         await _supersede_pending_workflow(
             db,
             conversation.id,
