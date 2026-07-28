@@ -14,10 +14,17 @@ import { instructorCoursePath } from "@/routes/paths";
 
 const courses = institutionCourseData[0]!.courses.slice(0, 2);
 
+const publishProps = {
+  onTogglePublish: vi.fn(),
+  isTogglingPublish: false,
+};
+
 const activeCourseProps = {
   activeCourseId: null as number | null,
   onSetActiveCourse: vi.fn(),
   settingActiveCourseId: null as number | null,
+  onTogglePublish: vi.fn(),
+  togglingPublishCourseId: null as number | null,
 };
 
 describe("InstructorCoursesCard", () => {
@@ -30,6 +37,7 @@ describe("InstructorCoursesCard", () => {
           isActive={false}
           onSetActive={vi.fn()}
           isSettingActive={false}
+          {...publishProps}
         />
       </MemoryRouter>,
     );
@@ -44,6 +52,9 @@ describe("InstructorCoursesCard", () => {
     expect(
       screen.getByRole("button", { name: "Set Active" }),
     ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Unpublish" }),
+    ).toBeInTheDocument();
   });
 
   // Verifies: Shows per-course feedback while setting active.
@@ -55,6 +66,7 @@ describe("InstructorCoursesCard", () => {
           isActive={false}
           onSetActive={vi.fn()}
           isSettingActive
+          {...publishProps}
         />
       </MemoryRouter>,
     );
@@ -81,11 +93,13 @@ describe("InstructorCoursesCard", () => {
           isActive={false}
           onSetActive={vi.fn()}
           isSettingActive={false}
+          {...publishProps}
         />
       </MemoryRouter>,
     );
 
     expect(screen.getByText("Unpublished")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Publish" })).toBeInTheDocument();
   });
 
   // Verifies: Shows a clear active state.
@@ -97,6 +111,7 @@ describe("InstructorCoursesCard", () => {
           isActive
           onSetActive={vi.fn()}
           isSettingActive={false}
+          {...publishProps}
         />
       </MemoryRouter>,
     );
@@ -110,16 +125,55 @@ describe("InstructorCoursesCard", () => {
     render(
       <MemoryRouter>
         <InstructorCoursesCard
-          course={{ ...courses[0]!, isPublished: false }}
+          course={{ ...courses[0]!, isPublished: false, isWritable: false }}
           isActive={false}
           onSetActive={vi.fn()}
           isSettingActive={false}
+          {...publishProps}
         />
       </MemoryRouter>,
     );
 
     expect(screen.getByText("Unpublished")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Set Active" })).toBeDisabled();
+  });
+
+  it("calls onTogglePublish when Publish is clicked", async () => {
+    const user = userEvent.setup();
+    const onTogglePublish = vi.fn();
+
+    render(
+      <MemoryRouter>
+        <InstructorCoursesCard
+          course={{ ...courses[0]!, isPublished: false, isWritable: false }}
+          isActive={false}
+          onSetActive={vi.fn()}
+          isSettingActive={false}
+          onTogglePublish={onTogglePublish}
+          isTogglingPublish={false}
+        />
+      </MemoryRouter>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Publish" }));
+    expect(onTogglePublish).toHaveBeenCalledWith(true);
+  });
+
+  it("hides publish controls for completed courses", () => {
+    render(
+      <MemoryRouter>
+        <InstructorCoursesCard
+          course={{ ...courses[0]!, isPublished: true, isWritable: false }}
+          isActive={false}
+          onSetActive={vi.fn()}
+          isSettingActive={false}
+          {...publishProps}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole("button", { name: "Publish" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Unpublish" })).not.toBeInTheDocument();
   });
 });
 
@@ -152,6 +206,8 @@ describe("InstructorCoursesList", () => {
           activeCourseId={null}
           onSetActiveCourse={vi.fn()}
           settingActiveCourseId={courses[1]!.id}
+          onTogglePublish={vi.fn()}
+          togglingPublishCourseId={null}
         />
       </MemoryRouter>,
     );
@@ -162,7 +218,7 @@ describe("InstructorCoursesList", () => {
 
   it("shows an Unpublished badge and disables Set Active for an unpublished course row", () => {
     const unpublishedCourses = [
-      { ...courses[0]!, isPublished: false },
+      { ...courses[0]!, isPublished: false, isWritable: false },
       courses[1]!,
     ];
 

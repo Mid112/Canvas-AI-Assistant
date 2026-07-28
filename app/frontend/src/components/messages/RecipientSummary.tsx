@@ -51,7 +51,11 @@ export function RecipientSummary({
 
       <div className="border-t border-border/60 px-4 py-3">
         <p className="text-xs text-muted-foreground">
-          {selectedCount === 1 ? "1 student selected" : `${selectedCount} students selected`}
+          {selectedCount === 0
+            ? "Course announcement selected"
+            : selectedCount === 1
+              ? "1 student selected"
+              : `${selectedCount} students selected`}
         </p>
       </div>
     </div>

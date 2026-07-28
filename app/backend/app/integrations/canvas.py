@@ -18,6 +18,24 @@ def _headers(token: str) -> dict:
 
 
 def _canvas_error_detail(response: httpx.Response) -> str:
+    def flatten(value) -> str:
+        if isinstance(value, str):
+            return value
+        if isinstance(value, list):
+            return "; ".join(message for item in value if (message := flatten(item)))
+        if isinstance(value, dict):
+            for key in ("message", "error"):
+                nested = value.get(key)
+                if isinstance(nested, str):
+                    return nested
+            messages = []
+            for field, nested in value.items():
+                message = flatten(nested)
+                if message:
+                    messages.append(f"{field}: {message}")
+            return "; ".join(messages)
+        return str(value) if value is not None else ""
+
     try:
         data = response.json()
     except ValueError:
@@ -26,22 +44,8 @@ def _canvas_error_detail(response: httpx.Response) -> str:
     if isinstance(data, dict):
         for key in ("message", "error", "errors"):
             value = data.get(key)
-            if isinstance(value, str):
-                return value
-            if isinstance(value, list) and value:
-                # Canvas often returns errors as [{"message": "..."}].
-                # Flatten that shape so UI banners show the actionable text,
-                # not a Python dict representation that hides the real cause.
-                messages: list[str] = []
-                for item in value:
-                    if isinstance(item, dict):
-                        nested = item.get("message") or item.get("error")
-                        messages.append(str(nested if nested is not None else item))
-                    else:
-                        messages.append(str(item))
-                return "; ".join(messages)
-            if isinstance(value, dict):
-                return "; ".join(f"{field}: {message}" for field, message in value.items())
+            if value:
+                return flatten(value)
 
     return str(data)
 
@@ -83,6 +87,8 @@ def _parse_next_link(link_header: str) -> str | None:
 async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
     # Feature Reliability (#1190): retry transient Canvas 5xx / timeouts on
     # safe reads with short backoff. Writes must not use this helper.
+    # #1295: retry attempts are expected noise on dashboard mirror refresh —
+    # log at info so callers that fall back quietly are not drowned in warnings.
     last_error: Exception | None = None
     for attempt in range(_MAX_READ_RETRIES + 1):
         try:
@@ -91,7 +97,7 @@ async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> http
             last_error = exc
             if attempt >= _MAX_READ_RETRIES:
                 raise
-            logger.warning(
+            logger.info(
                 "Canvas GET timed out for %s — retry %s/%s",
                 url,
                 attempt + 1,
@@ -103,7 +109,7 @@ async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> http
             last_error = exc
             if attempt >= _MAX_READ_RETRIES:
                 raise
-            logger.warning(
+            logger.info(
                 "Canvas GET network error for %s — retry %s/%s",
                 url,
                 attempt + 1,
@@ -113,7 +119,7 @@ async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> http
             continue
 
         if response.is_server_error and attempt < _MAX_READ_RETRIES:
-            logger.warning(
+            logger.info(
                 "Canvas returned %d for %s — retry %s/%s",
                 response.status_code,
                 url,
@@ -238,6 +244,80 @@ async def fetch_courses(token: str, canvas_url: str = settings.CANVAS_API_URL) -
                     "per_page": 100,
                 },
             )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
+async def fetch_accounts(token: str, canvas_url: str = settings.CANVAS_API_URL) -> list[dict]:
+    """Accounts the token can view/manage — needed to POST a new course."""
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            return await _fetch_all_pages(
+                client,
+                f"{canvas_url}/api/v1/accounts",
+                headers=_headers(token),
+                params={"per_page": 100},
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
+async def create_course(
+    account_id: int,
+    payload: dict,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+    *,
+    offer: bool = False,
+    enroll_me: bool = True,
+) -> dict:
+    """Create a course under a Canvas account (POST /accounts/:id/courses)."""
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    body: dict = {
+        "course": payload,
+        "enroll_me": enroll_me,
+        "offer": offer,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.post(
+                f"{canvas_url}/api/v1/accounts/{account_id}/courses",
+                headers=_headers(token),
+                json=body,
+            )
+            _raise_for_canvas_error(response)
+            return response.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
+async def update_course(
+    course_id: int,
+    payload: dict,
+    token: str,
+    canvas_url: str = settings.CANVAS_API_URL,
+) -> dict:
+    """Update a Canvas course (PUT /courses/:id) — used for publish/unpublish events."""
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.put(
+                f"{canvas_url}/api/v1/courses/{course_id}",
+                headers=_headers(token),
+                json={"course": payload},
+            )
+            _raise_for_canvas_error(response)
+            return response.json()
     except httpx.TimeoutException:
         raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
     except httpx.RequestError as e:

@@ -15,22 +15,54 @@ export class GradeManagementApiError extends Error {
   }
 }
 
+function stringifyErrorDetail(value: unknown): string | null {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    const messages = value
+      .map((item) => stringifyErrorDetail(item))
+      .filter((item): item is string => Boolean(item));
+    return messages.length > 0 ? messages.join("; ") : null;
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (typeof record.msg === "string") {
+      return record.msg;
+    }
+    if (typeof record.message === "string") {
+      return record.message;
+    }
+    if (typeof record.error === "string") {
+      return record.error;
+    }
+    const messages = Object.entries(record)
+      .map(([field, detail]) => {
+        const message = stringifyErrorDetail(detail);
+        return message ? `${field}: ${message}` : null;
+      })
+      .filter((item): item is string => Boolean(item));
+    return messages.length > 0 ? messages.join("; ") : null;
+  }
+  return null;
+}
+
 async function parseError(response: Response): Promise<string> {
   try {
-    const data = (await response.json()) as {
-      detail?: string | Array<{ msg?: string }>;
-    };
-    if (typeof data.detail === "string") {
-      return data.detail;
-    }
-    if (Array.isArray(data.detail)) {
-      const first = data.detail.find((item) => typeof item.msg === "string");
-      if (first?.msg) {
-        return first.msg;
-      }
+    const data = (await response.clone().json()) as { detail?: unknown };
+    const detail = stringifyErrorDetail(data.detail);
+    if (detail) {
+      return detail;
     }
   } catch {
-    // Fall through.
+    try {
+      const text = await response.text();
+      if (text.trim()) {
+        return text.trim();
+      }
+    } catch {
+      // Fall through.
+    }
   }
   return "Unable to update the grade.";
 }

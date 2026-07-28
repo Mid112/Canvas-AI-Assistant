@@ -192,10 +192,7 @@ describe("InstructorCoursesPage", () => {
 
     expect(await screen.findByText("Your Courses (3)")).toBeInTheDocument();
     expect(screen.queryByText("Connect Canvas to continue")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "New Course" })).toHaveAttribute(
-      "href",
-      `${LOCAL_CANVAS_URL}/courses`,
-    );
+    expect(screen.getByRole("button", { name: "New Course" })).toBeInTheDocument();
   });
 
   // Verifies: Hides New Course on connect state when env is unset and no saved connection.
@@ -205,7 +202,7 @@ describe("InstructorCoursesPage", () => {
     renderWithInstitution(<InstructorCoursesPage />);
 
     expect(screen.getByText("Connect Canvas to continue")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "New Course" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New Course" })).not.toBeInTheDocument();
   });
 
   // Verifies: Hides New Course on connect state when no saved connection exists.
@@ -218,7 +215,7 @@ describe("InstructorCoursesPage", () => {
     expect(screen.getByText("Connect Canvas to continue")).toBeInTheDocument();
     expect(screen.queryByText("Course Analytics Overview")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Search courses")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "New Course" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New Course" })).not.toBeInTheDocument();
 
     vi.unstubAllEnvs();
   });

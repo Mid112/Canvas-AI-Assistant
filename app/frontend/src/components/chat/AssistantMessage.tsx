@@ -50,8 +50,17 @@ export function AssistantMessage({
 }: AssistantMessageProps) {
   const showPendingControls =
     message.pendingMessageId !== undefined && message.pendingActionStatus;
+  // The interpreted-action card is an offer to review/edit/confirm a proposal,
+  // not a permanent audit record. Once the workflow settles, keep the status
+  // and risk/reversal surfaces below, but hide stale preview/edit links.
+  const isActionOfferActive =
+    !showPendingControls ||
+    message.pendingActionStatus === "pending" ||
+    message.pendingActionStatus === "paused";
   const showActionOffer =
-    !message.handoffDismissed && Boolean(message.interpretedAction);
+    !message.handoffDismissed &&
+    isActionOfferActive &&
+    Boolean(message.interpretedAction);
   const canActOnPending =
     message.pendingActionStatus === "pending" ||
     message.pendingActionStatus === "paused";
@@ -163,7 +172,10 @@ export function AssistantMessage({
         ) : null}
 
         {message.handoffDismissed && !showPendingControls ? (
-          <p className="text-sm text-muted-foreground">
+          <p
+            role="status"
+            className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-950"
+          >
             This action was cancelled.
           </p>
         ) : null}

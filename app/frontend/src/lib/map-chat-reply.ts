@@ -400,17 +400,6 @@ function buildMessageDraftState(
   };
 }
 
-function buildMessageDraftNavigateTo(
-  proposed: Record<string, unknown>,
-  previewMetadata: Record<string, unknown> | undefined,
-  conversationId?: number,
-): NonNullable<AssistantResponse["navigateTo"]> {
-  return {
-    path: instructorMessagesPath({ tab: "compose" }),
-    state: buildMessageDraftState(proposed, previewMetadata, conversationId),
-  };
-}
-
 function buildMessageDraftFormAction(
   proposed: Record<string, unknown>,
   previewMetadata: Record<string, unknown> | undefined,
@@ -600,20 +589,15 @@ export function mapChatReplyToAssistantResponse(
       };
     }
 
-    // send_message redirects to the Messages compose tab — same handoff
-    // pattern as create_quiz so the write is reviewed once and audited there.
+    // send_message is a form handoff, but the instructor should choose when
+    // to leave chat by clicking "Open message draft".
     if (proposed?.action === "send_message") {
       return {
         content:
           readString(reply.summary) ??
-          "Opening the message draft with your details…",
+          "I prepared a message draft with your details.",
         explanation:
           "Messages are drafted and sent in the Messages tab so the write is reviewed once and recorded in workflow history.",
-        navigateTo: buildMessageDraftNavigateTo(
-          proposed,
-          previewMetadata,
-          conversationId,
-        ),
         interpretedAction: buildMessageDraftFormAction(
           proposed,
           previewMetadata,

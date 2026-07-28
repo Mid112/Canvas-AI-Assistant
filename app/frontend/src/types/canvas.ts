@@ -9,6 +9,13 @@ export interface CanvasCourse {
   term_name: string | null;
 }
 
+/** Matches POST /api/v1/canvas/courses request body (#1285). */
+export interface CanvasCourseCreateRequest {
+  name: string;
+  course_code?: string | null;
+  publish?: boolean;
+}
+
 /** Matches PATCH /api/v1/auth/me/canvas-token request body. */
 export interface CanvasTokenUpdateRequest {
   canvas_token: string;

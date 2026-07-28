@@ -132,9 +132,15 @@ function SavedConnectionCard({
 
 export function CanvasConnectionTab() {
   const { user, accessToken, refreshUser } = useAuth();
-  const [newEntries, setNewEntries] = useState<CanvasConnectionEntryState[]>(() => [
-    createCanvasConnectionEntry(),
-  ]);
+  const connections = user?.canvas_connections ?? [];
+  // When already connected, start with no empty add-form card — the green
+  // Connected status above is the single connection state (#1294). Users add
+  // another institution explicitly via the CTA below.
+  const [newEntries, setNewEntries] = useState<CanvasConnectionEntryState[]>(() =>
+    (user?.canvas_connections?.length ?? 0) > 0
+      ? []
+      : [createCanvasConnectionEntry()],
+  );
   const [editingConnection, setEditingConnection] = useState<CanvasConnection | null>(
     null,
   );
@@ -153,8 +159,6 @@ export function CanvasConnectionTab() {
       editingConnection?.canvas_url ?? "",
       accessToken,
     );
-
-  const connections = user?.canvas_connections ?? [];
 
   const completedNewConnections = newEntries
     .map((entry) => ({
@@ -231,15 +235,20 @@ export function CanvasConnectionTab() {
   };
 
   const removeConnectionField = (id: string) => {
-    setNewEntries((current) =>
-      current.length === 1
-        ? current
-        : current.filter((entry) => entry.id !== id),
-    );
+    setNewEntries((current) => {
+      const next = current.filter((entry) => entry.id !== id);
+      // Keep at least one blank form when nothing is saved yet.
+      if (next.length === 0 && connections.length === 0) {
+        return [createCanvasConnectionEntry()];
+      }
+      return next;
+    });
   };
 
   const resetNewEntries = () => {
-    setNewEntries([createCanvasConnectionEntry()]);
+    // Collapse the add form after a successful save so a connected user does
+    // not immediately see another empty Institution card (#1294).
+    setNewEntries([]);
   };
 
   const keepFailedEntries = (failed: CanvasConnectionFailure[]) => {
@@ -360,6 +369,7 @@ export function CanvasConnectionTab() {
       return;
     }
 
+    const deletingLastConnection = connections.length === 1;
     setDisconnectingId(connectionId);
     setStatusMessage(null);
 
@@ -368,6 +378,9 @@ export function CanvasConnectionTab() {
       await refreshUser();
       if (editingConnection?.id === connectionId) {
         handleCancelEdit();
+      }
+      if (deletingLastConnection && newEntries.length === 0) {
+        setNewEntries([createCanvasConnectionEntry()]);
       }
       setStatusMessage({
         type: "success",
@@ -495,8 +508,9 @@ export function CanvasConnectionTab() {
                 {connections.length > 0 ? "Add more connections" : "Connect Canvas"}
               </p>
               <p className="text-sm text-muted-foreground">
-                Add one or more institution URLs and tokens. Each token is validated
-                before saving.
+                {connections.length > 0 && newEntries.length === 0
+                  ? "Your connection status is shown above. Add another institution only if you need a second Canvas account."
+                  : "Add one or more institution URLs and tokens. Each token is validated before saving."}
               </p>
             </div>
 
@@ -508,7 +522,9 @@ export function CanvasConnectionTab() {
                   index={index}
                   accessToken={accessToken}
                   isSubmitting={isSavingNew}
-                  canRemove={newEntries.length > 1}
+                  canRemove={
+                    newEntries.length > 1 || connections.length > 0
+                  }
                   onFieldChange={updateNewField}
                   onValidationChange={updateNewValidation}
                   onRemove={removeConnectionField}
@@ -527,22 +543,24 @@ export function CanvasConnectionTab() {
               </Button>
             </div>
 
-            <Button
-              type="button"
-              disabled={!canSaveNew}
-              onClick={() => void handleSaveNew()}
-            >
-              {isSavingNew ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                  Saving...
-                </>
-              ) : connections.length > 0 ? (
-                "Save new connections"
-              ) : (
-                "Save Canvas Connection"
-              )}
-            </Button>
+            {newEntries.length > 0 ? (
+              <Button
+                type="button"
+                disabled={!canSaveNew}
+                onClick={() => void handleSaveNew()}
+              >
+                {isSavingNew ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                    Saving...
+                  </>
+                ) : connections.length > 0 ? (
+                  "Save new connections"
+                ) : (
+                  "Save Canvas Connection"
+                )}
+              </Button>
+            ) : null}
           </div>
 
           <div className="space-y-3">

@@ -147,12 +147,21 @@ async def get_course_overview(
             Assignment.points_possible > 0,
         )
     )
-    percentages: list[float] = []
+    # Show the course average as total earned points over total possible points.
+    # Averaging each submission's percentage equally would let a tiny quiz skew
+    # the same amount as a large exam.
+    earned_points = 0.0
+    possible_points = 0.0
     for score, points_possible in grade_rows.all():
         if score is not None and points_possible:
-            percentages.append((score / points_possible) * 100)
+            earned_points += score
+            possible_points += points_possible
 
-    average_grade = round(sum(percentages) / len(percentages), 1) if percentages else None
+    average_grade = (
+        round((earned_points / possible_points) * 100, 1)
+        if possible_points > 0
+        else None
+    )
 
     total_slots = student_count * published_assignment_count
     completion_rate = (

@@ -256,7 +256,7 @@ e2e-up:
 	(cd app/backend && \
 		DATABASE_URL=$${DATABASE_URL:-postgresql+asyncpg://appuser:localdev@localhost:5433/appdb} \
 		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
-		DEBUG=false \
+		DEBUG=true \
 		BACKEND_CORS_ORIGINS=$${BACKEND_CORS_ORIGINS:-http://localhost:5173} \
 		CANVAS_API_URL=$${CANVAS_API_URL:-http://localhost:3000} \
 		ADMIN_EMAIL=$${ADMIN_EMAIL:-admin@example.com} \

@@ -17,6 +17,7 @@ from app.core.security import decrypt_canvas_token
 from app.integrations.canvas import (
     create_announcement,
     create_assignment,
+    create_course,
     create_new_quiz,
     create_new_quiz_item,
     create_quiz,
@@ -25,6 +26,7 @@ from app.integrations.canvas import (
     delete_assignment,
     delete_new_quiz,
     delete_quiz,
+    fetch_accounts,
     fetch_assignment,
     fetch_assignments,
     fetch_courses,
@@ -35,6 +37,7 @@ from app.integrations.canvas import (
     probe_new_quizzes,
     send_conversation,
     update_assignment,
+    update_course,
     update_submission_grade,
 )
 from app.models.assignment import Assignment
@@ -49,6 +52,8 @@ from app.schemas.canvas import (
     AssignmentCreate,
     AssignmentResponse,
     AssignmentUpdate,
+    CourseCreate,
+    CoursePublishUpdate,
     CourseResponse,
     MessageSendResult,
     QuestionBankSummary,
@@ -63,6 +68,7 @@ from app.services.canvas_idempotency import (
     duplicate_in_flight_http_exception,
     run_idempotent_canvas_write,
 )
+from app.services.profanity import check_message_profanity
 from app.services.quiz_validation import short_answer_new_quiz_warnings
 
 logger = logging.getLogger(__name__)
@@ -183,6 +189,61 @@ def _is_expected_canvas_token_sync_error(exc: Exception) -> bool:
     return False
 
 
+def _exception_text_for_canvas_classifier(exc: BaseException) -> str:
+    log_detail = getattr(exc, "log_detail", None)
+    user_message = getattr(exc, "user_message", None)
+    if isinstance(log_detail, str) or isinstance(user_message, str):
+        return (log_detail or "") or (user_message or "")
+    if isinstance(exc, HTTPException) and isinstance(exc.detail, str):
+        return exc.detail
+    return str(exc)
+
+
+def _text_has_gateway_status_with_context(text: str) -> bool:
+    """True when 502/503/504 appears with Canvas/HTTP/upstream context.
+
+    Bare numeric matches alone are too broad for quiet-fallback logging —
+    e.g. ``RuntimeError("order 502 failed")`` must not look like a Canvas
+    outage (#1295 review).
+    """
+    if not any(code in text for code in ("502", "503", "504")):
+        return False
+    lowered = text.lower()
+    return (
+        "canvas" in lowered
+        or "upstream" in lowered
+        or "http" in lowered
+        or "gateway" in lowered
+        or "bad gateway" in lowered
+        or "service unavailable" in lowered
+        or "server error" in lowered
+        or "timed out" in lowered
+        or "timeout" in lowered
+    )
+
+
+def _is_transient_canvas_outage(exc: BaseException) -> bool:
+    """Canvas 5xx / timeouts / reachability — expected when falling back to
+    last-synced local data (dashboard mirror refresh, chat monitoring).
+
+    Shared by dashboard + chat so classifiers do not drift (#1295). Accepts
+    ToolExecutionError-shaped exceptions via ``log_detail`` / ``user_message``
+    without importing the MCP dispatcher (avoids circular imports).
+    """
+    if isinstance(exc, HTTPException) and exc.status_code in {502, 503, 504}:
+        return True
+
+    text = _exception_text_for_canvas_classifier(exc)
+    lowered = text.lower()
+    return (
+        "canvas server error" in lowered
+        or "canvas api timed out" in lowered
+        or "could not reach canvas" in lowered
+        or "timed out" in lowered
+        or _text_has_gateway_status_with_context(text)
+    )
+
+
 async def get_owned_course(
     local_course_id: int,
     user: User,
@@ -206,6 +267,194 @@ async def get_owned_course(
         course.canvas_url = normalized
 
     return course
+
+
+async def _resolve_course_create_account_id(token: str, canvas_url: str) -> int:
+    """Pick a Canvas account the token can create courses under.
+
+    Prefer the root account when present; otherwise the first manageable
+    account. Teachers without account-manage permission get a clear 403 —
+    institutional Canvas often blocks course creation for instructor tokens.
+    """
+    accounts = await fetch_accounts(token, canvas_url)
+    if not accounts:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Your Canvas token cannot create courses on any account. "
+                "Ask an admin to grant course-creation permission, or create "
+                "the course in Canvas and sync it here."
+            ),
+        )
+
+    for account in accounts:
+        parent = account.get("parent_account_id")
+        # Canvas usually returns null for the root; some installs use 0 / "0".
+        if parent in (None, "", 0, "0"):
+            return int(account["id"])
+    return int(accounts[0]["id"])
+
+
+async def create_canvas_course(
+    payload: CourseCreate,
+    user: User,
+    canvas_url: str,
+    db: AsyncSession,
+) -> CourseResponse:
+    """Create a course in Canvas and upsert the local Course row (#1285)."""
+    token = require_canvas_token(user, canvas_url)
+    normalized_sync_url = normalize_canvas_url(canvas_url)
+    account_id = await _resolve_course_create_account_id(token, canvas_url)
+
+    course_payload: dict = {"name": payload.name.strip()}
+    if payload.course_code and payload.course_code.strip():
+        course_payload["course_code"] = payload.course_code.strip()
+
+    data = await create_course(
+        account_id,
+        course_payload,
+        token,
+        canvas_url,
+        offer=payload.publish,
+        enroll_me=True,
+    )
+
+    cid = str(data["id"])
+    term_name: str | None = (data.get("term") or {}).get("name")
+    workflow_state = data.get("workflow_state") or (
+        WRITABLE_WORKFLOW_STATE if payload.publish else "unpublished"
+    )
+
+    # Canvas course IDs are only unique within one Canvas instance — an instructor
+    # with multiple connections must not have institution B's create rewrite the
+    # local row for the same numeric id on institution A (see get_courses sync).
+    rows = await db.scalars(
+        select(Course).where(
+            Course.canvas_course_id == cid,
+            Course.instructor_id == user.id,
+        )
+    )
+    existing = next(
+        (
+            course
+            for course in rows
+            if canvas_urls_equivalent(course.canvas_url, normalized_sync_url)
+        ),
+        None,
+    )
+    if existing:
+        existing.name = data["name"]
+        existing.term = term_name
+        existing.canvas_url = normalized_sync_url
+        existing.workflow_state = workflow_state
+        existing.course_code = data.get("course_code")
+        existing.total_students = data.get("total_students")
+        existing.synced_at = datetime.now(UTC)
+        course = existing
+    else:
+        course = Course(
+            canvas_course_id=cid,
+            canvas_url=normalized_sync_url,
+            name=data["name"],
+            term=term_name,
+            workflow_state=workflow_state,
+            course_code=data.get("course_code"),
+            total_students=data.get("total_students"),
+            instructor_id=user.id,
+            synced_at=datetime.now(UTC),
+        )
+        db.add(course)
+
+    await db.commit()
+
+    return CourseResponse.model_validate(
+        {
+            **data,
+            "local_id": course.id,
+            "term_name": term_name,
+            "workflow_state": workflow_state,
+            "course_code": data.get("course_code") or "",
+        }
+    )
+
+
+async def set_course_published(
+    local_course_id: int,
+    payload: CoursePublishUpdate,
+    user: User,
+    canvas_url: str,
+    db: AsyncSession,
+) -> CourseResponse:
+    """Publish or unpublish a course via Canvas course[event] offer/claim."""
+    token = require_canvas_token(user, canvas_url)
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+
+    if course.workflow_state == "completed":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Completed courses can't be published or unpublished.",
+        )
+    if course.workflow_state == "deleted":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Deleted courses can't be published or unpublished.",
+        )
+
+    currently_published = course.workflow_state == WRITABLE_WORKFLOW_STATE
+    if payload.published == currently_published and course.workflow_state in {
+        WRITABLE_WORKFLOW_STATE,
+        "unpublished",
+    }:
+        # Already in the requested state — return current row without a Canvas write.
+        return CourseResponse(
+            canvas_id=int(course.canvas_course_id),
+            local_id=course.id,
+            name=course.name,
+            course_code=course.course_code or "",
+            workflow_state=course.workflow_state or "unpublished",
+            term_name=course.term,
+            total_students=course.total_students,
+        )
+
+    event = "offer" if payload.published else "claim"
+    data = await update_course(
+        int(course.canvas_course_id),
+        {"event": event},
+        token,
+        canvas_url,
+    )
+
+    workflow_state = data.get("workflow_state") or (
+        WRITABLE_WORKFLOW_STATE if payload.published else "unpublished"
+    )
+    # Capture selectability from the local row *before* we overwrite it with
+    # Canvas's response — used only to decide whether to clear the active-course
+    # preference when this write removes selectability.
+    was_selectable = course.workflow_state in SELECTABLE_WORKFLOW_STATES
+    course.name = data.get("name") or course.name
+    course.course_code = data.get("course_code", course.course_code)
+    course.workflow_state = workflow_state
+    course.total_students = data.get("total_students", course.total_students)
+    course.synced_at = datetime.now(UTC)
+
+    # Unpublishing removes selectability — clear active-course preference if needed.
+    if was_selectable and workflow_state not in SELECTABLE_WORKFLOW_STATES:
+        pref = await db.scalar(select(UserPreference).where(UserPreference.user_id == user.id))
+        if pref and pref.active_course_id == course.id:
+            pref.active_course_id = None
+            pref.updated_at = datetime.now(UTC)
+
+    await db.commit()
+
+    return CourseResponse.model_validate(
+        {
+            **data,
+            "local_id": course.id,
+            "term_name": course.term,
+            "workflow_state": workflow_state,
+            "course_code": course.course_code or "",
+        }
+    )
 
 
 async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[CourseResponse]:
@@ -430,6 +679,14 @@ async def create_course_assignment(
     idempotency_key: str | None = None,
     exclude_workflow_id: int | None = None,
 ) -> AssignmentResponse:
+    # REST create path does not go through validate_assignment_for_create
+    # (chat/MCP does); still block student-facing profanity before Canvas.
+    check_message_profanity(payload.name, content_label="Assignment title")
+    if payload.description:
+        check_message_profanity(
+            payload.description, content_label="Assignment description"
+        )
+
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     require_writable_course(course)
@@ -964,6 +1221,12 @@ async def update_course_assignment(
     idempotency_key: str | None = None,
     exclude_workflow_id: int | None = None,
 ) -> AssignmentResponse:
+    check_message_profanity(payload.name, content_label="Assignment title")
+    if payload.description:
+        check_message_profanity(
+            payload.description, content_label="Assignment description"
+        )
+
     token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     require_writable_course(course)

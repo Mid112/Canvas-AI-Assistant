@@ -93,6 +93,22 @@ async def test_create_rejects_empty_description(db):
 
 
 @pytest.mark.asyncio
+async def test_create_rejects_profanity_in_description(db):
+    with pytest.raises(HTTPException) as exc:
+        await _create(db, description="Complete this fucking worksheet.")
+    assert exc.value.status_code == 422
+    assert "appropriate" in exc.value.detail.lower()
+
+
+@pytest.mark.asyncio
+async def test_update_rejects_profanity_in_title(db):
+    with pytest.raises(HTTPException) as exc:
+        await _update(db, title="Midterm shit review")
+    assert exc.value.status_code == 422
+    assert "appropriate" in exc.value.detail.lower()
+
+
+@pytest.mark.asyncio
 async def test_create_requires_due_date(db):
     with pytest.raises(HTTPException) as exc:
         await _create(db, due_date=None)

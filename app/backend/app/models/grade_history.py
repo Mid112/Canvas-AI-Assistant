@@ -10,7 +10,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
+    from app.models.assignment import Assignment
     from app.models.course import Course
+    from app.models.student import Student
     from app.models.user import User
 
 
@@ -24,7 +26,13 @@ class GradeHistory(Base):
     course_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("courses.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    local_assignment_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("assignments.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     assignment_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    student_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("students.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     student_canvas_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
     previous_grade: Mapped[str | None] = mapped_column(String, nullable=True)
     new_grade: Mapped[str] = mapped_column(String, nullable=False)
@@ -41,3 +49,5 @@ class GradeHistory(Base):
 
     user: Mapped[User] = relationship("User")
     course: Mapped[Course] = relationship("Course")
+    assignment: Mapped[Assignment | None] = relationship("Assignment")
+    student: Mapped[Student | None] = relationship("Student")

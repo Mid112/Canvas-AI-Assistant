@@ -4,6 +4,8 @@ import type { AssignmentCreateStep } from "@/types/assignmentCreate";
 
 interface AssignmentCreateStepperProps {
   currentStep: AssignmentCreateStep;
+  canNavigateToReview?: boolean;
+  onStepChange?: (step: AssignmentCreateStep) => void;
 }
 
 const steps = [
@@ -13,6 +15,8 @@ const steps = [
 
 export function AssignmentCreateStepper({
   currentStep,
+  canNavigateToReview = false,
+  onStepChange,
 }: AssignmentCreateStepperProps) {
   const currentIndex = steps.findIndex((step) => step.id === currentStep);
 
@@ -22,28 +26,44 @@ export function AssignmentCreateStepper({
         const isActive = step.id === currentStep;
         const isComplete = index < currentIndex;
 
+        const isNavigable =
+          Boolean(onStepChange) &&
+          step.id !== currentStep &&
+          (step.id === "describe" || canNavigateToReview);
+
         return (
           <li key={step.id} className="flex items-center gap-3">
-            <div
+            <button
+              type="button"
               className={cn(
                 "flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                isNavigable ? "cursor-pointer" : "cursor-default",
                 isActive || isComplete
                   ? cn(dashboardColors.blue.button, "text-white")
                   : "bg-muted text-muted-foreground",
               )}
-              aria-hidden="true"
+              aria-current={isActive ? "step" : undefined}
+              aria-label={`Go to ${step.label}`}
+              disabled={!isNavigable}
+              onClick={() => onStepChange?.(step.id)}
             >
               {step.number}
-            </div>
+            </button>
             <div className="space-y-0.5">
-              <p
+              <button
+                type="button"
                 className={cn(
                   "text-sm font-medium",
+                  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  isNavigable ? "cursor-pointer hover:text-foreground" : "cursor-default",
                   isActive ? "text-foreground" : "text-muted-foreground",
                 )}
+                disabled={!isNavigable}
+                onClick={() => onStepChange?.(step.id)}
               >
                 {step.label}
-              </p>
+              </button>
             </div>
           </li>
         );

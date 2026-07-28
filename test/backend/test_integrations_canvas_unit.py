@@ -292,6 +292,32 @@ async def test_get_with_retry_retries_once_on_server_error():
 
 
 @pytest.mark.asyncio
+async def test_get_with_retry_logs_transient_retries_at_info(caplog):
+    """#1295: retry noise must stay at info so dashboard fallback stays quiet."""
+    import logging
+
+    server_error = httpx.Response(502, request=httpx.Request("GET", "https://canvas.test/x"))
+    success = httpx.Response(200, json={"ok": True}, request=httpx.Request("GET", "https://canvas.test/x"))
+    client = AsyncMock()
+    client.get = AsyncMock(side_effect=[server_error, success])
+
+    with (
+        patch("app.integrations.canvas.asyncio.sleep", new=AsyncMock()),
+        caplog.at_level(logging.INFO, logger="app.integrations.canvas"),
+    ):
+        await _get_with_retry(client, "https://canvas.test/x")
+
+    retry_records = [
+        record
+        for record in caplog.records
+        if "Canvas returned 502" in record.message and "retry" in record.message
+    ]
+    assert retry_records
+    assert all(record.levelno == logging.INFO for record in retry_records)
+    assert not any(record.levelno >= logging.WARNING for record in retry_records)
+
+
+@pytest.mark.asyncio
 async def test_get_with_retry_no_retry_on_success():
     success = httpx.Response(200, json={"ok": True}, request=httpx.Request("GET", "https://canvas.test/x"))
     client = AsyncMock()

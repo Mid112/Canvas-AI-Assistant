@@ -47,7 +47,10 @@ export default defineConfig({
     fileParallelism: !isCi,
     maxWorkers: isCi ? 1 : undefined,
     minWorkers: isCi ? 1 : undefined,
-    testTimeout: isCi ? 10000 : 5000,
+    // Coverage instrumentation is noticeably slower on local developer machines
+    // than regular Vitest runs; keep the per-test budget aligned with that path
+    // so long UI-flow tests fail on assertions instead of timing jitter.
+    testTimeout: 20000,
     coverage: {
       provider: "v8",
       allowExternal: true,
