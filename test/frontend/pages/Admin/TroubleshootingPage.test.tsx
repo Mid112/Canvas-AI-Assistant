@@ -67,6 +67,19 @@ const failingConnections: troubleshootService.FailingCanvasConnectionListRespons
   total: 1,
 };
 
+function hasNormalizedText(expectedText: string) {
+  return (_content: string, element: Element | null) => {
+    const normalize = (text: string | null | undefined) =>
+      text?.replace(/\s+/g, " ").trim() ?? "";
+    const elementText = normalize(element?.textContent);
+    const childHasText = Array.from(element?.children ?? []).some((child) =>
+      normalize(child.textContent).includes(expectedText),
+    );
+
+    return elementText.includes(expectedText) && !childHasText;
+  };
+}
+
 describe("TroubleshootingPage", () => {
   const user = userEvent.setup();
 
@@ -108,7 +121,7 @@ describe("TroubleshootingPage", () => {
       expect(screen.getByText("Instructor Canvas connections")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("Jane Doe")).toBeInTheDocument();
+    expect(await screen.findByText(hasNormalizedText("Jane Doe"))).toBeInTheDocument();
     expect(screen.getByText(/jane@example\.com/)).toBeInTheDocument();
     expect(
       screen.getByText("Canvas isn't responding for this instructor right now."),
@@ -217,7 +230,7 @@ describe("TroubleshootingPage", () => {
 
     renderWithRouter(<TroubleshootingPage />);
 
-    await screen.findByText("Jane Doe");
+    await screen.findByText(hasNormalizedText("Jane Doe"));
     expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
 
@@ -240,7 +253,7 @@ describe("TroubleshootingPage", () => {
 
     renderWithRouter(<TroubleshootingPage />);
 
-    await screen.findByText("Jane Doe");
+    await screen.findByText(hasNormalizedText("Jane Doe"));
 
     await user.click(screen.getByRole("button", { name: "Reset token" }));
     await user.type(screen.getByLabelText("New Canvas API token"), "fresh-token-value");
