@@ -337,6 +337,7 @@ describe("ChatWindow", () => {
       42,
     );
     expect(screen.getByText("This action was confirmed.")).toBeInTheDocument();
+    expect(screen.queryByText("Interpreted Action")).not.toBeInTheDocument();
   });
 
   // Verifies: Cancels a pending action from the chat window.

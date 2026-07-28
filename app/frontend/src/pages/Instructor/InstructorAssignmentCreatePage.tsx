@@ -130,13 +130,23 @@ export function InstructorAssignmentCreatePage() {
     ? "Connect your Canvas account to load courses."
     : courseLoadError;
 
+  // Preview data is valid only for the exact form snapshot that generated it.
+  // Keep all invalidation paths here so cancel, edit, regenerate, and back-nav
+  // behave consistently instead of leaving a stale dialog payload behind.
+  const resetPreviewState = useCallback(() => {
+    setPendingApproval(null);
+    setPreview(null);
+    setIsPreviewOpen(false);
+  }, []);
+
   const handleDescribeValuesChange = useCallback((values: AssignmentDescribeValues) => {
     setDescribeValues((current) =>
       current.courseId === values.courseId && current.prompt === values.prompt
         ? current
         : values,
     );
-  }, []);
+    resetPreviewState();
+  }, [resetPreviewState]);
 
   const handleReviewDraftChange = useCallback((values: GeneratedAssignmentDraft) => {
     setDraft((current) => {
@@ -149,9 +159,10 @@ export function InstructorAssignmentCreatePage() {
       ) {
         return current;
       }
+      resetPreviewState();
       return values;
     });
-  }, []);
+  }, [resetPreviewState]);
 
   const handleSaveTypedDraft = () => {
     if (!user?.id) return;
@@ -192,6 +203,7 @@ export function InstructorAssignmentCreatePage() {
         accessToken,
         canvasUrl,
       });
+      resetPreviewState();
       setDraft(generated);
       setStep("review");
     } catch (error) {
@@ -208,6 +220,33 @@ export function InstructorAssignmentCreatePage() {
   const handleBack = () => {
     setStep("describe");
     setApproveError(null);
+    resetPreviewState();
+  };
+
+  const handleStepChange = (nextStep: AssignmentCreateStep) => {
+    if (nextStep === step) {
+      return;
+    }
+    if (nextStep === "describe") {
+      handleBack();
+      return;
+    }
+    // Review is reachable from the stepper only after a draft exists; otherwise
+    // the describe form still owns the required course/prompt validation.
+    if (draft) {
+      setStep("review");
+    }
+  };
+
+  const handlePreviewOpenChange = (open: boolean) => {
+    if (isApproving) {
+      return;
+    }
+    if (open) {
+      setIsPreviewOpen(true);
+      return;
+    }
+    resetPreviewState();
   };
 
   const handleRequestApproval = async (values: AssignmentReviewFormSchema) => {
@@ -271,7 +310,7 @@ export function InstructorAssignmentCreatePage() {
         setSavedTypedDraftId(undefined);
       }
       setApprovedValues(pendingApproval);
-      setIsPreviewOpen(false);
+      resetPreviewState();
       // This wizard commits straight to Canvas rather than going through the
       // Workflow used elsewhere — ActiveCourseProvider/InstitutionProvider
       // won't know a new assignment exists until explicitly told to refetch.
@@ -375,7 +414,11 @@ export function InstructorAssignmentCreatePage() {
         </p>
       </header>
 
-      <AssignmentCreateStepper currentStep={step} />
+      <AssignmentCreateStepper
+        currentStep={step}
+        canNavigateToReview={Boolean(draft)}
+        onStepChange={handleStepChange}
+      />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Button type="button" variant="outline" size="sm" onClick={handleSaveTypedDraft}>
@@ -413,7 +456,7 @@ export function InstructorAssignmentCreatePage() {
 
       <AssignmentPreviewDialog
         open={isPreviewOpen}
-        onOpenChange={setIsPreviewOpen}
+        onOpenChange={handlePreviewOpenChange}
         preview={preview}
         isCreating={isApproving}
         onConfirm={() => void handleConfirmCreate()}

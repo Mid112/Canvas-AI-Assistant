@@ -412,7 +412,7 @@ export function InstructorAssistantPage() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 md:p-5 lg:p-6">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-5 lg:p-6">
       <InstructorAssistantHeader />
 
       {limitedMode ? (
@@ -453,7 +453,7 @@ export function InstructorAssistantPage() {
         disabled={isLoading}
       />
 
-      <div className="grid min-h-0 flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="grid min-h-[min(50.5rem,calc(100vh-23.5rem))] flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_20rem]">
         <ChatWindow
           ref={chatWindowRef}
           key={chatSessionKey}
@@ -485,9 +485,9 @@ export function InstructorAssistantPage() {
 
         <section
           aria-labelledby="assistant-history-heading"
-          className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border/70 bg-background p-4 shadow-sm"
+          className="flex min-h-0 max-h-[calc(100vh-24.5rem)] flex-col overflow-hidden rounded-lg border border-border/70 bg-background p-2.5 shadow-sm"
         >
-          <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="mb-2 flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
               <History className="size-4 shrink-0 text-muted-foreground" />
               <h2
@@ -520,7 +520,7 @@ export function InstructorAssistantPage() {
             </p>
           ) : null}
 
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+          <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
             {conversations.length === 0 && !isHistoryLoading ? (
               <p className="rounded-lg border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
                 Previous assistant conversations will appear here.
@@ -541,7 +541,7 @@ export function InstructorAssistantPage() {
                   onClick={() => void handleLoadConversation(conversation.id)}
                   disabled={isLoadingConversation}
                   className={[
-                    "w-full rounded-lg border px-3 py-3 text-left transition",
+                    "w-full rounded-lg border px-3 py-2.5 text-left transition",
                     "hover:border-blue-500/40 hover:bg-blue-500/5",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                     isSelected
@@ -557,12 +557,12 @@ export function InstructorAssistantPage() {
                       </span>
                     ) : null}
                   </span>
-                  <span className="mt-1 line-clamp-2 block text-sm font-medium text-foreground">
+                  <span className="mt-1 line-clamp-2 block text-[13px] font-medium leading-snug text-foreground">
                     {isLoadingConversation
                       ? "Loading conversation..."
                       : formatConversationPreview(conversation.preview)}
                   </span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
+                  <span className="mt-1 block text-xs leading-none text-muted-foreground">
                     {conversation.message_count} messages
                   </span>
                 </button>

@@ -144,6 +144,34 @@ describe("AssistantMessage", () => {
     ).toBeInTheDocument();
   });
 
+  it("hides the action offer after the workflow is confirmed", () => {
+    render(
+      <AssistantMessage
+        message={{
+          id: "4",
+          role: "assistant",
+          content: "Assignment created.",
+          timestamp: new Date("2026-06-24T10:15:00"),
+          pendingMessageId: 42,
+          pendingActionStatus: "confirmed",
+          interpretedAction: {
+            action: "Create Assignment",
+            course: "COSC 499",
+            affectedStudents: "Course-wide",
+            primaryLink: {
+              label: "Review preview",
+              href: "/instructor/actions/preview?conversation=7&pending=42",
+            },
+          },
+        }}
+      />,
+    );
+
+    expect(screen.queryByText("Interpreted Action")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Review preview/i })).not.toBeInTheDocument();
+    expect(screen.getByText("This action was confirmed.")).toBeInTheDocument();
+  });
+
   // Verifies: Renders a safety notice when the request was blocked.
   it("renders a safety notice when the request was blocked", () => {
     render(

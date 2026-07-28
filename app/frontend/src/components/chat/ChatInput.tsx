@@ -83,12 +83,12 @@ export function ChatInput({
           aria-invalid={Boolean(inputError)}
           rows={2}
           className={cn(
-            "min-h-[52px] w-full resize-none bg-transparent px-4 pt-3 pb-2 text-sm outline-none",
+            "min-h-[40px] w-full resize-none bg-transparent px-4 pt-2 pb-1 text-sm outline-none",
             "placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50",
           )}
         />
 
-        <div className="flex items-center justify-between gap-2 px-2 pb-2">
+        <div className="flex items-center justify-between gap-2 px-2 pb-1.5">
           <div className="min-w-0">
             {modelSettings && onModelProviderChange ? (
               <ChatModelSwitcher
@@ -107,10 +107,10 @@ export function ChatInput({
             size="icon"
             disabled={isDisabled}
             onClick={isLoading ? onStop : undefined}
-            className={cn("size-9 rounded-full", dashboardColors.blue.button)}
+            className={cn("size-8 rounded-full", dashboardColors.blue.button)}
             aria-label={isLoading ? "Stop response" : "Send message"}
           >
-            {isLoading ? <Square className="size-4" /> : <Send className="size-4" />}
+            {isLoading ? <Square className="size-3.5" /> : <Send className="size-3.5" />}
           </Button>
         </div>
       </form>
