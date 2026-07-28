@@ -3119,7 +3119,19 @@ async def handle_chat_message(
             parsed_envelope = json.loads(extract_json_object(raw_output))
         except json.JSONDecodeError:
             parsed_envelope = None
-        course_name_from_llm = parsed_envelope.get("course_name") if isinstance(parsed_envelope, dict) else None
+        # Read the model's course_name from the envelope — or, if it wrapped a
+        # course-scoped action inside intent_preview (against instructions),
+        # from the nested proposed_action, where the name actually lives.
+        # Without this second lookup a wrapped action's course never resolves
+        # and the turn falls back to a spurious "Which course?" clarify even
+        # though the model named it.
+        course_name_from_llm = None
+        if isinstance(parsed_envelope, dict):
+            course_name_from_llm = parsed_envelope.get("course_name")
+            if course_name_from_llm is None and parsed_envelope.get("action") == "intent_preview":
+                nested = parsed_envelope.get("proposed_action")
+                if isinstance(nested, dict):
+                    course_name_from_llm = nested.get("course_name")
 
         resolved_local_course_id = conversation.course_id
         # Fallback: if the conversation has no course_id yet (e.g. a fresh
