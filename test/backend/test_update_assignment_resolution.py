@@ -89,6 +89,43 @@ def _assignments() -> list[dict]:
     ]
 
 
+def _seed_local_assignment(
+    local_course_id: int,
+    canvas_assignment_id: int,
+    *,
+    title: str = "Seeded Assignment",
+) -> None:
+    """Persist a mirrored assignment so _resolve_course_and_assignment can
+    verify a model-supplied assignment_id without calling Canvas."""
+    import asyncio
+
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from app.config import settings as _settings
+    from app.models.assignment import Assignment
+
+    async def _insert():
+        engine = create_async_engine(_settings.DATABASE_URL)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+                db.add(
+                    Assignment(
+                        canvas_assignment_id=str(canvas_assignment_id),
+                        title=title,
+                        course_id=local_course_id,
+                    )
+                )
+                await db.commit()
+        finally:
+            await engine.dispose()
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(_insert())
+    finally:
+        loop.close()
+
+
 def _tool_call_log_actions(conversation_id: int) -> list[str]:
     import asyncio
 
@@ -195,11 +232,12 @@ def test_update_assignment_unresolvable_reference_returns_clarify(client):
     assert "pending_message_id" not in body["reply"]
 
 
-# Verifies: when assignment_id is already known, the new chain is never
-# invoked — completely unaffected, existing single-turn intent_preview
-# path (unchanged since before this fix).
+# Verifies: when assignment_id is already known AND mirrored locally, the
+# resolver verifies it without a Canvas fetch_assignments call and still
+# builds intent_preview in one turn.
 def test_update_assignment_with_known_id_is_unaffected(client):
     headers, local_course_id = _register_with_canvas(client)
+    _seed_local_assignment(local_course_id, 222, title="final exam")
 
     llm_output = (
         '{"action": "intent_preview", "course_name": "CPSC 310", '
@@ -214,7 +252,7 @@ def test_update_assignment_with_known_id_is_unaffected(client):
     reply = body["reply"]
     assert reply["action"] == "intent_preview"
     assert reply["proposed_action"]["assignment_id"] == 222
-    # No assignment resolution needed — no fetch_assignments call at all.
+    # Local mirror verified the ID — no live Canvas fetch needed.
     assert _tool_call_log_actions(body["conversation_id"]) == []
 
 
