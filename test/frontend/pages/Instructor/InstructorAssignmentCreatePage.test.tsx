@@ -80,6 +80,16 @@ const mockedGenerate = vi.mocked(generateAssignmentDraft);
 const mockedPreview = vi.mocked(previewAssignmentDraft);
 const mockedApprove = vi.mocked(approveAssignmentDraft);
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  return { promise, resolve, reject };
+}
+
 function renderPage(state?: Record<string, unknown>) {
   return renderWithRouter(
     <Routes>
@@ -354,6 +364,49 @@ describe("InstructorAssignmentCreatePage", () => {
     expect(
       await screen.findByText(
         "Create assignment 'Edited Quiz Title' in CS 101: Introduction to Programming",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("locks review fields while preview approval is loading", async () => {
+    const user = userEvent.setup();
+    const previewRequest = deferred<Awaited<ReturnType<typeof previewAssignmentDraft>>>();
+    mockedPreview.mockReturnValueOnce(previewRequest.promise);
+
+    renderPage();
+
+    await screen.findByRole("option", {
+      name: "CS 101: Introduction to Programming",
+    });
+    await user.selectOptions(screen.getByLabelText("Select Course"), "42");
+    await user.type(
+      screen.getByLabelText("Assignment Prompt"),
+      "Create a quiz on Python functions and parameters for beginners.",
+    );
+    await user.click(screen.getByRole("button", { name: "Generate Assignment" }));
+
+    const titleInput = await screen.findByLabelText("Assignment title");
+    const descriptionInput = screen.getByLabelText("Assignment description");
+    const dueDateInput = screen.getByLabelText("Due date");
+    const pointsInput = screen.getByLabelText("Points possible");
+
+    await user.click(screen.getByRole("button", { name: "Approve Assignment" }));
+
+    expect(await screen.findByRole("button", { name: "Approving..." })).toBeDisabled();
+    expect(titleInput).toBeDisabled();
+    expect(descriptionInput).toBeDisabled();
+    expect(dueDateInput).toBeDisabled();
+    expect(pointsInput).toBeDisabled();
+
+    previewRequest.resolve({
+      summary: "Create assignment 'Python Functions Quiz' in CS 101: Introduction to Programming",
+      reversible: true,
+      affectedResources: [{ type: "assignment", name: "Python Functions Quiz" }],
+    });
+
+    expect(
+      await screen.findByText(
+        "Create assignment 'Python Functions Quiz' in CS 101: Introduction to Programming",
       ),
     ).toBeInTheDocument();
   });

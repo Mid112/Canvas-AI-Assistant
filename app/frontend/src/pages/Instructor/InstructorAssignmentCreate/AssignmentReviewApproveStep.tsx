@@ -104,6 +104,7 @@ export function AssignmentReviewApproveStep({
             <Label htmlFor="review-title">Assignment title</Label>
             <Input
               id="review-title"
+              disabled={isApproving}
               aria-invalid={Boolean(errors.name)}
               aria-describedby={errors.name ? "review-title-error" : undefined}
               {...register("name")}
@@ -124,6 +125,7 @@ export function AssignmentReviewApproveStep({
             <Textarea
               id="review-description"
               rows={8}
+              disabled={isApproving}
               aria-invalid={Boolean(errors.description)}
               aria-describedby={
                 errors.description ? "review-description-error" : undefined
@@ -146,6 +148,7 @@ export function AssignmentReviewApproveStep({
             <Input
               id="review-due-date"
               type="datetime-local"
+              disabled={isApproving}
               aria-invalid={Boolean(errors.dueDate)}
               aria-describedby={errors.dueDate ? "review-due-date-error" : undefined}
               {...register("dueDate")}
@@ -171,6 +174,7 @@ export function AssignmentReviewApproveStep({
               type="number"
               min="0"
               step="1"
+              disabled={isApproving}
               aria-invalid={Boolean(errors.pointsPossible)}
               aria-describedby={
                 errors.pointsPossible ? "review-points-possible-error" : undefined
