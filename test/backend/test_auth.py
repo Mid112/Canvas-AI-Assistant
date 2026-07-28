@@ -357,20 +357,22 @@ def test_debug_rejects_untrusted_http_url(client, monkeypatch):
     assert resp.status_code == 422
 
 
-# Verifies: Non debug rejects localhost http url.
-def test_non_debug_rejects_localhost_http_url(client, monkeypatch):
+# Verifies: Local Docker/dev hosts may use http even when DEBUG is off —
+# they are not reachable from the public internet (see CanvasTokenRequest).
+def test_non_debug_allows_localhost_http_url(client, monkeypatch):
     monkeypatch.setattr(settings, "DEBUG", False)
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
-    resp = client.patch(
-        "/api/v1/auth/me/canvas-token",
-        json={"canvas_token": "tok", "canvas_url": "http://localhost:3000"},
-        headers=headers,
-    )
-    assert resp.status_code == 422
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        resp = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "tok", "canvas_url": "http://localhost:3000"},
+            headers=headers,
+        )
+    assert resp.status_code == 200
 
 
 # Verifies: Delete canvas connection.
