@@ -239,6 +239,46 @@ def test_is_expected_canvas_token_sync_error_rejects_non_http_errors():
     assert _is_expected_canvas_token_sync_error(RuntimeError("Invalid Canvas API token")) is False
 
 
+@pytest.mark.parametrize(
+    "message,expected",
+    [
+        ("upstream timed out waiting for Canvas", True),
+        ("Canvas proxy returned 503", True),
+        ("permission denied", False),
+    ],
+)
+def test_is_transient_canvas_outage_shared_classifier(message, expected):
+    """#1295: one shared helper for dashboard + chat (incl. bare 5xx text)."""
+    from app.services.canvas import _is_transient_canvas_outage
+
+    assert _is_transient_canvas_outage(RuntimeError(message)) is expected
+
+
+def test_is_transient_canvas_outage_accepts_http_502():
+    from fastapi import HTTPException, status
+
+    from app.services.canvas import _is_transient_canvas_outage
+
+    assert _is_transient_canvas_outage(
+        HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Canvas server error: 502",
+        )
+    )
+
+
+def test_is_transient_canvas_outage_accepts_tool_execution_error_shape():
+    from app.mcp_tools.dispatcher import ToolExecutionError
+    from app.services.canvas import _is_transient_canvas_outage
+
+    assert _is_transient_canvas_outage(
+        ToolExecutionError(
+            "Something went wrong talking to Canvas.",
+            log_detail="Canvas GET failed with 504",
+        )
+    )
+
+
 def test_chat_skips_monitoring_for_expected_canvas_reconnect_failures():
     from fastapi import HTTPException, status
 

@@ -83,6 +83,8 @@ def _parse_next_link(link_header: str) -> str | None:
 async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> httpx.Response:
     # Feature Reliability (#1190): retry transient Canvas 5xx / timeouts on
     # safe reads with short backoff. Writes must not use this helper.
+    # #1295: retry attempts are expected noise on dashboard mirror refresh —
+    # log at info so callers that fall back quietly are not drowned in warnings.
     last_error: Exception | None = None
     for attempt in range(_MAX_READ_RETRIES + 1):
         try:
@@ -91,7 +93,7 @@ async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> http
             last_error = exc
             if attempt >= _MAX_READ_RETRIES:
                 raise
-            logger.warning(
+            logger.info(
                 "Canvas GET timed out for %s — retry %s/%s",
                 url,
                 attempt + 1,
@@ -103,7 +105,7 @@ async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> http
             last_error = exc
             if attempt >= _MAX_READ_RETRIES:
                 raise
-            logger.warning(
+            logger.info(
                 "Canvas GET network error for %s — retry %s/%s",
                 url,
                 attempt + 1,
@@ -113,7 +115,7 @@ async def _get_with_retry(client: httpx.AsyncClient, url: str, **kwargs) -> http
             continue
 
         if response.is_server_error and attempt < _MAX_READ_RETRIES:
-            logger.warning(
+            logger.info(
                 "Canvas returned %d for %s — retry %s/%s",
                 response.status_code,
                 url,

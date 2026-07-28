@@ -185,20 +185,33 @@ def _is_expected_canvas_token_sync_error(exc: Exception) -> bool:
 
 def _is_transient_canvas_outage(exc: BaseException) -> bool:
     """Canvas 5xx / timeouts / reachability — expected when falling back to
-    last-synced local data (dashboard mirror refresh, chat monitoring)."""
+    last-synced local data (dashboard mirror refresh, chat monitoring).
+
+    Shared by dashboard + chat so classifiers do not drift (#1295). Accepts
+    ToolExecutionError-shaped exceptions via ``log_detail`` / ``user_message``
+    without importing the MCP dispatcher (avoids circular imports).
+    """
     if isinstance(exc, HTTPException) and exc.status_code in {502, 503, 504}:
         return True
-    text = (
-        exc.detail
-        if isinstance(exc, HTTPException) and isinstance(exc.detail, str)
-        else str(exc)
-    )
+
+    log_detail = getattr(exc, "log_detail", None)
+    user_message = getattr(exc, "user_message", None)
+    if isinstance(log_detail, str) or isinstance(user_message, str):
+        text = (log_detail or "") or (user_message or "")
+    elif isinstance(exc, HTTPException) and isinstance(exc.detail, str):
+        text = exc.detail
+    else:
+        text = str(exc)
+
     lowered = text.lower()
     return (
         "canvas server error" in lowered
         or "canvas api timed out" in lowered
         or "could not reach canvas" in lowered
         or "timed out" in lowered
+        or "502" in text
+        or "503" in text
+        or "504" in text
     )
 
 
