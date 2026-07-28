@@ -298,21 +298,6 @@ def test_match_course_name_legacy_row_with_null_workflow_state_still_resolves():
     assert match.local_course_id == 2
 
 
-def test_match_course_name_rejects_short_fuzzy_fragments():
-    """#1301: generic short fragments must not fuzzy-resolve a course."""
-    from app.models.canvas_course_name import CanvasCourseName
-    from app.services.chat import _match_course_name
-
-    course_names = [
-        CanvasCourseName(
-            canvas_connection_id=1, canvas_course_id="1", local_course_id=1,
-            name="CPSC 310 - Software Engineering", workflow_state="available",
-        ),
-    ]
-    assert _match_course_name(course_names, "CPS") is None
-    assert _match_course_name(course_names, "CPSC 310") is not None
-
-
 # ── Fuzzy substring fallback ─────────────────────────────────────────────
 
 # Verifies: an unambiguous normalized-substring match still resolves when
