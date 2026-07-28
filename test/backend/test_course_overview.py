@@ -254,3 +254,71 @@ def test_course_overview_grades_completion_and_activity(client):
     assert payload["completion_rate"] == 50.0
     assert len(payload["recent_activity"]) == 1
     assert payload["recent_activity"][0]["student_name"] == "Ada Lovelace"
+
+
+def test_course_overview_average_grade_is_weighted_by_points_possible(client):
+    headers = _register_with_canvas(client)
+    local_id = _sync_local_course(client, headers)
+    quiz_id = uuid.uuid4().int % 10_000_000
+    exam_id = quiz_id + 1
+    assignments = [
+        {
+            "id": quiz_id,
+            "name": "Small Quiz",
+            "description": None,
+            "due_at": None,
+            "points_possible": 10.0,
+            "course_id": 1,
+        },
+        {
+            "id": exam_id,
+            "name": "Large Exam",
+            "description": None,
+            "due_at": None,
+            "points_possible": 100.0,
+            "course_id": 1,
+        },
+    ]
+    with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock:
+        mock.return_value = assignments
+        client.get(
+            f"/api/v1/canvas/courses/{local_id}/assignments?canvas_url={CANVAS_URL}",
+            headers=headers,
+        )
+
+    for assignment_id, score, grade in [(quiz_id, 10.0, "10"), (exam_id, 50.0, "50")]:
+        with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
+            mock.return_value = [
+                {
+                    "id": uuid.uuid4().int % 10_000_000,
+                    "assignment_id": assignment_id,
+                    "user_id": 3001,
+                    "score": score,
+                    "grade": grade,
+                    "submitted_at": "2026-01-01T12:00:00Z",
+                    "workflow_state": "graded",
+                    "user": {"name": "Ada Lovelace"},
+                }
+            ]
+            client.get(
+                f"/api/v1/canvas/courses/{local_id}/assignments/{assignment_id}/submissions?canvas_url={CANVAS_URL}",
+                headers=headers,
+            )
+
+    with (
+        patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock_enrollments,
+        patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock_assignments,
+    ):
+        mock_enrollments.return_value = [
+            {"user_id": 3001, "enrollment_state": "active", "user": {"name": "Ada Lovelace"}},
+        ]
+        mock_assignments.return_value = assignments
+        response = client.get(
+            f"/api/v1/canvas/courses/{local_id}/overview?canvas_url={CANVAS_URL}",
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    # 60 earned points out of 110 possible = 54.5%. A flat average of the two
+    # percentages would incorrectly show 75.0%.
+    assert response.json()["average_grade"] == 54.5

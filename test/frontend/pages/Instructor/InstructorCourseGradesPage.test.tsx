@@ -155,6 +155,32 @@ describe("InstructorCourseGradesPage", () => {
     expect(screen.getByRole("button", { name: "Preview change" })).toBeEnabled();
   });
 
+  it.each(["Z", "excused", "0x10"])("rejects unsupported grade value %s before preview", async (grade) => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByRole("cell", { name: "Coin" });
+    await user.type(screen.getByLabelText("New grade"), grade);
+
+    expect(screen.getByText(/Use a numeric grade or a supported Canvas grade/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Preview change" })).toBeDisabled();
+    expect(mockedPreviewGradeUpdate).not.toHaveBeenCalled();
+  });
+
+  it.each(["satisfactory", "unsatisfactory", "np"])(
+    "allows supported Canvas grading scheme value %s before preview",
+    async (grade) => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await screen.findByRole("cell", { name: "Coin" });
+      await user.type(screen.getByLabelText("New grade"), grade);
+
+      expect(screen.queryByText(/Use a numeric grade or a supported Canvas grade/i)).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Preview change" })).toBeEnabled();
+    },
+  );
+
   it("filters grade rows and selects all visible students", async () => {
     // Covers bulk workflow ergonomics: filters change which rows are visible,
     // and "All" only selects the currently visible student rows.
