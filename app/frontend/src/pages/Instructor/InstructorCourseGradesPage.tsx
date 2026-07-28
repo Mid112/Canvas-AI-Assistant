@@ -373,6 +373,8 @@ export function InstructorCourseGradesPage() {
     payloads.length > 0 &&
     previews.length === payloads.length &&
     payloads.every((payload) => {
+      // A submit is only valid for the exact grade value the instructor just
+      // previewed; changing the field intentionally locks submit again.
       const preview = previewByUserId.get(payload.user_id);
       return preview?.proposed.posted_grade === payload.posted_grade.trim();
     });

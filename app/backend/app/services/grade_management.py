@@ -181,6 +181,8 @@ def _coerce_int(value) -> int | None:
 
 
 def _coerce_decimal(value) -> Decimal | None:
+    # Use Decimal instead of float/Number-style parsing so hex-ish strings like
+    # "0x10" are rejected consistently with the frontend validation.
     if value in (None, "") or isinstance(value, bool):
         return None
     try:
@@ -410,6 +412,9 @@ async def submit_grade_update(
     )
 
     async def _write():
+        # Canvas updates comments/feedback via the submission comment fields,
+        # while the grade itself stays in posted_grade. Excuse support would
+        # need a separate submission[excuse] path, not this helper.
         return await update_submission_grade(
             int(course.canvas_course_id),
             body.assignment_id,
