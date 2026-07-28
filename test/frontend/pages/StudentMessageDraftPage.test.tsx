@@ -5,7 +5,7 @@ import { Route, Routes } from "react-router-dom";
 
 import { StudentMessageDraftPage } from "@/pages/StudentMessageDraftPage";
 import { fetchMessageDraft, sendMessageDraft } from "@/services/messageDraft";
-import { emptyRecipientsMessageDraft, mockMessageDraft } from "@/data/mockMessageDraft";
+import { mockMessageDraft } from "@/data/mockMessageDraft";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 vi.mock("@/services/messageDraft", () => ({
@@ -72,12 +72,10 @@ describe("StudentMessageDraftPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Loading message draft...")).toBeInTheDocument();
 
-    expect(await screen.findByLabelText("Subject")).toHaveValue("Course Announcement");
-    expect(screen.getByLabelText("Message body")).toHaveValue(
-      "Share an important update with your class.",
-    );
+    expect(await screen.findByLabelText("Subject")).toHaveValue(mockMessageDraft.subject);
+    expect(screen.getByLabelText("Message body")).toHaveValue(mockMessageDraft.body);
     expect(screen.getByText("John Smith")).toBeInTheDocument();
-    expect(screen.getByText("Course announcement selected")).toBeInTheDocument();
+    expect(screen.getByText("5 students selected")).toBeInTheDocument();
     expect(screen.getByText("Assignment Reminder")).toBeInTheDocument();
   });
 
@@ -110,16 +108,16 @@ describe("StudentMessageDraftPage", () => {
     await waitFor(() => {
       expect(mockedSend).toHaveBeenCalledWith("access-token", {
         draftId: mockMessageDraft.id,
-        subject: "Course Announcement",
-        body: "Share an important update with your class.",
-        recipientIds: [],
-        recipients: [],
+        subject: mockMessageDraft.subject,
+        body: mockMessageDraft.body,
+        recipientIds: mockMessageDraft.recipients.map((recipient) => recipient.id),
+        recipients: mockMessageDraft.recipients,
       });
     });
 
     expect(await screen.findByText("Message Sent")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Course announcement posted successfully.",
+      "Message sent successfully to 5 students.",
     );
   });
 
@@ -149,6 +147,7 @@ describe("StudentMessageDraftPage", () => {
     renderPage();
 
     await screen.findByLabelText("Subject");
+    await user.click(screen.getByRole("button", { name: "Clear all" }));
     await user.click(screen.getByRole("checkbox", { name: /John Smith/i }));
 
     expect(screen.getByText("1 student selected")).toBeInTheDocument();
@@ -160,8 +159,8 @@ describe("StudentMessageDraftPage", () => {
     await waitFor(() => {
       expect(mockedSend).toHaveBeenCalledWith("access-token", {
         draftId: mockMessageDraft.id,
-        subject: "Assignment Reminder: Course Update",
-        body: "Remind students about the assignment, due date, and any next steps.",
+        subject: mockMessageDraft.subject,
+        body: mockMessageDraft.body,
         recipientIds: ["student-3"],
         recipients: [
           {
@@ -193,7 +192,8 @@ describe("StudentMessageDraftPage", () => {
   // Verifies: Requests empty recipients when ?empty=true.
   it("requests empty recipients when ?empty=true", async () => {
     mockedFetch.mockResolvedValueOnce({
-      ...emptyRecipientsMessageDraft,
+      ...mockMessageDraft,
+      recipients: [],
     });
 
     renderPage("/instructor/messages?empty=true");
@@ -205,8 +205,8 @@ describe("StudentMessageDraftPage", () => {
       });
     });
 
-    expect(await screen.findByText("Course announcement selected")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+    expect(await screen.findByText("0 students selected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   });
 
   // Verifies: Shows load error with retry when ?loadError=true.
@@ -228,6 +228,6 @@ describe("StudentMessageDraftPage", () => {
 
     await userEvent.setup().click(screen.getByRole("button", { name: "Retry" }));
 
-    expect(await screen.findByLabelText("Subject")).toHaveValue("Course Announcement");
+    expect(await screen.findByLabelText("Subject")).toHaveValue(mockMessageDraft.subject);
   });
 });

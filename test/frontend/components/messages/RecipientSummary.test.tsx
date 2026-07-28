@@ -36,8 +36,10 @@ describe("RecipientSummary", () => {
       />,
     );
 
-    expect(screen.getByText(/No recipients selected/i)).toBeInTheDocument();
-    expect(screen.getByText("Course announcement selected")).toBeInTheDocument();
+    expect(
+      screen.getByText(/No recipients selected/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("0 students selected")).toBeInTheDocument();
   });
 
   it("unchecking a recipient calls onToggle and updates the selected count", async () => {
