@@ -1,19 +1,23 @@
 """Fuzz / property-based tests for pure parsers and validators (#1301).
 
 These feed random, invalid, and unexpected inputs into isolated helpers to
-surface crashes and invariant breaks. They do not hit the network or DB.
+surface crashes and invariant breaks. The exercised helpers themselves do not
+hit the network or DB; ``make test-fuzz`` still runs ``db-ensure`` because the
+shared ``test/backend/conftest.py`` autouse fixtures expect Postgres.
 
 Run with:
   make test-fuzz
 
-Excluded from the default `make test` / CI suite via the ``fuzz`` marker so
-longer Hypothesis runs stay opt-in.
+Requires ``hypothesis`` in the backend venv (``pip install -r
+app/backend/requirements.txt`` after merge). Excluded from the default
+``make test`` / CI suite via the ``fuzz`` marker so longer Hypothesis runs
+stay opt-in.
 """
 
 from __future__ import annotations
 
 import json
-import re
+import string
 
 import pytest
 from hypothesis import HealthCheck, given, settings
@@ -45,6 +49,20 @@ _messy_text = st.text(
     ),
     min_size=0,
     max_size=200,
+)
+
+_key_body = st.text(
+    # Alphanumeric only so provider key regex word-boundaries always match.
+    alphabet=st.sampled_from(string.ascii_letters + string.digits),
+    min_size=8,
+    max_size=32,
+)
+# Inject known provider key shapes so redaction is actually exercised (#1301).
+_known_secret = st.one_of(
+    _key_body.map(lambda body: f"sk-ant-{body}"),
+    _key_body.map(lambda body: f"sk-{body}"),
+    _key_body.map(lambda body: f"hf_{body}"),
+    _key_body.map(lambda body: f"gsk_{body}"),
 )
 
 
@@ -105,19 +123,24 @@ def test_fuzz_canvas_urls_equivalent_never_crashes(left: str, right: str) -> Non
 
 
 @_FUZZ_SETTINGS
-@given(text=_messy_text)
-def test_fuzz_redact_secrets_returns_str_and_never_crashes(text: str) -> None:
+@given(prefix=_messy_text, secret=_known_secret, suffix=_messy_text)
+def test_fuzz_redact_secrets_scrubs_known_key_shapes(
+    prefix: str, secret: str, suffix: str
+) -> None:
+    text = f"{prefix} {secret} {suffix}"
     redacted = redact_secrets(text)
     assert isinstance(redacted, str)
-    assert not re.search(r"\bsk-ant-[A-Za-z0-9_-]{20,}\b", redacted)
+    assert secret not in redacted
+    assert "[REDACTED_API_KEY]" in redacted
 
 
 @_FUZZ_SETTINGS
-@given(message=_messy_text)
-def test_fuzz_safe_exception_text_never_crashes(message: str) -> None:
-    text = safe_exception_text(RuntimeError(message))
+@given(message=_messy_text, secret=_known_secret)
+def test_fuzz_safe_exception_text_never_crashes(message: str, secret: str) -> None:
+    text = safe_exception_text(RuntimeError(f"{message} {secret}"))
     assert isinstance(text, str)
     assert text.startswith("RuntimeError:")
+    assert secret not in text
 
 
 @_FUZZ_SETTINGS

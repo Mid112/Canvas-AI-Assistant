@@ -91,7 +91,9 @@ test: db-ensure
 
 # ── Fuzz / property-based tests (#1301) ───────
 # Hypothesis harness for pure parsers/validators. Opt-in (not in default
-# `make test` / CI) so longer random runs stay local or scheduled.
+# `make test` / CI). Still depends on `db-ensure` / shared conftest Postgres
+# fixtures even though the helpers under test do not query the DB.
+# Requires hypothesis in the backend venv (`pip install -r requirements.txt`).
 test-fuzz: db-ensure
 	cd app/backend && \
 		PYTHONPATH=. \

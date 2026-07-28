@@ -17,10 +17,15 @@ Windows: `make test-windows`.
 ### Fuzz / property-based (`make test-fuzz`)
 
 Hypothesis harness for pure parsers and validators (JSON extraction, MCP
-`parse_action`, Canvas URL normalize, secret redaction). Marked `fuzz` and
-excluded from default `make test` / CI so random runs stay opt-in (#1301):
+`parse_action`, Canvas URL normalize, secret redaction). The helpers under
+test do not hit the network or DB, but `make test-fuzz` still runs
+`db-ensure` because shared `test/backend/conftest.py` autouse fixtures expect
+Postgres. Marked `fuzz` and excluded from default `make test` / CI (#1301).
+
+After merge, refresh the backend venv so Hypothesis is installed:
 
 ```bash
+cd app/backend && .venv/bin/pip install -r requirements.txt
 make test-fuzz
 ```
 
