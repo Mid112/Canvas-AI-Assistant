@@ -82,6 +82,23 @@ def _remember_recent(
     memory[list_key] = current[:cap]
 
 
+def _assignment_id_from_nested(assignment: dict[str, Any]) -> int | None:
+    """Accept both ``id`` and chat-chain ``assignment_id`` nested shapes."""
+    return _coerce_int(
+        assignment.get("id")
+        or assignment.get("assignment_id")
+        or assignment.get("canvas_assignment_id")
+    )
+
+
+def _assignment_name_from_nested(assignment: dict[str, Any]) -> str | None:
+    for key in ("name", "assignment_name", "title"):
+        value = assignment.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
 def extract_refs_from_read_result(
     action_dump: dict[str, Any] | None,
     result: dict[str, Any] | None,
@@ -97,19 +114,17 @@ def extract_refs_from_read_result(
 
     assignment_id = _coerce_int(result.get("assignment_id"))
     if assignment_id is None and isinstance(result.get("assignment"), dict):
-        assignment_id = _coerce_int(result["assignment"].get("id"))
+        assignment_id = _assignment_id_from_nested(result["assignment"])
     if assignment_id is None:
         assignment_id = _coerce_int(action_dump.get("assignment_id"))
     if assignment_id is not None:
         refs["assignment_id"] = assignment_id
 
-    assignment_ref = (
-        result.get("assignment_name")
-        or result.get("assignment_reference")
-        or action_dump.get("assignment_reference")
-    )
+    assignment_ref = result.get("assignment_name") or result.get("assignment_reference")
     if isinstance(result.get("assignment"), dict):
-        assignment_ref = assignment_ref or result["assignment"].get("name")
+        assignment_ref = assignment_ref or _assignment_name_from_nested(result["assignment"])
+    if not assignment_ref:
+        assignment_ref = action_dump.get("assignment_reference")
     if isinstance(assignment_ref, str) and assignment_ref.strip():
         refs["assignment_reference"] = assignment_ref.strip()
 
@@ -126,6 +141,47 @@ def extract_refs_from_read_result(
     return refs
 
 
+def _remember_assignments_from_list(memory: dict[str, Any], items: list[Any]) -> None:
+    """Populate recent_assignments from fetch_assignments-style payloads."""
+    # Insert in reverse so the first list item ends up most-recent (front).
+    for item in reversed(items):
+        if not isinstance(item, dict):
+            continue
+        assignment_id = _assignment_id_from_nested(item)
+        if assignment_id is None:
+            continue
+        name = _assignment_name_from_nested(item) or f"Assignment {assignment_id}"
+        _remember_recent(
+            memory,
+            _RECENT_ASSIGNMENTS_KEY,
+            {"id": assignment_id, "name": name},
+            id_key="id",
+        )
+
+
+def _remember_students_from_list(memory: dict[str, Any], items: list[Any]) -> None:
+    """Populate recent_students from fetch_students-style payloads."""
+    for item in reversed(items):
+        if not isinstance(item, dict):
+            continue
+        student_id = _coerce_int(
+            item.get("id") or item.get("canvas_user_id") or item.get("user_id")
+        )
+        if student_id is None:
+            continue
+        name = item.get("name")
+        if not isinstance(name, str) or not name.strip():
+            name = f"Student {student_id}"
+        else:
+            name = name.strip()
+        _remember_recent(
+            memory,
+            _RECENT_STUDENTS_KEY,
+            {"id": student_id, "name": name},
+            id_key="id",
+        )
+
+
 def merge_read_result_into_field_memory(
     conversation: Conversation,
     action_dump: dict[str, Any] | None,
@@ -135,10 +191,15 @@ def merge_read_result_into_field_memory(
     if not isinstance(result, dict) or result.get("clarify") or result.get("error"):
         return
     refs = extract_refs_from_read_result(action_dump, result)
-    if not refs:
+    assignments_list = result.get("assignments")
+    students_list = result.get("students")
+    has_assignment_list = isinstance(assignments_list, list) and bool(assignments_list)
+    has_student_list = isinstance(students_list, list) and bool(students_list)
+    if not refs and not has_assignment_list and not has_student_list:
         return
 
-    merge_field_memory(conversation, refs)
+    if refs:
+        merge_field_memory(conversation, refs)
     memory = dict(conversation.field_memory or {})
 
     if "assignment_id" in refs:
@@ -161,6 +222,28 @@ def merge_read_result_into_field_memory(
             },
             id_key="id",
         )
+
+    if has_assignment_list:
+        _remember_assignments_from_list(memory, assignments_list)
+        # Prefer the first list entry as the scalar follow-up default when the
+        # read did not already resolve a single assignment.
+        if "assignment_id" not in refs:
+            first = next(
+                (
+                    item
+                    for item in assignments_list
+                    if isinstance(item, dict) and _assignment_id_from_nested(item) is not None
+                ),
+                None,
+            )
+            if first is not None:
+                memory["assignment_id"] = _assignment_id_from_nested(first)
+                first_name = _assignment_name_from_nested(first)
+                if first_name:
+                    memory["assignment_reference"] = first_name
+
+    if has_student_list:
+        _remember_students_from_list(memory, students_list)
 
     conversation.field_memory = memory
 
