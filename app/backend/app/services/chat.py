@@ -48,6 +48,7 @@ from app.services.assignment_rate import find_assignments_by_submission_rate
 from app.services.canvas import (
     CanvasTokenRequiredError,
     _is_expected_canvas_token_sync_error,
+    _is_transient_canvas_outage,
     sync_courses_if_stale,
 )
 from app.services.canvas_assistant_gate import (
@@ -113,28 +114,6 @@ def _is_expected_canvas_reconnect_failure(exc: BaseException) -> bool:
         or "Canvas token is corrupted" in text
     )
 
-
-def _is_transient_canvas_outage(exc: BaseException) -> bool:
-    """Canvas 5xx / timeouts / reachability — not actionable instructor failures."""
-    if isinstance(exc, HTTPException) and exc.status_code in {502, 503, 504}:
-        return True
-    text = ""
-    if isinstance(exc, ToolExecutionError):
-        text = exc.log_detail or exc.user_message or ""
-    elif isinstance(exc, HTTPException) and isinstance(exc.detail, str):
-        text = exc.detail
-    else:
-        text = str(exc)
-    lowered = text.lower()
-    return (
-        "canvas server error" in lowered
-        or "canvas api timed out" in lowered
-        or "could not reach canvas" in lowered
-        or "timed out" in lowered
-        or "502" in text
-        or "503" in text
-        or "504" in text
-    )
 
 LLM_TIMEOUT_SECONDS = 90.0
 HISTORY_WINDOW = 10
