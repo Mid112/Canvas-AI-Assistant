@@ -29,6 +29,32 @@ _FIELD_MEMORY_KEYS = frozenset(
     }
 )
 
+# Subset of _FIELD_MEMORY_KEYS that are safe to persist from a clarify
+# partial_plan. A clarify fires when the LLM's action was missing a field
+# OR a field failed to resolve (e.g. student_reference "999999" didn't
+# match any real student). Persisting the unresolved values would poison
+# the next turn — the LLM would see them in field memory labeled as
+# "confirmed earlier" and reuse them even if the user never re-mentioned them.
+#
+# Only persist fields that are context-setting, not action-specific:
+#   - local_course_id: which course we're working in (safe, verified)
+#   - assignment_reference: the user's own words for which assignment
+#   - title, description, due_date, points_possible: assignment draft params
+#     the user explicitly provided
+#
+# Exclude ALL student-related fields (student_id, student_reference) and
+# grade-related fields (new_grade, feedback, reason) because a clarify
+# means those values were NOT confirmed — they either failed resolution
+# or were never provided. Also exclude assignment_id (raw Canvas ID,
+# may be hallucinated).
+_PARTIAL_PLAN_SAFE_KEYS = _FIELD_MEMORY_KEYS - {
+    "assignment_id",
+    "student_id",
+    "student_reference",
+    "new_grade",
+    "feedback",
+}
+
 # Capped MRU lists persisted alongside scalar keys (#1302). Not free-form
 # tool dumps — only id + display label for prompt context.
 _RECENT_ASSIGNMENTS_KEY = "recent_assignments"
@@ -41,17 +67,53 @@ _GROUNDED_FACTS_KEY = "grounded_facts"
 _GROUNDED_FACTS_CAP = 64
 
 
-def merge_field_memory(conversation: Conversation, source: dict[str, Any] | None) -> None:
-    """Merge confirmed/collected fields into conversation.field_memory."""
+def merge_field_memory(
+    conversation: Conversation,
+    source: dict[str, Any] | None,
+    *,
+    allowed_keys: frozenset[str] | None = None,
+) -> None:
+    """Merge confirmed/collected fields into conversation.field_memory.
+
+    When ``allowed_keys`` is given (e.g. ``_PARTIAL_PLAN_SAFE_KEYS``), only
+    those keys are persisted — used for clarify ``partial_plan`` merges where
+    raw Canvas IDs from the LLM must not be trusted (see #1305).
+    """
     if not source:
         return
+    keys = allowed_keys if allowed_keys is not None else _FIELD_MEMORY_KEYS
     memory = dict(conversation.field_memory or {})
     for key, value in source.items():
-        if key not in _FIELD_MEMORY_KEYS or value is None:
+        if key not in keys or value is None:
             continue
         if isinstance(value, str) and not value.strip():
             continue
         memory[key] = value
+    conversation.field_memory = memory
+
+
+def clear_course_scoped_field_memory(conversation: Conversation) -> None:
+    """Clear assignment/student-scoped fields when the conversation switches
+    courses (#1306). Without this, ``recent_assignments`` and
+    ``recent_students`` from course A leak into course B's context, and the
+    LLM may reference them as if they belong to the new course. Also clears
+    scalar ``assignment_id``/``student_id`` and their reference strings,
+    since those are course-scoped by definition. ``grounded_facts`` is
+    cleared too — its IDs are course-scoped (a student ID from course A
+    is not valid in course B). ``local_course_id`` is kept since the
+    caller sets it to the new course immediately after.
+    """
+    memory = dict(conversation.field_memory or {})
+    for key in (
+        "assignment_id",
+        "assignment_reference",
+        "student_id",
+        "student_reference",
+        _RECENT_ASSIGNMENTS_KEY,
+        _RECENT_STUDENTS_KEY,
+        _GROUNDED_FACTS_KEY,
+    ):
+        memory.pop(key, None)
     conversation.field_memory = memory
 
 

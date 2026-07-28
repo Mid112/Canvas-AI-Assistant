@@ -233,3 +233,39 @@ def test_ground_assistant_result_scrubs_invented_claims_without_tools():
     assert "[ID redacted]" in result["message"]
     assert "[grade redacted]" in result["message"]
     assert "[name redacted]" in result["message"]
+
+
+def test_ground_assistant_result_proposed_action_uses_this_turn_facts_only():
+    """proposed_action ID scrubbing must use ONLY this-turn tool_facts, not
+    prior accumulated grounded_facts — a prior-turn ID must not authorize
+    a proposed_action ID for a different assignment/context (#1307)."""
+    from app.services.llm.student_context import ground_assistant_result
+
+    # Prior facts have student_id 77, but this turn's tools did NOT return 77.
+    # The proposed_action has student_id 77 — it must be scrubbed because
+    # it's not in this-turn tool_facts, even though it's in prior_facts.
+    result, _tool_facts = ground_assistant_result(
+        {
+            "action": "intent_preview",
+            "proposed_action": {
+                "action": "update_grade",
+                "assignment_id": 10,
+                "student_id": 77,  # in prior_facts but NOT this turn
+            },
+        },
+        tool_results=[
+            {"assignments": [{"id": 10, "name": "HW1"}]},  # no student 77
+        ],
+        field_memory={
+            "grounded_facts": {
+                "ids": [10, 77],  # 77 is from a prior turn
+                "names": ["hw1"],
+                "grades": [],
+                "dates": [],
+            }
+        },
+    )
+    # assignment_id 10 is in this-turn tool_facts — kept
+    assert result["proposed_action"]["assignment_id"] == 10
+    # student_id 77 is in prior_facts but NOT this-turn tool_facts — scrubbed
+    assert "student_id" not in result["proposed_action"]

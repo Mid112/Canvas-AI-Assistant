@@ -58,6 +58,8 @@ from app.services.canvas_assistant_gate import (
 from app.services.deferred_assistant import defer_assistant_request, mark_deferred_request_resumed
 from app.services.failed_operations import record_failed_operation
 from app.services.field_memory import (
+    _PARTIAL_PLAN_SAFE_KEYS,
+    clear_course_scoped_field_memory,
     format_field_memory_for_prompt,
     merge_field_memory,
     merge_grounded_facts_into_memory,
@@ -1164,11 +1166,12 @@ async def _run_update_assignment_chain(
     """update_assignment needs an exact Canvas assignment_id before a
     preview can be built, but — like fetch_submissions,
     resolve_missing_submissions, and find_assignment_by_submission_rate —
-    the model doesn't need to know it itself. Only reached when
-    assignment_id is unset and assignment_reference is given; resolves it
-    server-side via _resolve_course_and_assignment (the exact same shared
-    helper those other chains use) and builds the intent_preview directly
-    — one user turn, no loop needed — the same way
+    the model doesn't need to know it itself. Resolves it server-side via
+    _resolve_course_and_assignment (the exact same shared helper those
+    other chains use), which verifies a provided assignment_id against
+    this course's synced assignments and re-resolves if it's hallucinated,
+    stale, or belongs to a different course. Builds the intent_preview
+    directly — one user turn, no loop needed — the same way
     _build_grouped_send_message_result builds a preview without routing
     back through execute_tool's own intent_preview case."""
     resolved = await _resolve_course_and_assignment(
@@ -3104,6 +3107,15 @@ async def handle_chat_message(
                     # re-parent that only message away, leaving the
                     # preference-seeded conversation permanently empty and
                     # orphaned.
+                    if (
+                        conversation.course_id is not None
+                        and conversation.course_id != matched_local_course_id
+                    ):
+                        # Switching a preference-seeded conversation to a
+                        # different course before any history — clear
+                        # course-scoped field memory so stale IDs from the
+                        # seeded course don't leak into the new one (#1306).
+                        clear_course_scoped_field_memory(conversation)
                     conversation.course_id = matched_local_course_id
                     conversation.course_name = matched.name
                     resolved_local_course_id = matched_local_course_id
@@ -3176,7 +3188,16 @@ async def handle_chat_message(
             if text_reply is not None:
                 result = text_reply
                 break
-            assert action is not None
+            if action is None:
+                # Defensive: _parse_model_action_with_recovery should always
+                # return one of (action, text_reply), but if a future change
+                # breaks that invariant, degrade to a safe respond instead
+                # of crashing with an AssertionError.
+                result = {
+                    "action": "respond",
+                    "message": _MALFORMED_ACTION_DEGRADE_MESSAGE,
+                }
+                break
             needs_unwrap = False
             if action.action == "intent_preview":
                 proposed = action.proposed_action
@@ -3188,21 +3209,7 @@ async def handle_chat_message(
                         or proposed.get("broadcast_to_all_students")
                         or proposed.get("recipient_handle")
                     )
-                ) or (
-                    proposed_name == "update_assignment"
-                    and proposed.get("assignment_id") is None
-                    and bool(proposed.get("assignment_reference"))
-                ) or (
-                    proposed_name == "update_grade"
-                    and (
-                        proposed.get("assignment_id") is None
-                        or proposed.get("student_id") is None
-                    )
-                    and (
-                        bool(proposed.get("assignment_reference"))
-                        or bool(proposed.get("student_reference"))
-                    )
-                )
+                ) or proposed_name in ("update_assignment", "update_grade")
             if needs_unwrap:
                 # Defensive: the model wrapped a read, a send_message that
                 # still needs server-side recipient resolution, or an
@@ -3249,20 +3256,21 @@ async def handle_chat_message(
                 result = await _run_find_assignment_by_submission_rate_chain(
                     db, user, conversation, user_msg, action, message
                 )
-            elif action.action == "update_assignment" and action.assignment_id is None and action.assignment_reference:
-                # Same assignment-resolution need as fetch_submissions —
-                # resolve the reference server-side and build the preview
-                # directly, in this same turn, rather than making the user
-                # ask again once a fetch_assignments result is in history.
+            elif action.action == "update_assignment":
+                # Always route through the resolver chain — even when the
+                # model provides assignment_id directly, _resolve_course_and_assignment
+                # verifies it against this course's synced assignments and
+                # re-resolves if it's hallucinated, stale, or belongs to a
+                # different course. Never trust a bare ID from the model.
                 result = await _run_update_assignment_chain(
                     db, user, conversation, user_msg, action, message, adapter
                 )
-            elif action.action == "update_grade" and (
-                action.assignment_id is None
-                or action.student_id is None
-                or action.assignment_reference
-                or action.student_reference
-            ):
+            elif action.action == "update_grade":
+                # Always route through _resolve_grade_target — it fetches
+                # real submissions and validates assignment_id and
+                # student_id against them, so a hallucinated or stale ID
+                # is caught and re-resolved instead of passing through to
+                # a preview with unverified targets.
                 result = await _resolve_grade_target(
                     db, user, conversation, user_msg, action, message, adapter
                 )
@@ -3450,7 +3458,16 @@ async def handle_chat_message(
             )
     else:
         if result.get("action") == "clarify":
-            merge_field_memory(conversation, result.get("partial_plan"))
+            # Use _PARTIAL_PLAN_SAFE_KEYS so raw Canvas IDs (assignment_id,
+            # student_id) from the LLM's parsed action are NOT persisted —
+            # they may be hallucinated. Only reference strings and non-ID
+            # fields are carried forward; the resolver chains re-resolve
+            # IDs server-side on the next turn (see #1305).
+            merge_field_memory(
+                conversation,
+                result.get("partial_plan"),
+                allowed_keys=_PARTIAL_PLAN_SAFE_KEYS,
+            )
         await _supersede_pending_workflow(
             db,
             conversation.id,
