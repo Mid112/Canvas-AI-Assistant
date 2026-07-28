@@ -68,10 +68,10 @@ const TEMPLATE_PRESETS = {
 
 type MessageTemplateId = keyof typeof TEMPLATE_PRESETS;
 
-const TEMPLATE_SUBJECTS = new Set(
+const TEMPLATE_SUBJECTS = new Set<string>(
   Object.values(TEMPLATE_PRESETS).map((preset) => preset.subject),
 );
-const TEMPLATE_BODIES = new Set(
+const TEMPLATE_BODIES = new Set<string>(
   Object.values(TEMPLATE_PRESETS).map((preset) => preset.body),
 );
 
