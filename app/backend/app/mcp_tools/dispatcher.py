@@ -52,7 +52,7 @@ from app.services.canvas_status import CanvasWriteResult
 from app.services.course_access import get_owned_course_or_404
 from app.services.grade_management import submit_grade_update
 from app.services.llm.json_extraction import extract_json_object as _extract_json
-from app.services.message_validation import validate_message_for_send
+from app.services.message_validation import check_message_profanity, validate_message_for_send
 from app.services.quiz_validation import validate_quiz_for_create
 from app.services.risk import classify_action_risk
 from app.services.student import get_students
@@ -881,6 +881,10 @@ async def execute_tool(
                 )
             new_grade = (getattr(action, "new_grade", None) or "").strip()
             feedback = getattr(action, "feedback", None) or getattr(action, "reason", None)
+            if feedback and str(feedback).strip():
+                # Shared student-communication blocklist (#1300) — cover chat/MCP
+                # grade updates, not only the feedback wizard / grades UI.
+                check_message_profanity(str(feedback), content_label="Feedback")
 
             if _mcp_enabled():
                 async def _mcp_update_grade() -> dict[str, Any]:

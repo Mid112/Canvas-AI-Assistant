@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.course import Course
 from app.models.user import User
 from app.services.course_access import get_owned_course_or_404
+from app.services.profanity import check_message_profanity
 
 MIN_QUIZ_DESCRIPTION_LENGTH = 20
 ALLOWED_QUESTION_TYPES = frozenset(
@@ -25,6 +26,7 @@ def _check_title(title: str) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Quiz title cannot be empty.",
         )
+    check_message_profanity(title, content_label="Quiz title")
 
 
 def _check_description(description: str | None) -> None:
@@ -41,6 +43,7 @@ def _check_description(description: str | None) -> None:
                 f"{MIN_QUIZ_DESCRIPTION_LENGTH} characters."
             ),
         )
+    check_message_profanity(str(description), content_label="Quiz description")
 
 
 def _check_due_date(due_date: str) -> None:
@@ -127,6 +130,7 @@ def _check_choice_answers(index: int, question_type: str, answers: list) -> None
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"{label} has an answer with empty text.",
             )
+        check_message_profanity(text, content_label=f"{label} answer text")
         weight = _answer_weight(answer)
         if weight not in (0.0, 100.0):
             raise HTTPException(
@@ -161,6 +165,9 @@ def _check_questions(questions: list[dict] | None) -> None:
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"Question {index + 1} is missing question_text.",
             )
+        check_message_profanity(
+            text, content_label=f"Question {index + 1} text"
+        )
         question_type = question.get("question_type", "essay_question")
         if question_type not in ALLOWED_QUESTION_TYPES:
             raise HTTPException(
