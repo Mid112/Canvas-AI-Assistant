@@ -47,6 +47,18 @@ vi.mock("@/contexts/AuthContext", async () => {
 });
 
 const CANVAS_URL = "http://localhost:3000";
+// ActiveCourseProvider receives raw Canvas course payloads and maps them to the
+// frontend InstructorCourse shape internally, so these fixtures intentionally
+// use backend field names instead of the mapped UI field names.
+const syncedCanvasCourse = {
+  canvas_id: 99,
+  local_id: 3,
+  name: "Introduction to Programming",
+  course_code: "CS 101",
+  workflow_state: "available",
+  total_students: 45,
+  term_name: null,
+};
 
 const authWithCanvas = {
   user: {
@@ -94,17 +106,8 @@ describe("InstructorCourseAssignmentsPage", () => {
     vi.clearAllMocks();
     mockUseAuth.mockReturnValue(authWithCanvas);
     mockedFetchActiveCourse.mockResolvedValue(null);
-    mockedFetchCourses.mockResolvedValue([
-      {
-        canvas_id: 99,
-        local_id: 3,
-        name: "Introduction to Programming",
-        course_code: "CS 101",
-        workflow_state: "available",
-        total_students: 45,
-      },
-    ]);
-    mockedFetchCachedCourses.mockResolvedValue([]);
+    mockedFetchCourses.mockResolvedValue([syncedCanvasCourse]);
+    mockedFetchCachedCourses.mockResolvedValue([syncedCanvasCourse]);
     mockedFetchCourseAssignments.mockResolvedValue([
       {
         id: 10,
