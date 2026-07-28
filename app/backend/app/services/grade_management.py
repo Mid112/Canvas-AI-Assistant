@@ -27,6 +27,7 @@ from app.services.canvas_idempotency import (
     build_idempotency_key,
     run_idempotent_canvas_write,
 )
+from app.services.message_validation import check_message_profanity
 
 IRREVERSIBLE_GRADE_WARNING = (
     "Grade changes are high risk because Canvas updates the student's official record immediately."
@@ -42,7 +43,8 @@ FEEDBACK_ONLY_ROLLBACK_MESSAGE = (
 )
 MAX_REASONABLE_NUMERIC_GRADE = Decimal("10000")
 # Keep text grades intentionally allow-listed: Canvas can accept grading-scheme
-# values, but arbitrary letters or words are too easy to submit by mistake.
+# values such as pass/fail variants, but "excused" is a separate Canvas boolean
+# action and must not be submitted through posted_grade.
 CANVAS_LETTER_GRADE_RE = re.compile(r"^(?:A|B|C|D)[+-]?$|^F$", re.IGNORECASE)
 CANVAS_TEXT_GRADES = frozenset(
     {
@@ -201,6 +203,9 @@ def _validate_grade_payload(body: GradeUpdateRequest) -> str:
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Enter a new grade or feedback before previewing.",
         )
+    if feedback:
+        # Grade-page "reason" is student-facing feedback text (#1300).
+        check_message_profanity(feedback, content_label="Feedback")
     if not posted_grade:
         return posted_grade
 

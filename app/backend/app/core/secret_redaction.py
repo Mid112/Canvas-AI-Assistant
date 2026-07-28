@@ -11,11 +11,13 @@ import logging
 import re
 
 _REDACTION_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"(?i)(authorization\s*[:=]\s*bearer\s+)\S+"), r"\1[REDACTED]"),
-    (re.compile(r"(?i)(\bx-api-key\s*[:=]\s*)\S+"), r"\1[REDACTED]"),
-    (re.compile(r"(?i)(\bapi[_-]?key\s*[:=]\s*)\S+"), r"\1[REDACTED]"),
-    (re.compile(r"(?i)(\b(?:access_)?token\s*[:=]\s*)\S+"), r"\1[REDACTED]"),
-    (re.compile(r"(?i)(\bbearer\s+)\S+"), r"\1[REDACTED]"),
+    # Do not treat logging placeholders like "api_key=%s" as secret values;
+    # the corresponding args are scrubbed recursively below.
+    (re.compile(r"(?i)(authorization\s*[:=]\s*bearer\s+)(?!%[a-zA-Z])\S+"), r"\1[REDACTED]"),
+    (re.compile(r"(?i)(\bx-api-key\s*[:=]\s*)(?!%[a-zA-Z])\S+"), r"\1[REDACTED]"),
+    (re.compile(r"(?i)(\bapi[_-]?key\s*[:=]\s*)(?!%[a-zA-Z])\S+"), r"\1[REDACTED]"),
+    (re.compile(r"(?i)(\b(?:access_)?token\s*[:=]\s*)(?!%[a-zA-Z])\S+"), r"\1[REDACTED]"),
+    (re.compile(r"(?i)(\bbearer\s+)(?!%[a-zA-Z])\S+"), r"\1[REDACTED]"),
     # Common hosted-provider key shapes (OpenAI, Anthropic, Hugging Face, Groq).
     (re.compile(r"\b(sk-(?:ant-)?[A-Za-z0-9_-]{8,})\b"), "[REDACTED_API_KEY]"),
     (re.compile(r"\b(hf_[A-Za-z0-9]{8,})\b"), "[REDACTED_API_KEY]"),
@@ -38,18 +40,38 @@ def safe_exception_text(exc: BaseException) -> str:
     return redact_secrets(f"{type(exc).__name__}: {exc}")
 
 
-def _scrub_log_record(record: logging.LogRecord) -> logging.LogRecord:
-    """Format the record, scrub secrets, then clear args.
+def _redact_log_arg(value):
+    """Redact strings nested inside structured logging args."""
+    if isinstance(value, str):
+        return redact_secrets(value)
+    if isinstance(value, tuple):
+        return tuple(_redact_log_arg(item) for item in value)
+    if isinstance(value, list):
+        return [_redact_log_arg(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: _redact_log_arg(item)
+            for key, item in value.items()
+        }
+    return value
 
-    Scrubbing `msg` before `%` interpolation would eat placeholders like
-    `api_key=%s` (the `api_key=` pattern matches the template itself).
+
+def _scrub_log_record(record: logging.LogRecord) -> logging.LogRecord:
+    """Scrub secrets without changing the record's formatting contract.
+
+    Uvicorn's access formatter unpacks ``record.args`` directly instead of
+    calling ``record.getMessage()``. Preserve the args shape so access logs
+    can still render 4xx/5xx responses cleanly.
     """
-    try:
-        message = record.getMessage()
-    except Exception:
-        message = str(record.msg) if record.msg is not None else ""
-    record.msg = redact_secrets(message)
-    record.args = ()
+    if isinstance(record.msg, str):
+        record.msg = redact_secrets(record.msg)
+    if isinstance(record.args, tuple):
+        record.args = tuple(_redact_log_arg(arg) for arg in record.args)
+    elif isinstance(record.args, dict):
+        record.args = {
+            key: _redact_log_arg(value)
+            for key, value in record.args.items()
+        }
     return record
 
 

@@ -12,6 +12,8 @@ from app.schemas.canvas import (
     AssignmentCreate,
     AssignmentResponse,
     AssignmentUpdate,
+    CourseCreate,
+    CoursePublishUpdate,
     CourseResponse,
     GradePreviewResponse,
     GradeUpdateRequest,
@@ -38,6 +40,7 @@ from app.schemas.student import StudentResponse
 from app.services.analysis import analyze_late_submissions, analyze_missing_submissions
 from app.services.assignment_draft import generate_assignment_draft
 from app.services.canvas import (
+    create_canvas_course,
     create_course_assignment,
     create_course_quiz,
     get_active_course,
@@ -50,6 +53,7 @@ from app.services.canvas import (
     get_courses,
     get_submissions,
     set_active_course,
+    set_course_published,
     update_course_assignment,
     update_course_grade,
 )
@@ -93,6 +97,29 @@ async def list_courses(
     db: AsyncSession = Depends(get_db),
 ):
     return await get_courses(current_user, canvas_url, db)
+
+
+@router.post("/courses", response_model=CourseResponse, status_code=status.HTTP_201_CREATED)
+async def create_course(
+    body: CourseCreate,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a Canvas course from the app and sync it into the local course list (#1285)."""
+    return await create_canvas_course(body, current_user, canvas_url, db)
+
+
+@router.patch("/courses/{course_id}/publish", response_model=CourseResponse)
+async def publish_course(
+    course_id: int,
+    body: CoursePublishUpdate,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    db: AsyncSession = Depends(get_db),
+):
+    """Publish or unpublish a course in Canvas from Course Management."""
+    return await set_course_published(course_id, body, current_user, canvas_url, db)
 
 
 # Last-synced courses straight from the local DB, no live Canvas call — lets the

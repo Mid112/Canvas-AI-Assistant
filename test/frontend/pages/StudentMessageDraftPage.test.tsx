@@ -5,7 +5,7 @@ import { Route, Routes } from "react-router-dom";
 
 import { StudentMessageDraftPage } from "@/pages/StudentMessageDraftPage";
 import { fetchMessageDraft, sendMessageDraft } from "@/services/messageDraft";
-import { mockMessageDraft } from "@/data/mockMessageDraft";
+import { emptyRecipientsMessageDraft, mockMessageDraft } from "@/data/mockMessageDraft";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 vi.mock("@/services/messageDraft", () => ({
@@ -72,10 +72,15 @@ describe("StudentMessageDraftPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Loading message draft...")).toBeInTheDocument();
 
-    expect(await screen.findByLabelText("Subject")).toHaveValue(mockMessageDraft.subject);
-    expect(screen.getByLabelText("Message body")).toHaveValue(mockMessageDraft.body);
+    // Empty recipient selection is now the course-wide announcement path, so the
+    // page applies the announcement preset instead of the old private-message
+    // reminder default.
+    expect(await screen.findByLabelText("Subject")).toHaveValue("Course Announcement");
+    expect(screen.getByLabelText("Message body")).toHaveValue(
+      "Share an important update with your class.",
+    );
     expect(screen.getByText("John Smith")).toBeInTheDocument();
-    expect(screen.getByText("5 students selected")).toBeInTheDocument();
+    expect(screen.getByText("Course announcement selected")).toBeInTheDocument();
     expect(screen.getByText("Assignment Reminder")).toBeInTheDocument();
   });
 
@@ -108,16 +113,19 @@ describe("StudentMessageDraftPage", () => {
     await waitFor(() => {
       expect(mockedSend).toHaveBeenCalledWith("access-token", {
         draftId: mockMessageDraft.id,
-        subject: mockMessageDraft.subject,
-        body: mockMessageDraft.body,
-        recipientIds: mockMessageDraft.recipients.map((recipient) => recipient.id),
-        recipients: mockMessageDraft.recipients,
+        // No recipients means send as a course announcement, not as private
+        // messages to every student.
+        subject: "Course Announcement",
+        body: "Share an important update with your class.",
+        recipientIds: [],
+        recipients: [],
+        conversationId: undefined,
       });
     });
 
     expect(await screen.findByText("Message Sent")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(
-      "Message sent successfully to 5 students.",
+      "Course announcement posted successfully.",
     );
   });
 
@@ -147,7 +155,6 @@ describe("StudentMessageDraftPage", () => {
     renderPage();
 
     await screen.findByLabelText("Subject");
-    await user.click(screen.getByRole("button", { name: "Clear all" }));
     await user.click(screen.getByRole("checkbox", { name: /John Smith/i }));
 
     expect(screen.getByText("1 student selected")).toBeInTheDocument();
@@ -159,8 +166,8 @@ describe("StudentMessageDraftPage", () => {
     await waitFor(() => {
       expect(mockedSend).toHaveBeenCalledWith("access-token", {
         draftId: mockMessageDraft.id,
-        subject: mockMessageDraft.subject,
-        body: mockMessageDraft.body,
+        subject: "Assignment Reminder: Course Update",
+        body: "Remind students about the assignment, due date, and any next steps.",
         recipientIds: ["student-3"],
         recipients: [
           {
@@ -169,6 +176,7 @@ describe("StudentMessageDraftPage", () => {
             email: "john.smith@university.edu",
           },
         ],
+        conversationId: undefined,
       });
     });
   });
@@ -192,8 +200,7 @@ describe("StudentMessageDraftPage", () => {
   // Verifies: Requests empty recipients when ?empty=true.
   it("requests empty recipients when ?empty=true", async () => {
     mockedFetch.mockResolvedValueOnce({
-      ...mockMessageDraft,
-      recipients: [],
+      ...emptyRecipientsMessageDraft,
     });
 
     renderPage("/instructor/messages?empty=true");
@@ -205,8 +212,10 @@ describe("StudentMessageDraftPage", () => {
       });
     });
 
-    expect(await screen.findByText("0 students selected")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    // Course announcements are intentionally sendable with zero selected
+    // students because Canvas handles delivery at the course scope.
+    expect(await screen.findByText("Course announcement selected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
   });
 
   // Verifies: Shows load error with retry when ?loadError=true.
@@ -228,6 +237,6 @@ describe("StudentMessageDraftPage", () => {
 
     await userEvent.setup().click(screen.getByRole("button", { name: "Retry" }));
 
-    expect(await screen.findByLabelText("Subject")).toHaveValue(mockMessageDraft.subject);
+    expect(await screen.findByLabelText("Subject")).toHaveValue("Course Announcement");
   });
 });

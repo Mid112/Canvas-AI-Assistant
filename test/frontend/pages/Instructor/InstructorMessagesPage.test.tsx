@@ -188,7 +188,7 @@ describe("InstructorMessagesPage", () => {
     renderMessagesPage({ compose: true });
 
     expect(await screen.findByLabelText("Subject")).toHaveValue(
-      mockMessageDraft.subject,
+      "Course Announcement",
     );
   });
 

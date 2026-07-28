@@ -44,11 +44,6 @@ export const mockMessageTemplates: MessageTemplate[] = [
     name: "Course Announcement",
     description: "Share important updates with your class",
   },
-  {
-    id: "grade-feedback",
-    name: "Grade Feedback",
-    description: "Provide personalized feedback on student work",
-  },
 ];
 
 export const mockMessageDraft = {

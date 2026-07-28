@@ -1,4 +1,5 @@
 import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { Outlet, Route, Routes } from "react-router-dom";
 
@@ -6,7 +7,7 @@ import { institutionCourseData } from "@/data/institutionCourseData";
 import { mockMessageDraft } from "@/data/mockMessageDraft";
 import { InstructorCourseMessagesPage } from "@/pages/Instructor/InstructorCourse/InstructorCourseMessagesPage";
 import type { InstructorCourseOutletContext } from "@/pages/Instructor/InstructorCourse/instructorCourseLayoutContext";
-import { fetchMessageDraft } from "@/services/messageDraft";
+import { fetchMessageDraft, sendMessageDraft } from "@/services/messageDraft";
 import { fetchCourseStudentsWithSubmissionFallback } from "@/services/students";
 import type { InstructorCourse } from "@/types/course";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
@@ -55,6 +56,7 @@ vi.mock("@/contexts/AuthContext", async () => {
 });
 
 const mockedFetchDraft = vi.mocked(fetchMessageDraft);
+const mockedSendDraft = vi.mocked(sendMessageDraft);
 const mockedFetchStudents = vi.mocked(fetchCourseStudentsWithSubmissionFallback);
 
 function CourseMessagesRoute({
@@ -113,9 +115,14 @@ describe("InstructorCourseMessagesPage", () => {
     ).toBeInTheDocument();
 
     expect(await screen.findByLabelText("Subject")).toHaveValue(
-      mockMessageDraft.subject,
+      "Course Announcement",
     );
     expect(screen.getByText("Alex Student")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Course Announcement/i }),
+      ).toHaveAttribute("aria-current", "true");
+    });
 
     await waitFor(() => {
       expect(mockedFetchStudents).toHaveBeenCalledWith(
@@ -138,6 +145,94 @@ describe("InstructorCourseMessagesPage", () => {
         }),
       );
     });
+  });
+
+  it("sends a course announcement when Course Announcement is selected", async () => {
+    const user = userEvent.setup();
+    mockedFetchStudents.mockResolvedValue([
+      {
+        id: 1,
+        canvas_user_id: "101",
+        course_id: course.id,
+        name: "Alex Student",
+        sortable_name: null,
+        login_id: "alex@example.edu",
+        enrollment_state: "active",
+      },
+    ]);
+    mockedFetchDraft.mockResolvedValue({
+      ...mockMessageDraft,
+      recipients: [
+        {
+          id: "101",
+          name: "Alex Student",
+          email: "alex@example.edu",
+        },
+      ],
+    });
+    mockedSendDraft.mockResolvedValue();
+
+    renderWithRouter(<CourseMessagesRoute />);
+
+    await user.click(await screen.findByRole("button", { name: /Course Announcement/i }));
+    expect(screen.getByText("Course announcement selected")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Send$/ })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: /^Send$/ }));
+    expect(
+      await screen.findByText(/whole course as an announcement/i),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Confirm Send" }));
+
+    await waitFor(() => {
+      expect(mockedSendDraft).toHaveBeenCalledWith(
+        "access-token",
+        expect.objectContaining({
+          recipientIds: [],
+          recipients: [],
+        }),
+      );
+    });
+  });
+
+  it("switches back to Assignment Reminder when students are selected", async () => {
+    const user = userEvent.setup();
+    mockedFetchStudents.mockResolvedValue([
+      {
+        id: 1,
+        canvas_user_id: "101",
+        course_id: course.id,
+        name: "Alex Student",
+        sortable_name: null,
+        login_id: "alex@example.edu",
+        enrollment_state: "active",
+      },
+    ]);
+    mockedFetchDraft.mockResolvedValue({
+      ...mockMessageDraft,
+      recipients: [
+        {
+          id: "101",
+          name: "Alex Student",
+          email: "alex@example.edu",
+        },
+      ],
+    });
+
+    renderWithRouter(<CourseMessagesRoute />);
+
+    await screen.findByRole("button", { name: /Course Announcement/i });
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Course Announcement/i }),
+      ).toHaveAttribute("aria-current", "true");
+    });
+
+    await user.click(screen.getByRole("checkbox", { name: /Alex Student/i }));
+
+    expect(
+      screen.getByRole("button", { name: /Assignment Reminder/i }),
+    ).toHaveAttribute("aria-current", "true");
   });
 
   // Verifies: Loads recipients when the course has a Canvas URL but no Canvas course id.

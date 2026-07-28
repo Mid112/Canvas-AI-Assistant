@@ -1,14 +1,13 @@
 import { Plus, RefreshCw } from "lucide-react";
+import { useState } from "react";
 
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInstitution } from "@/contexts/useInstitution";
-import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
-import { toBrowserCanvasUrl } from "@/lib/canvas-url";
-import { cn } from "@/lib/utils";
+import { CreateCourseDialog } from "@/pages/Instructor/InstructorCourses/CreateCourseDialog";
 
 interface InstructorCoursesHeaderProps {
-  onRefreshCourses?: () => void;
+  onRefreshCourses?: () => void | Promise<void>;
   isRefreshing?: boolean;
 }
 
@@ -18,11 +17,8 @@ export function InstructorCoursesHeader({
 }: InstructorCoursesHeaderProps) {
   const { user } = useAuth();
   const { selectedInstitution } = useInstitution();
-  const connectionUrl = useCanvasConnectionUrl();
-  const newCourseUrl =
-    user?.has_canvas_token && connectionUrl
-      ? `${toBrowserCanvasUrl(connectionUrl)}/courses`
-      : undefined;
+  const [createOpen, setCreateOpen] = useState(false);
+  const canCreateCourse = Boolean(user?.has_canvas_token);
 
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
@@ -41,7 +37,9 @@ export function InstructorCoursesHeader({
             type="button"
             variant="outline"
             size="lg"
-            onClick={onRefreshCourses}
+            onClick={() => {
+              void onRefreshCourses();
+            }}
             disabled={isRefreshing}
           >
             <RefreshCw
@@ -51,18 +49,23 @@ export function InstructorCoursesHeader({
             Sync from Canvas
           </Button>
         ) : null}
-        {newCourseUrl ? (
-          <a
-            href={newCourseUrl}
-            target="_blank"
-            rel="noreferrer"
-            className={cn(buttonVariants({ size: "lg" }))}
+        {canCreateCourse ? (
+          <Button
+            type="button"
+            size="lg"
+            onClick={() => setCreateOpen(true)}
           >
             <Plus data-icon="inline-start" />
             New Course
-          </a>
+          </Button>
         ) : null}
       </div>
+
+      <CreateCourseDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onCreated={onRefreshCourses}
+      />
     </div>
   );
 }

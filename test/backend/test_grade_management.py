@@ -76,6 +76,23 @@ def test_preview_requires_grade_or_feedback():
     assert exc.value.detail == "Enter a new grade or feedback before previewing."
 
 
+def test_preview_rejects_profanity_in_feedback_reason():
+    with pytest.raises(HTTPException) as exc:
+        _build_grade_preview(
+            SimpleNamespace(id=7, name="COSC 777"),
+            GradeUpdateRequest(
+                assignment_id=10,
+                user_id=42,
+                posted_grade="85",
+                reason="This is fucking inappropriate",
+            ),
+            _submission(),
+        )
+
+    assert exc.value.status_code == 422
+    assert "appropriate" in exc.value.detail.lower()
+
+
 @pytest.mark.parametrize(
     "posted_grade,detail",
     [
@@ -102,7 +119,21 @@ def test_preview_rejects_invalid_grade_payloads(posted_grade, detail):
     assert exc.value.detail == detail
 
 
-@pytest.mark.parametrize("posted_grade", ["95", "A", "C-", "F", "complete", "incomplete", "pass"])
+@pytest.mark.parametrize(
+    "posted_grade",
+    [
+        "95",
+        "A",
+        "C-",
+        "F",
+        "complete",
+        "incomplete",
+        "pass",
+        "np",
+        "satisfactory",
+        "unsatisfactory",
+    ],
+)
 def test_preview_allows_supported_grade_formats(posted_grade):
     preview = _build_grade_preview(
         SimpleNamespace(id=7, name="COSC 777"),

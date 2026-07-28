@@ -167,6 +167,20 @@ describe("InstructorCourseGradesPage", () => {
     expect(mockedPreviewGradeUpdate).not.toHaveBeenCalled();
   });
 
+  it.each(["satisfactory", "unsatisfactory", "np"])(
+    "allows supported Canvas grading scheme value %s before preview",
+    async (grade) => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await screen.findByRole("cell", { name: "Coin" });
+      await user.type(screen.getByLabelText("New grade"), grade);
+
+      expect(screen.queryByText(/Use a numeric grade or a supported Canvas grade/i)).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Preview change" })).toBeEnabled();
+    },
+  );
+
   it("filters grade rows and selects all visible students", async () => {
     // Covers bulk workflow ergonomics: filters change which rows are visible,
     // and "All" only selects the currently visible student rows.
@@ -533,5 +547,26 @@ describe("InstructorCourseGradesPage", () => {
 
     await waitFor(() => expect(mockedSubmitGradeUpdate).toHaveBeenCalledTimes(1));
     expect(await screen.findByText(/Feedback sent. History record #12./)).toBeInTheDocument();
+  });
+
+  it("blocks preview when feedback contains profanity before calling the API", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await screen.findByRole("cell", { name: "Coin" });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Select Coin")).toBeChecked();
+    });
+
+    await user.type(
+      screen.getByLabelText("Feedback"),
+      "Please revise this shitty draft carefully.",
+    );
+
+    expect(
+      await screen.findByRole("alert"),
+    ).toHaveTextContent(/not appropriate for student communication/i);
+    expect(screen.getByRole("button", { name: "Preview feedback" })).toBeDisabled();
+    expect(mockedPreviewGradeUpdate).not.toHaveBeenCalled();
   });
 });
