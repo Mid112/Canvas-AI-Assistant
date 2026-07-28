@@ -160,12 +160,17 @@ def _remember_assignments_from_list(memory: dict[str, Any], items: list[Any]) ->
 
 
 def _remember_students_from_list(memory: dict[str, Any], items: list[Any]) -> None:
-    """Populate recent_students from fetch_students-style payloads."""
+    """Populate recent_students from fetch_students-style payloads.
+
+    Prefer Canvas user ids (``canvas_user_id`` / ``user_id``) over the local
+    Student row ``id`` — follow-up grade/student resolvers match submission
+    ``user_id`` / prompt ``canvas_user_id``, not the local PK (#1302).
+    """
     for item in reversed(items):
         if not isinstance(item, dict):
             continue
         student_id = _coerce_int(
-            item.get("id") or item.get("canvas_user_id") or item.get("user_id")
+            item.get("canvas_user_id") or item.get("user_id") or item.get("id")
         )
         if student_id is None:
             continue
