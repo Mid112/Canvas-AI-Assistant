@@ -160,7 +160,7 @@ jobs:
             -e DEFAULT_LLM_PROVIDER=huggingface \
             -e PYTHONPATH=/workspace/app/backend \
             python:3.12-slim-bookworm \
-            bash -c "pip install --quiet -r app/backend/requirements.txt && cd app/backend && pytest ../../test/backend/ -v --cov --cov-report=term-missing"
+            bash -c "pip install --quiet -r app/backend/requirements.txt && cd app/backend && pytest ../../test/backend/ -v -m \"not fuzz\" --cov --cov-report=term-missing"
       - name: Stop PostgreSQL
         if: always()
         run: |

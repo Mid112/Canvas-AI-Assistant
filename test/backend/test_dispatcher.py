@@ -92,6 +92,23 @@ def test_unknown_action():
     assert "isn't supported" in exc_info.value.user_message
 
 
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '{"action": {"nested": "object"}}',
+        '{"action": ["fetch_courses"]}',
+        '{"action": 12}',
+        '{"action": null}',
+    ],
+)
+def test_non_string_action_raises_tool_execution_error(raw):
+    """Non-string action must not TypeError crash chat callers (#1301 / PR #1314)."""
+    with pytest.raises(ToolExecutionError) as exc_info:
+        parse_action(raw)
+    assert "could not be understood" in exc_info.value.user_message
+    assert "Raw output" not in exc_info.value.user_message
+
+
 # Verifies: Missing field.
 def test_missing_field():
     with pytest.raises(ToolExecutionError) as exc_info:

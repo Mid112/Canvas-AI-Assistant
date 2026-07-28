@@ -1,4 +1,4 @@
-.PHONY: install install-vllm install-ollama lint lint-fix test test-windows test-llm test-llm-windows test-ollama test-ollama-windows test-vague-llm test-vague-llm-windows test-e2e test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset db-ensure seed-canvas-students run-vllm run-ollama dev e2e-up reload
+.PHONY: install install-vllm install-ollama lint lint-fix test test-fuzz test-windows test-llm test-llm-windows test-ollama test-ollama-windows test-vague-llm test-vague-llm-windows test-e2e test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset db-ensure seed-canvas-students run-vllm run-ollama dev e2e-up reload
 
 # ── Install ──────────────────────────────────
 # Creates a venv (if one doesn't exist) and installs backend deps
@@ -86,8 +86,23 @@ test: db-ensure
 		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
 		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
 		HF_TOKEN=$${HF_TOKEN:-test-hf-token} \
-		.venv/bin/pytest ../../test/backend/ -v --cov --cov-report=term-missing
+		.venv/bin/pytest ../../test/backend/ -v -m "not fuzz" --cov --cov-report=term-missing
 	cd app/frontend && npm run test:coverage
+
+# ── Fuzz / property-based tests (#1301) ───────
+# Hypothesis harness for pure parsers/validators. Opt-in (not in default
+# `make test` / CI). Still depends on `db-ensure` / shared conftest Postgres
+# fixtures even though the helpers under test do not query the DB.
+# Requires hypothesis in the backend venv (`pip install -r requirements.txt`).
+test-fuzz: db-ensure
+	cd app/backend && \
+		PYTHONPATH=. \
+		DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
+		ENVIRONMENT=test \
+		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
+		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
+		HF_TOKEN=$${HF_TOKEN:-test-hf-token} \
+		.venv/bin/pytest ../../test/backend/ -v -m fuzz
 
 # ── Test (Windows) ────────────────────────────
 # Same as `test` above — kept as a separate target rather than
@@ -103,7 +118,7 @@ test-windows: db-ensure
 		SECRET_KEY=$${SECRET_KEY:-localdevsecret} \
 		CANVAS_TOKEN_ENCRYPTION_KEY=$${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=} \
 		HF_TOKEN=$${HF_TOKEN:-test-hf-token} \
-		.venv/Scripts/pytest ../../test/backend/ -v --cov --cov-report=term-missing
+		.venv/Scripts/pytest ../../test/backend/ -v -m "not fuzz" --cov --cov-report=term-missing
 	cd app/frontend && npm run test:coverage
 
 # ── Browser E2E (Playwright) ─────────────────
