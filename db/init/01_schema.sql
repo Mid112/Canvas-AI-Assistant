@@ -334,7 +334,7 @@ CREATE INDEX idx_audit_logs_timestamp ON audit_logs(timestamp);
 -- ─────────────────────────────────────────────
 CREATE TABLE audit_logs_session (
     id           SERIAL PRIMARY KEY,
-    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
+    user_id      INTEGER REFERENCES users(id) ON DELETE RESTRICT,
     workflow_id  INTEGER REFERENCES workflows(id) ON DELETE SET NULL,
     action       VARCHAR NOT NULL,
     details      JSONB,
@@ -597,12 +597,16 @@ CREATE TABLE support_tickets (
     admin_notes         TEXT,
     created_by          INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     resolved_by         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    assigned_to         INTEGER REFERENCES users(id) ON DELETE SET NULL,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     resolved_at         TIMESTAMPTZ
 );
 
 CREATE INDEX idx_support_tickets_status_created_at
     ON support_tickets(status, created_at DESC);
+
+CREATE INDEX idx_support_tickets_assigned_to
+    ON support_tickets(assigned_to);
 
 -- ─────────────────────────────────────────────
 -- Schema Migrations
@@ -660,7 +664,9 @@ INSERT INTO schema_migrations (filename) VALUES
     ('033_workflow_paused_status.sql'),
     ('034_canvas_idempotency_claim_and_retention.sql'),
     ('035_workflow_display_name.sql'),
+    ('036_audit_log_session_nullable_user.sql'),
     ('036_failed_operations.sql'),
     ('037_failed_operations_human_summary.sql'),
     ('038_support_tickets.sql'),
-    ('039_grade_history_local_relationships.sql');
+    ('039_support_ticket_assigned_admin.sql'),
+    ('040_grade_history_local_relationships.sql');

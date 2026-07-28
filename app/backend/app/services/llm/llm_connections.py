@@ -17,6 +17,7 @@ from app.services.llm.provider_registry import (
     check_provider_health,
     get_provider_definition,
     list_provider_definitions,
+    validate_api_key,
 )
 
 
@@ -73,11 +74,12 @@ def is_provider_connected(
     health_status: str,
 ) -> bool:
     if definition.id == "openai_compatible_custom":
-        return _has_custom_credentials(connection)
+        return _has_custom_credentials(connection) and health_status != "unauthorized"
 
-    # Instructor personal key counts as connected even if server health is down.
+    # Instructor personal key counts as connected even if server health is down,
+    # unless the provider has explicitly rejected the key (401/403).
     if _has_user_credentials(connection):
-        return True
+        return health_status != "unauthorized"
 
     if definition.hosting == "local":
         return health_status == "available"
@@ -90,6 +92,43 @@ def is_provider_connected(
     return False
 
 
+async def _resolve_connection_health(
+    definition: ProviderDefinition,
+    connection: InstructorLlmConnection | None,
+) -> dict:
+    """Re-check the instructor's own stored key against the real provider.
+
+    Called on every catalog fetch (Settings load, model switcher — which
+    happens right after login) so a revoked or mistyped key is reflected
+    immediately instead of only at the moment it was first saved.
+    """
+    has_key = (
+        _has_custom_credentials(connection)
+        if definition.id == "openai_compatible_custom"
+        else _has_user_credentials(connection)
+    )
+    if not has_key:
+        return await check_provider_health(definition)
+
+    try:
+        user_key = _decrypt_stored_api_key(connection.encrypted_api_key)
+    except ValueError as exc:
+        return {"status": "unauthorized", "models": [], "detail": str(exc)}
+
+    base_url = connection.base_url if definition.id == "openai_compatible_custom" else None
+    is_valid, detail = await validate_api_key(definition, user_key, base_url=base_url)
+    if not is_valid:
+        return {"status": "unauthorized", "models": [], "detail": detail}
+
+    if not definition.supports_model_discovery:
+        return {
+            "status": "configured",
+            "models": [definition.default_model] if definition.default_model else [],
+            "detail": None,
+        }
+    return await check_provider_health(definition, api_key=user_key)
+
+
 async def build_instructor_provider_catalog(
     db: AsyncSession,
     user_id: int,
@@ -97,7 +136,10 @@ async def build_instructor_provider_catalog(
     connections = await get_user_connections(db, user_id)
     definitions = list_provider_definitions()
     health = await asyncio.gather(
-        *[check_provider_health(definition) for definition in definitions]
+        *[
+            _resolve_connection_health(definition, connections.get(definition.id))
+            for definition in definitions
+        ]
     )
 
     catalog: list[dict] = []
@@ -146,21 +188,34 @@ async def build_adapter_settings(
     definition = get_provider_definition(provider)
     connections = await get_user_connections(db, user_id)
     connection = connections.get(provider)
+    has_personal_key = (
+        _has_custom_credentials(connection)
+        if provider == "openai_compatible_custom"
+        else _has_user_credentials(connection)
+    )
 
-    # Local runtimes need a live health check. Hosted providers are credential-
-    # gated; probing /models on every chat turn is unnecessary and can falsely
-    # mark a working server key as disconnected.
+    # Local runtimes need a live health check. Server-configured (non-personal)
+    # hosted providers are credential-gated; probing /models on every chat turn
+    # is unnecessary and can falsely mark a working server key as disconnected.
+    # An instructor's own key is re-validated on every use so a revoked or
+    # mistyped key is caught before dispatching the chat request.
     if definition.hosting == "local":
         health = await check_provider_health(definition)
         health_status = health["status"]
+    elif has_personal_key:
+        user_key = _decrypt_stored_api_key(connection.encrypted_api_key)
+        base_url = connection.base_url if provider == "openai_compatible_custom" else None
+        is_valid, _ = await validate_api_key(definition, user_key, base_url=base_url)
+        health_status = "configured" if is_valid else "unauthorized"
     else:
-        health_status = (
-            "configured"
-            if definition.configured or _has_user_credentials(connection)
-            else "unconfigured"
-        )
+        health_status = "configured" if definition.configured else "unconfigured"
 
     if not is_provider_connected(definition, connection, health_status):
+        if health_status == "unauthorized":
+            raise ValueError(
+                f"{definition.name} rejected your saved API key. "
+                "Reconnect it in Settings."
+            )
         raise ValueError(f"{definition.name} is not connected")
 
     resolved_model = (
@@ -273,6 +328,18 @@ async def upsert_llm_connection(
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail="An API key is required to connect this provider.",
                 )
+
+    if normalized_api_key:
+        is_valid, error_detail = await validate_api_key(
+            definition,
+            normalized_api_key,
+            base_url=normalized_base_url if provider_id == "openai_compatible_custom" else None,
+        )
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=error_detail or "The provider rejected this API key.",
+            )
 
     if connection is None:
         connection = InstructorLlmConnection(

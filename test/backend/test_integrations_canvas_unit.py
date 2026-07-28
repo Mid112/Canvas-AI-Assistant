@@ -27,6 +27,7 @@ from app.integrations.canvas import (
     fetch_assignments,
     fetch_courses,
     fetch_enrollments,
+    fetch_student_enrollment,
     fetch_submissions,
     fetch_user_profile,
     post_announcement,
@@ -300,6 +301,42 @@ async def test_get_with_retry_no_retry_on_success():
 
     assert result is success
     assert client.get.await_count == 1
+
+
+# ---------------------------------------------------------------------------
+# fetch_enrollments / fetch_student_enrollment — active-only enrollment state
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "func,args",
+    [
+        (fetch_enrollments, (1, "tok")),
+        (fetch_student_enrollment, (1, 2, "tok")),
+    ],
+)
+async def test_enrollment_fetchers_request_active_state_only(func, args):
+    """Canvas exposes "invited"/"creation_pending" enrollments alongside
+    "active" ones, but every consumer of these two functions (roster counts,
+    course-overview/dashboard metrics, messaging recipients, the AI
+    assistant's student summaries) treats "active" as the only state that
+    counts as an enrolled student — see student-analytics.ts's matching
+    frontend filter. That invariant depends entirely on these two functions
+    never asking Canvas for anything but state[]=active; pin it here so a
+    future change can't silently widen the filter without also updating
+    every downstream consumer.
+    """
+    response = httpx.Response(
+        200, json=[], request=httpx.Request("GET", "https://canvas.test/x")
+    )
+    client = _client_returning(response, method="get")
+
+    with patch("app.integrations.canvas.httpx.AsyncClient", return_value=client):
+        await func(*args)
+
+    inner_client = client.__aenter__.return_value
+    call_params = inner_client.get.call_args.kwargs["params"]
+    assert call_params["state[]"] == "active"
 
 
 # ---------------------------------------------------------------------------

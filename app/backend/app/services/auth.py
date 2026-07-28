@@ -59,12 +59,9 @@ async def register_user(db: AsyncSession, body: RegisterRequest) -> TokenRespons
 async def login_user(db: AsyncSession, email: str, password: str) -> TokenResponse:
     user = await db.scalar(select(User).where(User.email == email))
 
-    if not user or not verify_password(password, user.hashed_password):
-        if user:
-            db.add(AuditLogSession(
-                user_id=user.id, action="login_failed", details={"email": email, "reason": "invalid_credentials"}
-            ))
-            await db.commit()
+    if not user:
+        db.add(AuditLogSession(user_id=None, action="login_failed", details={"email": email, "reason": "unknown_email"}))
+        await db.commit()
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     if not user.is_active:
@@ -74,14 +71,21 @@ async def login_user(db: AsyncSession, email: str, password: str) -> TokenRespon
         await db.commit()
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
 
-    token, _ = await issue_token_for_user(db, user)
+    if not verify_password(password, user.hashed_password):
+        db.add(AuditLogSession(
+            user_id=user.id, action="login_failed", details={"email": email, "reason": "invalid_credentials"}
+        ))
+        await db.commit()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     # Same "admin_login" record admin_login_user (the separate, rate-limited
     # /admin/login endpoint) writes, so the audit trail doesn't depend on
-    # which endpoint an admin happens to sign in through.
+    # which endpoint an admin happens to sign in through. Add it before
+    # issue_token_for_user(), whose commit persists both the Session and this
+    # audit row atomically.
     action = "admin_login" if user.role == "admin" else "instructor_login"
     db.add(AuditLogSession(user_id=user.id, action=action, details={"email": user.email}))
-    await db.commit()
+    token, _ = await issue_token_for_user(db, user)
 
     return TokenResponse(access_token=token)
 
@@ -89,12 +93,9 @@ async def login_user(db: AsyncSession, email: str, password: str) -> TokenRespon
 async def admin_login_user(db: AsyncSession, email: str, password: str) -> TokenResponse:
     user = await db.scalar(select(User).where(User.email == email))
 
-    if not user or not verify_password(password, user.hashed_password):
-        if user:
-            db.add(AuditLogSession(
-                user_id=user.id, action="login_failed", details={"email": email, "reason": "invalid_credentials"}
-            ))
-            await db.commit()
+    if not user:
+        db.add(AuditLogSession(user_id=None, action="login_failed", details={"email": email, "reason": "unknown_email"}))
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
@@ -115,27 +116,31 @@ async def admin_login_user(db: AsyncSession, email: str, password: str) -> Token
             user_id=user.id, action="login_failed", details={"email": email, "reason": "account_disabled"}
         ))
         await db.commit()
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account is disabled")
+
+    if not verify_password(password, user.hashed_password):
+        db.add(AuditLogSession(
+            user_id=user.id, action="login_failed", details={"email": email, "reason": "invalid_credentials"}
+        ))
+        await db.commit()
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is disabled",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
         )
 
-    token, _ = await issue_token_for_user(db, user)
     db.add(AuditLogSession(user_id=user.id, action="admin_login", details={"email": user.email}))
-    await db.commit()
+    token, _ = await issue_token_for_user(db, user)
     return TokenResponse(access_token=token)
 
 
 async def logout_user(db: AsyncSession, token: str, user: User) -> None:
-    await revoke_session(db, token)
     db.add(AuditLogSession(user_id=user.id, action="instructor_logout", details={"email": user.email}))
-    await db.commit()
+    await revoke_session(db, token)
 
 
 async def logout_admin(db: AsyncSession, token: str, user: User) -> None:
-    await revoke_session(db, token)
     db.add(AuditLogSession(user_id=user.id, action="admin_logout", details={"email": user.email}))
-    await db.commit()
+    await revoke_session(db, token)
 
 
 async def update_profile(db: AsyncSession, user: User, body: ProfileUpdateRequest) -> User:

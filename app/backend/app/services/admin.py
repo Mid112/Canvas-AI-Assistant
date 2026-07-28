@@ -50,15 +50,23 @@ async def get_dashboard_stats(db: AsyncSession) -> dict:
         select(func.count()).select_from(Workflow).where(Workflow.status == "pending")
     )
     week_ago = datetime.now(UTC) - timedelta(days=7)
-    audit_events = await db.scalar(
+    # Two independent tables back the audit viewer (see services/audit.py's
+    # list_audit_logs): AuditLog for workflow events, AuditLogSession for
+    # session/security/admin events. Both count as audit events in the
+    # viewer, so both must count here too, or this undercounts relative to
+    # what the admin sees when they open the audit log page.
+    workflow_audit_events = await db.scalar(
         select(func.count()).select_from(AuditLog).where(AuditLog.timestamp >= week_ago)
+    )
+    session_audit_events = await db.scalar(
+        select(func.count()).select_from(AuditLogSession).where(AuditLogSession.timestamp >= week_ago)
     )
 
     return {
         "instructor_count": instructor_count or 0,
         "admin_count": admin_count or 0,
         "active_workflows": active_workflows or 0,
-        "audit_events_last_7_days": audit_events or 0,
+        "audit_events_last_7_days": (workflow_audit_events or 0) + (session_audit_events or 0),
     }
 
 
@@ -89,13 +97,14 @@ async def update_admin_settings(db: AsyncSession, new_settings: dict, admin: Use
         else:
             db.add(SystemSetting(key=key, value=value))
 
+    # changed_keys only, deliberately not the values themselves — LLM keys
+    # are blocked above, but a future admin setting could hold something
+    # sensitive, and persisting whatever's passed in verbatim would leak it
+    # into the audit trail (which admins can view/export) the moment that
+    # happens. The keys alone are enough for an audit record.
     db.add(AuditLogSession(
         user_id=admin.id,
         action="admin_settings_updated",
-        # changed_keys only — deliberately not the values themselves. LLM keys
-        # are blocked above, but a future admin setting could hold something
-        # sensitive, and persisting whatever's passed in verbatim would leak
-        # it into the audit trail (and CSV exports).
         details={"changed_keys": list(new_settings.keys())},
     ))
     await db.commit()
