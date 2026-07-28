@@ -49,6 +49,7 @@ from app.services.canvas import (
     CanvasTokenRequiredError,
     _is_expected_canvas_token_sync_error,
     _is_transient_canvas_outage,
+    get_active_course,
     sync_courses_if_stale,
 )
 from app.services.canvas_assistant_gate import (
@@ -2407,6 +2408,9 @@ update_assignment, create_quiz, send_message, update_grade), check every field l
 in that action's schema below. This includes the action/task type itself
 (e.g. don't guess whether the user wants create_assignment vs
 create_quiz vs update_assignment), and fields like title, description, and due_date.
+(Exception: send_message's subject and body are optional — see
+SEND_MESSAGE HANDOFF below. create_quiz and update_grade also skip the
+missing-field clarify — see their HANDOFF sections.)
 If any required field is missing or was not stated by the user, use the
 AMBIGUITY CHECK format to ask for it. Never invent a placeholder value
 and never silently omit a required field from proposed_action.
@@ -2452,6 +2456,23 @@ Exception: if the user asks to "give feedback", "send feedback", or "leave
 a note" for a student but does not tie it to an assignment/submission/grade,
 ask whether they mean assignment feedback on a submission or a private
 message to the student.
+
+SEND_MESSAGE HANDOFF:
+IMPORTANT — send_message skips the missing-field AMBIGUITY CHECK for
+subject and body when the user's request implies a recipient set that
+needs server-side resolution (recipient_handle from a prior
+resolve_missing_submissions turn, recipient_directives naming students,
+or broadcast_to_all_students). When the user says "send reminders to
+students who haven't submitted assignment X" or "message all students
+saying Y", propose send_message immediately with whatever details you
+have. If the user provided a body or subject, include them; if not,
+leave them empty ("") and the Messages compose form handoff lets the
+user fill them in manually. Do not clarify subject or body when the
+user's request already implies who should receive the message — propose
+the action and let the form handle the rest. The one exception: if the
+user asks to "send a message" but doesn't say WHO (no recipient
+directives, no handle, no broadcast, no "students who haven't
+submitted"), ask who the recipients should be.
 
 READ ACTIONS — execute immediately, no preview:
 fetch_courses, fetch_assignments, fetch_quizzes, fetch_students, fetch_submissions,
@@ -3078,6 +3099,16 @@ async def handle_chat_message(
         course_name_from_llm = parsed_envelope.get("course_name") if isinstance(parsed_envelope, dict) else None
 
         resolved_local_course_id = conversation.course_id
+        # Fallback: if the conversation has no course_id yet (e.g. a fresh
+        # conversation seeded from the active-course preference but not yet
+        # resolved), try the user's active course preference before giving
+        # up. Without this, a resolve_missing_submissions action with
+        # course_name that doesn't exactly match canvas_course_names would
+        # fail validation on a required local_course_id (#1310).
+        if resolved_local_course_id is None:
+            active = await get_active_course(user, db)
+            if active is not None:
+                resolved_local_course_id = active.local_id
         matched = _match_course_name(course_names, course_name_from_llm)
         if matched is not None:
             matched_local_course_id = matched.local_course_id
