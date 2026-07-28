@@ -196,6 +196,45 @@ async def test_refresh_course_mirror_logs_quietly_on_transient_canvas_outage(cap
 
 
 @pytest.mark.asyncio
+async def test_refresh_course_mirror_redacts_secrets_in_quiet_log(caplog):
+    """Quiet fallback should not log raw API-key-shaped exception detail."""
+    import logging
+
+    from fastapi import HTTPException, status
+
+    from app.services.dashboard import _refresh_course_mirror
+
+    user = SimpleNamespace(id=1)
+    semaphore = __import__("asyncio").Semaphore(1)
+    leaky = "Could not reach Canvas; token=sk-ant-abcdefghijklmnopqrstuvwxyz"
+
+    with (
+        patch(
+            "app.services.dashboard.get_assignments",
+            new=AsyncMock(
+                side_effect=HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=leaky,
+                )
+            ),
+        ),
+        patch("app.services.dashboard.get_students", new=AsyncMock()),
+        caplog.at_level(logging.INFO),
+    ):
+        await _refresh_course_mirror(42, "https://canvas.ubc.ca", user, semaphore)
+
+    quiet = [
+        record
+        for record in caplog.records
+        if "Dashboard refresh skipped for course_id=42" in record.getMessage()
+    ]
+    assert quiet
+    joined = " ".join(record.getMessage() for record in quiet)
+    assert "sk-ant-abcdefghijklmnopqrstuvwxyz" not in joined
+    assert "[REDACTED" in joined
+
+
+@pytest.mark.asyncio
 async def test_refresh_course_mirror_logs_quietly_on_token_reconnect(caplog):
     import logging
 

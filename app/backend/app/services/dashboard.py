@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import AsyncSessionLocal
+from app.core.secret_redaction import redact_secrets
 from app.models.course import Course
 from app.models.submission import Submission
 from app.models.user import User
@@ -59,11 +60,13 @@ async def _refresh_course_mirror(
                 exc
             ):
                 detail = getattr(exc, "detail", None) or str(exc)
+                if not isinstance(detail, str):
+                    detail = str(detail)
                 logger.info(
                     "Dashboard refresh skipped for course_id=%s (%s); "
                     "showing last-synced data for this course.",
                     course_id,
-                    detail,
+                    redact_secrets(detail),
                 )
             else:
                 logger.warning(

@@ -189,6 +189,39 @@ def _is_expected_canvas_token_sync_error(exc: Exception) -> bool:
     return False
 
 
+def _exception_text_for_canvas_classifier(exc: BaseException) -> str:
+    log_detail = getattr(exc, "log_detail", None)
+    user_message = getattr(exc, "user_message", None)
+    if isinstance(log_detail, str) or isinstance(user_message, str):
+        return (log_detail or "") or (user_message or "")
+    if isinstance(exc, HTTPException) and isinstance(exc.detail, str):
+        return exc.detail
+    return str(exc)
+
+
+def _text_has_gateway_status_with_context(text: str) -> bool:
+    """True when 502/503/504 appears with Canvas/HTTP/upstream context.
+
+    Bare numeric matches alone are too broad for quiet-fallback logging —
+    e.g. ``RuntimeError("order 502 failed")`` must not look like a Canvas
+    outage (#1295 review).
+    """
+    if not any(code in text for code in ("502", "503", "504")):
+        return False
+    lowered = text.lower()
+    return (
+        "canvas" in lowered
+        or "upstream" in lowered
+        or "http" in lowered
+        or "gateway" in lowered
+        or "bad gateway" in lowered
+        or "service unavailable" in lowered
+        or "server error" in lowered
+        or "timed out" in lowered
+        or "timeout" in lowered
+    )
+
+
 def _is_transient_canvas_outage(exc: BaseException) -> bool:
     """Canvas 5xx / timeouts / reachability — expected when falling back to
     last-synced local data (dashboard mirror refresh, chat monitoring).
@@ -200,24 +233,14 @@ def _is_transient_canvas_outage(exc: BaseException) -> bool:
     if isinstance(exc, HTTPException) and exc.status_code in {502, 503, 504}:
         return True
 
-    log_detail = getattr(exc, "log_detail", None)
-    user_message = getattr(exc, "user_message", None)
-    if isinstance(log_detail, str) or isinstance(user_message, str):
-        text = (log_detail or "") or (user_message or "")
-    elif isinstance(exc, HTTPException) and isinstance(exc.detail, str):
-        text = exc.detail
-    else:
-        text = str(exc)
-
+    text = _exception_text_for_canvas_classifier(exc)
     lowered = text.lower()
     return (
         "canvas server error" in lowered
         or "canvas api timed out" in lowered
         or "could not reach canvas" in lowered
         or "timed out" in lowered
-        or "502" in text
-        or "503" in text
-        or "504" in text
+        or _text_has_gateway_status_with_context(text)
     )
 
 

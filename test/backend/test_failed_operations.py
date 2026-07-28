@@ -244,11 +244,16 @@ def test_is_expected_canvas_token_sync_error_rejects_non_http_errors():
     [
         ("upstream timed out waiting for Canvas", True),
         ("Canvas proxy returned 503", True),
+        ("HTTP 504 from upstream gateway", True),
+        ("Canvas GET failed with 504", True),
         ("permission denied", False),
+        # Bare status digits without Canvas/HTTP context must not quiet-log.
+        ("order 502 failed inventory sync", False),
+        ("step 503 of migration", False),
     ],
 )
 def test_is_transient_canvas_outage_shared_classifier(message, expected):
-    """#1295: one shared helper for dashboard + chat (incl. bare 5xx text)."""
+    """#1295: shared helper; gateway codes need Canvas/HTTP context."""
     from app.services.canvas import _is_transient_canvas_outage
 
     assert _is_transient_canvas_outage(RuntimeError(message)) is expected
