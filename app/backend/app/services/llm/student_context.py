@@ -348,13 +348,23 @@ def ground_assistant_result(
     facts = union_grounded_facts(prior_facts, tool_facts)
     out = dict(result)
 
+    # Prose scrubbing uses the union of prior + this-turn facts so a
+    # follow-up turn can reference "HW1" from an earlier fetch without
+    # re-fetching. This is safe — the user sees and reviews prose.
     for prose_key in ("message", "summary", "question"):
         value = out.get(prose_key)
         if isinstance(value, str):
             out[prose_key] = strip_ungrounded_canvas_facts(value, facts)
 
+    # proposed_action scrubbing uses ONLY this-turn tool_facts — never
+    # prior accumulated facts. A prior-turn ID (e.g. student 123 from
+    # assignment A's submissions) must NOT authorize the same ID in a
+    # proposed_action targeting assignment B, since the ID may not be
+    # valid for the new context. The resolver chains (_resolve_grade_target,
+    # _run_update_assignment_chain) already validate IDs server-side, so
+    # this is defense-in-depth, not the primary guard.
     proposed = out.get("proposed_action")
-    if isinstance(proposed, dict) and facts.ids:
+    if isinstance(proposed, dict) and tool_facts.ids:
         cleaned = dict(proposed)
         for key in _RETRIEVED_REF_KEYS:
             if key not in cleaned:
@@ -363,12 +373,14 @@ def ground_assistant_result(
                 numeric = int(cleaned[key])
             except (TypeError, ValueError):
                 continue
-            if numeric not in facts.ids:
+            if numeric not in tool_facts.ids:
                 cleaned.pop(key, None)
         out["proposed_action"] = cleaned
 
-    if facts.ids and out.get("action") == "respond" and isinstance(out.get("data"), dict):
-        out["data"] = filter_grounded_dict_fields(out["data"], facts.ids)
+    # Structured read echoes: drop ungrounded id fields if somehow mixed in.
+    # Uses this-turn tool_facts only — same reasoning as proposed_action.
+    if tool_facts.ids and out.get("action") == "respond" and isinstance(out.get("data"), dict):
+        out["data"] = filter_grounded_dict_fields(out["data"], tool_facts.ids)
 
     if tool_facts.ids or tool_facts.names or tool_facts.grades:
         out["grounded"] = True

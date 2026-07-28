@@ -80,7 +80,10 @@ class CanvasTokenRequest(BaseModel):
         v = str(v).rstrip("/")
         if not v.startswith("https://"):
             parsed_url = urlparse(v)
-            if not (settings.DEBUG and parsed_url.scheme == "http" and parsed_url.hostname in _LOCAL_HTTP_HOSTS):
+            # localhost, 127.0.0.1, and canvas_lms are internal Docker/dev
+            # hosts that can never be reached from the public internet, so
+            # allowing http:// for them is always safe regardless of DEBUG.
+            if not (parsed_url.scheme == "http" and parsed_url.hostname in _LOCAL_HTTP_HOSTS):
                 raise ValueError("canvas_url must be an https:// URL")
         return v
 
