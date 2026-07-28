@@ -22,11 +22,11 @@ export function InstructorAssistantHeader({
   subtitle = "Canvas Workflow Management Assistant",
 }: InstructorAssistantHeaderProps) {
   return (
-    <div className="flex items-start gap-3">
-      <AssistantAvatar size="lg" />
-      <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">{title}</h1>
-        <p className="text-muted-foreground">{subtitle}</p>
+    <div className="flex items-center gap-3">
+      <AssistantAvatar size="sm" />
+      <div className="min-w-0">
+        <h1 className="text-lg font-semibold tracking-tight md:text-xl">{title}</h1>
+        <p className="text-sm text-muted-foreground">{subtitle}</p>
       </div>
     </div>
   );
@@ -51,9 +51,9 @@ export function InstructorAssistantSuggestedActions({
   disabled = false,
 }: InstructorAssistantSuggestedActionsProps) {
   return (
-    <section aria-label="Suggested actions" className="space-y-3">
+    <section aria-label="Suggested actions" className="space-y-2">
       <h2 className="text-sm font-semibold">Suggested actions</h2>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-2 sm:grid-cols-2">
         {actions.map((action) => {
           const Icon =
             actionIcons[action.id as keyof typeof actionIcons] ?? ClipboardList;
@@ -71,18 +71,18 @@ export function InstructorAssistantSuggestedActions({
             >
               <div
                 className={cn(
-                  "flex size-9 shrink-0 items-center justify-center",
+                  "flex size-8 shrink-0 items-center justify-center",
                   dashboardColors.red.iconSquare,
                   dashboardInteractive.actionIcon,
                 )}
               >
-                <Icon className="size-4" aria-hidden="true" />
+                <Icon className="size-3.5" aria-hidden="true" />
               </div>
               <div className="min-w-0 space-y-0.5 text-left">
                 <p className="text-sm font-medium transition-colors group-hover:text-primary">
                   {action.title}
                 </p>
-                <p className="text-sm text-muted-foreground">{action.description}</p>
+                <p className="text-xs text-muted-foreground">{action.description}</p>
               </div>
             </button>
           );
