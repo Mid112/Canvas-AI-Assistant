@@ -147,14 +147,22 @@ def test_fuzz_safe_exception_text_never_crashes(message: str, secret: str) -> No
 @given(
     payload=st.fixed_dictionaries(
         {
-            "action": st.sampled_from(
-                [
-                    "respond",
-                    "clarify",
-                    "out_of_scope",
-                    "fetch_assignments",
-                    "not_a_real_action",
-                ]
+            "action": st.one_of(
+                st.sampled_from(
+                    [
+                        "respond",
+                        "clarify",
+                        "out_of_scope",
+                        "fetch_assignments",
+                        "not_a_real_action",
+                    ]
+                ),
+                # Non-string action values previously TypeError'd in
+                # ACTION_SCHEMAS.get (unhashable dict/list).
+                st.dictionaries(st.text(max_size=8), st.text(max_size=8), max_size=2),
+                st.lists(st.text(max_size=8), max_size=3),
+                st.integers(),
+                st.none(),
             ),
             "message": st.text(max_size=80),
         }
