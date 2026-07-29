@@ -103,7 +103,7 @@ The burn-up chart for **Cycle 20 (Jul 24 – Jul 27)** illustrates a dramatic sp
 
 ## Clockify Summary
 
-Time was tracked using Clockify for **Cycle 20 (Jul 24, 2026 – Jul 28, 2026)**. 
+Time was tracked using Clockify for **Cycle 20 (Jul 24, 2026 – Jul 27, 2026)**. 
 
 ### Team Summary
 
@@ -127,6 +127,12 @@ Time was tracked using Clockify for **Cycle 20 (Jul 24, 2026 – Jul 28, 2026)**
 - **CI Alignment:** The Makefile was aligned with CI coverage standards. A `make seed-canvas-students` command was added to strictly test the dedicated COSC 499 Capstone course environment.
 - **Data Safety:** Profanity filters for feedback, chat, and grades were implemented, tested, and resolved frontend linting flakes (`no-misleading-character-class`).
 - **Environment:** Resolved Docker disk reclaim issues, E2E port uniqueness, and missing `CANVAS_TOKEN_ENCRYPTION_KEY` crashes in local environments to ensure demo readiness.
+
+**Frontend Tests:**
+<img width="883" height="737" alt="frontend test" src="https://github.com/user-attachments/assets/56641cf3-5a0f-428a-8cab-970c0642dd22" />
+
+**Backend Tests:**
+<img width="1005" height="795" alt="backend test" src="https://github.com/user-attachments/assets/e3c4ca70-ff54-457f-97a4-23aa5269ab87" />
 
 ---
 
