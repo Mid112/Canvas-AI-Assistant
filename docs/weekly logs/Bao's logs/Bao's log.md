@@ -977,7 +977,7 @@ Total: 9 hours
 
 ---
 
-# Cycle 18 Report: July 21 – July 23
+# Cycle 19 Report: July 21 – July 23
 
 ## Timesheet
 
@@ -1026,3 +1026,78 @@ Total: 9 hours
 - **Priority: track down and fix the Vite dev-proxy / backend-connectivity bug found during this cycle's Docker reset** — the Troubleshooting page currently fails to load in the browser even though the backend endpoints work correctly when called directly
 - Fix any other integration bugs found ahead of **Testing Live Event 2 next Tuesday** — treat this as the cycle's primary deadline
 - Audit other admin-facing free-text fields (error details, sync/log messages) for the same unredacted-credential class of bug just found and fixed in System Health
+
+---
+
+# Cycle 20 Report: July 24 – July 27
+
+## Timesheet
+
+### Clockify Report
+
+- 24/7 (Friday): Meeting with the team – 2h 51m 13s
+- 25/7 (Saturday): Coding, fix bugs, review PRs – 4h 13m 34s
+- 27/7 (Monday): Coding, fix bugs, review PRs – 2h 37m 00s
+- 27/7 (Monday night, spilling into 28/7): Review PRs – 2h 31m 52s (11:43PM–2:15AM)
+
+**Total (clocked): ~12h 13m 39s**
+
+<!-- Clockify screenshot for this cycle goes here -->
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting (Friday, 24/7)
+- Attended the team meeting, 9:24AM–12:15PM (2h51m), coordinating on the Feature 9/10/12 work landed at the very end of Cycle 19 and what still needed follow-up before Testing Live Event 2
+
+### 2: Consolidating Troubleshooting onto Feature 11's Failed-Operations Table (Friday night 24/7 – Saturday 25/7)
+- `Update system health, extend troubleshoot monitoring`: trimmed the System Health page/service down (removed ~660 lines across `health.py`, `SystemHealthPage.tsx`, and their tests) as part of folding its diagnostics into the new Troubleshooting surface
+- `Merge feature/failed-operation-monitoring to build consolidated troubleshooting on top of it`: pulled in a teammate's Feature 11 `failed_operations` table (migration `031_failed_operations.sql`, `services/failed_operations.py`, `FailedOperationsPage.tsx`) as the foundation to build on
+- `Consolidate failed-operations onto Feature 11's table, retire Workflow-based version`: Troubleshooting's diagnostics previously derived "recent failures" from a `Workflow.status == "failed"` query (redacted on read); switched it to Feature 11's richer, append-only, redacted-at-write-time table via `get_failed_operations_summary()`, and removed the now-redundant `list_failed_operations`/`FailedOperation` schema and `/admin/troubleshoot/failed-operations` route
+- `Fold FailedOperationsPage into Troubleshooting instead of a separate nav item` / `Fold fail log page into troubleshooting page, adjust information to suit users instead of showing technical details`: merged the two admin pages into one (`TroubleshootingPage.tsx`, +348/−~0 net after the fold) and reworded raw technical failure detail into user-facing language
+- Landed as **PR #1284** (`feature/secure-trouble-shooting-integration-monitoring`), merged 00:18 on 27/7
+- Cleanup along the way: `Fix failed frontend test`, `fix lint error`, `Fix lint: sort imports in support_tickets router, drop unneeded f-string prefix`
+- Two commits Saturday night share the identical message `Update bugs fixed` (`45412c5`/`94e8e66`, 23:14) with overlapping diffs across `Makefile`, `services/canvas.py`, and test config — same "check `git log --all` before re-applying" pattern flagged back in Cycle 15's retro
+
+### 3: Audit Log Hardening — Server-Side Search, Pagination Fix, Anonymous Rows (Saturday 25/7 – Monday 27/7)
+- `Add server-side search/filter to audit log listing` / `Drive AuditLogsPage from server-side search instead of client filtering`: search/action/user/result/date filters now run as real SQL `WHERE` clauses across `audit_logs`/`audit_logs_session` instead of filtering whatever page happened to already be loaded client-side; removed the now-dead `filterAuditLogs`/search-text helpers
+- `Update requests change fixed`: additional backend/frontend test coverage for the new server-side query shape
+- `Merge remote-tracking branch 'origin/feature/failed-operation-monitoring' ...`: picked up teammate's Canvas-idempotency migrations along the way (renumbered `034`–`037`), resolving a conflict in `db/init/01_schema.sql` and `db/migrations/README.md`
+- `Fix anonymous audit-row support dropped during develop merge`: a prior merge staged the conflict resolution for `services/audit.py`/`map-audit-log.ts`/`types/auditLog.ts` before three files were actually patched to restore anonymous (nullable `user_id`) failed-login audit rows — an inner join on `AuditLogSession.user` was silently dropping those rows entirely; switched to an outer join with an "unknown" role fallback, caught before merge because it was tested locally first
+- `Fix remaining audit-log review findings: pagination cap, export completeness, load-more race`: replaced a two-branch `list_audit_logs` (Python-side sort capped at 5000 rows for non-timestamp sorts, silently dropping rows past that) with one SQL `UNION ALL` + `ORDER BY`/`LIMIT`/`OFFSET` for every sort field; fixed CSV export silently truncating to whatever page was already fetched instead of pulling the full server-side result set first; fixed a real race between rapid Export/"Load more" clicks using a ref-based mutex instead of state that can't block two clicks landing before either `setState` commits
+- Landed as **PR #1266** (`feature/testing-event-2-audit-logging`), merged 12:35 on 27/7
+
+### 4: Support Ticket Escalation from Failed Operations + LLM Provider Fixes (Monday, 27/7)
+- `update failed operation`: added admin-assignment fields to support tickets (`services/support_tickets.py`, migration `039_support_ticket_assigned_admin.sql`) and wired an "Escalate to ticket" flow into `FailedOperationsPage.tsx`
+- `update API key check not just showing connection` / `Update LLM adapter`: `llm_connections.py`/`provider_registry.py` now actually validate a configured provider's API key instead of just reporting it as "connected", with matching test coverage in `test_llm_api_endpoints.py` and `test_llm_providers_and_cache.py`
+- `update system health color`: sidebar/status-color consistency pass across `SystemHealthPage.tsx` and `TroubleshootingPage.tsx`
+- `Fix FailedOperationsPage test: mock fetchAssignableAdmins`: a test was masked by a `Promise.all` silently rejecting on an unmocked call and leaving ticket state `null` — most tests couldn't tell because a null ticket renders the same button as a real one, but one assertion on actual ticket status caught it
+
+### 5: PR Review Session — 3 Teammate Branches via the Structured Review Pipeline (Monday night 27/7, 11:43PM–2:15AM)
+- Reviewed three branches (`bugfix/fuzz-testing-harness`, `bugfix/canvas-connection-card-and-dashboard-refresh`, `bugfix/assistant-memory-grounding-parse`) using the same find → draft-checklist → double-check pipeline established in Cycle 18, each diffed against `develop`'s true merge-base
+- **fuzz-testing-harness**: flagged a `parse_action` crash — a non-string `"action"` value (nested object/array) in a model's JSON reply would `TypeError` past the function's own `ToolExecutionError` contract, and the harness's own fuzz strategy was too narrow to have ever caught it. Author fixed it (`isinstance` guard + a widened fuzz strategy) before merge — confirmed the fix is present in the merged commit (**PR #1314**, merged 01:13 on 28/7)
+- **canvas-connection-card-and-dashboard-refresh**: one non-blocking nit (missing test coverage for the "reappear after deleting the last connection" UI branch) — approved, merged as **PR #1312** (00:54 on 28/7)
+- **assistant-memory-grounding-parse**: flagged two Must-Fix items — (1) the Canvas URL validator's `http://localhost` bypass lost its `settings.DEBUG` gate, so it's now allowed in production too (confirmed via `git log -p` that the removed condition was original, deliberate SSRF-prevention code, unrelated to this PR's actual purpose); (2) `_run_resolve_missing_submissions_chain` doesn't return its server-verified `assignment_id` the way its two sibling chains do, so a hallucinated model-supplied ID can still get persisted into field memory via a fallback path — exactly the class of bug the rest of the PR fixes elsewhere. **Neither was addressed before merge** — confirmed both are still present on `develop`'s current tip after **PR #1313** merged (01:43 on 28/7)
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- Both of this cycle's two carried-over feature branches shipped as real PRs: **#1284** consolidated Troubleshooting onto Feature 11's failed-operations table (retiring the earlier Workflow-based version from Cycle 19), and **#1266** hardened Audit Logging with server-side search, a real pagination fix, and export/race fixes surfaced by review.
+- The audit-log pagination fix in particular was a genuine correctness bug, not just a nit — the old Python-side sort silently dropped rows past 5000 for any non-timestamp sort field, which would have been invisible until someone paginated deep enough to notice missing rows.
+- The Monday-night PR review session (Cycle 18's reviewed-3-PRs pattern repeated) had a mixed outcome worth being explicit about: one branch's flagged bug got fixed before merge, the other two branches' findings — including a security regression — did not, and both merged anyway.
+
+### Retrospective:
+- **The Canvas URL SSRF-gate regression from the `assistant-memory-grounding-parse` review is now live on `develop`** (confirmed by diffing `origin/develop`'s current tip) — this should be the first thing addressed next cycle, not treated as a routine carryover, since it weakens a production security control and has nothing to do with that PR's stated purpose.
+- Two commits Saturday night (`45412c5`/`94e8e66`, same message, overlapping diffs) repeat the exact duplicate-commit pattern already flagged in Cycle 15's retro — worth actually checking `git log --all --grep` before re-committing a fix next time, not just noting it again.
+- The dev Postgres DB reset / isolated test-DB goal and `make e2e-up` Windows compatibility were last explicitly tracked in Cycle 18 ("sixth"/"fifth straight cycle") — Cycle 19's own "Next Cycle Goals" dropped both without an explicit resolution, and no commit this cycle touched either. Re-flagging both below rather than assuming they were quietly fixed; the Vite dev-proxy bug from Cycle 19 also doesn't appear in any commit this cycle.
+
+## Next Cycle Goals
+- **Priority: fix the Canvas URL validator SSRF regression on `develop`** — restore the `settings.DEBUG` condition removed in PR #1313, or replace it with an explicit non-production gate
+- **Priority: fix `_run_resolve_missing_submissions_chain`** to return its verified `assignment_id` (matching `_run_fetch_submissions_chain`/`_run_find_assignment_by_submission_rate_chain`) so field memory can't be poisoned with a hallucinated ID from that one chain
+- Confirm the Vite dev-proxy / backend-connectivity bug from Cycle 19 was actually resolved somewhere in this cycle's work, or carry it forward explicitly — it wasn't visible in any commit this cycle
+- Give the dev Postgres DB a clean reset (or isolate pytest onto its own DB) — last tracked in Cycle 18 (Cycles 14–18), dropped from Cycle 19's goals, still unaddressed
+- Revisit `make e2e-up` for Windows compatibility — last tracked in Cycle 18 (Cycles 14–18), dropped from Cycle 19's goals, still unaddressed
+- Audit other admin-facing free-text fields for the unredacted-credential class of bug from Cycle 19 — not yet picked up
