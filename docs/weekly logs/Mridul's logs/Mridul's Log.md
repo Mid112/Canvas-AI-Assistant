@@ -1822,4 +1822,201 @@ The main area to continue improving is final validation. Since these features af
 * **Goal 6:** Update the analysis report with Testing Event 2 findings and completed feature work
 * **Goal 7:** Continue supporting PR reviews and final bug fixes
 
+---
+
+<br>
+
+
+# Cycle 20 Report: 24/07 – 27/07 (July 24 – July 27)
+
+## Timesheet
+
+### Clockify Report
+
+* **24/07 (Friday):** Using Clockify – Logged 7.24 hours
+  *(2 hours and 58 minutes for PR review and Cycle 20 task assignment)*
+  *(4 hours, 16 minutes, and 17 seconds for reviewing Feature 15 and other PRs)*
+  <img width="2410" height="342" alt="image" src="https://github.com/user-attachments/assets/230dae20-f4ad-45c2-bab4-addd19b03c19" />
+
+
+* **25/07 (Saturday):** Using Clockify – Logged 3.30 hours
+  *(1 hour, 37 minutes, and 24 seconds for PR review and bug fixes)*
+  *(1 hour, 40 minutes, and 35 seconds for issue creation and assignment)*
+<img width="2394" height="332" alt="image" src="https://github.com/user-attachments/assets/f490474c-8e69-4784-85d6-7d8f230f97f2" />
+
+
+* **26/07 (Sunday):** Using Clockify – Logged 7.47 hours
+  *(5 hours, 40 minutes, and 53 seconds for grade workflow, Canvas conversation bugs, helping with implementation, and related fixes)*
+  *(1 hour, 47 minutes, and 23 seconds for PR reviews and testing)*
+<img width="2428" height="362" alt="image" src="https://github.com/user-attachments/assets/fb27ef48-fabc-47b0-b65c-65f544350a43" />
+
+
+* **27/07 (Monday):** Using Clockify – Logged 9.69 hours
+  *(2 hours, 56 minutes, and 45 seconds for bug fixes across assigned issues)*
+  *(6 hours, 44 minutes, and 23 seconds for continued bug fixes across assigned issues)*
+
+  <img width="2404" height="336" alt="image" src="https://github.com/user-attachments/assets/7dc0cad2-d977-49e5-9c5f-72ade909d29c" />
+
+
+**Cycle Total:** 27 hours, 41 minutes, and 40 seconds
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: PR review and Cycle 20 task assignment (July 24)
+
+* Worked for 2 hours and 58 minutes on PR review and Cycle 20 task assignment.
+* Reviewed current project priorities and helped clarify what needed to be assigned for the next work cycle.
+* Helped organize upcoming tasks related to bug fixes, feature cleanup, and Testing Event 2 readiness.
+* This helped set direction for the cycle and ensured task ownership was clearer.
+
+### #2: Reviewing Feature 15 and other PRs (July 24)
+
+* Worked for 4 hours, 16 minutes, and 17 seconds reviewing Feature 15 and other pull requests.
+* Checked implementation quality, reviewed code changes, and identified issues that needed follow-up.
+* Supported team progress by helping validate PRs before merge or further revision.
+* This work helped reduce integration risk and supported feature stabilization.
+
+### #3: PR review and bug fixes (July 25)
+
+* Worked for 1 hour, 37 minutes, and 24 seconds on PR review and bug fixes.
+* Continued reviewing team changes and identifying problems that needed correction.
+* Worked on resolving bugs found during review and testing.
+* This contributed to improving project stability before final testing.
+
+### #4: Issue creation and assignment (July 25)
+
+* Worked for 1 hour, 40 minutes, and 35 seconds on issue creation and assignment.
+* Created and organized bug/feature issues based on problems discovered during review and testing.
+* Helped assign work so the remaining bugs could be tracked and resolved more clearly.
+* This helped improve task visibility and project board organization.
+
+### #5: Grade workflow, Canvas conversation bugs, and implementation support (July 26)
+
+* Worked for 5 hours, 40 minutes, and 53 seconds on grade workflow work, Canvas conversation bugs, implementation support, and related fixes.
+* Focused on improving grade workflow behavior and fixing issues connected to Canvas conversations.
+* Helped with implementation work across related feature areas.
+* Supported Testing Event 2 readiness by addressing issues found during feature validation.
+
+### #6: PR reviews and testing (July 26)
+
+* Worked for 1 hour, 47 minutes, and 23 seconds on PR reviews and testing.
+* Reviewed project changes and tested functionality connected to recent bug fixes.
+* Helped verify whether fixes were working correctly across the application.
+* Continued supporting stability before additional testing and validation.
+
+### #7: Assigned bug fixes (July 27)
+
+* Worked for 9 hours, 41 minutes, and 8 seconds total on assigned bug fixes.
+* Focused on resolving multiple bugs discovered during testing and review.
+* Worked across issues including:
+
+  * #1286 — Course announcements not working
+  * #1287 — Incorrect message visibility
+  * #1288 — Bug fix issue
+  * #1289 — Grades database relationships
+  * #1290 — Create assignment navigation
+  * #1291 — Grade field validation
+  * #1292 — Assignment preview persists
+  * #1293 — AI Assistant and Grades integration
+  * #1298 — Bug fix issue
+* This work helped address bugs connected to grading, assignments, messaging, Canvas behavior, and AI assistant integration.
+
+---
+
+## Completed Tasks This Cycle
+
+| Task ID | Description                                             | Status    | Notes                                                              |
+| ------- | ------------------------------------------------------- | --------- | ------------------------------------------------------------------ |
+| 1266    | Add audit log feature backend + frontend                | Completed | Completed audit log feature support across backend and frontend    |
+| 1286    | Bug: Course announcements not working                   | Completed | Fixed course announcement-related behavior                         |
+| 1287    | Bug: Incorrect message visibility                       | Completed | Fixed visibility behavior for messages                             |
+| 1288    | Bug fix issue                                           | Completed | Completed bug fix work connected to Testing Event 2                |
+| 1289    | Bug: Grades database relationships                      | Completed | Fixed grade-related database relationship issues                   |
+| 1290    | Bug: Create assignment navigation                       | Completed | Fixed navigation behavior for assignment creation                  |
+| 1291    | Bug: Grade field validation                             | Completed | Fixed validation behavior for grade fields                         |
+| 1292    | Bug: Assignment preview persists                        | Completed | Fixed issue where assignment preview state persisted incorrectly   |
+| 1293    | Bug: AI Assistant and Grades integration                | Completed | Fixed issues connecting AI assistant behavior with grade workflows |
+| 1298    | Bug fix issue                                           | Completed | Completed additional bug fix work                                  |
+| 1305    | Update low severity bugs fixed for live testing event 2 | Completed | Updated/finalized low-severity bug fixes for live testing event 2  |
+
+---
+
+## Progress Update (since 24/07/2026)
+
+| TASK/ISSUE #                              | STATUS    |
+| ----------------------------------------- | --------- |
+| PR review and Cycle 20 task assignment    | Completed |
+| Feature 15 PR review                      | Completed |
+| Issue creation and assignment             | Completed |
+| PR review and bug fixes                   | Completed |
+| Grade workflow fixes                      | Completed |
+| Canvas conversation bug fixes             | Completed |
+| Course announcement bug fixes             | Completed |
+| Message visibility bug fixes              | Completed |
+| Grades database relationship fixes        | Completed |
+| Create assignment navigation fixes        | Completed |
+| Grade field validation fixes              | Completed |
+| Assignment preview persistence fixes      | Completed |
+| AI Assistant and Grades integration fixes | Completed |
+| Testing Event 2 bug fixes                 | Completed |
+| Low severity live testing fixes           | Completed |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle focused heavily on PR review, task assignment, issue creation, bug
+fixes, and Testing Event 2 stabilization. On July 24, I worked on PR review,
+Cycle 20 task assignment, and reviewing Feature 15 along with other PRs. This
+helped clarify what work needed to be completed and supported the team’s
+progress toward a more stable feature set.
+
+On July 25, I worked on PR review, bug fixes, issue creation, and assignment.
+This helped organize the remaining bugs into trackable work items and made it
+easier for the team to address issues discovered during testing.
+
+On July 26, I focused on grade workflow work, Canvas conversation bugs, helping
+with implementation, PR reviews, and testing. This work helped improve
+important user-facing workflows related to grading, Canvas communication, and
+feature integration.
+
+On July 27, I spent most of the day working on assigned bug fixes across issues
+related to announcements, message visibility, grades, assignment navigation,
+grade validation, assignment previews, and AI Assistant/Grades integration. This
+was the most active day of the cycle and contributed directly to improving
+Testing Event 2 readiness.
+
+### Retrospective:
+
+This was a very productive cycle because it focused on stabilizing the project
+after testing and review. The main value of this cycle came from turning
+feedback and discovered issues into concrete fixes. The combination of PR
+reviews, issue creation, task assignment, and bug fixing helped move the project
+closer to a polished and reliable state.
+
+The biggest improvement this cycle was the number of bugs resolved across
+multiple connected areas of the application. These fixes improved behavior
+around grade workflows, Canvas conversations, assignment navigation, message
+visibility, and AI assistant integration.
+
+The main area to continue improving is final regression testing. Since many
+bugs were fixed in a short period of time, the next cycle should focus on
+verifying that the fixes work together and do not introduce new issues.
+
+---
+
+## Next Cycle Goals
+
+* **Goal 1:** Work on bugs discovered during Testing Event 2
+* **Goal 2:** Perform regression testing on completed Testing Event 2 bug fixes
+* **Goal 3:** Verify grade workflow, assignment navigation, Canvas conversation, and AI Assistant/Grades integration behavior
+* **Goal 4:** Continue reviewing PRs and helping with final bug fixes
+* **Goal 5:** Update testing documentation with completed fixes and validation results
+* **Goal 6:** Update the design document based on recent feature and bug-fix changes
+* **Goal 7:** Update the analysis report with Testing Event 2 findings and resolved issues
+* **Goal 8:** Prepare for final project delivery and demo
 
