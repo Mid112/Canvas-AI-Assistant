@@ -708,3 +708,88 @@ Managing team pull requests proved to be an essential exercise in maintaining ve
 *   **Smoke Testing:** Conduct manual smoke testing on `develop` to verify LLM provider switching, limited-mode defer/resume, and admin Failed Operations behavior after inducing an AI and Canvas failure.
 *   **TE2 Readiness:** Close associated board issues (#838, #842, #1169) if merged. Review 1-2 teammate TE2 PRs and note any remaining TE2 blockers in the team channel.
 *   **TE2 Setup:** Create documentation, script, and feedback forms required for Testing Event 2.
+
+# Cycle 20: Friday (07/24) to Money (07/27)
+
+## Timesheet & Daily Log
+
+**Total Cycle Time:** ~12:19:38 (excluding unlogged Tuesday hours)
+
+### **Friday (07/24) — 04:16:34**
+<img width="1338" height="236" alt="Untitled" src="https://github.com/user-attachments/assets/c0f492de-ff67-46f7-8e00-d31a9e4c2901" />
+
+* **Tasks:**
+* During the Team meeting I created cycle 19 personal and team logs and ensured all tests related to the Failed Operations Monitoring feature were working
+* Debugged a Docker/blank UI issue (ports :3000, :5173) on the `failed-operations` branch.
+* Audited and fixed course-sync error spam within Failed Operations.
+* Fixed a CI frontend failure and a `DeferredAssistantRequest` model import drop.
+
+### **Saturday (07/25) — 00:34:05**
+<img width="1343" height="110" alt="Untitled 2" src="https://github.com/user-attachments/assets/4ce7e5ab-0fdf-4011-96f5-5f06deae0c78" />
+
+* **Tasks:**
+* Addressed merge conflicts and PR review feedback on Failed Operations (PR #1265): Handled a database migration numbering collision with `develop` by renumbering migration 035 to a later number. 
+
+### **Sunday (07/26) — 03:41:22**
+<img width="1344" height="359" alt="Untitled 3" src="https://github.com/user-attachments/assets/43f7a769-ec50-4e78-b745-922a45656406" />
+
+* **Tasks:**
+*  Merged `develop` into #1265 to unblock it. Opened and addressed feedback on three major PRs:
+  * PR #1306 (Issue #1285): In-app Canvas course create + publish/unpublish.
+  * PR #1307 (Issue #1300): Feedback/grade/chat profanity filter.
+  * PR #1309 (Issue #1296): Align `make test` with CI (coverage, Windows, DB repair).
+
+### **Monday (07/27) — 03:47:37**
+<img width="1341" height="302" alt="Untitled 4" src="https://github.com/user-attachments/assets/d86ac59b-f7f6-450e-8423-e6fbb6a1cb6e" />
+
+* **Tasks:**
+* Conducted PR reviews for Grade Workflow (PR #1310 - reviewed twice) and approved the Hypothesis Fuzz Harness (PR #1314) (During Team Meeting).
+* Reviewed testing scripts to ensure all workflows are covered for TE2.
+* Updated the Makefile PR (#1309) to add a `make seed-canvas-students` command for a dedicated COSC 499 Capstone course (During Team Meeting).
+
+---
+
+## Feature & Task Association
+
+| Feature / Topic | Concrete Tasks This Cycle | Status |
+| :--- | :--- | :--- |
+| **Failed Operation Monitoring** | Addressed review feedback, resolved merge conflicts, fixed migration collisions, and resolved course-sync spam. | **PR #1265 (Merged)** |
+| **Course Creation & Publishing** | Implemented in-app Canvas course creation, publish, and unpublish features. *(Issue #1285)* | **PR #1306 (Merged)** |
+| **Profanity Filter** | Added content filtering for feedback, grades, and chat. Fixed linting and CI flakes. *(Issue #1300)* | **PR #1307 (Merged)** |
+| **CI & Env Alignment** | Aligned `make test` with CI (coverage, Windows support). Added `seed-canvas-students` logic. Fixed e2e env vars. *(Issue #1296)* | **PR #1309 (Merged)** |
+| **Peer Reviews & TE2 Prep** | Reviewed Grade Workflow (PR #1310), Hypothesis Fuzzing (PR #1314), and verified the full TE2 testing script coverage. | **Completed (Reviews Addressed and Merged)** |
+
+---
+
+## Progress Status
+
+| TASK / ISSUE | STATUS |
+| :--- | :--- |
+| PR #1265: Failed Operation Monitoring fixes & migration renumber | Completed |
+| PR #1306: Canvas Course Create + Publish/Unpublish | Completed |
+| PR #1307: Profanity Filtering | Completed |
+| PR #1309: Makefile CI alignment + Canvas student seeding | Completed |
+| Peer Reviews (PR #1310, #1314) | Completed (Approved) |
+| TE2 Testing Script Review | Completed |
+| Local env bug fixes (stale cache, missing e2e keys) | Completed |
+
+---
+
+## Cycle Goal Review & Reflection
+
+**Achievements vs. Cycle Goals:**
+* **Land Feature 11 / Resolve Collisions:** Met. Successfully managed the migration collision with `develop` by renumbering migration 035 and merging the latest `develop` branch to unblock PR #1265.
+* **TE2 Readiness & Script Review:** Met. Created the necessary course/student seeding commands, reviewed the final testing script to ensure 100% workflow coverage, and fixed local environment crashes just in time for the testing event.
+* **Feature Expansion:** Exceeded. Delivered three additional critical TE2 PRs (#1306 for Course Auth/Creation, #1307 for Safety/Profanity, and #1309 for CI stability). 
+
+**Challenges & Learnings:**
+* **Migration Conflicts:** As anticipated last cycle, migration collisions occurred. Renumbering the migration files manually was required before the PR could safely proceed.
+* **CI and Linting Flakes:** Encountered a rare `no-misleading-character-class` frontend lint error on the profanity filter, requiring regex adjustments. Learned to rely strictly on CI pipeline outputs rather than local passing tests for regex validations.
+* **Caching Stale Data:** Found a bug where the `canvas_course_names` cache was writing once for `prof2@test.com` and refusing to update. Implementing better cache invalidation logic is necessary for dynamic testing environments.
+
+---
+
+## Next Cycle Goals
+* Complete Testing Event 2
+* Consolidate user feedback and bug reports from TE2 into actionable GitHub issues on the project board.
+* Begin scoping and implementing post-TE2 hotfixes (specifically UI polish and cache invalidation consistency) based on client feedback.
