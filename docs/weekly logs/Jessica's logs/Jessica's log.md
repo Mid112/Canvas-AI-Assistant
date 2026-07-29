@@ -1462,6 +1462,102 @@ Overall, this cycle balanced feature implementation, code review, bug fixing, an
 * Maintain project board and sprint planning
 * Maintain consistent Clockify tracking
 
+# **Cycle 20: Friday (24/7) ~ Monday (27/7)**
+
+### **Friday (24/7)**
+<img width="1203" height="171" alt="Screenshot 2026-07-28 at 9 54 28 PM" src="https://github.com/user-attachments/assets/fe5cb256-47b7-4b98-bc05-a43152353e49" />
+
+**Timesheet**  
+**Clockify Report:** 2:13:19
+
+**Current Tasks**
+- Participated in the weekly team meeting
+- Discussed Testing Event 2 preparation and remaining project priorities
+- Fixed issues identified in personal pull requests
+- Addressed reviewer comments and updated implementation
+- Verified changes after applying fixes
+- Prepared updated pull requests for review
+
+---
+
+### **Saturday (25/7)**
+<img width="1204" height="164" alt="Screenshot 2026-07-28 at 9 54 36 PM" src="https://github.com/user-attachments/assets/eb901f75-4c9d-4655-a5d4-4134d64a561c" />
+
+**Timesheet**  
+**Clockify Report:** 5:37:40
+
+**Current Tasks**
+- Continued fixing issues identified in personal pull requests
+- Addressed code review feedback across multiple changes
+- Reviewed teammate pull requests and provided implementation feedback
+- Verified updated functionality through local testing
+- Prepared completed changes for integration
+
+---
+
+### **Sunday (26/7)**
+<img width="1204" height="158" alt="Screenshot 2026-07-28 at 9 54 48 PM" src="https://github.com/user-attachments/assets/9759b20e-f40b-418d-a05c-0d5070c5403e" />
+
+**Timesheet**  
+**Clockify Report:** 1:58:55
+
+**Current Tasks**
+- Reviewed teammate pull requests
+- Fixed remaining issues identified in personal pull requests
+- Verified updated implementation after applying reviewer feedback
+- Performed final checks before merging completed work
+
+---
+
+### **Monday (27/7)**
+<img width="1196" height="458" alt="Screenshot 2026-07-28 at 9 54 58 PM" src="https://github.com/user-attachments/assets/c2786140-90e7-4568-8ee8-1128ee10ad90" />
+
+**Timesheet**  
+**Clockify Report:** 3:01:24
+
+**Current Tasks**
+- Participated in the weekly team meeting
+- Worked on bug fixes identified after recent testing
+- Created the testing script for Testing Event 2
+- Prepared the Testing Event questionnaire
+- Refactored the project board and updated issue organization
+- Reviewed teammate pull requests and provided feedback
+- Fixed remaining issues identified during code review
+- Verified completed work before integration
+
+---
+
+## **Cycle 20 – Goal Review**
+
+### **Reflection**
+
+This cycle focused on improving project quality and preparing for **Testing Event 2**. Most of the effort was spent resolving pull request feedback, fixing implementation issues, reviewing teammate contributions, and creating the materials required for the upcoming testing event. Additional work included bug fixing, updating the project board, and refining the testing process to ensure the application was ready for evaluation.
+
+### **Retrospective**
+
+Following the completion of major feature development, the team's focus shifted toward stabilization, quality assurance, and testing preparation. Pull request reviews continued throughout the cycle, with reviewer feedback being addressed promptly to improve code quality and ensure completed work met project standards before integration.
+
+Preparation for **Testing Event 2** was another major focus. A testing script and questionnaire were created to support structured user testing, while project board refactoring helped organize remaining work and improve sprint visibility. Bug fixes identified during development and internal testing were also resolved to improve overall application stability.
+
+Regular team meetings ensured that development priorities remained aligned and that remaining tasks were coordinated effectively across the team.
+
+Overall, this cycle emphasized code quality, testing preparation, project organization, and bug fixing, positioning the project well for the next testing milestone.
+
+---
+
+## **Next Cycle Goals (Cycle 21: Tuesday 28/7 ~ Thursday 30/7)**
+
+* Participate in Testing Event 2
+* Collect and analyze user testing feedback
+* Resolve bugs identified during testing
+* Improve usability based on tester recommendations
+* Continue reviewing and merging pull requests
+* Perform regression and integration testing
+* Update project documentation and testing reports
+* Prepare remaining work for the Final Demo
+* Maintain project board and sprint planning
+* Maintain consistent Clockify tracking
+
 
 
 
