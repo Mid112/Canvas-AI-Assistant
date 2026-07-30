@@ -49,6 +49,7 @@ from app.services.canvas import (
     CanvasTokenRequiredError,
     _is_expected_canvas_token_sync_error,
     _is_transient_canvas_outage,
+    get_active_course,
     sync_courses_if_stale,
 )
 from app.services.canvas_assistant_gate import (
@@ -1993,12 +1994,20 @@ async def _parse_model_action_with_recovery(
     llm_message: str,
     history: list[dict],
     raw_output: str,
+    resolved_local_course_id: int | None = None,
 ) -> tuple[Any | None, dict | None, str]:
     """Parse model output; on malformed JSON retry once, then soft-respond.
 
     Returns ``(action, respond_dict, raw_output_used)``. Exactly one of
     ``action`` / ``respond_dict`` is set.
+
+    ``resolved_local_course_id`` is injected into the parsed envelope before
+    parsing, and also into any retry output, so a retry that omits
+    ``local_course_id`` doesn't fail validation (#1310).
     """
+    # Inject course into the raw output before parsing
+    raw_output = _inject_course_into_raw_output(raw_output, resolved_local_course_id)
+
     text_reply = _plain_text_response(raw_output)
     if text_reply is not None:
         return None, text_reply, raw_output
@@ -2027,6 +2036,8 @@ async def _parse_model_action_with_recovery(
         logger.warning("Strict JSON parse retry failed", exc_info=True)
         return None, {"action": "respond", "message": _MALFORMED_ACTION_DEGRADE_MESSAGE}, raw_output
 
+    # Inject course into retry output too
+    retry_raw = _inject_course_into_raw_output(retry_raw, resolved_local_course_id)
     text_retry = _plain_text_response(retry_raw)
     if text_retry is not None:
         return None, text_retry, retry_raw
@@ -2040,6 +2051,19 @@ async def _parse_model_action_with_recovery(
             )
             return None, {"action": "respond", "message": _MALFORMED_ACTION_DEGRADE_MESSAGE}, retry_raw
         raise
+
+
+def _inject_course_into_raw_output(raw_output: str, local_course_id: int | None) -> str:
+    """Parse raw LLM output, inject local_course_id, re-serialize.
+    If parsing fails or the action doesn't need a course, return unchanged."""
+    try:
+        parsed = json.loads(extract_json_object(raw_output))
+    except (json.JSONDecodeError, Exception):
+        return raw_output
+    if not isinstance(parsed, dict):
+        return raw_output
+    injected = _inject_course_into_envelope(parsed, local_course_id)
+    return json.dumps(injected)
 
 
 def _step_budget_exhausted_response(loop_steps: list[dict]) -> dict:
@@ -2407,6 +2431,9 @@ update_assignment, create_quiz, send_message, update_grade), check every field l
 in that action's schema below. This includes the action/task type itself
 (e.g. don't guess whether the user wants create_assignment vs
 create_quiz vs update_assignment), and fields like title, description, and due_date.
+(Exception: send_message's subject and body are optional — see
+SEND_MESSAGE HANDOFF below. create_quiz and update_grade also skip the
+missing-field clarify — see their HANDOFF sections.)
 If any required field is missing or was not stated by the user, use the
 AMBIGUITY CHECK format to ask for it. Never invent a placeholder value
 and never silently omit a required field from proposed_action.
@@ -2452,6 +2479,23 @@ Exception: if the user asks to "give feedback", "send feedback", or "leave
 a note" for a student but does not tie it to an assignment/submission/grade,
 ask whether they mean assignment feedback on a submission or a private
 message to the student.
+
+SEND_MESSAGE HANDOFF:
+IMPORTANT — send_message skips the missing-field AMBIGUITY CHECK for
+subject and body when the user's request implies a recipient set that
+needs server-side resolution (recipient_handle from a prior
+resolve_missing_submissions turn, recipient_directives naming students,
+or broadcast_to_all_students). When the user says "send reminders to
+students who haven't submitted assignment X" or "message all students
+saying Y", propose send_message immediately with whatever details you
+have. If the user provided a body or subject, include them; if not,
+leave them empty ("") and the Messages compose form handoff lets the
+user fill them in manually. Do not clarify subject or body when the
+user's request already implies who should receive the message — propose
+the action and let the form handle the rest. The one exception: if the
+user asks to "send a message" but doesn't say WHO (no recipient
+directives, no handle, no broadcast, no "students who haven't
+submitted"), ask who the recipients should be.
 
 READ ACTIONS — execute immediately, no preview:
 fetch_courses, fetch_assignments, fetch_quizzes, fetch_students, fetch_submissions,
@@ -3075,9 +3119,31 @@ async def handle_chat_message(
             parsed_envelope = json.loads(extract_json_object(raw_output))
         except json.JSONDecodeError:
             parsed_envelope = None
-        course_name_from_llm = parsed_envelope.get("course_name") if isinstance(parsed_envelope, dict) else None
+        # Read the model's course_name from the envelope — or, if it wrapped a
+        # course-scoped action inside intent_preview (against instructions),
+        # from the nested proposed_action, where the name actually lives.
+        # Without this second lookup a wrapped action's course never resolves
+        # and the turn falls back to a spurious "Which course?" clarify even
+        # though the model named it.
+        course_name_from_llm = None
+        if isinstance(parsed_envelope, dict):
+            course_name_from_llm = parsed_envelope.get("course_name")
+            if course_name_from_llm is None and parsed_envelope.get("action") == "intent_preview":
+                nested = parsed_envelope.get("proposed_action")
+                if isinstance(nested, dict):
+                    course_name_from_llm = nested.get("course_name")
 
         resolved_local_course_id = conversation.course_id
+        # Fallback: if the conversation has no course_id yet (e.g. a fresh
+        # conversation seeded from the active-course preference but not yet
+        # resolved), try the user's active course preference before giving
+        # up. Without this, a resolve_missing_submissions action with
+        # course_name that doesn't exactly match canvas_course_names would
+        # fail validation on a required local_course_id (#1310).
+        if resolved_local_course_id is None:
+            active = await get_active_course(user, db)
+            if active is not None:
+                resolved_local_course_id = active.local_id
         matched = _match_course_name(course_names, course_name_from_llm)
         if matched is not None:
             matched_local_course_id = matched.local_course_id
@@ -3184,6 +3250,7 @@ async def handle_chat_message(
                 ),
                 history=history,
                 raw_output=raw_output,
+                resolved_local_course_id=resolved_local_course_id,
             )
             if text_reply is not None:
                 result = text_reply

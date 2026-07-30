@@ -221,8 +221,13 @@ class RecipientDirective(BaseModel):
 class SendMessageAction(BaseModel):
     action: Literal["send_message"] = "send_message"
     local_course_id: int
-    subject: str
-    body: str
+    # Subject and body are optional so the LLM can emit a send_message with
+    # just a recipient_handle (e.g. from a resolve_missing_submissions turn)
+    # and let the user fill in subject/body in the Messages compose form
+    # handoff. When the user provides them in the original prompt, the LLM
+    # should include them; when omitted, the form handoff handles it (#1310).
+    subject: str = ""
+    body: str = ""
     # When omitted or empty (and recipient_directives/broadcast_to_all_students
     # are also unset), posts a public class announcement. When provided
     # directly, sends a Canvas conversation to the listed student Canvas user
