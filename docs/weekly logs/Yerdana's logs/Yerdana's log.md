@@ -1301,3 +1301,105 @@ Reviewing merged PRs as a batch, back to back, made a pattern visible that testi
 
 
 
+
+
+# Cycle 20 personal log: 24/7 – 27/7 (July 24 – July 27)
+
+## Timesheet
+
+### Clockify Report
+<img width="1225" height="229" alt="Screenshot 2026-07-29 at 1 33 07 PM" src="https://github.com/user-attachments/assets/69bd3bd8-4077-4fc6-8f8d-247ed578e96c" />
+<img width="1228" height="370" alt="Screenshot 2026-07-29 at 1 33 34 PM" src="https://github.com/user-attachments/assets/422f6bd4-e5cd-4fac-8bd6-b0d9a2f92a35" />
+
+
+
+- **24/7 (Thursday):** 05:21:09 hours
+- **25/7 (Friday):** 0 hours
+- **26/7 (Saturday):** 05:08:58 hours
+- **27/7 (Sunday):** 09:07:03 hours
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Re-reviewed feature/testing-event-2-audit-logging after merge conflict resolution
+
+- Reviewed the branch after it resolved merge conflicts from develop
+- Verified all 3 previous critical findings were fixed: token committed before audit log, no audit for non-existent email logins, and fetch-then-merge pagination
+- Confirmed anonymous failed-login attempts now log with user_id=null and user_role="unknown"
+- Verified admin dashboard audit count now sums both audit_logs and audit_logs_session tables
+
+
+### #2: Re-reviewed bugfix/announcement-window after previous comments
+
+- Verified all 6 previous findings were resolved including redact_secrets log template fix, canReplaceBody exact match fix, useEffect override removal, and send_message navigation removal
+- Found 6 test failures from outdated assertions that need updating for the new announcement behavior
+
+
+### #3: Re-reviewed feature/course-access-page after previous regression
+
+- Confirmed the _is_expected_canvas_token_sync_error regression was fixed with the 422 check restored
+- Reviewed new course creation and publish/unpublish functionality
+
+
+### #4: Created user workflow testing guide (testing/user-workflow branch)
+
+- Wrote 20 user workflows covering all features on develop branch, each with simple and advanced versions
+
+
+
+### #5: Reviewed bugfix/assistant-memory-grounding-parse branch
+
+- Conducted thorough codebase exploration of LLM grounding architecture including chat.py, dispatcher.py, field_memory.py, student_context.py, and resolved_set.py
+- Identified 13 loopholes including 2 critical: proposed_action scrubbing skipped when no tools ran, and field memory poisoning via partial_plan from clarify turns
+- Found 3 of 6 known issues were not fixed on the branch
+
+### #6: Implemented fixes for LLM grounding loopholes (bugfix/assistant-memory-grounding-parse)
+
+- Fixed update_grade with both IDs bypassing _resolve_grade_target by always routing through the resolver chain
+- Fixed update_assignment with assignment_id skipping course-assignment verification
+- Fixed partial_plan field memory poisoning by adding _PARTIAL_PLAN_SAFE_KEYS that excludes student_id, student_reference, new_grade, and feedback
+- Fixed grounded_facts cross-turn ID bleed by using this-turn tool_facts only for proposed_action scrubbing
+- Added clear_course_scoped_field_memory to clear stale entity references on course switch
+- Replaced assert action is not None with defensive degrade to safe respond
+
+
+### #7: Fixed reminder workflow bugs (bugfix/reminder-workflow branch)
+
+- Fixed resolve_missing_submissions validation error when local_course_id is missing by adding active course preference fallback
+- Made send_message subject and body optional so the LLM can emit a send_message with just a recipient_handle
+- Added SEND_MESSAGE HANDOFF section to system prompt telling the LLM to propose send_message immediately when recipients are implied
+- Fixed course injection in parse recovery path by adding _inject_course_into_raw_output helper that injects local_course_id on both initial parse and retry
+- Fixed Canvas URL validator to accept http://localhost:3000 regardless of DEBUG mode
+- Fixed Makefile e2e-up to use CANVAS_TOKEN_ENCRYPTION_KEY from .env instead of overriding with a different hardcoded key
+
+
+
+## Progress Update (since 24/7/2025)
+
+| TASK/ISSUE # | STATUS |
+|---|---|
+| Re-review audit-logging branch | Completed (24/7) |
+| Re-review announcement-window branch | Completed (24/7) |
+| Re-review course-access-page branch | Completed (24/7) |
+| Create user workflow testing guide | Completed (25/7) |
+| Review assistant-memory-grounding-parse branch | Completed (26/7) |
+| Implement LLM grounding loophole fixes | Completed (26/7) |
+| Fix reminder workflow bugs | Completed (27/7) |
+| Debug Canvas token and bcrypt issues | Completed (27/7) |
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle was heavily focused on code review and bug fixing. I reviewed 3 branches that had been updated since my last review, created a comprehensive testing guide for the team, and implemented fixes for 6 LLM grounding loopholes plus 3 reminder workflow bugs. The grounding fixes were particularly important as they prevent the LLM from hallucinating Canvas IDs and carrying stale references across courses.
+
+### Retrospective:
+
+The Canvas token encryption key mismatch between Makefile and .env caused significant debugging time. In the future, the team should ensure all environment variable defaults are consistent across configuration files. The LLM grounding review also revealed that defense in depth is critical: even with server-side resolution, the grounding layer must not trust prior-turn accumulated facts for proposed_action validation.
+
+## Next Cycle Goals
+
+- Test the reminder workflow fixes end to end with the live Canvas sandbox
+- Debug and test thinking vs non-thinking mode for LLM
+
+
+
