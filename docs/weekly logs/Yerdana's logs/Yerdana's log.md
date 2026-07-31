@@ -1403,3 +1403,100 @@ The Canvas token encryption key mismatch between Makefile and .env caused signif
 
 
 
+
+
+# Cycle 21 personal log: 28/7 – 30/7 (July 28 – July 30)
+
+## Timesheet
+
+### Clockify Report
+<!-- Paste your Clockify screenshots here, same as previous cycles -->
+<img width="1221" height="144" alt="Screenshot 2026-07-31 at 11 53 09 AM" src="https://github.com/user-attachments/assets/6f46c72a-2a85-4401-adfb-5cd9e764ed47" />
+
+- **28/7 (Tuesday):** 0 hours
+- **29/7 (Wednesday):** 0 hours
+- **30/7 (Thursday):** 07:19:14 hours
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Synced bugfix/reminder-workflow with develop
+
+- Merged origin/develop into bugfix/reminder-workflow and resolved a real conflict in chat.py
+- The conflict was two independent additions to the same due date retry helper. Kept both sides since one was a superset of the other
+- Verified with the full backend test suite after resolving
+
+### #2: Documented Cycle 20 personal log and progress updates
+
+- Wrote up Cycle 20's tasks, progress table, and goal review
+- Opened it as a PR on the logs-yerdana branch
+
+### #3: Diagnosed and fixed a slow LLM response bug
+
+- Traced a report of slow AI Assistant replies to the instructor account's saved model, moonshotai/Kimi-K3
+- Confirmed the app default already points to openai/gpt-oss-20b through Hugging Face, pinned to Groq for speed
+- Checked Hugging Face's own provider mapping for gpt-oss-20b. It has no native Hugging Face inference option, only 8 third-party partners including Groq
+- Updated the instructor's saved connection back to the Groq-pinned model
+
+### #4: Restarted a stuck local dev environment
+
+- Found an orphaned uvicorn process still holding port 8000 from an earlier session
+- Killed it and restarted the backend and frontend cleanly with make e2e-up
+
+### #5: Added a per-course Create Assignment button (bugfix/create_assignment_ui)
+
+- Fixed bug 4 from manual QA. Create Assignment with AI was only reachable from the dashboard
+- Added a Create button to the Assignments subtab's Actions column, placed left of Submissions and Edit
+- Reused the existing AI draft handoff so the course is pre-selected on the create page
+- Added test coverage and verified manually in the browser
+
+### #6: Fixed the assignment draft due date bug (bugfix/timezone-date-resolution)
+
+- Fixed bug 6 from manual QA. Due date and points possible were dropped when saving and resuming a typed assignment draft
+- Traced it to the draft storage schema never carrying those two fields through save and resume, not a conflict between assignment and quiz drafts as first suspected
+- Added dueDate and pointsPossible to the draft content type, the save handler, and the resume target
+- Also root caused bug 5, the 11:59 PM becoming 4:59 PM timezone shift on AI-created assignments, and had a working fix. Descoped it from this branch on request to keep the PR focused on bug 6 only
+
+### #7: Fixed AI Assistant chat window sizing (bugfix/chat-window-size)
+
+- Fixed bug 1 from manual QA. The chat window felt too small
+- Fixed bug 10 from manual QA. A growing saved drafts list could push the message input out of view and out of reach
+- Made Saved Drafts and Suggested Actions collapsible and collapsed by default, so the chat window is the primary surface
+- Replaced a fixed min height on the chat grid with flex sizing so it fills the frame exactly
+- Iterated after visual feedback. First pass let the whole page scroll and left dead white space below the chat. Fixed by keeping scroll contained to the message list and history sidebar only
+
+## Progress Update (since 28/07/2026)
+
+| TASK/ISSUE #                                                        | STATUS         |
+| --------------------------------------------------------------------- | -------------- |
+| Sync bugfix/reminder-workflow with develop and resolve conflict        | Completed (28/7) |
+| Document Cycle 20 personal log and progress updates                   | Completed (29/7) |
+| Diagnose and fix slow LLM response, Kimi-K3 to gpt-oss-20b             | Completed (30/7) |
+| Restart stuck local dev environment                                   | Completed (30/7) |
+| Fix bug 4, per-course Create Assignment button                        | Completed (30/7) |
+| Fix bug 6, assignment draft due date lost on resume                   | Completed (30/7) |
+| Root cause bug 5, timezone shift on AI-created due dates              | Descoped (30/7)  |
+| Fix bug 1 and bug 10, AI Assistant chat window sizing                 | Completed (30/7) |
+| Push local bugfix branches and open PRs                                | Not Started    |
+| Live e2e verification against Canvas sandbox (carryover)               | Not Started    |
+| Decide on extending resolution to update_assignment (carryover)        | Not Started    |
+
+## Cycle 21 Goal Review
+
+### Reflection:
+
+This cycle was mostly small, isolated bug fixes rather than one large feature, which made scope control the main skill in play. Reverting bug 5 after it was fully implemented, on request, was the clearest example. The fix was correct, but keeping the timezone change out of the draft persistence PR kept that PR reviewable and focused on one thing. The chat window sizing fix also needed a second pass after the first attempt let the whole page scroll instead of just the message list. Visual feedback caught that quickly, and the fix ended up simpler than the first attempt, collapsing sections instead of adding more scroll containers.
+
+### Retrospective:
+
+The Kimi-K3 investigation was a good reminder to check runtime state before assuming a bug is in the code. The app's default config was already correct. The slow model was a leftover manual test setting on one instructor account, not a code defect. Worth checking saved per-user settings first next time a "the app is slow" report comes in before assuming the codebase default is wrong.
+
+## Next Cycle Goals
+
+- Push bugfix/create_assignment_ui, bugfix/timezone-date-resolution, and bugfix/chat-window-size and open PRs for review
+- Fix bug 7, quiz draft resume should land on the generated questions page, not regenerate from scratch
+- Fix bug 8, quiz answer point values change unexpectedly after a small edit and resume
+- Fix bug 12, grade and submission analysis from the AI Assistant does not match the course's own submissions view
+- Fix bug 13, redaction should only apply when data is sent to the LLM, not when the instructor is reading it
+- Finish the live e2e verification against the Canvas sandbox (carryover)
+- Decide whether to extend natural language assignment resolution to update_assignment (carryover)
+
