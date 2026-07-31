@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InstructorCoursesHeader } from "@/pages/Instructor/InstructorCourses/InstructorCoursesHeader";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
-const CANVAS_URL = "https://canvas.ubc.ca";
+const CANVAS_URL = "https://canvas.example.edu";
 
 const mockUseCanvasConnectionUrl = vi.fn(() => CANVAS_URL);
 const mockUseAuth = vi.fn();
@@ -59,7 +59,7 @@ describe("InstructorCoursesHeader", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /Manage all your courses and track performance at canvas\.ubc\.ca\./,
+        /Manage all your courses and track performance at canvas\.example\.edu\./,
       ),
     ).toBeInTheDocument();
     expect(
