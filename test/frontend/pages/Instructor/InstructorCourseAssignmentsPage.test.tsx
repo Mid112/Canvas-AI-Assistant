@@ -144,6 +144,12 @@ describe("InstructorCourseAssignmentsPage", () => {
       "href",
       "/instructor/courses/3/assignments/10/edit",
     );
+
+    const createLink = screen.getByRole("button", { name: "Create" });
+    expect(createLink).toHaveAttribute(
+      "href",
+      "/instructor/assignments/create",
+    );
   });
 
   // Verifies: Shows connect Canvas prompt when no token is linked.
