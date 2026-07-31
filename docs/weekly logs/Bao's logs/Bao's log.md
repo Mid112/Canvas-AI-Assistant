@@ -1101,3 +1101,49 @@ Total: 9 hours
 - Give the dev Postgres DB a clean reset (or isolate pytest onto its own DB) — last tracked in Cycle 18 (Cycles 14–18), dropped from Cycle 19's goals, still unaddressed
 - Revisit `make e2e-up` for Windows compatibility — last tracked in Cycle 18 (Cycles 14–18), dropped from Cycle 19's goals, still unaddressed
 - Audit other admin-facing free-text fields for the unredacted-credential class of bug from Cycle 19 — not yet picked up
+
+---
+
+# Cycle 21 Report: July 28 – July 30
+
+## Timesheet
+
+### Clockify Report
+
+- 28/7 (Tuesday): Team meeting – 3h 10m 25s
+- 30/7 (Wednesday night, spilling into 31/7): Applied 2 bug fixes – 2h 57m 50s (10:08PM–1:05AM)
+
+**Total (clocked): ~6h 8m 15s**
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting (Tuesday, 28/7)
+- Attended the team meeting, syncing on Cycle 20's wrap-up (Troubleshooting consolidation, Audit Logging hardening) and the review findings still open heading into this cycle.
+<img width="2254" height="128" alt="Screenshot 2026-07-31 102131" src="https://github.com/user-attachments/assets/70dd843a-b82e-4032-b910-c6dac5464103" />
+
+
+### 2: Troubleshooting Token-Reset Gating + Review Permissions Copy Fix (Wednesday night 30/7)
+- `Update UI for reviewpermission and troubleshooting`:
+  - **Troubleshooting**: added `needs_token_reset` (`services/troubleshoot.py`, `services/failed_operations.py`) to distinguish an actual reconnect-able Canvas token problem from a transient outage, for both the failing-connections list and failed-operation summaries; `TroubleshootingPage.tsx`'s "Reset token" button now only renders when a reset would actually help, instead of always offering an action that's a dead end for outages.
+  - **Review Permissions**: the onboarding page's "Cancel" button actually navigated to reconnect Canvas rather than cancelling anything — relabeled to "Reconnect Canvas" with matching copy/icon so the action matches what it does.
+- Pushed to `bugfix/Permission-troubleshooting-page` with backend/frontend test coverage; not yet merged into `develop`.
+<img width="2260" height="135" alt="Screenshot 2026-07-31 102134" src="https://github.com/user-attachments/assets/ef1f8e43-f4d4-4faa-95d4-a6d75d70a03a" />
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- Short cycle (~6h logged): one meeting plus one focused bug-fix session. No movement yet on the items carried over from Cycle 20.
+
+### Retrospective:
+- The Canvas URL SSRF-gate regression and the missing-`assignment_id` chain bug flagged at the end of Cycle 20 are still unfixed on `develop` — carrying both forward again rather than letting them go stale a second cycle.
+
+## Next Cycle Goals
+- Fix the Canvas URL validator SSRF regression on `develop` (carried from Cycle 20)
+- Fix `_run_resolve_missing_submissions_chain` to return its verified `assignment_id` (carried from Cycle 20)
+- Merge `bugfix/Permission-troubleshooting-page` into `develop`
+- Confirm/resolve the Vite dev-proxy bug, dev Postgres DB reset, and `make e2e-up` Windows compatibility — all still carried from Cycles 18–20
+- Audit other admin-facing free-text fields for the unredacted-credential class of bug (carried from Cycle 19)
