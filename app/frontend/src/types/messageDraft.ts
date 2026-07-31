@@ -43,6 +43,7 @@ export interface SendMessageDraftPayload {
   recipientIds: string[];
   recipients?: MessageRecipient[];
   conversationId?: number;
+  canvasUrl?: string;
 }
 
 export type MessageDraftPageState =

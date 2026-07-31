@@ -189,7 +189,7 @@ async def test_grade_preview_authorization_stops_before_canvas_fetch():
                 999,
                 GradeUpdateRequest(assignment_id=10, user_id=42, posted_grade="95"),
                 user,
-                "https://canvas.ubc.ca",
+                "https://canvas.example.edu",
                 db,
             )
 
@@ -214,7 +214,7 @@ async def test_grade_submit_authorization_stops_before_canvas_mutation():
                 999,
                 GradeUpdateRequest(assignment_id=10, user_id=42, posted_grade="95"),
                 user,
-                "https://canvas.ubc.ca",
+                "https://canvas.example.edu",
                 db,
             )
 
@@ -249,7 +249,7 @@ async def test_grade_submit_records_workflow_audit_and_history_in_one_commit():
         id=7,
         name="COSC 777",
         canvas_course_id="77",
-        canvas_url="https://canvas.ubc.ca",
+        canvas_url="https://canvas.example.edu",
     )
     raw_submission = {
         "id": 99,
@@ -281,7 +281,7 @@ async def test_grade_submit_records_workflow_audit_and_history_in_one_commit():
                 reason="Rubric correction",
             ),
             user,
-            "https://canvas.ubc.ca",
+            "https://canvas.example.edu",
             db,
         )
 
@@ -303,7 +303,7 @@ async def test_grade_submit_records_workflow_audit_and_history_in_one_commit():
         42,
         "95",
         "token",
-        "https://canvas.ubc.ca",
+        "https://canvas.example.edu",
         feedback="Rubric correction",
     )
     db.commit.assert_awaited_once()
@@ -336,7 +336,7 @@ async def test_grade_submit_rejects_stale_preview_snapshot():
         id=7,
         name="COSC 777",
         canvas_course_id="77",
-        canvas_url="https://canvas.ubc.ca",
+        canvas_url="https://canvas.example.edu",
     )
     live = _submission()
     live.grade = "90"
@@ -367,7 +367,7 @@ async def test_grade_submit_rejects_stale_preview_snapshot():
                     },
                 ),
                 user,
-                "https://canvas.ubc.ca",
+                "https://canvas.example.edu",
                 db,
             )
 
@@ -387,7 +387,7 @@ async def test_grade_submit_accepts_matching_preview_snapshot():
         id=7,
         name="COSC 777",
         canvas_course_id="77",
-        canvas_url="https://canvas.ubc.ca",
+        canvas_url="https://canvas.example.edu",
     )
     live = _submission()
     raw_submission = {
@@ -424,7 +424,7 @@ async def test_grade_submit_accepts_matching_preview_snapshot():
                 },
             ),
             user,
-            "https://canvas.ubc.ca",
+            "https://canvas.example.edu",
             db,
             record_workflow_audit=False,
         )
@@ -445,7 +445,7 @@ async def test_grade_submit_rolls_back_when_history_or_audit_commit_fails():
         id=7,
         name="COSC 777",
         canvas_course_id="77",
-        canvas_url="https://canvas.ubc.ca",
+        canvas_url="https://canvas.example.edu",
     )
     raw_submission = {
         "id": 99,
@@ -471,7 +471,7 @@ async def test_grade_submit_rolls_back_when_history_or_audit_commit_fails():
                 7,
                 GradeUpdateRequest(assignment_id=10, user_id=42, posted_grade="95"),
                 user,
-                "https://canvas.ubc.ca",
+                "https://canvas.example.edu",
                 db,
             )
 
@@ -488,7 +488,7 @@ async def test_grade_submit_blocked_when_any_write_executing():
         id=7,
         name="COSC 777",
         canvas_course_id="77",
-        canvas_url="https://canvas.ubc.ca",
+        canvas_url="https://canvas.example.edu",
     )
 
     with (
@@ -512,7 +512,7 @@ async def test_grade_submit_blocked_when_any_write_executing():
                 7,
                 GradeUpdateRequest(assignment_id=10, user_id=42, posted_grade="95"),
                 user,
-                "https://canvas.ubc.ca",
+                "https://canvas.example.edu",
                 db,
             )
 

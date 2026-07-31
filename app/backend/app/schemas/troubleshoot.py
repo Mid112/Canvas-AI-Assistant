@@ -27,7 +27,7 @@ class FailingCanvasConnectionListResponse(BaseModel):
 
 
 class DiagnosticsResponse(BaseModel):
-    canvas_api_url: str
+    canvas_api_url: str | None
     backend_uptime_seconds: int
     health: LatestHealthResponse
     instructor_canvas: InstructorCanvasSummary

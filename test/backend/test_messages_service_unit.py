@@ -210,7 +210,7 @@ async def test_send_message_draft_rejects_already_sent():
     user = SimpleNamespace(id=1)
 
     with pytest.raises(HTTPException) as exc_info:
-        await send_message_draft(db, user, 1, "https://canvas.ubc.ca")
+        await send_message_draft(db, user, 1, "https://canvas.example.edu")
 
     assert exc_info.value.status_code == 409
 
@@ -223,7 +223,7 @@ async def test_send_message_draft_rejects_no_course():
     user = SimpleNamespace(id=1)
 
     with pytest.raises(HTTPException) as exc_info:
-        await send_message_draft(db, user, 1, "https://canvas.ubc.ca")
+        await send_message_draft(db, user, 1, "https://canvas.example.edu")
 
     assert exc_info.value.status_code == 422
 
@@ -239,7 +239,7 @@ async def test_send_message_draft_rejects_malformed_recipient_ids():
     user = SimpleNamespace(id=1)
 
     with pytest.raises(HTTPException) as exc_info:
-        await send_message_draft(db, user, 1, "https://canvas.ubc.ca")
+        await send_message_draft(db, user, 1, "https://canvas.example.edu")
 
     assert exc_info.value.status_code == 422
 
@@ -253,23 +253,28 @@ async def test_send_message_draft_success_marks_sent_and_records_delivery():
     )
     db.get = AsyncMock(return_value=draft)
     db.refresh = AsyncMock()
-    db.scalar = AsyncMock(return_value=None)
+    course = SimpleNamespace(id=5, canvas_url="https://canvas.example.edu")
+    db.scalar = AsyncMock(return_value=course)
     db.flush = AsyncMock()
     db.add = Mock()
     user = SimpleNamespace(id=1)
 
     result = SimpleNamespace(delivery_mode="conversation", audience_size=1)
+    mock_validate = AsyncMock()
+    mock_send = AsyncMock(return_value=result)
 
     with (
-        patch("app.services.messages.validate_message_for_send", new=AsyncMock()),
-        patch("app.services.canvas.send_course_message", new=AsyncMock(return_value=result)),
+        patch("app.services.messages.validate_message_for_send", new=mock_validate),
+        patch("app.services.canvas.send_course_message", new=mock_send),
     ):
-        updated = await send_message_draft(db, user, 1, "https://canvas.ubc.ca")
+        updated = await send_message_draft(db, user, 1, "https://stale.example.edu")
 
     assert updated.status == "sent"
     assert updated.sent_at is not None
     assert updated.delivery_mode == "conversation"
     assert updated.recipient_count == 1
+    assert mock_validate.await_args.kwargs["canvas_url"] == "https://canvas.example.edu"
+    assert mock_send.await_args.args[4] == "https://canvas.example.edu"
     assert db.add.call_count >= 2
     db.flush.assert_awaited()
     db.commit.assert_awaited_once()

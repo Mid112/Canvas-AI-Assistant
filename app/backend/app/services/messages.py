@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.models.audit_log import AuditLog
 from app.models.conversation import Conversation
+from app.models.course import Course
 from app.models.message_draft import MessageDraft
 from app.models.user import User
 from app.models.workflow import Workflow
@@ -117,7 +118,7 @@ async def send_message_draft(
     db: AsyncSession,
     user: User,
     draft_id: int,
-    canvas_url: str,
+    canvas_url: str | None,
     *,
     conversation_id: int | None = None,
 ) -> MessageDraft:
@@ -126,6 +127,19 @@ async def send_message_draft(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Draft already sent")
     if not draft.course_id:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Draft has no course")
+
+    course = await db.scalar(
+        select(Course).where(
+            Course.id == draft.course_id,
+            Course.instructor_id == user.id,
+        )
+    )
+    if course is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found or does not belong to you.",
+        )
+    resolved_canvas_url = course.canvas_url
 
     recipient_canvas_user_ids: list[int] | None = None
     if draft.recipients:
@@ -146,7 +160,7 @@ async def send_message_draft(
         draft.subject,
         draft.body,
         db,
-        canvas_url=canvas_url,
+        canvas_url=resolved_canvas_url,
         recipient_canvas_user_ids=recipient_canvas_user_ids,
     )
 
@@ -157,7 +171,7 @@ async def send_message_draft(
         draft.subject,
         draft.body,
         user,
-        canvas_url,
+        resolved_canvas_url,
         db,
         recipient_canvas_user_ids=recipient_canvas_user_ids,
     )

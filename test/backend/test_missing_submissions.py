@@ -5,7 +5,7 @@ from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 from app.main import app
 
-CANVAS_URL = "https://canvas.ubc.ca"
+CANVAS_URL = "https://canvas.example.edu"
 ASSIGNMENT_ID = 10
 
 

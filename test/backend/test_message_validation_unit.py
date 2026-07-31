@@ -14,12 +14,12 @@ from app.services.message_validation import validate_message_for_send
 COURSE = Course(
     id=7,
     canvas_course_id="70",
-    canvas_url="https://canvas.ubc.ca",
+    canvas_url="https://canvas.example.edu",
     name="CPSC 310",
     instructor_id=1,
 )
 USER = User(id=1, name="Instructor", email="i@example.com", hashed_password="x", role="instructor")
-CANVAS_URL = "https://canvas.ubc.ca"
+CANVAS_URL = "https://canvas.example.edu"
 
 
 def _student(canvas_user_id: str) -> StudentResponse:

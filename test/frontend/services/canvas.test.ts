@@ -29,8 +29,8 @@ describe("canvas service", () => {
     vi.restoreAllMocks();
   });
 
-  // Verifies: Sends a PATCH request with a single canvas token.
-  it("sends a PATCH request with a single canvas token", async () => {
+  // Verifies: Sends a PATCH request with a Canvas URL and token.
+  it("sends a PATCH request with a canvas url and token", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       json: async () => ({
@@ -41,7 +41,11 @@ describe("canvas service", () => {
       }),
     } as Response);
 
-    const result = await updateCanvasToken("canvas-token-123", "jwt-token");
+    const result = await updateCanvasToken(
+      "canvas-token-123",
+      "jwt-token",
+      "https://canvas.example.edu",
+    );
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:8000/api/v1/auth/me/canvas-token",
@@ -51,36 +55,20 @@ describe("canvas service", () => {
           "Content-Type": "application/json",
           Authorization: "Bearer jwt-token",
         },
-        body: JSON.stringify({ canvas_token: "canvas-token-123" }),
+        body: JSON.stringify({
+          canvas_token: "canvas-token-123",
+          canvas_url: "https://canvas.example.edu",
+        }),
       }),
     );
     expect(result.has_canvas_token).toBe(true);
   });
 
-  // Verifies: Sends one PATCH request per token when saving multiple tokens.
-  it("sends one PATCH request per token when saving multiple tokens", async () => {
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        id: 1,
-        email: "professor@university.edu",
-        is_active: true,
-        has_canvas_token: true,
-      }),
-    } as Response);
-
-    await updateCanvasTokens(
-      ["canvas-token-123", "canvas-token-456"],
-      "jwt-token",
-    );
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
-      body: JSON.stringify({ canvas_token: "canvas-token-123" }),
-    });
-    expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({
-      body: JSON.stringify({ canvas_token: "canvas-token-456" }),
-    });
+  // Verifies: Deprecated token-only save helper rejects missing Canvas URL.
+  it("rejects deprecated token-only updates", async () => {
+    await expect(
+      updateCanvasTokens(["canvas-token-123"], "jwt-token"),
+    ).rejects.toEqual(new CanvasApiError("Canvas URL is required", 400));
   });
 
   // Verifies: Throws CanvasApiError when the request fails.
@@ -106,7 +94,11 @@ describe("canvas service", () => {
       json: async () => ({ status: "valid" }),
     } as Response);
 
-    const result = await validateCanvasToken("canvas-token-123", "jwt-token");
+    const result = await validateCanvasToken(
+      "canvas-token-123",
+      "jwt-token",
+      "https://canvas.example.edu",
+    );
 
     expect(fetchMock).toHaveBeenCalledWith(
       "http://localhost:8000/api/v1/auth/me/canvas-token/validate",
@@ -116,7 +108,10 @@ describe("canvas service", () => {
           "Content-Type": "application/json",
           Authorization: "Bearer jwt-token",
         },
-        body: JSON.stringify({ canvas_token: "canvas-token-123" }),
+        body: JSON.stringify({
+          canvas_token: "canvas-token-123",
+          canvas_url: "https://canvas.example.edu",
+        }),
       }),
     );
     expect(result).toBe("valid");
@@ -130,7 +125,11 @@ describe("canvas service", () => {
       json: async () => ({ status: "expired" }),
     } as Response);
 
-    const result = await validateCanvasToken("expired-token", "jwt-token");
+    const result = await validateCanvasToken(
+      "expired-token",
+      "jwt-token",
+      "https://canvas.example.edu",
+    );
 
     expect(result).toBe("expired");
   });
@@ -139,7 +138,11 @@ describe("canvas service", () => {
   it("returns invalid when the backend cannot validate the token", async () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Network error"));
 
-    const result = await validateCanvasToken("bad-token", "jwt-token");
+    const result = await validateCanvasToken(
+      "bad-token",
+      "jwt-token",
+      "https://canvas.example.edu",
+    );
 
     expect(result).toBe("invalid");
   });
@@ -153,7 +156,7 @@ describe("canvas service", () => {
     await updateCanvasToken(
       "canvas-token-123",
       "jwt-token",
-      "https://canvas.university.edu",
+      "https://canvas.example.edu",
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -161,7 +164,7 @@ describe("canvas service", () => {
       expect.objectContaining({
         body: JSON.stringify({
           canvas_token: "canvas-token-123",
-          canvas_url: "https://canvas.university.edu",
+          canvas_url: "https://canvas.example.edu",
         }),
       }),
     );
@@ -176,7 +179,7 @@ describe("canvas service", () => {
     await updateCanvasConnections(
       [
         {
-          canvasUrl: "https://canvas.ubc.ca",
+          canvasUrl: "https://canvas.example.edu",
           canvasToken: "token-1",
         },
         {
@@ -222,11 +225,11 @@ describe("canvas service", () => {
 
     const courses = await fetchCourses(
       "jwt-token",
-      "https://canvas.university.edu",
+      "https://canvas.example.edu",
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/canvas/courses?canvas_url=https%3A%2F%2Fcanvas.university.edu",
+      "http://localhost:8000/api/v1/canvas/courses?canvas_url=https%3A%2F%2Fcanvas.example.edu",
       expect.objectContaining({
         headers: { Authorization: "Bearer jwt-token" },
       }),
@@ -242,11 +245,11 @@ describe("canvas service", () => {
 
     const courses = await fetchCachedCourses(
       "jwt-token",
-      "https://canvas.university.edu",
+      "https://canvas.example.edu",
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://localhost:8000/api/v1/canvas/courses/cached?canvas_url=https%3A%2F%2Fcanvas.university.edu",
+      "http://localhost:8000/api/v1/canvas/courses/cached?canvas_url=https%3A%2F%2Fcanvas.example.edu",
       expect.objectContaining({
         headers: { Authorization: "Bearer jwt-token" },
       }),
@@ -314,7 +317,7 @@ describe("canvas service", () => {
     } as Response);
 
     await expect(
-      validateCanvasToken("bad-token", "jwt-token", "https://canvas.university.edu"),
+      validateCanvasToken("bad-token", "jwt-token", "https://canvas.example.edu"),
     ).resolves.toBe("invalid");
   });
 });

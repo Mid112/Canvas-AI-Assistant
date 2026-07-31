@@ -10,7 +10,7 @@ describe("isCanvasConnectionRequiredError", () => {
     expect(
       isCanvasConnectionRequiredError(
         new CanvasApiError(
-          "No Canvas token for https://canvas.ubc.ca. PATCH to /api/v1/auth/me/canvas-token first.",
+          "No Canvas token for https://canvas.example.edu. PATCH to /api/v1/auth/me/canvas-token first.",
           403,
         ),
       ),

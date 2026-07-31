@@ -255,7 +255,7 @@ def test_chat_resolves_course_name_before_calling_model(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -270,7 +270,7 @@ def test_chat_resolves_course_name_before_calling_model(client):
             }
         ]
         courses = client.get(
-            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            "/api/v1/canvas/courses?canvas_url=https://canvas.example.edu",
             headers=headers,
         )
         assert courses.status_code == 200
@@ -310,7 +310,7 @@ def test_chat_reuses_conversation_course_context_on_followup(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -325,7 +325,7 @@ def test_chat_reuses_conversation_course_context_on_followup(client):
             }
         ]
         courses = client.get(
-            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            "/api/v1/canvas/courses?canvas_url=https://canvas.example.edu",
             headers=headers,
         )
         local_course_id = courses.json()[0]["local_id"]
@@ -377,7 +377,7 @@ def test_chat_followup_stays_on_conversation_course_despite_conflicting_active_c
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -399,7 +399,7 @@ def test_chat_followup_stays_on_conversation_course_despite_conflicting_active_c
             },
         ]
         courses = client.get(
-            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            "/api/v1/canvas/courses?canvas_url=https://canvas.example.edu",
             headers=headers,
         )
         local_ids = {c["name"]: c["local_id"] for c in courses.json()}
@@ -530,7 +530,7 @@ def test_history_keeps_intent_preview_full_for_modify_turn(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -545,7 +545,7 @@ def test_history_keeps_intent_preview_full_for_modify_turn(client):
             }
         ]
         courses = client.get(
-            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            "/api/v1/canvas/courses?canvas_url=https://canvas.example.edu",
             headers=headers,
         )
         local_course_id = courses.json()[0]["local_id"]
@@ -601,7 +601,7 @@ def test_course_name_resolution_is_exact_not_fuzzy(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -623,7 +623,7 @@ def test_course_name_resolution_is_exact_not_fuzzy(client):
             },
         ]
         courses = client.get(
-            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            "/api/v1/canvas/courses?canvas_url=https://canvas.example.edu",
             headers=headers,
         )
         local_ids = {c["name"]: c["local_id"] for c in courses.json()}
@@ -666,7 +666,7 @@ def test_chat_uses_saved_active_course_when_client_context_is_not_ready(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -681,7 +681,7 @@ def test_chat_uses_saved_active_course_when_client_context_is_not_ready(client):
             }
         ]
         courses = client.get(
-            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            "/api/v1/canvas/courses?canvas_url=https://canvas.example.edu",
             headers=headers,
         )
         local_course_id = courses.json()[0]["local_id"]
@@ -720,7 +720,7 @@ def test_write_action_without_intent_preview_is_forced_into_a_preview(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -735,7 +735,7 @@ def test_write_action_without_intent_preview_is_forced_into_a_preview(client):
             }
         ]
         courses = client.get(
-            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            "/api/v1/canvas/courses?canvas_url=https://canvas.example.edu",
             headers=headers,
         )
         local_course_id = courses.json()[0]["local_id"]
@@ -806,7 +806,7 @@ def test_canvas_action_without_token_returns_actionable_error(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -821,7 +821,7 @@ def test_canvas_action_without_token_returns_actionable_error(client):
             }
         ]
         courses = client.get(
-            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            "/api/v1/canvas/courses?canvas_url=https://canvas.example.edu",
             headers=headers,
         )
     local_course_id = courses.json()[0]["local_id"]
@@ -878,7 +878,7 @@ def test_canvas_failure_returns_chat_error(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -921,7 +921,7 @@ def test_switching_course_and_back_returns_to_the_original_conversation(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": "https://canvas.ubc.ca"},
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 
@@ -943,7 +943,7 @@ def test_switching_course_and_back_returns_to_the_original_conversation(client):
             },
         ]
         courses = client.get(
-            "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+            "/api/v1/canvas/courses?canvas_url=https://canvas.example.edu",
             headers=headers,
         )
         local_ids = {c["name"]: c["local_id"] for c in courses.json()}

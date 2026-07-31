@@ -165,6 +165,30 @@ def require_canvas_token(user: User, canvas_url: str) -> str:
         )
 
 
+def resolve_institution_canvas_url(user: User, canvas_url: str | None) -> str:
+    """Resolve Canvas URL for institution-level workflows.
+
+    Course-scoped workflows should use the Course.canvas_url instead. This
+    helper is for routes such as course sync/create that operate before a local
+    course exists.
+    """
+    if canvas_url:
+        return normalize_canvas_url(canvas_url)
+
+    connections = getattr(user, "canvas_connections", []) or []
+    if len(connections) == 1:
+        return normalize_canvas_url(connections[0].canvas_url)
+
+    if not connections:
+        detail = "Connect Canvas and provide a Canvas URL before loading courses."
+    else:
+        detail = "Select a Canvas institution before loading courses."
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=detail,
+    )
+
+
 def _is_expected_canvas_token_sync_error(exc: Exception) -> bool:
     """Background sync treats missing/invalid/corrupted Canvas tokens as
     expected account state, not infrastructure failure. Interactive endpoints
@@ -382,12 +406,13 @@ async def set_course_published(
     local_course_id: int,
     payload: CoursePublishUpdate,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
 ) -> CourseResponse:
     """Publish or unpublish a course via Canvas course[event] offer/claim."""
-    token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
 
     if course.workflow_state == "completed":
         raise HTTPException(
@@ -421,7 +446,7 @@ async def set_course_published(
         int(course.canvas_course_id),
         {"event": event},
         token,
-        canvas_url,
+        resolved_canvas_url,
     )
 
     workflow_state = data.get("workflow_state") or (
@@ -655,16 +680,17 @@ async def get_assignment(
     local_course_id: int,
     assignment_id: int,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
 ) -> AssignmentResponse:
-    token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
     data = await fetch_assignment(
         int(course.canvas_course_id),
         assignment_id,
         token,
-        canvas_url,
+        resolved_canvas_url,
     )
     return AssignmentResponse(**data)
 
@@ -673,7 +699,7 @@ async def create_course_assignment(
     local_course_id: int,
     payload: AssignmentCreate,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
     *,
     idempotency_key: str | None = None,
@@ -687,8 +713,9 @@ async def create_course_assignment(
             payload.description, content_label="Assignment description"
         )
 
-    token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
     require_writable_course(course)
     await _assert_no_executing_write(
         db,
@@ -710,7 +737,7 @@ async def create_course_assignment(
             int(course.canvas_course_id),
             payload.model_dump(mode="json"),
             token,
-            canvas_url,
+            resolved_canvas_url,
         )
 
     data = await run_idempotent_canvas_write(
@@ -886,13 +913,14 @@ def _new_quiz_item_payload(question, position: int) -> dict:
 async def get_course_quiz_capabilities(
     local_course_id: int,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
 ) -> QuizCapabilities:
-    token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
     available, reason = await probe_new_quizzes(
-        int(course.canvas_course_id), token, canvas_url
+        int(course.canvas_course_id), token, resolved_canvas_url
     )
     return QuizCapabilities(
         new_quizzes=available,
@@ -904,13 +932,14 @@ async def get_course_quiz_capabilities(
 async def get_course_question_banks(
     local_course_id: int,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
 ) -> list[QuestionBankSummary]:
-    token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
     banks = await list_question_banks(
-        int(course.canvas_course_id), token, canvas_url
+        int(course.canvas_course_id), token, resolved_canvas_url
     )
     return [
         QuestionBankSummary(
@@ -928,9 +957,9 @@ async def get_course_quizzes(
     canvas_url: str | None,
     db: AsyncSession,
 ) -> list[QuizResponse]:
-    token = require_canvas_token(user, canvas_url or settings.CANVAS_API_URL)
-    course = await get_owned_course(local_course_id, user, canvas_url or settings.CANVAS_API_URL, db)
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
     resolved = course.canvas_url
+    token = require_canvas_token(user, resolved)
     raw = await list_quizzes(int(course.canvas_course_id), token, resolved)
     quizzes: list[QuizResponse] = []
     for item in raw:
@@ -958,14 +987,15 @@ async def create_course_quiz(
     local_course_id: int,
     payload: QuizCreate,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
     *,
     idempotency_key: str | None = None,
     exclude_workflow_id: int | None = None,
 ) -> QuizResponse:
-    token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
     require_writable_course(course)
     await _assert_no_executing_write(
         db,
@@ -987,7 +1017,7 @@ async def create_course_quiz(
             course=course,
             payload=payload,
             token=token,
-            canvas_url=canvas_url,
+            canvas_url=resolved_canvas_url,
         )
         return quiz.model_dump(mode="json")
 
@@ -1215,7 +1245,7 @@ async def update_course_assignment(
     assignment_id: int,
     payload: AssignmentUpdate,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
     *,
     idempotency_key: str | None = None,
@@ -1227,8 +1257,9 @@ async def update_course_assignment(
             payload.description, content_label="Assignment description"
         )
 
-    token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
     require_writable_course(course)
     await _assert_no_executing_write(
         db,
@@ -1252,7 +1283,7 @@ async def update_course_assignment(
             assignment_id,
             payload.model_dump(mode="json"),
             token,
-            canvas_url,
+            resolved_canvas_url,
         )
 
     data = await run_idempotent_canvas_write(
@@ -1271,13 +1302,14 @@ async def update_course_grade(
     student_id: int,
     posted_grade: str,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
     *,
     feedback: str | None = None,
 ) -> dict:
-    token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
     require_writable_course(course)
     return await update_submission_grade(
         int(course.canvas_course_id),
@@ -1285,7 +1317,7 @@ async def update_course_grade(
         student_id,
         posted_grade,
         token,
-        canvas_url,
+        resolved_canvas_url,
         feedback=feedback,
     )
 
@@ -1323,7 +1355,7 @@ async def send_course_message(
     subject: str,
     body: str,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
     recipient_canvas_user_ids: list[int] | None = None,
     *,
@@ -1336,8 +1368,9 @@ async def send_course_message(
     # modules are fully loaded by the time this actually runs.
     from app.services.student import get_students
 
-    token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
     require_writable_course(course)
     await _assert_no_executing_write(
         db,
@@ -1366,7 +1399,7 @@ async def send_course_message(
                 subject,
                 body,
                 token,
-                canvas_url,
+                resolved_canvas_url,
             )
             result = MessageSendResult(
                 course_id=canvas_course_id,
@@ -1378,8 +1411,8 @@ async def send_course_message(
             )
             return result.model_dump(mode="json")
 
-        await create_announcement(canvas_course_id, subject, body, token, canvas_url)
-        roster = await get_students(local_course_id, user, canvas_url, db)
+        await create_announcement(canvas_course_id, subject, body, token, resolved_canvas_url)
+        roster = await get_students(local_course_id, user, resolved_canvas_url, db)
         result = MessageSendResult(
             course_id=canvas_course_id,
             subject=subject,
@@ -1475,19 +1508,20 @@ async def get_submissions(
     local_course_id: int,
     assignment_id: int,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
 ) -> list[SubmissionResponse]:
-    token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
     data = await fetch_submissions(
         int(course.canvas_course_id),
         assignment_id,
         token,
-        canvas_url,
+        resolved_canvas_url,
     )
     parsed = [_parse_submission(raw) for raw in data]
-    await _fill_submission_contact_fields(parsed, token, canvas_url)
+    await _fill_submission_contact_fields(parsed, token, resolved_canvas_url)
     await _cache_submissions_safely(course.id, assignment_id, parsed)
 
     return parsed

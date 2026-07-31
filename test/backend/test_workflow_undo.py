@@ -20,7 +20,7 @@ from app.models.message import Message
 from app.models.workflow import Workflow
 from app.schemas.canvas import AssignmentResponse, MessageSendResult
 
-CANVAS_URL = "https://canvas.ubc.ca"
+CANVAS_URL = "https://canvas.example.edu"
 
 
 def _make_session():

@@ -67,17 +67,18 @@ async def analyze_missing_submissions(
     local_course_id: int,
     assignment_id: int,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
 ) -> MissingSubmissionAnalysis:
-    token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
 
     canvas_course_id = int(course.canvas_course_id)
     # Roster and submissions are independent Canvas calls — fetch them concurrently
     enrollments, submissions = await asyncio.gather(
-        fetch_enrollments(canvas_course_id, token, canvas_url),
-        fetch_submissions(canvas_course_id, assignment_id, token, canvas_url),
+        fetch_enrollments(canvas_course_id, token, resolved_canvas_url),
+        fetch_submissions(canvas_course_id, assignment_id, token, resolved_canvas_url),
     )
     assignment_published = await _resolve_assignment_published(course, assignment_id, db)
 
@@ -143,12 +144,13 @@ async def analyze_late_submissions(
     local_course_id: int,
     assignment_id: int,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
 ) -> LateSubmissionAnalysis:
-    token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
-    roster, submissions = await _fetch_roster_and_submissions(course, assignment_id, token, canvas_url)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
+    roster, submissions = await _fetch_roster_and_submissions(course, assignment_id, token, resolved_canvas_url)
     assignment_published = await _resolve_assignment_published(course, assignment_id, db)
 
     submission_by_user = {str(raw["user_id"]): raw for raw in submissions}

@@ -55,7 +55,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:-localdevsecret}
       # nginx serves the frontend on port 8888 (see nginx service below)
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:8888,http://localhost}
-      CANVAS_API_URL: ${CANVAS_API_URL:-https://canvas.ubc.ca}
+      CANVAS_API_URL: ${CANVAS_API_URL:-}
       CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-}
       CANVAS_TOKEN_ENCRYPTION_KEY: ${CANVAS_TOKEN_ENCRYPTION_KEY}
       MCP_SERVER_URL: http://mcp_server:8001
@@ -82,11 +82,11 @@ services:
     restart: unless-stopped
     environment:
       # Align with backend CANVAS_API_URL so allowlisted canvas_url hosts match.
-      CANVAS_API_URL: ${CANVAS_API_URL:-https://canvas.ubc.ca}
+      CANVAS_API_URL: ${CANVAS_API_URL:-}
       CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-placeholder}
       # Same secret the backend sends on /tools/call and /mcp (Bearer).
       MCP_SHARED_SECRET: ${MCP_SHARED_SECRET:-local-mcp-shared-secret}
-      MCP_ALLOWED_CANVAS_HOSTS: ${MCP_ALLOWED_CANVAS_HOSTS:-canvas.ubc.ca}
+      MCP_ALLOWED_CANVAS_HOSTS: ${MCP_ALLOWED_CANVAS_HOSTS:-}
     # No host port publish — mcp_server stays on backend_net only so
     # /tools/call and /mcp are not open Canvas proxies on the host (#1273 review).
     expose:

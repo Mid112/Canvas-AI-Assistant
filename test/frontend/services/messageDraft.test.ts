@@ -150,6 +150,7 @@ describe("messageDraft service", () => {
       body: "Please submit.",
       recipientIds: ["student-1"],
       recipients,
+      canvasUrl: "https://canvas.example.edu",
     });
 
     expect(fetchSpy.mock.calls[0]?.[0]).toBe(
@@ -161,7 +162,7 @@ describe("messageDraft service", () => {
       recipients,
     });
     expect(fetchSpy.mock.calls[1]?.[0]).toBe(
-      "http://localhost:8000/api/v1/messages/drafts/7/send",
+      "http://localhost:8000/api/v1/messages/drafts/7/send?canvas_url=https%3A%2F%2Fcanvas.example.edu",
     );
   });
 

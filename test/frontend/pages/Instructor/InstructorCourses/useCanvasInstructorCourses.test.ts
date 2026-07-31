@@ -76,7 +76,7 @@ describe("useCanvasInstructorCourses", () => {
 
   // Verifies: Stale per-course assignment counts are cleared once the course list empties out.
   it("clears assignment counts when availableCourses becomes empty", async () => {
-    mockUseCanvasConnectionUrl.mockReturnValue("https://canvas.ubc.ca");
+    mockUseCanvasConnectionUrl.mockReturnValue("https://canvas.example.edu");
     vi.mocked(fetchCourseAssignments).mockResolvedValue([{ id: 1 } as never]);
 
     mockUseActiveCourse.mockReturnValue({
