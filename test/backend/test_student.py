@@ -77,15 +77,16 @@ def test_list_students_unauthenticated(client):
 
 
 # Verifies: List students no canvas token.
-def test_list_students_no_canvas_token(client):
+def test_list_students_no_canvas_token(client, create_local_course_for_user_email):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
         json={"name": "No Token", "email": email, "password": "secret123"},
     )
     token = reg.json()["access_token"]
+    local_course_id = create_local_course_for_user_email(email, canvas_url=CANVAS_URL)
     response = client.get(
-        f"/api/v1/canvas/courses/1/students?canvas_url={CANVAS_URL}",
+        f"/api/v1/canvas/courses/{local_course_id}/students?canvas_url={CANVAS_URL}",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 403
