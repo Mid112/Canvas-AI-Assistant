@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.canvas_url import resolve_canvas_url_for_user
 from app.core.database import get_db
 from app.dependencies import get_current_user, get_instructor_user
 from app.models.user import User
@@ -93,21 +94,27 @@ async def course_overview(
 @router.get("/courses", response_model=list[CourseResponse])
 async def list_courses(
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    return await get_courses(current_user, canvas_url, db)
+    resolved = resolve_canvas_url_for_user(current_user, canvas_url)
+    return await get_courses(current_user, resolved, db)
 
 
 @router.post("/courses", response_model=CourseResponse, status_code=status.HTTP_201_CREATED)
 async def create_course(
     body: CourseCreate,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a Canvas course from the app and sync it into the local course list (#1285)."""
-    return await create_canvas_course(body, current_user, canvas_url, db)
+    """Create a Canvas course from the app and sync it into the local course list (#1285).
+
+    ``canvas_url`` may be omitted; the user's saved Canvas connection is used so
+    newly connected accounts do not hit the global CANVAS_API_URL mismatch (#1425).
+    """
+    resolved = resolve_canvas_url_for_user(current_user, canvas_url)
+    return await create_canvas_course(body, current_user, resolved, db)
 
 
 @router.patch("/courses/{course_id}/publish", response_model=CourseResponse)

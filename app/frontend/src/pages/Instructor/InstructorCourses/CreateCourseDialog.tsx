@@ -1,4 +1,5 @@
 import { useRef, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +14,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
+import {
+  canvasConnectionRequiredMessage,
+  isCanvasConnectionRequiredError,
+} from "@/lib/canvas-connection";
 import { toBrowserCanvasUrl } from "@/lib/canvas-url";
+import { instructorSettingsPath } from "@/routes/paths";
 import { CanvasApiError, createCourse } from "@/services/canvas";
 
 interface CreateCourseDialogProps {
@@ -33,6 +39,7 @@ export function CreateCourseDialog({
   const [courseCode, setCourseCode] = useState("");
   const [publish, setPublish] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [needsReconnect, setNeedsReconnect] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // Sync guard — React state alone can miss a second click before re-render.
   const isSubmittingRef = useRef(false);
@@ -47,6 +54,7 @@ export function CreateCourseDialog({
     setCourseCode("");
     setPublish(false);
     setError(null);
+    setNeedsReconnect(false);
     setIsSubmitting(false);
     isSubmittingRef.current = false;
   };
@@ -69,16 +77,24 @@ export function CreateCourseDialog({
     const trimmedName = name.trim();
     if (!trimmedName) {
       setError("Course name is required.");
+      setNeedsReconnect(false);
       return;
     }
     if (!accessToken) {
       setError("You must be signed in to create a course.");
+      setNeedsReconnect(false);
+      return;
+    }
+    if (!connectionUrl) {
+      setError(canvasConnectionRequiredMessage());
+      setNeedsReconnect(true);
       return;
     }
 
     isSubmittingRef.current = true;
     setIsSubmitting(true);
     setError(null);
+    setNeedsReconnect(false);
     try {
       await createCourse(
         {
@@ -93,11 +109,17 @@ export function CreateCourseDialog({
       onOpenChange(false);
       await onCreated?.();
     } catch (err) {
-      setError(
-        err instanceof CanvasApiError
-          ? err.message
-          : "Unable to create the course. Please try again.",
-      );
+      if (isCanvasConnectionRequiredError(err)) {
+        setError(canvasConnectionRequiredMessage(err));
+        setNeedsReconnect(true);
+      } else {
+        setError(
+          err instanceof CanvasApiError
+            ? err.message
+            : "Unable to create the course. Please try again.",
+        );
+        setNeedsReconnect(false);
+      }
       isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
@@ -151,14 +173,20 @@ export function CreateCourseDialog({
           </label>
 
           {error ? (
-            <p
+            <div
               role="alert"
-              className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+              className="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
             >
-              {error}
-              {canvasCoursesUrl ? (
-                <>
-                  {" "}
+              <p>{error}</p>
+              {needsReconnect ? (
+                <Link
+                  to={instructorSettingsPath("canvas")}
+                  className="inline-flex h-8 items-center rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground underline-offset-4 hover:underline"
+                >
+                  Reconnect Canvas
+                </Link>
+              ) : canvasCoursesUrl ? (
+                <p>
                   You can also{" "}
                   <a
                     href={canvasCoursesUrl}
@@ -169,9 +197,9 @@ export function CreateCourseDialog({
                     create the course in Canvas
                   </a>{" "}
                   and sync it here.
-                </>
+                </p>
               ) : null}
-            </p>
+            </div>
           ) : null}
 
           <DialogFooter>

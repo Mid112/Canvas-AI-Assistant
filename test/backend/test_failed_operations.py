@@ -212,7 +212,7 @@ def test_should_record_course_sync_failure(
 @pytest.mark.parametrize(
     ("status_code", "detail", "expected"),
     [
-        (403, "No Canvas token for http://localhost:3000. PATCH to /api/v1/auth/me/canvas-token first.", True),
+        (403, "No Canvas token for http://localhost:3000. Reconnect Canvas in Settings, then try again.", True),
         (403, "Canvas token is corrupted — please reconnect Canvas.", True),
         (422, "Invalid Canvas API token", True),
         (403, "Canvas token lacks permission for this resource", False),

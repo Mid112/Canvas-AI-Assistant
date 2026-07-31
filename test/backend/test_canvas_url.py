@@ -30,3 +30,51 @@ def test_resolve_server_canvas_url_maps_local_aliases(monkeypatch):
         resolve_server_canvas_url("http://localhost:3000", settings.CANVAS_API_URL)
         == "http://canvas_lms:3000"
     )
+
+
+def test_resolve_canvas_url_for_user_prefers_saved_connection_when_omitted():
+    from types import SimpleNamespace
+
+    from app.core.canvas_url import resolve_canvas_url_for_user
+
+    user = SimpleNamespace(
+        canvas_connections=[
+            SimpleNamespace(canvas_url="http://localhost:3000"),
+        ]
+    )
+
+    assert (
+        resolve_canvas_url_for_user(user, None, server_default="https://canvas.ubc.ca")
+        == "http://localhost:3000"
+    )
+
+
+def test_resolve_canvas_url_for_user_keeps_matching_explicit_url():
+    from types import SimpleNamespace
+
+    from app.core.canvas_url import resolve_canvas_url_for_user
+
+    user = SimpleNamespace(
+        canvas_connections=[
+            SimpleNamespace(canvas_url="http://localhost:3000/"),
+            SimpleNamespace(canvas_url="https://canvas.ubc.ca"),
+        ]
+    )
+
+    assert (
+        resolve_canvas_url_for_user(user, "http://localhost:3000")
+        == "http://localhost:3000"
+    )
+
+
+def test_resolve_canvas_url_for_user_falls_back_to_global_without_connections():
+    from types import SimpleNamespace
+
+    from app.core.canvas_url import resolve_canvas_url_for_user
+
+    user = SimpleNamespace(canvas_connections=[])
+
+    assert (
+        resolve_canvas_url_for_user(user, None, server_default="https://canvas.ubc.ca")
+        == "https://canvas.ubc.ca"
+    )
