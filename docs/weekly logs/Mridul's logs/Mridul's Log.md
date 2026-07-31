@@ -2020,3 +2020,131 @@ verifying that the fixes work together and do not introduce new issues.
 * **Goal 7:** Update the analysis report with Testing Event 2 findings and resolved issues
 * **Goal 8:** Prepare for final project delivery and demo
 
+---
+
+<br> 
+
+# Cycle 21 Report: 28/07 – 30/07 (July 28 – July 30)
+
+## Timesheet
+
+### Clockify Report
+
+* **28/07 (Tuesday):** Using Clockify – Logged 4.63 hours
+  *(4 hours, 15 minutes, and 17 seconds for Testing Event 2 preparation and testing)*
+  *(22 minutes and 33 seconds for cycle logs)*
+<img width="2426" height="342" alt="image" src="https://github.com/user-attachments/assets/895de398-eb14-4fa4-b040-aceb61528c39" />
+
+* **29/07 (Wednesday):** Using Clockify – Logged 1.50 hours
+  *(1 hour and 30 minutes for ticket and feedback consolidation from Testing Event 2)*
+<img width="2418" height="218" alt="image" src="https://github.com/user-attachments/assets/3ded5a23-e698-43ca-aa98-35a9fbfcd53d" />
+
+* **30/07 (Thursday):** Using Clockify – Logged 2.96 hours
+  *(2 hours, 57 minutes, and 53 seconds for Ticket 2 work)*
+<img width="2410" height="234" alt="image" src="https://github.com/user-attachments/assets/55a04630-2c66-40da-ae5f-70a2a758b20c" />
+
+**Cycle Total:** 9 hours, 5 minutes, and 43 seconds
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Testing Event 2 preparation and testing (July 28)
+
+* Worked for 4 hours, 15 minutes, and 17 seconds on Testing Event 2 preparation and testing.
+* Prepared the application and workflows for Testing Event 2 validation.
+* Tested key user-facing flows to identify remaining bugs and usability issues.
+* Helped validate current project behavior across frontend, backend, Canvas, and workflow-related features.
+* This work supported final stabilization before moving toward final project delivery and demo readiness.
+
+### #2: Cycle logs (July 28)
+
+* Worked for 22 minutes and 33 seconds on cycle logs.
+* Updated personal documentation for recent work completed during the project cycle.
+* Ensured the timesheet, task descriptions, progress updates, and next cycle goals were properly recorded.
+* This helped keep project documentation organized and aligned with team progress.
+
+### #3: Ticket and feedback consolidation from Testing Event 2 (July 29)
+
+* Worked for 1 hour and 30 minutes on consolidating tickets and feedback from Testing Event 2.
+* Reviewed issues discovered during testing and helped organize them into actionable work items.
+* Helped connect testing feedback to GitHub tickets so the team could prioritize remaining fixes.
+* This work supported clearer planning for final bug fixes and final delivery preparation.
+
+### #4: Ticket 2 — Canvas institution URL mismatch regression (July 30)
+
+* Worked for 2 hours, 57 minutes, and 53 seconds on Ticket 2.
+* Focused on the regression issue related to Canvas institution URL mismatch across workflows.
+* Reviewed how Canvas URLs are handled across different application flows.
+* Worked toward ensuring Canvas-related workflows use the correct institution URL consistently.
+* This issue moved into review, supporting final cleanup and regression resolution before final delivery.
+
+---
+
+## Tasks Started / To Be Completed
+
+| Task ID | Description                                                                         | Status    | Notes                                                          |
+| ------- | ----------------------------------------------------------------------------------- | --------- | -------------------------------------------------------------- |
+| 1426    | Ticket 2: Fix Canvas Institution URL Mismatch Across Workflows [Regression]         | In Review | Worked on Canvas URL mismatch behavior across workflows        |
+| 1326    | Final Submission Package                                                            | Planned   | Needs completion for final project delivery                    |
+| 1447    | Ticket 23: Improve Course Code Validation and Help Text [Manual verification]       | Ready     | Planned for follow-up manual verification                      |
+| 1449    | Ticket 25: Fix Message Preview and Sent Message Synchronization [Regression]        | Ready     | Planned regression fix for message preview and sent state sync |
+| 1448    | Ticket 24: Refresh Review Status After Message Send [Existing feature confirmation] | Ready     | Planned verification/fix for review status refresh             |
+| 1442    | Ticket 18: Improve Chat Window Layout and History Navigation [Manual verification]  | Ready     | Planned UI/manual verification task                            |
+| 1434    | Ticket 10: Add Course Name Repair Migration or Maintenance Command [Regression]     | Ready     | Planned regression support task                                |
+| 1433    | Ticket 9: Fix Stale Chat Course Context and Course Code Handling [Regression]       | Ready     | Planned regression fix for stale chat course context           |
+
+---
+
+## Progress Update (since 28/07/2026)
+
+| TASK/ISSUE #                                       | STATUS      |
+| -------------------------------------------------- | ----------- |
+| Testing Event 2 preparation and testing            | Completed   |
+| Cycle logs                                         | Completed   |
+| Testing Event 2 feedback consolidation             | Completed   |
+| Ticket creation and organization                   | Completed   |
+| Ticket 2: Canvas institution URL mismatch          | In Review   |
+| Final Submission Package                           | Planned     |
+| Course code validation and help text               | Planned     |
+| Message preview and sent message synchronization   | Planned     |
+| Review status refresh after message send           | Planned     |
+| Chat window layout and history navigation          | Planned     |
+| Course name repair migration/maintenance command   | Planned     |
+| Stale chat course context and course code handling | Planned     |
+| Final project delivery and demo preparation        | In Progress |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle focused on Testing Event 2 preparation, testing, feedback consolidation, and beginning final regression cleanup. On July 28, I worked on preparing and testing the system for Testing Event 2. This helped identify issues that still needed attention before final delivery and gave the team a better understanding of the project’s current stability.
+
+I also worked on cycle logs on July 28 to keep project documentation updated. This ensured that recent work, testing progress, and upcoming goals were recorded clearly.
+
+On July 29, I worked on consolidating tickets and feedback from Testing Event 2. This was important because the testing event produced several follow-up tasks, and organizing them into GitHub issues helped make the remaining work easier to track and prioritize.
+
+On July 30, I worked on Ticket 2, which focused on fixing Canvas institution URL mismatch behavior across workflows. This was important because Canvas URL consistency affects multiple user flows, and resolving this regression helps improve reliability before the final demo and project delivery.
+
+### Retrospective:
+
+This was a productive cycle because it moved the project from Testing Event 2 execution into issue consolidation and final regression work. The main value of this cycle was not just testing the system, but turning testing feedback into organized, actionable tickets.
+
+The Ticket 2 work was especially important because Canvas URL mismatch issues can affect multiple workflows and create inconsistent behavior for users. Moving this task into review helped reduce one of the remaining risks before final delivery.
+
+The main area to continue improving is completing the remaining regression and manual verification tickets. Since the project is now moving toward final delivery and demo preparation, the next cycle should focus on resolving the remaining Testing Event 2 bugs, validating fixes, and preparing the final submission package.
+
+---
+
+## Next Cycle Goals
+
+* **Goal 1:** Continue fixing bugs discovered during Testing Event 2
+* **Goal 2:** Complete and verify remaining regression tickets from the final live demo/project delivery board
+* **Goal 3:** Finish manual verification tasks for course code validation, chat layout, history navigation, and message workflows
+* **Goal 4:** Continue reviewing PRs and validating fixes before final merge
+* **Goal 5:** Prepare the final submission package
+* **Goal 6:** Update testing documentation with completed fixes and validation results
+* **Goal 7:** Update the design document and analysis report with final project changes
+* **Goal 8:** Prepare for final project delivery and demo
