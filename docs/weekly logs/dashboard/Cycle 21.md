@@ -4,7 +4,7 @@
 
 ## Burn-up Chart (Velocity)
 
-![Burn-up Chart](<INSERT_BURNUP_CHART_IMAGE>)
+<img width="1087" height="585" alt="Screenshot 2026-07-31 at 11 15 38 AM" src="https://github.com/user-attachments/assets/6bc6da34-828f-4f48-ba00-af63b0da2f94" />
 
 ### Burn-up Summary
 
@@ -34,7 +34,7 @@ The project board reflects the project's final delivery stage. Most development 
 | In Review | **4 active items** |
 | Done | **1117 completed items** |
 
-![Project Board](<INSERT_PROJECT_BOARD_IMAGE>)
+<img width="1426" height="738" alt="Screenshot 2026-07-31 at 11 16 16 AM" src="https://github.com/user-attachments/assets/cbd5e989-5989-483a-80f9-bd4861f9f212" />
 
 ---
 
@@ -100,27 +100,33 @@ The team logged a combined **36 hours, 42 minutes, and 20 seconds** during Cycle
 
 ### Team Clockify
 
-![Team Summary](<INSERT_TEAM_CLOCKIFY_IMAGE>)
+<img width="904" height="527" alt="Screenshot 2026-07-31 at 11 16 38 AM" src="https://github.com/user-attachments/assets/2e849d85-7a35-4e26-b859-ff8c232635be" />
+
 
 ### Mridul
 
-![Mridul Clockify](<INSERT_MRIDUL_CLOCKIFY_IMAGE>)
+<img width="1222" height="385" alt="Screenshot 2026-07-31 at 11 18 25 AM" src="https://github.com/user-attachments/assets/18416369-9a5d-41dd-a2aa-6bc0c02686d7" />
+
 
 ### Jessica
 
-![Jessica Clockify](<INSERT_JESSICA_CLOCKIFY_IMAGE>)
+<img width="1197" height="395" alt="Screenshot 2026-07-31 at 11 18 14 AM" src="https://github.com/user-attachments/assets/c1203060-ad01-4905-8c6a-e4649f1aa34c" />
+
 
 ### Yerdana
 
-![Yerdana Clockify](<INSERT_YERDANA_CLOCKIFY_IMAGE>)
+<img width="1208" height="397" alt="Screenshot 2026-07-31 at 11 19 03 AM" src="https://github.com/user-attachments/assets/501e6447-942e-49f5-a2c1-03daba9c8784" />
+
 
 ### Bao
 
-![Bao Clockify](<INSERT_BAO_CLOCKIFY_IMAGE>)
+<img width="1208" height="390" alt="Screenshot 2026-07-31 at 11 18 43 AM" src="https://github.com/user-attachments/assets/7358e4e2-e0b8-4b9e-97db-5583ccb116a4" />
+
 
 ### Rhythm
 
-![Rhythm Clockify](<INSERT_RHYTHM_CLOCKIFY_IMAGE>)
+<img width="1217" height="395" alt="Screenshot 2026-07-31 at 11 18 52 AM" src="https://github.com/user-attachments/assets/335818b3-189b-4d4d-b860-e3569880c084" />
+
 
 ---
 
