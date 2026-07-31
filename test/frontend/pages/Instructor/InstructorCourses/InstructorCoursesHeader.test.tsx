@@ -59,7 +59,7 @@ describe("InstructorCoursesHeader", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        /Manage all your courses and track performance at canvas\.ubc\.ca\./,
+        /Manage all your courses and track performance at canvas\.example\.edu\./,
       ),
     ).toBeInTheDocument();
     expect(

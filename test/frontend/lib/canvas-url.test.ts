@@ -34,7 +34,7 @@ describe("canvasUrlsEquivalent", () => {
   // Verifies: Does not equate different public hosts.
   it("does not equate different public hosts", () => {
     expect(
-      canvasUrlsEquivalent("https://canvas.example.edu", "https://canvas.example.edu"),
+      canvasUrlsEquivalent("https://canvas.example.edu", "https://canvas.other.edu"),
     ).toBe(false);
   });
 });
