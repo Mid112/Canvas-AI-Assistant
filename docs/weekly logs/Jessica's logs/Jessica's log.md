@@ -1558,6 +1558,89 @@ Overall, this cycle emphasized code quality, testing preparation, project organi
 * Maintain project board and sprint planning
 * Maintain consistent Clockify tracking
 
+# **Cycle 21: Tuesday (28/7) ~ Thursday (30/7)**
+
+### **Tuesday (28/7)**
+<img width="1197" height="283" alt="Screenshot 2026-07-31 at 11 51 50 AM" src="https://github.com/user-attachments/assets/12620b20-79b6-4b88-95a3-a9481684c820" />
+
+**Timesheet**  
+**Clockify Report:** 3:13:35
+
+**Current Tasks**
+- Participated in the weekly team meeting and Testing Event 2
+- Collected tester observations and discussed feedback with the team
+- Worked on bug fixes identified during testing
+- Created and organized the Testing Event report documentation
+- Began writing the testing summary report
+- Documented testing results for future implementation improvements
+
+---
+
+### **Wednesday (29/7)**
+<img width="1191" height="213" alt="Screenshot 2026-07-31 at 11 51 56 AM" src="https://github.com/user-attachments/assets/60ca1a5e-f8f5-4500-84b4-8ec504405a06" />
+
+**Timesheet**  
+**Clockify Report:** 3:30:34
+
+**Current Tasks**
+- Continued writing the Testing Event summary report
+- Consolidated user feedback and testing observations
+- Updated and refactored the project board after Testing Event 2
+- Created a detailed task list for post-testing improvements
+- Organized remaining issues based on testing priorities
+- Prepared documentation for the final implementation phase
+
+---
+
+### **Thursday (30/7)**
+<img width="1197" height="228" alt="Screenshot 2026-07-31 at 11 52 03 AM" src="https://github.com/user-attachments/assets/b15c8001-2941-4513-a1bf-acc7b68c19bb" />
+
+**Timesheet**  
+**Clockify Report:** 2:18:05
+
+**Current Tasks**
+- Finalized the Testing Event report
+- Created the findings summary from collected testing data
+- Fixed bugs identified during Testing Event 2
+- Verified fixes through testing and validation
+- Reviewed completed documentation for accuracy and completeness
+- Prepared deliverables for the team's final development phase
+
+---
+
+## **Cycle 21 – Goal Review**
+
+### **Reflection**
+
+This cycle focused on activities following **Testing Event 2**, with the primary objective of documenting testing outcomes, addressing reported issues, and organizing the remaining work before the final project milestone. Time was spent analyzing tester feedback, preparing comprehensive testing reports, fixing bugs identified during evaluation, and updating project documentation to reflect the latest implementation status.
+
+### **Retrospective**
+
+Testing Event 2 provided valuable feedback regarding the application's usability and overall functionality. After completing the testing session, effort shifted toward documenting observations, consolidating user feedback, and producing detailed testing summaries that could be shared with the team and incorporated into future improvements.
+
+The project board was also updated to reflect post-testing priorities, ensuring remaining tasks were organized according to their impact and urgency. Bug fixes identified during testing were implemented and validated, improving the overall stability and reliability of the application.
+
+Documentation remained a significant focus throughout the cycle, including the creation of summary reports and findings documents that captured both technical issues and user experience observations. These activities helped prepare the project for its final refinement stage and ensured that the team had a clear understanding of the remaining work before the Final Demo.
+
+Overall, this cycle emphasized testing analysis, documentation, bug fixing, and project organization, helping transition the project from user testing into the final polishing phase.
+
+---
+
+## **Next Cycle Goals (Cycle 22: Friday 31/7 ~ Monday 3/8)**
+
+* Implement remaining fixes identified during Testing Event 2
+* Complete outstanding bug fixes and UI refinements
+* Perform final regression and integration testing
+* Review and merge remaining pull requests
+* Finalize project documentation
+* Update user guides and testing reports
+* Prepare presentation materials for the Final Demo
+* Verify application stability across all major workflows
+* Complete final project board cleanup
+* Maintain consistent Clockify tracking
+
+**Total Clockify Time for Cycle 21:** **9:02:14**
+
 
 
 
