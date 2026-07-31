@@ -130,13 +130,30 @@ _KNOWN_OPERATION_SUMMARIES: dict[tuple[str, str], str] = {
     ("ai", "ai_draft"): "The AI assistant couldn't generate a draft.",
 }
 
+# Same reconnect-able token-problem prefixes as _is_expected_canvas_token_sync_error
+# (services/canvas.py) and _TOKEN_ISSUE_PREFIXES (services/troubleshoot.py) --
+# kept as a separate constant here (rather than imported) to avoid a circular
+# import, since troubleshoot.py already imports from this module.
+_TOKEN_ISSUE_PREFIXES = ("No Canvas token", "Canvas token is corrupted", "Invalid Canvas API token")
 
-def summarize_failure(source: str, operation: str) -> str:
+_TOKEN_ISSUE_SUMMARY = (
+    "Canvas access needs to be reconnected before this can complete — "
+    "reconnect Canvas in Settings, or an admin can reset the token from Troubleshooting."
+)
+
+
+def summarize_failure(source: str, operation: str, error_detail: str | None = None) -> str:
     """Plain-language description generated at write time (point of
     failure), so the admin dashboard's default view never has to translate
-    raw error text/operation codes at render time. See _KNOWN_OPERATION_SUMMARIES
-    for the tailored cases; everything else (chiefly dynamic Canvas workflow
-    action names) gets a humanized generic phrase."""
+    raw error text/operation codes at render time. A reconnect-able Canvas
+    token problem always gets the actionable reconnect summary, regardless
+    of (source, operation) -- an admin needs to know that *first*, not that
+    "course_sync" failed. See _KNOWN_OPERATION_SUMMARIES for the other
+    tailored cases; everything else (chiefly dynamic Canvas workflow action
+    names) gets a humanized generic phrase."""
+    if error_detail and any(prefix in error_detail for prefix in _TOKEN_ISSUE_PREFIXES):
+        return _TOKEN_ISSUE_SUMMARY
+
     known = _KNOWN_OPERATION_SUMMARIES.get((source, operation))
     if known:
         return known
@@ -220,7 +237,7 @@ async def record_failed_operation(
         provider=(provider.strip()[:64] if isinstance(provider, str) and provider.strip() else None),
         error_detail=detail,
         context_json=context,
-        human_summary=summarize_failure(source, op),
+        human_summary=summarize_failure(source, op, detail),
     )
     db.add(row)
     await db.flush()
