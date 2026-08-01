@@ -312,24 +312,6 @@ export function InstructorCourseAssignmentsPage() {
                           <div className="flex flex-wrap justify-end gap-2">
                             <Button
                               size="sm"
-                              render={
-                                <Link
-                                  to={paths.instructor.assignmentCreate}
-                                  state={
-                                    {
-                                      aiAssignmentDraft: {
-                                        courseId: parsedLocalCourseId,
-                                      },
-                                    } satisfies AiActionDraftLocationState
-                                  }
-                                />
-                              }
-                            >
-                              <Plus data-icon="inline-start" />
-                              Create
-                            </Button>
-                            <Button
-                              size="sm"
                               variant="outline"
                               render={
                                 <Link
@@ -395,8 +377,34 @@ function PageHeader({
   course?: InstructorCourse | null;
   embedded?: boolean;
 }) {
+  const createAssignmentButton = (
+    <Button
+      size={embedded ? "sm" : "default"}
+      render={
+        <Link
+          to={paths.instructor.assignmentCreate}
+          state={
+            {
+              aiAssignmentDraft: {
+                courseId: localCourseId,
+              },
+            } satisfies AiActionDraftLocationState
+          }
+        />
+      }
+    >
+      <Plus data-icon="inline-start" />
+      Create assignment
+    </Button>
+  );
+
   if (embedded) {
-    return <h2 className="text-lg font-semibold">Assignments</h2>;
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">Assignments</h2>
+        {createAssignmentButton}
+      </div>
+    );
   }
 
   return (
@@ -412,6 +420,7 @@ function PageHeader({
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
+        {createAssignmentButton}
         <Button
           variant="outline"
           render={<Link to={instructorCourseStudentsPath(localCourseId)} />}
