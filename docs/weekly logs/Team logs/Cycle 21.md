@@ -137,6 +137,7 @@ Time was tracked using Clockify for **Cycle 21 (Jul 28, 2026 – Jul 30, 2026).*
 | Rhythm | trivedirhythm | **05:06:54** |
 | **Total** | | **36:42:20** |
 
+
 The team logged a combined **36 hours, 42 minutes, and 20 seconds** during Cycle 21. Compared to the intensive implementation and bug-fixing efforts of previous cycles, this cycle emphasized project stabilization, documentation, deployment preparation, regression verification, and project management activities. Thursday represented the most productive day of the cycle as the team collaborated on documentation, validation tasks, and project refinement following Testing Event 2.
 
 ### Daily Team Hours
@@ -284,7 +285,11 @@ Backend validation included:
 
 ### Testing Outcome
 
-Cycle 21 confirmed that the application's core workflows remained stable following Testing Event 2. Regression fixes continued to improve overall reliability while documentation and deployment validation progressed alongside testing activities. The results of this cycle provide a strong foundation for the remaining development cycles, allowing the team to continue refining the application, completing documentation, and addressing any additional feedback before the final project milestones.
+Cycle 21 confirmed that the application's core workflows remained stable following Testing Event 2. Regression fixes continued to improve overall reliability while documentation and deployment validation progressed alongside testing activities. Testing covered the project's user requirements, functional requirements, AI integration, security, reliability, deployment, and scope constraints, with all documented requirements successfully passing the applicable testing stages.
+For the complete Testing Event 2 results, including the detailed requirements traceability matrix, testing methodologies (Unit, Integration, System, Operational Acceptance, Usability, and Acceptance Testing), contributors, and pass/fail outcomes, please refer to the **Testing Event 2 Report** available in the project's **documentation** branch.
+
+For the complete Testing Event 2 results, including the detailed requirements traceability matrix, testing methodologies (Unit, Integration, System, Operational Acceptance, Usability, and Acceptance Testing), contributors, and pass/fail outcomes, please refer to the **[Testing Event 2 Report](https://github.com/UBCO-COSC499-S2026/capstone-team-16/blob/documentation/docs/testing%20event%20outcomes/UX%20report.docx)** available in the project's documentation branch.
+
 ---
 
 # Project Status Summary
@@ -353,6 +358,7 @@ Cycle 21 marked the project's transition from Testing Event 2 into a stabilizati
 The successful merge of **PR #1418** completed the remaining work carried over from Cycle 20, allowing the team to focus on regression verification, deployment preparation, documentation, and project quality improvements. The GitHub project board reflects this shift, with documentation, validation, and deployment activities now representing the majority of active work.
 
 With **36 hours and 42 minutes** of collaborative effort logged during the cycle, the team continued strengthening the application's stability while preparing for the upcoming milestones. As the project advances through its remaining cycles, development efforts will continue emphasizing documentation, deployment readiness, regression resolution, and refinement to ensure a reliable and well-documented system for the final demonstration and project submission.
+
 ---
 
 # Individual Team Contributions
