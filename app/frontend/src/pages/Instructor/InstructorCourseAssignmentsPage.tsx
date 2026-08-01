@@ -1,4 +1,4 @@
-import { AlertCircle, Eye, Loader2, Pencil, Users } from "lucide-react";
+import { AlertCircle, Eye, Loader2, Pencil, Plus, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -30,6 +30,7 @@ import {
   instructorCourseStudentsPath,
   instructorCourseSubmissionsPath,
   paths,
+  type AiActionDraftLocationState,
 } from "@/routes/paths";
 import {
   AssignmentApiError,
@@ -309,6 +310,24 @@ export function InstructorCourseAssignmentsPage() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex flex-wrap justify-end gap-2">
+                            <Button
+                              size="sm"
+                              render={
+                                <Link
+                                  to={paths.instructor.assignmentCreate}
+                                  state={
+                                    {
+                                      aiAssignmentDraft: {
+                                        courseId: parsedLocalCourseId,
+                                      },
+                                    } satisfies AiActionDraftLocationState
+                                  }
+                                />
+                              }
+                            >
+                              <Plus data-icon="inline-start" />
+                              Create
+                            </Button>
                             <Button
                               size="sm"
                               variant="outline"

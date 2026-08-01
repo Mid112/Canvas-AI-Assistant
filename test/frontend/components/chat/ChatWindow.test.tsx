@@ -104,6 +104,18 @@ describe("ChatWindow", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies: Regression (#10) — the message input is protected with
+  // shrink-0 so a tall sibling (e.g. a growing saved-drafts panel above
+  // the chat window) can never squeeze it down to zero height and make
+  // it inaccessible.
+  it("protects the message input from being flex-shrunk", () => {
+    renderWithInstitution(<ChatWindow />);
+
+    const input = screen.getByRole("textbox", { name: "Chat message" });
+    const inputWrapper = input.closest("form")?.parentElement;
+    expect(inputWrapper).toHaveClass("shrink-0");
+  });
+
   // Verifies: Shows an error for empty submissions.
   it("shows an error for empty submissions", async () => {
     const user = userEvent.setup();

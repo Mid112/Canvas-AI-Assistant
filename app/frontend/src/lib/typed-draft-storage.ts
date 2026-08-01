@@ -18,6 +18,11 @@ export interface TypedDraftContent {
   grade?: string;
   studentName?: string;
   assignmentName?: string;
+  /** Assignment drafts only — an ISO 8601 string, same shape as
+   * GeneratedAssignmentDraft.dueDate. Not a Canvas identifier, so it's
+   * safe to persist alongside title/description. */
+  dueDate?: string;
+  pointsPossible?: number;
 }
 
 export interface TypedDraft {
@@ -60,6 +65,8 @@ function stripCanvasIdentifiers(
     grade,
     studentName,
     assignmentName,
+    dueDate,
+    pointsPossible,
   } = content;
   return {
     ...(title !== undefined ? { title } : {}),
@@ -69,6 +76,8 @@ function stripCanvasIdentifiers(
     ...(grade !== undefined ? { grade } : {}),
     ...(studentName !== undefined ? { studentName } : {}),
     ...(assignmentName !== undefined ? { assignmentName } : {}),
+    ...(dueDate !== undefined ? { dueDate } : {}),
+    ...(pointsPossible !== undefined ? { pointsPossible } : {}),
   };
 }
 
@@ -199,6 +208,12 @@ export function buildTypedDraftResumeTarget(
             ...(courseId !== undefined ? { courseId } : {}),
             name: draft.content.title ?? "",
             description: draft.content.body ?? "",
+            ...(draft.content.dueDate !== undefined
+              ? { dueDate: draft.content.dueDate }
+              : {}),
+            ...(draft.content.pointsPossible !== undefined
+              ? { pointsPossible: draft.content.pointsPossible }
+              : {}),
           },
         },
       };
