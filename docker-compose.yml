@@ -59,7 +59,9 @@ services:
       CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-}
       CANVAS_TOKEN_ENCRYPTION_KEY: ${CANVAS_TOKEN_ENCRYPTION_KEY}
       MCP_SERVER_URL: http://mcp_server:8001
-      MCP_ENABLED: "true"
+      # Enable only after configuring MCP_ALLOWED_CANVAS_HOSTS with the real
+      # Canvas hostnames this deployment may contact.
+      MCP_ENABLED: ${MCP_ENABLED:-false}
       MCP_SHARED_SECRET: ${MCP_SHARED_SECRET:-local-mcp-shared-secret}
       # VLLM_MODE=native → vLLM running on host Mac via Metal
       # VLLM_MODE=docker → vLLM running in container (slow, CPU only on Mac)
@@ -83,8 +85,8 @@ services:
     environment:
       # SSRF allowlist for Canvas hosts the MCP sidecar may call when the
       # backend forwards a user/course canvas_url. Configure this in .env;
-      # see .env.example. Leaving it empty makes MCP fail closed without
-      # preventing the rest of the Compose stack from starting.
+      # see .env.example. Root Compose defaults MCP off; leaving this empty
+      # keeps the sidecar fail closed if it is called unexpectedly.
       CANVAS_API_URL: ${CANVAS_API_URL:-}
       CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-placeholder}
       # Same secret the backend sends on /tools/call and /mcp (Bearer).
