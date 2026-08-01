@@ -29,19 +29,22 @@ def _check_description(description: str) -> None:
 
 
 def _check_due_date(due_date: str) -> None:
+    from app.services.due_date import parse_due_date
+
     try:
-        due_dt = datetime.fromisoformat(due_date)
-        if due_dt.tzinfo is None:
-            due_dt = due_dt.replace(tzinfo=UTC)
+        due_dt = parse_due_date(due_date)
         if due_dt <= datetime.now(UTC):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail="Due date must be in the future.",
             )
-    except ValueError:
+    except (ValueError, TypeError, OverflowError):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid due date format: {due_date}. Use ISO 8601, e.g. 2026-09-01T23:59:00.",
+            detail=(
+                f"Invalid due date format: {due_date}. "
+                "Use ISO 8601 with timezone when possible, e.g. 2026-09-01T23:59:00Z."
+            ),
         )
 
 

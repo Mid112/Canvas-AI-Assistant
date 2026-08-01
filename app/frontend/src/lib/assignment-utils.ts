@@ -5,13 +5,32 @@ import type {
   AssignmentUpdatePayload,
 } from "@/types/assignment";
 
+export function parseDueDate(value: string): Date | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  // Naive ISO from chat/LLM (no offset) is UTC wall-clock, matching backend
+  // normalize_due_date_to_utc_iso (#1435). Browser Date otherwise treats
+  // timezone-less strings as local time and skews hours.
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed);
+  const normalized = hasTimezone
+    ? trimmed
+    : /T\d{2}:\d{2}/.test(trimmed)
+      ? `${trimmed}Z`
+      : trimmed;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
 export function formatDueDateForInput(dueAt: string | null): string {
   if (!dueAt) {
     return "";
   }
 
-  const date = new Date(dueAt);
-  if (Number.isNaN(date.getTime())) {
+  const date = parseDueDate(dueAt);
+  if (!date) {
     return "";
   }
 
@@ -24,8 +43,8 @@ export function formatDueDateForDisplay(value: string | null | undefined): strin
     return "No due date";
   }
 
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
+  const date = parseDueDate(value);
+  if (!date) {
     return value;
   }
 
@@ -36,7 +55,12 @@ export function formatDueDateForDisplay(value: string | null | undefined): strin
 }
 
 export function formatDueDateForApi(dueDate: string): string {
-  return new Date(dueDate).toISOString();
+  // datetime-local values are local wall-clock; toISOString emits UTC Z.
+  const date = new Date(dueDate);
+  if (Number.isNaN(date.getTime())) {
+    return dueDate;
+  }
+  return date.toISOString();
 }
 
 export function assignmentToFormValues(assignment: Assignment): AssignmentFormValues {

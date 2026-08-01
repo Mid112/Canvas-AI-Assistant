@@ -3,8 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   assignmentToFormValues,
   buildAssignmentChanges,
+  formatDueDateForApi,
   formatDueDateForDisplay,
+  formatDueDateForInput,
   hasAssignmentChanges,
+  parseDueDate,
 } from "@/lib/assignment-utils";
 import type { Assignment } from "@/types/assignment";
 
@@ -48,5 +51,18 @@ describe("assignment-utils", () => {
   it("formats due dates for display", () => {
     expect(formatDueDateForDisplay(null)).toBe("No due date");
     expect(formatDueDateForDisplay("invalid-date")).toBe("invalid-date");
+  });
+
+  // Verifies: Naive chat ISO times are treated as UTC, matching backend (#1435).
+  it("parses naive ISO due dates as UTC wall-clock", () => {
+    const parsed = parseDueDate("2026-08-13T23:59:00");
+    expect(parsed?.toISOString()).toBe("2026-08-13T23:59:00.000Z");
+  });
+
+  // Verifies: Omitted seconds still round-trip through API conversion.
+  it("converts datetime-local values without seconds to UTC ISO", () => {
+    const apiValue = formatDueDateForApi("2026-08-13T17:00");
+    expect(apiValue).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+    expect(formatDueDateForInput(apiValue)).toMatch(/T\d{2}:\d{2}$/);
   });
 });

@@ -344,12 +344,12 @@ def _create_assignment_due_date_in_past(due_date: str) -> bool:
     prompt tells the model what today is, but it doesn't reliably do the
     "nearest future occurrence" arithmetic itself — observed defaulting
     to the current year even when that puts the date in the past)."""
+    from app.services.due_date import parse_due_date
+
     try:
-        due_dt = date_parser.parse(due_date)
-    except (date_parser.ParserError, ValueError, OverflowError, TypeError):
+        due_dt = parse_due_date(due_date)
+    except (ValueError, TypeError, OverflowError):
         return False
-    if due_dt.tzinfo is None:
-        due_dt = due_dt.replace(tzinfo=UTC)
     return due_dt <= datetime.now(UTC)
 
 
@@ -413,10 +413,21 @@ def _merge_assignment_update(current: AssignmentResponse, action: Any) -> Assign
     """Canvas's assignment PUT is a full overwrite — fields left out of the
     payload get blanked, not left alone. Any field the user didn't ask to
     change is carried over from the just-fetched current Canvas state."""
+    from app.services.due_date import parse_due_date
+
+    if action.due_date is not None:
+        due_at = parse_due_date(action.due_date)
+    else:
+        due_at = current.due_at
+        if isinstance(due_at, datetime) and due_at.tzinfo is None:
+            due_at = due_at.replace(tzinfo=UTC)
+        elif isinstance(due_at, str):
+            due_at = parse_due_date(due_at)
+
     return AssignmentUpdate(
         name=action.title if action.title is not None else current.name,
         description=action.description if action.description is not None else current.description,
-        due_at=action.due_date if action.due_date is not None else current.due_at,
+        due_at=due_at,
         points_possible=action.points_possible if action.points_possible is not None else current.points_possible,
     )
 
