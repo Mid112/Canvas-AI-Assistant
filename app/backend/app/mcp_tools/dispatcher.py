@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
-from dateutil import parser as date_parser
 from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
