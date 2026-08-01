@@ -27,15 +27,21 @@ test.describe("Instructor workflows (#711)", () => {
   test("instructor can open core nav pages without Canvas", async ({ page }) => {
     await registerAndSkipCanvas(page);
 
-    const pages: { path: string; assert: () => Promise<void> }[] = [
+    const pages: {
+      path: string;
+      navLabel?: string;
+      assert: () => Promise<void>;
+    }[] = [
       {
         path: "/instructor/dashboard",
+        navLabel: "Dashboard",
         assert: async () => {
           await expect(mainHeading(page, "Dashboard")).toBeVisible();
         },
       },
       {
         path: "/instructor/courses",
+        navLabel: "Courses",
         assert: async () => {
           await expect(
             page.getByRole("heading", { name: "Connect Canvas to continue" }),
@@ -44,6 +50,7 @@ test.describe("Instructor workflows (#711)", () => {
       },
       {
         path: "/instructor/messages",
+        navLabel: "Messages",
         assert: async () => {
           await expect(
             page.getByRole("heading", { name: "Connect Canvas to continue" }),
@@ -52,12 +59,14 @@ test.describe("Instructor workflows (#711)", () => {
       },
       {
         path: "/instructor/history",
+        navLabel: "Workflow History",
         assert: async () => {
           await expect(mainHeading(page, "Workflow Audit Log")).toBeVisible();
         },
       },
       {
         path: "/instructor/settings",
+        navLabel: "Settings",
         assert: async () => {
           await expect(mainHeading(page, "Settings")).toBeVisible();
         },
@@ -88,7 +97,15 @@ test.describe("Instructor workflows (#711)", () => {
     ];
 
     for (const target of pages) {
-      await page.goto(target.path);
+      if (target.navLabel) {
+        await page
+          .getByRole("navigation")
+          .getByRole("link", { name: target.navLabel, exact: true })
+          .click();
+      } else {
+        await page.goto(target.path, { waitUntil: "domcontentloaded" });
+      }
+      await expect(page).toHaveURL(target.path);
       await target.assert();
     }
   });

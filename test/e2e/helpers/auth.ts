@@ -26,7 +26,34 @@ export async function login(page: Page, email: string, password: string) {
   await page.goto("/login");
   await page.locator("#email").fill(email);
   await page.locator("#password").fill(password);
+
+  const loginResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/v1/auth/login") &&
+      response.request().method() === "POST",
+    { timeout: 30_000 },
+  );
+  const currentUserResponsePromise = page.waitForResponse(
+    (response) => response.url().endsWith("/api/v1/auth/me"),
+    { timeout: 30_000 },
+  );
+
   await page.getByRole("button", { name: "Sign In" }).click();
+
+  const loginResponse = await loginResponsePromise;
+  expect(
+    loginResponse.ok(),
+    `Login API returned ${loginResponse.status()}`,
+  ).toBeTruthy();
+
+  const currentUserResponse = await currentUserResponsePromise;
+  expect(
+    currentUserResponse.ok(),
+    `Current-user API returned ${currentUserResponse.status()}`,
+  ).toBeTruthy();
+  await expect(page).toHaveURL(/\/(?:instructor|admin)\//, {
+    timeout: 30_000,
+  });
 }
 
 export async function registerInstructor(page: Page, email: string, password = "Secret123!") {

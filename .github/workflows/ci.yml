@@ -18,6 +18,10 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  pull-requests: read
+
 env:
   # Helps setup-node use the runner's writable _work/_tool cache.
   # Note: setup-python on macOS always installs to /Users/runner/hostedtoolcache,
@@ -38,8 +42,8 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       e2e: ${{ steps.filter.outputs.e2e }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -66,14 +70,14 @@ jobs:
       run:
         working-directory: ./app/backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Set up Python 3.12
         working-directory: ${{ github.workspace }}
         run: |
           python3.12 --version
           python3.12 -m venv .ci-venv
           echo "$GITHUB_WORKSPACE/.ci-venv/bin" >> $GITHUB_PATH
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.cache/pip
           key: pip-${{ runner.os }}-${{ runner.arch }}-py3.12-${{ hashFiles('app/backend/requirements.txt') }}
@@ -112,7 +116,7 @@ jobs:
     - ARM64
     needs: backend-lint
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Ensure Docker daemon
         run: bash .github/scripts/ensure-docker.sh
       - name: Start PostgreSQL
@@ -179,8 +183,8 @@ jobs:
       run:
         working-directory: ./app/frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: "22.13.0"
           cache: "npm"
@@ -203,7 +207,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.e2e == 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Ensure Docker daemon
         run: bash .github/scripts/ensure-docker.sh
       - name: Start isolated PostgreSQL
@@ -265,7 +269,7 @@ jobs:
           python3.12 -m venv app/backend/.venv
           app/backend/.venv/bin/pip install --upgrade pip
           app/backend/.venv/bin/pip install -r app/backend/requirements.txt
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "22.13.0"
           cache: "npm"
@@ -355,7 +359,7 @@ jobs:
         run: docker rm -f "${E2E_DB_CONTAINER:-ci-e2e-postgres-${{ github.run_id }}-${{ github.run_attempt }}}" 2>/dev/null || true
       - name: Upload Playwright report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: playwright-report
           path: test/e2e/playwright-report
@@ -372,26 +376,26 @@ jobs:
     needs: [backend-test, frontend-test, e2e-test]
     if: always() && !failure() && !cancelled()
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Ensure Docker daemon
         run: bash .github/scripts/ensure-docker.sh
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
       - name: Build backend image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./app/backend
           push: false
           tags: app-backend:test
       - name: Build frontend image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./app/frontend
           push: false
           tags: app-frontend:test
       # Feature 13 (#862): verify the Dockerized MCP image still builds in CI.
       - name: Build MCP image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./app/mcp
           push: false
