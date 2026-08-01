@@ -25,6 +25,7 @@ from app.mcp_tools.schemas import (
     ACTION_SCHEMAS,
     READ_ACTIONS,
     WRITE_ACTIONS,
+    AnalyzeCourseSubmissionsAction,
     FetchAssignmentsAction,
     FetchStudentsAction,
     FetchSubmissionsAction,
@@ -580,6 +581,11 @@ async def _resolve_course_switch(
     return _match_course_name(course_names, candidate_name)
 
 
+# Actions where "which course?" has no sensible fallback, so a missing
+# course is a hard stop with a plain explanation rather than a clarify.
+_COURSE_REQUIRED_ACTIONS = frozenset({"analyze_course_submissions"})
+
+
 def _inject_course_into_envelope(parsed_envelope: dict, local_course_id: int | None) -> dict:
     """Injects the resolved local_course_id directly into the model's raw
     parsed JSON — into proposed_action if it already wrapped its answer in
@@ -617,6 +623,20 @@ def _inject_course_into_envelope(parsed_envelope: dict, local_course_id: int | N
         return parsed_envelope
 
     if local_course_id is None:
+        # A course-wide analysis has nothing to fall back on — there is no
+        # partial answer to give and nothing useful to guess, so say plainly
+        # that it can't run rather than opening a clarify round-trip that
+        # implies the request is still in progress (#12).
+        if target.get("action") in _COURSE_REQUIRED_ACTIONS:
+            return {
+                "action": "respond",
+                "message": (
+                    "I can't analyse submissions without knowing which course. "
+                    "Select an active course, or name the course in your "
+                    "message, and ask again."
+                ),
+            }
+
         partial_plan = {key: value for key, value in target.items() if key != "action"}
         return {
             "action": "clarify",
@@ -1061,6 +1081,122 @@ async def _run_resolve_missing_submissions_chain(
         "count": len(matched),
         "sample": sample,
         "handle": resolved_set.handle,
+        "summary": summary,
+    }
+
+
+# Course-wide overviews list real names, not just a 5-name teaser like
+# _RESOLVED_SET_SAMPLE_SIZE gives per assignment — the instructor asked who
+# hasn't submitted and a truncated answer is the bug, not the feature. Still
+# bounded so a 300-student course can't blow the prompt budget; when it
+# trips, the result says so explicitly rather than quietly cutting off.
+_COURSE_ANALYSIS_MAX_NAMES = 50
+
+
+async def _run_analyze_course_submissions_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    action: AnalyzeCourseSubmissionsAction,
+) -> dict:
+    """Course-wide missing/late submission overview across every assignment.
+
+    Bug 12: the dashboard's analysis button had no tool behind it, so the
+    model answered from nothing and invented submission rates that
+    contradicted the course. This gives that question a real server-side
+    read. resolve_missing_submissions already did this for ONE assignment;
+    this walks the whole course and reuses the same
+    compute_submissions_by_status so "missing" and "late" mean exactly what
+    services/resolved_set.py says they mean, rather than being redefined
+    here.
+    """
+    course = await resolve_course(db, user, action.local_course_id)
+
+    print(f"Gathering {course.name} assignments")
+    fetch_action = FetchAssignmentsAction(local_course_id=course.id)
+    assignments_result = await _run_tracked_read(
+        db, user, conversation, user_msg.id, "fetch_assignments",
+        fetch_action.model_dump(), execute_tool(db, user, fetch_action),
+    )
+    assignments = assignments_result["assignments"]
+    if not assignments:
+        return {
+            "action": "analyze_course_submissions",
+            "status": action.status,
+            "course": course.name,
+            "assignments": [],
+            "total": 0,
+            "summary": f"{course.name} has no assignments yet, so there is nothing to analyse.",
+        }
+
+    print(f"Checking {course.name} for {action.status} submissions")
+    per_assignment: list[dict] = []
+    names_budget = _COURSE_ANALYSIS_MAX_NAMES
+    truncated = False
+
+    for assignment in assignments:
+        canvas_assignment_id = assignment.get("id")
+        if canvas_assignment_id is None:
+            continue
+        matched = await _run_tracked_read(
+            db, user, conversation, user_msg.id, "analyze_course_submissions",
+            {
+                "local_course_id": course.id,
+                "assignment_id": canvas_assignment_id,
+                "status": action.status,
+            },
+            compute_submissions_by_status(
+                course, canvas_assignment_id, user, db, action.status
+            ),
+        )
+        names = [student["name"] for student in matched]
+        if len(names) > names_budget:
+            names = names[:names_budget]
+            truncated = True
+        names_budget -= len(names)
+        per_assignment.append(
+            {
+                "assignment_id": canvas_assignment_id,
+                "assignment_name": assignment.get("name") or "Untitled assignment",
+                "due_at": assignment.get("due_at"),
+                "count": len(matched),
+                "students": names,
+            }
+        )
+
+    total = sum(entry["count"] for entry in per_assignment)
+    label = "missing" if action.status == "missing" else "late"
+    if total == 0:
+        summary = (
+            f"No {label} submissions in {course.name} — every active student is "
+            f"up to date across all {len(per_assignment)} assignment(s)."
+        )
+    else:
+        affected = [entry for entry in per_assignment if entry["count"]]
+        lines = "; ".join(
+            f"{entry['assignment_name']}: {entry['count']} ({', '.join(entry['students'])})"
+            if entry["students"]
+            else f"{entry['assignment_name']}: {entry['count']}"
+            for entry in affected
+        )
+        summary = (
+            f"{total} {label} submission(s) across {len(affected)} of "
+            f"{len(per_assignment)} assignment(s) in {course.name}. {lines}."
+        )
+        if truncated:
+            summary += (
+                f" Only the first {_COURSE_ANALYSIS_MAX_NAMES} student names are "
+                "listed; open the course Submissions view for the full list."
+            )
+
+    return {
+        "action": "analyze_course_submissions",
+        "status": action.status,
+        "course": course.name,
+        "assignments": per_assignment,
+        "total": total,
+        "truncated": truncated,
         "summary": summary,
     }
 
@@ -2622,6 +2758,21 @@ the result — never invent one, and never build recipient_directives out
 of the "sample" names instead, that's only a preview excerpt, not the
 full set.
 
+ANALYSING A WHOLE COURSE'S SUBMISSIONS:
+When the user asks about submissions across a course rather than one
+assignment (e.g. "analyse missing submissions", "who hasn't submitted
+anything", "how are submissions looking in this course", "give me a
+submission overview"), propose analyze_course_submissions — NOT
+resolve_missing_submissions, which needs one specific assignment, and
+never a plain "respond" written from memory:
+{"action": "analyze_course_submissions", "course_name": "<course>", "status": "missing"}
+status works exactly as it does for resolve_missing_submissions.
+The result carries "total", "course", and an "assignments" list, each
+entry with assignment_name, count, and the "students" who match. Report
+those numbers and names as given — never estimate a submission rate,
+average, or percentage that is not in the result. If you were not given
+data, say so instead of producing a plausible-looking figure.
+
 FINDING AN ASSIGNMENT BY SUBMISSION RATE:
 When the user describes an assignment by a submission-rate criterion
 instead of by name (e.g. "the last assignment with fewer than 30%
@@ -3314,6 +3465,14 @@ async def handle_chat_message(
                 # {count, sample, handle} summary — never the raw list.
                 result = await _run_resolve_missing_submissions_chain(
                     db, user, conversation, user_msg, action, message, adapter
+                )
+            elif action.action == "analyze_course_submissions":
+                # Course-wide overview across every assignment — the read
+                # that the dashboard's analysis button previously had no
+                # tool for, which is why the model used to invent
+                # submission rates instead of fetching them (#12).
+                result = await _run_analyze_course_submissions_chain(
+                    db, user, conversation, user_msg, action
                 )
             elif action.action == "find_assignment_by_submission_rate":
                 # Scans every assignment's real submission data server-side
