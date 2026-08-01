@@ -43,42 +43,11 @@ def resolve_server_canvas_url(
     from app.config import settings
 
     client_url = normalize_canvas_url(canvas_url)
-    server_url = normalize_canvas_url(server_default or settings.CANVAS_API_URL)
+    configured_default = server_default or settings.CANVAS_API_URL
+    if not configured_default:
+        return client_url
+
+    server_url = normalize_canvas_url(configured_default)
     if canvas_urls_equivalent(client_url, server_url):
         return server_url
     return client_url
-
-
-def resolve_canvas_url_for_user(
-    user: object,
-    canvas_url: str | None = None,
-    *,
-    server_default: str | None = None,
-) -> str:
-    """Resolve Canvas URL for requests that may omit ``canvas_url``.
-
-    Prefer an explicit URL when the user has a matching saved connection.
-    When omitted, use the user's first saved connection so newly connected
-    accounts do not silently fall through to the deployment-wide
-    ``CANVAS_API_URL`` (e.g. ``https://canvas.ubc.ca``) and fail with
-    "No Canvas token for …".
-    """
-    from app.config import settings
-
-    connections = list(getattr(user, "canvas_connections", None) or [])
-    default = normalize_canvas_url(server_default or settings.CANVAS_API_URL)
-
-    if canvas_url and str(canvas_url).strip():
-        normalized = normalize_canvas_url(canvas_url)
-        for conn in connections:
-            conn_url = getattr(conn, "canvas_url", None)
-            if isinstance(conn_url, str) and canvas_urls_equivalent(conn_url, normalized):
-                return normalize_canvas_url(conn_url)
-        return normalized
-
-    if connections:
-        first = getattr(connections[0], "canvas_url", None)
-        if isinstance(first, str) and first.strip():
-            return normalize_canvas_url(first)
-
-    return default

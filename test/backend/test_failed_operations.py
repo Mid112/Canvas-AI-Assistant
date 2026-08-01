@@ -153,6 +153,26 @@ def test_summarize_failure_falls_back_to_humanized_operation():
     )
 
 
+def test_summarize_failure_flags_reconnect_able_token_issues():
+    """A reconnect-able Canvas token problem overrides the generic
+    (source, operation) summary -- an admin needs to know the failure was a
+    token issue *first*, and how to fix it, not just that "course_sync"
+    failed. Raw API-style detail ("No Canvas token for ...") must not leak
+    into the summary."""
+    summary = summarize_failure(
+        "canvas",
+        "course_sync",
+        "No Canvas token for https://canvas.example.edu. PATCH to /api/v1/auth/me/canvas-token first.",
+    )
+    assert "reconnect" in summary.lower()
+    assert "PATCH" not in summary
+
+    # Non-token errors for the same pair are unaffected.
+    assert summarize_failure("canvas", "course_sync", "Canvas 502 Bad Gateway") == (
+        "This course couldn't be synced from Canvas."
+    )
+
+
 @pytest.mark.asyncio
 async def test_record_failed_operation_generates_human_summary():
     db = _db_mock()
@@ -163,6 +183,18 @@ async def test_record_failed_operation_generates_human_summary():
         error_detail="Canvas 500",
     )
     assert row.human_summary == "Canvas couldn't create quiz."
+
+
+@pytest.mark.asyncio
+async def test_record_failed_operation_generates_reconnect_summary_for_token_issues():
+    db = _db_mock()
+    row = await record_failed_operation(
+        db,
+        source="canvas",
+        operation="course_sync",
+        error_detail="Invalid Canvas API token",
+    )
+    assert "reconnect" in row.human_summary.lower()
 
 
 @pytest.mark.asyncio

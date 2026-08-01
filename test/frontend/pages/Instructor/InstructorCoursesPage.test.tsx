@@ -53,7 +53,7 @@ vi.mock("@/contexts/AuthContext", async () => {
   };
 });
 
-const CANVAS_URL = "https://canvas.ubc.ca";
+const CANVAS_URL = "https://canvas.example.edu";
 const LOCAL_CANVAS_URL = "http://localhost:3000";
 
 const authWithCanvas = {

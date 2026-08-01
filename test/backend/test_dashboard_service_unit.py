@@ -18,7 +18,7 @@ def _course(course_id: int, name: str, assignment_ids: list[int], student_count:
     return SimpleNamespace(
         id=course_id,
         name=name,
-        canvas_url="https://canvas.ubc.ca",
+        canvas_url="https://canvas.example.edu",
         assignments=[
             SimpleNamespace(id=aid, is_active=True, published=True) for aid in assignment_ids
         ],
@@ -140,7 +140,7 @@ async def test_get_instructor_dashboard_includes_active_course():
         local_id=7,
         name="COSC 310",
         canvas_course_id="998877",
-        canvas_url="https://canvas.ubc.ca",
+        canvas_url="https://canvas.example.edu",
         term=None,
     )
 
@@ -176,14 +176,14 @@ async def test_refresh_course_mirror_logs_quietly_on_transient_canvas_outage(cap
             new=AsyncMock(
                 side_effect=HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail="Could not reach Canvas at https://canvas.ubc.ca",
+                    detail="Could not reach Canvas at https://canvas.example.edu",
                 )
             ),
         ),
         patch("app.services.dashboard.get_students", new=AsyncMock()),
         caplog.at_level(logging.INFO),
     ):
-        await _refresh_course_mirror(42, "https://canvas.ubc.ca", user, semaphore)
+        await _refresh_course_mirror(42, "https://canvas.example.edu", user, semaphore)
 
     assert any(
         "Dashboard refresh skipped for course_id=42" in record.message
@@ -221,7 +221,7 @@ async def test_refresh_course_mirror_redacts_secrets_in_quiet_log(caplog):
         patch("app.services.dashboard.get_students", new=AsyncMock()),
         caplog.at_level(logging.INFO),
     ):
-        await _refresh_course_mirror(42, "https://canvas.ubc.ca", user, semaphore)
+        await _refresh_course_mirror(42, "https://canvas.example.edu", user, semaphore)
 
     quiet = [
         record
@@ -258,7 +258,7 @@ async def test_refresh_course_mirror_logs_quietly_on_token_reconnect(caplog):
         patch("app.services.dashboard.get_students", new=AsyncMock()),
         caplog.at_level(logging.INFO),
     ):
-        await _refresh_course_mirror(7, "https://canvas.ubc.ca", user, semaphore)
+        await _refresh_course_mirror(7, "https://canvas.example.edu", user, semaphore)
 
     assert any("Dashboard refresh skipped for course_id=7" in r.message for r in caplog.records)
     assert not any(r.levelno >= logging.WARNING and r.exc_info for r in caplog.records)
@@ -281,7 +281,7 @@ async def test_refresh_course_mirror_keeps_traceback_for_unexpected_errors(caplo
         patch("app.services.dashboard.get_students", new=AsyncMock()),
         caplog.at_level(logging.WARNING),
     ):
-        await _refresh_course_mirror(9, "https://canvas.ubc.ca", user, semaphore)
+        await _refresh_course_mirror(9, "https://canvas.example.edu", user, semaphore)
 
     assert any(
         "Dashboard refresh failed for course_id=9" in record.message and record.exc_info

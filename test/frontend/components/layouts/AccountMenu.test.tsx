@@ -111,7 +111,7 @@ describe("AccountMenu", () => {
           id: "ubc",
           name: "University of British Columbia",
           shortName: "UBC",
-          canvasUrl: "https://canvas.ubc.ca",
+          canvasUrl: "https://canvas.example.edu",
         },
         {
           id: "ubco",
@@ -124,7 +124,7 @@ describe("AccountMenu", () => {
         id: "ubc",
         name: "University of British Columbia",
         shortName: "UBC",
-        canvasUrl: "https://canvas.ubc.ca",
+        canvasUrl: "https://canvas.example.edu",
       },
       setSelectedInstitution: mockSetSelectedInstitution,
       courses: [],

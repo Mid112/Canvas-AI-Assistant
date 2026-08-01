@@ -610,7 +610,7 @@ async def test_remove_canvas_connection_not_found_raises_404():
 @pytest.mark.asyncio
 async def test_remove_canvas_connection_success():
     db = _db_assigning_ids()
-    conn = SimpleNamespace(id=5, canvas_url="https://canvas.ubc.ca")
+    conn = SimpleNamespace(id=5, canvas_url="https://canvas.example.edu")
     db.scalar = AsyncMock(return_value=conn)
     user = SimpleNamespace(id=1)
 
@@ -632,7 +632,7 @@ async def test_update_canvas_token_creates_new_connection():
         patch("app.services.auth.validate_token", new=AsyncMock()),
         patch("app.services.auth.encrypt_canvas_token", return_value="encrypted-token"),
     ):
-        result = await update_canvas_token(db, user, "raw-token", "https://canvas.ubc.ca")
+        result = await update_canvas_token(db, user, "raw-token", "https://canvas.example.edu")
 
     # One add() for the new CanvasConnection, one for the audit log entry.
     assert db.add.call_count == 2
@@ -654,7 +654,7 @@ async def test_update_canvas_token_replaces_existing_connection_token():
         patch("app.services.auth.validate_token", new=AsyncMock()),
         patch("app.services.auth.encrypt_canvas_token", return_value="new-encrypted"),
     ):
-        await update_canvas_token(db, user, "raw-token", "https://canvas.ubc.ca")
+        await update_canvas_token(db, user, "raw-token", "https://canvas.example.edu")
 
     assert existing.encrypted_token == "new-encrypted"
     # No new CanvasConnection row, but the audit log entry still gets added.

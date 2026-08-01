@@ -14,7 +14,7 @@ def test_canvas_urls_equivalent_local_aliases():
 
 # Verifies: Canvas urls equivalent different hosts.
 def test_canvas_urls_equivalent_different_hosts():
-    assert not canvas_urls_equivalent("https://canvas.ubc.ca", "https://canvas.sfu.ca")
+    assert not canvas_urls_equivalent("https://canvas.example.edu", "https://canvas.sfu.ca")
 
 
 # Verifies: Resolve server canvas url maps local aliases.
@@ -32,49 +32,15 @@ def test_resolve_server_canvas_url_maps_local_aliases(monkeypatch):
     )
 
 
-def test_resolve_canvas_url_for_user_prefers_saved_connection_when_omitted():
-    from types import SimpleNamespace
-
-    from app.core.canvas_url import resolve_canvas_url_for_user
-
-    user = SimpleNamespace(
-        canvas_connections=[
-            SimpleNamespace(canvas_url="http://localhost:3000"),
-        ]
+# Verifies: Resolve server canvas url keeps client url when no global default is configured.
+def test_resolve_server_canvas_url_without_default_keeps_client_url(monkeypatch):
+    monkeypatch.setattr(
+        "app.config.settings.CANVAS_API_URL",
+        None,
+        raising=False,
     )
 
     assert (
-        resolve_canvas_url_for_user(user, None, server_default="https://canvas.ubc.ca")
-        == "http://localhost:3000"
-    )
-
-
-def test_resolve_canvas_url_for_user_keeps_matching_explicit_url():
-    from types import SimpleNamespace
-
-    from app.core.canvas_url import resolve_canvas_url_for_user
-
-    user = SimpleNamespace(
-        canvas_connections=[
-            SimpleNamespace(canvas_url="http://localhost:3000/"),
-            SimpleNamespace(canvas_url="https://canvas.ubc.ca"),
-        ]
-    )
-
-    assert (
-        resolve_canvas_url_for_user(user, "http://localhost:3000")
-        == "http://localhost:3000"
-    )
-
-
-def test_resolve_canvas_url_for_user_falls_back_to_global_without_connections():
-    from types import SimpleNamespace
-
-    from app.core.canvas_url import resolve_canvas_url_for_user
-
-    user = SimpleNamespace(canvas_connections=[])
-
-    assert (
-        resolve_canvas_url_for_user(user, None, server_default="https://canvas.ubc.ca")
-        == "https://canvas.ubc.ca"
+        resolve_server_canvas_url("https://canvas.example.edu")
+        == "https://canvas.example.edu"
     )

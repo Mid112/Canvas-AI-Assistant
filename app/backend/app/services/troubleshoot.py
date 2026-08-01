@@ -28,6 +28,16 @@ _RECENT_FAILURE_HOURS = 24
 _TOKEN_ISSUE_PREFIXES = ("No Canvas token", "Canvas token is corrupted", "Invalid Canvas API token")
 
 
+def is_token_issue(error_detail: str | None) -> bool:
+    """True when error_detail is one of the reconnect-able token problems
+    (missing/corrupted/invalid token) rather than a transient Canvas outage —
+    the distinction that decides whether an admin-side token reset can
+    actually fix it."""
+    return error_detail is not None and any(
+        prefix in error_detail for prefix in _TOKEN_ISSUE_PREFIXES
+    )
+
+
 def summarize_connection_error(error_detail: str | None) -> str:
     """Plain-language description for the admin dashboard's default view —
     last_sync_error is a raw HTTP client failure message (e.g. "422: Invalid
@@ -35,8 +45,11 @@ def summarize_connection_error(error_detail: str | None) -> str:
     have to parse at render time."""
     if error_detail is None:
         return "This instructor's Canvas connection is healthy."
-    if any(prefix in error_detail for prefix in _TOKEN_ISSUE_PREFIXES):
-        return "This instructor needs to reconnect their Canvas account."
+    if is_token_issue(error_detail):
+        return (
+            "This instructor needs to reconnect their Canvas account — ask "
+            "them to reconnect in Settings, or reset their token below."
+        )
     return "Canvas isn't responding for this instructor right now."
 
 
@@ -101,6 +114,7 @@ async def list_failing_canvas_connections(
             # it could echo a bearer token/API key back from a raw request
             # error, so scrub before this ever reaches an admin-facing response.
             error_detail=redact_secrets(error_detail) if error_detail else None,
+            needs_token_reset=is_token_issue(error_detail),
         )
         for user_id, name, email, canvas_url, error_detail in rows
     ]

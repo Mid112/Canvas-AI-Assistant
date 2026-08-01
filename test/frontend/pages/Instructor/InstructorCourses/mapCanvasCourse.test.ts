@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { mapCanvasCourseToInstructorCourse } from "@/pages/Instructor/InstructorCourses/mapCanvasCourse";
 import type { CanvasCourse } from "@/types/canvas";
 
-const CANVAS_URL = "https://canvas.ubc.ca";
+const CANVAS_URL = "https://canvas.example.edu";
 
 function canvasCourse(overrides: Partial<CanvasCourse> = {}): CanvasCourse {
   return {

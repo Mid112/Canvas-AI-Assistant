@@ -19,20 +19,32 @@ export function ActiveCourseContextBar({
   // nothing is selected, so that explanation is kept here for the
   // genuinely-empty case only.
   return (
-    <div className="border-b border-border/70 bg-background px-4 py-3 md:px-6">
+    <section
+      aria-label="Active course context"
+      className="shrink-0 rounded-lg border border-border/80 bg-card px-3 py-2.5 shadow-sm"
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Active course context
-          </p>
+        <div className="flex min-w-0 items-start gap-2">
+          <span
+            className="mt-0.5 h-5 w-1 shrink-0 rounded-full bg-primary"
+            aria-hidden="true"
+          />
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm font-semibold text-foreground">
+              Active course context
+            </p>
           {!isLoading && !activeCourse ? (
             <p className="text-sm text-muted-foreground">
               No active course selected. Choose a course to scope assistant and
               workflow actions in this session.
             </p>
           ) : null}
+          </div>
         </div>
-        <ActiveCourseSelector hasPendingAssistantWork={hasPendingAssistantWork} />
+        <ActiveCourseSelector
+          className="rounded-lg bg-muted/50 px-2 py-1"
+          hasPendingAssistantWork={hasPendingAssistantWork}
+        />
       </div>
 
       {error ? (
@@ -44,6 +56,6 @@ export function ActiveCourseContextBar({
           <span>{error}</span>
         </div>
       ) : null}
-    </div>
+    </section>
   );
 }

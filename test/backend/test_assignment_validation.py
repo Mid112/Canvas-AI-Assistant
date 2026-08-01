@@ -20,7 +20,7 @@ from app.services.assignment_validation import (
 COURSE = Course(
     id=1,
     canvas_course_id="99",
-    canvas_url="https://canvas.ubc.ca",
+    canvas_url="https://canvas.example.edu",
     name="CPSC 310",
     instructor_id=1,
 )

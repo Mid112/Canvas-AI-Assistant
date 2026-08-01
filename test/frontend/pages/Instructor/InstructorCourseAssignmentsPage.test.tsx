@@ -1,6 +1,7 @@
 import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { Route, Routes } from "react-router-dom";
+import { Route, Routes, useLocation } from "react-router-dom";
 
 import { InstructorCourseAssignmentsPage } from "@/pages/Instructor/InstructorCourseAssignmentsPage";
 import { fetchCourseAssignments } from "@/services/assignments";
@@ -85,12 +86,21 @@ const authWithCanvas = {
   refreshUser: vi.fn(),
 };
 
+function AssignmentCreateLocationProbe() {
+  const location = useLocation();
+  return <pre data-testid="assignment-create-state">{JSON.stringify(location.state)}</pre>;
+}
+
 function renderPage(localCourseId = "3") {
   return renderWithInstitution(
     <Routes>
       <Route
         path="/instructor/courses/:localCourseId/assignments"
         element={<InstructorCourseAssignmentsPage />}
+      />
+      <Route
+        path="/instructor/assignments/create"
+        element={<AssignmentCreateLocationProbe />}
       />
     </Routes>,
     {
@@ -120,8 +130,10 @@ describe("InstructorCourseAssignmentsPage", () => {
     ]);
   });
 
-  // Verifies: Loads assignments and links to the edit page.
+  // Verifies: Loads assignments and exposes one course-aware create action in
+  // the tab header instead of repeating it for every assignment row.
   it("loads assignments and links to the edit page", async () => {
+    const user = userEvent.setup();
     // Not asserting the "Loading assignments" state synchronously here: the
     // shared course list (ActiveCourseProvider) resolving before this page's
     // own assignment fetch can start means the exact loading-state timing is
@@ -143,6 +155,21 @@ describe("InstructorCourseAssignmentsPage", () => {
     expect(editLink).toHaveAttribute(
       "href",
       "/instructor/courses/3/assignments/10/edit",
+    );
+
+    const createLinks = screen.getAllByRole("button", {
+      name: "Create assignment",
+    });
+    expect(createLinks).toHaveLength(1);
+    const createLink = createLinks[0]!;
+    expect(createLink).toHaveAttribute(
+      "href",
+      "/instructor/assignments/create",
+    );
+
+    await user.click(createLink);
+    expect(screen.getByTestId("assignment-create-state")).toHaveTextContent(
+      '"courseId":3',
     );
   });
 

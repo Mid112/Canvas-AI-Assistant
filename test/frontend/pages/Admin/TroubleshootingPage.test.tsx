@@ -23,7 +23,7 @@ vi.mock("@/contexts/AuthContext", async () => {
 });
 
 const diagnosticsResponse: troubleshootService.DiagnosticsResponse = {
-  canvas_api_url: "https://canvas.ubc.ca",
+  canvas_api_url: "https://canvas.example.edu",
   backend_uptime_seconds: 185,
   health: { overall_status: "degraded", checked_at: "2026-07-21T18:00:00Z", services: {} },
   instructor_canvas: {
@@ -62,6 +62,23 @@ const failingConnections: troubleshootService.FailingCanvasConnectionListRespons
       canvas_url: "https://canvas.example.edu",
       human_summary: "Canvas isn't responding for this instructor right now.",
       error_detail: "401 Unauthorized",
+      needs_token_reset: false,
+    },
+  ],
+  total: 1,
+};
+
+const tokenIssueConnections: troubleshootService.FailingCanvasConnectionListResponse = {
+  items: [
+    {
+      user_id: 42,
+      user_name: "Jane Doe",
+      user_email: "jane@example.com",
+      canvas_url: "https://canvas.example.edu",
+      human_summary:
+        "This instructor needs to reconnect their Canvas account — ask them to reconnect in Settings, or reset their token below.",
+      error_detail: "No Canvas token for https://canvas.example.edu.",
+      needs_token_reset: true,
     },
   ],
   total: 1,
@@ -97,7 +114,7 @@ describe("TroubleshootingPage", () => {
     });
 
     expect(screen.getByText("Degraded")).toBeInTheDocument();
-    expect(screen.getByText("https://canvas.ubc.ca")).toBeInTheDocument();
+    expect(screen.getByText("https://canvas.example.edu")).toBeInTheDocument();
     expect(screen.getByText("3 min")).toBeInTheDocument();
   });
 
@@ -114,6 +131,18 @@ describe("TroubleshootingPage", () => {
       screen.getByText("Canvas isn't responding for this instructor right now."),
     ).toBeInTheDocument();
     expect(screen.queryByText(/token/i, { selector: "code, pre" })).not.toBeInTheDocument();
+  });
+
+  // Verifies AC3 (admin-only instructions appear only when actually
+  // required): a transient "Canvas isn't responding" outage isn't fixable
+  // by a token reset, so the admin-only "Reset token" action shouldn't be
+  // offered for it.
+  it("hides the Reset token action when the failure isn't a token issue", async () => {
+    renderWithRouter(<TroubleshootingPage />);
+
+    await screen.findByText("Jane Doe");
+
+    expect(screen.queryByRole("button", { name: "Reset token" })).not.toBeInTheDocument();
   });
 
   it("renders LLM provider statuses", async () => {
@@ -236,6 +265,9 @@ describe("TroubleshootingPage", () => {
   });
 
   it("resets a failing connection's Canvas token directly from the card", async () => {
+    vi.spyOn(troubleshootService, "fetchFailingCanvasConnections").mockResolvedValue(
+      tokenIssueConnections,
+    );
     vi.spyOn(adminCanvasConnectionsService, "resetInstructorCanvasToken").mockResolvedValue([]);
 
     renderWithRouter(<TroubleshootingPage />);

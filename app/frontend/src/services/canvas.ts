@@ -57,12 +57,12 @@ export interface CanvasConnectionInput {
 export async function updateCanvasToken(
   canvasToken: string,
   accessToken: string,
-  canvasUrl?: string,
+  canvasUrl: string,
 ): Promise<CanvasTokenUpdateResponse> {
-  const body: CanvasTokenUpdateRequest = { canvas_token: canvasToken };
-  if (canvasUrl) {
-    body.canvas_url = canvasUrl;
-  }
+  const body: CanvasTokenUpdateRequest = {
+    canvas_token: canvasToken,
+    canvas_url: canvasUrl,
+  };
 
   const response = await fetch(`${API_BASE_URL}/auth/me/canvas-token`, {
     method: "PATCH",
@@ -153,16 +153,12 @@ export async function updateCanvasTokens(
   canvasTokens: string[],
   accessToken: string,
 ): Promise<CanvasTokenUpdateResponse> {
+  void accessToken;
   if (canvasTokens.length === 0) {
     throw new CanvasApiError("Canvas token is required", 400);
   }
 
-  let lastResponse: CanvasTokenUpdateResponse | undefined;
-  for (const token of canvasTokens) {
-    lastResponse = await updateCanvasToken(token, accessToken);
-  }
-
-  return lastResponse!;
+  throw new CanvasApiError("Canvas URL is required", 400);
 }
 
 export async function removeCanvasConnection(
@@ -187,12 +183,12 @@ export async function removeCanvasConnection(
 export async function validateCanvasToken(
   canvasToken: string,
   accessToken: string,
-  canvasUrl?: string,
+  canvasUrl: string,
 ): Promise<CanvasTokenValidationStatus> {
-  const body: CanvasTokenUpdateRequest = { canvas_token: canvasToken };
-  if (canvasUrl) {
-    body.canvas_url = canvasUrl;
-  }
+  const body: CanvasTokenUpdateRequest = {
+    canvas_token: canvasToken,
+    canvas_url: canvasUrl,
+  };
 
   try {
     const response = await fetch(`${API_BASE_URL}/auth/me/canvas-token/validate`, {

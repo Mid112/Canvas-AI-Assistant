@@ -1,4 +1,4 @@
-import { AlertCircle, Eye, Loader2, Pencil, Users } from "lucide-react";
+import { AlertCircle, Eye, Loader2, Pencil, Plus, Users } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 
@@ -30,6 +30,7 @@ import {
   instructorCourseStudentsPath,
   instructorCourseSubmissionsPath,
   paths,
+  type AiActionDraftLocationState,
 } from "@/routes/paths";
 import {
   AssignmentApiError,
@@ -376,8 +377,34 @@ function PageHeader({
   course?: InstructorCourse | null;
   embedded?: boolean;
 }) {
+  const createAssignmentButton = (
+    <Button
+      size={embedded ? "sm" : "default"}
+      render={
+        <Link
+          to={paths.instructor.assignmentCreate}
+          state={
+            {
+              aiAssignmentDraft: {
+                courseId: localCourseId,
+              },
+            } satisfies AiActionDraftLocationState
+          }
+        />
+      }
+    >
+      <Plus data-icon="inline-start" />
+      Create assignment
+    </Button>
+  );
+
   if (embedded) {
-    return <h2 className="text-lg font-semibold">Assignments</h2>;
+    return (
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-semibold">Assignments</h2>
+        {createAssignmentButton}
+      </div>
+    );
   }
 
   return (
@@ -393,6 +420,7 @@ function PageHeader({
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
+        {createAssignmentButton}
         <Button
           variant="outline"
           render={<Link to={instructorCourseStudentsPath(localCourseId)} />}

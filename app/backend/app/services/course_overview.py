@@ -61,7 +61,7 @@ def _activity_action(status: str, assignment_title: str) -> str:
 async def get_course_overview(
     local_course_id: int,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
 ) -> CourseOverviewResponse:
     roster = await get_students(local_course_id, user, canvas_url, db)

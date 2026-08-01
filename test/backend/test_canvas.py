@@ -1,9 +1,15 @@
 import uuid
+import asyncio
 import pytest
 from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from app.config import settings
 from app.main import app
+from app.models.course import Course
+from app.models.user import User
 
 
 # ---------------------------------------------------------------------------
@@ -12,7 +18,8 @@ from app.main import app
 
 # Explicit Canvas URL used by all tests — avoids depending on whatever CANVAS_API_URL
 # is set to in .env (which may point to the mock Docker server for manual testing)
-CANVAS_URL = "https://canvas.ubc.ca"
+CANVAS_URL = "https://canvas.example.edu"
+OTHER_CANVAS_URL = "https://canvas.other.edu"
 
 
 def _unique_course(canvas_id: int | None = None) -> dict:
@@ -117,6 +124,65 @@ def _sync_local_course(client, headers, canvas_id: int = 12345) -> int:
 
     assert response.status_code == 200
     return response.json()[0]["local_id"]
+
+
+def _create_local_course_for_user_email(email: str, canvas_id: int | None = None) -> int:
+    async def _insert() -> int:
+        engine = create_async_engine(settings.DATABASE_URL)
+        try:
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as db:
+                user = await db.scalar(select(User).where(User.email == email))
+                assert user is not None
+                course = Course(
+                    canvas_course_id=str(canvas_id or uuid.uuid4().int % 10_000_000),
+                    canvas_url=CANVAS_URL,
+                    name="No Token Course",
+                    course_code="NTC101",
+                    workflow_state="available",
+                    instructor_id=user.id,
+                )
+                db.add(course)
+                await db.commit()
+                await db.refresh(course)
+                return course.id
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(_insert())
+
+
+# Verifies: institution-level course sync uses the sole saved connection URL
+# when the request omits canvas_url.
+def test_list_courses_without_canvas_url_uses_sole_connection(client):
+    headers = _register_with_canvas(client)
+    courses = [_unique_course()]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        response = client.get("/api/v1/canvas/courses", headers=headers)
+
+    assert response.status_code == 200, response.json()
+    mock.assert_awaited_once()
+    assert mock.await_args.args[1] == CANVAS_URL
+
+
+# Verifies: institution-level course sync refuses to guess when multiple
+# saved Canvas connections exist and the request omits canvas_url.
+def test_list_courses_without_canvas_url_rejects_multiple_connections(client):
+    headers = _register_with_canvas(client)
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "other-token", "canvas_url": OTHER_CANVAS_URL},
+            headers=headers,
+        )
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        response = client.get("/api/v1/canvas/courses", headers=headers)
+
+    assert response.status_code == 422
+    assert "Select a Canvas institution" in response.json()["detail"]
+    mock.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -715,8 +781,9 @@ def test_list_submissions_no_canvas_token(client):
         json={"name": "No Token", "email": email, "password": "secret123"}
     )
     token = reg.json()["access_token"]
+    local_course_id = _create_local_course_for_user_email(email)
     response = client.get(
-        f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+        f"/api/v1/canvas/courses/{local_course_id}/assignments/10/submissions?canvas_url={CANVAS_URL}",
         headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 403

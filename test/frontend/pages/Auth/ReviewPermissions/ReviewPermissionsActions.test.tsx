@@ -6,30 +6,32 @@ import { ReviewPermissionsActions } from "@/pages/Auth/ReviewPermissions/ReviewP
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 describe("ReviewPermissionsActions", () => {
-  // Verifies: Renders cancel and approve buttons.
-  it("renders cancel and approve buttons", () => {
+  // Verifies: Renders reconnect and approve buttons.
+  it("renders reconnect and approve buttons", () => {
     renderWithRouter(
-      <ReviewPermissionsActions onCancel={vi.fn()} onApprove={vi.fn()} />,
+      <ReviewPermissionsActions onReconnect={vi.fn()} onApprove={vi.fn()} />,
     );
 
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Reconnect Canvas" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Approve & Continue" }),
     ).toBeInTheDocument();
   });
 
-  // Verifies: Calls onCancel when cancel is clicked.
-  it("calls onCancel when cancel is clicked", async () => {
+  // Verifies: Calls onReconnect when reconnect is clicked.
+  it("calls onReconnect when reconnect is clicked", async () => {
     const user = userEvent.setup();
-    const onCancel = vi.fn();
+    const onReconnect = vi.fn();
 
     renderWithRouter(
-      <ReviewPermissionsActions onCancel={onCancel} onApprove={vi.fn()} />,
+      <ReviewPermissionsActions onReconnect={onReconnect} onApprove={vi.fn()} />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Reconnect Canvas" }));
 
-    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onReconnect).toHaveBeenCalledTimes(1);
   });
 
   // Verifies: Calls onApprove when approve is clicked.
@@ -38,7 +40,7 @@ describe("ReviewPermissionsActions", () => {
     const onApprove = vi.fn();
 
     renderWithRouter(
-      <ReviewPermissionsActions onCancel={vi.fn()} onApprove={onApprove} />,
+      <ReviewPermissionsActions onReconnect={vi.fn()} onApprove={onApprove} />,
     );
 
     await user.click(
