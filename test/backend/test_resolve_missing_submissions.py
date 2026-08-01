@@ -235,6 +235,22 @@ def test_resolve_missing_submissions_filters_persists_and_chains(client):
     assert body["is_error"] is False, body
     assert mock_adapter.generate.await_count == 3
 
+    reply = body["reply"]
+    assert reply["action"] == "respond"
+    analytics = reply["structured_analytics"]
+    assert analytics["action"] == "resolve_missing_submissions"
+    assert analytics["status"] == "missing"
+    assert analytics["count"] == 1
+    assert analytics["sample"] == ["Alice"]
+    assert analytics["local_course_id"] == local_course_id
+    assert analytics["course_name"] == "CPSC 310"
+    assert analytics["assignment_id"] == 222
+    assert analytics["assignment_name"] == "Assignment 4"
+    assert analytics["due_at"]
+    assert "Alice" in analytics["summary"]
+    assert "Assignment 4" in analytics["summary"]
+    assert "CPSC 310" in analytics["summary"]
+
     rows = _resolved_sets(body["conversation_id"])
     assert len(rows) == 1
     assert rows[0]["handle"].startswith("rs_")
@@ -252,6 +268,44 @@ def test_resolve_missing_submissions_filters_persists_and_chains(client):
 
     logs = _tool_call_log_actions(body["conversation_id"])
     assert logs == ["fetch_assignments", "resolve_missing_submissions"]
+
+
+# Verifies: empty missing results still attach structured analytics with a
+# clear "nobody is missing" summary so chat can explain unavailable/empty
+# states without inventing student names (#1443).
+def test_resolve_missing_empty_result_attaches_clear_structured_analytics(client):
+    headers, local_course_id = _register_with_canvas(client)
+    students = [
+        _student("501", local_course_id, "Alice"),
+        _student("502", local_course_id, "Bob"),
+    ]
+    submissions = [
+        _submission(501, SubmissionStatus.graded, "Alice"),
+        _submission(502, SubmissionStatus.submitted, "Bob"),
+    ]
+
+    llm_outputs = [
+        '{"action": "resolve_missing_submissions", "course_name": "CPSC 310", '
+        '"assignment_reference": "assignment 4"}',
+        '{"assignment_id": 222}',
+        '{"action": "respond", "course_name": "CPSC 310", '
+        '"message": "Nobody is missing Assignment 4."}',
+    ]
+
+    with (
+        patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=_two_assignments())),
+        patch("app.services.resolved_set.get_submissions", new=AsyncMock(return_value=submissions)),
+        patch("app.services.resolved_set.get_students", new=AsyncMock(return_value=students)),
+    ):
+        body, _mock_adapter = _chat(client, headers, "who's missing assignment 4?", llm_outputs)
+
+    assert body["is_error"] is False, body
+    analytics = body["reply"]["structured_analytics"]
+    assert analytics["count"] == 0
+    assert analytics["sample"] == []
+    assert analytics["local_course_id"] == local_course_id
+    assert "No active students are missing" in analytics["summary"]
+    assert "CPSC 310" in analytics["summary"]
 
 
 # Verifies: "missing" also covers assignments that AREN'T past due yet.
