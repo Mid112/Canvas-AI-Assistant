@@ -9,7 +9,7 @@ describe("ReviewPermissionsHeader", () => {
     render(<ReviewPermissionsHeader />);
 
     expect(
-      screen.getByRole("heading", { name: "Review Permissions" }),
+      screen.getByRole("heading", { name: "Review Canvas Permissions" }),
     ).toBeInTheDocument();
   });
 
@@ -19,7 +19,7 @@ describe("ReviewPermissionsHeader", () => {
 
     expect(
       screen.getByText(
-        "Review what the AI assistant can and cannot do in Canvas",
+        "Here's what the AI assistant can access in Canvas and why, so you can confirm it before continuing.",
       ),
     ).toBeInTheDocument();
   });

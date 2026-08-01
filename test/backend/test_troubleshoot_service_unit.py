@@ -10,6 +10,7 @@ from app.services.troubleshoot import (
     get_diagnostics,
     get_instructor_canvas_summary,
     list_failing_canvas_connections,
+    summarize_connection_error,
 )
 
 
@@ -135,6 +136,46 @@ async def test_list_failing_canvas_connections_maps_fields():
     assert result.items[0].user_email == "jane@example.com"
     assert result.items[0].canvas_url == "https://canvas.example.edu"
     assert result.items[0].error_detail == "401 Unauthorized"
+    # A bare "401 Unauthorized" isn't one of the reconnect-able token-issue
+    # prefixes, so a token reset wouldn't fix it -- no reset action offered.
+    assert result.items[0].needs_token_reset is False
+
+
+@pytest.mark.asyncio
+async def test_list_failing_canvas_connections_flags_token_issues_for_reset():
+    """A reconnect-able token problem (missing/corrupted/invalid) gets an
+    actionable, non-raw summary and needs_token_reset=True so the admin UI
+    only offers the "Reset token" action when it can actually fix things."""
+    db = AsyncMock()
+    db.scalar = AsyncMock(return_value=1)
+    db.execute = AsyncMock(
+        return_value=[
+            (
+                7,
+                "Jane Doe",
+                "jane@example.com",
+                "https://canvas.example.edu",
+                "No Canvas token for https://canvas.example.edu. PATCH to /api/v1/auth/me/canvas-token first.",
+            )
+        ]
+    )
+
+    result = await list_failing_canvas_connections(db, limit=10, offset=0)
+
+    item = result.items[0]
+    assert item.needs_token_reset is True
+    # Raw, API-style detail (mentions the PATCH endpoint) is not the primary
+    # user-facing copy -- human_summary must not leak it.
+    assert "PATCH" not in item.human_summary
+    assert "reconnect" in item.human_summary.lower()
+
+
+def test_summarize_connection_error_explains_reconnecting():
+    assert summarize_connection_error(None) == "This instructor's Canvas connection is healthy."
+    assert "reconnect" in summarize_connection_error("No Canvas token for x").lower()
+    assert summarize_connection_error("timeout") == (
+        "Canvas isn't responding for this instructor right now."
+    )
 
 
 @pytest.mark.asyncio

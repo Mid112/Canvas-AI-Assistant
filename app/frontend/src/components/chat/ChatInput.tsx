@@ -61,7 +61,7 @@ export function ChatInput({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="shrink-0 space-y-2">
       <form
         onSubmit={handleSubmit}
         className={cn(

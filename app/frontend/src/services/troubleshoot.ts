@@ -10,6 +10,9 @@ export interface FailingCanvasConnection {
   canvas_url: string;
   human_summary: string;
   error_detail: string | null;
+  // True only when the failure is an actual token problem an admin-side
+  // token reset can fix -- not for transient Canvas outages.
+  needs_token_reset: boolean;
 }
 
 export interface InstructorCanvasSummary {

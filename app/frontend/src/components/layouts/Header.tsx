@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Menu, PanelLeft } from "lucide-react";
 
 import { AccountMenu } from "@/components/layouts/AccountMenu";
@@ -17,6 +17,8 @@ import type { UserRole } from "@/types/user";
 
 interface HeaderProps {
   title: string;
+  subtitle?: string;
+  leading?: ReactNode;
   role: UserRole;
   roleLabel: string;
   navItems: NavItem[];
@@ -26,6 +28,8 @@ interface HeaderProps {
 
 export function Header({
   title,
+  subtitle,
+  leading,
   role,
   roleLabel,
   navItems,
@@ -35,7 +39,7 @@ export function Header({
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-6">
+    <header className="sticky top-0 z-30 flex min-h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-6">
       <div className="flex min-w-0 items-center gap-3">
         {onToggleSidebar ? (
           <Button
@@ -75,9 +79,15 @@ export function Header({
             />
           </SheetContent>
         </Sheet>
-        <h1 className="truncate text-lg font-semibold tracking-tight md:text-xl">
-          {title}
-        </h1>
+        {leading ? <div className="shrink-0">{leading}</div> : null}
+        <div className="min-w-0">
+          <h1 className="truncate text-lg font-semibold tracking-tight md:text-xl">
+            {title}
+          </h1>
+          {subtitle ? (
+            <p className="truncate text-sm text-muted-foreground">{subtitle}</p>
+          ) : null}
+        </div>
       </div>
       {onToggleSidebar ? (
         <div className={cn("shrink-0", sidebarOpen && "lg:hidden")}>

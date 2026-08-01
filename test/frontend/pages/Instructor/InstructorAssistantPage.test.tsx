@@ -105,22 +105,33 @@ beforeEach(() => {
 });
 
 describe("InstructorAssistantPage", () => {
-  // Verifies: Renders the assistant header, suggested actions, and chat.
-  it("renders the assistant header, suggested actions, and chat", () => {
+  // Verifies: Renders the assistant page body; the global layout owns the title.
+  it("renders suggested actions and chat", () => {
     renderWithInstitution(<InstructorAssistantPage />);
 
-    expect(screen.getByText("AI Assistant")).toBeInTheDocument();
-    expect(
-      screen.getByText("Canvas Workflow Management Assistant"),
-    ).toBeInTheDocument();
     expect(screen.getByText("Suggested actions")).toBeInTheDocument();
-    expect(screen.getByText("Show missing submissions")).toBeInTheDocument();
     expect(
       screen.getByText(/Hello! I'm your Canvas AI Assistant/),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("textbox", { name: "Chat message" }),
     ).toBeInTheDocument();
+  });
+
+  // Verifies: Regression (#1) — suggested actions start collapsed so the chat
+  // window owns the vertical space, and expand on demand.
+  it("collapses suggested actions by default and expands them on click", async () => {
+    const user = userEvent.setup();
+    renderWithInstitution(<InstructorAssistantPage />);
+
+    const toggle = screen.getByRole("button", { name: /Suggested actions/ });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Show missing submissions")).not.toBeInTheDocument();
+
+    await user.click(toggle);
+
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Show missing submissions")).toBeInTheDocument();
   });
 
   it("shows limited mode when Canvas is not connected", async () => {

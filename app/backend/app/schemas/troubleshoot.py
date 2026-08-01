@@ -13,6 +13,10 @@ class FailingCanvasConnection(BaseModel):
     # see summarize_connection_error() in services/troubleshoot.py.
     human_summary: str
     error_detail: str | None = None
+    # True only when the underlying error is an actual token problem an
+    # admin-side token reset can fix — not for transient Canvas outages,
+    # where offering "Reset token" would be a dead-end admin action.
+    needs_token_reset: bool = False
 
 
 class InstructorCanvasSummary(BaseModel):
