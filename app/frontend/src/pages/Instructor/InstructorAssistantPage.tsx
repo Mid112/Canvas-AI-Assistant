@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
 import {
-  InstructorAssistantHeader,
   InstructorAssistantSuggestedActions,
 } from "@/pages/Instructor/InstructorAssistant/InstructorAssistantHeader";
 import { buildSuggestedActions } from "@/data/assistantSeedData";
@@ -413,8 +412,6 @@ export function InstructorAssistantPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-5 lg:p-6">
-      <InstructorAssistantHeader />
-
       {limitedMode ? (
         <AssistantLimitedModeBanner deferredCount={deferredRequests.length} />
       ) : deferredRequests.length > 0 ? (
@@ -453,7 +450,11 @@ export function InstructorAssistantPage() {
         disabled={isLoading}
       />
 
-      <div className="grid min-h-[min(50.5rem,calc(100vh-23.5rem))] flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_20rem]">
+      {/* The chat is the primary surface: it takes every pixel the collapsed
+          panels above don't need (min-h-0 + flex-1), and all scrolling happens
+          inside it (or inside the history sidebar) rather than on the page
+          frame, so the input never scrolls out of reach (#1, #10). */}
+      <div className="grid min-h-0 flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_20rem]">
         <ChatWindow
           ref={chatWindowRef}
           key={chatSessionKey}
@@ -485,7 +486,7 @@ export function InstructorAssistantPage() {
 
         <section
           aria-labelledby="assistant-history-heading"
-          className="flex min-h-0 max-h-[calc(100vh-24.5rem)] flex-col overflow-hidden rounded-lg border border-border/70 bg-background p-2.5 shadow-sm"
+          className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border/70 bg-background p-2.5 shadow-sm"
         >
           <div className="mb-2 flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">

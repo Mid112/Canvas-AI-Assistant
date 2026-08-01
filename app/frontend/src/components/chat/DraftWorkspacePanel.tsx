@@ -1,4 +1,5 @@
-import { Loader2, Trash2 } from "lucide-react";
+import { ChevronDown, Loader2, Trash2 } from "lucide-react";
+import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -6,6 +7,7 @@ import {
   typedDraftPreviewText,
   type TypedDraft,
 } from "@/lib/typed-draft-storage";
+import { cn } from "@/lib/utils";
 import type { DeferredAssistantRequest } from "@/services/assistant";
 
 interface DraftWorkspacePanelProps {
@@ -43,141 +45,168 @@ export function DraftWorkspacePanel({
   requiresCourseSelection = false,
 }: DraftWorkspacePanelProps) {
   const total = items.length + typedDrafts.length;
+  // Collapsed by default so the chat window stays the primary surface —
+  // the count stays visible in the header either way (#1, #10).
+  const [isExpanded, setIsExpanded] = useState(false);
 
   return (
     <section
       aria-labelledby="draft-workspace-heading"
-      className="rounded-lg border border-border/70 bg-muted/20 p-4 shadow-sm"
+      className="shrink-0 rounded-lg border border-border/70 bg-muted/20 px-4 py-3 shadow-sm"
     >
-      <h2
-        id="draft-workspace-heading"
-        className="text-sm font-semibold text-foreground"
+      <button
+        type="button"
+        onClick={() => setIsExpanded((current) => !current)}
+        aria-expanded={isExpanded}
+        aria-controls="draft-workspace-content"
+        className="flex w-full items-center justify-between gap-2 text-left"
       >
-        Saved drafts ({total})
-      </h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Content-only drafts and chat requests saved before Canvas was ready.
-        After connecting, select a course, then resume to validate, preview, and
-        confirm before any Canvas write.
-      </p>
-      {requiresCourseSelection ? (
-        <p role="status" className="mt-2 text-sm text-amber-800">
-          Select an active course before resuming a typed draft.
-        </p>
+        <h2
+          id="draft-workspace-heading"
+          className="text-sm font-semibold text-foreground"
+        >
+          Saved drafts ({total})
+        </h2>
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 text-muted-foreground transition-transform",
+            isExpanded && "rotate-180",
+          )}
+          aria-hidden="true"
+        />
+      </button>
+
+      {isExpanded ? (
+        <div id="draft-workspace-content">
+          <p className="mt-1 text-sm text-muted-foreground">
+            Content-only drafts and chat requests saved before Canvas was ready.
+            After connecting, select a course, then resume to validate, preview,
+            and confirm before any Canvas write.
+          </p>
+          {requiresCourseSelection ? (
+            <p role="status" className="mt-2 text-sm text-amber-800">
+              Select an active course before resuming a typed draft.
+            </p>
+          ) : null}
+
+          {/* Bounded and independently scrollable — an unbounded list here
+              (#10) grows with every saved draft/deferred request, eating into
+              the chat window's shared vertical budget until the message input
+              gets clipped off entirely. */}
+          <ul className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
+            {typedDrafts.map((draft) => {
+              const isDiscarding = discardingTypedId === draft.id;
+              return (
+                <li
+                  key={`typed-${draft.id}`}
+                  className="flex flex-col gap-3 rounded-lg border border-border/70 bg-background px-3 py-3 sm:flex-row sm:items-start sm:justify-between"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-muted-foreground">
+                      {typedDraftKindLabel(draft.kind)} · Saved{" "}
+                      {formatDeferredTime(draft.savedAt)}
+                    </p>
+                    <p className="mt-1 line-clamp-3 text-sm text-foreground">
+                      {typedDraftPreviewText(draft)}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={
+                        isResuming ||
+                        isDiscarding ||
+                        requiresCourseSelection ||
+                        !onResumeTypedDraft
+                      }
+                      onClick={() => onResumeTypedDraft?.(draft.id)}
+                    >
+                      Resume
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isResuming || isDiscarding || !onDiscardTypedDraft}
+                      onClick={() => onDiscardTypedDraft?.(draft.id)}
+                    >
+                      {isDiscarding ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          Discarding…
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="size-4" aria-hidden="true" />
+                          Discard
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+
+            {items.map((item) => {
+              const isDiscarding = discardingId === item.id;
+
+              return (
+                <li
+                  key={item.id}
+                  className="flex flex-col gap-3 rounded-lg border border-border/70 bg-background px-3 py-3 sm:flex-row sm:items-start sm:justify-between"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs text-muted-foreground">
+                      Chat request · Saved {formatDeferredTime(item.created_at)}
+                    </p>
+                    <p className="mt-1 line-clamp-3 text-sm text-foreground">
+                      {item.message}
+                    </p>
+                  </div>
+
+                  <div className="flex shrink-0 flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isResuming || isDiscarding}
+                      onClick={() => onResume(item.id)}
+                    >
+                      {isResuming ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          Preparing…
+                        </>
+                      ) : (
+                        "Resume"
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={isResuming || isDiscarding}
+                      onClick={() => onDiscard(item.id)}
+                    >
+                      {isDiscarding ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          Discarding…
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="size-4" aria-hidden="true" />
+                          Discard
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       ) : null}
-
-      <ul className="mt-3 space-y-2">
-        {typedDrafts.map((draft) => {
-          const isDiscarding = discardingTypedId === draft.id;
-          return (
-            <li
-              key={`typed-${draft.id}`}
-              className="flex flex-col gap-3 rounded-lg border border-border/70 bg-background px-3 py-3 sm:flex-row sm:items-start sm:justify-between"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="text-xs text-muted-foreground">
-                  {typedDraftKindLabel(draft.kind)} · Saved{" "}
-                  {formatDeferredTime(draft.savedAt)}
-                </p>
-                <p className="mt-1 line-clamp-3 text-sm text-foreground">
-                  {typedDraftPreviewText(draft)}
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={
-                    isResuming ||
-                    isDiscarding ||
-                    requiresCourseSelection ||
-                    !onResumeTypedDraft
-                  }
-                  onClick={() => onResumeTypedDraft?.(draft.id)}
-                >
-                  Resume
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={isResuming || isDiscarding || !onDiscardTypedDraft}
-                  onClick={() => onDiscardTypedDraft?.(draft.id)}
-                >
-                  {isDiscarding ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                      Discarding…
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="size-4" aria-hidden="true" />
-                      Discard
-                    </>
-                  )}
-                </Button>
-              </div>
-            </li>
-          );
-        })}
-
-        {items.map((item) => {
-          const isDiscarding = discardingId === item.id;
-
-          return (
-            <li
-              key={item.id}
-              className="flex flex-col gap-3 rounded-lg border border-border/70 bg-background px-3 py-3 sm:flex-row sm:items-start sm:justify-between"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="text-xs text-muted-foreground">
-                  Chat request · Saved {formatDeferredTime(item.created_at)}
-                </p>
-                <p className="mt-1 line-clamp-3 text-sm text-foreground">
-                  {item.message}
-                </p>
-              </div>
-
-              <div className="flex shrink-0 flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={isResuming || isDiscarding}
-                  onClick={() => onResume(item.id)}
-                >
-                  {isResuming ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                      Preparing…
-                    </>
-                  ) : (
-                    "Resume"
-                  )}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={isResuming || isDiscarding}
-                  onClick={() => onDiscard(item.id)}
-                >
-                  {isDiscarding ? (
-                    <>
-                      <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-                      Discarding…
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="size-4" aria-hidden="true" />
-                      Discard
-                    </>
-                  )}
-                </Button>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
     </section>
   );
 }
