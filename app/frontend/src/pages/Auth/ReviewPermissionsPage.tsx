@@ -26,7 +26,7 @@ export function ReviewPermissionsPage() {
       <ReviewPermissionsRestrictedActions />
       <ReviewPermissionsNote />
       <ReviewPermissionsActions
-        onCancel={() => navigate(paths.connectCanvas)}
+        onReconnect={() => navigate(paths.connectCanvas)}
         onApprove={() => {
           if (user) {
             markOnboardingComplete(user.id);

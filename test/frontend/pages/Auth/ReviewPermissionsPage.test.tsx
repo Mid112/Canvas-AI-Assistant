@@ -50,11 +50,11 @@ describe("ReviewPermissionsPage", () => {
 
     expect(screen.getByLabelText("Onboarding progress")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "Review Permissions" }),
+      screen.getByRole("heading", { name: "Review Canvas Permissions" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Review what the AI assistant can and cannot do in Canvas",
+        "Here's what the AI assistant can access in Canvas and why, so you can confirm it before continuing.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -66,7 +66,9 @@ describe("ReviewPermissionsPage", () => {
     expect(
       screen.getByRole("button", { name: "Approve & Continue" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Reconnect Canvas" }),
+    ).toBeInTheDocument();
   });
 
   // Verifies: Renders allowed and restricted action details.
@@ -102,14 +104,14 @@ describe("ReviewPermissionsPage", () => {
     expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.dashboard);
   });
 
-  // Verifies: Navigates back to connect canvas on cancel.
-  it("navigates back to connect canvas on cancel", async () => {
+  // Verifies: Navigates back to connect canvas on reconnect.
+  it("navigates back to connect canvas on reconnect", async () => {
     const user = userEvent.setup();
     mockNavigate.mockClear();
 
     renderWithRouter(<ReviewPermissionsPage />);
 
-    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    await user.click(screen.getByRole("button", { name: "Reconnect Canvas" }));
 
     expect(mockNavigate).toHaveBeenCalledWith(paths.connectCanvas);
   });
