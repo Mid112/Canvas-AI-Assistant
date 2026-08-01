@@ -103,6 +103,12 @@ export interface ChatMessage {
   /** True after the instructor dismisses a form-handoff offer (quiz /
    * message / feedback) so the action card and explanation hide. */
   handoffDismissed?: boolean;
+  /** Canvas-fact claim types the backend found in this reply that no
+   * Canvas read backed (e.g. ["grade"]). The reply text is shown intact;
+   * this only drives a "not verified" notice, so the instructor can see a
+   * made-up statistic for what it is rather than the number being
+   * silently rewritten to "[grade redacted]" (bugs 12 and 13). */
+  unverifiedClaims?: string[];
 }
 
 export interface AssistantContext {
@@ -121,6 +127,8 @@ export interface AssistantResponse {
   safetyMessage?: string;
   requiresCanvasToken?: boolean;
   deferredRequestId?: number;
+  /** See ChatMessage.unverifiedClaims. */
+  unverifiedClaims?: string[];
   /** When set, navigate to this route instead of showing a preview
    * card. The chat message content is still displayed. */
   navigateTo?: {

@@ -66,6 +66,49 @@ describe("ActionCard", () => {
 });
 
 describe("AssistantMessage", () => {
+  // Verifies: Regression (#12, #13) — an answer the backend could not verify
+  // is shown in full with a warning beside it. The old behaviour rewrote the
+  // number inside the text to "[grade redacted]", which hid real answers far
+  // more often than fabricated ones.
+  it("shows the full text plus a notice when claims are unverified", () => {
+    render(
+      <AssistantMessage
+        message={{
+          id: "unverified-1",
+          role: "assistant",
+          content: "Average overall grade 82 %.",
+          timestamp: new Date("2026-06-24T10:00:00"),
+          unverifiedClaims: ["grade"],
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Average overall grade 82 %.")).toBeInTheDocument();
+    expect(screen.queryByText(/redacted/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/could not be verified against your\s+Canvas data/),
+    ).toBeInTheDocument();
+  });
+
+  // Verifies: Regression (#12) — the notice must stay quiet on grounded
+  // replies, or instructors learn to ignore it.
+  it("shows no notice when nothing was flagged", () => {
+    render(
+      <AssistantMessage
+        message={{
+          id: "verified-1",
+          role: "assistant",
+          content: "Alex Chen scored 88 on Homework 1.",
+          timestamp: new Date("2026-06-24T10:00:00"),
+        }}
+      />,
+    );
+
+    expect(
+      screen.queryByText(/could not be verified/),
+    ).not.toBeInTheDocument();
+  });
+
   // Verifies: Renders explanation and action cards when provided.
   it("renders explanation and action cards when provided", () => {
     render(

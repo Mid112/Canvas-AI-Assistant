@@ -91,6 +91,24 @@ export function AssistantMessage({
           </div>
         ) : null}
 
+        {/* The reply text above is shown exactly as written. This notice
+            replaces the old behaviour of rewriting unbacked numbers to
+            "[grade redacted]" inside the message itself, which hid real
+            answers far more often than fake ones (bugs 12 and 13). */}
+        {message.unverifiedClaims && message.unverifiedClaims.length > 0 ? (
+          <div
+            role="status"
+            className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-950"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <p>
+              Some figures in this answer could not be verified against your
+              Canvas data, so they may be inaccurate. Open the course to
+              confirm before acting on them.
+            </p>
+          </div>
+        ) : null}
+
         {message.safetyBlocked && message.safetyMessage ? (
           <div
             role="alert"

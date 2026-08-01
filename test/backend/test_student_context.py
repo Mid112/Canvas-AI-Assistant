@@ -164,9 +164,11 @@ def test_ground_assistant_result_scrubs_respond_and_proposed_action():
     assert "Assignment id 10" in result["message"]
     assert '"HW1"' in result["message"]
     assert "scored 88" in result["message"]
+    # Ungrounded Canvas IDs are still rewritten — a wrong ID can misroute a
+    # later write. Grades and quoted titles are not (bugs 2, 13).
     assert "[ID redacted]" in result["message"]
-    assert "[grade redacted]" in result["message"]
-    assert "[name redacted]" in result["message"]
+    assert "[grade redacted]" not in result["message"]
+    assert "[name redacted]" not in result["message"]
     assert "555" not in result["message"]
     assert result["proposed_action"]["assignment_id"] == 10
     assert "student_id" not in result["proposed_action"]
@@ -190,9 +192,12 @@ def test_ground_assistant_result_ignores_scalar_field_memory_as_retrieval_source
             "grade": "99",
         },
     )
-    assert "[grade redacted]" in result["message"]
-    assert "[name redacted]" in result["message"]
+    # Scalar field_memory is not a retrieval source, so the grade claim is
+    # unbacked. The text stays intact and the caller is told instead — the
+    # instructor reads the real answer plus a "not verified" notice.
+    assert result["message"] == 'Student scored 99 on "Remembered Homework".'
     assert "grounded" not in result
+    assert result["unverified_claims"] == ["grade"]
 
 
 def test_ground_assistant_result_reuses_prior_tool_grounded_facts():
@@ -220,7 +225,10 @@ def test_ground_assistant_result_reuses_prior_tool_grounded_facts():
     assert "[grade redacted]" not in result["message"]
 
 
-def test_ground_assistant_result_scrubs_invented_claims_without_tools():
+def test_ground_assistant_result_flags_invented_claims_without_tools():
+    """Bug 12: the model answering with no tool call behind it must be
+    flagged, not rewritten — the instructor needs to see what it claimed in
+    order to recognize it as wrong."""
     from app.services.llm.student_context import ground_assistant_result
 
     result, _tool_facts = ground_assistant_result(
@@ -231,8 +239,66 @@ def test_ground_assistant_result_scrubs_invented_claims_without_tools():
         tool_results=None,
     )
     assert "[ID redacted]" in result["message"]
-    assert "[grade redacted]" in result["message"]
-    assert "[name redacted]" in result["message"]
+    assert '"Invented Title"' in result["message"]
+    assert "scored 77" in result["message"]
+    assert "grounded" not in result
+    assert result["unverified_claims"] == ["canvas_id", "grade"]
+
+
+def test_ground_assistant_result_keeps_instructor_authored_preview_summary():
+    """Bug 2: a write preview's summary is composed server-side from
+    validated params and contains the instructor's own message body. It must
+    never be scrubbed — they are being asked to approve exactly this text."""
+    from app.services.llm.student_context import ground_assistant_result
+
+    summary = (
+        'Send "this is your last chance to submit without a penalty" as a '
+        "private Canvas message to Student Two in Capstone Project."
+    )
+    result, _tool_facts = ground_assistant_result(
+        {
+            "action": "intent_preview",
+            "intent_preview": True,
+            "summary": summary,
+            "proposed_action": {"action": "send_message"},
+        },
+        tool_results=[{"students": [{"canvas_user_id": 77, "name": "Student Two"}]}],
+    )
+    assert result["summary"] == summary
+    assert "unverified_claims" not in result
+
+
+def test_ground_assistant_result_no_warning_for_plain_conversation():
+    """A reply with no Canvas claims must not trip the notice — otherwise it
+    fires on every greeting and instructors learn to ignore it."""
+    from app.services.llm.student_context import ground_assistant_result
+
+    result, _tool_facts = ground_assistant_result(
+        {"action": "respond", "message": "Hello! How can I help you today?"},
+        tool_results=[],
+    )
+    assert "grounded" not in result
+    assert "unverified_claims" not in result
+
+
+def test_ground_assistant_result_backed_grade_is_not_flagged():
+    """A grade that a tool actually returned is neither rewritten nor
+    flagged — this is the case bug 13 says must read cleanly."""
+    from app.services.llm.student_context import ground_assistant_result
+
+    result, _tool_facts = ground_assistant_result(
+        {"action": "respond", "message": 'Alex Chen scored 88 on "Homework 1".'},
+        tool_results=[
+            {
+                "submissions": [
+                    {"user_id": 7, "student_name": "Alex Chen", "grade": "88", "score": 88.0}
+                ]
+            }
+        ],
+    )
+    assert result["message"] == 'Alex Chen scored 88 on "Homework 1".'
+    assert result["grounded"] is True
+    assert "unverified_claims" not in result
 
 
 def test_ground_assistant_result_proposed_action_uses_this_turn_facts_only():

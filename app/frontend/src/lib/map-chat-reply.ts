@@ -523,7 +523,31 @@ function buildQuizCreateFormAction(
   };
 }
 
+/** Claim types the backend found in this reply that no Canvas read backs.
+ * Absent whenever every claim checks out, so this stays quiet on ordinary
+ * replies rather than crying wolf until instructors tune it out. */
+function readUnverifiedClaims(
+  reply: Record<string, unknown>,
+): string[] | undefined {
+  const claims = reply.unverified_claims;
+  if (!Array.isArray(claims) || claims.length === 0) {
+    return undefined;
+  }
+  const names = claims.filter((claim): claim is string => typeof claim === "string");
+  return names.length > 0 ? names : undefined;
+}
+
 export function mapChatReplyToAssistantResponse(
+  reply: Record<string, unknown>,
+  isError: boolean,
+  conversationId?: number,
+): AssistantResponse {
+  const mapped = mapReplyBody(reply, isError, conversationId);
+  const unverifiedClaims = readUnverifiedClaims(reply);
+  return unverifiedClaims ? { ...mapped, unverifiedClaims } : mapped;
+}
+
+function mapReplyBody(
   reply: Record<string, unknown>,
   isError: boolean,
   conversationId?: number,

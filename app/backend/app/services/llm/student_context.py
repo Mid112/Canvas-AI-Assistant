@@ -210,7 +210,6 @@ _DATE_KEYS = frozenset({"due_at", "due_date", "submitted_at", "graded_at"})
 _GRADE_CLAIM_PATTERN = re.compile(
     r"(?i)\b(?:grade|score|scored|marks?)\b[^0-9]{0,12}(\d+(?:\.\d+)?)\b"
 )
-_QUOTED_TITLE_PATTERN = re.compile(r"[\"“]([^\"”]{2,80})[\"”]")
 
 
 @dataclass(frozen=True)
@@ -248,36 +247,62 @@ def collect_grounded_facts(tool_results: list[Any]) -> GroundedFacts:
     return GroundedFacts(ids=ids, names=names, grades=grades, dates=dates)
 
 
+def _grade_claim_is_backed(raw: str, facts: GroundedFacts) -> bool:
+    # Allow integer forms of float scores present as "88.0".
+    return raw.casefold() in facts.grades or f"{raw}.0".casefold() in facts.grades
+
+
+def detect_unverified_claims(text: str, facts: GroundedFacts) -> set[str]:
+    """Name the Canvas-fact claim types in prose that no retrieval backs.
+
+    Detection only — this never rewrites the text (bug 2 / bug 13). The
+    previous behaviour substituted "[grade redacted]" and
+    '"[name redacted]"' into the reply the instructor reads, which was the
+    wrong end of the pipe for a privacy control and destroyed two kinds of
+    legitimate content:
+
+    * Quoted strings. The pattern could not tell a Canvas assignment title
+      from the message body the instructor themselves typed, so composing
+      "send X to the class" came back with X blanked out — hiding the very
+      text they were being asked to approve.
+    * Aggregates. facts.grades only ever holds individual fetched scores,
+      so an average, rate, or percentile is unrepresentable in it by
+      construction and was redacted 100% of the time.
+
+    Callers surface the returned claim types to the instructor as a trust
+    signal instead, which keeps the anti-hallucination value (see bug 12,
+    where the model invented statistics with no tool call behind them)
+    without censoring real answers.
+    """
+    unverified: set[str] = set()
+
+    for match in _GRADE_CLAIM_PATTERN.finditer(text):
+        if not _grade_claim_is_backed(match.group(1), facts):
+            unverified.add("grade")
+            break
+
+    for match in _CANVAS_ID_CLAIM_PATTERN.finditer(text):
+        raw_id = match.group(2) or match.group(4)
+        try:
+            numeric = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if numeric not in facts.ids:
+            unverified.add("canvas_id")
+            break
+
+    return unverified
+
+
 def strip_ungrounded_canvas_facts(text: str, facts: GroundedFacts) -> str:
-    """Redact grade/score claims and quoted titles that were not retrieved."""
-    scrubbed = strip_ungrounded_canvas_id_claims(text, facts.ids)
+    """Redact ungrounded Canvas ID claims only.
 
-    def _grade_replace(match: re.Match[str]) -> str:
-        raw = match.group(1)
-        if raw.casefold() in facts.grades:
-            return match.group(0)
-        # Also allow integer forms of float scores present as "88.0"
-        if f"{raw}.0".casefold() in facts.grades:
-            return match.group(0)
-        return "[grade redacted]"
-
-    scrubbed = _GRADE_CLAIM_PATTERN.sub(_grade_replace, scrubbed)
-
-    def _title_replace(match: re.Match[str]) -> str:
-        title = match.group(1).strip()
-        if not facts.names:
-            return '"[name redacted]"'
-        if title.casefold() in facts.names:
-            return match.group(0)
-        # Allow substring match against retrieved names (partial titles).
-        folded = title.casefold()
-        if any(folded in name or name in folded for name in facts.names):
-            return match.group(0)
-        return '"[name redacted]"'
-
-    scrubbed = _QUOTED_TITLE_PATTERN.sub(_title_replace, scrubbed)
-
-    return scrubbed
+    ID claims stay destructive because a wrong Canvas ID is qualitatively
+    different from a wrong number in prose: it can misroute a later write to
+    the wrong assignment or student. Grade and title scrubbing were removed
+    in favour of detect_unverified_claims — see its docstring.
+    """
+    return strip_ungrounded_canvas_id_claims(text, facts.ids)
 
 
 def filter_grounded_dict_fields(
@@ -322,6 +347,22 @@ _RETRIEVED_REF_KEYS = frozenset(
 )
 
 
+_LLM_PROSE_ACTIONS = frozenset({"respond", "clarify", "out_of_scope"})
+
+
+def action_is_llm_prose(result: dict[str, Any]) -> bool:
+    """True when the result's prose was written by the model, not the server.
+
+    intent_preview carries a write-preview summary built by
+    services/write_preview.py; every other non-conversational action is a
+    tool echo whose summary comes from a resolver chain. Neither is model
+    free text, so neither should be scrubbed.
+    """
+    if result.get("intent_preview"):
+        return False
+    return result.get("action") in _LLM_PROSE_ACTIONS
+
+
 def ground_assistant_result(
     result: dict[str, Any],
     *,
@@ -348,13 +389,25 @@ def ground_assistant_result(
     facts = union_grounded_facts(prior_facts, tool_facts)
     out = dict(result)
 
-    # Prose scrubbing uses the union of prior + this-turn facts so a
-    # follow-up turn can reference "HW1" from an earlier fetch without
-    # re-fetching. This is safe — the user sees and reviews prose.
-    for prose_key in ("message", "summary", "question"):
-        value = out.get(prose_key)
-        if isinstance(value, str):
-            out[prose_key] = strip_ungrounded_canvas_facts(value, facts)
+    # Only the model's own free text is a hallucination surface. An
+    # intent_preview "summary" is composed server-side by
+    # services/write_preview.py from already-validated params, and a direct
+    # tool echo's "summary" is built by the resolver chains in
+    # services/chat.py from real Canvas reads. Scrubbing either one edited
+    # trustworthy server output and, for write previews, hid the
+    # instructor's own subject/body from the approval step (bug 2).
+    is_llm_authored = action_is_llm_prose(out)
+
+    # Detection and scrubbing both use the union of prior + this-turn facts
+    # so a follow-up turn can reference "HW1" from an earlier fetch without
+    # re-fetching.
+    unverified: set[str] = set()
+    if is_llm_authored:
+        for prose_key in ("message", "summary", "question"):
+            value = out.get(prose_key)
+            if isinstance(value, str):
+                unverified |= detect_unverified_claims(value, facts)
+                out[prose_key] = strip_ungrounded_canvas_facts(value, facts)
 
     # proposed_action scrubbing uses ONLY this-turn tool_facts — never
     # prior accumulated facts. A prior-turn ID (e.g. student 123 from
@@ -384,6 +437,14 @@ def ground_assistant_result(
 
     if tool_facts.ids or tool_facts.names or tool_facts.grades:
         out["grounded"] = True
+
+    # Names the claim types nothing retrieved backs, so the client can warn
+    # on the bug 12 shape — the model answering "average grade is 82%" with
+    # no Canvas read behind it — instead of the number being silently
+    # rewritten to "[grade redacted]". Absent when everything checks out, so
+    # ordinary replies carry no extra payload.
+    if unverified:
+        out["unverified_claims"] = sorted(unverified)
 
     # Only newly observed tool facts should be appended; prior_facts are
     # already stored. Callers merge tool_facts into memory.

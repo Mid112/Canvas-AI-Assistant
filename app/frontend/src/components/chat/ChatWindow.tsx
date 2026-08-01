@@ -357,6 +357,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
             safetyMessage: mapped.safetyMessage,
             requiresCanvasToken: mapped.requiresCanvasToken,
             deferredRequestId: mapped.deferredRequestId,
+            unverifiedClaims: mapped.unverifiedClaims,
           }];
         });
 
@@ -432,6 +433,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
         safetyMessage: entry.safetyMessage,
         requiresCanvasToken: entry.requiresCanvasToken,
         deferredRequestId: entry.deferredRequestId,
+        unverifiedClaims: entry.unverifiedClaims,
       }));
 
       setMessages((current) => [...current, ...newMessages]);
