@@ -44,6 +44,12 @@ class CoursePublishUpdate(BaseModel):
     published: bool
 
 
+class AssignmentPublishUpdate(BaseModel):
+    """Publish or unpublish a Canvas assignment from Course Assignments."""
+
+    published: bool
+
+
 class AssignmentResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
 

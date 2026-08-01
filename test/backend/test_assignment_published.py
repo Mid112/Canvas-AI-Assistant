@@ -407,3 +407,169 @@ def test_late_submissions_analysis_reports_unpublished_assignment(client):
 
     assert response.status_code == 200
     assert response.json()["assignment_published"] is False
+
+
+# ---------------------------------------------------------------------------
+# Ticket 12 — publish / unpublish assignment write path
+# ---------------------------------------------------------------------------
+
+
+# Verifies: PATCH .../publish published=true sends Canvas published=true and returns it.
+def test_publish_assignment(client):
+    headers, local_course_id = _register_with_canvas(client)
+    assignment_id = uuid.uuid4().int % 10_000_000
+
+    with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock:
+        mock.return_value = [_assignment(assignment_id, published=False)]
+        client.get(
+            f"/api/v1/canvas/courses/{local_course_id}/assignments?canvas_url={CANVAS_URL}",
+            headers=headers,
+        )
+
+    with (
+        patch(
+            "app.services.canvas.fetch_assignment",
+            new_callable=AsyncMock,
+            return_value=_assignment(assignment_id, published=False),
+        ),
+        patch(
+            "app.services.canvas.update_assignment",
+            new_callable=AsyncMock,
+            return_value=_assignment(assignment_id, published=True),
+        ) as mock_update,
+    ):
+        response = client.patch(
+            f"/api/v1/canvas/courses/{local_course_id}/assignments/{assignment_id}/publish"
+            f"?canvas_url={CANVAS_URL}",
+            json={"published": True},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    assert response.json()["published"] is True
+    mock_update.assert_awaited_once()
+    assert mock_update.await_args.args[2] == {"published": True}
+
+
+# Verifies: Unpublish sends published=false and mirrors local Assignment.published.
+def test_unpublish_assignment_updates_local_mirror(client):
+    import asyncio
+
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from app.config import settings as _settings
+    from app.models.assignment import Assignment
+
+    headers, local_course_id = _register_with_canvas(client)
+    assignment_id = uuid.uuid4().int % 10_000_000
+
+    with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock:
+        mock.return_value = [_assignment(assignment_id, published=True)]
+        client.get(
+            f"/api/v1/canvas/courses/{local_course_id}/assignments?canvas_url={CANVAS_URL}",
+            headers=headers,
+        )
+
+    with (
+        patch(
+            "app.services.canvas.fetch_assignment",
+            new_callable=AsyncMock,
+            return_value=_assignment(assignment_id, published=True),
+        ),
+        patch(
+            "app.services.canvas.update_assignment",
+            new_callable=AsyncMock,
+            return_value=_assignment(assignment_id, published=False),
+        ) as mock_update,
+    ):
+        response = client.patch(
+            f"/api/v1/canvas/courses/{local_course_id}/assignments/{assignment_id}/publish"
+            f"?canvas_url={CANVAS_URL}",
+            json={"published": False},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    assert response.json()["published"] is False
+    mock_update.assert_awaited_once()
+    assert mock_update.await_args.args[2] == {"published": False}
+
+    async def _read_published() -> bool | None:
+        engine = create_async_engine(_settings.DATABASE_URL)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+                local = await db.scalar(
+                    select(Assignment).where(
+                        Assignment.canvas_assignment_id == str(assignment_id),
+                        Assignment.course_id == local_course_id,
+                    )
+                )
+                return None if local is None else local.published
+        finally:
+            await engine.dispose()
+
+    assert asyncio.run(_read_published()) is False
+
+
+# Verifies: Already-published no-op skips Canvas write and still returns published=true.
+def test_publish_assignment_noop_when_already_published(client):
+    headers, local_course_id = _register_with_canvas(client)
+    assignment_id = uuid.uuid4().int % 10_000_000
+
+    with (
+        patch(
+            "app.services.canvas.fetch_assignment",
+            new_callable=AsyncMock,
+            return_value=_assignment(assignment_id, published=True),
+        ),
+        patch(
+            "app.services.canvas.update_assignment",
+            new_callable=AsyncMock,
+        ) as mock_update,
+    ):
+        response = client.patch(
+            f"/api/v1/canvas/courses/{local_course_id}/assignments/{assignment_id}/publish"
+            f"?canvas_url={CANVAS_URL}",
+            json={"published": True},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    assert response.json()["published"] is True
+    mock_update.assert_not_awaited()
+
+
+# Verifies: Canvas unpublish refusals are explained to the caller.
+def test_unpublish_assignment_explains_canvas_refusal(client):
+    from fastapi import HTTPException, status
+
+    headers, local_course_id = _register_with_canvas(client)
+    assignment_id = uuid.uuid4().int % 10_000_000
+
+    with (
+        patch(
+            "app.services.canvas.fetch_assignment",
+            new_callable=AsyncMock,
+            return_value=_assignment(assignment_id, published=True),
+        ),
+        patch(
+            "app.services.canvas.update_assignment",
+            new_callable=AsyncMock,
+            side_effect=HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Canvas API error: 400 - Can't unpublish if there are student submissions",
+            ),
+        ),
+    ):
+        response = client.patch(
+            f"/api/v1/canvas/courses/{local_course_id}/assignments/{assignment_id}/publish"
+            f"?canvas_url={CANVAS_URL}",
+            json={"published": False},
+            headers=headers,
+        )
+
+    assert response.status_code == 502
+    detail = response.json()["detail"]
+    assert detail.startswith("Canvas refused to unpublish this assignment.")
+    assert "student submissions" in detail

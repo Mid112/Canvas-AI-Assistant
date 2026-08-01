@@ -50,6 +50,7 @@ from app.models.workflow import Workflow
 from app.schemas.canvas import (
     ActiveCourseResponse,
     AssignmentCreate,
+    AssignmentPublishUpdate,
     AssignmentResponse,
     AssignmentUpdate,
     CourseCreate,
@@ -1297,6 +1298,89 @@ async def update_course_assignment(
         write=_write,
     )
     return AssignmentResponse(**data)
+
+
+async def _sync_local_assignment_published(
+    db: AsyncSession,
+    course_id: int,
+    assignment_id: int,
+    published: bool,
+) -> Assignment | None:
+    """Mirror Canvas published state onto the local assignment row when present."""
+    local = await db.scalar(
+        select(Assignment).where(
+            Assignment.canvas_assignment_id == str(assignment_id),
+            Assignment.course_id == course_id,
+        )
+    )
+    if local is not None:
+        local.published = published
+    return local
+
+
+async def set_assignment_published(
+    local_course_id: int,
+    assignment_id: int,
+    payload: AssignmentPublishUpdate,
+    user: User,
+    canvas_url: str | None,
+    db: AsyncSession,
+) -> AssignmentResponse:
+    """Publish or unpublish an assignment via Canvas assignment.published."""
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
+    require_writable_course(course)
+
+    current = await fetch_assignment(
+        int(course.canvas_course_id),
+        assignment_id,
+        token,
+        resolved_canvas_url,
+    )
+    currently_published = bool(current.get("published", True))
+
+    if payload.published == currently_published:
+        local = await _sync_local_assignment_published(
+            db, course.id, assignment_id, currently_published
+        )
+        await db.commit()
+        return AssignmentResponse.model_validate(
+            {**current, "local_id": local.id if local else None}
+        )
+
+    try:
+        data = await update_assignment(
+            int(course.canvas_course_id),
+            assignment_id,
+            {"published": payload.published},
+            token,
+            resolved_canvas_url,
+        )
+    except HTTPException as exc:
+        # Ticket 12: surface Canvas unpublish refusals (e.g. submissions exist)
+        # with an explicit message instead of a bare upstream status string.
+        if not payload.published:
+            canvas_detail = (
+                exc.detail if isinstance(exc.detail, str) else "Unknown Canvas error."
+            )
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail=(
+                    "Canvas refused to unpublish this assignment. "
+                    f"{canvas_detail}"
+                ),
+            ) from exc
+        raise
+
+    published = bool(data.get("published", payload.published))
+    local = await _sync_local_assignment_published(
+        db, course.id, assignment_id, published
+    )
+    await db.commit()
+    return AssignmentResponse.model_validate(
+        {**data, "local_id": local.id if local else None}
+    )
 
 
 async def update_course_grade(
