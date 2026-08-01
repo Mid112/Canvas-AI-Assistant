@@ -7,8 +7,8 @@ app/backend/app/services/canvas.py:
   there can never expire/corrupt the shared session objects the caller
   still needs (see AsyncSession.rollback()'s always-expires behavior).
 - _match_course_name resolves a same-name collision across terms
-  (canvas_course_names is write-once and fetch_courses includes completed
-  terms) by preferring the non-completed match, and falls back to a safe
+  (fetch_courses includes completed terms) by preferring the
+  non-completed match, and falls back to a safe
   normalized-substring match when there's no exact match at all.
 - handle_chat_message's post-hoc course resolution: never forks on a
   modify turn (would silently break update_message_content), mutates a

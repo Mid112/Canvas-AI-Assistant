@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class CanvasCourseName(Base):
-    """A small, connection-scoped, write-once index of canvas_course_id ->
+    """A small, connection-scoped, refreshed index of canvas_course_id ->
     name, used only by the chat/LLM course-resolution pathway
     (services/chat.py). Deliberately separate from Course:
 
@@ -24,12 +24,9 @@ class CanvasCourseName(Base):
       canvas_course_ids can't be disambiguated there. This table is keyed
       by canvas_connection_id instead — the connection's own PK, no token
       decryption needed.
-    - Course.name is overwritten in place on every sync (services/canvas.py
-      get_courses), which is fine for the dashboard but wrong for an LLM
-      mid-conversation: a rename on Canvas between turns would otherwise
-      change what a conversation has been calling that course. Rows here
-      are inserted once and never updated (see services/canvas.py
-      sync_courses_if_stale).
+    - Course.name and Course.course_code are the canonical prompt-facing
+      values. This table is refreshed on sync so the connection-scoped
+      lookup never drifts behind the current course row.
     """
 
     __tablename__ = "canvas_course_names"

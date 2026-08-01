@@ -1630,10 +1630,10 @@ async def sync_courses_if_stale(user: User, connection: CanvasConnection, db: As
     course data.
 
     Also upserts canvas_course_names — the small, connection-scoped,
-    write-once canvas_course_id -> name index services/chat.py uses to
+    refreshed canvas_course_id -> name index services/chat.py uses to
     resolve a course by name without ever exposing a numeric ID to the
-    LLM. Rows there are inserted once and never overwritten
-    (ON CONFLICT DO NOTHING) — see CanvasCourseName's docstring for why.
+    LLM. Rows there are refreshed from the current Canvas sync so stale
+    names cannot leak into chat prompts.
 
     get_courses() itself is unmodified; this wrapper only adds the
     cooldown gate and the name-index upsert around it.
@@ -1651,21 +1651,27 @@ async def sync_courses_if_stale(user: User, connection: CanvasConnection, db: As
 
     courses = await get_courses(user, connection.canvas_url, db)
     if courses:
+        insert_names = pg_insert(CanvasCourseName).values(
+            [
+                {
+                    "canvas_connection_id": connection.id,
+                    "canvas_course_id": str(course.canvas_id),
+                    "local_course_id": course.local_id,
+                    "name": course.name,
+                    "workflow_state": course.workflow_state,
+                }
+                for course in courses
+            ]
+        )
         await db.execute(
-            pg_insert(CanvasCourseName)
-            .values(
-                [
-                    {
-                        "canvas_connection_id": connection.id,
-                        "canvas_course_id": str(course.canvas_id),
-                        "local_course_id": course.local_id,
-                        "name": course.name,
-                        "workflow_state": course.workflow_state,
-                    }
-                    for course in courses
-                ]
+            insert_names.on_conflict_do_update(
+                index_elements=["canvas_connection_id", "canvas_course_id"],
+                set_={
+                    "local_course_id": insert_names.excluded.local_course_id,
+                    "name": insert_names.excluded.name,
+                    "workflow_state": insert_names.excluded.workflow_state,
+                },
             )
-            .on_conflict_do_nothing(index_elements=["canvas_connection_id", "canvas_course_id"])
         )
 
     connection.courses_synced_at = now

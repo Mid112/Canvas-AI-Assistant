@@ -1185,12 +1185,11 @@ def test_sync_courses_if_stale_respects_cooldown(client):
         assert mock.call_count == 2
 
 
-# Verifies: canvas_course_names is never overwritten once synced.
-def test_canvas_course_names_never_overwritten_once_synced(client):
-    """canvas_course_names is insert-once (ON CONFLICT DO NOTHING) — a
-    rename on Canvas between syncs must not retroactively change what an
-    in-progress chat conversation has already been calling a course, even
-    though Course.name (the dashboard's view) does pick up the rename."""
+# Verifies: canvas_course_names is refreshed when Canvas renames a course.
+def test_canvas_course_names_refreshed_on_sync(client):
+    """canvas_course_names is the chat resolver's connection-scoped index,
+    so a Canvas rename must refresh it instead of leaving chat prompts
+    stuck on the first-seen course name."""
     from app.config import settings as app_settings
 
     headers = _register_with_canvas(client)
@@ -1220,13 +1219,13 @@ def test_canvas_course_names_never_overwritten_once_synced(client):
         # Course.name picks up the rename...
         assert set_resp_2.json()["name"] == "Renamed"
 
-    # ...but canvas_course_names — what the chat pipeline shows the LLM —
-    # keeps the name it first saw.
+    # The chat pipeline shows the current name, not the stale first-seen
+    # value from canvas_course_names.
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = '{"action": "respond", "message": "OK."}'
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
         client.post("/api/v1/chat/", json={"message": "hi"}, headers=headers)
 
     sent_message = mock_adapter.generate.call_args.args[1]
-    assert "Original Name" in sent_message
-    assert "Renamed" not in sent_message
+    assert "Renamed" in sent_message
+    assert "Original Name" not in sent_message

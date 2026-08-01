@@ -88,13 +88,12 @@ CREATE INDEX idx_courses_instructor_id ON courses(instructor_id);
 
 -- ─────────────────────────────────────────────
 -- Canvas Course Names
--- A small, connection-scoped, write-once canvas_course_id -> name index
+-- A small, connection-scoped, refreshed canvas_course_id -> name index
 -- used only by the chat/LLM course-resolution pathway (services/chat.py).
 -- Separate from `courses` because it's keyed by canvas_connection_id (so
 -- two institutions with colliding numeric canvas_course_ids never
--- collide) and rows are never overwritten once inserted (so a rename on
--- Canvas mid-conversation doesn't retroactively change what an
--- in-progress conversation has been calling a course).
+-- collide). Prompt-facing names/codes are read from the current `courses`
+-- row first so Canvas renames do not leave chat stuck on stale labels.
 -- ─────────────────────────────────────────────
 CREATE TABLE canvas_course_names (
     id                      SERIAL PRIMARY KEY,
