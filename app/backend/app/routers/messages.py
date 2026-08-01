@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.core.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
@@ -74,7 +73,7 @@ async def update_draft(
 async def send_draft(
     draft_id: int,
     current_user: User = Depends(get_current_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     conversation_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
@@ -98,7 +97,7 @@ async def send_draft(
 async def list_inbox(
     current_user: User = Depends(get_current_user),
     course_id: int | None = Query(default=None),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await list_inbox_threads(
@@ -111,7 +110,7 @@ async def get_inbox_conversation(
     conversation_id: int,
     current_user: User = Depends(get_current_user),
     course_id: int | None = Query(default=None),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await get_inbox_thread(
@@ -128,7 +127,7 @@ async def generate_inbox_reply_draft_endpoint(
     body: InboxReplyDraftRequest,
     current_user: User = Depends(get_current_user),
     course_id: int | None = Query(default=None),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await generate_inbox_reply_draft(
@@ -150,7 +149,7 @@ async def preview_inbox_reply_endpoint(
     body: InboxReplyPreviewRequest,
     current_user: User = Depends(get_current_user),
     course_id: int | None = Query(default=None),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await preview_inbox_reply(
@@ -169,7 +168,7 @@ async def reply_to_inbox_conversation(
     body: InboxReplyRequest,
     current_user: User = Depends(get_current_user),
     course_id: int | None = Query(default=None),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await reply_to_inbox_thread(

@@ -24,7 +24,7 @@ from app.main import app
 from app.models.user import User
 
 # Same fixed Canvas URL used by test_canvas.py — avoids depending on env config.
-CANVAS_URL = "https://canvas.ubc.ca"
+CANVAS_URL = "https://canvas.example.edu"
 
 
 @contextlib.asynccontextmanager

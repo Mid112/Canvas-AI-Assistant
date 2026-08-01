@@ -15,7 +15,7 @@ from fastapi.testclient import TestClient
 from app.config import settings
 from app.main import app
 
-CANVAS_URL = "https://canvas.ubc.ca"
+CANVAS_URL = "https://canvas.example.edu"
 
 
 @contextlib.asynccontextmanager

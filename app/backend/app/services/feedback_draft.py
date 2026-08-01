@@ -19,7 +19,7 @@ async def generate_feedback_draft(
     local_course_id: int,
     body: FeedbackDraftRequest,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
 ) -> FeedbackDraftResponse:
     await verify_assignment_in_course(

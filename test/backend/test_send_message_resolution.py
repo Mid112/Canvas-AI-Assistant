@@ -13,7 +13,7 @@ from app.main import app
 from app.schemas.canvas import AssignmentResponse
 from app.schemas.student import StudentResponse
 
-CANVAS_URL = "https://canvas.ubc.ca"
+CANVAS_URL = "https://canvas.example.edu"
 
 
 @pytest.fixture(scope="module")

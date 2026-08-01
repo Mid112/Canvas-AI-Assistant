@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.schemas.canvas import AssignmentResponse
 
-CANVAS_URL = "https://canvas.ubc.ca"
+CANVAS_URL = "https://canvas.example.edu"
 
 
 def auth(token: str) -> dict[str, str]:

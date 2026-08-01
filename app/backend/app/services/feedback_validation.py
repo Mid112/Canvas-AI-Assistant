@@ -4,8 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.integrations.canvas import fetch_student_enrollment
 from app.models.course import Course
 from app.models.user import User
-from app.services.canvas import get_assignment, require_canvas_token
-from app.services.course_access import get_owned_course_or_404
+from app.services.canvas import get_assignment, get_owned_course, require_canvas_token
 from app.services.message_validation import check_message_profanity
 
 
@@ -13,7 +12,7 @@ async def verify_canvas_student_in_course(
     local_course_id: int,
     canvas_student_id: int,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
 ) -> Course:
     """Ensure the student belongs to the instructor-owned course roster.
@@ -21,13 +20,14 @@ async def verify_canvas_student_in_course(
     Queries Canvas for this one user's enrollment instead of paging the full
     course roster (which can be hundreds of students).
     """
-    course = await get_owned_course_or_404(local_course_id, user, db)
-    token = require_canvas_token(user, canvas_url)
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
     enrollments = await fetch_student_enrollment(
         int(course.canvas_course_id),
         canvas_student_id,
         token,
-        canvas_url,
+        resolved_canvas_url,
     )
     if not enrollments:
         raise HTTPException(
@@ -41,7 +41,7 @@ async def verify_assignment_in_course(
     local_course_id: int,
     assignment_id: int,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
 ) -> None:
     """Ensure the Canvas assignment exists on the instructor-owned course."""
@@ -82,7 +82,7 @@ async def validate_feedback_for_post(
     canvas_student_id: int,
     new_grade: str,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
     *,
     feedback: str | None = None,

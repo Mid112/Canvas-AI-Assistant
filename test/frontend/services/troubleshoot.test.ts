@@ -7,7 +7,7 @@ vi.mock("@/config/api", () => ({
 }));
 
 const diagnosticsResponse = {
-  canvas_api_url: "https://canvas.ubc.ca",
+  canvas_api_url: "https://canvas.example.edu",
   backend_uptime_seconds: 120,
   health: { overall_status: "healthy", checked_at: "2026-07-21T18:00:00Z", services: {} },
   instructor_canvas: { total: 10, healthy: 9, failing: 1, failing_connections: [] },

@@ -3,8 +3,6 @@ from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator
 
-from app.config import settings
-
 _LOCAL_HTTP_HOSTS = {"localhost", "127.0.0.1", "canvas_lms"}
 
 
@@ -70,7 +68,7 @@ class SecurityStatusResponse(BaseModel):
 
 class CanvasTokenRequest(BaseModel):
     canvas_token: str = Field(min_length=1)
-    canvas_url: str = Field(default_factory=lambda: settings.CANVAS_API_URL)
+    canvas_url: str
 
     @field_validator("canvas_url", mode="before")
     @classmethod

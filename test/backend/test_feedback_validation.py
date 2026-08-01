@@ -1,6 +1,6 @@
 import pytest
 from fastapi import HTTPException
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.feedback_validation import (
     _check_feedback,
@@ -37,10 +37,10 @@ def test_feedback_allows_clean_comment():
 async def test_verify_canvas_student_in_course_rejects_outside_roster():
     db = AsyncMock()
     user = AsyncMock()
-    course = AsyncMock(id=1, canvas_course_id="42")
+    course = MagicMock(id=1, canvas_course_id="42", canvas_url="http://localhost")
     with (
         patch(
-            "app.services.feedback_validation.get_owned_course_or_404",
+            "app.services.feedback_validation.get_owned_course",
             new=AsyncMock(return_value=course),
         ),
         patch(
@@ -62,10 +62,10 @@ async def test_verify_canvas_student_in_course_rejects_outside_roster():
 async def test_verify_canvas_student_in_course_accepts_single_enrollment():
     db = AsyncMock()
     user = AsyncMock()
-    course = AsyncMock(id=1, canvas_course_id="42")
+    course = MagicMock(id=1, canvas_course_id="42", canvas_url="http://localhost")
     with (
         patch(
-            "app.services.feedback_validation.get_owned_course_or_404",
+            "app.services.feedback_validation.get_owned_course",
             new=AsyncMock(return_value=course),
         ),
         patch(

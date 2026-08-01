@@ -91,7 +91,7 @@ describe("DryRunPreviewPage", () => {
         canvas_connections: [
           {
             id: 1,
-            canvas_url: "https://canvas.ubc.ca",
+            canvas_url: "https://canvas.example.edu",
             created_at: "2026-06-26T00:00:00.000Z",
           },
         ],

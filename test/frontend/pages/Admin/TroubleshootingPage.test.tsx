@@ -23,7 +23,7 @@ vi.mock("@/contexts/AuthContext", async () => {
 });
 
 const diagnosticsResponse: troubleshootService.DiagnosticsResponse = {
-  canvas_api_url: "https://canvas.ubc.ca",
+  canvas_api_url: "https://canvas.example.edu",
   backend_uptime_seconds: 185,
   health: { overall_status: "degraded", checked_at: "2026-07-21T18:00:00Z", services: {} },
   instructor_canvas: {
@@ -114,7 +114,7 @@ describe("TroubleshootingPage", () => {
     });
 
     expect(screen.getByText("Degraded")).toBeInTheDocument();
-    expect(screen.getByText("https://canvas.ubc.ca")).toBeInTheDocument();
+    expect(screen.getByText("https://canvas.example.edu")).toBeInTheDocument();
     expect(screen.getByText("3 min")).toBeInTheDocument();
   });
 

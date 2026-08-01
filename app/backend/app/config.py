@@ -56,9 +56,17 @@ class Settings(BaseSettings):
 
     # Canvas API
     # base domain only — /api/v1 is appended by the integration layer
-    CANVAS_API_URL: str = "https://canvas.ubc.ca"
+    CANVAS_API_URL: str | None = None
     CANVAS_API_TOKEN: str = ""
     CANVAS_TOKEN_ENCRYPTION_KEY: str = ""
+
+    @field_validator("CANVAS_API_URL", mode="before")
+    @classmethod
+    def _empty_canvas_url_to_none(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            stripped = v.strip()
+            return stripped or None
+        return v
 
     # LLM
     VLLM_BASE_URL: str = "http://host.docker.internal:8001/v1"

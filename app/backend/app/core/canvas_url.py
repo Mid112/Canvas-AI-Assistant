@@ -43,7 +43,11 @@ def resolve_server_canvas_url(
     from app.config import settings
 
     client_url = normalize_canvas_url(canvas_url)
-    server_url = normalize_canvas_url(server_default or settings.CANVAS_API_URL)
+    configured_default = server_default or settings.CANVAS_API_URL
+    if not configured_default:
+        return client_url
+
+    server_url = normalize_canvas_url(configured_default)
     if canvas_urls_equivalent(client_url, server_url):
         return server_url
     return client_url

@@ -54,26 +54,26 @@ def test_require_canvas_token_no_matching_connection_raises_403():
     user = SimpleNamespace(canvas_connections=[_connection("https://other.canvas.edu")])
 
     with pytest.raises(HTTPException) as exc_info:
-        require_canvas_token(user, "https://canvas.ubc.ca")
+        require_canvas_token(user, "https://canvas.example.edu")
 
     assert exc_info.value.status_code == 403
 
 
 def test_require_canvas_token_corrupted_token_raises_403():
-    user = SimpleNamespace(canvas_connections=[_connection("https://canvas.ubc.ca")])
+    user = SimpleNamespace(canvas_connections=[_connection("https://canvas.example.edu")])
 
     with patch("app.services.canvas.decrypt_canvas_token", side_effect=InvalidToken):
         with pytest.raises(HTTPException) as exc_info:
-            require_canvas_token(user, "https://canvas.ubc.ca")
+            require_canvas_token(user, "https://canvas.example.edu")
 
     assert exc_info.value.status_code == 403
 
 
 def test_require_canvas_token_success_returns_decrypted_token():
-    user = SimpleNamespace(canvas_connections=[_connection("https://canvas.ubc.ca")])
+    user = SimpleNamespace(canvas_connections=[_connection("https://canvas.example.edu")])
 
     with patch("app.services.canvas.decrypt_canvas_token", return_value="plain-token"):
-        result = require_canvas_token(user, "https://canvas.ubc.ca")
+        result = require_canvas_token(user, "https://canvas.example.edu")
 
     assert result == "plain-token"
 
@@ -89,7 +89,7 @@ async def test_get_owned_course_not_found_raises_404():
     user = SimpleNamespace(id=1)
 
     with pytest.raises(HTTPException) as exc_info:
-        await get_owned_course(1, user, "https://canvas.ubc.ca", db)
+        await get_owned_course(1, user, "https://canvas.example.edu", db)
 
     assert exc_info.value.status_code == 404
 
@@ -97,7 +97,7 @@ async def test_get_owned_course_not_found_raises_404():
 @pytest.mark.asyncio
 async def test_get_owned_course_url_mismatch_raises_404():
     db = AsyncMock()
-    course = SimpleNamespace(id=1, canvas_url="https://canvas.ubc.ca")
+    course = SimpleNamespace(id=1, canvas_url="https://canvas.example.edu")
     db.scalar = AsyncMock(return_value=course)
     user = SimpleNamespace(id=1)
 
@@ -108,11 +108,11 @@ async def test_get_owned_course_url_mismatch_raises_404():
 @pytest.mark.asyncio
 async def test_get_owned_course_updates_stale_url_on_match():
     db = AsyncMock()
-    course = SimpleNamespace(id=1, canvas_url="https://canvas.ubc.ca/")
+    course = SimpleNamespace(id=1, canvas_url="https://canvas.example.edu/")
     db.scalar = AsyncMock(return_value=course)
     user = SimpleNamespace(id=1)
 
-    result = await get_owned_course(1, user, "https://canvas.ubc.ca", db)
+    result = await get_owned_course(1, user, "https://canvas.example.edu", db)
 
     assert result is course
 
@@ -126,7 +126,7 @@ async def test_create_canvas_course_posts_to_canvas_and_upserts_local():
     db = _db_assigning_ids()
     db.scalars = AsyncMock(return_value=[])
     user = SimpleNamespace(
-        id=1, canvas_connections=[_connection("https://canvas.ubc.ca")]
+        id=1, canvas_connections=[_connection("https://canvas.example.edu")]
     )
     created = {
         "id": 555,
@@ -158,7 +158,7 @@ async def test_create_canvas_course_posts_to_canvas_and_upserts_local():
         result = await create_canvas_course(
             CourseCreate(name="COSC 499", course_code="COSC499", publish=False),
             user,
-            "https://canvas.ubc.ca",
+            "https://canvas.example.edu",
             db,
         )
 
@@ -166,7 +166,7 @@ async def test_create_canvas_course_posts_to_canvas_and_upserts_local():
         1,
         {"name": "COSC 499", "course_code": "COSC499"},
         "tok",
-        "https://canvas.ubc.ca",
+        "https://canvas.example.edu",
         offer=False,
         enroll_me=True,
     )
@@ -254,7 +254,7 @@ async def test_create_canvas_course_does_not_rewrite_other_canvas_url():
 async def test_create_canvas_course_no_accounts_raises_403():
     db = AsyncMock()
     user = SimpleNamespace(
-        id=1, canvas_connections=[_connection("https://canvas.ubc.ca")]
+        id=1, canvas_connections=[_connection("https://canvas.example.edu")]
     )
 
     with (
@@ -265,7 +265,7 @@ async def test_create_canvas_course_no_accounts_raises_403():
             await create_canvas_course(
                 CourseCreate(name="Blocked"),
                 user,
-                "https://canvas.ubc.ca",
+                "https://canvas.example.edu",
                 db,
             )
 
@@ -278,7 +278,7 @@ async def test_create_canvas_course_treats_zero_parent_account_as_root():
     db = _db_assigning_ids()
     db.scalars = AsyncMock(return_value=[])
     user = SimpleNamespace(
-        id=1, canvas_connections=[_connection("https://canvas.ubc.ca")]
+        id=1, canvas_connections=[_connection("https://canvas.example.edu")]
     )
     created = {
         "id": 7,
@@ -315,7 +315,7 @@ async def test_create_canvas_course_treats_zero_parent_account_as_root():
         await create_canvas_course(
             CourseCreate(name="Root Course"),
             user,
-            "https://canvas.ubc.ca",
+            "https://canvas.example.edu",
             db,
         )
 
@@ -333,7 +333,7 @@ async def test_set_course_published_offers_and_updates_local_state():
     course = SimpleNamespace(
         id=5,
         canvas_course_id="100",
-        canvas_url="https://canvas.ubc.ca",
+        canvas_url="https://canvas.example.edu",
         name="Draft",
         course_code="D100",
         workflow_state="unpublished",
@@ -341,7 +341,7 @@ async def test_set_course_published_offers_and_updates_local_state():
         total_students=0,
     )
     user = SimpleNamespace(
-        id=1, canvas_connections=[_connection("https://canvas.ubc.ca")]
+        id=1, canvas_connections=[_connection("https://canvas.example.edu")]
     )
 
     with (
@@ -364,12 +364,12 @@ async def test_set_course_published_offers_and_updates_local_state():
             5,
             CoursePublishUpdate(published=True),
             user,
-            "https://canvas.ubc.ca",
+            "https://canvas.example.edu",
             db,
         )
 
     mock_update.assert_awaited_once_with(
-        100, {"event": "offer"}, "tok", "https://canvas.ubc.ca"
+        100, {"event": "offer"}, "tok", "https://canvas.example.edu"
     )
     assert course.workflow_state == "available"
     assert result.workflow_state == "available"
@@ -382,7 +382,7 @@ async def test_set_course_published_claims_and_clears_active_preference():
     course = SimpleNamespace(
         id=5,
         canvas_course_id="100",
-        canvas_url="https://canvas.ubc.ca",
+        canvas_url="https://canvas.example.edu",
         name="Live",
         course_code="L100",
         workflow_state="available",
@@ -392,7 +392,7 @@ async def test_set_course_published_claims_and_clears_active_preference():
     pref = SimpleNamespace(active_course_id=5, updated_at=None)
     db.scalar = AsyncMock(return_value=pref)
     user = SimpleNamespace(
-        id=1, canvas_connections=[_connection("https://canvas.ubc.ca")]
+        id=1, canvas_connections=[_connection("https://canvas.example.edu")]
     )
 
     with (
@@ -415,12 +415,12 @@ async def test_set_course_published_claims_and_clears_active_preference():
             5,
             CoursePublishUpdate(published=False),
             user,
-            "https://canvas.ubc.ca",
+            "https://canvas.example.edu",
             db,
         )
 
     mock_update.assert_awaited_once_with(
-        100, {"event": "claim"}, "tok", "https://canvas.ubc.ca"
+        100, {"event": "claim"}, "tok", "https://canvas.example.edu"
     )
     assert course.workflow_state == "unpublished"
     assert pref.active_course_id is None
@@ -433,11 +433,11 @@ async def test_set_course_published_rejects_completed_course():
     course = SimpleNamespace(
         id=5,
         canvas_course_id="100",
-        canvas_url="https://canvas.ubc.ca",
+        canvas_url="https://canvas.example.edu",
         workflow_state="completed",
     )
     user = SimpleNamespace(
-        id=1, canvas_connections=[_connection("https://canvas.ubc.ca")]
+        id=1, canvas_connections=[_connection("https://canvas.example.edu")]
     )
 
     with (
@@ -449,7 +449,7 @@ async def test_set_course_published_rejects_completed_course():
                 5,
                 CoursePublishUpdate(published=False),
                 user,
-                "https://canvas.ubc.ca",
+                "https://canvas.example.edu",
                 db,
             )
 
@@ -464,11 +464,11 @@ async def test_set_course_published_rejects_completed_course():
 async def test_get_courses_inserts_new_and_updates_existing():
     db = _db_assigning_ids()
     user = SimpleNamespace(
-        id=1, canvas_connections=[_connection("https://canvas.ubc.ca")]
+        id=1, canvas_connections=[_connection("https://canvas.example.edu")]
     )
     existing_course = SimpleNamespace(
         id=5, canvas_course_id="100", name="Old Name", term=None,
-        canvas_url="https://canvas.ubc.ca", workflow_state="available",
+        canvas_url="https://canvas.example.edu", workflow_state="available",
     )
     db.scalars = AsyncMock(return_value=[existing_course])
 
@@ -494,7 +494,7 @@ async def test_get_courses_inserts_new_and_updates_existing():
                     candidate.id = 999
         db.flush = AsyncMock(side_effect=_flush_side_effect)
 
-        result = await get_courses(user, "https://canvas.ubc.ca", db)
+        result = await get_courses(user, "https://canvas.example.edu", db)
 
     assert existing_course.name == "COSC 111 Updated"
     assert existing_course.course_code == "COSC111"
@@ -517,13 +517,13 @@ async def test_get_courses_empty_response_returns_empty_list():
     teacher access) get reconciled away instead of lingering forever."""
     db = AsyncMock()
     db.scalars = AsyncMock(return_value=[])
-    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.ubc.ca")])
+    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.example.edu")])
 
     with (
         patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
         patch("app.services.canvas.fetch_courses", new=AsyncMock(return_value=[])),
     ):
-        result = await get_courses(user, "https://canvas.ubc.ca", db)
+        result = await get_courses(user, "https://canvas.example.edu", db)
 
     assert result == []
     db.scalars.assert_awaited_once()
@@ -534,7 +534,7 @@ async def test_get_courses_empty_response_returns_empty_list():
 # ---------------------------------------------------------------------------
 
 def _cached_course_row(
-    id: int, canvas_course_id: str, canvas_url: str = "https://canvas.ubc.ca",
+    id: int, canvas_course_id: str, canvas_url: str = "https://canvas.example.edu",
     workflow_state: str = "available", course_code: str | None = "COSC111",
     total_students: int | None = 42, name: str = "COSC 111", term: str | None = "2025W",
 ) -> SimpleNamespace:
@@ -552,7 +552,7 @@ async def test_get_cached_courses_returns_local_rows_without_calling_canvas():
     user = SimpleNamespace(id=1)
 
     with patch("app.services.canvas.fetch_courses", new=AsyncMock()) as fetch_mock:
-        result = await get_cached_courses(user, "https://canvas.ubc.ca", db)
+        result = await get_cached_courses(user, "https://canvas.example.edu", db)
 
     fetch_mock.assert_not_awaited()
     assert len(result) == 1
@@ -573,7 +573,7 @@ async def test_get_cached_courses_excludes_deleted_and_filters_by_canvas_url():
     ])
     user = SimpleNamespace(id=1)
 
-    result = await get_cached_courses(user, "https://canvas.ubc.ca", db)
+    result = await get_cached_courses(user, "https://canvas.example.edu", db)
 
     assert [c.canvas_id for c in result] == [300]
 
@@ -584,7 +584,7 @@ async def test_get_cached_courses_empty_when_nothing_synced():
     db.scalars = AsyncMock(return_value=[])
     user = SimpleNamespace(id=1)
 
-    result = await get_cached_courses(user, "https://canvas.ubc.ca", db)
+    result = await get_cached_courses(user, "https://canvas.example.edu", db)
 
     assert result == []
 
@@ -597,7 +597,7 @@ async def test_get_cached_courses_coalesces_null_course_code_to_empty_string():
     ])
     user = SimpleNamespace(id=1)
 
-    result = await get_cached_courses(user, "https://canvas.ubc.ca", db)
+    result = await get_cached_courses(user, "https://canvas.example.edu", db)
 
     assert result[0].course_code == ""
     assert result[0].total_students is None
@@ -611,17 +611,17 @@ async def test_get_cached_courses_coalesces_null_course_code_to_empty_string():
 async def test_get_assignments_empty_returns_empty_list():
     db = AsyncMock()
     course = SimpleNamespace(
-        id=1, canvas_course_id="100", canvas_url="https://canvas.ubc.ca",
+        id=1, canvas_course_id="100", canvas_url="https://canvas.example.edu",
         canvas_connections=[],
     )
-    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.ubc.ca")])
+    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.example.edu")])
 
     with (
         patch("app.services.canvas.get_owned_course", new=AsyncMock(return_value=course)),
         patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
         patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=[])),
     ):
-        result = await get_assignments(1, user, "https://canvas.ubc.ca", db)
+        result = await get_assignments(1, user, "https://canvas.example.edu", db)
 
     assert result == []
 
@@ -632,9 +632,9 @@ async def test_get_assignments_upserts_new_and_existing():
     created: list = []
     db.add = Mock(side_effect=created.append)
     course = SimpleNamespace(
-        id=1, canvas_course_id="100", canvas_url="https://canvas.ubc.ca", workflow_state="available",
+        id=1, canvas_course_id="100", canvas_url="https://canvas.example.edu", workflow_state="available",
     )
-    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.ubc.ca")])
+    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.example.edu")])
     existing_assignment = SimpleNamespace(
         id=50, canvas_assignment_id="10", title="Old", description=None, due_date=None, points_possible=None,
     )
@@ -657,7 +657,7 @@ async def test_get_assignments_upserts_new_and_existing():
         patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
         patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=fetched)),
     ):
-        result = await get_assignments(1, user, "https://canvas.ubc.ca", db)
+        result = await get_assignments(1, user, "https://canvas.example.edu", db)
 
     assert existing_assignment.title == "HW1 Updated"
     assert len(result) == 2
@@ -672,9 +672,9 @@ async def test_get_assignments_upserts_new_and_existing():
 async def test_get_assignment_returns_parsed_response():
     db = AsyncMock()
     course = SimpleNamespace(
-        id=1, canvas_course_id="100", canvas_url="https://canvas.ubc.ca", workflow_state="available",
+        id=1, canvas_course_id="100", canvas_url="https://canvas.example.edu", workflow_state="available",
     )
-    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.ubc.ca")])
+    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.example.edu")])
     raw = {"id": 10, "name": "HW1", "course_id": 100}
 
     with (
@@ -682,7 +682,7 @@ async def test_get_assignment_returns_parsed_response():
         patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
         patch("app.services.canvas.fetch_assignment", new=AsyncMock(return_value=raw)),
     ):
-        result = await get_assignment(1, 10, user, "https://canvas.ubc.ca", db)
+        result = await get_assignment(1, 10, user, "https://canvas.example.edu", db)
 
     assert result.id == 10
     assert result.name == "HW1"
@@ -692,9 +692,9 @@ async def test_get_assignment_returns_parsed_response():
 async def test_create_course_assignment_calls_integration_with_course_id():
     db = AsyncMock()
     course = SimpleNamespace(
-        id=1, canvas_course_id="100", canvas_url="https://canvas.ubc.ca", workflow_state="available",
+        id=1, canvas_course_id="100", canvas_url="https://canvas.example.edu", workflow_state="available",
     )
-    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.ubc.ca")])
+    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.example.edu")])
     raw = {"id": 30, "name": "New Assignment", "course_id": 100}
     payload = AssignmentCreate(name="New Assignment")
 
@@ -703,7 +703,7 @@ async def test_create_course_assignment_calls_integration_with_course_id():
         patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
         patch("app.services.canvas.create_assignment", new=AsyncMock(return_value=raw)) as mock_create,
     ):
-        result = await create_course_assignment(1, payload, user, "https://canvas.ubc.ca", db)
+        result = await create_course_assignment(1, payload, user, "https://canvas.example.edu", db)
 
     assert result.id == 30
     mock_create.assert_awaited_once()
@@ -714,9 +714,9 @@ async def test_create_course_assignment_calls_integration_with_course_id():
 async def test_update_course_assignment_calls_integration():
     db = AsyncMock()
     course = SimpleNamespace(
-        id=1, canvas_course_id="100", canvas_url="https://canvas.ubc.ca", workflow_state="available",
+        id=1, canvas_course_id="100", canvas_url="https://canvas.example.edu", workflow_state="available",
     )
-    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.ubc.ca")])
+    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.example.edu")])
     raw = {"id": 30, "name": "Updated", "course_id": 100}
     payload = AssignmentUpdate(name="Updated")
 
@@ -725,7 +725,7 @@ async def test_update_course_assignment_calls_integration():
         patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
         patch("app.services.canvas.update_assignment", new=AsyncMock(return_value=raw)),
     ):
-        result = await update_course_assignment(1, 30, payload, user, "https://canvas.ubc.ca", db)
+        result = await update_course_assignment(1, 30, payload, user, "https://canvas.example.edu", db)
 
     assert result.name == "Updated"
 
@@ -738,9 +738,9 @@ async def test_update_course_assignment_calls_integration():
 async def test_send_course_message_with_recipients_uses_conversation():
     db = AsyncMock()
     course = SimpleNamespace(
-        id=1, canvas_course_id="100", canvas_url="https://canvas.ubc.ca", workflow_state="available",
+        id=1, canvas_course_id="100", canvas_url="https://canvas.example.edu", workflow_state="available",
     )
-    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.ubc.ca")])
+    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.example.edu")])
 
     with (
         patch("app.services.canvas.get_owned_course", new=AsyncMock(return_value=course)),
@@ -749,7 +749,7 @@ async def test_send_course_message_with_recipients_uses_conversation():
         patch("app.services.canvas.create_announcement", new=AsyncMock()) as mock_announce,
     ):
         result = await send_course_message(
-            1, "Subject", "Body", user, "https://canvas.ubc.ca", db,
+            1, "Subject", "Body", user, "https://canvas.example.edu", db,
             recipient_canvas_user_ids=[42, 43],
         )
 
@@ -763,9 +763,9 @@ async def test_send_course_message_with_recipients_uses_conversation():
 async def test_send_course_message_without_recipients_uses_announcement():
     db = AsyncMock()
     course = SimpleNamespace(
-        id=1, canvas_course_id="100", canvas_url="https://canvas.ubc.ca", workflow_state="available",
+        id=1, canvas_course_id="100", canvas_url="https://canvas.example.edu", workflow_state="available",
     )
-    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.ubc.ca")])
+    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.example.edu")])
     roster = [SimpleNamespace(id=1), SimpleNamespace(id=2), SimpleNamespace(id=3)]
 
     with (
@@ -775,7 +775,7 @@ async def test_send_course_message_without_recipients_uses_announcement():
         patch("app.services.student.get_students", new=AsyncMock(return_value=roster)),
     ):
         result = await send_course_message(
-            1, "Subject", "Body", user, "https://canvas.ubc.ca", db,
+            1, "Subject", "Body", user, "https://canvas.example.edu", db,
         )
 
     assert result.delivery_mode == "announcement"
@@ -838,7 +838,7 @@ async def test_fill_submission_contact_fields_enriches_sparse_rows():
         "app.services.canvas.fetch_user_profile",
         new=AsyncMock(return_value={"primary_email": "alice@example.com", "login_id": "alice"}),
     ):
-        await _fill_submission_contact_fields([submission], "tok", "https://canvas.ubc.ca")
+        await _fill_submission_contact_fields([submission], "tok", "https://canvas.example.edu")
 
     assert submission.student_email == "alice@example.com"
     assert submission.student_login_id == "alice"
@@ -854,7 +854,7 @@ async def test_fill_submission_contact_fields_swallows_profile_fetch_failure():
         "app.services.canvas.fetch_user_profile",
         new=AsyncMock(side_effect=HTTPException(status_code=404, detail="not found")),
     ):
-        await _fill_submission_contact_fields([submission], "tok", "https://canvas.ubc.ca")
+        await _fill_submission_contact_fields([submission], "tok", "https://canvas.example.edu")
 
     assert submission.student_email is None
 
@@ -864,7 +864,7 @@ async def test_fill_submission_contact_fields_skips_rows_with_no_name():
     submission = _parse_submission({"id": 1, "assignment_id": 2, "user_id": 3, "workflow_state": "unsubmitted"})
 
     with patch("app.services.canvas.fetch_user_profile", new=AsyncMock()) as mock_profile:
-        await _fill_submission_contact_fields([submission], "tok", "https://canvas.ubc.ca")
+        await _fill_submission_contact_fields([submission], "tok", "https://canvas.example.edu")
 
     mock_profile.assert_not_called()
 
@@ -877,9 +877,9 @@ async def test_fill_submission_contact_fields_skips_rows_with_no_name():
 async def test_get_submissions_caches_new_and_updates_existing():
     db = _db_assigning_ids()
     course = SimpleNamespace(
-        id=1, canvas_course_id="100", canvas_url="https://canvas.ubc.ca", workflow_state="available",
+        id=1, canvas_course_id="100", canvas_url="https://canvas.example.edu", workflow_state="available",
     )
-    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.ubc.ca")])
+    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.example.edu")])
 
     existing_assignment_row = SimpleNamespace(id=77)
     existing_submission = SimpleNamespace(
@@ -902,7 +902,7 @@ async def test_get_submissions_caches_new_and_updates_existing():
         patch("app.services.canvas.fetch_user_profile", new=AsyncMock()),
         patch("app.services.canvas._cache_submissions_safely", new=AsyncMock()) as mock_cache,
     ):
-        result = await get_submissions(1, 10, user, "https://canvas.ubc.ca", db)
+        result = await get_submissions(1, 10, user, "https://canvas.example.edu", db)
 
     assert len(result) == 2
     mock_cache.assert_awaited_once()
@@ -917,9 +917,9 @@ async def test_get_submissions_creates_assignment_cache_row_when_missing():
     Submission rows have something to key off."""
     db = _db_assigning_ids()
     course = SimpleNamespace(
-        id=1, canvas_course_id="100", canvas_url="https://canvas.ubc.ca", workflow_state="available",
+        id=1, canvas_course_id="100", canvas_url="https://canvas.example.edu", workflow_state="available",
     )
-    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.ubc.ca")])
+    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.example.edu")])
 
     db.scalar = AsyncMock(return_value=None)  # no cached Assignment row yet
     db.scalars = AsyncMock(return_value=[])  # no cached Submission rows yet
@@ -932,7 +932,7 @@ async def test_get_submissions_creates_assignment_cache_row_when_missing():
         patch("app.services.canvas.fetch_submissions", new=AsyncMock(return_value=fetched)),
         patch("app.services.canvas._cache_submissions_safely", new=AsyncMock()) as mock_cache,
     ):
-        result = await get_submissions(1, 10, user, "https://canvas.ubc.ca", db)
+        result = await get_submissions(1, 10, user, "https://canvas.example.edu", db)
 
     assert len(result) == 1
     mock_cache.assert_awaited_once()
@@ -943,7 +943,7 @@ async def test_get_submissions_creates_assignment_cache_row_when_missing():
 @pytest.mark.asyncio
 async def test_get_submissions_authorization_stops_before_canvas_fetch():
     db = AsyncMock()
-    user = SimpleNamespace(id=2, canvas_connections=[_connection("https://canvas.ubc.ca")])
+    user = SimpleNamespace(id=2, canvas_connections=[_connection("https://canvas.example.edu")])
 
     with (
         patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
@@ -963,7 +963,7 @@ async def test_get_submissions_authorization_stops_before_canvas_fetch():
         ) as cache_mock,
     ):
         with pytest.raises(HTTPException) as exc_info:
-            await get_submissions(999, 10, user, "https://canvas.ubc.ca", db)
+            await get_submissions(999, 10, user, "https://canvas.example.edu", db)
 
     assert exc_info.value.status_code == 404
     fetch_mock.assert_not_awaited()
@@ -976,9 +976,9 @@ async def test_get_submissions_cache_failure_does_not_touch_caller_transaction()
     submissions are still returned even if the local write fails."""
     db = AsyncMock()
     course = SimpleNamespace(
-        id=1, canvas_course_id="100", canvas_url="https://canvas.ubc.ca", workflow_state="available",
+        id=1, canvas_course_id="100", canvas_url="https://canvas.example.edu", workflow_state="available",
     )
-    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.ubc.ca")])
+    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.example.edu")])
     fetched = [{"id": 1, "assignment_id": 10, "user_id": 100, "workflow_state": "unsubmitted"}]
 
     with (
@@ -987,7 +987,7 @@ async def test_get_submissions_cache_failure_does_not_touch_caller_transaction()
         patch("app.services.canvas.fetch_submissions", new=AsyncMock(return_value=fetched)),
         patch("app.services.canvas._cache_submissions_safely", new=AsyncMock()) as mock_cache,
     ):
-        result = await get_submissions(1, 10, user, "https://canvas.ubc.ca", db)
+        result = await get_submissions(1, 10, user, "https://canvas.example.edu", db)
 
     assert len(result) == 1
     mock_cache.assert_awaited_once()
@@ -1057,7 +1057,7 @@ async def test_get_active_course_returns_none_when_preference_has_no_course():
 @pytest.mark.asyncio
 async def test_get_active_course_returns_parsed_response():
     db = AsyncMock()
-    course = SimpleNamespace(id=5, canvas_course_id="100", canvas_url="https://canvas.ubc.ca", name="COSC 111", term="2026W1")
+    course = SimpleNamespace(id=5, canvas_course_id="100", canvas_url="https://canvas.example.edu", name="COSC 111", term="2026W1")
     db.scalar = AsyncMock(return_value=SimpleNamespace(active_course=course))
     user = SimpleNamespace(id=1)
 
@@ -1082,7 +1082,7 @@ async def test_set_active_course_not_found_raises_404():
 @pytest.mark.asyncio
 async def test_set_active_course_updates_existing_preference():
     db = AsyncMock()
-    course = SimpleNamespace(id=5, canvas_course_id="100", canvas_url="https://canvas.ubc.ca", name="COSC 111", term=None)
+    course = SimpleNamespace(id=5, canvas_course_id="100", canvas_url="https://canvas.example.edu", name="COSC 111", term=None)
     pref = SimpleNamespace(active_course_id=None, updated_at=None)
     db.scalar = AsyncMock(side_effect=[course, pref])
     user = SimpleNamespace(id=1)
@@ -1096,7 +1096,7 @@ async def test_set_active_course_updates_existing_preference():
 @pytest.mark.asyncio
 async def test_set_active_course_creates_new_preference_when_none_exists():
     db = _db_assigning_ids()
-    course = SimpleNamespace(id=5, canvas_course_id="100", canvas_url="https://canvas.ubc.ca", name="COSC 111", term=None)
+    course = SimpleNamespace(id=5, canvas_course_id="100", canvas_url="https://canvas.example.edu", name="COSC 111", term=None)
     db.scalar = AsyncMock(side_effect=[course, None])
     user = SimpleNamespace(id=1)
 

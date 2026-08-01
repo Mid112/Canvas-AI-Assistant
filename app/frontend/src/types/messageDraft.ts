@@ -34,6 +34,8 @@ export interface FetchMessageDraftOptions {
   emptyRecipients?: boolean;
   simulateLoadError?: boolean;
   conversationId?: number;
+  /** Canvas base URL resolved from the selected course or institution. */
+  canvasUrl?: string;
 }
 
 export interface SendMessageDraftPayload {
@@ -43,6 +45,7 @@ export interface SendMessageDraftPayload {
   recipientIds: string[];
   recipients?: MessageRecipient[];
   conversationId?: number;
+  canvasUrl?: string;
 }
 
 export type MessageDraftPageState =

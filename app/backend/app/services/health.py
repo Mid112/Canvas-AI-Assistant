@@ -89,6 +89,12 @@ async def check_canvas() -> ServiceHealth:
     # Per-instructor Canvas connectivity is a separate signal, surfaced only
     # in the Troubleshooting dashboard (services/troubleshoot.py) — it's
     # deep-dive detail, not part of the at-a-glance platform status.
+    if not settings.CANVAS_API_URL:
+        return ServiceHealth(
+            status="degraded",
+            error_detail="No system Canvas URL configured.",
+        )
+
     canvas_url = resolve_server_canvas_url(settings.CANVAS_API_URL)
     start = time.monotonic()
     try:

@@ -37,6 +37,8 @@ from app.integrations.canvas import (
     validate_token,
 )
 
+CANVAS_URL = "https://canvas.test"
+
 
 def _client_raising(exc: Exception, *, method: str = "get") -> MagicMock:
     """A mock httpx.AsyncClient() context manager whose given HTTP method
@@ -52,19 +54,19 @@ def _client_raising(exc: Exception, *, method: str = "get") -> MagicMock:
 # Every (callable, args, kwargs, http-method-used) combination that shares
 # the timeout->504 / request-error->502 mapping.
 _ENDPOINTS = [
-    (validate_token, ("tok",), {}, "get"),
-    (fetch_courses, ("tok",), {}, "get"),
-    (fetch_assignments, (1, "tok"), {}, "get"),
-    (fetch_assignment, (1, 2, "tok"), {}, "get"),
-    (fetch_submissions, (1, 2, "tok"), {}, "get"),
-    (fetch_user_profile, (1, "tok"), {}, "get"),
-    (fetch_enrollments, (1, "tok"), {}, "get"),
-    (create_assignment, (1, {"name": "A"}, "tok"), {}, "post"),
-    (update_assignment, (1, 2, {"name": "A"}, "tok"), {}, "put"),
-    (update_submission_grade, (1, 2, 3, "88", "tok"), {}, "put"),
-    (create_announcement, (1, "Subject", "Body", "tok"), {}, "post"),
-    (post_announcement, (1, "Subject", "Body", "tok"), {}, "post"),
-    (send_conversation, (1, [10, 11], "Subject", "Body", "tok"), {}, "post"),
+    (validate_token, ("tok", CANVAS_URL), {}, "get"),
+    (fetch_courses, ("tok", CANVAS_URL), {}, "get"),
+    (fetch_assignments, (1, "tok", CANVAS_URL), {}, "get"),
+    (fetch_assignment, (1, 2, "tok", CANVAS_URL), {}, "get"),
+    (fetch_submissions, (1, 2, "tok", CANVAS_URL), {}, "get"),
+    (fetch_user_profile, (1, "tok", CANVAS_URL), {}, "get"),
+    (fetch_enrollments, (1, "tok", CANVAS_URL), {}, "get"),
+    (create_assignment, (1, {"name": "A"}, "tok", CANVAS_URL), {}, "post"),
+    (update_assignment, (1, 2, {"name": "A"}, "tok", CANVAS_URL), {}, "put"),
+    (update_submission_grade, (1, 2, 3, "88", "tok", CANVAS_URL), {}, "put"),
+    (create_announcement, (1, "Subject", "Body", "tok", CANVAS_URL), {}, "post"),
+    (post_announcement, (1, "Subject", "Body", "tok", CANVAS_URL), {}, "post"),
+    (send_conversation, (1, [10, 11], "Subject", "Body", "tok", CANVAS_URL), {}, "post"),
 ]
 
 
@@ -107,8 +109,8 @@ def _client_returning(response: httpx.Response, *, method: str = "get") -> Magic
 @pytest.mark.parametrize(
     "func,args",
     [
-        (fetch_assignment, (1, 2, "tok")),
-        (fetch_user_profile, (1, "tok")),
+        (fetch_assignment, (1, 2, "tok", CANVAS_URL)),
+        (fetch_user_profile, (1, "tok", CANVAS_URL)),
     ],
 )
 async def test_single_resource_get_success_returns_json_body(func, args):
@@ -126,19 +128,19 @@ async def test_single_resource_get_success_returns_json_body(func, args):
 async def test_validate_token_success_does_not_raise():
     response = httpx.Response(200, json={"id": 1}, request=httpx.Request("GET", "https://canvas.test/api/v1/users/self"))
     with patch("app.integrations.canvas.httpx.AsyncClient", return_value=_client_returning(response, method="get")):
-        await validate_token("tok")  # no exception raised
+        await validate_token("tok", CANVAS_URL)  # no exception raised
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "func,args,method",
     [
-        (create_assignment, (1, {"name": "A"}, "tok"), "post"),
-        (update_assignment, (1, 2, {"name": "A"}, "tok"), "put"),
-        (update_submission_grade, (1, 2, 3, "88", "tok"), "put"),
-        (create_announcement, (1, "Subject", "Body", "tok"), "post"),
-        (post_announcement, (1, "Subject", "Body", "tok"), "post"),
-        (send_conversation, (1, [10, 11], "Subject", "Body", "tok"), "post"),
+        (create_assignment, (1, {"name": "A"}, "tok", CANVAS_URL), "post"),
+        (update_assignment, (1, 2, {"name": "A"}, "tok", CANVAS_URL), "put"),
+        (update_submission_grade, (1, 2, 3, "88", "tok", CANVAS_URL), "put"),
+        (create_announcement, (1, "Subject", "Body", "tok", CANVAS_URL), "post"),
+        (post_announcement, (1, "Subject", "Body", "tok", CANVAS_URL), "post"),
+        (send_conversation, (1, [10, 11], "Subject", "Body", "tok", CANVAS_URL), "post"),
     ],
 )
 async def test_write_endpoint_success_returns_json_body(func, args, method):
@@ -223,7 +225,7 @@ async def test_check_token_status_network_failure_returns_invalid():
         "app.integrations.canvas.httpx.AsyncClient",
         return_value=_client_raising(httpx.RequestError("unreachable"), method="get"),
     ):
-        result = await check_token_status("tok")
+        result = await check_token_status("tok", CANVAS_URL)
 
     assert result == "invalid"
 
@@ -238,7 +240,7 @@ async def test_check_token_status_401_is_expired():
     cm.__aexit__ = AsyncMock(return_value=False)
 
     with patch("app.integrations.canvas.httpx.AsyncClient", return_value=cm):
-        result = await check_token_status("tok")
+        result = await check_token_status("tok", CANVAS_URL)
 
     assert result == "expired"
 
@@ -253,7 +255,7 @@ async def test_check_token_status_success_is_valid():
     cm.__aexit__ = AsyncMock(return_value=False)
 
     with patch("app.integrations.canvas.httpx.AsyncClient", return_value=cm):
-        result = await check_token_status("tok")
+        result = await check_token_status("tok", CANVAS_URL)
 
     assert result == "valid"
 
@@ -268,7 +270,7 @@ async def test_check_token_status_other_error_is_invalid():
     cm.__aexit__ = AsyncMock(return_value=False)
 
     with patch("app.integrations.canvas.httpx.AsyncClient", return_value=cm):
-        result = await check_token_status("tok")
+        result = await check_token_status("tok", CANVAS_URL)
 
     assert result == "invalid"
 
@@ -337,8 +339,8 @@ async def test_get_with_retry_no_retry_on_success():
 @pytest.mark.parametrize(
     "func,args",
     [
-        (fetch_enrollments, (1, "tok")),
-        (fetch_student_enrollment, (1, 2, "tok")),
+        (fetch_enrollments, (1, "tok", CANVAS_URL)),
+        (fetch_student_enrollment, (1, 2, "tok", CANVAS_URL)),
     ],
 )
 async def test_enrollment_fetchers_request_active_state_only(func, args):

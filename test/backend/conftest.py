@@ -117,6 +117,46 @@ def reset_rate_limiter_state():
     app.state.limiter.reset()
 
 
+@pytest.fixture
+def create_local_course_for_user_email():
+    """Create an owned local course without requiring a Canvas token.
+
+    Use this for route tests that need to isolate token lookup behavior from
+    course ownership lookup.
+    """
+    from app.config import settings as _settings
+    from app.models.course import Course
+    from app.models.user import User
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    def _factory(email: str, *, canvas_url: str, canvas_course_id: str | None = None) -> int:
+        async def _create() -> int:
+            engine = create_async_engine(_settings.DATABASE_URL)
+            try:
+                async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+                    user = await db.scalar(select(User).where(User.email == email))
+                    assert user is not None
+                    course = Course(
+                        canvas_course_id=canvas_course_id or str(uuid.uuid4().int % 10_000_000),
+                        canvas_url=canvas_url,
+                        name="CPSC 310",
+                        course_code="CPSC310",
+                        workflow_state="available",
+                        instructor_id=user.id,
+                    )
+                    db.add(course)
+                    await db.commit()
+                    await db.refresh(course)
+                    return course.id
+            finally:
+                await engine.dispose()
+
+        return asyncio.run(_create())
+
+    return _factory
+
+
 @pytest.fixture(scope="module")
 def admin_credentials():
     """Create a fresh admin user directly in the DB and return its credentials.
