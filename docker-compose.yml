@@ -82,13 +82,14 @@ services:
     restart: unless-stopped
     environment:
       # SSRF allowlist for Canvas hosts the MCP sidecar may call when the
-      # backend forwards a user/course canvas_url. Configure this in .env for
-      # production; see .env.example. Leaving it empty makes MCP fail closed.
+      # backend forwards a user/course canvas_url. Configure this in .env;
+      # see .env.example. Leaving it empty makes MCP fail closed without
+      # preventing the rest of the Compose stack from starting.
       CANVAS_API_URL: ${CANVAS_API_URL:-}
       CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-placeholder}
       # Same secret the backend sends on /tools/call and /mcp (Bearer).
       MCP_SHARED_SECRET: ${MCP_SHARED_SECRET:-local-mcp-shared-secret}
-      MCP_ALLOWED_CANVAS_HOSTS: ${MCP_ALLOWED_CANVAS_HOSTS:?Set MCP_ALLOWED_CANVAS_HOSTS to comma-separated Canvas hostnames. See .env.example.}
+      MCP_ALLOWED_CANVAS_HOSTS: ${MCP_ALLOWED_CANVAS_HOSTS:-}
     # No host port publish — mcp_server stays on backend_net only so
     # /tools/call and /mcp are not open Canvas proxies on the host (#1273 review).
     expose:
