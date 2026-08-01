@@ -137,12 +137,15 @@ class CanvasTokenRequiredError(HTTPException):
     """Raised in place of a bare HTTPException when a Canvas action is
     attempted with no connected token, so callers (services/chat.py) can
     special-case this into an actionable, non-technical chat message instead
-    of surfacing the raw 'PATCH to /api/v1/auth/me/canvas-token' detail."""
+    of surfacing an internal API patch path."""
 
     def __init__(self, canvas_url: str):
         super().__init__(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"No Canvas token for {canvas_url}. PATCH to /api/v1/auth/me/canvas-token first.",
+            detail=(
+                f"No Canvas token for {canvas_url}. "
+                "Reconnect Canvas in Settings, then try again."
+            ),
         )
 
 

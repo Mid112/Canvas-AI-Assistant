@@ -225,7 +225,7 @@ describe("InstructorCoursesPage", () => {
     const { CanvasApiError } = await import("@/services/canvas");
     mockedFetchCourses.mockRejectedValue(
       new CanvasApiError(
-        "No Canvas token for https://canvas.example.edu. PATCH to /api/v1/auth/me/canvas-token first.",
+        "No Canvas token for https://canvas.ubc.ca. Reconnect Canvas in Settings, then try again.",
         403,
       ),
     );
