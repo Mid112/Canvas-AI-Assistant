@@ -105,14 +105,10 @@ beforeEach(() => {
 });
 
 describe("InstructorAssistantPage", () => {
-  // Verifies: Renders the assistant header, suggested actions, and chat.
-  it("renders the assistant header, suggested actions, and chat", () => {
+  // Verifies: Renders the assistant page body; the global layout owns the title.
+  it("renders suggested actions and chat", () => {
     renderWithInstitution(<InstructorAssistantPage />);
 
-    expect(screen.getByText("AI Assistant")).toBeInTheDocument();
-    expect(
-      screen.getByText("Canvas Workflow Management Assistant"),
-    ).toBeInTheDocument();
     expect(screen.getByText("Suggested actions")).toBeInTheDocument();
     expect(
       screen.getByText(/Hello! I'm your Canvas AI Assistant/),

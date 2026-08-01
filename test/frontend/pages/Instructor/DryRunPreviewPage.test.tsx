@@ -142,7 +142,9 @@ describe("DryRunPreviewPage", () => {
 
     await user.click(await screen.findByRole("button", { name: /Reject/ }));
 
-    expect(await screen.findByText("AI Assistant")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("textbox", { name: "Chat message" }),
+    ).toBeInTheDocument();
   });
 
   // Verifies: Returns to the assistant with the original request prefilled when modify is clicked.
@@ -152,8 +154,7 @@ describe("DryRunPreviewPage", () => {
 
     await user.click(await screen.findByRole("button", { name: /Modify Request/ }));
 
-    expect(await screen.findByText("AI Assistant")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Chat message" })).toHaveValue(
+    expect(await screen.findByRole("textbox", { name: "Chat message" })).toHaveValue(
       mockStudentReminderPreview.originalRequest,
     );
   });
