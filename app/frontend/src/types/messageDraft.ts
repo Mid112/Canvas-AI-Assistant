@@ -34,6 +34,8 @@ export interface FetchMessageDraftOptions {
   emptyRecipients?: boolean;
   simulateLoadError?: boolean;
   conversationId?: number;
+  /** Canvas base URL resolved from the selected course or institution. */
+  canvasUrl?: string;
 }
 
 export interface SendMessageDraftPayload {
