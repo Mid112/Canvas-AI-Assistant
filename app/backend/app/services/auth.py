@@ -28,7 +28,7 @@ from app.schemas.auth import (
     TokenResponse,
 )
 from app.services.admin import get_admin_settings
-from app.services.sessions import issue_token_for_user, revoke_session
+from app.services.sessions import issue_token_for_user, revoke_other_sessions, revoke_session
 
 
 async def register_user(db: AsyncSession, body: RegisterRequest) -> TokenResponse:
@@ -184,13 +184,19 @@ async def delete_account(db: AsyncSession, user: User, password: str) -> None:
     await db.commit()
 
 
-async def change_password(db: AsyncSession, user: User, body: ChangePasswordRequest) -> None:
+async def change_password(
+    db: AsyncSession, user: User, body: ChangePasswordRequest, current_token: str
+) -> None:
     if not verify_password(body.current_password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Current password is incorrect")
 
     user.hashed_password = hash_password(body.new_password)
     db.add(AuditLogSession(user_id=user.id, action="password_changed", details={}))
-    await db.commit()
+    # Keep the Settings session that performed the change usable; revoke every
+    # other device session so a stolen/old token cannot outlive the password
+    # change (mirrors confirm_password_reset, but preserves current — #1480).
+    # revoke_other_sessions commits the password update + session deletes together.
+    await revoke_other_sessions(db, user, current_token)
 
 
 async def request_password_reset(db: AsyncSession, email: str) -> str | None:
