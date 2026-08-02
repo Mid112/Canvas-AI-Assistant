@@ -20,6 +20,7 @@ from app.schemas.auth import (
     NotificationSettingsUpdate,
     PasswordResetConfirmRequest,
     PasswordResetRequest,
+    PasswordResetRequestResponse,
     ProfileUpdateRequest,
     RegisterRequest,
     SecurityStatusResponse,
@@ -81,9 +82,12 @@ async def logout(
         await logout_user(db, credentials.credentials, current_user)
 
 
-@router.post("/password-reset/request", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/password-reset/request", response_model=PasswordResetRequestResponse)
 async def password_reset_request(body: PasswordResetRequest, db: AsyncSession = Depends(get_db)):
-    await request_password_reset(db, body.email)
+    # No SMTP yet — return the raw token when an account matches so the
+    # frontend can finish confirm. Unknown emails still get 200 with null.
+    token = await request_password_reset(db, body.email)
+    return PasswordResetRequestResponse(reset_token=token)
 
 
 @router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)

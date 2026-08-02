@@ -217,4 +217,30 @@ export async function fetchSecurityStatus(
   );
 }
 
+export interface PasswordResetRequestResponse {
+  reset_token: string | null;
+}
+
+export async function requestPasswordReset(
+  email: string,
+): Promise<PasswordResetRequestResponse> {
+  return request<PasswordResetRequestResponse>("/auth/password-reset/request", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function confirmPasswordReset(
+  token: string,
+  newPassword: string,
+): Promise<void> {
+  return request<void>("/auth/password-reset/confirm", {
+    method: "POST",
+    body: JSON.stringify({
+      token,
+      new_password: newPassword,
+    }),
+  });
+}
+
 export { AuthApiError };

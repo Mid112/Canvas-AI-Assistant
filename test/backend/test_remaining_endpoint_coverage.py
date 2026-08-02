@@ -180,7 +180,8 @@ def test_password_reset_confirm_success_and_invalid_token(client):
 
     with patch("app.services.auth.generate_reset_token", return_value=known_token):
         request = client.post("/api/v1/auth/password-reset/request", json={"email": email})
-    assert request.status_code == 204
+    assert request.status_code == 200
+    assert request.json()["reset_token"] == known_token
 
     bad = client.post(
         "/api/v1/auth/password-reset/confirm",

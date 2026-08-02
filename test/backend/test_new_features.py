@@ -67,7 +67,30 @@ def test_password_reset_flow(client):
         json={"name": "Reset User", "email": email, "password": "secret123"},
     )
     request = client.post("/api/v1/auth/password-reset/request", json={"email": email})
-    assert request.status_code == 204
+    assert request.status_code == 200
+    token = request.json()["reset_token"]
+    assert token
+
+    confirm = client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": token, "new_password": "brandnew99"},
+    )
+    assert confirm.status_code == 204
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "brandnew99"},
+    )
+    assert login.status_code == 200
+
+
+def test_password_reset_request_unknown_email_returns_null_token(client):
+    request = client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": f"missing_{uuid.uuid4()}@example.com"},
+    )
+    assert request.status_code == 200
+    assert request.json()["reset_token"] is None
 
 
 # Verifies: Security status.

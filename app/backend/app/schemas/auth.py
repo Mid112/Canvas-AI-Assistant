@@ -31,6 +31,12 @@ class PasswordResetRequest(BaseModel):
     email: EmailStr
 
 
+class PasswordResetRequestResponse(BaseModel):
+    # Returned so the client can complete reset without email delivery.
+    # Null when no matching account exists (same response shape either way).
+    reset_token: str | None = None
+
+
 class PasswordResetConfirmRequest(BaseModel):
     token: str = Field(min_length=1)
     new_password: str = Field(min_length=8)
