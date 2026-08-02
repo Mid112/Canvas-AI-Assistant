@@ -5,7 +5,12 @@ import { Route, Routes } from "react-router-dom";
 
 import { StudentMessageDraftPage } from "@/pages/StudentMessageDraftPage";
 import { fetchMessageDraft, sendMessageDraft } from "@/services/messageDraft";
-import { emptyRecipientsMessageDraft, mockMessageDraft } from "@/data/mockMessageDraft";
+import { listMessageTemplates } from "@/services/messageTemplates";
+import {
+  emptyRecipientsMessageDraft,
+  mockMessageDraft,
+  mockMessageTemplates,
+} from "@/data/mockMessageDraft";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 vi.mock("@/services/messageDraft", () => ({
@@ -15,6 +20,16 @@ vi.mock("@/services/messageDraft", () => ({
   isMessageDraftSendMocked: false,
   fetchMessageDraft: vi.fn(),
   sendMessageDraft: vi.fn(),
+}));
+
+vi.mock("@/services/messageTemplates", () => ({
+  MessageTemplateApiError: class MessageTemplateApiError extends Error {
+    name = "MessageTemplateApiError";
+  },
+  listMessageTemplates: vi.fn(),
+  createMessageTemplate: vi.fn(),
+  updateMessageTemplate: vi.fn(),
+  deleteMessageTemplate: vi.fn(),
 }));
 
 vi.mock("@/contexts/AuthContext", async () => {
@@ -39,6 +54,7 @@ vi.mock("@/contexts/AuthContext", async () => {
 
 const mockedFetch = vi.mocked(fetchMessageDraft);
 const mockedSend = vi.mocked(sendMessageDraft);
+const mockedListTemplates = vi.mocked(listMessageTemplates);
 
 function renderPage(initialEntry = "/instructor/messages") {
   return renderWithRouter(
@@ -61,6 +77,7 @@ describe("StudentMessageDraftPage", () => {
       recipients: [...mockMessageDraft.recipients],
     });
     mockedSend.mockResolvedValue();
+    mockedListTemplates.mockResolvedValue([...mockMessageTemplates]);
   });
 
   // Verifies: Loads and displays the mock message draft.
