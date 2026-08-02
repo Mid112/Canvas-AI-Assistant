@@ -1,7 +1,7 @@
-import { screen, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import { InstructorAssignmentCreatePage } from "@/pages/Instructor/InstructorAssignmentCreatePage";
 import {
@@ -37,8 +37,12 @@ vi.mock("@/contexts/AuthContext", () => ({
   }),
 }));
 
+const canvasUrlHolder = vi.hoisted(() => ({
+  current: "https://canvas.university.edu" as string | undefined,
+}));
+
 vi.mock("@/hooks/useCanvasConnectionUrl", () => ({
-  useCanvasConnectionUrl: () => "https://canvas.university.edu",
+  useCanvasConnectionUrl: () => canvasUrlHolder.current,
 }));
 
 vi.mock("@/services/assignmentCreator", () => ({
@@ -115,6 +119,7 @@ describe("InstructorAssignmentCreatePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    canvasUrlHolder.current = "https://canvas.university.edu";
     mockedGenerate.mockResolvedValue({
       name: "Python Functions Quiz",
       description: "Complete a short quiz covering functions.",
@@ -676,5 +681,74 @@ describe("InstructorAssignmentCreatePage", () => {
       await screen.findByDisplayValue("it is about beef corndogs"),
     ).toBeInTheDocument();
     expect(mockedGenerate).not.toHaveBeenCalled();
+  });
+  // Verifies: Regression (#15) — canvasUrl resolves from AuthContext /
+  // InstitutionContext, so it is undefined on first render and populated a
+  // tick later. That dep change re-runs the effect: the previous run's
+  // cleanup cancels the in-flight call, and the single-flight ref blocks
+  // the new run from starting another. If cancellation also gates the
+  // "settled" flag, the spinner never clears and the description never
+  // arrives — the backend answers in under a second, but the UI hangs.
+  it("still settles when canvasUrl resolves mid-flight", async () => {
+    canvasUrlHolder.current = undefined;
+    const pending = deferred<{
+      name: string;
+      description: string;
+      dueDate: string;
+      pointsPossible: number;
+    }>();
+    mockedGenerate.mockReturnValue(pending.promise);
+
+    // A fresh element each time so the rerender is not bailed out of.
+    const makeTree = () => (
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: "/instructor/assignments/create",
+            state: {
+              aiAssignmentDraft: {
+                courseId: 42,
+                name: "Homework 3",
+                description: "it is about beef corndogs",
+                dueDate: "2026-08-04T23:59",
+                pointsPossible: 120,
+                prompt: "Homework 3. it is about beef corndogs",
+              },
+            },
+          },
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/instructor/assignments/create"
+            element={<InstructorAssignmentCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+    const { rerender } = render(makeTree());
+
+    expect(
+      await screen.findByText(/Writing a full description from your request/),
+    ).toBeInTheDocument();
+
+    // Canvas URL resolves while the request is still in flight, re-running
+    // the effect with changed deps.
+    canvasUrlHolder.current = "https://canvas.university.edu";
+    rerender(makeTree());
+
+    pending.resolve({
+      name: "Ignored",
+      description: "Expanded after canvasUrl resolved.",
+      dueDate: "2099-01-01T00:00",
+      pointsPossible: 999,
+    });
+
+    expect(
+      await screen.findByDisplayValue("Expanded after canvasUrl resolved."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Writing a full description from your request/),
+    ).not.toBeInTheDocument();
   });
 });
