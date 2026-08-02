@@ -327,9 +327,10 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
           : "Unable to load message templates.",
       );
     }
-  }, [accessToken, fetchOptions?.courseId]);
+  }, [accessToken, fetchOptions]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async template list load on mount/auth changes
     void refreshTemplates();
   }, [refreshTemplates]);
 
