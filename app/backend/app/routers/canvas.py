@@ -170,17 +170,49 @@ async def preview_assignment_endpoint(
     canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.services.assignment_validation import validate_assignment_for_create
     from app.services.canvas import get_owned_course, require_writable_course
 
+    # Validate required fields before preview so the dry-run matches what
+    # create will accept — same gate as quiz/feedback preview paths.
+    await validate_assignment_for_create(
+        course_id,
+        current_user,
+        body.name,
+        body.description,
+        body.due_at.isoformat() if body.due_at else None,
+        body.points_possible,
+        db,
+    )
     course = await get_owned_course(course_id, current_user, canvas_url, db)
     require_writable_course(course)
-    preview = build_action_preview(
-        "create_assignment",
-        f"Create assignment '{body.name}' in {course.name}",
-        body.model_dump(mode="json"),
-        course_name=course.name,
+    proposed = {
+        "action": "create_assignment",
+        "local_course_id": course_id,
+        "title": body.name,
+        "description": body.description,
+        "due_date": body.due_at.isoformat() if body.due_at else None,
+        "points_possible": body.points_possible,
+    }
+    preview = generate_write_preview(proposed, course)
+    # Keep the exact payload that would be POSTed so the UI preview mirrors
+    # Canvas submission fields (name/due_at/points), not only display labels.
+    metadata = {
+        **preview["metadata"],
+        "name": body.name,
+        "description": body.description,
+        "due_at": body.due_at.isoformat() if body.due_at else None,
+        "points_possible_value": body.points_possible,
+        "submitted": body.model_dump(mode="json"),
+    }
+    return ActionPreviewResponse(
+        action=preview["action"],
+        summary=preview["summary"],
+        metadata=metadata,
+        reversible=preview["reversible"],
+        affected_resources=preview["affected_resources"],
+        risk_level=preview["risk_level"],
     )
-    return ActionPreviewResponse(**preview)
 
 
 @router.post("/courses/{course_id}/assignments", response_model=AssignmentResponse)

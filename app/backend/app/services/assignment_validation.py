@@ -14,7 +14,7 @@ def _check_title(title: str) -> None:
     if not title or not title.strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Assignment title cannot be empty.",
+            detail="Assignment title cannot be empty. Enter a title before submitting.",
         )
     check_message_profanity(title, content_label="Assignment title")
 
@@ -23,7 +23,10 @@ def _check_description(description: str) -> None:
     if not description or not description.strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Assignment description cannot be empty.",
+            detail=(
+                "Assignment description cannot be empty. "
+                "Add a short description of what students should do."
+            ),
         )
     check_message_profanity(description, content_label="Assignment description")
 
@@ -36,12 +39,18 @@ def _check_due_date(due_date: str) -> None:
         if due_dt <= datetime.now(UTC):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Due date must be in the future.",
+                detail=(
+                    "Due date must be in the future. "
+                    "Choose a date and time after now, then try again."
+                ),
             )
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid due date format: {due_date}. Use ISO 8601, e.g. 2026-09-01T23:59:00.",
+            detail=(
+                f"Invalid due date format: {due_date}. "
+                "Use ISO 8601, e.g. 2026-09-01T23:59:00."
+            ),
         )
 
 
@@ -49,7 +58,10 @@ def _check_points_possible(points_possible: float) -> None:
     if points_possible <= 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Points possible must be greater than zero.",
+            detail=(
+                "Points possible must be greater than zero. "
+                "Enter a positive point value, or leave points blank for an ungraded assignment."
+            ),
         )
 
 
@@ -77,7 +89,10 @@ async def validate_assignment_for_create(
     if not due_date:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Due date is required for assignments.",
+            detail=(
+                "Due date is required for assignments. "
+                "Set a due date before creating or previewing."
+            ),
         )
     _check_due_date(due_date)
 

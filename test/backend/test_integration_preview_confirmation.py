@@ -256,6 +256,8 @@ def test_non_chat_assignment_preview_does_not_write(client):
     assert body["action"] == "create_assignment"
     assert "Previewed Lab" in body["summary"]
     assert body["metadata"]["name"] == "Previewed Lab"
+    assert body["metadata"]["title"] == "Previewed Lab"
+    assert "10" in str(body["metadata"]["points_possible"])
     assert isinstance(body["affected_resources"], list)
     mock_create.assert_not_called()
 

@@ -68,7 +68,6 @@ from app.services.canvas_idempotency import (
     duplicate_in_flight_http_exception,
     run_idempotent_canvas_write,
 )
-from app.services.profanity import check_message_profanity
 from app.services.quiz_validation import short_answer_new_quiz_warnings
 
 logger = logging.getLogger(__name__)
@@ -708,13 +707,20 @@ async def create_course_assignment(
     idempotency_key: str | None = None,
     exclude_workflow_id: int | None = None,
 ) -> AssignmentResponse:
-    # REST create path does not go through validate_assignment_for_create
-    # (chat/MCP does); still block student-facing profanity before Canvas.
-    check_message_profanity(payload.name, content_label="Assignment title")
-    if payload.description:
-        check_message_profanity(
-            payload.description, content_label="Assignment description"
-        )
+    from app.services.assignment_validation import validate_assignment_for_create
+
+    # Semantic validation (required fields, future due date, points > 0 or
+    # intentional null for ungraded) before any Canvas write — same rules as
+    # chat/MCP confirm. Profanity is checked inside the validators.
+    await validate_assignment_for_create(
+        local_course_id,
+        user,
+        payload.name,
+        payload.description,
+        payload.due_at.isoformat() if payload.due_at else None,
+        payload.points_possible,
+        db,
+    )
 
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     resolved_canvas_url = course.canvas_url
@@ -1254,11 +1260,20 @@ async def update_course_assignment(
     idempotency_key: str | None = None,
     exclude_workflow_id: int | None = None,
 ) -> AssignmentResponse:
-    check_message_profanity(payload.name, content_label="Assignment title")
-    if payload.description:
-        check_message_profanity(
-            payload.description, content_label="Assignment description"
-        )
+    from app.services.assignment_validation import validate_assignment_for_update
+
+    # Validate only fields being changed; blank description is sent as null
+    # (intentional clear / leave optional), empty strings are rejected with
+    # fix-it messages before Canvas sees them.
+    await validate_assignment_for_update(
+        local_course_id,
+        user,
+        payload.name,
+        payload.description,
+        payload.due_at.isoformat() if payload.due_at else None,
+        payload.points_possible,
+        db,
+    )
 
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     resolved_canvas_url = course.canvas_url
