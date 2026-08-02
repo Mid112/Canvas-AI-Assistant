@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.config import settings
 from app.main import app
+from app.models.canvas_course_name import CanvasCourseName
 from app.models.course import Course
 from app.models.user import User
 
@@ -1185,11 +1186,11 @@ def test_sync_courses_if_stale_respects_cooldown(client):
         assert mock.call_count == 2
 
 
-# Verifies: canvas_course_names is refreshed when Canvas renames a course.
+# Verifies: canvas_course_names preserves aliases when Canvas renames a course.
 def test_canvas_course_names_refreshed_on_sync(client):
-    """canvas_course_names is the chat resolver's connection-scoped index,
-    so a Canvas rename must refresh it instead of leaving chat prompts
-    stuck on the first-seen course name."""
+    """canvas_course_names is the chat resolver's connection-scoped alias
+    index: a Canvas rename must add the new name without dropping the old
+    one, while prompts still display only the current Course row."""
     from app.config import settings as app_settings
 
     headers = _register_with_canvas(client)
@@ -1219,8 +1220,24 @@ def test_canvas_course_names_refreshed_on_sync(client):
         # Course.name picks up the rename...
         assert set_resp_2.json()["name"] == "Renamed"
 
+    async def _alias_names() -> list[str]:
+        engine = create_async_engine(settings.DATABASE_URL)
+        try:
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as db:
+                rows = await db.scalars(
+                    select(CanvasCourseName)
+                    .where(CanvasCourseName.local_course_id == local_id)
+                    .order_by(CanvasCourseName.name)
+                )
+                return [row.name for row in rows]
+        finally:
+            await engine.dispose()
+
+    assert asyncio.run(_alias_names()) == ["Original Name", "Renamed"]
+
     # The chat pipeline shows the current name, not the stale first-seen
-    # value from canvas_course_names.
+    # alias from canvas_course_names.
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = '{"action": "respond", "message": "OK."}'
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):

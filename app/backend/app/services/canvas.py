@@ -1637,11 +1637,12 @@ async def sync_courses_if_stale(user: User, connection: CanvasConnection, db: As
     connection can never fail a chat turn that doesn't even need fresh
     course data.
 
-    Also upserts canvas_course_names — the small, connection-scoped,
-    refreshed canvas_course_id -> name index services/chat.py uses to
-    resolve a course by name without ever exposing a numeric ID to the
-    LLM. Rows there are refreshed from the current Canvas sync so stale
-    names cannot leak into chat prompts.
+    Also upserts canvas_course_names — the connection-scoped alias index
+    services/chat.py uses to resolve a course by name without exposing a
+    numeric ID to the LLM. Unlike the old single-label index, it keeps
+    historical aliases while refreshing last_seen_at on the current alias.
+    Prompt display still comes from Course.name/Course.course_code, so chat
+    stays aligned with the rest of the app after Canvas renames.
 
     get_courses() itself is unmodified; this wrapper only adds the
     cooldown gate and the name-index upsert around it.
@@ -1667,17 +1668,18 @@ async def sync_courses_if_stale(user: User, connection: CanvasConnection, db: As
                     "local_course_id": course.local_id,
                     "name": course.name,
                     "workflow_state": course.workflow_state,
+                    "last_seen_at": now,
                 }
                 for course in courses
             ]
         )
         await db.execute(
             insert_names.on_conflict_do_update(
-                index_elements=["canvas_connection_id", "canvas_course_id"],
+                index_elements=["canvas_connection_id", "canvas_course_id", "name"],
                 set_={
                     "local_course_id": insert_names.excluded.local_course_id,
-                    "name": insert_names.excluded.name,
                     "workflow_state": insert_names.excluded.workflow_state,
+                    "last_seen_at": insert_names.excluded.last_seen_at,
                 },
             )
         )

@@ -389,8 +389,9 @@ async def _refresh_conversation_course_snapshot(db: AsyncSession, conversation: 
 async def _get_course_names_for_user(db: AsyncSession, user: User) -> list[CanvasCourseName]:
     """The full canvas_course_names index across every Canvas connection
     this user has, with the canonical Course row eagerly loaded. The
-    connection-scoped index avoids cross-institution Canvas ID collisions;
-    the joined Course supplies the current prompt-facing name/code."""
+    connection-scoped alias index avoids cross-institution Canvas ID
+    collisions; the joined Course supplies the current prompt-facing
+    name/code while historical alias rows remain matchable."""
     return list(
         await db.scalars(
             select(CanvasCourseName)
@@ -420,18 +421,55 @@ def _course_prompt_label(course_name: CanvasCourseName) -> str:
     return name
 
 
+def _course_identity(course_name: CanvasCourseName) -> tuple[str, int] | tuple[str, int, str]:
+    if course_name.local_course_id is not None:
+        return ("local", course_name.local_course_id)
+    return ("canvas", course_name.canvas_connection_id, course_name.canvas_course_id)
+
+
+def _dedupe_course_aliases(course_names: list[CanvasCourseName]) -> list[CanvasCourseName]:
+    deduped: dict[tuple[str, int] | tuple[str, int, str], CanvasCourseName] = {}
+    for course_name in course_names:
+        identity = _course_identity(course_name)
+        existing = deduped.get(identity)
+        if existing is None:
+            deduped[identity] = course_name
+            continue
+        existing_seen = existing.last_seen_at or existing.created_at or datetime.min.replace(tzinfo=UTC)
+        candidate_seen = course_name.last_seen_at or course_name.created_at or datetime.min.replace(tzinfo=UTC)
+        if candidate_seen > existing_seen:
+            deduped[identity] = course_name
+    return list(deduped.values())
+
+
+def _course_prompt_labels(course_names: list[CanvasCourseName]) -> list[str]:
+    labels: list[str] = []
+    seen: set[str] = set()
+    for course_name in _dedupe_course_aliases(course_names):
+        label = _course_prompt_label(course_name)
+        normalized = _normalize_course_text(label)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        labels.append(label)
+    return labels
+
+
 def _course_exact_match_texts(course_name: CanvasCourseName) -> tuple[str, ...]:
-    values = [_course_display_name(course_name)]
+    display_name = _course_display_name(course_name)
+    values = [display_name, course_name.name]
     code = _course_code(course_name)
     if code:
         values.append(code)
-        values.append(f"{_course_display_name(course_name)} {code}")
-        values.append(f"{_course_display_name(course_name)} / {code}")
+        values.append(f"{display_name} {code}")
+        values.append(f"{display_name} / {code}")
+        values.append(f"{course_name.name} {code}")
+        values.append(f"{course_name.name} / {code}")
     return tuple(values)
 
 
 def _course_substring_match_texts(course_name: CanvasCourseName) -> tuple[str, ...]:
-    return (_course_display_name(course_name),)
+    return (_course_display_name(course_name), course_name.name)
 
 
 _COURSE_NAME_FUZZY_MATCH_MIN_LENGTH = 4
@@ -450,7 +488,10 @@ def _resolve_duplicate_course_name_matches(
     that doesn't narrow to exactly one — e.g. two genuinely active
     sections, or a legacy row with no workflow_state recorded at all
     sitting alongside another candidate."""
-    still_relevant = [cn for cn in matches if cn.workflow_state != "completed"]
+    logical_matches = _dedupe_course_aliases(matches)
+    if len(logical_matches) == 1:
+        return logical_matches[0]
+    still_relevant = [cn for cn in logical_matches if cn.workflow_state != "completed"]
     return still_relevant[0] if len(still_relevant) == 1 else None
 
 
@@ -586,7 +627,7 @@ async def _resolve_course_switch(
     if not course_names or current_course_name is None:
         return None
 
-    listing = "\n".join(f"- {_course_prompt_label(cn)}" for cn in course_names)
+    listing = "\n".join(f"- {label}" for label in _course_prompt_labels(course_names))
     prompt = (
         f"CURRENT COURSES:\n{listing}\n\n"
         f"This conversation is currently about: {current_course_name}\n"
@@ -1945,7 +1986,7 @@ def _build_llm_message(
     parts = []
 
     if course_names:
-        names = "\n".join(f"- {_course_prompt_label(cn)}" for cn in course_names)
+        names = "\n".join(f"- {label}" for label in _course_prompt_labels(course_names))
         parts.append(
             "YOUR COURSES:\n"
             f"{names}\n\n"

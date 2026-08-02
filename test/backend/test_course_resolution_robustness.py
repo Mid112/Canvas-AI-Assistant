@@ -334,6 +334,55 @@ def test_match_course_name_department_code_prefix_stays_unresolved():
     assert exact_code_match.local_course_id == 3
 
 
+def test_match_course_name_aliases_for_same_course_resolve_old_and_new_names():
+    from datetime import UTC, datetime
+
+    from app.models.canvas_course_name import CanvasCourseName
+    from app.models.course import Course
+    from app.services.chat import _match_course_name
+
+    current_course = Course(
+        id=3,
+        canvas_course_id="3",
+        canvas_url=CANVAS_URL,
+        name="Senior Design",
+        course_code="COSC 499",
+        workflow_state="available",
+        instructor_id=1,
+    )
+    course_names = [
+        CanvasCourseName(
+            canvas_connection_id=1,
+            canvas_course_id="3",
+            local_course_id=3,
+            name="Capstone Project",
+            workflow_state="available",
+            last_seen_at=datetime(2026, 1, 1, tzinfo=UTC),
+        ),
+        CanvasCourseName(
+            canvas_connection_id=1,
+            canvas_course_id="3",
+            local_course_id=3,
+            name="Senior Design",
+            workflow_state="available",
+            last_seen_at=datetime(2026, 1, 2, tzinfo=UTC),
+        ),
+    ]
+    for course_name in course_names:
+        course_name.course = current_course
+
+    new_name_match = _match_course_name(course_names, "Senior Design")
+    old_name_match = _match_course_name(course_names, "Capstone Project")
+    code_match = _match_course_name(course_names, "COSC 499")
+
+    assert new_name_match is not None
+    assert new_name_match.local_course_id == 3
+    assert old_name_match is not None
+    assert old_name_match.local_course_id == 3
+    assert code_match is not None
+    assert code_match.local_course_id == 3
+
+
 # ── Fuzzy substring fallback ─────────────────────────────────────────────
 
 # Verifies: an unambiguous normalized-substring match still resolves when
