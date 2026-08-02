@@ -104,6 +104,11 @@ export async function loginUser(
   });
 }
 
+/** Revoke the current server session. Callers should clear local auth even if this fails. */
+export async function logoutUser(token: string): Promise<void> {
+  return request<void>("/auth/logout", { method: "POST" }, token);
+}
+
 export async function registerUser(
   credentials: RegisterCredentials,
 ): Promise<TokenResponse> {

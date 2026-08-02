@@ -17,6 +17,7 @@ import {
   AuthApiError,
   fetchCurrentUser,
   loginUser,
+  logoutUser,
   registerUser,
 } from "@/services/auth";
 import type {
@@ -159,10 +160,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [accessToken, loadUser]);
 
   const logout = useCallback(() => {
+    const token = accessToken;
+    // Always clear local auth so the UI signs out even if revoke fails
+    // (expired token, network blip). Still attempt server revoke when we have
+    // a token so Ticket 37 sessions do not linger after logout.
     clearStoredToken();
     setAccessToken(null);
     setUser(null);
-  }, []);
+    if (token) {
+      void logoutUser(token).catch(() => {
+        // Local state already cleared — ignore revoke errors.
+      });
+    }
+  }, [accessToken]);
 
   const value = useMemo<AuthContextValue>(
     () => ({
