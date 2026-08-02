@@ -86,6 +86,47 @@ describe("toAssignmentCreateRequest", () => {
       },
       "access-token",
       "https://canvas.university.edu",
+      // No preview to close out on the plain "+ Create Assignment" path.
+      undefined,
+    );
+  });
+
+  // Verifies: Regression (#12 follow-up) — a draft that came from an
+  // assistant intent_preview forwards the conversation and preview ids, so
+  // the backend can close out the pending Workflow chat opened for it and
+  // record the audit row instead of leaving it pending forever.
+  it("forwards the preview link when the draft came from the assistant", async () => {
+    mockedCreateAssignment.mockResolvedValue({
+      id: 10,
+      name: "Updated Quiz",
+      description: "Revised description.",
+      due_at: new Date("2026-12-15T23:59").toISOString(),
+      points_possible: 80,
+      course_id: 123,
+    });
+
+    await approveAssignmentDraft(
+      {
+        courseId: "3",
+        name: "Updated Quiz",
+        description: "Revised description.",
+        dueDate: "2026-12-15T23:59",
+        pointsPossible: 80,
+      },
+      {
+        accessToken: "access-token",
+        canvasUrl: "https://canvas.university.edu",
+        conversationId: 7,
+        pendingMessageId: 42,
+      },
+    );
+
+    expect(mockedCreateAssignment).toHaveBeenCalledWith(
+      3,
+      expect.anything(),
+      "access-token",
+      "https://canvas.university.edu",
+      { conversationId: 7, pendingMessageId: 42 },
     );
   });
 });

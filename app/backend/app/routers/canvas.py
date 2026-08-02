@@ -190,8 +190,124 @@ async def create_assignment_endpoint(
     current_user: User = Depends(get_instructor_user),
     canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
+    conversation_id: int | None = Query(default=None),
+    preview_message_id: int | None = Query(default=None),
 ):
-    return await create_course_assignment(course_id, body, current_user, canvas_url, db)
+    """Creates the assignment, then records the Workflow + AuditLog the same
+    way create_quiz_endpoint does.
+
+    This endpoint used to be a bare passthrough, which left two holes. Every
+    assignment created through the wizard had no AuditLog row at all — real
+    Canvas writes with no audit trail. And when the wizard was reached from
+    an assistant intent_preview, chat had already opened a *pending* Workflow
+    for that preview (create_assignment is not in the form-handoff exclusion
+    set in services/chat.py, unlike create_quiz), which nothing ever
+    resolved. Confirming here left it pending forever, so workflow history
+    showed "pending" for an assignment that plainly existed in Canvas.
+
+    With preview_message_id, the assistant's pending Workflow is claimed and
+    marked executed. Without it (the plain "+ Create Assignment" path), a new
+    executed Workflow is recorded instead, so both routes leave an audit
+    trail.
+    """
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
+    from app.models.conversation import Conversation
+    from app.models.workflow import Workflow
+    from app.services.canvas import get_owned_course
+    from app.services.chat import _claim_pending_workflow, record_write_audit
+
+    assignment = await create_course_assignment(
+        course_id, body, current_user, canvas_url, db
+    )
+    course = await get_owned_course(course_id, current_user, canvas_url, db)
+
+    linked_conversation_id: int | None = None
+    if conversation_id is not None:
+        conversation = await db.scalar(
+            select(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.user_id == current_user.id,
+            )
+        )
+        if conversation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found.",
+            )
+        linked_conversation_id = conversation.id
+
+    affected_resources = [
+        {
+            "type": "course",
+            "id": course.id,
+            "name": course.name,
+            "status": "unchanged",
+        },
+        {
+            "type": "assignment",
+            "id": assignment.id,
+            "name": assignment.name,
+            "status": "created",
+        },
+    ]
+
+    workflow: Workflow | None = None
+    if preview_message_id is not None and linked_conversation_id is not None:
+        workflow = await db.scalar(
+            select(Workflow).where(
+                Workflow.preview_message_id == preview_message_id,
+                Workflow.conversation_id == linked_conversation_id,
+                Workflow.user_id == current_user.id,
+            )
+        )
+        # Only a still-pending preview is ours to close. If it was already
+        # confirmed or cancelled in chat, the Canvas write above still stands
+        # — fall through and record a standalone Workflow rather than
+        # rewriting settled history or failing after the write succeeded.
+        if workflow is not None and await _claim_pending_workflow(
+            db, workflow, "executed"
+        ):
+            workflow.executed_at = datetime.now(UTC)
+            workflow.affected_resources = affected_resources
+        else:
+            workflow = None
+
+    if workflow is None:
+        workflow = Workflow(
+            conversation_id=linked_conversation_id,
+            user_id=current_user.id,
+            course_id=course.id,
+            source_user_message_id=None,
+            preview_message_id=None,
+            action_name="create_assignment",
+            user_prompt="Created via assignment creation form",
+            proposed_action={
+                "action": "create_assignment",
+                "local_course_id": course.id,
+                **body.model_dump(mode="json"),
+            },
+            affected_resources=affected_resources,
+            status="executed",
+            executed_at=datetime.now(UTC),
+        )
+        db.add(workflow)
+
+    await db.flush()
+
+    await record_write_audit(
+        db,
+        current_user,
+        workflow,
+        {
+            "data": assignment.model_dump(mode="json"),
+            "affected_resources": affected_resources,
+        },
+    )
+    await db.commit()
+    return assignment
 
 
 @router.post(

@@ -147,6 +147,10 @@ export async function previewAssignmentDraft(
 interface ApproveAssignmentDraftOptions {
   accessToken: string;
   canvasUrl?: string;
+  /** Set when the draft came from an assistant intent_preview, so the
+   * pending Workflow chat opened for it gets closed out and audited. */
+  conversationId?: number;
+  pendingMessageId?: number;
 }
 
 export async function approveAssignmentDraft(
@@ -154,10 +158,20 @@ export async function approveAssignmentDraft(
   options: ApproveAssignmentDraftOptions,
 ): Promise<void> {
   const request = toAssignmentCreateRequest(payload);
+  // Omitted entirely on the plain "+ Create Assignment" path so that call
+  // keeps its original shape — there is no preview to close out there.
+  const workflowLink =
+    options.conversationId != null && options.pendingMessageId != null
+      ? {
+          conversationId: options.conversationId,
+          pendingMessageId: options.pendingMessageId,
+        }
+      : undefined;
   await createAssignment(
     request.courseId,
     request.assignment,
     options.accessToken,
     options.canvasUrl,
+    workflowLink,
   );
 }

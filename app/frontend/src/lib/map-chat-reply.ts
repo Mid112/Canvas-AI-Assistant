@@ -279,6 +279,11 @@ function buildInterpretedAction(
           // into their own fields, and re-feeding those makes the generator
           // re-answer them and fight the values it just set.
           prompt: buildAssignmentGenerationPrompt(proposed),
+          // Lets the create page close out the pending Workflow this
+          // preview opened, so approving in the form audits the write
+          // instead of leaving chat history stuck on "pending".
+          conversationId,
+          pendingMessageId,
         },
       },
     };

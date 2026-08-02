@@ -382,6 +382,11 @@ export function InstructorAssignmentCreatePage() {
       }, {
         accessToken,
         canvasUrl,
+        // Closes out the assistant preview's pending Workflow and audits
+        // the write. Undefined on the plain "+ Create Assignment" path,
+        // where the backend records a standalone Workflow instead.
+        conversationId: seededDraft?.conversationId,
+        pendingMessageId: seededDraft?.pendingMessageId,
       });
       if (user?.id && savedTypedDraftId) {
         discardTypedDraft(user.id, savedTypedDraftId);

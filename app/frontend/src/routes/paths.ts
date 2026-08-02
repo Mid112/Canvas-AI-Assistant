@@ -177,6 +177,11 @@ export interface AiActionDraftLocationState {
     pointsPossible?: unknown;
     /** Describe-step seed when no generated title/description exists yet. */
     prompt?: string;
+    /** Set when this draft came from an assistant intent_preview. Sent back
+     * on approve so the pending Workflow chat opened for that preview is
+     * closed out and audited, instead of being left pending forever. */
+    conversationId?: number;
+    pendingMessageId?: number;
   };
   aiQuizDraft?: {
     courseId?: number;
