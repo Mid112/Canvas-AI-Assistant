@@ -393,10 +393,17 @@ describe("password reset API", () => {
   it("requests a password reset token", async () => {
     const { requestPasswordReset } = await import("@/services/auth");
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ reset_token: "tok-123" }), { status: 200 }),
+      new Response(
+        JSON.stringify({
+          message: "If an account exists for that email, a password reset was started.",
+          reset_token: "tok-123",
+        }),
+        { status: 200 },
+      ),
     );
 
     await expect(requestPasswordReset("you@university.edu")).resolves.toEqual({
+      message: "If an account exists for that email, a password reset was started.",
       reset_token: "tok-123",
     });
     expect(globalThis.fetch).toHaveBeenCalledWith(

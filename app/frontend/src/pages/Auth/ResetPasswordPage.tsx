@@ -118,6 +118,10 @@ export function ResetPasswordPage() {
             setIsRequesting(true);
             try {
               const result = await requestPasswordReset(email);
+              // Production never returns reset_token (anti-enumeration + no
+              // public secret). DEBUG/e2e may include it so local testing can
+              // finish confirm without SMTP; only then jump to the set-password
+              // step. Otherwise always show the same generic acknowledgement.
               if (result.reset_token) {
                 setResetToken(result.reset_token);
                 navigate(

@@ -218,6 +218,7 @@ export async function fetchSecurityStatus(
 }
 
 export interface PasswordResetRequestResponse {
+  message: string;
   reset_token: string | null;
 }
 

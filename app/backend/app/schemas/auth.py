@@ -32,8 +32,13 @@ class PasswordResetRequest(BaseModel):
 
 
 class PasswordResetRequestResponse(BaseModel):
-    # Returned so the client can complete reset without email delivery.
-    # Null when no matching account exists (same response shape either way).
+    # Always the same generic acknowledgement so responses do not reveal
+    # whether the email matched an account. ``reset_token`` is only populated
+    # when settings.DEBUG is true (local/e2e without SMTP); production never
+    # returns the raw token on this public endpoint.
+    message: str = (
+        "If an account exists for that email, a password reset was started."
+    )
     reset_token: str | None = None
 
 

@@ -174,7 +174,10 @@ def test_revoke_session_cannot_target_another_users_session(client):
     assert client.get("/api/v1/auth/me", headers=headers_b).status_code == 200
 
 
-def test_password_reset_confirm_success_and_invalid_token(client):
+def test_password_reset_confirm_success_and_invalid_token(client, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "DEBUG", True)
     email, headers = _register(client, password="oldpass123")
     known_token = f"reset-token-{uuid.uuid4()}"
 
@@ -182,6 +185,7 @@ def test_password_reset_confirm_success_and_invalid_token(client):
         request = client.post("/api/v1/auth/password-reset/request", json={"email": email})
     assert request.status_code == 200
     assert request.json()["reset_token"] == known_token
+    assert "If an account exists" in request.json()["message"]
 
     bad = client.post(
         "/api/v1/auth/password-reset/confirm",

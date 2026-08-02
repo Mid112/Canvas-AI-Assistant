@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request, status
@@ -5,6 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.dependencies import bearer, get_current_user
@@ -48,6 +50,7 @@ from app.services.auth import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -84,10 +87,16 @@ async def logout(
 
 @router.post("/password-reset/request", response_model=PasswordResetRequestResponse)
 async def password_reset_request(body: PasswordResetRequest, db: AsyncSession = Depends(get_db)):
-    # No SMTP yet — return the raw token when an account matches so the
-    # frontend can finish confirm. Unknown emails still get 200 with null.
+    # Always 200 with the same acknowledgement shape so callers cannot tell
+    # whether the email matched an account. The raw token is a single-use
+    # secret that belongs in an out-of-band channel (email) — never on this
+    # public response in production. With no SMTP yet, DEBUG/e2e may include
+    # the token so local testing can finish confirm without inbox delivery.
     token = await request_password_reset(db, body.email)
-    return PasswordResetRequestResponse(reset_token=token)
+    debug_token = token if settings.DEBUG else None
+    if settings.DEBUG and token:
+        logger.info("DEBUG password-reset token for %s: %s", body.email, token)
+    return PasswordResetRequestResponse(reset_token=debug_token)
 
 
 @router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)
