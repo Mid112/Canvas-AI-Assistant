@@ -61,6 +61,7 @@ export function InstructorCourseMessagesPage() {
         setStudentFetchOptions({
           courseId: localCourseId,
           prompt: basePrompt,
+          canvasUrl: selectedCanvasUrl,
           recipients: students.map((student) => ({
             id: student.canvas_user_id,
             name: student.name,
@@ -81,6 +82,7 @@ export function InstructorCourseMessagesPage() {
           courseId: localCourseId,
           prompt: basePrompt,
           emptyRecipients: true,
+          canvasUrl: selectedCanvasUrl,
         });
       }
     }

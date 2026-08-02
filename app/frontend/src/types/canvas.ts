@@ -19,7 +19,7 @@ export interface CanvasCourseCreateRequest {
 /** Matches PATCH /api/v1/auth/me/canvas-token request body. */
 export interface CanvasTokenUpdateRequest {
   canvas_token: string;
-  canvas_url?: string;
+  canvas_url: string;
 }
 
 /** Result of validating a Canvas access token. */

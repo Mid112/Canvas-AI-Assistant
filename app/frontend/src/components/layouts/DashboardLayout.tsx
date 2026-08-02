@@ -3,6 +3,7 @@ import { Outlet, useLocation } from "react-router-dom";
 
 import { Header } from "@/components/layouts/Header";
 import { Sidebar } from "@/components/layouts/Sidebar";
+import { AssistantAvatar } from "@/components/brand/AssistantAvatar";
 import { ActiveCourseProvider } from "@/contexts/ActiveCourseProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { InstitutionProvider } from "@/contexts/InstitutionProvider";
@@ -76,6 +77,7 @@ function DashboardShell({ role }: DashboardLayoutProps) {
   const { accessToken } = useAuth();
   const roleLabel = getRoleLabel(role);
   const title = getPageTitle(pathname, role);
+  const isAssistantPage = role === "instructor" && pathname === paths.instructor.assistant;
   const [sidebarOpen, setSidebarOpen] = useState(() => getStoredSidebarOpen());
   const { status: healthStatus, setStatus: setHealthStatus } = useSystemHealthBadge();
 
@@ -138,6 +140,10 @@ function DashboardShell({ role }: DashboardLayoutProps) {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         <Header
           title={title}
+          subtitle={
+            isAssistantPage ? "Canvas Workflow Management Assistant" : undefined
+          }
+          leading={isAssistantPage ? <AssistantAvatar size="sm" /> : undefined}
           role={role}
           roleLabel={roleLabel}
           navItems={navItems}

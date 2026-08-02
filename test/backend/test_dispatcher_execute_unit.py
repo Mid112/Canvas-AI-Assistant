@@ -32,7 +32,7 @@ from app.mcp_tools.schemas import (
 from app.schemas.canvas import SubmissionStatus
 
 
-def _course(course_id: int = 1, canvas_url: str = "https://canvas.ubc.ca", name: str = "COSC 111"):
+def _course(course_id: int = 1, canvas_url: str = "https://canvas.example.edu", name: str = "COSC 111"):
     return SimpleNamespace(id=course_id, canvas_url=canvas_url, name=name)
 
 
@@ -49,7 +49,7 @@ def _db_with_course(course) -> AsyncMock:
 @pytest.mark.asyncio
 async def test_execute_fetch_courses_uses_default_canvas_url():
     db = AsyncMock()
-    user = MagicMock(id=1, canvas_connections=[SimpleNamespace(canvas_url="https://canvas.ubc.ca")])
+    user = MagicMock(id=1, canvas_connections=[SimpleNamespace(canvas_url="https://canvas.example.edu")])
     action = FetchCoursesAction()
     courses = [SimpleNamespace(model_dump=lambda: {"name": "COSC 111"})]
 
@@ -57,7 +57,7 @@ async def test_execute_fetch_courses_uses_default_canvas_url():
         result = await execute_tool(db, user, action)
 
     assert result["courses"] == [{"name": "COSC 111"}]
-    mock_get.assert_awaited_once_with(user, "https://canvas.ubc.ca", db)
+    mock_get.assert_awaited_once_with(user, "https://canvas.example.edu", db)
 
 
 @pytest.mark.asyncio
@@ -677,9 +677,9 @@ def test_default_canvas_url_returns_first_connection():
     user = SimpleNamespace(
         id=1,
         canvas_connections=[
-            SimpleNamespace(canvas_url="https://canvas.ubc.ca"),
+            SimpleNamespace(canvas_url="https://canvas.example.edu"),
             SimpleNamespace(canvas_url="https://canvas.other.edu"),
         ],
     )
 
-    assert _default_canvas_url(user) == "https://canvas.ubc.ca"
+    assert _default_canvas_url(user) == "https://canvas.example.edu"

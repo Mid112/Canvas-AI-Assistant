@@ -7,7 +7,6 @@ from urllib.parse import urlencode
 import httpx
 from fastapi import HTTPException, status
 
-from app.config import settings
 from app.core.canvas_url import resolve_server_canvas_url
 
 logger = logging.getLogger(__name__)
@@ -162,7 +161,7 @@ async def _fetch_all_pages(
     return results
 
 
-async def validate_token(token: str, canvas_url: str = settings.CANVAS_API_URL) -> None:
+async def validate_token(token: str, canvas_url: str) -> None:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
@@ -179,7 +178,7 @@ async def validate_token(token: str, canvas_url: str = settings.CANVAS_API_URL) 
     _raise_for_canvas_error(response)
 
 
-async def fetch_self(token: str, canvas_url: str = settings.CANVAS_API_URL) -> dict:
+async def fetch_self(token: str, canvas_url: str) -> dict:
     """Returns the Canvas profile of the user the token authenticates as.
 
     This is the authoritative "who am I" for the connected Canvas account —
@@ -205,7 +204,7 @@ async def fetch_self(token: str, canvas_url: str = settings.CANVAS_API_URL) -> d
 CanvasTokenStatus = Literal["valid", "expired", "invalid"]
 
 
-async def check_token_status(token: str, canvas_url: str = settings.CANVAS_API_URL) -> CanvasTokenStatus:
+async def check_token_status(token: str, canvas_url: str) -> CanvasTokenStatus:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
@@ -226,7 +225,7 @@ async def check_token_status(token: str, canvas_url: str = settings.CANVAS_API_U
     return "invalid"
 
 
-async def fetch_courses(token: str, canvas_url: str = settings.CANVAS_API_URL) -> list[dict]:
+async def fetch_courses(token: str, canvas_url: str) -> list[dict]:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
@@ -251,7 +250,7 @@ async def fetch_courses(token: str, canvas_url: str = settings.CANVAS_API_URL) -
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
 
 
-async def fetch_accounts(token: str, canvas_url: str = settings.CANVAS_API_URL) -> list[dict]:
+async def fetch_accounts(token: str, canvas_url: str) -> list[dict]:
     """Accounts the token can view/manage — needed to POST a new course."""
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
@@ -273,7 +272,7 @@ async def create_course(
     account_id: int,
     payload: dict,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
     *,
     offer: bool = False,
     enroll_me: bool = True,
@@ -305,7 +304,7 @@ async def update_course(
     course_id: int,
     payload: dict,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     """Update a Canvas course (PUT /courses/:id) — used for publish/unpublish events."""
     canvas_url = resolve_server_canvas_url(canvas_url)
@@ -325,7 +324,7 @@ async def update_course(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
 
 
-async def fetch_assignments(course_id: int, token: str, canvas_url: str = settings.CANVAS_API_URL) -> list[dict]:
+async def fetch_assignments(course_id: int, token: str, canvas_url: str) -> list[dict]:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
@@ -346,7 +345,7 @@ async def fetch_assignment(
     course_id: int,
     assignment_id: int,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
@@ -369,7 +368,7 @@ async def create_assignment(
     course_id: int,
     payload: dict,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
@@ -393,7 +392,7 @@ async def update_assignment(
     assignment_id: int,
     payload: dict,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
@@ -416,7 +415,7 @@ async def delete_assignment(
     course_id: int,
     assignment_id: int,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     # Only ever called from undo_workflow, to revert a create_assignment
     # action — never a standalone user-facing "delete assignment" action.
@@ -441,7 +440,7 @@ async def create_announcement(
     title: str,
     message: str,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
@@ -464,7 +463,7 @@ async def fetch_submissions(
     course_id: int,
     assignment_id: int,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> list[dict]:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
@@ -489,7 +488,7 @@ async def update_submission_grade(
     student_id: int,
     posted_grade: str | None,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
     *,
     feedback: str | None = None,
     comment: str | None = None,
@@ -532,7 +531,7 @@ async def update_submission_grade(
 async def fetch_user_profile(
     user_id: int,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
@@ -554,7 +553,7 @@ async def fetch_user_profile(
 async def fetch_enrollments(
     course_id: int,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> list[dict]:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
@@ -584,7 +583,7 @@ async def fetch_student_enrollment(
     course_id: int,
     canvas_user_id: int,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> list[dict]:
     """Return active StudentEnrollment rows for one Canvas user in a course.
 
@@ -624,7 +623,7 @@ async def post_announcement(
     subject: str,
     body: str,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     # Keep this older announcement helper compatible with the browser-facing
     # localhost URL and the backend/container-facing Canvas alias.
@@ -655,7 +654,7 @@ async def send_conversation(
     subject: str,
     body: str,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     canvas_url = resolve_server_canvas_url(canvas_url)
     form_data = [
@@ -696,7 +695,7 @@ async def send_conversation(
 
 async def fetch_conversations(
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
     course_context_code: str | None = None,
 ) -> list[dict]:
     """Lists the authenticated user's Canvas inbox conversation summaries.
@@ -729,7 +728,7 @@ async def fetch_conversations(
 async def fetch_conversation(
     conversation_id: int,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     """Fetches a single conversation with its full message history. Note that
     Canvas marks the conversation as read as a side effect of this GET."""
@@ -753,7 +752,7 @@ async def fetch_conversation(
 async def list_quizzes(
     course_id: int,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> list[dict]:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
@@ -775,7 +774,7 @@ async def create_quiz(
     course_id: int,
     payload: dict,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
@@ -799,7 +798,7 @@ async def create_quiz_question(
     quiz_id: int,
     payload: dict,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
@@ -822,7 +821,7 @@ async def delete_quiz(
     course_id: int,
     quiz_id: int,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     # Only ever called from undo_workflow to revert create_quiz.
     canvas_url = resolve_server_canvas_url(canvas_url)
@@ -844,7 +843,7 @@ async def delete_quiz(
 async def probe_new_quizzes(
     course_id: int,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> tuple[bool, str | None]:
     """Soft capability probe for the separate New Quizzes service."""
     canvas_url = resolve_server_canvas_url(canvas_url)
@@ -869,7 +868,7 @@ async def probe_new_quizzes(
 async def list_new_quizzes(
     course_id: int,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> list[dict]:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
@@ -896,7 +895,7 @@ async def list_new_quizzes(
 async def list_question_banks(
     course_id: int,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> list[dict]:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
@@ -930,7 +929,7 @@ async def create_quiz_question_group(
     quiz_id: int,
     payload: dict,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
@@ -960,7 +959,7 @@ async def create_new_quiz(
     course_id: int,
     payload: dict,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
@@ -990,7 +989,7 @@ async def create_new_quiz_item(
     assignment_id: int,
     payload: dict,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
@@ -1022,7 +1021,7 @@ async def delete_new_quiz(
     course_id: int,
     assignment_id: int,
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
@@ -1054,7 +1053,7 @@ async def add_conversation_message(
     body: str,
     recipient_canvas_user_ids: list[int],
     token: str,
-    canvas_url: str = settings.CANVAS_API_URL,
+    canvas_url: str,
 ) -> dict:
     """Appends a reply to an existing conversation. Canvas requires an explicit
     recipients[] list, so callers pass the current participant ids."""

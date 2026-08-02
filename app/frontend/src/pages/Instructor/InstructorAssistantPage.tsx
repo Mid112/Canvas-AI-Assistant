@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";
 import {
-  InstructorAssistantHeader,
   InstructorAssistantSuggestedActions,
 } from "@/pages/Instructor/InstructorAssistant/InstructorAssistantHeader";
 import { buildSuggestedActions } from "@/data/assistantSeedData";
@@ -413,8 +412,6 @@ export function InstructorAssistantPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-5 lg:p-6">
-      <InstructorAssistantHeader />
-
       {limitedMode ? (
         <AssistantLimitedModeBanner deferredCount={deferredRequests.length} />
       ) : deferredRequests.length > 0 ? (

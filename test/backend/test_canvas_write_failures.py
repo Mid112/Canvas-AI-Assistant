@@ -23,7 +23,7 @@ from app.integrations.canvas import (
 from app.main import app
 from app.schemas.student import StudentResponse
 
-CANVAS_URL = "https://canvas.ubc.ca"
+CANVAS_URL = "https://canvas.example.edu"
 
 CREATE_PAYLOAD = {
     "name": "New Assignment",
@@ -348,10 +348,10 @@ def test_canvas_error_detail_flattens_nested_grade_errors():
 
 def test_parse_next_link():
     header = (
-        '<https://canvas.ubc.ca/api/v1/courses?page=2&per_page=10>; rel="next", '
-        '<https://canvas.ubc.ca/api/v1/courses?page=1&per_page=10>; rel="current"'
+        '<https://canvas.example.edu/api/v1/courses?page=2&per_page=10>; rel="next", '
+        '<https://canvas.example.edu/api/v1/courses?page=1&per_page=10>; rel="current"'
     )
-    assert _parse_next_link(header) == "https://canvas.ubc.ca/api/v1/courses?page=2&per_page=10"
+    assert _parse_next_link(header) == "https://canvas.example.edu/api/v1/courses?page=2&per_page=10"
     assert _parse_next_link("") is None
 
 

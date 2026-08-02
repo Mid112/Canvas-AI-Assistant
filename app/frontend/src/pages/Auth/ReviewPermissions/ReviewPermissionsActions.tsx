@@ -1,12 +1,14 @@
+import { Check, RefreshCw } from "lucide-react";
+
 import { Button } from "@/components/ui/button";
 
 interface ReviewPermissionsActionsProps {
-  onCancel: () => void;
+  onReconnect: () => void;
   onApprove: () => void;
 }
 
 export function ReviewPermissionsActions({
-  onCancel,
+  onReconnect,
   onApprove,
 }: ReviewPermissionsActionsProps) {
   return (
@@ -14,16 +16,18 @@ export function ReviewPermissionsActions({
       <Button
         type="button"
         variant="outline"
-        onClick={onCancel}
+        onClick={onReconnect}
         className="h-11 flex-1 rounded-lg border-border bg-card text-base font-semibold text-muted-foreground hover:bg-muted"
       >
-        Cancel
+        <RefreshCw className="size-4" aria-hidden="true" />
+        Reconnect Canvas
       </Button>
       <Button
         type="button"
         onClick={onApprove}
         className="h-11 flex-1 rounded-lg bg-primary text-base font-semibold text-primary-foreground shadow-sm shadow-primary/20 hover:bg-primary/90"
       >
+        <Check className="size-4" aria-hidden="true" />
         Approve &amp; Continue
       </Button>
     </div>

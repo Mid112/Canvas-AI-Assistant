@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.schemas.canvas import SubmissionResponse, SubmissionStatus
 
-CANVAS_URL = "https://canvas.ubc.ca"
+CANVAS_URL = "https://canvas.example.edu"
 
 
 @pytest.fixture(scope="module")

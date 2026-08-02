@@ -1,2 +1,3 @@
-export const CANVAS_API_URL =
-  import.meta.env.VITE_CANVAS_API_URL ?? "https://canvas.ubc.ca/api/v1";
+const configuredCanvasApiUrl = import.meta.env.VITE_CANVAS_API_URL?.trim();
+
+export const CANVAS_API_URL = configuredCanvasApiUrl || undefined;

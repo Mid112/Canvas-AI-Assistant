@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.canvas_url import normalize_canvas_url
 from app.integrations.canvas import (
     add_conversation_message,
     fetch_conversation,
@@ -166,33 +167,40 @@ def _map_detail(
 async def _resolve_course_scope(
     local_course_id: int | None,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
-) -> tuple[str | None, int | None, str | None]:
-    """Returns (context_code, local_course_id, course_name) for the inbox scope.
+) -> tuple[str | None, int | None, str | None, str]:
+    """Returns (context_code, local_course_id, course_name, canvas_url).
 
     When a course is selected we look it up (validating ownership) so Canvas can
     filter server-side and threads carry the local course id + display name."""
     if local_course_id is None:
-        return None, None, None
+        if canvas_url:
+            return None, None, None, normalize_canvas_url(canvas_url)
+        if len(user.canvas_connections) == 1:
+            return None, None, None, user.canvas_connections[0].canvas_url
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Select a course or Canvas institution before loading messages.",
+        )
     course = await get_owned_course(local_course_id, user, canvas_url, db)
-    return f"course_{int(course.canvas_course_id)}", course.id, course.name
+    return f"course_{int(course.canvas_course_id)}", course.id, course.name, course.canvas_url
 
 
 async def list_inbox_threads(
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
     *,
     local_course_id: int | None = None,
 ) -> InboxThreadList:
-    token = require_canvas_token(user, canvas_url)
-    context_code, course_id, course_name = await _resolve_course_scope(
+    context_code, course_id, course_name, resolved_canvas_url = await _resolve_course_scope(
         local_course_id, user, canvas_url, db
     )
-    self_canvas_id = await _resolve_self_canvas_id(user, token, canvas_url)
+    token = require_canvas_token(user, resolved_canvas_url)
+    self_canvas_id = await _resolve_self_canvas_id(user, token, resolved_canvas_url)
     raw_threads = await fetch_conversations(
-        token, canvas_url, course_context_code=context_code
+        token, resolved_canvas_url, course_context_code=context_code
     )
     threads = [
         _map_summary(
@@ -211,17 +219,17 @@ async def list_inbox_threads(
 async def get_inbox_thread(
     conversation_id: int,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
     *,
     local_course_id: int | None = None,
 ) -> InboxThreadDetail:
-    token = require_canvas_token(user, canvas_url)
-    _, course_id, course_name = await _resolve_course_scope(
+    _, course_id, course_name, resolved_canvas_url = await _resolve_course_scope(
         local_course_id, user, canvas_url, db
     )
-    self_canvas_id = await _resolve_self_canvas_id(user, token, canvas_url)
-    raw = await fetch_conversation(conversation_id, token, canvas_url)
+    token = require_canvas_token(user, resolved_canvas_url)
+    self_canvas_id = await _resolve_self_canvas_id(user, token, resolved_canvas_url)
+    raw = await fetch_conversation(conversation_id, token, resolved_canvas_url)
     return _map_detail(
         raw,
         course_id=course_id,
@@ -234,7 +242,7 @@ async def reply_to_inbox_thread(
     conversation_id: int,
     body: str,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
     *,
     local_course_id: int | None = None,
@@ -247,11 +255,11 @@ async def reply_to_inbox_thread(
         )
     check_message_profanity(trimmed)
 
-    token = require_canvas_token(user, canvas_url)
-    _, course_id, course_name = await _resolve_course_scope(
+    _, course_id, course_name, resolved_canvas_url = await _resolve_course_scope(
         local_course_id, user, canvas_url, db
     )
-    self_canvas_id = await _resolve_self_canvas_id(user, token, canvas_url)
+    token = require_canvas_token(user, resolved_canvas_url)
+    self_canvas_id = await _resolve_self_canvas_id(user, token, resolved_canvas_url)
 
     # We build the recipient list by excluding ourselves from the participants.
     # If we can't confirm our own Canvas id, the exclusion filter would match
@@ -265,7 +273,7 @@ async def reply_to_inbox_thread(
 
     # Canvas add_message needs an explicit recipient list, so read the current
     # participants first and reply to everyone except the instructor themselves.
-    existing = await fetch_conversation(conversation_id, token, canvas_url)
+    existing = await fetch_conversation(conversation_id, token, resolved_canvas_url)
     recipient_ids = [
         int(person["id"])
         for person in existing.get("participants", [])
@@ -275,11 +283,11 @@ async def reply_to_inbox_thread(
     ]
 
     await add_conversation_message(
-        conversation_id, trimmed, recipient_ids, token, canvas_url
+        conversation_id, trimmed, recipient_ids, token, resolved_canvas_url
     )
 
     # Re-fetch so the response reflects the full, updated thread history.
-    raw = await fetch_conversation(conversation_id, token, canvas_url)
+    raw = await fetch_conversation(conversation_id, token, resolved_canvas_url)
     return _map_detail(
         raw,
         course_id=course_id,

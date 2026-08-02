@@ -155,10 +155,16 @@ export async function sendMessageDraft(
       },
     );
 
-    const sendPath =
-      payload.conversationId != null
-        ? `/messages/drafts/${payload.draftId}/send?conversation_id=${payload.conversationId}`
-        : `/messages/drafts/${payload.draftId}/send`;
+    const params = new URLSearchParams();
+    if (payload.conversationId != null) {
+      params.set("conversation_id", String(payload.conversationId));
+    }
+    if (payload.canvasUrl) {
+      params.set("canvas_url", payload.canvasUrl);
+    }
+
+    const query = params.toString();
+    const sendPath = `/messages/drafts/${payload.draftId}/send${query ? `?${query}` : ""}`;
 
     await apiRequest(sendPath, accessToken, {
       method: "POST",
