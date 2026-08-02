@@ -549,4 +549,132 @@ describe("InstructorAssignmentCreatePage", () => {
     expect(await screen.findByLabelText("Due date")).toHaveValue("2026-12-15T23:59");
     expect(screen.getByLabelText("Points possible")).toHaveValue(75);
   });
+
+  // Verifies: Regression (#15) — a chat handoff runs the same draft
+  // generator the "+ Create Assignment" path uses, so the vague one-line
+  // description the chat extracted gets written out before Review.
+  it("expands the assistant's description through the draft generator", async () => {
+    mockedGenerate.mockResolvedValue({
+      name: "Ignored Title",
+      description: "A full, written-out description about beef corndogs.",
+      dueDate: "2099-01-01T00:00",
+      pointsPossible: 999,
+    });
+
+    renderPage({
+      aiAssignmentDraft: {
+        courseId: 42,
+        name: "Homework 3",
+        description: "it is about beef corndogs",
+        dueDate: "2026-08-04T23:59",
+        pointsPossible: 120,
+        prompt: "Homework 3. it is about beef corndogs",
+      },
+    });
+
+    await waitFor(() => {
+      expect(mockedGenerate).toHaveBeenCalledWith(
+        42,
+        "Homework 3. it is about beef corndogs",
+        expect.anything(),
+      );
+    });
+
+    const description = await screen.findByDisplayValue(
+      "A full, written-out description about beef corndogs.",
+    );
+    expect(description).toBeInTheDocument();
+
+    // Only the description is taken. Title, due date, and points were
+    // explicitly stated by the instructor and must survive the generator's
+    // own defaults.
+    expect(screen.getByDisplayValue("Homework 3")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("2026-08-04T23:59")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("120")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Ignored Title")).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue("999")).not.toBeInTheDocument();
+  });
+
+  // Verifies: Regression (#15) — the LLM round-trip is visible rather than
+  // flashing the chat's one-liner and swapping it under the instructor.
+  it("shows a generating state while expanding the description", async () => {
+    const pending = deferred<{
+      name: string;
+      description: string;
+      dueDate: string;
+      pointsPossible: number;
+    }>();
+    mockedGenerate.mockReturnValue(pending.promise);
+
+    renderPage({
+      aiAssignmentDraft: {
+        courseId: 42,
+        name: "Homework 3",
+        description: "it is about beef corndogs",
+        dueDate: "2026-08-04T23:59",
+        pointsPossible: 120,
+        prompt: "Homework 3. it is about beef corndogs",
+      },
+    });
+
+    expect(
+      await screen.findByText(/Writing a full description from your request/),
+    ).toBeInTheDocument();
+
+    pending.resolve({
+      name: "Ignored",
+      description: "Expanded description.",
+      dueDate: "2099-01-01T00:00",
+      pointsPossible: 999,
+    });
+
+    expect(
+      await screen.findByDisplayValue("Expanded description."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/Writing a full description from your request/),
+    ).not.toBeInTheDocument();
+  });
+
+  // Verifies: Regression (#15) — a generator failure drops to Describe with
+  // the prompt intact, rather than stranding the instructor on Review.
+  it("falls back to the describe step when expansion fails", async () => {
+    mockedGenerate.mockRejectedValue(new Error("Generator unavailable"));
+
+    renderPage({
+      aiAssignmentDraft: {
+        courseId: 42,
+        name: "Homework 3",
+        description: "it is about beef corndogs",
+        dueDate: "2026-08-04T23:59",
+        pointsPossible: 120,
+        prompt: "Homework 3. it is about beef corndogs",
+      },
+    });
+
+    expect(await screen.findByText("Generator unavailable")).toBeInTheDocument();
+    expect(
+      screen.getByDisplayValue("Homework 3. it is about beef corndogs"),
+    ).toBeInTheDocument();
+  });
+
+  // Verifies: Regression (#15) — handoffs without a prompt (the per-course
+  // "Create" button, and resumed typed drafts) must not trigger a generate
+  // call, or resuming a saved draft would silently overwrite edits.
+  it("does not auto-generate when the handoff carries no prompt", async () => {
+    renderPage({
+      aiAssignmentDraft: {
+        courseId: 42,
+        name: "Homework 3",
+        description: "it is about beef corndogs",
+        dueDate: "2026-08-04T23:59",
+        pointsPossible: 120,
+      },
+    });
+
+    expect(
+      await screen.findByDisplayValue("it is about beef corndogs"),
+    ).toBeInTheDocument();
+    expect(mockedGenerate).not.toHaveBeenCalled();
+  });
 });

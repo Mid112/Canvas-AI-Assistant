@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildAssignmentGenerationPrompt,
   ChatReplyMappingError,
   mapChatReply,
   mapChatReplyToAssistantResponse,
@@ -537,5 +538,74 @@ describe("mapChatReply", () => {
     );
 
     expect(result.unverifiedClaims).toBeUndefined();
+  });
+
+  // Verifies: Regression (#15) — the create_assignment handoff carries the
+  // prompt that seeds the describe-step generator, so a chat-initiated
+  // assignment reaches Review with a written-out description.
+  it("carries a generation prompt on the create_assignment handoff", () => {
+    const result = mapChatReplyToAssistantResponse(
+      {
+        action: "intent_preview",
+        intent_preview: true,
+        summary: "Create a new assignment titled \"Homework 3\" in COSTCO.",
+        proposed_action: {
+          action: "create_assignment",
+          local_course_id: 42,
+          title: "Homework 3",
+          description: "it is about beef corndogs",
+          points_possible: 120,
+        },
+        preview_metadata: { course: "COSTCO" },
+        pending_message_id: 9,
+      },
+      false,
+      3,
+    );
+
+    const state = result.interpretedAction?.secondaryLink?.state as
+      | { aiAssignmentDraft?: { prompt?: string } }
+      | undefined;
+    expect(state?.aiAssignmentDraft?.prompt).toBe(
+      "Homework 3. it is about beef corndogs",
+    );
+  });
+});
+
+describe("buildAssignmentGenerationPrompt", () => {
+  it("joins title and description into one describe-step prompt", () => {
+    expect(
+      buildAssignmentGenerationPrompt({
+        title: "Homework 3",
+        description: "it is about beef corndogs",
+      }),
+    ).toBe("Homework 3. it is about beef corndogs");
+  });
+
+  it("does not double up punctuation on a title that ends a sentence", () => {
+    expect(
+      buildAssignmentGenerationPrompt({
+        title: "What is recursion?",
+        description: "Cover base cases.",
+      }),
+    ).toBe("What is recursion? Cover base cases.");
+  });
+
+  it("falls back to whichever field is present", () => {
+    expect(buildAssignmentGenerationPrompt({ title: "Homework 3" })).toBe(
+      "Homework 3",
+    );
+    expect(
+      buildAssignmentGenerationPrompt({ description: "beef corndogs" }),
+    ).toBe("beef corndogs");
+  });
+
+  // Verifies: an empty proposal yields no prompt, so the create page keeps
+  // its existing behaviour instead of calling the generator with "".
+  it("returns undefined when there is nothing to generate from", () => {
+    expect(buildAssignmentGenerationPrompt({})).toBeUndefined();
+    expect(
+      buildAssignmentGenerationPrompt({ title: "   ", description: "  " }),
+    ).toBeUndefined();
   });
 });
