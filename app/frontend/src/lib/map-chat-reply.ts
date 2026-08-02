@@ -318,10 +318,7 @@ function buildQuizCreateDraftState(
               | "true_false_question"
               | "short_answer_question"
               | "essay_question") ?? "essay_question",
-          pointsPossible:
-            typeof record.points_possible === "number"
-              ? record.points_possible
-              : 1,
+          pointsPossible: readNumber(record.points_possible) ?? 1,
           answers: Array.isArray(record.answers)
             ? (record.answers as Array<{ text: string; weight: number }>)
             : [],
@@ -341,9 +338,9 @@ function buildQuizCreateDraftState(
       dueDate: readString(proposed.due_date)
         ? formatDueDateForInput(readString(proposed.due_date)!)
         : undefined,
-      pointsPossible: proposed.points_possible,
-      allowedAttempts: proposed.allowed_attempts,
-      timeLimit: proposed.time_limit,
+      pointsPossible: readNumber(proposed.points_possible),
+      allowedAttempts: readNumber(proposed.allowed_attempts),
+      timeLimit: readNumber(proposed.time_limit),
       quizEngine:
         proposed.quiz_engine === "new_quizzes" ? "new_quizzes" : "classic",
       questionBankGroups: Array.isArray(proposed.question_bank_groups)

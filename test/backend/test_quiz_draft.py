@@ -51,11 +51,52 @@ def test_generate_quiz_draft_success(client):
     assert response.status_code == 200
     data = response.json()
     assert data["title"] == "Recursion Quiz"
-    assert data["points_possible"] == 20
+    # Ticket 14: quiz total is realigned to the scored question sum when the
+    # model returns an inconsistent points_possible.
+    assert data["points_possible"] == 5
     assert data["allowed_attempts"] == 2
     assert data["time_limit"] == 30
     assert len(data["questions"]) == 1
     assert data["questions"][0]["question_text"] == "What is a base case?"
+    assert data["questions"][0]["points_possible"] == 5
+
+
+# Verifies: Ticket 14 — multi-point questions are preserved and quiz total
+# is aligned to the sum when the model returns an inconsistent total.
+def test_generate_quiz_draft_preserves_multi_point_questions(client):
+    headers, _ = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        '{"title": "Weighted Quiz", "description": "Uses multi-point questions.", '
+        '"due_at": null, "points_possible": 100, "allowed_attempts": 1, '
+        '"time_limit": null, "questions": ['
+        '{"question_text": "Essay on recursion", "question_type": "essay_question", '
+        '"points_possible": 5, "answers": []},'
+        '{"question_text": "Short definition", "question_type": "short_answer_question", '
+        '"points_possible": 2, "answers": []},'
+        '{"question_text": "True or false?", "question_type": "true_false_question", '
+        '"points_possible": 3, "answers": [{"text": "True", "weight": 100}, '
+        '{"text": "False", "weight": 0}]}]}'
+    )
+
+    with (
+        patch(
+            "app.services.course_access.get_owned_course_or_404",
+            new=AsyncMock(return_value=object()),
+        ),
+        patch("app.services.quiz_draft.get_llm_adapter", return_value=mock_adapter),
+    ):
+        response = client.post(
+            "/api/v1/canvas/courses/1/quizzes/generate-draft",
+            json={"prompt": "Create a quiz with multi-point questions on recursion"},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [q["points_possible"] for q in data["questions"]] == [5, 2, 3]
+    assert data["points_possible"] == 10
 
 
 def test_generate_quiz_draft_rejects_unowned_course(client):

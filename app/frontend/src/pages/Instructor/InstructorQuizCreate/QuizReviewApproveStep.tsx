@@ -169,10 +169,50 @@ export function QuizReviewApproveStep({
     name: "quizEngine",
     defaultValue: draft.quizEngine ?? "classic",
   });
+  const watchedQuestions = useWatch({ control, name: "questions" });
+  const watchedBankGroups = useWatch({ control, name: "questionBankGroups" });
 
   useEffect(() => {
     void trigger();
   }, [trigger]);
+
+  // Keep quiz points_possible aligned with per-question / bank points so
+  // editing a question above 1 point doesn't leave the form stuck invalid
+  // (Ticket 14).
+  useEffect(() => {
+    const questionTotal = (watchedQuestions ?? []).reduce((sum, question) => {
+      const points = Number(question?.pointsPossible);
+      return sum + (Number.isFinite(points) && points > 0 ? points : 0);
+    }, 0);
+    const bankTotal = (watchedBankGroups ?? []).reduce((sum, group) => {
+      const pickCount = Number(group?.pickCount);
+      const questionPoints = Number(group?.questionPoints);
+      if (
+        !Number.isFinite(pickCount) ||
+        !Number.isFinite(questionPoints) ||
+        pickCount <= 0 ||
+        questionPoints <= 0
+      ) {
+        return sum;
+      }
+      return sum + pickCount * questionPoints;
+    }, 0);
+    const scoredTotal = questionTotal + bankTotal;
+    if (scoredTotal <= 0) {
+      return;
+    }
+    const currentTotal = Number(getValues("pointsPossible"));
+    if (
+      Number.isFinite(currentTotal) &&
+      Math.abs(currentTotal - scoredTotal) <= 0.01
+    ) {
+      return;
+    }
+    setValue("pointsPossible", scoredTotal, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }, [getValues, setValue, watchedBankGroups, watchedQuestions]);
 
   const lastSyncedDraftKey = useRef<string | null>(null);
 
@@ -287,8 +327,8 @@ export function QuizReviewApproveStep({
               <Input
                 id="quiz-review-points"
                 type="number"
-                min="0"
-                step="1"
+                min="0.01"
+                step="0.1"
                 aria-invalid={Boolean(errors.pointsPossible)}
                 {...register("pointsPossible", { valueAsNumber: true })}
               />
@@ -595,8 +635,8 @@ export function QuizReviewApproveStep({
                 <input type="hidden" {...register(`questions.${index}.questionType`)} />
                 <Input
                   type="number"
-                  min="0"
-                  step="1"
+                  min="0.01"
+                  step="0.1"
                   aria-label={`Points for question ${index + 1}`}
                   {...register(`questions.${index}.pointsPossible`, {
                     valueAsNumber: true,

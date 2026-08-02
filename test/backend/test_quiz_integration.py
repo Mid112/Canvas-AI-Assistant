@@ -192,6 +192,9 @@ def test_create_quiz_creates_quiz_and_questions(client):
     canvas_payload = create_quiz.await_args.args[1]
     assert "questions" not in canvas_payload
     assert canvas_payload["published"] is False
+    # Ticket 14: per-question points > 1 are forwarded to Canvas question creates.
+    question_payloads = [call.args[2] for call in create_question.await_args_list]
+    assert all(payload["points_possible"] == 10 for payload in question_payloads)
 
     history = client.get("/api/v1/history/workflows", headers=headers)
     assert history.status_code == 200, history.json()

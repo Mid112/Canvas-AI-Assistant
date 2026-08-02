@@ -180,9 +180,15 @@ def _check_questions(questions: list[dict] | None) -> None:
         points = question.get("points_possible")
         if points is not None:
             try:
-                if float(points) <= 0:
-                    raise ValueError
+                points_value = float(points)
             except (TypeError, ValueError):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Question {index + 1} points_possible must be a number.",
+                ) from None
+            # Canvas accepts any positive points value (including > 1). Ticket 14
+            # regression: never reject realistic multi-point questions here.
+            if points_value <= 0:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=f"Question {index + 1} points_possible must be greater than zero.",

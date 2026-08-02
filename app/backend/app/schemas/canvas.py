@@ -88,7 +88,8 @@ class QuizQuestionCreate(BaseModel):
         "short_answer_question",
         "essay_question",
     ] = "essay_question"
-    points_possible: float = 1.0
+    # Canvas allows any positive points value — do not cap at 1 (Ticket 14).
+    points_possible: float = Field(default=1.0, gt=0)
     answers: list[dict] = Field(default_factory=list)
 
 

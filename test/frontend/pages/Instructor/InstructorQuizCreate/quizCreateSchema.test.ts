@@ -33,6 +33,43 @@ describe("quizCreateSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  // Verifies: Ticket 14 — per-question points may be greater than 1.
+  it("accepts mixed per-question point values greater than 1", () => {
+    const result = quizReviewSchema.safeParse({
+      name: "Weighted Quiz",
+      description: "Covers base cases and recursive definitions.",
+      dueDate: "2030-12-15T23:59",
+      pointsPossible: 17.5,
+      allowedAttempts: 1,
+      timeLimit: null,
+      questions: [
+        {
+          questionText: "Essay explanation",
+          questionType: "essay_question",
+          pointsPossible: 10,
+          answers: [],
+        },
+        {
+          questionText: "Short answer",
+          questionType: "short_answer_question",
+          pointsPossible: 2.5,
+          answers: [],
+        },
+        {
+          questionText: "Multiple choice",
+          questionType: "multiple_choice_question",
+          pointsPossible: 5,
+          answers: [
+            { text: "A", weight: 100 },
+            { text: "B", weight: 0 },
+          ],
+        },
+      ],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it("rejects short quiz descriptions", () => {
     const result = quizReviewSchema.safeParse({
       name: "Recursion Quiz",

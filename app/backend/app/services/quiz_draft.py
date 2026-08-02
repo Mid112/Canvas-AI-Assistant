@@ -35,6 +35,9 @@ async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
         '"multiple_choice_question"|"true_false_question"|"short_answer_question"|"essay_question", '
         '"points_possible": number, "answers": [{"text": "...", "weight": 100 or 0}]}]}. '
         "Include 3-5 questions when the prompt implies a quiz with questions. "
+        "Per-question points_possible may be greater than 1 (for example 2, 5, or 10) "
+        "when the prompt implies multi-point items — never force every question to 1. "
+        "Set quiz points_possible to the exact sum of all question points_possible values. "
         "For multiple_choice_question and true_false_question, set weight 100 on the "
         "correct answer and 0 on incorrect ones. "
         "Description and question_text must be plain text only."
@@ -109,6 +112,10 @@ async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
                 points_value = float(points) if points is not None else 1.0
             except (TypeError, ValueError):
                 points_value = 1.0
+            # Preserve multi-point values from the model; only fall back when
+            # missing/invalid. Never clamp down to 1 (Ticket 14).
+            if points_value <= 0:
+                points_value = 1.0
             questions.append(
                 QuizQuestionDraft(
                     question_text=text,
@@ -130,11 +137,27 @@ async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
     except (TypeError, ValueError):
         time_limit_value = None
 
+    question_points_sum = sum(question.points_possible for question in questions)
+    quiz_points = data.get("points_possible")
+    try:
+        quiz_points_value = float(quiz_points) if quiz_points is not None else None
+    except (TypeError, ValueError):
+        quiz_points_value = None
+    # Prefer the scored question total when the model omitted quiz points or
+    # left them inconsistent — otherwise the review form rejects multi-point
+    # questions as a total mismatch (Ticket 14).
+    if questions and (
+        quiz_points_value is None
+        or quiz_points_value <= 0
+        or abs(quiz_points_value - question_points_sum) > 0.01
+    ):
+        quiz_points_value = question_points_sum
+
     return QuizDraftResponse(
         title=str(data.get("title") or "Untitled Quiz"),
         description=_plain_text(str(data.get("description") or body.prompt)),
         due_at=due_at,
-        points_possible=data.get("points_possible"),
+        points_possible=quiz_points_value,
         allowed_attempts=allowed_attempts_value,
         time_limit=time_limit_value,
         questions=questions,
