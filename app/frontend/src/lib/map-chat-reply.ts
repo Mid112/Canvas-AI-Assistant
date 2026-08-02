@@ -270,7 +270,7 @@ function buildInterpretedAction(
           dueDate: readString(proposed.due_date)
             ? formatDueDateForInput(readString(proposed.due_date)!)
             : undefined,
-          pointsPossible: proposed.points_possible,
+          pointsPossible: readNumber(proposed.points_possible) ?? null,
         },
       },
     };

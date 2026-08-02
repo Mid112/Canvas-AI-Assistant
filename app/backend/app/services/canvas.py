@@ -698,6 +698,21 @@ async def get_assignment(
     return AssignmentResponse(**data)
 
 
+def _assignment_create_payload_for_canvas(payload: AssignmentCreate) -> dict:
+    """Map AssignmentCreate to a Canvas assignment body.
+
+    Ticket 21: null points_possible is ungraded. Canvas defaults omitted
+    grading_type to "points", so we must send grading_type=not_graded
+    instead of inventing a numeric points default (e.g. 10).
+    """
+    body = payload.model_dump(mode="json")
+    if payload.points_possible is None:
+        body["grading_type"] = "not_graded"
+    else:
+        body["grading_type"] = "points"
+    return body
+
+
 async def create_course_assignment(
     local_course_id: int,
     payload: AssignmentCreate,
@@ -728,17 +743,18 @@ async def create_course_assignment(
         exclude_workflow_id=exclude_workflow_id,
     )
 
+    canvas_body = _assignment_create_payload_for_canvas(payload)
     key = idempotency_key or build_idempotency_key(
         "create_assignment",
         user.id,
         course.id,
-        payload.model_dump(mode="json"),
+        canvas_body,
     )
 
     async def _write() -> dict:
         return await create_assignment(
             int(course.canvas_course_id),
-            payload.model_dump(mode="json"),
+            canvas_body,
             token,
             resolved_canvas_url,
         )

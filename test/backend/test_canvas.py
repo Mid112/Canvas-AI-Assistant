@@ -643,9 +643,46 @@ def test_create_assignment(client, auth_headers):
     assert response.status_code == 200
     assert response.json()["id"] == 11
     mock.assert_awaited_once()
-    # payload passes through AssignmentCreate, which fills in points_possible=None
-    # for any field the client didn't send
-    assert mock.await_args.args[:2] == (12345, payload | {"points_possible": None})
+    # Ticket 21: omitted points become ungraded (grading_type=not_graded),
+    # not a invented numeric default.
+    assert mock.await_args.args[0] == 12345
+    assert mock.await_args.args[1] == {
+        **payload,
+        "points_possible": None,
+        "grading_type": "not_graded",
+    }
+
+
+# Verifies: Ungraded create sends Canvas grading_type=not_graded (Ticket 21).
+def test_create_ungraded_assignment_sets_not_graded(client, auth_headers):
+    local_course_id = _sync_local_course(client, auth_headers)
+    payload = {
+        "name": "Reading Check-in",
+        "description": "Ungraded reflection",
+        "due_at": "2026-12-15T23:59:00Z",
+        "points_possible": None,
+    }
+    created = MOCK_ASSIGNMENT | {
+        "id": 12,
+        "name": "Reading Check-in",
+        "points_possible": None,
+        "grading_type": "not_graded",
+    }
+
+    with patch("app.services.canvas.create_assignment", new_callable=AsyncMock) as mock:
+        mock.return_value = created
+        response = client.post(
+            f"/api/v1/canvas/courses/{local_course_id}/assignments?canvas_url={CANVAS_URL}",
+            json=payload,
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 200
+    mock.assert_awaited_once()
+    canvas_body = mock.await_args.args[1]
+    assert canvas_body["grading_type"] == "not_graded"
+    assert canvas_body["points_possible"] is None
+    assert canvas_body.get("points_possible", "missing") is None
 
 
 # Verifies: Update assignment.
