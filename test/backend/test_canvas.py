@@ -1229,3 +1229,94 @@ def test_canvas_course_names_refreshed_on_sync(client):
     sent_message = mock_adapter.generate.call_args.args[1]
     assert "Renamed" in sent_message
     assert "Original Name" not in sent_message
+
+
+# ---------------------------------------------------------------------------
+# POST /canvas/courses — new-account token URL resolution (#1425)
+# ---------------------------------------------------------------------------
+
+
+# Verifies: Newly connected accounts can create a first course without an
+# explicit canvas_url query param — uses the saved connection instead of the
+# global CANVAS_API_URL (which caused "No Canvas token for https://canvas.ubc.ca").
+def test_create_course_uses_saved_connection_when_canvas_url_omitted(client, monkeypatch):
+    connection_url = "http://localhost:3000"
+    monkeypatch.setattr(
+        "app.config.settings.CANVAS_API_URL",
+        "https://canvas.ubc.ca",
+        raising=False,
+    )
+
+    email = f"new_acct_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "New Instructor", "email": email, "password": "secret123"},
+    )
+    assert reg.status_code == 201
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        saved = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "new-account-token", "canvas_url": connection_url},
+            headers=headers,
+        )
+    assert saved.status_code == 200
+
+    created = {
+        "id": 9001,
+        "name": "Capstone Project",
+        "course_code": "COSC499",
+        "workflow_state": "unpublished",
+        "total_students": 0,
+    }
+
+    with (
+        patch(
+            "app.services.canvas.fetch_accounts",
+            new=AsyncMock(return_value=[{"id": 1, "parent_account_id": None}]),
+        ),
+        patch(
+            "app.services.canvas.create_course",
+            new=AsyncMock(return_value=created),
+        ) as mock_create,
+        patch("app.services.canvas.decrypt_canvas_token", return_value="new-account-token"),
+    ):
+        response = client.post(
+            "/api/v1/canvas/courses",
+            json={"name": "Capstone Project", "course_code": "COSC499", "publish": False},
+            headers=headers,
+        )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["name"] == "Capstone Project"
+    mock_create.assert_awaited_once()
+    assert mock_create.await_args.args[3] == connection_url
+
+
+# Verifies: Missing Canvas token on create returns reconnect guidance, not a raw PATCH path.
+def test_create_course_missing_token_returns_reconnect_guidance(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.config.settings.CANVAS_API_URL",
+        "https://canvas.ubc.ca",
+        raising=False,
+    )
+
+    email = f"no_token_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "No Token", "email": email, "password": "secret123"},
+    )
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+
+    response = client.post(
+        "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+        json={"name": "Should Fail", "publish": False},
+        headers=headers,
+    )
+
+    assert response.status_code == 403
+    detail = response.json()["detail"]
+    assert "No Canvas token" in detail
+    assert "Reconnect Canvas" in detail
+    assert "PATCH" not in detail

@@ -10,7 +10,7 @@ describe("isCanvasConnectionRequiredError", () => {
     expect(
       isCanvasConnectionRequiredError(
         new CanvasApiError(
-          "No Canvas token for https://canvas.example.edu. PATCH to /api/v1/auth/me/canvas-token first.",
+          "No Canvas token for https://canvas.ubc.ca. Reconnect Canvas in Settings, then try again.",
           403,
         ),
       ),
@@ -54,5 +54,34 @@ describe("isCanvasConnectionRequiredError", () => {
     expect(
       isCanvasConnectionRequiredError(new CanvasApiError("Canvas unavailable", 503)),
     ).toBe(false);
+  });
+});
+
+describe("canvasConnectionRequiredMessage", () => {
+  // Verifies: Hides raw API patch paths behind reconnect guidance.
+  it("returns reconnect guidance for missing token errors", async () => {
+    const { canvasConnectionRequiredMessage } = await import("@/lib/canvas-connection");
+
+    expect(
+      canvasConnectionRequiredMessage(
+        new CanvasApiError(
+          "No Canvas token for https://canvas.ubc.ca. Reconnect Canvas in Settings, then try again.",
+          403,
+        ),
+      ),
+    ).toBe(
+      "Canvas is not connected for this institution. Reconnect Canvas in Settings, then try again.",
+    );
+  });
+
+  // Verifies: Preserves Canvas admin permission guidance.
+  it("preserves Canvas admin permission guidance", async () => {
+    const { canvasConnectionRequiredMessage } = await import("@/lib/canvas-connection");
+    const message =
+      "Your Canvas token cannot create courses on any account. Ask an admin to grant course-creation permission.";
+
+    expect(canvasConnectionRequiredMessage(new CanvasApiError(message, 403))).toBe(
+      message,
+    );
   });
 });

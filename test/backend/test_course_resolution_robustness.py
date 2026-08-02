@@ -298,6 +298,42 @@ def test_match_course_name_legacy_row_with_null_workflow_state_still_resolves():
     assert match.local_course_id == 2
 
 
+def test_match_course_name_department_code_prefix_stays_unresolved():
+    from app.models.canvas_course_name import CanvasCourseName
+    from app.models.course import Course
+    from app.services.chat import _match_course_name
+
+    def course_name(local_id: int, name: str, code: str, workflow_state: str) -> CanvasCourseName:
+        row = CanvasCourseName(
+            canvas_connection_id=1,
+            canvas_course_id=str(local_id),
+            local_course_id=local_id,
+            name=name,
+            workflow_state=workflow_state,
+        )
+        row.course = Course(
+            id=local_id,
+            canvas_course_id=str(local_id),
+            canvas_url=CANVAS_URL,
+            name=name,
+            course_code=code,
+            workflow_state=workflow_state,
+            instructor_id=1,
+        )
+        return row
+
+    course_names = [
+        course_name(1, "Introduction to Software Engineering", "COSC 310", "completed"),
+        course_name(2, "Software Architecture", "COSC 333", "completed"),
+        course_name(3, "Capstone Project", "COSC 499", "available"),
+    ]
+
+    assert _match_course_name(course_names, "COSC") is None
+    exact_code_match = _match_course_name(course_names, "COSC 499")
+    assert exact_code_match is not None
+    assert exact_code_match.local_course_id == 3
+
+
 # ── Fuzzy substring fallback ─────────────────────────────────────────────
 
 # Verifies: an unambiguous normalized-substring match still resolves when

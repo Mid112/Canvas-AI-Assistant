@@ -419,7 +419,7 @@ def _course_prompt_label(course_name: CanvasCourseName) -> str:
     return name
 
 
-def _course_match_texts(course_name: CanvasCourseName) -> tuple[str, ...]:
+def _course_exact_match_texts(course_name: CanvasCourseName) -> tuple[str, ...]:
     values = [_course_display_name(course_name)]
     code = _course_code(course_name)
     if code:
@@ -427,6 +427,10 @@ def _course_match_texts(course_name: CanvasCourseName) -> tuple[str, ...]:
         values.append(f"{_course_display_name(course_name)} {code}")
         values.append(f"{_course_display_name(course_name)} / {code}")
     return tuple(values)
+
+
+def _course_substring_match_texts(course_name: CanvasCourseName) -> tuple[str, ...]:
+    return (_course_display_name(course_name),)
 
 
 _COURSE_NAME_FUZZY_MATCH_MIN_LENGTH = 4
@@ -450,28 +454,18 @@ def _resolve_duplicate_course_name_matches(
 
 
 def _match_course_name(course_names: list[CanvasCourseName], course_name: str | None) -> CanvasCourseName | None:
-    """Exact (normalized) match first; a normalized substring match only
-    if that finds nothing, since the model is given the literal course
-    labels in YOUR COURSES and told to copy the display name or code, so exact
-    is both the expected and the safest case. The substring fallback
-    exists only for a smaller/weaker model paraphrasing or abbreviating
-    despite that instruction — restricted to a single unambiguous
-    candidate (in either substring direction) and a minimum normalized
-    length, so a short/generic fragment can't spuriously match half the
-    course list. Either stage can still hit a same-name collision across
-    terms (see _resolve_duplicate_course_name_matches); if that's also
-    ambiguous, this returns None either way — no match is ever guessed,
-    only ever resolved to something already unambiguous — and the caller
-    falls back to its existing sticky-course behavior, same
-    belt-and-suspenders philosophy as dispatcher.py's
-    _create_assignment_missing_field."""
+    """Exact (normalized) match first across display names and course
+    codes; a normalized substring match only if that finds nothing, and
+    only against display names. Course codes are short identifiers, so a
+    prefix like "COSC" must not bind to the one available COSC course just
+    because historical completed terms were narrowed away."""
     if not course_name:
         return None
     normalized_target = _normalize_course_text(course_name)
 
     exact_matches = [
         cn for cn in course_names
-        if any(_normalize_course_text(value) == normalized_target for value in _course_match_texts(cn))
+        if any(_normalize_course_text(value) == normalized_target for value in _course_exact_match_texts(cn))
     ]
     if len(exact_matches) == 1:
         return exact_matches[0]
@@ -485,7 +479,7 @@ def _match_course_name(course_names: list[CanvasCourseName], course_name: str | 
         if any(
             normalized_target in _normalize_course_text(value)
             or _normalize_course_text(value) in normalized_target
-            for value in _course_match_texts(cn)
+            for value in _course_substring_match_texts(cn)
         )
     ]
     if len(substring_matches) == 1:

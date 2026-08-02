@@ -107,7 +107,12 @@ async def create_course(
     canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a Canvas course from the app and sync it into the local course list (#1285)."""
+    """Create a Canvas course from the app and sync it into the local course list (#1285).
+
+    ``canvas_url`` may be omitted when the user has a single saved Canvas
+    connection, so newly connected accounts do not hit the global
+    CANVAS_API_URL mismatch (#1425).
+    """
     resolved_canvas_url = resolve_institution_canvas_url(current_user, canvas_url)
     return await create_canvas_course(body, current_user, resolved_canvas_url, db)
 
