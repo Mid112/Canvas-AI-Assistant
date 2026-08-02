@@ -160,6 +160,11 @@ export function InstructorQuizCreatePage() {
   const effectiveCourseLoadError = needsCanvasConnection
     ? "Connect your Canvas account to load courses."
     : courseLoadError;
+  // Persisted with saved drafts so resuming targets this course rather than
+  // whatever is active later. Labels only — see TypedDraftContent (#1239).
+  const selectedCourse = writableCourses.find(
+    (course) => String(course.id) === resolvedCourseId,
+  );
 
   const handleDescribeValuesChange = useCallback((values: QuizDescribeValues) => {
     setDescribeValues((current) =>
@@ -215,7 +220,12 @@ export function InstructorQuizCreatePage() {
     const saved = saveTypedDraft(user.id, {
       id: savedTypedDraftId,
       kind: "quiz",
-      content,
+      content: {
+        ...content,
+        ...(selectedCourse
+          ? { courseCode: selectedCourse.code, courseName: selectedCourse.name }
+          : {}),
+      },
     });
     setSavedTypedDraftId(saved.id);
     setDraftSaveStatus("Draft saved. Resume it anytime from the assistant.");

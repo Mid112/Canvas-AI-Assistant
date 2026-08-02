@@ -143,6 +143,11 @@ export function InstructorAssignmentCreatePage() {
   const courseLabel =
     courseOptions.find((course) => course.id === describeValues.courseId)
       ?.label ?? "your course";
+  // Persisted with saved drafts so resuming targets this course rather than
+  // whatever is active later. Labels only — see TypedDraftContent (#1239).
+  const selectedCourse = writableCourses.find(
+    (course) => String(course.id) === describeValues.courseId,
+  );
   const effectiveCourseLoadError = needsCanvasConnection
     ? "Connect your Canvas account to load courses."
     : courseLoadError;
@@ -259,7 +264,12 @@ export function InstructorAssignmentCreatePage() {
     const saved = saveTypedDraft(user.id, {
       id: savedTypedDraftId,
       kind: "assignment",
-      content,
+      content: {
+        ...content,
+        ...(selectedCourse
+          ? { courseCode: selectedCourse.code, courseName: selectedCourse.name }
+          : {}),
+      },
     });
     setSavedTypedDraftId(saved.id);
     setDraftSaveStatus("Draft saved. Resume it anytime from the assistant.");

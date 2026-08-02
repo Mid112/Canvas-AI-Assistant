@@ -25,6 +25,7 @@ import {
   buildTypedDraftResumeTarget,
   discardTypedDraft,
   listTypedDrafts,
+  resolveTypedDraftCourseId,
   type TypedDraft,
 } from "@/lib/typed-draft-storage";
 import {
@@ -92,7 +93,7 @@ export function InstructorAssistantPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { accessToken, user } = useAuth();
-  const { activeCourse } = useActiveCourse();
+  const { activeCourse, availableCourses } = useActiveCourse();
   const suggestedActions = useMemo(
     () => buildSuggestedActions(activeCourse?.displayName),
     [activeCourse?.displayName],
@@ -155,6 +156,21 @@ export function InstructorAssistantPage() {
     void typedDraftRevision;
     return listTypedDrafts(user.id);
   }, [user?.id, typedDraftRevision]);
+
+  // A draft that carries its own course is resumable with nothing active, so
+  // prompting for a course selection there would be asking for something the
+  // draft already answers. Panel-level rather than per-draft: the notice is a
+  // single banner, so it shows only when no draft can resolve on its own.
+  const requiresCourseSelection = useMemo(
+    () =>
+      !activeCourse &&
+      !typedDrafts.some(
+        (draft) =>
+          resolveTypedDraftCourseId(draft.content, availableCourses) !==
+          undefined,
+      ),
+    [activeCourse, availableCourses, typedDrafts],
+  );
 
   const loadConversationList = useCallback(async () => {
     if (!accessToken) {
@@ -392,13 +408,19 @@ export function InstructorAssistantPage() {
 
   const handleResumeTypedDraft = (draftId: string) => {
     if (!user?.id) return;
-    if (!activeCourse) return;
     const draft = typedDrafts.find((entry) => entry.id === draftId);
     if (!draft) return;
+    // The draft's own course wins over whatever happens to be active now.
+    // Resuming used to seed the active course unconditionally, so switching
+    // courses between save and resume silently retargeted the draft at the
+    // new one. The active course is the fallback only when the draft predates
+    // this (no labels stored) or its course is no longer in the list.
+    const courseId =
+      resolveTypedDraftCourseId(draft.content, availableCourses) ??
+      activeCourse?.localId;
+    if (courseId === undefined) return;
     // Keep the draft until Canvas confirm/submit on the target create page.
-    const target = buildTypedDraftResumeTarget(draft, {
-      courseId: activeCourse.localId,
-    });
+    const target = buildTypedDraftResumeTarget(draft, { courseId });
     navigate(target.path, { state: target.state });
   };
 
@@ -434,7 +456,7 @@ export function InstructorAssistantPage() {
           isResuming={isResumingDeferred}
           discardingId={discardingDeferredId}
           discardingTypedId={discardingTypedId}
-          requiresCourseSelection={!activeCourse}
+          requiresCourseSelection={requiresCourseSelection}
         />
       ) : null}
 
