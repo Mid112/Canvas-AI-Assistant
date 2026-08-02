@@ -19,7 +19,7 @@ from app.schemas.admin import (
 )
 from app.schemas.auth import CanvasTokenRequest
 from app.schemas.health import HealthCheckResponse, HealthHistoryResponse, LatestHealthResponse
-from app.schemas.llm_provider import LlmProviderConfig, LlmProviderConfigResponse
+from app.schemas.llm_provider import LlmProviderConfig, LlmProviderConfigResponse, LlmProviderStatus
 from app.services.admin import (
     create_admin_user,
     create_instructor,
@@ -105,7 +105,7 @@ async def llm_provider_settings(
 ):
     return LlmProviderConfigResponse(
         config=await get_llm_provider_config(db),
-        providers=await get_provider_statuses(),
+        providers=[LlmProviderStatus(**provider) for provider in await get_provider_statuses()],
     )
 
 
@@ -118,7 +118,7 @@ async def update_llm_provider_settings(
     config = await update_llm_provider_config(db, body, current_user)
     return LlmProviderConfigResponse(
         config=config,
-        providers=await get_provider_statuses(),
+        providers=[LlmProviderStatus(**provider) for provider in await get_provider_statuses()],
     )
 
 

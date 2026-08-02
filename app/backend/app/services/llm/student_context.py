@@ -80,6 +80,7 @@ def llm_safe_submission_dict(submission: Any) -> dict[str, Any]:
         raw = dict(submission)
     else:
         status = getattr(submission, "status", None)
+        status_value = status.value if status is not None and hasattr(status, "value") else status
         raw = {
             "id": getattr(submission, "id", None),
             "assignment_id": getattr(submission, "assignment_id", None),
@@ -87,7 +88,7 @@ def llm_safe_submission_dict(submission: Any) -> dict[str, Any]:
             "student_name": getattr(submission, "student_name", None),
             "submitted_at": getattr(submission, "submitted_at", None),
             "workflow_state": getattr(submission, "workflow_state", None),
-            "status": status.value if hasattr(status, "value") else status,
+            "status": status_value,
             "score": getattr(submission, "score", None),
             "grade": getattr(submission, "grade", None),
             "graded_at": getattr(submission, "graded_at", None),

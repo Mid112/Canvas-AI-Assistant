@@ -6,13 +6,14 @@ import re
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy import desc, func, select
 from sqlalchemy import update as sa_update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, selectinload
 
@@ -2239,7 +2240,7 @@ async def _sync_workflow_for_preview(
     unhandled IntegrityError instead of the graceful "course not found"
     message _resolve_course already produces at confirm time. Leaving it
     unset here means that existing, tested error path still fires."""
-    action_name = proposed_action.get("action")
+    action_name = str(proposed_action.get("action") or "")
     resources = affected_resources or []
 
     if conversation.course_id is None:
@@ -3641,7 +3642,7 @@ async def _claim_pending_workflow(db: AsyncSession, workflow: Workflow, new_stat
         .where(Workflow.id == workflow.id, Workflow.status == "pending")
         .values(status=new_status)
     )
-    if claim.rowcount > 0:
+    if cast(CursorResult, claim).rowcount > 0:
         return True
     # SQLAlchemy's default synchronize_session='evaluate' strategy re-checks
     # the bulk UPDATE's WHERE clause against workflow's in-memory attributes,
@@ -3867,11 +3868,14 @@ async def handle_confirmed_action(
     # loaded in a different session context, causing greenlet errors when
     # execute_tool accesses them during async execution
     from sqlalchemy import select as sa_select
-    user = await db.scalar(
+    loaded_user = await db.scalar(
         sa_select(User)
         .where(User.id == user.id)
         .options(selectinload(User.canvas_connections))
     )
+    if loaded_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    user = loaded_user
 
     await log_message(db, conversation, role="user", content="[confirmed action]")
 

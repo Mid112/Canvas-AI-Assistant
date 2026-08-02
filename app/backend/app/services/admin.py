@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from typing import Any, cast
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
@@ -143,7 +144,7 @@ async def update_llm_provider_config(
     if config.fallback_provider:
         get_provider_definition(config.fallback_provider)
 
-    values = {
+    values: dict[str, Any] = {
         ACTIVE_PROVIDER_KEY: config.provider,
         ACTIVE_MODEL_KEY: config.model.strip(),
         FALLBACK_PROVIDER_KEY: config.fallback_provider or "",
@@ -160,10 +161,10 @@ async def update_llm_provider_config(
     for key, value in values.items():
         existing = await db.get(SystemSetting, key)
         if existing:
-            existing.value = value
+            existing.value = cast(dict | list | str | int | float | bool, value)
             existing.updated_at = datetime.now(UTC)
         else:
-            db.add(SystemSetting(key=key, value=value))
+            db.add(SystemSetting(key=key, value=cast(dict | list | str | int | float | bool, value)))
 
     db.add(AuditLogSession(
         user_id=admin.id,

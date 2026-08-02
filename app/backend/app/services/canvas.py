@@ -192,7 +192,7 @@ def resolve_institution_canvas_url(user: User, canvas_url: str | None) -> str:
     )
 
 
-def _is_expected_canvas_token_sync_error(exc: Exception) -> bool:
+def _is_expected_canvas_token_sync_error(exc: BaseException) -> bool:
     """Background sync treats missing/invalid/corrupted Canvas tokens as
     expected account state, not infrastructure failure. Interactive endpoints
     still raise the original status, but sweeps should only log a concise
@@ -283,8 +283,13 @@ async def get_owned_course(
             Course.instructor_id == user.id,
         )
     )
-    normalized = normalize_canvas_url(canvas_url or course.canvas_url) if course else None
-    if not course or not canvas_urls_equivalent(course.canvas_url, normalized):
+    if course is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found or does not belong to you.",
+        )
+    normalized = normalize_canvas_url(canvas_url or course.canvas_url)
+    if not canvas_urls_equivalent(course.canvas_url, normalized):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found or does not belong to you.",
@@ -1751,7 +1756,7 @@ async def run_course_sync_sweep(db: AsyncSession) -> None:
                 if expected_token_issue:
                     logger.warning(
                         "course sync sweep skipped canvas_connection_id=%s user_id=%s: %s",
-                        connection_id, user_id, exc.detail,
+                        connection_id, user_id, getattr(exc, "detail", str(exc)),
                     )
                 else:
                     logger.warning(
@@ -1884,7 +1889,7 @@ async def set_active_course(user: User, local_course_id: int, db: AsyncSession) 
                     if _is_expected_canvas_token_sync_error(exc):
                         logger.warning(
                             "set_active_course sync skipped canvas_connection_id=%s user_id=%s: %s",
-                            connection.id, user.id, exc.detail,
+                            connection.id, user.id, getattr(exc, "detail", str(exc)),
                         )
                     else:
                         logger.warning(
