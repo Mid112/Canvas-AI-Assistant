@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import { useAuth } from "@/contexts/AuthContext";
@@ -12,6 +13,7 @@ import {
 import { filterNotificationsBySettings } from "@/lib/filter-notifications";
 import { pageShell } from "@/lib/page-shell";
 import { NotificationList } from "@/pages/Instructor/InstructorDashboard/NotificationList";
+import { instructorSettingsPath } from "@/routes/paths";
 import { fetchNotificationSettings } from "@/services/auth";
 import type { NotificationSettings } from "@/types/auth";
 
@@ -34,7 +36,7 @@ export function InstructorNotificationsPage() {
           setSettings(remote);
         }
       } catch {
-        // Keep unfiltered dashboard notifications if settings fail to load.
+        // Keep default-filtered dashboard notifications if settings fail to load.
         if (!cancelled) {
           setSettings(null);
         }
@@ -76,13 +78,23 @@ export function InstructorNotificationsPage() {
         </h1>
         <p className="text-muted-foreground">
           Updates for {user?.name ?? "Instructor"} at{" "}
-          {selectedInstitution.shortName}.
+          {selectedInstitution.shortName}.{" "}
+          <Link
+            to={instructorSettingsPath("notifications")}
+            className="font-medium text-foreground underline-offset-4 hover:underline"
+          >
+            Manage notification preferences
+          </Link>
         </p>
       </div>
 
       <Card className="shadow-sm ring-1 ring-border/60">
         <CardHeader>
           <CardTitle>Recent notifications</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Alerts match your Settings preferences: Workflow Approvals, Grade
+            Updates, New Submissions, Urgent Workflows, and Daily Summary.
+          </p>
         </CardHeader>
         <CardContent>
           <NotificationList notifications={notifications} />

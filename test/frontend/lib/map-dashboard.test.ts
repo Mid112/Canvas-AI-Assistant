@@ -115,21 +115,45 @@ describe("mapInstructorDashboardApiToData", () => {
         timestamp: "2026-10-03T12:00:00Z",
       },
     ]);
-    expect(result.notifications).toEqual([]);
+    expect(result.notifications).toEqual([
+      {
+        id: "daily-summary",
+        message: "Course summary: 2 courses, 45 students, 8 assignments",
+        timestamp: "Based on latest dashboard data",
+        variant: "info",
+      },
+    ]);
   });
 
-  it("adds notifications for missing, late, and pending counts", () => {
+  it("adds notifications aligned with Settings preference IDs", () => {
     const result = mapInstructorDashboardApiToData({
       ...baseResponse,
       missing_submissions: 3,
       late_submissions: 2,
       pending_workflows: 1,
+      recent_workflows: [
+        ...baseResponse.recent_workflows,
+        {
+          id: 13,
+          action_name: "update_grade",
+          user_prompt: "Post grade",
+          status: "completed",
+          created_at: "2026-10-04T12:00:00Z",
+        },
+      ],
     });
 
-    expect(result.notifications).toHaveLength(3);
-    expect(result.notifications[0]?.id).toBe("missing-submissions");
-    expect(result.notifications[1]?.id).toBe("late-submissions");
-    expect(result.notifications[2]?.id).toBe("pending-workflows");
+    expect(result.notifications.map((item) => item.id)).toEqual([
+      "workflow-approvals",
+      "grade-updates",
+      "new-submissions",
+      "urgent-workflows",
+      "daily-summary",
+    ]);
+    expect(result.notifications[0]?.message).toMatch(/1 workflow awaiting/);
+    expect(result.notifications[1]?.message).toMatch(/1 recent grade/);
+    expect(result.notifications[2]?.message).toMatch(/3 missing submission/);
+    expect(result.notifications[3]?.message).toMatch(/2 late submission/);
   });
 
   // Verifies: Ticket 26 — remapping the same payload keeps stable timestamps.
@@ -147,9 +171,10 @@ describe("mapInstructorDashboardApiToData", () => {
     expect(first.notifications.map((item) => item.timestamp)).toEqual(
       second.notifications.map((item) => item.timestamp),
     );
-    expect(first.notifications[0]?.timestamp).toBe(
-      "Based on latest dashboard data",
-    );
+    expect(
+      first.notifications.find((item) => item.id === "new-submissions")
+        ?.timestamp,
+    ).toBe("Based on latest dashboard data");
   });
 
   it("uses a fallback course label when no active course is present", () => {

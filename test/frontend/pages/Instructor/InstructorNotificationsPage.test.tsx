@@ -2,6 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { InstructorNotificationsPage } from "@/pages/Instructor/InstructorNotificationsPage";
+import { instructorSettingsPath } from "@/routes/paths";
 import { fetchNotificationSettings } from "@/services/auth";
 import { fetchInstructorDashboard } from "@/services/dashboard";
 import { sharedDashboardQuickActions } from "@/types/dashboard";
@@ -72,12 +73,14 @@ beforeEach(() => {
   mockedFetchDashboard.mockResolvedValue(emptyDashboard);
   mockedFetchSettings.mockResolvedValue({
     "workflow-approvals": true,
-    "new-submissions": false,
+    "grade-updates": true,
+    "new-submissions": true,
+    "urgent-workflows": true,
+    "daily-summary": false,
   });
 });
 
 describe("InstructorNotificationsPage", () => {
-  // Verifies: Empty dashboard alerts show the shared empty state (not seed data).
   it("renders an empty state when dashboard has no actionable alerts", async () => {
     renderWithInstitution(<InstructorNotificationsPage />);
 
@@ -85,73 +88,80 @@ describe("InstructorNotificationsPage", () => {
       screen.getByRole("heading", { name: "Notifications" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Updates for Dr. Jane Doe at UBC."),
-    ).toBeInTheDocument();
+      screen.getByRole("link", { name: "Manage notification preferences" }),
+    ).toHaveAttribute("href", instructorSettingsPath("notifications"));
     expect(await screen.findByText(/No notifications yet/)).toBeInTheDocument();
-    expect(
-      screen.queryByText(/submissions pending review/i),
-    ).not.toBeInTheDocument();
   });
 
-  // Verifies: Ticket 26 — missing, late, and pending workflow alerts appear.
-  it("renders dashboard-derived notifications when counts are greater than zero", async () => {
+  it("renders Settings-aligned notification categories from dashboard data", async () => {
     mockedFetchDashboard.mockResolvedValue({
       ...emptyDashboard,
-      metrics: {
-        ...emptyDashboard.metrics,
-        missingSubmissions: 3,
-        pendingApprovals: 1,
-      },
       notifications: [
         {
-          id: "missing-submissions",
+          id: "workflow-approvals",
+          message: "1 workflow awaiting approval",
+          timestamp: "Based on latest dashboard data",
+          variant: "info",
+        },
+        {
+          id: "grade-updates",
+          message: "1 recent grade or feedback update",
+          timestamp: "2026-10-04T12:00:00Z",
+          variant: "success",
+        },
+        {
+          id: "new-submissions",
           message: "3 missing submissions need attention",
           timestamp: "Based on latest dashboard data",
           variant: "warning",
         },
         {
-          id: "late-submissions",
-          message: "2 late submissions detected",
+          id: "urgent-workflows",
+          message: "2 late submissions need urgent follow-up",
           timestamp: "Based on latest dashboard data",
           variant: "warning",
         },
         {
-          id: "pending-workflows",
-          message: "1 workflows awaiting approval",
+          id: "daily-summary",
+          message: "Course summary: 2 courses, 45 students, 8 assignments",
           timestamp: "Based on latest dashboard data",
           variant: "info",
         },
       ],
     });
+    mockedFetchSettings.mockResolvedValue({
+      "workflow-approvals": true,
+      "grade-updates": true,
+      "new-submissions": true,
+      "urgent-workflows": true,
+      "daily-summary": true,
+    });
 
     renderWithInstitution(<InstructorNotificationsPage />);
 
     expect(
-      await screen.findByText("3 missing submissions need attention"),
+      await screen.findByText("1 workflow awaiting approval"),
     ).toBeInTheDocument();
-    expect(screen.getByText("2 late submissions detected")).toBeInTheDocument();
-    expect(
-      screen.getByText("1 workflows awaiting approval"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getAllByText("Based on latest dashboard data").length,
-    ).toBeGreaterThan(0);
+    expect(screen.getByText("Workflow Approvals")).toBeInTheDocument();
+    expect(screen.getByText("Grade Updates")).toBeInTheDocument();
+    expect(screen.getByText("New Submissions")).toBeInTheDocument();
+    expect(screen.getByText("Urgent Workflows")).toBeInTheDocument();
+    expect(screen.getByText("Daily Summary")).toBeInTheDocument();
   });
 
-  // Verifies: Ticket 26 — workflow-approvals preference hides pending workflows.
-  it("hides pending workflow alerts when workflow-approvals is disabled", async () => {
+  it("hides alerts whose Settings toggles are disabled", async () => {
     mockedFetchDashboard.mockResolvedValue({
       ...emptyDashboard,
       notifications: [
         {
-          id: "missing-submissions",
+          id: "new-submissions",
           message: "3 missing submissions need attention",
           timestamp: "Based on latest dashboard data",
           variant: "warning",
         },
         {
-          id: "pending-workflows",
-          message: "1 workflows awaiting approval",
+          id: "workflow-approvals",
+          message: "1 workflow awaiting approval",
           timestamp: "Based on latest dashboard data",
           variant: "info",
         },
@@ -159,6 +169,7 @@ describe("InstructorNotificationsPage", () => {
     });
     mockedFetchSettings.mockResolvedValue({
       "workflow-approvals": false,
+      "new-submissions": true,
     });
 
     renderWithInstitution(<InstructorNotificationsPage />);
@@ -168,7 +179,7 @@ describe("InstructorNotificationsPage", () => {
     ).toBeInTheDocument();
     await waitFor(() => {
       expect(
-        screen.queryByText("1 workflows awaiting approval"),
+        screen.queryByText("1 workflow awaiting approval"),
       ).not.toBeInTheDocument();
     });
   });
