@@ -59,10 +59,11 @@ export async function fetchChatIntentPreview(
 }
 
 export async function confirmDryRunPreview(
-  _previewId: string,
+  previewId: string,
 ): Promise<{ success: true; message: string }> {
   // Ticket 38: mock/?preview= demos must not claim Canvas execution. Real
   // confirms go through confirmAssistantAction on the chat preview path.
+  void previewId;
   throw new DryRunPreviewError(
     "This demo preview cannot execute Canvas actions. Approve a preview from the assistant chat instead.",
   );
