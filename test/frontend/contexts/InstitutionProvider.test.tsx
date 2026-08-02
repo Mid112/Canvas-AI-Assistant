@@ -115,6 +115,24 @@ describe("InstitutionProvider dashboard fetch", () => {
 
     expect(result.current.dashboard.metrics.totalStudents).toBe(1);
   });
+
+  // Verifies: Ticket 39 — failed dashboard fetch does not fall back to seed metrics.
+  it("uses empty dashboard metrics when the API fetch fails", async () => {
+    mockUseAuth.mockReturnValue(instructorAuth);
+    mockedFetchInstructorDashboard.mockRejectedValue(new Error("offline"));
+
+    const { result } = renderHook(() => useInstitution(), { wrapper });
+
+    await waitFor(() => {
+      expect(mockedFetchInstructorDashboard).toHaveBeenCalled();
+    });
+
+    expect(result.current.dashboard.metrics.totalStudents).toBe(0);
+    expect(result.current.dashboard.metrics.missingSubmissions).toBe(0);
+    expect(result.current.dashboard.metrics.pendingApprovals).toBe(0);
+    expect(result.current.dashboard.notifications).toEqual([]);
+    expect(result.current.dashboard.activeCourses).toEqual([]);
+  });
 });
 
 describe("InstitutionProvider connected institutions", () => {
