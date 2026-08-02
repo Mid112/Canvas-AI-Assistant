@@ -132,6 +132,26 @@ describe("mapInstructorDashboardApiToData", () => {
     expect(result.notifications[2]?.id).toBe("pending-workflows");
   });
 
+  // Verifies: Ticket 26 — remapping the same payload keeps stable timestamps.
+  it("uses a stable timestamp label that does not change across remaps", () => {
+    const payload = {
+      ...baseResponse,
+      missing_submissions: 1,
+      late_submissions: 1,
+      pending_workflows: 1,
+    };
+
+    const first = mapInstructorDashboardApiToData(payload);
+    const second = mapInstructorDashboardApiToData(payload);
+
+    expect(first.notifications.map((item) => item.timestamp)).toEqual(
+      second.notifications.map((item) => item.timestamp),
+    );
+    expect(first.notifications[0]?.timestamp).toBe(
+      "Based on latest dashboard data",
+    );
+  });
+
   it("uses a fallback course label when no active course is present", () => {
     const result = mapInstructorDashboardApiToData({
       ...baseResponse,

@@ -59,12 +59,15 @@ export function mapInstructorDashboardApiToData(
   response: InstructorDashboardApiResponse,
 ): InstructorDashboardData {
   const notifications: InstructorDashboardData["notifications"] = [];
+  // Stable label — intentionally not Date.now()/toISOString() so remapping the
+  // same dashboard payload does not regenerate timestamps on every render.
+  const timestamp = "Based on latest dashboard data";
 
   if (response.missing_submissions > 0) {
     notifications.push({
       id: "missing-submissions",
       message: `${response.missing_submissions} missing submissions need attention`,
-      timestamp: new Date().toISOString(),
+      timestamp,
       variant: "warning" satisfies DashboardNotificationVariant,
     });
   }
@@ -73,7 +76,7 @@ export function mapInstructorDashboardApiToData(
     notifications.push({
       id: "late-submissions",
       message: `${response.late_submissions} late submissions detected`,
-      timestamp: new Date().toISOString(),
+      timestamp,
       variant: "warning" satisfies DashboardNotificationVariant,
     });
   }
@@ -82,7 +85,7 @@ export function mapInstructorDashboardApiToData(
     notifications.push({
       id: "pending-workflows",
       message: `${response.pending_workflows} workflows awaiting approval`,
-      timestamp: new Date().toISOString(),
+      timestamp,
       variant: "info" satisfies DashboardNotificationVariant,
     });
   }

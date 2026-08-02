@@ -1,3 +1,5 @@
+import { useEffect, useMemo, useState } from "react";
+
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInstitution } from "@/contexts/useInstitution";
@@ -7,11 +9,47 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { filterNotificationsBySettings } from "@/lib/filter-notifications";
 import { pageShell } from "@/lib/page-shell";
+import { NotificationList } from "@/pages/Instructor/InstructorDashboard/NotificationList";
+import { fetchNotificationSettings } from "@/services/auth";
+import type { NotificationSettings } from "@/types/auth";
 
 export function InstructorNotificationsPage() {
-  const { user } = useAuth();
-  const { selectedInstitution } = useInstitution();
+  const { user, accessToken } = useAuth();
+  const { selectedInstitution, dashboard } = useInstitution();
+  const [settings, setSettings] = useState<NotificationSettings | null>(null);
+
+  useEffect(() => {
+    if (!accessToken || !user?.has_canvas_token) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const remote = await fetchNotificationSettings(accessToken);
+        if (!cancelled) {
+          setSettings(remote);
+        }
+      } catch {
+        // Keep unfiltered dashboard notifications if settings fail to load.
+        if (!cancelled) {
+          setSettings(null);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, user?.has_canvas_token]);
+
+  const notifications = useMemo(
+    () => filterNotificationsBySettings(dashboard.notifications, settings),
+    [dashboard.notifications, settings],
+  );
 
   if (!user?.has_canvas_token) {
     return (
@@ -47,10 +85,7 @@ export function InstructorNotificationsPage() {
           <CardTitle>Recent notifications</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            No notifications yet. Course and submission alerts will appear here
-            once available.
-          </p>
+          <NotificationList notifications={notifications} />
         </CardContent>
       </Card>
     </div>

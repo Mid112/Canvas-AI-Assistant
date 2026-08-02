@@ -115,6 +115,20 @@ describe("InstitutionProvider dashboard fetch", () => {
 
     expect(result.current.dashboard.metrics.totalStudents).toBe(1);
   });
+
+  // Verifies: Ticket 26 — seed catalog notifications are never exposed as alerts.
+  it("does not fall back to hardcoded seed notifications when the API fails", async () => {
+    mockUseAuth.mockReturnValue(instructorAuth);
+    mockedFetchInstructorDashboard.mockRejectedValue(new Error("offline"));
+
+    const { result } = renderHook(() => useInstitution(), { wrapper });
+
+    await waitFor(() => {
+      expect(mockedFetchInstructorDashboard).toHaveBeenCalled();
+    });
+
+    expect(result.current.dashboard.notifications).toEqual([]);
+  });
 });
 
 describe("InstitutionProvider connected institutions", () => {
