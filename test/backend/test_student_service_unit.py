@@ -45,7 +45,7 @@ async def test_get_students_returns_empty_list_when_no_enrollments():
     longer actively enrolled as inactive instead of leaving them stale."""
     db = AsyncMock()
     db.scalars = AsyncMock(return_value=[])
-    course = SimpleNamespace(id=1, canvas_course_id="500", canvas_url="https://canvas.ubc.ca")
+    course = SimpleNamespace(id=1, canvas_course_id="500", canvas_url="https://canvas.example.edu")
     user = SimpleNamespace(id=1)
 
     with (
@@ -53,7 +53,7 @@ async def test_get_students_returns_empty_list_when_no_enrollments():
         patch("app.services.student.get_owned_course", new=AsyncMock(return_value=course)),
         patch("app.services.student.fetch_enrollments", new=AsyncMock(return_value=[])),
     ):
-        result = await get_students(1, user, "https://canvas.ubc.ca", db)
+        result = await get_students(1, user, "https://canvas.example.edu", db)
 
     assert result == []
     db.scalars.assert_awaited_once()
@@ -64,7 +64,7 @@ async def test_get_students_returns_empty_list_when_no_enrollments():
 async def test_get_students_inserts_new_student_rows():
     """No existing Student rows match — every enrollment becomes a new insert."""
     db = _db_with_flush_assigning_ids()
-    course = SimpleNamespace(id=1, canvas_course_id="500", canvas_url="https://canvas.ubc.ca")
+    course = SimpleNamespace(id=1, canvas_course_id="500", canvas_url="https://canvas.example.edu")
     user = SimpleNamespace(id=1)
     enrollments = [_enrollment(101), _enrollment(102, name="Bob Lee", login_id=None)]
 
@@ -75,7 +75,7 @@ async def test_get_students_inserts_new_student_rows():
         patch("app.services.student.get_owned_course", new=AsyncMock(return_value=course)),
         patch("app.services.student.fetch_enrollments", new=AsyncMock(return_value=enrollments)),
     ):
-        result = await get_students(1, user, "https://canvas.ubc.ca", db)
+        result = await get_students(1, user, "https://canvas.example.edu", db)
 
     assert db.add.call_count == 2
     assert db.commit.await_count == 1
@@ -90,7 +90,7 @@ async def test_get_students_updates_existing_student_in_place():
     """A student already in the DB (re-synced roster) gets its fields
     refreshed on the existing row instead of a duplicate insert."""
     db = AsyncMock()
-    course = SimpleNamespace(id=1, canvas_course_id="500", canvas_url="https://canvas.ubc.ca")
+    course = SimpleNamespace(id=1, canvas_course_id="500", canvas_url="https://canvas.example.edu")
     user = SimpleNamespace(id=1)
     existing = SimpleNamespace(
         id=55,
@@ -112,7 +112,7 @@ async def test_get_students_updates_existing_student_in_place():
             new=AsyncMock(return_value=[_enrollment(101, name="New Name")]),
         ),
     ):
-        await get_students(1, user, "https://canvas.ubc.ca", db)
+        await get_students(1, user, "https://canvas.example.edu", db)
 
     db.add.assert_not_called()
     assert existing.name == "New Name"
@@ -123,7 +123,7 @@ async def test_get_students_updates_existing_student_in_place():
 @pytest.mark.asyncio
 async def test_get_students_defaults_missing_name_to_unknown():
     db = _db_with_flush_assigning_ids()
-    course = SimpleNamespace(id=1, canvas_course_id="500", canvas_url="https://canvas.ubc.ca")
+    course = SimpleNamespace(id=1, canvas_course_id="500", canvas_url="https://canvas.example.edu")
     user = SimpleNamespace(id=1)
     db.scalars = AsyncMock(return_value=[])
     enrollment = {"user_id": 200, "enrollment_state": "active", "user": {}}
@@ -133,7 +133,7 @@ async def test_get_students_defaults_missing_name_to_unknown():
         patch("app.services.student.get_owned_course", new=AsyncMock(return_value=course)),
         patch("app.services.student.fetch_enrollments", new=AsyncMock(return_value=[enrollment])),
     ):
-        await get_students(1, user, "https://canvas.ubc.ca", db)
+        await get_students(1, user, "https://canvas.example.edu", db)
 
     added = db.add.call_args_list[0].args[0]
     assert added.name == "Unknown"

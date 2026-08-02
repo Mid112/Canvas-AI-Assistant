@@ -14,14 +14,15 @@ from app.services.canvas import get_owned_course, require_canvas_token
 async def get_students(
     local_course_id: int,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
 ) -> list[StudentResponse]:
-    token = require_canvas_token(user, canvas_url)
     course = await get_owned_course(local_course_id, user, canvas_url, db)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
     canvas_course_id = int(course.canvas_course_id)
 
-    data = await fetch_enrollments(canvas_course_id, token, canvas_url)
+    data = await fetch_enrollments(canvas_course_id, token, resolved_canvas_url)
 
     # Batch-fetch ALL local student rows for this course (not just ones Canvas still
     # returns) — fetch_enrollments only requests state[]=active, so a row missing from

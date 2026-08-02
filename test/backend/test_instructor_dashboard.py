@@ -51,7 +51,7 @@ def test_instructor_dashboard_empty_state(client):
 # Verifies: Instructor dashboard with seeded course.
 def test_instructor_dashboard_with_seeded_course(client):
     headers = _register(client)
-    canvas_url = "https://canvas.ubc.ca"
+    canvas_url = "https://canvas.example.edu"
     canvas_course_id = uuid.uuid4().int % 10_000_000
     course_payload = [
         {
@@ -91,7 +91,7 @@ def test_instructor_dashboard_with_seeded_course(client):
 # Verifies: One course's Canvas refresh failing does not fail the whole dashboard.
 def test_instructor_dashboard_tolerates_one_course_refresh_failure(client):
     headers = _register(client)
-    canvas_url = "https://canvas.ubc.ca"
+    canvas_url = "https://canvas.example.edu"
     canvas_course_id = uuid.uuid4().int % 10_000_000
     course_payload = [
         {
@@ -136,7 +136,7 @@ def test_instructor_dashboard_tolerates_one_course_refresh_failure(client):
 # course refreshes at once, even when the instructor owns many more courses.
 def test_instructor_dashboard_bounded_concurrency(client):
     headers = _register(client)
-    canvas_url = "https://canvas.ubc.ca"
+    canvas_url = "https://canvas.example.edu"
     course_count = _MAX_CONCURRENT_COURSE_REFRESHES + 3
     course_payload = [
         {
@@ -192,7 +192,7 @@ def test_instructor_dashboard_bounded_concurrency(client):
 # Verifies: An assignment Canvas no longer returns is no longer counted after refresh.
 def test_dashboard_assignment_count_reflects_canvas_deletion(client):
     headers = _register(client)
-    canvas_url = "https://canvas.ubc.ca"
+    canvas_url = "https://canvas.example.edu"
     canvas_course_id = uuid.uuid4().int % 10_000_000
     course_payload = [
         {
@@ -241,7 +241,7 @@ def test_dashboard_assignment_count_reflects_canvas_deletion(client):
 # Verifies: A student Canvas no longer returns (unenrolled) is no longer counted after refresh.
 def test_dashboard_student_count_reflects_canvas_unenrollment(client):
     headers = _register(client)
-    canvas_url = "https://canvas.ubc.ca"
+    canvas_url = "https://canvas.example.edu"
     canvas_course_id = uuid.uuid4().int % 10_000_000
     course_payload = [
         {
@@ -291,7 +291,7 @@ def test_dashboard_student_count_reflects_canvas_unenrollment(client):
 # submission data, not just the empty defaults.
 def test_dashboard_missing_and_late_counts_from_real_submissions(client):
     headers = _register(client)
-    canvas_url = "https://canvas.ubc.ca"
+    canvas_url = "https://canvas.example.edu"
     canvas_course_id = uuid.uuid4().int % 10_000_000
     assignment_id = uuid.uuid4().int % 10_000_000
     course_payload = [
@@ -385,7 +385,7 @@ def test_dashboard_missing_and_late_counts_from_real_submissions(client):
 # rather than lingering in dashboard aggregates indefinitely.
 def test_dashboard_excludes_deleted_course_from_aggregates(client):
     headers = _register(client)
-    canvas_url = "https://canvas.ubc.ca"
+    canvas_url = "https://canvas.example.edu"
     canvas_course_id = uuid.uuid4().int % 10_000_000
     course_payload = [
         {

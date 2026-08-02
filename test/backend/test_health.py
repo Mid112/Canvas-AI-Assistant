@@ -165,9 +165,12 @@ async def test_check_canvas_healthy_without_any_canvas_token_configured():
 
 @pytest.mark.asyncio
 async def test_check_canvas_down_on_timeout():
-    with patch(
-        "app.services.health.httpx.AsyncClient",
-        return_value=_client_raising(httpx.TimeoutException("timed out")),
+    with (
+        patch.object(settings, "CANVAS_API_URL", "https://canvas.example.edu"),
+        patch(
+            "app.services.health.httpx.AsyncClient",
+            return_value=_client_raising(httpx.TimeoutException("timed out")),
+        ),
     ):
         result = await check_canvas()
 
@@ -176,9 +179,12 @@ async def test_check_canvas_down_on_timeout():
 
 @pytest.mark.asyncio
 async def test_check_canvas_down_on_request_error():
-    with patch(
-        "app.services.health.httpx.AsyncClient",
-        return_value=_client_raising(httpx.RequestError("unreachable")),
+    with (
+        patch.object(settings, "CANVAS_API_URL", "https://canvas.example.edu"),
+        patch(
+            "app.services.health.httpx.AsyncClient",
+            return_value=_client_raising(httpx.RequestError("unreachable")),
+        ),
     ):
         result = await check_canvas()
 
@@ -194,9 +200,12 @@ async def test_check_canvas_down_on_server_error():
     response.is_server_error = True
     response.status_code = 500
 
-    with patch(
-        "app.services.health.httpx.AsyncClient",
-        return_value=_client_returning(response),
+    with (
+        patch.object(settings, "CANVAS_API_URL", "https://canvas.example.edu"),
+        patch(
+            "app.services.health.httpx.AsyncClient",
+            return_value=_client_returning(response),
+        ),
     ):
         result = await check_canvas()
 

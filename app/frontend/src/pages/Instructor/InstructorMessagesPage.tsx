@@ -71,9 +71,10 @@ export function InstructorMessagesPage() {
           body: aiDraft?.body,
           emptyRecipients: true,
           conversationId: aiDraft?.conversationId,
+          canvasUrl,
         }
       : null,
-    [activeCourse, aiDraft, basePrompt],
+    [activeCourse, aiDraft, basePrompt, canvasUrl],
   );
   const draftSeedKey = [
     aiDraft?.subject ?? "",
@@ -149,6 +150,7 @@ export function InstructorMessagesPage() {
           preSelectedIds:
             preferredIds && preferredIds.length > 0 ? preferredIds : undefined,
           conversationId: aiDraft?.conversationId,
+          canvasUrl: selectedCanvasUrl,
         });
       } catch (error) {
         if (
@@ -171,6 +173,7 @@ export function InstructorMessagesPage() {
           body: aiDraft?.body,
           emptyRecipients: true,
           conversationId: aiDraft?.conversationId,
+          canvasUrl: selectedCanvasUrl,
         });
       }
     }

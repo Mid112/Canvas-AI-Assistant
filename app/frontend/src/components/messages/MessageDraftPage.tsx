@@ -370,6 +370,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
         recipientIds: selectedRecipients.map((recipient) => recipient.id),
         recipients: selectedRecipients,
         conversationId: fetchOptions?.conversationId,
+        canvasUrl: fetchOptions?.canvasUrl,
       });
 
       if (user?.id && savedTypedDraftId) {

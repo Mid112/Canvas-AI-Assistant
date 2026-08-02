@@ -19,7 +19,8 @@ from app.main import app
 from app.models.message_draft import MessageDraft
 from app.schemas.student import StudentResponse
 
-CANVAS_URL = "https://canvas.ubc.ca"
+CANVAS_URL = "https://canvas.example.edu"
+ALT_CANVAS_URL = "https://canvas.example.edu"
 
 
 def _make_session():
@@ -59,6 +60,40 @@ def _register_with_canvas(client) -> tuple[dict, int]:
             "workflow_state": "available",
         }]
         resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+
+    local_course_id = resp.json()[0]["local_id"]
+    return headers, local_course_id
+
+
+def _register_with_canvas_url(client, canvas_url: str) -> tuple[dict, int]:
+    email = f"msgsend_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Message Sender", "email": email, "password": "secret123"},
+    )
+    token = reg.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": canvas_url},
+            headers=headers,
+        )
+
+    canvas_course_id = uuid.uuid4().int % 10_000_000
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = [{
+            "id": canvas_course_id,
+            "name": "Non-default Canvas",
+            "course_code": "NDC101",
+            "enrollment_term_id": 1,
+            "workflow_state": "available",
+        }]
+        resp = client.get(
+            f"/api/v1/canvas/courses?canvas_url={canvas_url}",
+            headers=headers,
+        )
 
     local_course_id = resp.json()[0]["local_id"]
     return headers, local_course_id
@@ -153,6 +188,37 @@ def test_send_succeeds_when_recipient_enrolled(client):
     assert body["status"] == "sent"
     assert body["delivery_mode"] == "conversation"
     mock_send.assert_awaited_once()
+    assert _draft_status(draft_id) == "sent"
+
+
+# Verifies: Send derives Canvas URL from the draft course when the request
+# omits canvas_url, rather than falling back to settings.CANVAS_API_URL.
+def test_send_without_canvas_url_uses_draft_course_canvas_url(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.config.settings.CANVAS_API_URL",
+        CANVAS_URL,
+        raising=False,
+    )
+    headers, local_course_id = _register_with_canvas_url(client, ALT_CANVAS_URL)
+    draft_id = _create_draft(client, headers, local_course_id, recipient_ids=["42"])
+
+    with (
+        patch(
+            "app.services.message_validation.get_students",
+            new_callable=AsyncMock,
+            return_value=[_student("42", local_course_id)],
+        ) as mock_validation_students,
+        patch("app.services.canvas.send_conversation", new_callable=AsyncMock) as mock_send,
+    ):
+        resp = client.post(
+            f"/api/v1/messages/drafts/{draft_id}/send",
+            headers=headers,
+        )
+
+    assert resp.status_code == 200, resp.json()
+    assert resp.json()["delivery_mode"] == "conversation"
+    assert mock_validation_students.await_args.args[2] == ALT_CANVAS_URL
+    assert mock_send.await_args.args[5] == ALT_CANVAS_URL
     assert _draft_status(draft_id) == "sent"
 
 

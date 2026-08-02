@@ -6,33 +6,12 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
-import { AssistantAvatar } from "@/components/brand/AssistantAvatar";
 import { cn } from "@/lib/utils";
 import {
   dashboardColors,
   dashboardInteractive,
 } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
 import type { SuggestedAction } from "@/types/chat";
-
-interface InstructorAssistantHeaderProps {
-  title?: string;
-  subtitle?: string;
-}
-
-export function InstructorAssistantHeader({
-  title = "AI Assistant",
-  subtitle = "Canvas Workflow Management Assistant",
-}: InstructorAssistantHeaderProps) {
-  return (
-    <div className="flex shrink-0 items-center gap-3">
-      <AssistantAvatar size="sm" />
-      <div className="min-w-0">
-        <h1 className="text-lg font-semibold tracking-tight md:text-xl">{title}</h1>
-        <p className="text-sm text-muted-foreground">{subtitle}</p>
-      </div>
-    </div>
-  );
-}
 
 const actionIcons = {
   "missing-submissions": ClipboardList,
@@ -57,22 +36,29 @@ export function InstructorAssistantSuggestedActions({
   const [isExpanded, setIsExpanded] = useState(false);
 
   return (
-    <section aria-label="Suggested actions" className="shrink-0 space-y-2">
+    <section aria-label="Suggested actions" className="shrink-0 space-y-2.5">
       <button
         type="button"
         onClick={() => setIsExpanded((current) => !current)}
         aria-expanded={isExpanded}
         aria-controls="suggested-actions-content"
-        className="flex w-full items-center justify-between gap-2 text-left"
+        className="group flex w-full items-center justify-between gap-3 rounded-lg border border-border/80 bg-card px-3 py-2.5 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       >
-        <h2 className="text-sm font-semibold">Suggested actions</h2>
-        <ChevronDown
-          className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-transform",
-            isExpanded && "rotate-180",
-          )}
-          aria-hidden="true"
-        />
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="h-5 w-1 rounded-full bg-primary" aria-hidden="true" />
+          <h2 className="truncate text-sm font-semibold text-foreground">
+            Suggested actions
+          </h2>
+        </span>
+        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground transition-colors group-hover:bg-background group-hover:text-foreground">
+          <ChevronDown
+            className={cn(
+              "size-4 transition-transform",
+              isExpanded && "rotate-180",
+            )}
+            aria-hidden="true"
+          />
+        </span>
       </button>
 
       {isExpanded ? (

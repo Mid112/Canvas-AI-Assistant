@@ -196,20 +196,22 @@ function InstructorCanvasDiagnosticsCard({
                     </p>
                     <p className="text-destructive">{connection.human_summary}</p>
                   </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setResetTarget({
-                        instructorId: String(connection.user_id),
-                        instructorName: connection.user_name,
-                        canvasUrl: connection.canvas_url,
-                      })
-                    }
-                  >
-                    Reset token
-                  </Button>
+                  {connection.needs_token_reset ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        setResetTarget({
+                          instructorId: String(connection.user_id),
+                          instructorName: connection.user_name,
+                          canvasUrl: connection.canvas_url,
+                        })
+                      }
+                    >
+                      Reset token
+                    </Button>
+                  ) : null}
                 </li>
               ))}
             </ul>

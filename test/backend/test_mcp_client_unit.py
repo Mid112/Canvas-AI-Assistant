@@ -15,7 +15,7 @@ async def test_call_tool_raises_when_disabled():
                 "fetch_courses",
                 {},
                 canvas_token="token",
-                canvas_url="https://canvas.ubc.ca",
+                canvas_url="https://canvas.example.edu",
             )
 
 
@@ -29,7 +29,7 @@ async def test_call_tool_rejects_unknown_tool():
                 "delete_everything",
                 {},
                 canvas_token="token",
-                canvas_url="https://canvas.ubc.ca",
+                canvas_url="https://canvas.example.edu",
             )
 
 
@@ -43,7 +43,7 @@ async def test_call_tool_requires_shared_secret():
                 "fetch_courses",
                 {},
                 canvas_token="token",
-                canvas_url="https://canvas.ubc.ca",
+                canvas_url="https://canvas.example.edu",
             )
 
 
@@ -67,7 +67,7 @@ async def test_call_tool_posts_payload_and_returns_json():
             "fetch_courses",
             {},
             canvas_token="secret",
-            canvas_url="https://canvas.ubc.ca",
+            canvas_url="https://canvas.example.edu",
         )
 
     assert result["courses"][0]["name"] == "COSC 111"
@@ -94,5 +94,5 @@ async def test_call_tool_maps_unreachable_server():
                 "fetch_courses",
                 {},
                 canvas_token="secret",
-                canvas_url="https://canvas.ubc.ca",
+                canvas_url="https://canvas.example.edu",
             )

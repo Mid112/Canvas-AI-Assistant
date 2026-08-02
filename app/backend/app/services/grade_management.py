@@ -65,7 +65,7 @@ async def _find_submission(
     local_course_id: int,
     body: GradeUpdateRequest,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
 ):
     course = await get_owned_course(local_course_id, user, canvas_url, db)
@@ -349,7 +349,7 @@ async def preview_grade_update(
     local_course_id: int,
     body: GradeUpdateRequest,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
 ) -> GradePreviewResponse:
     course = await get_owned_course(local_course_id, user, canvas_url, db)
@@ -370,7 +370,7 @@ async def submit_grade_update(
     local_course_id: int,
     body: GradeUpdateRequest,
     user: User,
-    canvas_url: str,
+    canvas_url: str | None,
     db: AsyncSession,
     *,
     record_workflow_audit: bool = True,

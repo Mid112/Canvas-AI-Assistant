@@ -85,10 +85,11 @@ export function ConnectCanvasPage() {
               markOnboardingComplete(user.id);
             }
 
-            // Move forward as soon as the token save succeeds; if the follow-up
-            // auth refresh has a transient failure, Canvas is still connected.
-            navigate(paths.reviewPermissions);
+            // Refresh auth state before leaving onboarding so the first course
+            // create uses the saved connection URL instead of a stale empty
+            // canvas_connections list (#1425).
             await refreshUser().catch(() => undefined);
+            navigate(paths.reviewPermissions);
           } catch (err) {
             if (err instanceof CanvasApiError && err.status === 401) {
               logout();

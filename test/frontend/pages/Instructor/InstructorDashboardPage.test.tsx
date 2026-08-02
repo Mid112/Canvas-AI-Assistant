@@ -57,7 +57,7 @@ const mockedFetchCachedCourses = vi.mocked(fetchCachedCourses);
 const mockedFetchActiveCourse = vi.mocked(fetchActiveCourse);
 const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
 
-const CANVAS_URL = "https://canvas.ubc.ca";
+const CANVAS_URL = "https://canvas.example.edu";
 
 const authWithCanvas = {
   user: {
@@ -139,7 +139,7 @@ describe("InstructorDashboardPage", () => {
       screen.getByRole("heading", { name: "Dashboard" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("Welcome back, Dr. Jane Doe. Overview for canvas.ubc.ca."),
+      screen.getByText("Welcome back, Dr. Jane Doe. Overview for canvas.example.edu."),
     ).toBeInTheDocument();
 
     await waitFor(() => {

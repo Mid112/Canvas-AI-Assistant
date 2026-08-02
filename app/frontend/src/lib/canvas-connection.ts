@@ -43,3 +43,19 @@ export function isCanvasConnectionRequiredError(error: unknown): boolean {
 
   return isReconnectMessage(details.message);
 }
+
+/** User-facing copy for missing/invalid Canvas token errors (hides raw API paths). */
+export function canvasConnectionRequiredMessage(error?: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    const normalized = error.message.toLowerCase();
+    // Keep permission/admin guidance when Canvas truly refuses course create.
+    if (
+      normalized.includes("ask an admin") ||
+      normalized.includes("grant course-creation")
+    ) {
+      return error.message;
+    }
+  }
+
+  return "Canvas is not connected for this institution. Reconnect Canvas in Settings, then try again.";
+}

@@ -5,7 +5,7 @@ from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 from app.main import app
 
-CANVAS_URL = "https://canvas.ubc.ca"
+CANVAS_URL = "https://canvas.example.edu"
 ASSIGNMENT_ID = 10
 DAY = 86400
 
@@ -134,15 +134,16 @@ def test_late_submissions_unauthenticated(client):
 
 
 # Verifies: Late submissions no canvas token.
-def test_late_submissions_no_canvas_token(client):
+def test_late_submissions_no_canvas_token(client, create_local_course_for_user_email):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
         json={"name": "No Token", "email": email, "password": "secret123"},
     )
     token = reg.json()["access_token"]
+    local_course_id = create_local_course_for_user_email(email, canvas_url=CANVAS_URL)
     response = client.get(
-        f"/api/v1/canvas/courses/1/assignments/10/late-submissions?canvas_url={CANVAS_URL}",
+        f"/api/v1/canvas/courses/{local_course_id}/assignments/10/late-submissions?canvas_url={CANVAS_URL}",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 403

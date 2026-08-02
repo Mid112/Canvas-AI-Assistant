@@ -1,9 +1,15 @@
 import uuid
+import asyncio
 import pytest
 from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from app.config import settings
 from app.main import app
+from app.models.course import Course
+from app.models.user import User
 
 
 # ---------------------------------------------------------------------------
@@ -12,7 +18,8 @@ from app.main import app
 
 # Explicit Canvas URL used by all tests — avoids depending on whatever CANVAS_API_URL
 # is set to in .env (which may point to the mock Docker server for manual testing)
-CANVAS_URL = "https://canvas.ubc.ca"
+CANVAS_URL = "https://canvas.example.edu"
+OTHER_CANVAS_URL = "https://canvas.other.edu"
 
 
 def _unique_course(canvas_id: int | None = None) -> dict:
@@ -117,6 +124,65 @@ def _sync_local_course(client, headers, canvas_id: int = 12345) -> int:
 
     assert response.status_code == 200
     return response.json()[0]["local_id"]
+
+
+def _create_local_course_for_user_email(email: str, canvas_id: int | None = None) -> int:
+    async def _insert() -> int:
+        engine = create_async_engine(settings.DATABASE_URL)
+        try:
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as db:
+                user = await db.scalar(select(User).where(User.email == email))
+                assert user is not None
+                course = Course(
+                    canvas_course_id=str(canvas_id or uuid.uuid4().int % 10_000_000),
+                    canvas_url=CANVAS_URL,
+                    name="No Token Course",
+                    course_code="NTC101",
+                    workflow_state="available",
+                    instructor_id=user.id,
+                )
+                db.add(course)
+                await db.commit()
+                await db.refresh(course)
+                return course.id
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(_insert())
+
+
+# Verifies: institution-level course sync uses the sole saved connection URL
+# when the request omits canvas_url.
+def test_list_courses_without_canvas_url_uses_sole_connection(client):
+    headers = _register_with_canvas(client)
+    courses = [_unique_course()]
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        mock.return_value = courses
+        response = client.get("/api/v1/canvas/courses", headers=headers)
+
+    assert response.status_code == 200, response.json()
+    mock.assert_awaited_once()
+    assert mock.await_args.args[1] == CANVAS_URL
+
+
+# Verifies: institution-level course sync refuses to guess when multiple
+# saved Canvas connections exist and the request omits canvas_url.
+def test_list_courses_without_canvas_url_rejects_multiple_connections(client):
+    headers = _register_with_canvas(client)
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "other-token", "canvas_url": OTHER_CANVAS_URL},
+            headers=headers,
+        )
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
+        response = client.get("/api/v1/canvas/courses", headers=headers)
+
+    assert response.status_code == 422
+    assert "Select a Canvas institution" in response.json()["detail"]
+    mock.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -715,8 +781,9 @@ def test_list_submissions_no_canvas_token(client):
         json={"name": "No Token", "email": email, "password": "secret123"}
     )
     token = reg.json()["access_token"]
+    local_course_id = _create_local_course_for_user_email(email)
     response = client.get(
-        f"/api/v1/canvas/courses/1/assignments/10/submissions?canvas_url={CANVAS_URL}",
+        f"/api/v1/canvas/courses/{local_course_id}/assignments/10/submissions?canvas_url={CANVAS_URL}",
         headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 403
@@ -1163,3 +1230,94 @@ def test_canvas_course_names_never_overwritten_once_synced(client):
     sent_message = mock_adapter.generate.call_args.args[1]
     assert "Original Name" in sent_message
     assert "Renamed" not in sent_message
+
+
+# ---------------------------------------------------------------------------
+# POST /canvas/courses — new-account token URL resolution (#1425)
+# ---------------------------------------------------------------------------
+
+
+# Verifies: Newly connected accounts can create a first course without an
+# explicit canvas_url query param — uses the saved connection instead of the
+# global CANVAS_API_URL (which caused "No Canvas token for https://canvas.ubc.ca").
+def test_create_course_uses_saved_connection_when_canvas_url_omitted(client, monkeypatch):
+    connection_url = "http://localhost:3000"
+    monkeypatch.setattr(
+        "app.config.settings.CANVAS_API_URL",
+        "https://canvas.ubc.ca",
+        raising=False,
+    )
+
+    email = f"new_acct_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "New Instructor", "email": email, "password": "secret123"},
+    )
+    assert reg.status_code == 201
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        saved = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "new-account-token", "canvas_url": connection_url},
+            headers=headers,
+        )
+    assert saved.status_code == 200
+
+    created = {
+        "id": 9001,
+        "name": "Capstone Project",
+        "course_code": "COSC499",
+        "workflow_state": "unpublished",
+        "total_students": 0,
+    }
+
+    with (
+        patch(
+            "app.services.canvas.fetch_accounts",
+            new=AsyncMock(return_value=[{"id": 1, "parent_account_id": None}]),
+        ),
+        patch(
+            "app.services.canvas.create_course",
+            new=AsyncMock(return_value=created),
+        ) as mock_create,
+        patch("app.services.canvas.decrypt_canvas_token", return_value="new-account-token"),
+    ):
+        response = client.post(
+            "/api/v1/canvas/courses",
+            json={"name": "Capstone Project", "course_code": "COSC499", "publish": False},
+            headers=headers,
+        )
+
+    assert response.status_code == 201, response.text
+    assert response.json()["name"] == "Capstone Project"
+    mock_create.assert_awaited_once()
+    assert mock_create.await_args.args[3] == connection_url
+
+
+# Verifies: Missing Canvas token on create returns reconnect guidance, not a raw PATCH path.
+def test_create_course_missing_token_returns_reconnect_guidance(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.config.settings.CANVAS_API_URL",
+        "https://canvas.ubc.ca",
+        raising=False,
+    )
+
+    email = f"no_token_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"name": "No Token", "email": email, "password": "secret123"},
+    )
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+
+    response = client.post(
+        "/api/v1/canvas/courses?canvas_url=https://canvas.ubc.ca",
+        json={"name": "Should Fail", "publish": False},
+        headers=headers,
+    )
+
+    assert response.status_code == 403
+    detail = response.json()["detail"]
+    assert "No Canvas token" in detail
+    assert "Reconnect Canvas" in detail
+    assert "PATCH" not in detail

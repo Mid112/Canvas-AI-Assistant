@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
 from app.core.database import get_db
 from app.dependencies import get_current_user, get_instructor_user
 from app.models.user import User
@@ -52,6 +51,7 @@ from app.services.canvas import (
     get_course_quizzes,
     get_courses,
     get_submissions,
+    resolve_institution_canvas_url,
     set_active_course,
     set_course_published,
     update_course_assignment,
@@ -84,7 +84,7 @@ async def instructor_dashboard(
 async def course_overview(
     course_id: int,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await get_course_overview(course_id, current_user, canvas_url, db)
@@ -93,21 +93,28 @@ async def course_overview(
 @router.get("/courses", response_model=list[CourseResponse])
 async def list_courses(
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    return await get_courses(current_user, canvas_url, db)
+    resolved_canvas_url = resolve_institution_canvas_url(current_user, canvas_url)
+    return await get_courses(current_user, resolved_canvas_url, db)
 
 
 @router.post("/courses", response_model=CourseResponse, status_code=status.HTTP_201_CREATED)
 async def create_course(
     body: CourseCreate,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a Canvas course from the app and sync it into the local course list (#1285)."""
-    return await create_canvas_course(body, current_user, canvas_url, db)
+    """Create a Canvas course from the app and sync it into the local course list (#1285).
+
+    ``canvas_url`` may be omitted when the user has a single saved Canvas
+    connection, so newly connected accounts do not hit the global
+    CANVAS_API_URL mismatch (#1425).
+    """
+    resolved_canvas_url = resolve_institution_canvas_url(current_user, canvas_url)
+    return await create_canvas_course(body, current_user, resolved_canvas_url, db)
 
 
 @router.patch("/courses/{course_id}/publish", response_model=CourseResponse)
@@ -115,7 +122,7 @@ async def publish_course(
     course_id: int,
     body: CoursePublishUpdate,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     """Publish or unpublish a course in Canvas from Course Management."""
@@ -128,10 +135,11 @@ async def publish_course(
 @router.get("/courses/cached", response_model=list[CourseResponse])
 async def list_cached_courses(
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    return await get_cached_courses(current_user, canvas_url, db)
+    resolved_canvas_url = resolve_institution_canvas_url(current_user, canvas_url)
+    return await get_cached_courses(current_user, resolved_canvas_url, db)
 
 
 @router.get("/courses/{course_id}/assignments", response_model=list[AssignmentResponse])
@@ -159,7 +167,7 @@ async def preview_assignment_endpoint(
     course_id: int,
     body: AssignmentCreate,
     current_user: User = Depends(get_current_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     from app.services.canvas import get_owned_course, require_writable_course
@@ -180,7 +188,7 @@ async def create_assignment_endpoint(
     course_id: int,
     body: AssignmentCreate,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await create_course_assignment(course_id, body, current_user, canvas_url, db)
@@ -194,7 +202,7 @@ async def generate_feedback_draft_endpoint(
     course_id: int,
     body: FeedbackDraftRequest,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await generate_feedback_draft(
@@ -207,7 +215,7 @@ async def preview_feedback_endpoint(
     course_id: int,
     body: FeedbackPostRequest,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     course = await validate_feedback_for_post(
@@ -246,7 +254,7 @@ async def post_feedback_endpoint(
     course_id: int,
     body: FeedbackPostRequest,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     conversation_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
@@ -319,7 +327,7 @@ async def list_quizzes_endpoint(
 async def quiz_capabilities_endpoint(
     course_id: int,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await get_course_quiz_capabilities(
@@ -334,7 +342,7 @@ async def quiz_capabilities_endpoint(
 async def list_question_banks_endpoint(
     course_id: int,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await get_course_question_banks(
@@ -361,7 +369,7 @@ async def preview_quiz_endpoint(
     course_id: int,
     body: QuizCreate,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     from app.services.canvas import get_owned_course, require_writable_course
@@ -429,7 +437,7 @@ async def create_quiz_endpoint(
     course_id: int,
     body: QuizCreate,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     conversation_id: int | None = Query(default=None),
 ):
@@ -528,7 +536,7 @@ async def get_assignment_endpoint(
     course_id: int,
     assignment_id: int,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await get_assignment(course_id, assignment_id, current_user, canvas_url, db)
@@ -540,7 +548,7 @@ async def update_assignment_endpoint(
     assignment_id: int,
     body: AssignmentUpdate,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await update_course_assignment(
@@ -561,7 +569,7 @@ async def list_submissions(
     course_id: int,
     assignment_id: int,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await get_submissions(
@@ -581,7 +589,7 @@ async def preview_grade_update_endpoint(
     course_id: int,
     body: GradeUpdateRequest,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await preview_grade_update(course_id, body, current_user, canvas_url, db)
@@ -595,7 +603,7 @@ async def submit_grade_update_endpoint(
     course_id: int,
     body: GradeUpdateRequest,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await submit_grade_update(course_id, body, current_user, canvas_url, db)
@@ -611,7 +619,7 @@ async def missing_submission_analysis(
     course_id: int,
     assignment_id: int,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await analyze_missing_submissions(
@@ -633,7 +641,7 @@ async def late_submission_analysis(
     course_id: int,
     assignment_id: int,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     return await analyze_late_submissions(
@@ -649,7 +657,7 @@ async def late_submission_analysis(
 async def list_students(
     course_id: int,
     current_user: User = Depends(get_instructor_user),
-    canvas_url: str = Query(default=settings.CANVAS_API_URL),
+    canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
     """List enrolled students for a course. ``course_id`` is the local DB course id."""
