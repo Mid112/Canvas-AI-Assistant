@@ -18,12 +18,11 @@ class CanvasCourseName(Base):
     name, used only by the chat/LLM course-resolution pathway
     (services/chat.py). Deliberately separate from Course:
 
-    - Course is keyed on (canvas_course_id, instructor_id) and has no
-      notion of *which* Canvas connection a course came from, so an
-      instructor connected to two institutions with colliding numeric
-      canvas_course_ids can't be disambiguated there. This table is keyed
-      by canvas_connection_id instead — the connection's own PK, no token
-      decryption needed.
+    - Course is keyed on (canvas_course_id, instructor_id, canvas_url), so
+      multi-institution collisions are already scoped by host there; this
+      table is still keyed by canvas_connection_id instead — the
+      connection's own PK, no token decryption needed — and stays
+      write-once for chat name resolution.
     - Course.name is overwritten in place on every sync (services/canvas.py
       get_courses), which is fine for the dashboard but wrong for an LLM
       mid-conversation: a rename on Canvas between turns would otherwise

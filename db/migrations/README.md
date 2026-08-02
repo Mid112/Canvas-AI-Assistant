@@ -55,3 +55,4 @@ If you have a genuinely ancient local database (created before the `ta` role was
 | `038_support_tickets.sql` | Creates `support_tickets`, one-per-`failed_operation` admin escalation tracking (status/notes/resolved_by) for the Secure Troubleshooting ticket workflow (Feature 12) |
 | `039_support_ticket_assigned_admin.sql` | Adds `support_tickets.assigned_to` so admins can claim escalated support tickets before resolving them |
 | `040_grade_history_local_relationships.sql` | Adds nullable local `assignments`/`students` foreign keys to `grade_history` and backfills them from the existing Canvas assignment/student IDs when local mirror rows exist. |
+| `041_course_unique_per_instructor_url.sql` | Widens `courses.uq_course_per_instructor` from `(canvas_course_id, instructor_id)` to `(canvas_course_id, instructor_id, canvas_url)` so an instructor with two Canvas institutions can keep separate rows when numeric course IDs collide across hosts |
