@@ -8,6 +8,9 @@ export interface MessageTemplate {
   id: string;
   name: string;
   description: string;
+  /** Full template body from the backend (optional for legacy mock shapes). */
+  content?: string;
+  courseId?: number | null;
 }
 
 export interface MessageDraft {
