@@ -242,18 +242,29 @@ def test_ground_assistant_result_flags_invented_claims_without_tools():
     assert '"Invented Title"' in result["message"]
     assert "scored 77" in result["message"]
     assert "grounded" not in result
-    assert result["unverified_claims"] == ["canvas_id", "grade"]
+    # canvas_id is absent by design: it was redacted in the text above, so
+    # naming it here too would warn about a figure no longer shown. The grade
+    # is still displayed and still needs qualifying.
+    assert result["unverified_claims"] == ["grade"]
 
 
 def test_ground_assistant_result_keeps_instructor_authored_preview_summary():
     """Bug 2: a write preview's summary is composed server-side from
     validated params and contains the instructor's own message body. It must
-    never be scrubbed — they are being asked to approve exactly this text."""
+    never be scrubbed — they are being asked to approve exactly this text.
+
+    The resolver chains in services/chat.py mark themselves as the author by
+    handing back the very string generate_write_preview produced, so
+    preview_metadata carries it too. The ungrounded-looking student id below
+    is deliberate: server text is built from already-validated params, so its
+    ids are real by construction and must survive even with nothing retrieved
+    this turn.
+    """
     from app.services.llm.student_context import ground_assistant_result
 
     summary = (
         'Send "this is your last chance to submit without a penalty" as a '
-        "private Canvas message to Student Two in Capstone Project."
+        "private Canvas message to student id 4021 in Capstone Project."
     )
     result, _tool_facts = ground_assistant_result(
         {
@@ -261,11 +272,78 @@ def test_ground_assistant_result_keeps_instructor_authored_preview_summary():
             "intent_preview": True,
             "summary": summary,
             "proposed_action": {"action": "send_message"},
+            "preview_metadata": {"summary": summary},
         },
-        tool_results=[{"students": [{"canvas_user_id": 77, "name": "Student Two"}]}],
+        tool_results=[],
     )
     assert result["summary"] == summary
+    assert "[ID redacted]" not in result["summary"]
     assert "unverified_claims" not in result
+
+
+def test_ground_assistant_result_scrubs_model_authored_preview_summary():
+    """P1: not every intent_preview summary is server text.
+
+    dispatcher.py's generic ``case "intent_preview":`` — the primary write
+    preview path — returns ``summary=action.summary``, the model's own
+    IntentPreviewAction field, while building preview_metadata separately
+    alongside it. Exempting every intent_preview from scrubbing let that
+    free text carry a Canvas ID nothing retrieved straight into the approval
+    step, which is the highest-stakes surface there is: a wrong id here
+    misroutes the write the instructor is about to confirm.
+    """
+    from app.services.llm.student_context import ground_assistant_result
+
+    result, _tool_facts = ground_assistant_result(
+        {
+            "action": "intent_preview",
+            "intent_preview": True,
+            # The model's phrasing, NOT preview_metadata's — the two differ,
+            # which is exactly what marks this as model-authored.
+            "summary": "I'll update assignment id 999999 (Midterm) for you.",
+            "proposed_action": {"action": "update_assignment", "local_course_id": 1},
+            "preview_metadata": {"summary": "Update Midterm in Capstone Project."},
+        },
+        tool_results=[],
+    )
+    assert result["summary"] == "I'll update assignment id [ID redacted] (Midterm) for you."
+
+
+def test_ground_assistant_result_id_only_miss_redacts_without_warning():
+    """P2: an ungrounded id is rewritten to "[ID redacted]" in the prose, so
+    also raising the "figures could not be verified" notice would point the
+    instructor at a figure that is no longer on screen.
+
+    The notice exists for the bug 12 shape, where the number stays visible
+    and needs qualifying. Anything the scrubber already handled is
+    self-evident in the text.
+    """
+    from app.services.llm.student_context import ground_assistant_result
+
+    result, _tool_facts = ground_assistant_result(
+        {"action": "respond", "message": "See assignment id 999999 for details."},
+        tool_results=[],
+    )
+    assert result["message"] == "See assignment id [ID redacted] for details."
+    assert "unverified_claims" not in result
+
+
+def test_ground_assistant_result_grade_still_warns_alongside_redacted_id():
+    """P2 is scoped to an id-only miss. A grade in the same reply is left
+    standing in the text, so the notice must still fire for it — suppressing
+    the whole warning whenever an id happened to be redacted would drop the
+    bug 12 signal."""
+    from app.services.llm.student_context import ground_assistant_result
+
+    result, _tool_facts = ground_assistant_result(
+        {
+            "action": "respond",
+            "message": "The average grade is 82%. See assignment id 999999.",
+        },
+        tool_results=[],
+    )
+    assert result["message"] == "The average grade is 82%. See assignment id [ID redacted]."
+    assert result["unverified_claims"] == ["grade"]
 
 
 def test_ground_assistant_result_no_warning_for_plain_conversation():
