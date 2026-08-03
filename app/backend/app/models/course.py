@@ -16,8 +16,17 @@ if TYPE_CHECKING:
 
 class Course(Base):
     __tablename__ = "courses"
-    # Composite unique: same Canvas course ID can exist once per instructor (co-instructors)
-    __table_args__ = (UniqueConstraint("canvas_course_id", "instructor_id", name="uq_course_per_instructor"),)
+    # Composite unique: same Canvas course ID can exist once per instructor per
+    # Canvas instance (co-instructors allowed; multi-institution instructors
+    # keep separate rows when numeric IDs collide across hosts).
+    __table_args__ = (
+        UniqueConstraint(
+            "canvas_course_id",
+            "instructor_id",
+            "canvas_url",
+            name="uq_course_per_instructor",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     canvas_course_id: Mapped[str] = mapped_column(String, nullable=False)
