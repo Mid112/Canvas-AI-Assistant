@@ -311,12 +311,15 @@ describe("AuthContext", () => {
     });
 
     act(() => {
-      result.current.logout();
+      void result.current.logout();
+    });
+
+    await waitFor(() => {
+      expect(result.current.isAuthenticated).toBe(false);
     });
 
     expect(mockedClearStoredToken).toHaveBeenCalledTimes(1);
     expect(mockedLogoutUser).toHaveBeenCalledWith("stored-token");
-    expect(result.current.isAuthenticated).toBe(false);
     expect(result.current.user).toBeNull();
     expect(result.current.accessToken).toBeNull();
   });
@@ -334,10 +337,44 @@ describe("AuthContext", () => {
     });
 
     act(() => {
-      result.current.logout();
+      void result.current.logout();
     });
 
-    expect(result.current.isAuthenticated).toBe(false);
+    await waitFor(() => {
+      expect(result.current.isAuthenticated).toBe(false);
+    });
+
     expect(result.current.accessToken).toBeNull();
+  });
+
+  // Verifies: revoke is attempted before local auth is cleared.
+  it("awaits server revoke before clearing local auth", async () => {
+    mockedGetStoredToken.mockReturnValue("stored-token");
+    mockedFetchCurrentUser.mockResolvedValue(mockUserResponse);
+
+    let revokeStarted = false;
+    let clearedBeforeRevokeFinished = false;
+    mockedLogoutUser.mockImplementation(async () => {
+      revokeStarted = true;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    mockedClearStoredToken.mockImplementation(() => {
+      if (revokeStarted) {
+        clearedBeforeRevokeFinished = true;
+      }
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isAuthenticated).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.logout();
+    });
+
+    expect(mockedLogoutUser).toHaveBeenCalledWith("stored-token");
+    expect(clearedBeforeRevokeFinished).toBe(true);
   });
 });
