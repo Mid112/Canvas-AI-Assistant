@@ -284,3 +284,97 @@ def test_create_rejects_another_instructors_conversation(client):
     )
     assert response.status_code == 404, response.text
     assert _rows(Workflow, conversation_id=conversation_a) == []
+
+
+# Verifies: the ownership 404 is raised before Canvas is touched. Rejecting
+# afterwards left a real assignment in Canvas with no Workflow and no
+# AuditLog behind it — an unaudited write, which is what this endpoint
+# exists to prevent. Asserting on the mock is the point: the row assertions
+# above pass either way, so only this pins the ordering.
+def test_foreign_conversation_is_rejected_before_the_canvas_write(client):
+    headers_a, _ = _register_with_canvas(client)
+    headers_b, course_b = _register_with_canvas(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "hi"}'
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        chat = client.post(
+            "/api/v1/chat/", json={"message": "hello"}, headers=headers_a
+        )
+    conversation_a = chat.json()["conversation_id"]
+
+    with patch(
+        "app.services.canvas.create_assignment", new_callable=AsyncMock
+    ) as canvas_write:
+        canvas_write.return_value = _mock_assignment()
+        response = client.post(
+            f"/api/v1/canvas/courses/{course_b}/assignments"
+            f"?canvas_url={CANVAS_URL}&conversation_id={conversation_a}",
+            json={
+                "name": "Object Segmentation",
+                "description": "Segment the objects.",
+                "due_at": "2026-10-15T23:59:00Z",
+                "points_possible": 120,
+            },
+            headers=headers_b,
+        )
+
+    assert response.status_code == 404, response.text
+    canvas_write.assert_not_awaited()
+
+
+# Verifies: a failure after the workflow claim cannot revert it to "pending".
+# The claim must be committed on its own (_claim_pending_workflow's contract);
+# deferring that commit past the audit insert meant an error in between rolled
+# the transition back while the Canvas write stayed durable, leaving "pending"
+# for an assignment that exists — the precise bug this endpoint fixes.
+def test_claim_survives_a_failure_before_the_audit_commit(client):
+    from app.models.audit_log import AuditLog
+    from app.models.workflow import Workflow
+
+    headers, local_course_id = _register_with_canvas(client)
+
+    llm_output = (
+        '{"action": "intent_preview", "summary": "Create it.", '
+        '"proposed_action": {"action": "create_assignment", '
+        '"course_name": "CPSC 310", "title": "Object Segmentation", '
+        '"description": "Segment the objects.", '
+        '"due_date": "2026-10-15T23:59:00", "points_possible": 120}}'
+    )
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = llm_output
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        chat = client.post(
+            "/api/v1/chat/",
+            json={"message": "create an assignment about object segmentation"},
+            headers=headers,
+        )
+    conversation_id = chat.json()["conversation_id"]
+
+    pending = _rows(Workflow, conversation_id=conversation_id)
+    assert len(pending) == 1 and pending[0].status == "pending", pending
+    preview_message_id = pending[0].preview_message_id
+
+    # Fail in the window between the claim and the final commit.
+    with patch(
+        "app.services.chat.record_write_audit",
+        new_callable=AsyncMock,
+        side_effect=RuntimeError("audit insert exploded"),
+    ):
+        with pytest.raises(RuntimeError):
+            _create(
+                client,
+                headers,
+                local_course_id,
+                query=(
+                    f"&conversation_id={conversation_id}"
+                    f"&preview_message_id={preview_message_id}"
+                ),
+            )
+
+    after = _rows(Workflow, conversation_id=conversation_id)
+    assert len(after) == 1, after
+    # The Canvas write is durable, so the workflow must not read "pending".
+    assert after[0].status == "executed", after[0].status
+    # The audit row is the casualty, and that is the acceptable loss here.
+    assert _rows(AuditLog, workflow_id=after[0].id) == []

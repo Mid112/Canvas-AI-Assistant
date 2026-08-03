@@ -219,11 +219,11 @@ async def create_assignment_endpoint(
     from app.services.canvas import get_owned_course
     from app.services.chat import _claim_pending_workflow, record_write_audit
 
-    assignment = await create_course_assignment(
-        course_id, body, current_user, canvas_url, db
-    )
-    course = await get_owned_course(course_id, current_user, canvas_url, db)
-
+    # Ownership is settled before the Canvas write, not after. Rejecting a
+    # foreign or unknown conversation_id afterwards still left the assignment
+    # created in Canvas while the 404 unwound the request with no Workflow and
+    # no AuditLog written — an unaudited real write, which is the exact hole
+    # this endpoint exists to close.
     linked_conversation_id: int | None = None
     if conversation_id is not None:
         conversation = await db.scalar(
@@ -238,6 +238,11 @@ async def create_assignment_endpoint(
                 detail="Conversation not found.",
             )
         linked_conversation_id = conversation.id
+
+    assignment = await create_course_assignment(
+        course_id, body, current_user, canvas_url, db
+    )
+    course = await get_owned_course(course_id, current_user, canvas_url, db)
 
     affected_resources = [
         {
@@ -270,6 +275,18 @@ async def create_assignment_endpoint(
         if workflow is not None and await _claim_pending_workflow(
             db, workflow, "executed"
         ):
+            # Commit the claim on its own, per _claim_pending_workflow's
+            # contract — the same thing handle_confirmed_action and
+            # handle_cancelled_action do. Holding it open until the audit
+            # insert below had a second failure mode beyond the row lock: the
+            # Canvas write above is already durable (create_course_assignment
+            # goes through run_idempotent_canvas_write, which commits
+            # independently), so any error between the claim and the final
+            # commit rolled the transition back to "pending" for an assignment
+            # that exists in Canvas — reproducing this endpoint's own bug, and
+            # returning 500 for a create that actually succeeded.
+            await db.commit()
+            workflow.status = "executed"
             workflow.executed_at = datetime.now(UTC)
             workflow.affected_resources = affected_resources
         else:
