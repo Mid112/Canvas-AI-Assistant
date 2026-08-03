@@ -1,9 +1,11 @@
 import json
 from datetime import UTC, datetime
+from typing import cast
 
 from fastapi import HTTPException, status
 from sqlalchemy import desc, func, select
 from sqlalchemy import update as sa_update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -106,7 +108,7 @@ async def _transition_workflow_status(
         .where(Workflow.id == workflow.id, Workflow.status == expected_status)
         .values(status=new_status)
     )
-    if claim.rowcount > 0:
+    if cast(CursorResult, claim).rowcount > 0:
         workflow.status = new_status
         return True
     await db.refresh(workflow, attribute_names=["status"])
@@ -274,7 +276,7 @@ async def reverse_workflow(db: AsyncSession, user: User, workflow_id: int) -> Wo
         )
         .values(undone_at=datetime.now(UTC))
     )
-    if claim.rowcount == 0:
+    if cast(CursorResult, claim).rowcount == 0:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="This action has already been undone.",
@@ -297,18 +299,30 @@ async def reverse_workflow(db: AsyncSession, user: User, workflow_id: int) -> Wo
             detail="No prior state was recorded for this action — it cannot be undone.",
         )
 
-    course = await get_owned_course_or_404(workflow.course_id, user, db)
+    if workflow.course_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="No course was recorded for this action — it cannot be undone.",
+        )
+    if audit_row.resource_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="No Canvas resource was recorded for this action — it cannot be undone.",
+        )
+
+    course_id = workflow.course_id
+    course = await get_owned_course_or_404(course_id, user, db)
     assignment_id = int(audit_row.resource_id)
 
     if workflow.action_name == "create_assignment":
         # No "before" state to re-apply — the assignment didn't exist
         # before this action. Undoing it means deleting it.
-        await delete_course_assignment(workflow.course_id, assignment_id, user, course.canvas_url, db)
+        await delete_course_assignment(course_id, assignment_id, user, course.canvas_url, db)
         db.add(
             AuditLog(
                 user_id=user.id,
                 workflow_id=workflow.id,
-                course_id=workflow.course_id,
+                course_id=course_id,
                 action="undo_assignment",
                 resource_type="assignment",
                 resource_id=audit_row.resource_id,
@@ -321,7 +335,7 @@ async def reverse_workflow(db: AsyncSession, user: User, workflow_id: int) -> Wo
         )
     elif workflow.action_name == "create_quiz":
         await delete_course_quiz(
-            workflow.course_id,
+            course_id,
             assignment_id,
             user,
             course.canvas_url,
@@ -334,7 +348,7 @@ async def reverse_workflow(db: AsyncSession, user: User, workflow_id: int) -> Wo
             AuditLog(
                 user_id=user.id,
                 workflow_id=workflow.id,
-                course_id=workflow.course_id,
+                course_id=course_id,
                 action="undo_quiz",
                 resource_type="quiz",
                 resource_id=audit_row.resource_id,
@@ -359,13 +373,13 @@ async def reverse_workflow(db: AsyncSession, user: User, workflow_id: int) -> Wo
             points_possible=before.get("points_possible"),
         )
         restored = await update_course_assignment(
-            workflow.course_id, assignment_id, payload, user, course.canvas_url, db
+            course_id, assignment_id, payload, user, course.canvas_url, db
         )
         db.add(
             AuditLog(
                 user_id=user.id,
                 workflow_id=workflow.id,
-                course_id=workflow.course_id,
+                course_id=course_id,
                 action="undo_assignment",
                 resource_type="assignment",
                 resource_id=audit_row.resource_id,

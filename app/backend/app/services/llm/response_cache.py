@@ -4,9 +4,11 @@ import hashlib
 import logging
 import re
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.llm_response_cache import LlmResponseCache
@@ -127,4 +129,4 @@ async def store_cached_response(
 
 async def delete_expired_cache_entries(db: AsyncSession) -> int:
     result = await db.execute(delete(LlmResponseCache).where(LlmResponseCache.expires_at <= datetime.now(UTC)))
-    return result.rowcount or 0
+    return cast(CursorResult, result).rowcount or 0
