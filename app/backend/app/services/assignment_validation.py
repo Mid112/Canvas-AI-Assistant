@@ -75,6 +75,11 @@ async def validate_assignment_for_create(
     course = await get_owned_course_or_404(local_course_id, user, db)
 
     _check_title(title)
+    if description is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Description is required for assignments.",
+        )
     _check_description(description)
 
     if not due_date:

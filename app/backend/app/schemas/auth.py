@@ -108,7 +108,7 @@ class UserResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def has_canvas_token(self) -> bool:
         return len(self.canvas_connections) > 0

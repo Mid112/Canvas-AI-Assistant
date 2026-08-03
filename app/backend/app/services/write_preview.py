@@ -44,7 +44,7 @@ def _reversibility_fields(action_type: str) -> dict:
     """Shared #581 metadata every write preview carries — single source
     of truth is is_reversible(), never hand-duplicated per builder."""
     reversible = is_reversible(action_type)
-    fields = {
+    fields: dict[str, object] = {
         "reversible": reversible,
         "risk_level": get_risk_level(action_type),
     }

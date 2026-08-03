@@ -192,7 +192,7 @@ def resolve_institution_canvas_url(user: User, canvas_url: str | None) -> str:
     )
 
 
-def _is_expected_canvas_token_sync_error(exc: Exception) -> bool:
+def _is_expected_canvas_token_sync_error(exc: BaseException) -> bool:
     """Background sync treats missing/invalid/corrupted Canvas tokens as
     expected account state, not infrastructure failure. Interactive endpoints
     still raise the original status, but sweeps should only log a concise
@@ -283,8 +283,13 @@ async def get_owned_course(
             Course.instructor_id == user.id,
         )
     )
-    normalized = normalize_canvas_url(canvas_url or course.canvas_url) if course else None
-    if not course or not canvas_urls_equivalent(course.canvas_url, normalized):
+    if course is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found or does not belong to you.",
+        )
+    normalized = normalize_canvas_url(canvas_url or course.canvas_url)
+    if not canvas_urls_equivalent(course.canvas_url, normalized):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found or does not belong to you.",
@@ -1656,11 +1661,12 @@ async def sync_courses_if_stale(user: User, connection: CanvasConnection, db: As
     connection can never fail a chat turn that doesn't even need fresh
     course data.
 
-    Also upserts canvas_course_names — the small, connection-scoped,
-    write-once canvas_course_id -> name index services/chat.py uses to
-    resolve a course by name without ever exposing a numeric ID to the
-    LLM. Rows there are inserted once and never overwritten
-    (ON CONFLICT DO NOTHING) — see CanvasCourseName's docstring for why.
+    Also upserts canvas_course_names — the connection-scoped alias index
+    services/chat.py uses to resolve a course by name without exposing a
+    numeric ID to the LLM. Unlike the old single-label index, it keeps
+    historical aliases while refreshing last_seen_at on the current alias.
+    Prompt display still comes from Course.name/Course.course_code, so chat
+    stays aligned with the rest of the app after Canvas renames.
 
     get_courses() itself is unmodified; this wrapper only adds the
     cooldown gate and the name-index upsert around it.
@@ -1678,21 +1684,28 @@ async def sync_courses_if_stale(user: User, connection: CanvasConnection, db: As
 
     courses = await get_courses(user, connection.canvas_url, db)
     if courses:
+        insert_names = pg_insert(CanvasCourseName).values(
+            [
+                {
+                    "canvas_connection_id": connection.id,
+                    "canvas_course_id": str(course.canvas_id),
+                    "local_course_id": course.local_id,
+                    "name": course.name,
+                    "workflow_state": course.workflow_state,
+                    "last_seen_at": now,
+                }
+                for course in courses
+            ]
+        )
         await db.execute(
-            pg_insert(CanvasCourseName)
-            .values(
-                [
-                    {
-                        "canvas_connection_id": connection.id,
-                        "canvas_course_id": str(course.canvas_id),
-                        "local_course_id": course.local_id,
-                        "name": course.name,
-                        "workflow_state": course.workflow_state,
-                    }
-                    for course in courses
-                ]
+            insert_names.on_conflict_do_update(
+                index_elements=["canvas_connection_id", "canvas_course_id", "name"],
+                set_={
+                    "local_course_id": insert_names.excluded.local_course_id,
+                    "workflow_state": insert_names.excluded.workflow_state,
+                    "last_seen_at": insert_names.excluded.last_seen_at,
+                },
             )
-            .on_conflict_do_nothing(index_elements=["canvas_connection_id", "canvas_course_id"])
         )
 
     connection.courses_synced_at = now
@@ -1769,7 +1782,7 @@ async def run_course_sync_sweep(db: AsyncSession) -> None:
                 if expected_token_issue:
                     logger.warning(
                         "course sync sweep skipped canvas_connection_id=%s user_id=%s: %s",
-                        connection_id, user_id, exc.detail,
+                        connection_id, user_id, getattr(exc, "detail", str(exc)),
                     )
                 else:
                     logger.warning(
@@ -1902,7 +1915,7 @@ async def set_active_course(user: User, local_course_id: int, db: AsyncSession) 
                     if _is_expected_canvas_token_sync_error(exc):
                         logger.warning(
                             "set_active_course sync skipped canvas_connection_id=%s user_id=%s: %s",
-                            connection.id, user.id, exc.detail,
+                            connection.id, user.id, getattr(exc, "detail", str(exc)),
                         )
                     else:
                         logger.warning(
