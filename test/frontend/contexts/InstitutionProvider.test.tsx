@@ -116,8 +116,8 @@ describe("InstitutionProvider dashboard fetch", () => {
     expect(result.current.dashboard.metrics.totalStudents).toBe(1);
   });
 
-  // Verifies: Ticket 26 — seed catalog notifications are never exposed as alerts.
-  it("does not fall back to hardcoded seed notifications when the API fails", async () => {
+  // Verifies: Tickets 26/39 — failed dashboard fetch does not fall back to seed data.
+  it("uses empty dashboard defaults when the API fetch fails", async () => {
     mockUseAuth.mockReturnValue(instructorAuth);
     mockedFetchInstructorDashboard.mockRejectedValue(new Error("offline"));
 
@@ -127,7 +127,11 @@ describe("InstitutionProvider dashboard fetch", () => {
       expect(mockedFetchInstructorDashboard).toHaveBeenCalled();
     });
 
+    expect(result.current.dashboard.metrics.totalStudents).toBe(0);
+    expect(result.current.dashboard.metrics.missingSubmissions).toBe(0);
+    expect(result.current.dashboard.metrics.pendingApprovals).toBe(0);
     expect(result.current.dashboard.notifications).toEqual([]);
+    expect(result.current.dashboard.activeCourses).toEqual([]);
   });
 });
 

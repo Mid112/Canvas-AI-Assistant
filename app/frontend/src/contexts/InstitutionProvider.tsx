@@ -226,18 +226,6 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
     [selectedInstitution.id],
   );
 
-  // Seed catalogs include hardcoded demo notifications. Ticket 26 requires the
-  // notifications page to use backend/dashboard state only — never seed alerts.
-  const seedDashboardFallback = useMemo(() => {
-    if (!institutionData?.dashboard) {
-      return EMPTY_DASHBOARD;
-    }
-    return {
-      ...institutionData.dashboard,
-      notifications: [],
-    };
-  }, [institutionData]);
-
   const value = useMemo<InstitutionContextValue>(
     () => ({
       institutions: connectedInstitutions,
@@ -245,7 +233,7 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
       setSelectedInstitution,
       courses: institutionData?.courses ?? [],
       analytics: institutionData?.analytics ?? EMPTY_ANALYTICS,
-      dashboard: withSharedQuickActions(apiDashboard ?? seedDashboardFallback),
+      dashboard: withSharedQuickActions(apiDashboard ?? EMPTY_DASHBOARD),
       refreshDashboard,
     }),
     [
@@ -253,7 +241,6 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
       connectedInstitutions,
       institutionData,
       refreshDashboard,
-      seedDashboardFallback,
       selectedInstitution,
       setSelectedInstitution,
     ],
