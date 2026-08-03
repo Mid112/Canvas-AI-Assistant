@@ -56,3 +56,4 @@ If you have a genuinely ancient local database (created before the `ta` role was
 | `039_support_ticket_assigned_admin.sql` | Adds `support_tickets.assigned_to` so admins can claim escalated support tickets before resolving them |
 | `040_grade_history_local_relationships.sql` | Adds nullable local `assignments`/`students` foreign keys to `grade_history` and backfills them from the existing Canvas assignment/student IDs when local mirror rows exist. |
 | `041_canvas_course_names_aliases.sql` | Converts `canvas_course_names` from one mutable label per Canvas course to a connection-scoped alias table with `last_seen_at`, preserving historical names for chat resolution while prompts display current `courses.name`/`course_code` |
+| `044_canvas_connection_time_zone.sql` | Adds `canvas_connections.time_zone` (IANA name from Canvas `/api/v1/users/self`) as the instructor source of truth when interpreting naive assignment due dates (#1435) |
