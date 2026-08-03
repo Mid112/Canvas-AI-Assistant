@@ -175,6 +175,49 @@ def test_create_assignment_has_required_params():
     assert "points_possible" in props
 
 
+# Verifies: Ungraded MCP create sends not_graded without inventing points (Ticket 21).
+def test_create_assignment_ungraded_sends_not_graded_to_canvas():
+    """MCP create_assignment passes points_possible=None and grading_type=not_graded."""
+    import sys
+    from pathlib import Path
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mcp_dir = Path(__file__).resolve().parents[2] / "app" / "mcp"
+    sys.path.insert(0, str(mcp_dir))
+    from server import create_assignment  # noqa: E402
+
+    mock_response = MagicMock()
+    mock_response.is_error = False
+    mock_response.json.return_value = {
+        "id": 1,
+        "name": "Reading Check-in",
+        "grading_type": "not_graded",
+        "points_possible": None,
+        "published": False,
+    }
+
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+
+    async def _run() -> None:
+        with patch("server.httpx.AsyncClient", return_value=mock_client):
+            result = await create_assignment(
+                course_id=1,
+                name="Reading Check-in",
+                points_possible=None,
+            )
+
+        assert result["success"] is True
+        payload = mock_client.post.call_args.kwargs["json"]
+        assignment_body = payload["assignment"]
+        assert assignment_body["grading_type"] == "not_graded"
+        assert "points_possible" not in assignment_body
+
+    asyncio.run(_run())
+
+
 # Verifies: Send message has required params.
 def test_send_message_has_required_params():
     """send_message_to_students declares course_id, subject, body, recipient_ids."""
