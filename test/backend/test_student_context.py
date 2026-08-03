@@ -281,6 +281,69 @@ def test_ground_assistant_result_keeps_instructor_authored_preview_summary():
     assert "unverified_claims" not in result
 
 
+def test_ground_assistant_result_warns_on_a_fabricated_stat_in_a_preview():
+    """The bug 12 shape reaching the highest-stakes surface there is.
+
+    A drafted send_message or announcement is prose the instructor is about
+    to send to students under their own name, and the model can invent a
+    figure for it with no tool call behind it. While every intent_preview
+    was exempt, that draft reached the approval step with no redaction and
+    no warning — the instructor's only signal that the number was made up
+    would have been recognising it themselves.
+
+    The number deliberately stays visible: grades are detected, never
+    rewritten, because an average or rate is unrepresentable in facts.grades
+    by construction and blanking it destroyed legitimate answers (bug 13).
+    So the contract here is the warning, not a redaction.
+    """
+    from app.services.llm.student_context import ground_assistant_result
+
+    result, _tool_facts = ground_assistant_result(
+        {
+            "action": "intent_preview",
+            "intent_preview": True,
+            # Model free text — differs from preview_metadata's summary,
+            # which is what marks it as model-authored rather than composed
+            # by write_preview from validated params.
+            "summary": (
+                "Announce to the class that the average grade is 82 on the "
+                "midterm and that scores will be posted tonight."
+            ),
+            "proposed_action": {"action": "send_message"},
+            "preview_metadata": {"summary": "Send an announcement to Capstone Project."},
+        },
+        tool_results=[],
+    )
+
+    assert result["unverified_claims"] == ["grade"]
+    # Still shown, so the instructor can see what is being questioned.
+    assert "82" in result["summary"]
+
+
+def test_ground_assistant_result_keeps_a_grounded_stat_in_a_preview_unflagged():
+    """The other half of the contract: a figure a tool actually returned
+    carries no warning, so the notice keeps meaning something. Without this
+    the test above passes just as well against a rule that flags every
+    preview containing a number."""
+    from app.services.llm.student_context import ground_assistant_result
+
+    result, _tool_facts = ground_assistant_result(
+        {
+            "action": "intent_preview",
+            "intent_preview": True,
+            "summary": "Announce that Ada scored 82 on the midterm.",
+            "proposed_action": {"action": "send_message"},
+            "preview_metadata": {"summary": "Send an announcement to Capstone Project."},
+        },
+        tool_results=[
+            {"submissions": [{"id": 1, "score": 82}]},
+        ],
+    )
+
+    assert "unverified_claims" not in result
+    assert "82" in result["summary"]
+
+
 def test_ground_assistant_result_scrubs_model_authored_preview_summary():
     """P1: not every intent_preview summary is server text.
 
