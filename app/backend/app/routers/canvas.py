@@ -170,12 +170,13 @@ async def preview_assignment_endpoint(
     canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.core.canvas_url import canvas_urls_equivalent, normalize_canvas_url
     from app.services.assignment_validation import validate_assignment_for_create
-    from app.services.canvas import get_owned_course, require_writable_course
+    from app.services.canvas import require_writable_course
 
     # Validate required fields before preview so the dry-run matches what
     # create will accept — same gate as quiz/feedback preview paths.
-    await validate_assignment_for_create(
+    course = await validate_assignment_for_create(
         course_id,
         current_user,
         body.name,
@@ -184,7 +185,14 @@ async def preview_assignment_endpoint(
         body.points_possible,
         db,
     )
-    course = await get_owned_course(course_id, current_user, canvas_url, db)
+    normalized_canvas_url = normalize_canvas_url(canvas_url or course.canvas_url)
+    if not canvas_urls_equivalent(course.canvas_url, normalized_canvas_url):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found or does not belong to you.",
+        )
+    if course.canvas_url != normalized_canvas_url:
+        course.canvas_url = normalized_canvas_url
     require_writable_course(course)
     proposed = {
         "action": "create_assignment",
