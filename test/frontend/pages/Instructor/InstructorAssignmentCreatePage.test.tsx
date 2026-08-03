@@ -1,9 +1,12 @@
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 
-import { InstructorAssignmentCreatePage } from "@/pages/Instructor/InstructorAssignmentCreatePage";
+import {
+  InstructorAssignmentCreatePage,
+  InstructorAssignmentCreateRoute,
+} from "@/pages/Instructor/InstructorAssignmentCreatePage";
 import {
   listTypedDrafts,
   saveTypedDraft,
@@ -598,6 +601,115 @@ describe("InstructorAssignmentCreatePage", () => {
     expect(screen.getByDisplayValue("120")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("Ignored Title")).not.toBeInTheDocument();
     expect(screen.queryByDisplayValue("999")).not.toBeInTheDocument();
+  });
+
+  // Verifies: a second handoff onto the already-mounted route is treated as
+  // new work. React Router reuses the element when the path is unchanged, and
+  // every seeded value here comes from a useState initialiser or a useRef
+  // single-flight guard — none of which re-run on a state change. Without the
+  // identity key the page would keep the first handoff's draft and skip
+  // expansion entirely, showing one assignment's content under another's name.
+  it("re-seeds and re-expands when a second handoff reuses the mounted route", async () => {
+    const user = userEvent.setup();
+    mockedGenerate
+      .mockResolvedValueOnce({
+        name: "Ignored",
+        description: "Expanded description for the first handoff.",
+        dueDate: "2099-01-01T00:00",
+        pointsPossible: 999,
+      })
+      .mockResolvedValueOnce({
+        name: "Ignored",
+        description: "Expanded description for the second handoff.",
+        dueDate: "2099-01-01T00:00",
+        pointsPossible: 999,
+      });
+
+    const secondHandoff = {
+      aiAssignmentDraft: {
+        courseId: 42,
+        name: "Homework 4",
+        description: "it is about sorting",
+        dueDate: "2026-09-09T23:59",
+        pointsPossible: 60,
+        prompt: "Homework 4. it is about sorting",
+      },
+    };
+
+    // Lives outside <Routes> so it survives the navigation and can trigger a
+    // create -> create transition without unmounting the page.
+    function SecondHandoffButton() {
+      const navigate = useNavigate();
+      return (
+        <button
+          type="button"
+          onClick={() =>
+            navigate("/instructor/assignments/create", { state: secondHandoff })
+          }
+        >
+          send second handoff
+        </button>
+      );
+    }
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: "/instructor/assignments/create",
+            state: {
+              aiAssignmentDraft: {
+                courseId: 42,
+                name: "Homework 3",
+                description: "it is about beef corndogs",
+                dueDate: "2026-08-04T23:59",
+                pointsPossible: 120,
+                prompt: "Homework 3. it is about beef corndogs",
+              },
+            },
+          },
+        ]}
+      >
+        <SecondHandoffButton />
+        <Routes>
+          <Route
+            path="/instructor/assignments/create"
+            element={<InstructorAssignmentCreateRoute />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByDisplayValue(
+        "Expanded description for the first handoff.",
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "send second handoff" }),
+    );
+
+    // The generator runs again for the new prompt rather than being refused
+    // by the first handoff's guard.
+    await waitFor(() => {
+      expect(mockedGenerate).toHaveBeenCalledWith(
+        42,
+        "Homework 4. it is about sorting",
+        expect.anything(),
+      );
+    });
+    expect(
+      await screen.findByDisplayValue(
+        "Expanded description for the second handoff.",
+      ),
+    ).toBeInTheDocument();
+
+    // And the form shows the second assignment, not the first one's values.
+    expect(screen.getByDisplayValue("Homework 4")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("2026-09-09T23:59")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("60")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Homework 3")).not.toBeInTheDocument();
   });
 
   // Verifies: Regression (#15) — the LLM round-trip is visible rather than
