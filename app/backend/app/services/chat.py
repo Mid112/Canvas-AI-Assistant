@@ -1113,7 +1113,7 @@ async def _run_analyze_course_submissions_chain(
     """
     course = await resolve_course(db, user, action.local_course_id)
 
-    print(f"Gathering {course.name} assignments")
+    logger.info("Gathering %s assignments", course.name)
     fetch_action = FetchAssignmentsAction(local_course_id=course.id)
     assignments_result = await _run_tracked_read(
         db, user, conversation, user_msg.id, "fetch_assignments",
@@ -1130,7 +1130,9 @@ async def _run_analyze_course_submissions_chain(
             "summary": f"{course.name} has no assignments yet, so there is nothing to analyse.",
         }
 
-    print(f"Checking {course.name} for {action.status} submissions")
+    logger.info(
+        "Checking %s for %s submissions", course.name, action.status
+    )
     per_assignment: list[dict] = []
     names_budget = _COURSE_ANALYSIS_MAX_NAMES
     truncated = False
