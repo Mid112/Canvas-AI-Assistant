@@ -532,19 +532,19 @@ async def execute_tool(
                         ),
                     }
                 )
-            students = await get_students(
+            course_students = await get_students(
                 course.id, user, course.canvas_url, db
             )
             active_students = [
-                student for student in students if student.enrollment_state == "active"
+                student for student in course_students if student.enrollment_state == "active"
             ]
             return {
-                "students": [llm_safe_student_dict(student) for student in students],
-                "count": len(students),
+                "students": [llm_safe_student_dict(student) for student in course_students],
+                "count": len(course_students),
                 "active_count": len(active_students),
                 "summary": (
                     f"{course.name} has {len(active_students)} active students "
-                    f"and {len(students)} total enrollments."
+                    f"and {len(course_students)} total enrollments."
                 ),
             }
 
@@ -569,22 +569,22 @@ async def execute_tool(
                         "summary": f"{course.name} has {len(quizzes)} quiz(zes).",
                     }
                 )
-            quizzes = await get_course_quizzes(
+            course_quizzes = await get_course_quizzes(
                 course.id, user, course.canvas_url, db
             )
             return {
-                "quizzes": [quiz.model_dump(mode="json") for quiz in quizzes],
-                "count": len(quizzes),
-                "summary": f"{course.name} has {len(quizzes)} quiz(zes).",
+                "quizzes": [quiz.model_dump(mode="json") for quiz in course_quizzes],
+                "count": len(course_quizzes),
+                "summary": f"{course.name} has {len(course_quizzes)} quiz(zes).",
             }
 
         case "set_active_course":
-            result = await set_active_course(user, action.local_course_id, db)
-            return {"active_course": result.model_dump()}
+            active_course_set = await set_active_course(user, action.local_course_id, db)
+            return {"active_course": active_course_set.model_dump()}
 
         case "get_active_course":
-            result = await get_active_course(user, db)
-            return {"active_course": result.model_dump() if result else None}
+            active_course_current = await get_active_course(user, db)
+            return {"active_course": active_course_current.model_dump() if active_course_current else None}
 
         # ── Write actions (PATH B only — Canvas write, no preview) ────
         # These cases are only reached from handle_confirmed_action after
@@ -607,7 +607,7 @@ async def execute_tool(
                 db,
             )
 
-            payload = AssignmentCreate(
+            assignment_payload = AssignmentCreate(
                 name=action.title,
                 description=action.description,
                 due_at=action.due_date,
@@ -656,7 +656,7 @@ async def execute_tool(
                                 "create_assignment",
                                 user.id,
                                 course.id,
-                                payload.model_dump(mode="json"),
+                                assignment_payload.model_dump(mode="json"),
                             ),
                             write=_mcp_create_assignment,
                             exclude_workflow_id=exclude_workflow_id,
@@ -666,13 +666,13 @@ async def execute_tool(
             else:
                 assignment = await create_course_assignment(
                     course.id,
-                    payload,
+                    assignment_payload,
                     user,
                     course.canvas_url,
                     db,
                     exclude_workflow_id=exclude_workflow_id,
                 )
-            result = CanvasWriteResult(
+            assignment_write = CanvasWriteResult(
                 action="create_assignment",
                 data=assignment,
                 reversible=is_reversible("create_assignment"),
@@ -681,7 +681,7 @@ async def execute_tool(
                     {"type": "assignment", "id": assignment.id, "name": assignment.name, "status": "created"},
                 ],
             )
-            out = result.to_dict()
+            out = assignment_write.to_dict()
             if _mcp_enabled():
                 out["via_mcp"] = True
             return out
@@ -715,7 +715,7 @@ async def execute_tool(
                 quiz_engine=action.quiz_engine,
                 question_bank_groups=question_bank_groups,
             )
-            payload = QuizCreate(
+            quiz_payload = QuizCreate(
                 title=action.title,
                 description=action.description,
                 due_at=action.due_date,
@@ -741,13 +741,13 @@ async def execute_tool(
             )
             quiz = await create_course_quiz(
                 course.id,
-                payload,
+                quiz_payload,
                 user,
                 course.canvas_url,
                 db,
                 exclude_workflow_id=exclude_workflow_id,
             )
-            result = CanvasWriteResult(
+            quiz_write = CanvasWriteResult(
                 action="create_quiz",
                 data=quiz,
                 reversible=is_reversible("create_quiz"),
@@ -756,7 +756,7 @@ async def execute_tool(
                     {"type": "quiz", "id": quiz.id, "name": quiz.title, "status": "created"},
                 ],
             )
-            return result.to_dict()
+            return quiz_write.to_dict()
 
         case "update_assignment":
             course = await _resolve_course(db, user, action.local_course_id)
@@ -777,7 +777,7 @@ async def execute_tool(
             current = await get_assignment(
                 course.id, action.assignment_id, user, course.canvas_url, db
             )
-            payload = _merge_assignment_update(current, action)
+            update_payload = _merge_assignment_update(current, action)
 
             if _mcp_enabled():
                 async def _mcp_update_assignment() -> dict[str, Any]:
@@ -788,13 +788,14 @@ async def execute_tool(
                         {
                             "course_id": int(course.canvas_course_id),
                             "assignment_id": action.assignment_id,
-                            "name": payload.name,
-                            "points_possible": payload.points_possible,
-                            "due_at": payload.due_at.isoformat()
-                            if getattr(payload, "due_at", None) is not None
-                            and hasattr(payload.due_at, "isoformat")
-                            else payload.due_at,
-                            "description": payload.description,
+                            "name": update_payload.name,
+                            "points_possible": update_payload.points_possible,
+                            "due_at": (
+                                update_payload.due_at.isoformat()
+                                if update_payload.due_at is not None
+                                else None
+                            ),
+                            "description": update_payload.description,
                         },
                     )
                     if not mcp_result.get("success") or not mcp_result.get("assignment"):
@@ -834,7 +835,7 @@ async def execute_tool(
                                 user.id,
                                 course.id,
                                 action.assignment_id,
-                                payload.model_dump(mode="json"),
+                                update_payload.model_dump(mode="json"),
                             ),
                             write=_mcp_update_assignment,
                             exclude_workflow_id=exclude_workflow_id,
@@ -845,7 +846,7 @@ async def execute_tool(
                 assignment = await update_course_assignment(
                     course.id,
                     action.assignment_id,
-                    payload,
+                    update_payload,
                     user,
                     course.canvas_url,
                     db,
@@ -861,7 +862,7 @@ async def execute_tool(
                 )
                 if value is not None
             ]
-            result = CanvasWriteResult(
+            assignment_update_write = CanvasWriteResult(
                 action="update_assignment",
                 data=assignment,
                 reversible=is_reversible("update_assignment"),
@@ -877,7 +878,7 @@ async def execute_tool(
                 ],
                 previous_data=current,
             )
-            out = result.to_dict()
+            out = assignment_update_write.to_dict()
             if _mcp_enabled():
                 out["via_mcp"] = True
             return out
@@ -940,7 +941,7 @@ async def execute_tool(
                     write=_mcp_update_grade,
                     exclude_workflow_id=exclude_workflow_id,
                 )
-                result = CanvasWriteResult(
+                grade_mcp_write = CanvasWriteResult(
                     action="update_grade",
                     data=submission,
                     reversible=is_reversible("update_grade"),
@@ -964,7 +965,7 @@ async def execute_tool(
                         },
                     ],
                 )
-                out = result.to_dict()
+                out = grade_mcp_write.to_dict()
                 out["via_mcp"] = True
                 return out
 
@@ -982,14 +983,14 @@ async def execute_tool(
                 record_workflow_audit=False,
                 exclude_workflow_id=exclude_workflow_id,
             )
-            result = CanvasWriteResult(
+            grade_write = CanvasWriteResult(
                 action="update_grade",
                 data=grade_result.canvas_submission,
                 reversible=is_reversible("update_grade"),
                 affected_resources=grade_result.affected_resources,
                 previous_data=grade_result.current,
             )
-            return result.to_dict()
+            return grade_write.to_dict()
 
         case "send_message":
             course = await _resolve_course(db, user, action.local_course_id)
@@ -1061,7 +1062,7 @@ async def execute_tool(
                     write=_mcp_send_message,
                     exclude_workflow_id=exclude_workflow_id,
                 )
-                message_result = SimpleNamespace(**message_payload)
+                message_result: Any = SimpleNamespace(**message_payload)
             else:
                 message_result = await send_course_message(
                     course.id,
@@ -1078,7 +1079,7 @@ async def execute_tool(
                 if message_result.delivery_mode == "conversation"
                 else "announcement"
             )
-            result = CanvasWriteResult(
+            message_write = CanvasWriteResult(
                 action="send_message",
                 data=message_result,
                 reversible=is_reversible("send_message"),
@@ -1092,7 +1093,7 @@ async def execute_tool(
                     },
                 ],
             )
-            out = result.to_dict()
+            out = message_write.to_dict()
             if _mcp_enabled():
                 out["via_mcp"] = True
             return out
@@ -1205,13 +1206,13 @@ async def execute_tool(
                     }
 
             if proposed.get("action") == "update_assignment":
-                changed_fields = (
+                editable_fields = (
                     "title",
                     "description",
                     "due_date",
                     "points_possible",
                 )
-                if not any(proposed.get(field) is not None for field in changed_fields):
+                if not any(proposed.get(field) is not None for field in editable_fields):
                     return {
                         "action": "clarify",
                         "clarify": True,
