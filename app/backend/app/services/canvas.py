@@ -1323,6 +1323,82 @@ async def _sync_local_assignment_published(
     return local
 
 
+def _format_unpublish_error(canvas_detail: str) -> str:
+    """Map Canvas unpublish failures to user-facing messages."""
+    lowered = canvas_detail.lower()
+    if (
+        ("can't unpublish" in lowered or "cannot unpublish" in lowered)
+        and "submission" in lowered
+    ):
+        return (
+            "Canvas refused to unpublish this assignment. "
+            f"{canvas_detail}"
+        )
+    return f"Failed to unpublish this assignment. {canvas_detail}"
+
+
+async def _record_assignment_publish_audit(
+    db: AsyncSession,
+    user: User,
+    course: Course,
+    assignment_id: int,
+    *,
+    published: bool,
+    previous_data: dict,
+    result_data: dict,
+) -> None:
+    """Record workflow history and audit for assignment publish/unpublish writes."""
+    from app.services.chat import record_write_audit
+
+    assignment_name = (
+        result_data.get("name")
+        or previous_data.get("name")
+        or f"Assignment {assignment_id}"
+    )
+    proposed_action = {
+        "action": "update_assignment",
+        "local_course_id": course.id,
+        "assignment_id": assignment_id,
+        "published": published,
+    }
+    workflow = Workflow(
+        conversation_id=None,
+        user_id=user.id,
+        course_id=course.id,
+        source_user_message_id=None,
+        preview_message_id=None,
+        action_name="update_assignment",
+        user_prompt=(
+            f"{'Publish' if published else 'Unpublish'} assignment "
+            f"'{assignment_name}' from Course Assignments"
+        ),
+        proposed_action=proposed_action,
+        affected_resources=[
+            {
+                "type": "assignment",
+                "id": assignment_id,
+                "name": assignment_name,
+                "status": "updated",
+            },
+        ],
+        status="executed",
+        executed_at=datetime.now(UTC),
+    )
+    db.add(workflow)
+    await db.flush()
+
+    await record_write_audit(
+        db,
+        user,
+        workflow,
+        {
+            "data": result_data,
+            "previous_data": previous_data,
+            "affected_resources": workflow.affected_resources,
+        },
+    )
+
+
 async def set_assignment_published(
     local_course_id: int,
     assignment_id: int,
@@ -1349,7 +1425,6 @@ async def set_assignment_published(
         local = await _sync_local_assignment_published(
             db, course.id, assignment_id, currently_published
         )
-        await db.commit()
         return AssignmentResponse.model_validate(
             {**current, "local_id": local.id if local else None}
         )
@@ -1363,18 +1438,15 @@ async def set_assignment_published(
             resolved_canvas_url,
         )
     except HTTPException as exc:
-        # Ticket 12: surface Canvas unpublish refusals (e.g. submissions exist)
-        # with an explicit message instead of a bare upstream status string.
+        # Ticket 12: surface known Canvas unpublish refusals (e.g. submissions
+        # exist) explicitly; other unpublish failures get a generic prefix.
         if not payload.published:
             canvas_detail = (
                 exc.detail if isinstance(exc.detail, str) else "Unknown Canvas error."
             )
             raise HTTPException(
                 status_code=exc.status_code,
-                detail=(
-                    "Canvas refused to unpublish this assignment. "
-                    f"{canvas_detail}"
-                ),
+                detail=_format_unpublish_error(canvas_detail),
             ) from exc
         raise
 
@@ -1382,7 +1454,15 @@ async def set_assignment_published(
     local = await _sync_local_assignment_published(
         db, course.id, assignment_id, published
     )
-    await db.commit()
+    await _record_assignment_publish_audit(
+        db,
+        user,
+        course,
+        assignment_id,
+        published=published,
+        previous_data={**current, "published": currently_published},
+        result_data=data,
+    )
     return AssignmentResponse.model_validate(
         {**data, "local_id": local.id if local else None}
     )

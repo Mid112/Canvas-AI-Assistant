@@ -575,7 +575,7 @@ async def publish_assignment_endpoint(
     canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    return await set_assignment_published(
+    result = await set_assignment_published(
         course_id,
         assignment_id,
         body,
@@ -583,6 +583,8 @@ async def publish_assignment_endpoint(
         canvas_url,
         db,
     )
+    await db.commit()
+    return result
 
 
 @router.get(
