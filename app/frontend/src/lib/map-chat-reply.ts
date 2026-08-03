@@ -153,9 +153,11 @@ function buildStructuredAnalyticsResponse(
     readString(analytics.assignment_name) ?? "this assignment";
   const assignmentId = readNumber(analytics.assignment_id);
   const summary = readString(analytics.summary);
-  const dueLabel = formatDueDateForDisplay(
-    readString(analytics.due_at) ?? readString(analytics.due_date) ?? null,
-  );
+  // formatDueDateForDisplay(null) returns "No due date" — only format when a
+  // real due timestamp is present so we don't render "Due: No due date".
+  const rawDue =
+    readString(analytics.due_at) ?? readString(analytics.due_date);
+  const dueLabel = rawDue ? formatDueDateForDisplay(rawDue) : undefined;
 
   if (action === "resolve_missing_submissions") {
     const status = readString(analytics.status) ?? "missing";
@@ -173,16 +175,20 @@ function buildStructuredAnalyticsResponse(
     }
 
     if (count === 0) {
+      // Prefer the backend summary so zero-state wording stays in one place.
       lines.push(
-        status === "late"
-          ? `No active students submitted this assignment late.`
-          : `No active students are missing this assignment.`,
+        summary ??
+          (status === "late"
+            ? `No active students submitted this assignment late.`
+            : `No active students are missing this assignment.`),
       );
     } else {
       lines.push(`${count} student${count === 1 ? "" : "s"} ${verb}:`);
       for (const name of sample) {
         lines.push(`- ${name}`);
       }
+      // sample is capped server-side (_RESOLVED_SET_SAMPLE_SIZE); the
+      // analytics deep-link below is the path to the full roster.
       if (count > sample.length) {
         lines.push(`- …and ${count - sample.length} more`);
       }

@@ -1130,6 +1130,9 @@ async def _run_resolve_missing_submissions_chain(
         return resolved
     course, assignment_id = resolved
 
+    # Local row is normally populated by fetch_assignments inside
+    # _resolve_course_and_assignment; the generic "Assignment {id}" label
+    # is only a fallback when that sync somehow missed the row.
     assignment_row = await db.scalar(
         select(Assignment).where(
             Assignment.course_id == course.id,
@@ -1428,7 +1431,7 @@ async def _run_find_assignment_by_submission_rate_chain(
             "course_name": course.name,
             "assignment_id": None,
             "assignment_name": None,
-            "due_date": None,
+            "due_at": None,
             "submission_rate_percent": None,
             "summary": (
                 f"{course.name} has no assignments yet, so submission-rate "
@@ -1457,7 +1460,7 @@ async def _run_find_assignment_by_submission_rate_chain(
             "course_name": course.name,
             "assignment_id": None,
             "assignment_name": None,
-            "due_date": None,
+            "due_at": None,
             "submission_rate_percent": None,
             "summary": (
                 f"No assignment in {course.name} currently has a submission rate "
@@ -1466,7 +1469,7 @@ async def _run_find_assignment_by_submission_rate_chain(
         }
 
     best = max(matches, key=lambda m: m["due_at"] or datetime.min.replace(tzinfo=UTC))
-    due_date = best["due_at"].isoformat() if best["due_at"] else None
+    due_at = best["due_at"].isoformat() if best["due_at"] else None
     rate = round(best["rate_percent"], 1)
     return {
         "action": "find_assignment_by_submission_rate",
@@ -1475,11 +1478,11 @@ async def _run_find_assignment_by_submission_rate_chain(
         "course_name": course.name,
         "assignment_id": best["id"],
         "assignment_name": best["name"],
-        "due_date": due_date,
+        "due_at": due_at,
         "submission_rate_percent": rate,
         "summary": (
             f'"{best["name"]}" in {course.name} has a {rate}% submission rate '
-            f'(current due date: {due_date or "not set"}).'
+            f'(current due date: {due_at or "not set"}).'
         ),
     }
 
@@ -2477,7 +2480,6 @@ _STRUCTURED_ANALYTICS_FIELDS = (
     "assignment_id",
     "assignment_name",
     "due_at",
-    "due_date",
     "matched",
     "submission_rate_percent",
     "handle",
