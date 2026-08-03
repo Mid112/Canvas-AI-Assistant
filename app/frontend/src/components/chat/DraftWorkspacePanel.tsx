@@ -20,7 +20,11 @@ interface DraftWorkspacePanelProps {
   isResuming?: boolean;
   discardingId?: number | null;
   discardingTypedId?: string | null;
-  requiresCourseSelection?: boolean;
+  /** Typed drafts whose course could not be resolved, so resuming them has
+   * nowhere to land. Per draft rather than a single flag: a list can hold a
+   * self-describing draft and a legacy one at the same time, and only the
+   * legacy one is blocked. */
+  blockedTypedDraftIds?: ReadonlySet<string>;
 }
 
 function formatDeferredTime(value: string): string {
@@ -42,9 +46,11 @@ export function DraftWorkspacePanel({
   isResuming = false,
   discardingId = null,
   discardingTypedId = null,
-  requiresCourseSelection = false,
+  blockedTypedDraftIds,
 }: DraftWorkspacePanelProps) {
   const total = items.length + typedDrafts.length;
+  const blockedIds = blockedTypedDraftIds ?? new Set<string>();
+  const hasBlockedDrafts = typedDrafts.some((draft) => blockedIds.has(draft.id));
   // Collapsed by default so the chat window stays the primary surface —
   // the count stays visible in the header either way (#1, #10).
   const [isExpanded, setIsExpanded] = useState(false);
@@ -83,9 +89,13 @@ export function DraftWorkspacePanel({
             After connecting, select a course, then resume to validate, preview,
             and confirm before any Canvas write.
           </p>
-          {requiresCourseSelection ? (
+          {/* Worded for a mixed list: drafts that name their own course stay
+              resumable alongside ones that don't, so this can't claim every
+              draft needs a selection. */}
+          {hasBlockedDrafts ? (
             <p role="status" className="mt-2 text-sm text-amber-800">
-              Select an active course before resuming a typed draft.
+              Select an active course to resume drafts that don&apos;t name
+              their own.
             </p>
           ) : null}
 
@@ -96,6 +106,8 @@ export function DraftWorkspacePanel({
           <ul className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
             {typedDrafts.map((draft) => {
               const isDiscarding = discardingTypedId === draft.id;
+              const isBlocked = blockedIds.has(draft.id);
+              const blockedReasonId = `typed-draft-blocked-${draft.id}`;
               return (
                 <li
                   key={`typed-${draft.id}`}
@@ -109,6 +121,18 @@ export function DraftWorkspacePanel({
                     <p className="mt-1 line-clamp-3 text-sm text-foreground">
                       {typedDraftPreviewText(draft)}
                     </p>
+                    {/* Says why this one specifically can't be resumed. Without
+                        it a disabled button in a list where its neighbours are
+                        enabled reads as a glitch. */}
+                    {isBlocked ? (
+                      <p
+                        id={blockedReasonId}
+                        className="mt-1 text-xs text-amber-800"
+                      >
+                        This draft has no saved course. Select an active course
+                        to resume it.
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex shrink-0 flex-wrap gap-2">
                     <Button
@@ -117,9 +141,10 @@ export function DraftWorkspacePanel({
                       disabled={
                         isResuming ||
                         isDiscarding ||
-                        requiresCourseSelection ||
+                        isBlocked ||
                         !onResumeTypedDraft
                       }
+                      aria-describedby={isBlocked ? blockedReasonId : undefined}
                       onClick={() => onResumeTypedDraft?.(draft.id)}
                     >
                       Resume

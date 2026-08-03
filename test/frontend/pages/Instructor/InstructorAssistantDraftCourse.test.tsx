@@ -278,8 +278,74 @@ describe("resuming a typed draft's course", () => {
     );
 
     expect(
-      await screen.findByText(/Select an active course before resuming/),
+      await screen.findByText(/Select an active course to resume drafts/),
     ).toBeInTheDocument();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  // Review follow-up: resumability is per draft, so a list holding both kinds
+  // must gate them separately. Deciding it panel-wide meant one self-resolving
+  // draft turned the gate off for the whole list, leaving the legacy draft's
+  // Resume enabled and silently doing nothing when clicked.
+  it("gates each draft on its own in a mixed list", async () => {
+    saveCapstoneDraft();
+    saveTypedDraft(7, {
+      kind: "assignment",
+      content: { title: "Legacy draft", body: "No course stored" },
+    });
+    setCourseContext({ activeLocalId: null });
+
+    renderWithRouter(<InstructorAssistantPage />);
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: /Saved drafts/ }),
+    );
+
+    // Newest first: the legacy draft was saved last.
+    const [legacyResume, capstoneResume] = await screen.findAllByRole("button", {
+      name: "Resume",
+    });
+    expect(legacyResume).toBeDisabled();
+    expect(capstoneResume).toBeEnabled();
+
+    // The blocked draft says why, rather than presenting a dead button.
+    expect(
+      screen.getByText(/This draft has no saved course/),
+    ).toBeInTheDocument();
+
+    // The draft that names its own course still resumes onto it.
+    await user.click(capstoneResume);
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+    const [, options] = mockNavigate.mock.calls[0];
+    const state = options.state as {
+      aiAssignmentDraft: { courseId?: number };
+    };
+    expect(state.aiAssignmentDraft.courseId).toBe(capstone.id);
+  });
+
+  // The mirror case: once a course is active, the legacy draft has a fallback
+  // and nothing in the list is gated.
+  it("unblocks legacy drafts once a course is active", async () => {
+    saveCapstoneDraft();
+    saveTypedDraft(7, {
+      kind: "assignment",
+      content: { title: "Legacy draft", body: "No course stored" },
+    });
+    setCourseContext({ activeLocalId: calculus.id });
+
+    renderWithRouter(<InstructorAssistantPage />);
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: /Saved drafts/ }),
+    );
+
+    for (const button of await screen.findAllByRole("button", {
+      name: "Resume",
+    })) {
+      expect(button).toBeEnabled();
+    }
+    expect(
+      screen.queryByText(/Select an active course to resume drafts/),
+    ).not.toBeInTheDocument();
   });
 });

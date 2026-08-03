@@ -157,19 +157,35 @@ export function InstructorAssistantPage() {
     return listTypedDrafts(user.id);
   }, [user?.id, typedDraftRevision]);
 
-  // A draft that carries its own course is resumable with nothing active, so
-  // prompting for a course selection there would be asking for something the
-  // draft already answers. Panel-level rather than per-draft: the notice is a
-  // single banner, so it shows only when no draft can resolve on its own.
-  const requiresCourseSelection = useMemo(
+  // The course each draft's Resume would open on, or undefined when nothing
+  // can supply one. Resolution is per draft because resumability is per
+  // draft: a draft carrying its own course needs no active course, while a
+  // legacy one saved before labels existed needs exactly that. A panel-level
+  // flag cannot express a list holding both — it either blocks the draft that
+  // is fine or lets through the one that is not.
+  //
+  // handleResumeTypedDraft reads the same map, so the button's enabled state
+  // and what resuming actually does cannot drift apart.
+  const typedDraftCourseIds = useMemo(
     () =>
-      !activeCourse &&
-      !typedDrafts.some(
-        (draft) =>
-          resolveTypedDraftCourseId(draft.content, availableCourses) !==
-          undefined,
+      new Map(
+        typedDrafts.map((draft) => [
+          draft.id,
+          resolveTypedDraftCourseId(draft.content, availableCourses) ??
+            activeCourse?.localId,
+        ]),
       ),
-    [activeCourse, availableCourses, typedDrafts],
+    [activeCourse?.localId, availableCourses, typedDrafts],
+  );
+
+  const blockedTypedDraftIds = useMemo(
+    () =>
+      new Set(
+        typedDrafts
+          .filter((draft) => typedDraftCourseIds.get(draft.id) === undefined)
+          .map((draft) => draft.id),
+      ),
+    [typedDraftCourseIds, typedDrafts],
   );
 
   const loadConversationList = useCallback(async () => {
@@ -415,9 +431,9 @@ export function InstructorAssistantPage() {
     // courses between save and resume silently retargeted the draft at the
     // new one. The active course is the fallback only when the draft predates
     // this (no labels stored) or its course is no longer in the list.
-    const courseId =
-      resolveTypedDraftCourseId(draft.content, availableCourses) ??
-      activeCourse?.localId;
+    // typedDraftCourseIds holds that resolution; the panel disables Resume for
+    // the drafts it cannot answer, so reaching this guard is defensive only.
+    const courseId = typedDraftCourseIds.get(draftId);
     if (courseId === undefined) return;
     // Keep the draft until Canvas confirm/submit on the target create page.
     const target = buildTypedDraftResumeTarget(draft, { courseId });
@@ -456,7 +472,7 @@ export function InstructorAssistantPage() {
           isResuming={isResumingDeferred}
           discardingId={discardingDeferredId}
           discardingTypedId={discardingTypedId}
-          requiresCourseSelection={requiresCourseSelection}
+          blockedTypedDraftIds={blockedTypedDraftIds}
         />
       ) : null}
 
