@@ -7,6 +7,7 @@ from app.config import settings
 from app.core.secret_redaction import redact_secrets
 from app.models.canvas_connection import CanvasConnection
 from app.models.user import User
+from app.schemas.llm_provider import LlmProviderStatus
 from app.schemas.troubleshoot import (
     DiagnosticsResponse,
     FailingCanvasConnection,
@@ -124,7 +125,7 @@ async def list_failing_canvas_connections(
 async def get_diagnostics(db: AsyncSession, backend_started_at: float) -> DiagnosticsResponse:
     health = await get_latest_health_status(db)
     instructor_canvas = await get_instructor_canvas_summary(db)
-    llm_providers = await get_provider_statuses()
+    llm_providers = [LlmProviderStatus(**provider) for provider in await get_provider_statuses()]
     # Failed operations (Canvas + AI) are Feature 11's append-only log --
     # Troubleshooting reuses it rather than keeping its own separate query,
     # so there's exactly one "what failed" data source across the admin UI.
@@ -135,8 +136,6 @@ async def get_diagnostics(db: AsyncSession, backend_started_at: float) -> Diagno
         backend_uptime_seconds=int(time.monotonic() - backend_started_at),
         health=health,
         instructor_canvas=instructor_canvas,
-        # get_provider_statuses() returns plain dicts shaped like
-        # LlmProviderStatus -- pydantic validates/coerces them on assignment.
         llm_providers=llm_providers,
         recent_failed_operations_count=failed_ops_summary.total,
     )
