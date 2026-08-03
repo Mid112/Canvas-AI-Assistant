@@ -114,12 +114,14 @@ def _register_with_canvas(client) -> dict:
     return headers
 
 
-def _sync_local_course(client, headers, canvas_id: int = 12345) -> int:
+def _sync_local_course(
+    client, headers, canvas_id: int = 12345, canvas_url: str = CANVAS_URL
+) -> int:
     courses = [_unique_course(canvas_id)]
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
         mock.return_value = courses
         response = client.get(
-            f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses?canvas_url={canvas_url}",
             headers=headers,
         )
 
@@ -242,6 +244,36 @@ def test_list_courses_upsert_is_idempotent(client, auth_headers):
     assert r1.json()[0]["local_id"] == r2.json()[0]["local_id"]
 
 
+# Verifies: Ticket 34 — same canvas_course_id under two canvas_urls for one
+# instructor must create two local course rows (unique constraint includes
+# canvas_url), without overwriting the other institution's row.
+def test_sync_same_canvas_course_id_across_institutions(client):
+    headers = _register_with_canvas(client)
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "other-token", "canvas_url": OTHER_CANVAS_URL},
+            headers=headers,
+        )
+
+    colliding_id = 34_001
+    local_a = _sync_local_course(
+        client, headers, canvas_id=colliding_id, canvas_url=CANVAS_URL
+    )
+    local_b = _sync_local_course(
+        client, headers, canvas_id=colliding_id, canvas_url=OTHER_CANVAS_URL
+    )
+
+    assert local_a != local_b
+
+    # Re-sync institution A: still the same row, and B remains distinct.
+    local_a_again = _sync_local_course(
+        client, headers, canvas_id=colliding_id, canvas_url=CANVAS_URL
+    )
+    assert local_a_again == local_a
+    assert local_a_again != local_b
+
+
 # Verifies: List courses term name populated.
 def test_list_courses_term_name_populated(client, auth_headers):
     """term_name is extracted from the nested Canvas term object."""
@@ -304,6 +336,54 @@ def test_create_course(client, auth_headers):
     assert body["name"] == "New Capstone"
     mock_create.assert_awaited_once()
     assert mock_create.await_args.kwargs["offer"] is True
+
+
+# Verifies: Ticket 34 — creating a course on a second institution with the
+# same Canvas course id as an existing local row must insert, not fail unique.
+def test_create_course_same_canvas_id_across_institutions(client):
+    headers = _register_with_canvas(client)
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "other-token", "canvas_url": OTHER_CANVAS_URL},
+            headers=headers,
+        )
+
+    colliding_id = 34_002
+    local_a = _sync_local_course(
+        client, headers, canvas_id=colliding_id, canvas_url=CANVAS_URL
+    )
+    created = {
+        "id": colliding_id,
+        "name": "Other Host Course",
+        "course_code": "OHC",
+        "workflow_state": "unpublished",
+        "total_students": 0,
+    }
+    with (
+        patch(
+            "app.services.canvas.fetch_accounts",
+            new_callable=AsyncMock,
+            return_value=[{"id": 1, "parent_account_id": None}],
+        ),
+        patch(
+            "app.services.canvas.create_course",
+            new_callable=AsyncMock,
+            return_value=created,
+        ),
+    ):
+        response = client.post(
+            f"/api/v1/canvas/courses?canvas_url={OTHER_CANVAS_URL}",
+            json={"name": "Other Host Course", "course_code": "OHC"},
+            headers=headers,
+        )
+
+    assert response.status_code == 201, response.json()
+    body = response.json()
+    assert body["canvas_id"] == colliding_id
+    assert body["local_id"] is not None
+    assert body["local_id"] != local_a
+    assert body["name"] == "Other Host Course"
 
 
 # Verifies: Create course rejects empty name.
