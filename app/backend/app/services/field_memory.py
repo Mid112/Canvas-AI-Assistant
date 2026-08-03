@@ -291,14 +291,15 @@ def merge_read_result_into_field_memory(
         )
 
     if has_assignment_list:
-        _remember_assignments_from_list(memory, assignments_list)
+        assignments = assignments_list if isinstance(assignments_list, list) else []
+        _remember_assignments_from_list(memory, assignments)
         # Prefer the first list entry as the scalar follow-up default when the
         # read did not already resolve a single assignment.
         if "assignment_id" not in refs:
             first = next(
                 (
                     item
-                    for item in assignments_list
+                    for item in assignments
                     if isinstance(item, dict) and _assignment_id_from_nested(item) is not None
                 ),
                 None,
@@ -310,7 +311,8 @@ def merge_read_result_into_field_memory(
                     memory["assignment_reference"] = first_name
 
     if has_student_list:
-        _remember_students_from_list(memory, students_list)
+        students = students_list if isinstance(students_list, list) else []
+        _remember_students_from_list(memory, students)
 
     conversation.field_memory = memory
 
@@ -340,7 +342,7 @@ def grounded_facts_from_memory(memory: dict[str, Any] | None) -> dict[str, list]
     if not isinstance(raw, dict):
         return {"ids": [], "names": [], "grades": [], "dates": []}
     return {
-        "ids": [int(v) for v in (raw.get("ids") or []) if _coerce_int(v) is not None],
+        "ids": [coerced for v in (raw.get("ids") or []) if (coerced := _coerce_int(v)) is not None],
         "names": [str(v) for v in (raw.get("names") or []) if str(v).strip()],
         "grades": [str(v) for v in (raw.get("grades") or []) if str(v).strip()],
         "dates": [str(v) for v in (raw.get("dates") or []) if str(v).strip()],
@@ -366,11 +368,18 @@ def merge_grounded_facts_into_memory(
         merged: list = list(existing)
         seen = set(merged)
         for item in sorted(incoming, key=lambda value: str(value)):
-            value = int(item) if as_int else str(item)
-            if value in seen:
+            merged_value: int | str
+            if as_int:
+                coerced = _coerce_int(item)
+                if coerced is None:
+                    continue
+                merged_value = coerced
+            else:
+                merged_value = str(item)
+            if merged_value in seen:
                 continue
-            merged.append(value)
-            seen.add(value)
+            merged.append(merged_value)
+            seen.add(merged_value)
         return merged[-cap:]
 
     memory[_GROUNDED_FACTS_KEY] = {
