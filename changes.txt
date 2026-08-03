@@ -1059,6 +1059,7 @@ WHAT AND WHY
 
 COMMITS
     3346931  Use resolved assignment and student names in previews and grade handoff
+    4ec2130  Restore field-memory persistence regression test from #1477
 
 FILES
     app/backend/app/services/write_preview.py
@@ -1066,6 +1067,7 @@ FILES
     test/backend/test_write_preview.py
     test/backend/test_update_assignment_resolution.py
     test/backend/test_update_grade_resolution.py
+    test/backend/test_field_memory_persistence.py
 
 WHAT AND WHY
     Follow-up to Yerdana UX review on #1477 (persist assignment/student refs,
@@ -1074,6 +1076,14 @@ WHAT AND WHY
     use the resolved assignment title; affected_resources no longer leaves
     assignment name as None. Grade handoff names 1-3 resolved students; larger
     sets fall back to a count. assignment_label uses resolved title when known.
+
+    Restored test/backend/test_field_memory_persistence.py (removed from develop
+    via #1518 after #1477 merged). Unit coverage for merge helpers lives in
+    test_field_memory_unit.py; this module closes the remaining acceptance gap:
+    a successful fetch_assignments or fetch_students read must persist refs into
+    conversation.field_memory, and a follow-up chat turn must inject FIELD MEMORY
+    so the model can reuse "that assignment" / "the first student" without
+    clarifying (#1432).
 
 ================================================================================
 CROSS-CUTTING NOTES
