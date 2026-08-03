@@ -2,6 +2,7 @@ import html
 import json
 import re
 from datetime import datetime
+from typing import Literal, cast
 
 import httpx
 from fastapi import HTTPException, status
@@ -10,6 +11,13 @@ from app.config import settings
 from app.schemas.preview import QuizDraftRequest, QuizDraftResponse, QuizQuestionDraft
 from app.services.llm.json_extraction import loads_llm_json
 from app.services.llm.llm_setting import get_llm_adapter
+
+QuizQuestionType = Literal[
+    "multiple_choice_question",
+    "true_false_question",
+    "short_answer_question",
+    "essay_question",
+]
 
 _LIST_ITEM_RE = re.compile(r"<li[^>]*>", re.IGNORECASE)
 _BLOCK_BREAK_RE = re.compile(r"</(p|div|li|h[1-6])>|<br\s*/?>", re.IGNORECASE)
@@ -107,6 +115,7 @@ async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
                 "essay_question",
             }:
                 q_type = "essay_question"
+            question_type = cast(QuizQuestionType, q_type)
             points = item.get("points_possible")
             try:
                 points_value = float(points) if points is not None else 1.0
@@ -119,7 +128,7 @@ async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
             questions.append(
                 QuizQuestionDraft(
                     question_text=text,
-                    question_type=q_type,  # validated against the allowed set above
+                    question_type=question_type,
                     points_possible=points_value,
                     answers=answers,
                 )

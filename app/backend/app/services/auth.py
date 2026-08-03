@@ -165,12 +165,15 @@ async def update_profile(db: AsyncSession, user: User, body: ProfileUpdateReques
     )
     await db.commit()
 
-    return await db.scalar(
+    refreshed = await db.scalar(
         select(User)
         .where(User.id == user.id)
         .options(selectinload(User.canvas_connections))
         .execution_options(populate_existing=True)
     )
+    if refreshed is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return refreshed
 
 
 async def delete_account(db: AsyncSession, user: User, password: str) -> None:
@@ -314,9 +317,12 @@ async def update_canvas_token(db: AsyncSession, user: User, canvas_token: str, c
     db.add(AuditLogSession(user_id=user.id, action=action, details={"canvas_url": canvas_url}))
     await db.commit()
 
-    return await db.scalar(
+    refreshed = await db.scalar(
         select(User)
         .where(User.id == user.id)
         .options(selectinload(User.canvas_connections))
         .execution_options(populate_existing=True)
     )
+    if refreshed is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return refreshed
