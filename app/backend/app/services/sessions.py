@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
+from typing import cast
 
 from sqlalchemy import delete, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import create_access_token_with_expiry, hash_token
@@ -50,4 +52,4 @@ async def revoke_other_sessions(db: AsyncSession, user: User, current_token: str
         )
     )
     await db.commit()
-    return result.rowcount or 0
+    return cast(CursorResult, result).rowcount or 0
