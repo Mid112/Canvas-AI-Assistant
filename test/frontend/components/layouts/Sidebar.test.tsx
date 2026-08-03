@@ -55,6 +55,21 @@ vi.mock("@/contexts/useInstitution", () => ({
   }),
 }));
 
+// Sidebar mounts ActiveCourseSidebarBadge for the instructor role, which
+// reads from ActiveCourseProvider — mock it the same way as the other
+// contexts above rather than wrapping every render in the real provider.
+vi.mock("@/contexts/useActiveCourse", () => ({
+  useActiveCourse: () => ({
+    activeCourse: { localId: 1, displayName: "CPSC 101: Intro to Programming" },
+    availableCourses: [],
+    isLoading: false,
+    isSaving: false,
+    error: null,
+    selectActiveCourse: vi.fn(),
+    refreshActiveCourse: vi.fn(),
+  }),
+}));
+
 function renderSidebar(props: ComponentProps<typeof Sidebar>) {
   return render(
     <MemoryRouter>
