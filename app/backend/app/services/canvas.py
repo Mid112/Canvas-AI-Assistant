@@ -505,8 +505,8 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
     # instructor with multiple Canvas connections (different institutions) must
     # not have this sync mark or reconcile courses that belong to a different
     # canvas_url, since Canvas course ids are only unique within one instance.
-    # Known limitation: canvas_course_id is globally UNIQUE, so two co-instructors
-    # on the same Canvas course will conflict on INSERT — tracked for follow-up.
+    # Uniqueness is (canvas_course_id, instructor_id, canvas_url), so
+    # co-instructors on the same Canvas course still each get their own row.
     rows = await db.scalars(select(Course).where(Course.instructor_id == user.id))
     course_map: dict[str, Course] = {
         c.canvas_course_id: c

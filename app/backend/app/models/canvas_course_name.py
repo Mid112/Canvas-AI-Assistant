@@ -14,21 +14,25 @@ if TYPE_CHECKING:
 
 
 class CanvasCourseName(Base):
-    """A connection-scoped alias index of canvas_course_id -> observed names,
-    used only by the chat/LLM course-resolution pathway
-    (services/chat.py). Deliberately separate from Course:
+    """Connection-scoped alias index for chat course-name resolution.
 
-    - Course is keyed on (canvas_course_id, instructor_id) and has no
-      notion of *which* Canvas connection a course came from, so an
-      instructor connected to two institutions with colliding numeric
-      canvas_course_ids can't be disambiguated there. This table is keyed
-      by canvas_connection_id instead — the connection's own PK, no token
-      decryption needed.
-    - Course.name and Course.course_code are the canonical prompt-facing
-      values. This table accumulates historical aliases so names an
-      instructor used earlier in a conversation can still resolve after a
-      Canvas rename. last_seen_at identifies the alias observed by the
-      most recent sync, but prompts still display Course.name.
+    The app deliberately keeps two course-name sources:
+
+    - **Course** (``courses.name`` / ``course_code``): canonical,
+      host-scoped via ``canvas_url``, overwritten in place on every Canvas
+      sync — dashboards, prompts, and the rest of the UI read this row.
+    - **canvas_course_names** (this table): historical aliases keyed by
+      ``canvas_connection_id`` for ``services/chat.py`` only. A Canvas
+      rename updates Course but leaves prior aliases here so an instructor
+      can still refer to an earlier label mid-conversation. Prompt display
+      always prefers Course.name; ``last_seen_at`` marks the alias observed
+      on the most recent sync.
+
+    Course is keyed on ``(canvas_course_id, instructor_id, canvas_url)``,
+    so multi-institution numeric-ID collisions are already disambiguated
+    there. This table stays keyed by ``canvas_connection_id`` — the
+    connection's own PK, no token decryption — because chat resolution runs
+    in a connection context.
     """
 
     __tablename__ = "canvas_course_names"
