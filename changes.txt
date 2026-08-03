@@ -1,0 +1,1140 @@
+================================================================================
+CHANGES LOG — AI Assistant, Submission Analysis, and Assignment Creator
+Branch stack: bugfix/pii-resolve .. bugfix/draft-course-persist
+Base: develop @ f0512ac2
+Compiled: 2026-08-02
+================================================================================
+
+AUTHORS
+-------
+All commits in this stack:
+    Yerdana <84761341+Yerdana2002@users.noreply.github.com>
+    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+
+Code review that produced commit c84c3eb7 (P1/P2 on bugfix/pii-resolve):
+    <FILL IN — reviewer name>
+
+Adjacent work by other team members, referenced but NOT part of this stack:
+    Mridul Nohria — fix/stale-course-context (backend course resolution,
+                    bugs 16/17). Independent of everything below; test-merged
+                    against bugfix/creator-workflow-audit with no conflicts.
+    <FILL IN>     — published vs unpublished courses PR (why assignments
+                    created in this stack land as "unpublished")
+
+    Jessica Goel (jessica545) — open ticket-fix PRs #1478–#1520 targeting develop
+        independently of the bugfix/pii-resolve stack. See sections 6+.
+    Jessica Goel — #1477 (merged) persist assignment/student refs across chat turns;
+        follow-up label work in #1520; backend test removed on develop after merge.
+
+
+================================================================================
+STACK TOPOLOGY AND MERGE ORDER  ** READ THIS FIRST **
+================================================================================
+
+This is a LINEAR stack. Each branch is based on the one above it, NOT on
+develop. Opening PRs against develop for all five will show duplicated diffs
+and will conflict.
+
+    develop (f0512ac2)
+      |
+      +-- bugfix/pii-resolve                    143c9b1e 7115e25c 12cd0d0d
+      |     |                                   f0e781dc(merge develop) c84c3eb7
+      |     |
+      +-----+-- bugfix/analyse-missing-submissions   d165ffb6 f3e1774e(merge)
+      |           |
+      +-----------+-- bugfix/assignment-create       5efae76c c5a00521
+      |                 |
+      +-----------------+-- bugfix/creator-workflow-audit   a3f08b50
+      |                       |
+      +-----------------------+-- bugfix/draft-course-persist   ea8a844c
+
+Correct PR bases:
+    bugfix/pii-resolve                 -> develop
+    bugfix/analyse-missing-submissions -> bugfix/pii-resolve
+    bugfix/assignment-create           -> bugfix/analyse-missing-submissions
+    bugfix/creator-workflow-audit      -> bugfix/assignment-create
+    bugfix/draft-course-persist        -> bugfix/creator-workflow-audit
+
+*** WARNING — c84c3eb7 IS NOT IN THE DOWNSTREAM BRANCHES ***
+The four downstream branches were cut BEFORE the review fix c84c3eb7 landed on
+bugfix/pii-resolve. Merging pii-resolve first is therefore mandatory. If
+anyone rebases or squash-merges out of order, the narrowed intent_preview
+exemption and the ID-warning suppression will be silently reverted by the
+older copy of student_context.py carried in the downstream branches. Verify
+after every merge that services/llm/student_context.py still contains
+_SELF_EVIDENT_CLAIMS.
+
+
+================================================================================
+1. bugfix/pii-resolve
+   Bugs: #1, #2, #6, #10, #13  (+ review follow-up)
+================================================================================
+
+COMMITS
+    143c9b1e  Make the chat window the primary surface on the AI Assistant page
+    7115e25c  Fix due date lost when resuming a saved assignment draft
+    12cd0d0d  Redact only for the LLM, never for the instructor reading the reply
+    f0e781dc  Merge remote-tracking branch 'origin/develop'
+    c84c3eb7  Narrow the intent_preview scrub exemption; drop redundant ID warning
+
+--------------------------------------------------------------------------------
+1a. Chat window layout (143c9b1e) — bugs #1, #10
+--------------------------------------------------------------------------------
+FILES
+    app/frontend/src/components/chat/ChatInput.tsx
+    app/frontend/src/components/chat/DraftWorkspacePanel.tsx
+    app/frontend/src/pages/Instructor/InstructorAssistantPage.tsx
+    app/frontend/src/pages/Instructor/InstructorAssistant/InstructorAssistantHeader.tsx
+
+WHAT AND WHY
+    The assistant page sized its chat area with a hardcoded viewport formula,
+    min-h-[min(50.5rem,calc(100vh-23.5rem))] and a matching max-h. Every panel
+    stacked above the chat (saved drafts, deferred requests, banners) ate into
+    that fixed budget, so with a few saved drafts the message input scrolled
+    off the bottom entirely and the page became unusable.
+
+    Replaced the magic numbers with a flex contract:
+      - the grid container is min-h-0 flex-1 — it claims whatever the panels
+        above do not need, instead of a fixed height computed from nothing
+      - ChatInput's wrapper became shrink-0, so the input is never the thing
+        that gets compressed
+      - DraftWorkspacePanel became collapsed-by-default and its list bounded
+        at max-h-64 with overflow-y-auto
+
+ARCHITECTURE DELTA
+    Vertical space moved from "each component guesses its share of the
+    viewport" to "one flex parent owns distribution; children declare whether
+    they shrink." Scrolling is now always INSIDE a bounded child, never on the
+    page frame.
+
+*** SRP WARNINGS ***
+  ! DraftWorkspacePanel owns ONLY its own bounded scroll region. If you add a
+    new panel above the chat, give it shrink-0 and bound its own content. Do
+    NOT reintroduce a viewport-relative height on the chat container to
+    compensate — that is the exact bug this fixed, and it will regress the
+    moment anyone adds a fourth panel.
+  ! ChatInput must stay shrink-0. Removing it makes the input the flex
+    casualty again and it silently squeezes to zero height rather than erroring.
+
+--------------------------------------------------------------------------------
+1b. Due date lost on draft resume (7115e25c) — bug #6
+--------------------------------------------------------------------------------
+FILES
+    app/frontend/src/lib/typed-draft-storage.ts
+    app/frontend/src/pages/Instructor/InstructorAssignmentCreatePage.tsx
+
+SYMBOLS
+    TypedDraftContent.dueDate        (new, ISO 8601 string)
+    TypedDraftContent.pointsPossible (new)
+    stripCanvasIdentifiers()         (whitelist widened)
+    buildTypedDraftResumeTarget()    (carries both through)
+
+WHAT AND WHY
+    Saving an assignment draft and resuming it dropped the due date and points.
+    Cause: stripCanvasIdentifiers is a hard WHITELIST — it destructures a fixed
+    set of keys and rebuilds the object. Fields added to TypedDraftContent but
+    not to that whitelist are silently discarded on save, with no error.
+
+ARCHITECTURE DELTA
+    None structurally. This is the first instance of a recurring failure mode
+    that recurs again in section 5: the whitelist is the single chokepoint for
+    everything persisted, and it fails silently.
+
+*** SRP WARNINGS ***
+  ! stripCanvasIdentifiers is the ONLY enforcement point for #1239 (no Canvas
+    or local identifiers in localStorage). Two symmetrical mistakes:
+      - Adding a field to TypedDraftContent and NOT to the whitelist => the
+        field silently vanishes on save. No test failure unless you write one.
+      - Adding an *identifier* to the whitelist => reintroduces the privacy
+        issue #1239 closed.
+    Anything you add here needs a round-trip test, not just a type change.
+
+
+--------------------------------------------------------------------------------
+1c. PII redaction vs. hallucination grounding (12cd0d0d) — bugs #2, #13
+--------------------------------------------------------------------------------
+FILES
+    app/backend/app/services/llm/student_context.py     (core)
+    app/frontend/src/lib/map-chat-reply.ts
+    app/frontend/src/components/chat/AssistantMessage.tsx
+    app/frontend/src/components/chat/ChatWindow.tsx
+    app/frontend/src/services/assistant.ts
+    app/frontend/src/types/chat.ts
+
+REMOVED
+    _QUOTED_TITLE_PATTERN                and all quoted-title scrubbing
+    the blanket `if not facts.names: return '"[name redacted]"'` branch
+
+ADDED
+    _grade_claim_is_backed(raw, facts)
+    detect_unverified_claims(text, facts) -> set[str]     (detection only)
+    strip_ungrounded_canvas_facts(text, facts)            (IDs only)
+    _LLM_PROSE_ACTIONS = {"respond","clarify","out_of_scope"}
+    action_is_llm_prose(result) -> bool
+    result["unverified_claims"]                           (new response field)
+    frontend: readUnverifiedClaims(), mapReplyBody() wrapper,
+              ChatMessage.unverifiedClaims, AssistantResponse.unverifiedClaims
+
+WHAT AND WHY
+    ONE FILE WAS DOING TWO UNRELATED JOBS, and they were conflated:
+
+      Mechanism A — inbound PII minimization (CORRECT, untouched)
+        llm_student_candidates, llm_safe_student_dict, llm_safe_submission_dict,
+        _PII_KEYS. Strips email / login_id / sortable_name BEFORE payloads go
+        to the LLM provider. This is the actual privacy control.
+
+      Mechanism B — outbound fact grounding (THE BUG)
+        ground_assistant_result rewrote the text the INSTRUCTOR reads,
+        substituting "[grade redacted]" and '"[name redacted]"'. This ran on
+        the wrong end of the pipe. It destroyed two classes of legitimate
+        content:
+          - Quoted strings: the pattern could not distinguish a Canvas
+            assignment title from the message body the instructor themselves
+            typed, so "send X to the class" came back with X blanked out —
+            hiding the very text they were being asked to approve (bug #2).
+          - Aggregates: facts.grades only ever holds individual fetched
+            scores, so an average/rate/percentile is unrepresentable in it by
+            construction and was redacted 100% of the time (bug #13).
+
+    New policy: WARN, DO NOT REWRITE.
+      - Grade and title claims are detected, never rewritten. The claim types
+        ride out on result["unverified_claims"] and the client shows an amber
+        advisory. The instructor sees what the model claimed, which is what
+        lets them recognise it as wrong (bug #12's failure shape).
+      - Canvas ID claims REMAIN destructive. A wrong ID is qualitatively
+        different: it can misroute a later write to the wrong assignment or
+        student. Rewritten to "[ID redacted]".
+
+ARCHITECTURE DELTA
+    * A privacy control that mutated user-facing output became a trust signal
+      attached to it. Redaction now happens ONLY on the inbound path.
+    * New backend->frontend contract field: unverified_claims: string[].
+      Emitted only when non-empty, so ordinary replies carry no extra payload.
+    * The frontend banner is CLAIM-TYPE AGNOSTIC: AssistantMessage keys off
+      message.unverifiedClaims?.length, not on specific strings. The backend
+      can add claim types without a frontend change.
+    * "grounded" was deliberately left as set-only-when-true. Making it always
+      present broke an exact-payload test (test_plain_text_model_reply_is_
+      returned) — the response shape is asserted literally in places.
+
+*** SRP WARNINGS ***
+  ! student_context.py holds TWO responsibilities that look like one. Keep them
+    apart:
+      - inbound minimization  (llm_safe_*, _PII_KEYS)      -> may redact
+      - outbound grounding    (ground_assistant_result)    -> must NOT redact,
+                                                              except IDs
+    Adding any new "[... redacted]" substitution to the outbound half
+    re-creates bugs #2 and #13. If a reviewer asks for redaction of a new
+    field, that request belongs in the inbound half.
+  ! ground_assistant_result has EXACTLY ONE call site (services/chat.py:3451),
+    at the end of every chat turn. It is not workflow-specific and must not be
+    made so. Do not add per-action branching inside it; add it to
+    action_is_llm_prose instead.
+  ! Do NOT reintroduce quoted-string scrubbing for "safety". The pattern cannot
+    distinguish Canvas data from instructor-authored text, and the approval
+    step is exactly where instructor-authored text appears.
+  ! Frontend: do not switch the banner to inspect specific claim strings. It
+    would couple the client to backend claim taxonomy and break silently when
+    the set changes.
+
+--------------------------------------------------------------------------------
+1d. Review follow-up (c84c3eb7) — P1 and P2
+--------------------------------------------------------------------------------
+FILES
+    app/backend/app/services/llm/student_context.py
+    test/backend/test_student_context.py
+
+SYMBOLS
+    action_is_llm_prose()   — rewritten discriminator
+    _SELF_EVIDENT_CLAIMS = frozenset({"canvas_id"})   (new)
+
+P1 — THE BLANKET intent_preview EXEMPTION WAS TOO BROAD, AND WAS A REGRESSION
+    12cd0d0d exempted every intent_preview from scrubbing on the stated
+    grounds that its summary is server text built by services/write_preview.py.
+    That is true for only ONE of the two producers:
+
+      services/chat.py  (5 sites: :1201, :1597, :1710, :1845, :3750)
+          summary = preview_metadata["summary"]      <- SERVER text
+      mcp_tools/dispatcher.py  (generic `case "intent_preview":`, ~:1303)
+          summary = action.summary                   <- THE MODEL'S OWN TEXT
+
+    dispatcher.py's case is labelled in its own comment as "PATH A: build the
+    write preview here" — it is the PRIMARY write preview path, not an edge
+    case. IntentPreviewAction.summary is a plain str the LLM fills in; the
+    system prompt at chat.py:2448 instructs it to. The frontend renders
+    reply.summary, not preview_metadata.summary.
+
+    Worse: on develop the scrubbing loop had NO gate at all, so intent_preview
+    summaries WERE scrubbed. The blanket exemption therefore REMOVED existing
+    protection from the exact text an instructor approves a Canvas write from.
+
+    Fix: distinguish the two by whether summary IS the string write_preview
+    produced:
+
+        if result.get("intent_preview"):
+            metadata = result.get("preview_metadata")
+            server_summary = metadata.get("summary") if isinstance(metadata, dict) else None
+            return result.get("summary") != server_summary
+
+    Deciding this from the PAYLOAD rather than adding a marker field is
+    deliberate and load-bearing: chat.py:1849 persists its result via
+    log_message BEFORE grounding runs, and handle_modified_action (chat.py:3650)
+    never calls ground_assistant_result at all. A marker key would have leaked
+    into stored message JSON (which _load_stored_intent_preview reads back) and
+    into that response.
+
+P2 — DOUBLE-SIGNALLING ON AN ID-ONLY MISS
+    detect_unverified_claims and strip_ungrounded_canvas_id_claims share
+    _CANVAS_ID_CLAIM_PATTERN and the same grounded set, so an ID the detector
+    finds is ALWAYS one the scrubber redacts. Emitting "canvas_id" in
+    unverified_claims therefore made the client warn "figures could not be
+    verified... confirm before acting on them" about a figure that had already
+    been replaced with "[ID redacted]" and was no longer on screen.
+
+    Fix: subtract _SELF_EVIDENT_CLAIMS before emitting. Grades, which stay
+    visible by design, still raise the notice.
+
+ARCHITECTURE DELTA
+    * "Who authored this prose" became a derived property of the payload rather
+      than an assumption about the action name.
+    * unverified_claims is now explicitly "claims still visible in the text",
+      not "all claims detected". The two are no longer the same set.
+
+*** SRP WARNINGS ***
+  ! action_is_llm_prose INFERS authorship from payload shape. It silently
+    flips if anyone:
+      - changes dispatcher.py to assign preview_metadata["summary"] into
+        summary (would make model previews stop being scrubbed), or
+      - changes any chat.py site to post-edit summary after
+        generate_write_preview (would make server previews START being
+        scrubbed, re-opening bug #2).
+    If you touch either producer, re-read this function. There is a test for
+    both directions: test_ground_assistant_result_scrubs_model_authored_
+    preview_summary and ..._keeps_instructor_authored_preview_summary.
+  ! _SELF_EVIDENT_CLAIMS is only correct while detection and scrubbing share a
+    pattern and a grounded set. If someone makes detect_unverified_claims
+    broader than strip_ungrounded_canvas_id_claims, IDs will be detected,
+    suppressed from the banner, and NOT redacted — a silent hole. Keep the two
+    functions' inputs identical or change both together.
+  ! handle_modified_action does NOT ground its result. If model-authored prose
+    ever reaches that path, it is unscrubbed. Currently safe only because
+    chat.py:3750 uses preview_metadata["summary"].
+
+
+================================================================================
+2. bugfix/analyse-missing-submissions
+   Bug: #12
+================================================================================
+
+COMMITS
+    d165ffb6  Give the dashboard's submission analysis a real Canvas read
+
+FILES
+    app/backend/app/mcp_tools/schemas.py
+    app/backend/app/services/chat.py
+    app/frontend/src/pages/Instructor/InstructorDashboard/InstructorDashboardQuickActions.tsx
+    app/frontend/src/types/dashboard.ts
+
+SYMBOLS
+    AnalyzeCourseSubmissionsAction          (new Pydantic action schema)
+        action, local_course_id, status: Literal["missing","late"] = "missing"
+        registered in ACTION_SCHEMAS and ACTION_CLASSIFICATION as read_only
+        (therefore derived into READ_ACTIONS)
+    _run_analyze_course_submissions_chain() (new resolver chain)
+    _COURSE_REQUIRED_ACTIONS = frozenset({"analyze_course_submissions"})
+    _COURSE_ANALYSIS_MAX_NAMES = 50
+    prompt section "ANALYSING A WHOLE COURSE'S SUBMISSIONS"
+
+WHAT AND WHY
+    The dashboard's "Grade Analysis" button routed to the assistant, which then
+    invented statistics — "Average overall 82%", "85% submitted on time",
+    "Assignment 4 (72% submitted)" — for a course with no submissions at all.
+
+    ROOT CAUSE: no analysis tool existed. The model was asked a question it had
+    no instrument for, so it answered from priors. This is why bug #12 is
+    listed as partly caused by the button itself: it promised an analysis the
+    system could not perform.
+
+    Changes:
+      - Added a real read action that walks every assignment in the course and
+        REUSES compute_submissions_by_status, so missing/late semantics are
+        byte-identical to resolved_set.py and to the Analytics tab. It returns
+        per-assignment counts plus student names, with a truncation flag past
+        _COURSE_ANALYSIS_MAX_NAMES.
+      - Renamed the dashboard button "Grade Analysis" -> "Analyse Missing
+        Submissions" and rewrote its seeded prompt, so the button no longer
+        promises more than the tool delivers.
+      - _inject_course_into_envelope now returns a plain `respond` error for
+        actions in _COURSE_REQUIRED_ACTIONS ("I can't analyse submissions
+        without knowing which course...") instead of a clarify. Deliberate
+        product decision: analysis without a course is impossible, not
+        ambiguous, so it is an error rather than a question.
+
+ARCHITECTURE DELTA
+    * Closed the gap between "what the UI offers" and "what the tool layer can
+      do". The anti-hallucination work in section 1 warns about invented
+      numbers; this branch removes the reason they were invented.
+    * Single source of truth for missing/late: compute_submissions_by_status.
+      Chat no longer has its own notion of these states.
+
+*** SRP WARNINGS ***
+  ! _run_analyze_course_submissions_chain MUST keep delegating to
+    compute_submissions_by_status. If anyone reimplements missing/late inline
+    "for performance", chat and the Analytics tab will drift and bug #14
+    (Overview vs Submissions disagreeing) gets a third disagreeing surface.
+    The reuse IS the design.
+  ! AnalyzeCourseSubmissionsAction is classified read_only. If a future
+    variant gains a write (e.g. "and message them"), it must NOT be added to
+    this schema — read actions bypass intent_preview entirely. Create a
+    separate write action.
+  ! _COURSE_REQUIRED_ACTIONS changes the UX contract from "ask" to "fail".
+    Adding an action to this set makes it hard-error with no course. Only add
+    actions where a course genuinely cannot be inferred, or instructors will
+    hit dead ends where a clarify would have recovered.
+  ! _COURSE_ANALYSIS_MAX_NAMES caps names to bound prompt size. Raising it
+    grows the LLM payload linearly and can push large courses over context.
+
+
+================================================================================
+3. bugfix/assignment-create
+   Bug: #15  (+ a hang found during its own manual QA)
+================================================================================
+
+COMMITS
+    5efae76c  Run the chat's assignment description through the draft generator
+    c5a00521  Fix the description expansion hanging instead of settling
+
+--------------------------------------------------------------------------------
+3a. Description parity between the two creation paths (5efae76c)
+--------------------------------------------------------------------------------
+FILES
+    app/frontend/src/lib/map-chat-reply.ts
+    app/frontend/src/pages/Instructor/InstructorAssignmentCreatePage.tsx
+
+SYMBOLS
+    buildAssignmentGenerationPrompt(proposed)   (new, exported)
+    create_assignment handoff now carries: prompt, conversationId,
+                                           pendingMessageId
+
+WHAT AND WHY
+    The two ways of creating an assignment fed the LLM differently. Via the
+    "+ Create Assignment" button, the typed description ran through the draft
+    generator and came back written out. Via the AI Assistant, the chat's
+    extracted one-liner ("it is about beef corndogs") was passed literally, so
+    the same intent produced a much worse assignment.
+
+    The handoff now carries the prompt that produced the preview.
+    InstructorAssignmentCreatePage runs the identical generateAssignmentDraft
+    call and lands the instructor on Review with a comparable description.
+    Only the DESCRIPTION is taken from the generator — title, due date and
+    points stay as the assistant resolved them, because those came from what
+    the instructor explicitly asked for ("worth 120 points, due Friday").
+
+ARCHITECTURE DELTA
+    * The chat handoff went from "seed the form" to "seed the form AND replay
+      the generation step", making the creator page the single place where an
+      assignment description is authored, regardless of entry point.
+
+--------------------------------------------------------------------------------
+3b. The generation hang (c5a00521)
+--------------------------------------------------------------------------------
+FILES
+    app/frontend/src/pages/Instructor/InstructorAssignmentCreatePage.tsx
+
+SYMBOLS
+    hasAutoGeneratedRef        (single-flight guard)
+    hasEnhancementSettled      (state)
+    isEnhancingDescription     (DERIVED, not stored)
+
+WHAT AND WHY
+    The spinner never cleared. Two wrong diagnoses were ruled out with
+    evidence before the real one was found:
+      - "30s adapter timeout / slow reasoning model" — DISPROVED: measured
+        POST /assignments/generate-draft returning HTTP 200 in 0.72s.
+      - "React StrictMode double-invocation" — DISPROVED by a test that
+        asserted exactly one generate call; it passed.
+
+    ACTUAL CAUSE: canvasUrl is derived from useAuth() + useInstitution(), so it
+    is undefined on first render and populated a tick later. That dep change
+    re-ran the effect while the request was still in flight. The cleanup set
+    cancelled = true, and the single-flight ref then REFUSED the second run as
+    a duplicate — so nothing was left to clear the spinner or deliver the
+    description. A deadlock between a cancellation flag and a de-duplication
+    guard.
+
+    Fix: never cancel, always settle, let the ref keep it to one call. Removed
+    the cancelled flag and cleanup entirely. Save-draft is disabled while
+    isEnhancingDescription, which also closed a second defect: pressing it
+    mid-generation created two resumable workflows for the same assignment.
+
+    isEnhancingDescription is DERIVED rather than stored because accessToken
+    can settle after mount, and a value computed before that left the spinner
+    off for the whole call. It also avoids the react-hooks/set-state-in-effect
+    lint rule.
+
+ARCHITECTURE DELTA
+    * Establishes a rule for this codebase's async effects: a single-flight ref
+      and an in-flight cancel are mutually exclusive. Pick one.
+
+*** SRP WARNINGS ***
+  ! The comment above hasAutoGeneratedRef says the ref is "deliberately the
+    ONLY guard". Adding a cleanup that cancels the in-flight request
+    reintroduces the exact deadlock. This looks like a missing-cleanup bug to
+    anyone reading the effect in isolation — it is not. There is a regression
+    test: "still settles when canvasUrl resolves mid-flight".
+  ! isEnhancingDescription must stay DERIVED. Converting it to useState and
+    setting it in the effect body trips react-hooks/set-state-in-effect and
+    reopens the accessToken race.
+  ! InstructorAssignmentCreatePage.tsx is now the most overloaded file in this
+    stack — describe/review stepper, chat handoff, auto-generation effect,
+    draft save/resume, workflow linking, and course selection all live here.
+    Four of the five branches touch it, so it is also the main conflict site.
+    Strongly consider extracting the auto-generation effect into a hook before
+    adding anything else to it.
+  ! generate_assignment_draft (backend) uses get_active_llm_config ONLY and
+    ignores per-instructor instructor_llm_connections, unlike chat which goes
+    through resolve_instructor_llm_request. Same model today, so no visible
+    effect — but a per-instructor model override will NOT apply to description
+    generation until that is reconciled. Untouched here deliberately.
+
+
+================================================================================
+4. bugfix/creator-workflow-audit
+   Found during manual QA of bug #12
+================================================================================
+
+COMMITS
+    a3f08b50  Record a workflow and audit row when the assignment form writes
+
+FILES
+    app/backend/app/routers/canvas.py            (create_assignment_endpoint)
+    app/frontend/src/lib/map-chat-reply.ts
+    app/frontend/src/pages/Instructor/InstructorAssignmentCreatePage.tsx
+    app/frontend/src/routes/paths.ts
+    app/frontend/src/services/assignmentCreator.ts
+    app/frontend/src/services/assignments.ts
+
+WHAT AND WHY
+    Reported as "the assignment never reached Canvas". Ground truth from the
+    Canvas DB disproved that — all three assignments existed (ids 21, 22, 23 in
+    Capstone Project). They were workflow_state=unpublished, which is why they
+    were not visible; that is a separate teammate's PR and out of scope here.
+
+    Two real defects remained:
+
+    (1) NO AUDIT TRAIL AT ALL. create_assignment_endpoint was a bare
+        passthrough to Canvas. Confirmed empirically: three real Canvas writes
+        at 05:20, 05:26 and 05:28, newest audit_logs row from 04:29.
+        record_write_audit's own docstring says it is "Shared by
+        handle_confirmed_action (chat confirm path) and form write endpoints
+        (e.g. create_quiz REST)" — assignments were simply missed.
+
+    (2) THE CHAT'S PENDING WORKFLOW WAS NEVER RESOLVED. create_assignment is
+        NOT in the form-handoff exclusion set in services/chat.py
+        ({"create_quiz","send_message","update_grade"}), so chat opens a
+        PENDING Workflow at intent_preview time. The creator page commits
+        straight to Canvas, so nothing ever closed it. Workflow history showed
+        "pending" for assignments that plainly existed.
+
+    Pre-existing, but section 3 routes far more traffic through the creator
+    page, which is why it surfaced now.
+
+    Changes to create_assignment_endpoint (mirrors create_quiz_endpoint):
+      - accepts optional conversation_id / preview_message_id query params
+      - with them: claims the assistant's pending Workflow via
+        _claim_pending_workflow (the same atomic conditional UPDATE
+        ... WHERE status='pending' that handle_confirmed_action uses) and
+        marks it executed
+      - without them: records a standalone executed Workflow
+      - either way: calls record_write_audit
+      - ownership is checked on the conversation; another instructor's
+        conversation_id is a 404
+
+    Frontend threads conversationId/pendingMessageId from the chat handoff
+    through approveAssignmentDraft -> createAssignment as query params. The
+    workflowLink is OMITTED ENTIRELY on the plain "+ Create Assignment" path
+    so that call keeps its original shape.
+
+DESIGN DECISIONS WORTH PRESERVING
+    * Claim the existing Workflow rather than always creating a new one.
+      Creating a second row would leave the original stuck pending — the
+      reported symptom — and double-count the write in history.
+    * A settled preview is never rewritten. If the preview was already
+      confirmed or cancelled in chat, _claim_pending_workflow returns false and
+      the code falls through to a standalone Workflow. The Canvas write has
+      already succeeded at that point, so failing after the fact or reopening
+      settled history would both be worse.
+
+ARCHITECTURE DELTA
+    * Every Canvas assignment write now produces an AuditLog regardless of
+      entry point. The REST form endpoint moved from "thin proxy" to
+      "transactional boundary that reconciles chat state".
+    * Introduces a cross-surface invariant: a pending Workflow opened by chat
+      can be claimed by a REST endpoint. Replay safety rests entirely on
+      _claim_pending_workflow's conditional UPDATE.
+
+*** SRP WARNINGS ***
+  ! create_assignment_endpoint now has THREE responsibilities: the Canvas
+    write, workflow reconciliation, and audit. It is a near-copy of
+    create_quiz_endpoint. If audit or workflow semantics change in one and not
+    the other they will drift silently. If you touch either, diff them against
+    each other afterwards. Extracting the shared tail is the better fix.
+  ! The form-handoff exclusion set in services/chat.py is COUPLED to this
+    endpoint. If anyone "tidies up" by adding create_assignment to
+    {"create_quiz","send_message","update_grade"}, chat stops opening a pending
+    Workflow and the claim logic here becomes dead code that silently records
+    standalone workflows instead. Change one, change both.
+  ! _claim_pending_workflow's conditional UPDATE is the ONLY thing making this
+    replay-safe. Do not replace it with a read-then-write; two concurrent
+    approvals would both see 'pending'.
+  ! _assert_no_executing_write is a user-scoped mutex on Canvas writes only
+    (status == "executing"). It does not serialise these claims.
+  ! approveAssignmentDraft omits workflowLink entirely when either id is null.
+    Do not "simplify" this to always send the params as undefined — the plain
+    creation path's request shape is asserted in tests.
+
+
+================================================================================
+5. bugfix/draft-course-persist
+   Draft course vs active course
+================================================================================
+
+COMMITS
+    ea8a844c  Bind saved drafts to their own course instead of the active one
+
+FILES
+    app/frontend/src/lib/typed-draft-storage.ts
+    app/frontend/src/pages/Instructor/InstructorAssistantPage.tsx
+    app/frontend/src/pages/Instructor/InstructorAssignmentCreatePage.tsx
+    app/frontend/src/pages/Instructor/InstructorQuizCreatePage.tsx
+    app/frontend/src/pages/Instructor/InstructorFeedbackCreatePage.tsx
+
+SYMBOLS
+    TypedDraftContent.courseCode / .courseName   (new)
+    TypedDraftCourseCandidate                    (new structural type)
+    resolveTypedDraftCourseId(content, courses)  (new)
+    matchUniqueCourse(), normalizeCourseLabel()  (module-private)
+    requiresCourseSelection                      (now a useMemo, was !activeCourse)
+
+WHAT AND WHY
+    Saving a preview as a draft and resuming it opened the create form on
+    whichever course was ACTIVE AT RESUME TIME, not the course the draft was
+    written for.
+
+    ROOT CAUSE: the draft never stored a course at all. stripCanvasIdentifiers
+    (see 1b) keeps ids out of localStorage per #1239, so nothing survived the
+    save, and handleResumeTypedDraft filled the gap with
+    activeCourse.localId unconditionally. Both reported symptoms are one bug —
+    the draft's course is not overwritten on a course switch, it is INJECTED
+    FRESH on every resume. A draft resumed without switching courses only
+    looked correct by coincidence.
+
+    Fix: persist the course's two DISPLAY LABELS and resolve them back to a
+    local id against the current course list at resume time. This satisfies
+    #1239 (no Canvas id, no local id — only strings Canvas already displays,
+    the same category as the studentName / assignmentName the whitelist has
+    always allowed).
+
+    BOTH labels are kept because either can change independently: a renamed
+    course still resolves on its code, a re-coded one on its name. Code is
+    tried first — instructors rename far more often than they re-code.
+    Ambiguous matches (two courses sharing a code) resolve to nothing rather
+    than to a guess, and fall back to the active course along with drafts that
+    predate this change.
+
+    Also removed the blanket `if (!activeCourse) return;` gate on resume: a
+    draft that names its own course no longer needs one selected.
+    requiresCourseSelection is now "no active course AND no draft self-resolves".
+
+SCOPE NOTE
+    MessageDraftPage has NO course selector, so there is no draft-specific
+    course to persist there; it keeps today's active-course behaviour. Three
+    save sites, not four.
+
+ARCHITECTURE DELTA
+    * Drafts became SELF-DESCRIBING. Resume changed from "seed with ambient
+      state" to "resolve the draft's own binding, with ambient state as
+      fallback".
+    * Establishes a pattern for satisfying #1239 without losing referential
+      integrity: persist labels, resolve to ids at use time. This is the same
+      shape as Mridul's backend course matching, and would compose with an
+      alias table if that lands.
+
+*** SRP WARNINGS ***
+  ! The RESOLUTION lives in typed-draft-storage.ts but the PRECEDENCE POLICY
+    ("draft's course beats active course") lives in InstructorAssistantPage's
+    handleResumeTypedDraft. Any NEW resume entry point must apply the same
+    precedence or the bug returns for that surface only. If a second caller
+    appears, move the precedence into the storage module.
+  ! resolveTypedDraftCourseId takes a structural TypedDraftCourseCandidate so
+    callers can pass an already-filtered list. InstructorAssistantPage passes
+    availableCourses (all courses); the create pages filter to writableCourses.
+    Passing a filtered list to the RESOLVER would make a draft for a
+    now-unwritable course silently fall back to the active course. Keep the
+    resolver's input broad.
+  ! Ambiguity resolves to undefined ON PURPOSE. Do not "improve" it to return
+    the first match — that reintroduces silent mis-targeting, which is the
+    entire bug.
+  ! requiresCourseSelection is PANEL-LEVEL, not per-draft. With no active
+    course and a mix of resolvable and unresolvable drafts, the banner is
+    hidden but unresolvable drafts are still no-ops on click. Making it
+    per-draft requires changing DraftWorkspacePanel's props. Known and
+    documented, not an oversight.
+  ! See also the stripCanvasIdentifiers warning in 1b — courseCode/courseName
+    had to be added to that whitelist. The same trap applies to anything else.
+
+
+
+================================================================================
+6. bugfix/ticket-11-assignment-update-time-1435
+   Bug: #1435 (ticket 11)
+   PR: #1478 -> develop
+================================================================================
+
+COMMITS
+    ec513d4  Fix assignment update due-date hour and timezone handling
+    debfcb9  Remove unused dateutil import from dispatcher
+    9d0e66c  Fix update-assignment tests for points_possible preserve fetch
+    4692c1c  Address PR #1478 timezone feedback for due date handling
+    b42965d  Renumber timezone migration to 044 to avoid 041 conflict
+
+FILES
+    app/backend/app/services/due_date.py              (new shared helpers)
+    app/backend/app/services/canvas_timezone.py
+    app/backend/app/services/write_preview.py
+    app/backend/app/services/assignment_validation.py
+    app/backend/app/mcp_tools/schemas.py
+    app/backend/app/mcp_tools/dispatcher.py
+    app/frontend/src/lib/canvas-timezone.ts
+    app/frontend/src/lib/assignment-utils.ts
+    app/frontend/src/lib/map-chat-reply.ts
+    db/migrations/044_course_timezone.sql
+
+WHAT AND WHY
+    Assignment due-date updates could skew hours when chat emitted naive or
+    partial ISO times, and previews did not always match the Canvas write
+    payload. Added normalize_due_date_to_utc_iso / parse_due_date helpers
+    (date-only -> 23:59:00 UTC, fill omitted minutes/seconds, convert offsets
+    to UTC, treat naive ISO as UTC). Wired through MCP/chat schemas,
+    validation, write preview, and assignment-update merge. REST updates now
+    preserve existing points_possible when the UI omits it (Canvas PUT is a
+    full overwrite).
+
+
+================================================================================
+7. bugfix/ticket-12-publish-unpublish-assignment-1436
+   Bug: #1436 (ticket 12)
+   PR: #1481 -> develop
+================================================================================
+
+COMMITS
+    50ffe0e  Fix ticket 12: add assignment publish/unpublish workflow
+    c2b2b4c  Address Mid112 review notes for assignment publish/unpublish
+
+FILES
+    app/backend/app/routers/canvas.py
+    app/backend/app/services/canvas.py
+    app/backend/app/schemas/canvas.py
+    app/frontend/src/pages/Instructor/InstructorCourseAssignmentsPage.tsx
+    app/frontend/src/services/assignments.ts
+    test/backend/test_assignment_published.py
+
+WHAT AND WHY
+    Assignments could be shown as unpublished (e.g. MCP drafts) but there was
+    no app path to publish or unpublish them, so Canvas and the UI could stay
+    out of sync. Added PATCH publish endpoint that writes Canvas
+    assignment.published, mirrors local Assignment.published, and explains
+    Canvas unpublish refusals. Course Assignments page exposes Publish/Unpublish
+    actions with row refresh and error alert.
+
+
+================================================================================
+8. bugfix/ticket-13-quiz-workflow-1437
+   Bug: #1437 (ticket 13)
+   PR: #1482 -> develop
+================================================================================
+
+COMMITS
+    507d190  Fix ticket 13: treat quizzes as their own Canvas workflow
+    1f9fee8  Address review nits for quiz workflow PR
+
+FILES
+    app/backend/app/integrations/canvas.py
+    app/backend/app/routers/canvas.py
+    app/backend/app/services/canvas.py
+    app/frontend/src/pages/Instructor/InstructorCourseQuizzesPage.tsx
+    app/frontend/src/pages/Instructor/InstructorQuizCreatePage.tsx
+    app/frontend/src/services/quizzes.ts
+    test/backend/test_quiz_workflow_ticket_13.py
+
+WHAT AND WHY
+    Quiz create/publish/unpublish/marking were missing or treated like
+    assignment variants. Quizzes now use quiz-engine-specific Canvas APIs
+    (classic fetch_quiz/update_quiz and New Quizzes fetch_new_quiz/
+    update_new_quiz). Added PATCH publish with engine-aware branching.
+    Course quiz list merges classic + New Quizzes; New Quiz create includes
+    published; assignment_id exposed for gradebook marking.
+
+
+================================================================================
+9. bugfix/ticket-14-quiz-question-points-1438
+   Bug: #1438 (ticket 14)
+   PR: #1483 -> develop
+================================================================================
+
+COMMITS
+    0f5ab5d  Fix ticket 14: allow quiz question points greater than 1
+
+FILES
+    app/backend/app/schemas/canvas.py
+    app/backend/app/schemas/preview.py
+    app/backend/app/mcp_tools/schemas.py
+    app/backend/app/services/quiz_draft.py
+    app/backend/app/services/quiz_validation.py
+    app/frontend/src/pages/Instructor/InstructorQuizCreate/quizCreateSchema.ts
+    app/frontend/src/pages/Instructor/InstructorQuizCreate/QuizReviewApproveStep.tsx
+
+WHAT AND WHY
+    Quiz creation blocked realistic multi-point questions — drafts/UI totals
+    could leave the form invalid after raising a question above 1 point, and
+    AI/chat handoffs did not reliably preserve per-question points. Explicit
+    Field(gt=0) on question point schemas with no 1-point upper bound. Draft
+    generation preserves multi-point values and realigns quiz points_possible
+    to the question sum. Review UI syncs quiz total when question/bank points
+    change.
+
+
+================================================================================
+10. bugfix/ticket-21-ungraded-assignments-1445
+    Bug: #1445 (ticket 21)
+    PR: #1484 -> develop
+================================================================================
+
+COMMITS
+    cd55138  Fix ticket 21: support ungraded assignments without inventing points
+    95111c6  Add MCP regression test for ungraded assignment create
+
+FILES
+    app/backend/app/services/assignment_draft.py
+    app/backend/app/services/chat.py
+    app/backend/app/mcp_tools/dispatcher.py
+    app/frontend/src/lib/map-chat-reply.ts
+    app/frontend/src/pages/Instructor/InstructorAssignmentCreate/assignmentCreateSchema.ts
+    app/frontend/src/pages/Instructor/InstructorAssignmentCreatePage.tsx
+    test/mcp/test_mcp_server.py
+
+WHAT AND WHY
+    Missing assignment points were forced into a graded default (app used 100;
+    Canvas graded default behaves like 10). Ungraded creates now stay ungraded.
+    Removed ?? 100 defaults in draft/UI mapping. Review form allows null/blank
+    points for ungraded creates. Chat/MCP clarify asks graded-vs-ungraded only
+    when points were never addressed; explicit null means ungraded.
+
+
+================================================================================
+11. bugfix/ticket-22-assignment-field-validation-1446
+    Bug: #1446 (ticket 22)
+    PR: #1485 -> develop
+================================================================================
+
+COMMITS
+    857ca13  Fix ticket 22: Validate assignment fields before Canvas submit
+    e9cd1d3  Address PR review: honest reset copy, rate limits, token handling
+    1f24297  Surface preview edit errors in the form and drop duplicate course lookup
+    53f1168  Revert duplicate review commit from wrong branch
+
+FILES
+    app/backend/app/routers/canvas.py
+    app/backend/app/services/assignment_validation.py
+    app/backend/app/services/canvas.py
+    app/frontend/src/components/preview/PreviewPanel.tsx
+    app/frontend/src/pages/Instructor/InstructorAssignmentCreate/assignmentCreateSchema.ts
+    app/frontend/src/pages/Instructor/InstructorAssignmentUpdate/assignmentUpdateSchema.ts
+    test/backend/test_integration_preview_confirmation.py
+
+WHAT AND WHY
+    Assignment REST create/preview skipped the same semantic validation chat
+    already uses, so missing due dates, empty titles, and past due dates could
+    reach Canvas or produce a weak dry-run. Preview also omitted due/points
+    details. Wired validate_assignment_for_create / _update into REST create,
+    preview, and update; returns generate_write_preview summary plus the exact
+    submitted payload. Form/validation messages improved so users know how to
+    fix issues.
+
+
+================================================================================
+12. bugfix/ticket-26-instructor-notifications-1450
+    Bug: #1450 (ticket 26)
+    PR: #1486 -> develop
+================================================================================
+
+COMMITS
+    3bcee36  Fix ticket 26: Make instructor notifications page functional
+    bbb4a51  Align notification settings with the Notifications page alerts
+    98d6973  Update dashboard service test for settings-aligned daily summary alert
+    01f9cc2  Drop seedDashboardFallback; use empty dashboard defaults
+
+FILES
+    app/frontend/src/pages/Instructor/InstructorNotificationsPage.tsx
+    app/frontend/src/pages/Instructor/InstructorDashboard/NotificationList.tsx
+    app/frontend/src/lib/map-dashboard.ts
+    app/frontend/src/lib/filter-notifications.ts
+    app/frontend/src/lib/notification-preferences.ts
+    app/frontend/src/contexts/InstitutionProvider.tsx
+
+WHAT AND WHY
+    The instructor Notifications page always showed a static empty placeholder
+    even though /canvas/dashboard already provides missing submissions, late
+    submissions, and pending workflow counts. Wired the page to that dashboard-
+    derived list (reusing NotificationList), stabilized notification timestamps,
+    filtered pending-workflow alerts by the workflow-approvals preference, and
+    stopped falling back to hardcoded institution seed notifications.
+
+
+================================================================================
+13. bugfix/wire-password-reset-backend
+    Bug: #1488 (ticket 36)
+    PR: #1487 -> develop
+================================================================================
+
+COMMITS
+    6b3e187  Wire forgot-password UI to backend reset request and confirm
+    8ebb29d  Gate password-reset token behind DEBUG to stop public account takeover
+    bfe09ac  Address PR review: honest reset copy, rate limits, token handling
+
+FILES
+    app/backend/app/routers/auth.py
+    app/backend/app/schemas/auth.py
+    app/frontend/src/pages/Auth/ResetPasswordPage.tsx
+    app/frontend/src/pages/Auth/ResetPassword/ResetPasswordForm.tsx
+    app/frontend/src/pages/Auth/ResetPassword/ResetPasswordConfirmForm.tsx
+    app/frontend/src/services/auth.ts
+    test/backend/test_password_reset_rate_limit.py
+
+WHAT AND WHY
+    The reset-password page showed a fake "email sent" message and never called
+    the backend. Wired request + confirm to /auth/password-reset/*, returns a
+    reset_token when an account matches (no SMTP yet), and lets users set a new
+    password in-app or via ?token=. Token exposure gated behind DEBUG to prevent
+    public account takeover; rate limits and honest copy added per review.
+
+
+================================================================================
+14. bugfix/ticket-37-logout-session-revoke-1489
+    Bug: #1489 (ticket 37)
+    PR: #1493 -> develop
+================================================================================
+
+COMMITS
+    e1bc4b5  Fix ticket 37: Revoke server session on logout
+    94ed14d  Await logout revoke before clearing local auth
+
+FILES
+    app/frontend/src/contexts/AuthContext.tsx
+    app/frontend/src/services/auth.ts
+    test/frontend/contexts/AuthContext.test.tsx
+
+WHAT AND WHY
+    Frontend logout only cleared local storage and left server sessions active.
+    Logout now calls POST /auth/logout to revoke the session, awaiting revoke
+    before clearing local auth so a race cannot leave a stale token usable.
+
+
+================================================================================
+15. bugfix/ticket-38-mock-dry-run-fake-confirm-1490
+    Bug: #1490 (ticket 38)
+    PR: #1494 -> develop
+================================================================================
+
+COMMITS
+    6395ebc  Fix ticket 38: Block mock dry-run from faking Canvas execution
+    e67cc50  Fix CI for ticket 38: silence unused previewId and align e2e
+    2ee6195  Narrow mock dry-run confirm return type to Promise<never>
+
+FILES
+    app/frontend/src/pages/Instructor/DryRunPreviewPage.tsx
+    app/frontend/src/services/dryRunPreview.ts
+    test/e2e/specs/preview.spec.ts
+
+WHAT AND WHY
+    Approving a mock dry-run preview claimed Canvas actions would run but
+    performed no backend write. Mock confirm now errors clearly; chat
+    ?conversation=&pending= confirm path is unchanged.
+
+
+================================================================================
+16. bugfix/ticket-39-dashboard-seed-fallback-1491
+    Bug: #1491 (ticket 39)
+    PR: #1495 -> develop
+================================================================================
+
+COMMITS
+    d27f833  Fix ticket 39: Stop dashboard seed metrics on API failure
+    0c31fdc  Fix InstitutionContext tests for empty dashboard defaults
+
+FILES
+    app/frontend/src/contexts/InstitutionProvider.tsx
+    test/frontend/contexts/InstitutionContext.test.tsx
+
+WHAT AND WHY
+    When the instructor dashboard API failed, the UI could show hardcoded
+    institution seed metrics (fake missing/pending counts). It now falls back
+    to empty dashboard defaults instead.
+
+
+================================================================================
+17. bugfix/ticket-40-message-templates-1492
+    Bug: #1492 (ticket 40)
+    PR: #1496 -> develop
+================================================================================
+
+COMMITS
+    4da5d6e  Fix ticket 40: Wire message templates UI to backend CRUD
+    10b2f80  Fix eslint hooks violations in MessageDraftPage template loading
+    43e23a9  Fix frontend tests to mock backend message templates
+    c1cb931  Include global templates in course-scoped compose lists
+
+FILES
+    app/backend/app/services/message_template.py
+    app/frontend/src/components/messages/MessageDraftPage.tsx
+    app/frontend/src/components/messages/MessageTemplateSummary.tsx
+    app/frontend/src/services/messageTemplates.ts
+    test/backend/test_message_templates.py
+
+WHAT AND WHY
+    Message compose used hardcoded mockMessageTemplates while /message-templates
+    CRUD already existed. Compose UI now lists/saves/deletes templates through
+    the backend API. Global templates included in course-scoped compose lists.
+
+
+================================================================================
+18. bugfix/ticket-34-course-unique-constraint-1479
+    Bug: #1479 (ticket 34)
+    PR: #1499 -> develop
+================================================================================
+
+COMMITS
+    b4b8b6f  Fix multi-institution course unique constraint collision
+    5d3eda5  Clarify why canvas_course_names coexists with Course.name
+
+FILES
+    app/backend/app/models/course.py
+    db/migrations/042_course_unique_per_instructor_url.sql
+    db/init/01_schema.sql
+    test/backend/test_canvas.py
+
+WHAT AND WHY
+    courses.uq_course_per_instructor blocked an instructor with two Canvas
+    institutions when numeric Canvas course IDs overlapped. Widened the unique
+    constraint to include canvas_url so both hosts can sync/create. Create/sync
+    lookups were already URL-scoped; only the DB constraint was wrong.
+
+
+================================================================================
+19. bugfix/ticket-35-revoke-sessions-password-change-1480
+    Bug: #1480 (ticket 35)
+    PR: #1500 -> develop
+================================================================================
+
+COMMITS
+    d69d0ac  Revoke other sessions after in-app password change
+
+FILES
+    app/backend/app/routers/auth.py
+    app/backend/app/services/auth.py
+    test/backend/test_auth_service_unit.py
+
+WHAT AND WHY
+    Forgot-password reset already clears all sessions, but in-app change_password
+    only updated the password hash. Tokens on other devices could remain valid.
+    Wired revoke_other_sessions into change_password: other active sessions are
+    deleted; the current Settings session stays usable.
+
+
+================================================================================
+20. bugfix/preview-assignment-student-labels
+    Follow-up to merged #1477
+    PR: #1520 -> develop
+================================================================================
+
+COMMITS
+    3346931  Use resolved assignment and student names in previews and grade handoff
+
+FILES
+    app/backend/app/services/write_preview.py
+    app/backend/app/services/chat.py
+    test/backend/test_write_preview.py
+    test/backend/test_update_assignment_resolution.py
+    test/backend/test_update_grade_resolution.py
+
+WHAT AND WHY
+    Follow-up to Yerdana UX review on #1477 (persist assignment/student refs,
+    merged to develop). Approval/handoff copy showed raw Canvas IDs and student
+    counts instead of human-readable names. Update-assignment write previews now
+    use the resolved assignment title; affected_resources no longer leaves
+    assignment name as None. Grade handoff names 1-3 resolved students; larger
+    sets fall back to a count. assignment_label uses resolved title when known.
+
+================================================================================
+CROSS-CUTTING NOTES
+================================================================================
+
+FILES TOUCHED BY MULTIPLE BRANCHES (conflict + coupling hotspots)
+    app/frontend/src/lib/map-chat-reply.ts
+        12cd0d0d (unverified claims), 5efae76c (generation prompt),
+        a3f08b50 (workflow ids). This mapper is becoming a hub — it now
+        translates three unrelated concerns. Consider splitting per action
+        family before adding a fourth.
+    app/frontend/src/pages/Instructor/InstructorAssignmentCreatePage.tsx
+        7115e25c, 5efae76c, c5a00521, a3f08b50, ea8a844c — five commits across
+        four branches. Highest-risk merge target in the stack.
+    app/frontend/src/lib/typed-draft-storage.ts
+        7115e25c, ea8a844c.
+    app/backend/app/services/llm/student_context.py
+        12cd0d0d, c84c3eb7.
+
+TEST POSTURE AT TIME OF WRITING
+    Backend  : 1244 passed, 1 skipped
+               (test_fuzz_harness.py excluded — ModuleNotFoundError:
+                hypothesis, though it IS pinned at requirements.txt:27, so the
+                venv is stale; run pip install -r app/backend/requirements.txt)
+    Frontend : 1038 passed across 212 files (on the tip branch)
+    tsc      : clean for app/frontend
+    eslint   : clean on all changed files
+    ruff     : clean
+
+KNOWN PRE-EXISTING FAILURES — NOT CAUSED BY THIS STACK
+    test_troubleshoot_service_unit.py::
+      test_list_failing_canvas_connections_paginates_without_overlap
+        Fails on bare origin/develop. Shared dev Postgres with 2000+ rows;
+        page.total shifts mid-pagination because a running dev server writes
+        concurrently. Deselected in runs above.
+    mypy: student_context.py:90 "Item None of Any|None has no attribute value"
+        In the untouched llm_safe_submission_dict. Identical before and after
+        c84c3eb7.
+    tsc on test/frontend/tsconfig.json: 56 errors
+        All in service tests this stack does not touch. Verified identical
+        count with and without these changes.
+
+LOCAL-ONLY ARTEFACTS (deliberately not pushed)
+    docs/testing/*.md — per-feature testing reports, excluded via
+    .git/info/exclude. Kept locally by request.
+
+
+================================================================================
+THE ONE RULE, IF YOU READ NOTHING ELSE
+================================================================================
+
+Three of the defects in this stack were caused by ONE component quietly
+acquiring a second responsibility:
+
+  * student_context.py did PII minimization AND output grounding, so a privacy
+    control started censoring the instructor's own text (bugs #2, #13).
+  * The auto-generation effect did single-flight AND cancellation, so the two
+    guards deadlocked and the spinner never cleared.
+  * stripCanvasIdentifiers is both a privacy filter AND the de-facto schema for
+    what a draft can hold, so adding a field to the type silently dropped it
+    on save (bug #6, and the draft-course bug in section 5).
+
+When extending any component below, ask which of its responsibilities you are
+extending. If the answer is "a new one", extract instead of adding.

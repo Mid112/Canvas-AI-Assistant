@@ -7,8 +7,8 @@ app/backend/app/services/canvas.py:
   there can never expire/corrupt the shared session objects the caller
   still needs (see AsyncSession.rollback()'s always-expires behavior).
 - _match_course_name resolves a same-name collision across terms
-  (canvas_course_names is write-once and fetch_courses includes completed
-  terms) by preferring the non-completed match, and falls back to a safe
+  (fetch_courses includes completed terms) by preferring the
+  non-completed match, and falls back to a safe
   normalized-substring match when there's no exact match at all.
 - handle_chat_message's post-hoc course resolution: never forks on a
   modify turn (would silently break update_message_content), mutates a
@@ -296,6 +296,91 @@ def test_match_course_name_legacy_row_with_null_workflow_state_still_resolves():
     match = _match_course_name(course_names, "CPSC 310")
     assert match is not None
     assert match.local_course_id == 2
+
+
+def test_match_course_name_department_code_prefix_stays_unresolved():
+    from app.models.canvas_course_name import CanvasCourseName
+    from app.models.course import Course
+    from app.services.chat import _match_course_name
+
+    def course_name(local_id: int, name: str, code: str, workflow_state: str) -> CanvasCourseName:
+        row = CanvasCourseName(
+            canvas_connection_id=1,
+            canvas_course_id=str(local_id),
+            local_course_id=local_id,
+            name=name,
+            workflow_state=workflow_state,
+        )
+        row.course = Course(
+            id=local_id,
+            canvas_course_id=str(local_id),
+            canvas_url=CANVAS_URL,
+            name=name,
+            course_code=code,
+            workflow_state=workflow_state,
+            instructor_id=1,
+        )
+        return row
+
+    course_names = [
+        course_name(1, "Introduction to Software Engineering", "COSC 310", "completed"),
+        course_name(2, "Software Architecture", "COSC 333", "completed"),
+        course_name(3, "Capstone Project", "COSC 499", "available"),
+    ]
+
+    assert _match_course_name(course_names, "COSC") is None
+    exact_code_match = _match_course_name(course_names, "COSC 499")
+    assert exact_code_match is not None
+    assert exact_code_match.local_course_id == 3
+
+
+def test_match_course_name_aliases_for_same_course_resolve_old_and_new_names():
+    from datetime import UTC, datetime
+
+    from app.models.canvas_course_name import CanvasCourseName
+    from app.models.course import Course
+    from app.services.chat import _match_course_name
+
+    current_course = Course(
+        id=3,
+        canvas_course_id="3",
+        canvas_url=CANVAS_URL,
+        name="Senior Design",
+        course_code="COSC 499",
+        workflow_state="available",
+        instructor_id=1,
+    )
+    course_names = [
+        CanvasCourseName(
+            canvas_connection_id=1,
+            canvas_course_id="3",
+            local_course_id=3,
+            name="Capstone Project",
+            workflow_state="available",
+            last_seen_at=datetime(2026, 1, 1, tzinfo=UTC),
+        ),
+        CanvasCourseName(
+            canvas_connection_id=1,
+            canvas_course_id="3",
+            local_course_id=3,
+            name="Senior Design",
+            workflow_state="available",
+            last_seen_at=datetime(2026, 1, 2, tzinfo=UTC),
+        ),
+    ]
+    for course_name in course_names:
+        course_name.course = current_course
+
+    new_name_match = _match_course_name(course_names, "Senior Design")
+    old_name_match = _match_course_name(course_names, "Capstone Project")
+    code_match = _match_course_name(course_names, "COSC 499")
+
+    assert new_name_match is not None
+    assert new_name_match.local_course_id == 3
+    assert old_name_match is not None
+    assert old_name_match.local_course_id == 3
+    assert code_match is not None
+    assert code_match.local_course_id == 3
 
 
 # ── Fuzzy substring fallback ─────────────────────────────────────────────

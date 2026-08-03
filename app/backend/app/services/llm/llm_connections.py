@@ -109,6 +109,8 @@ async def _resolve_connection_health(
     )
     if not has_key:
         return await check_provider_health(definition)
+    if connection is None or connection.encrypted_api_key is None:
+        return {"status": "unauthorized", "models": [], "detail": "Provider is not connected."}
 
     try:
         user_key = _decrypt_stored_api_key(connection.encrypted_api_key)
@@ -203,6 +205,8 @@ async def build_adapter_settings(
         health = await check_provider_health(definition)
         health_status = health["status"]
     elif has_personal_key:
+        if connection is None or connection.encrypted_api_key is None:
+            raise ValueError(f"{definition.name} is not connected")
         user_key = _decrypt_stored_api_key(connection.encrypted_api_key)
         base_url = connection.base_url if provider == "openai_compatible_custom" else None
         is_valid, _ = await validate_api_key(definition, user_key, base_url=base_url)

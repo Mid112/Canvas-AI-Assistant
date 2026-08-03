@@ -14,26 +14,36 @@ if TYPE_CHECKING:
 
 
 class CanvasCourseName(Base):
-    """A small, connection-scoped, write-once index of canvas_course_id ->
-    name, used only by the chat/LLM course-resolution pathway
-    (services/chat.py). Deliberately separate from Course:
+    """Connection-scoped alias index for chat course-name resolution.
 
-    - Course is keyed on (canvas_course_id, instructor_id) and has no
-      notion of *which* Canvas connection a course came from, so an
-      instructor connected to two institutions with colliding numeric
-      canvas_course_ids can't be disambiguated there. This table is keyed
-      by canvas_connection_id instead — the connection's own PK, no token
-      decryption needed.
-    - Course.name is overwritten in place on every sync (services/canvas.py
-      get_courses), which is fine for the dashboard but wrong for an LLM
-      mid-conversation: a rename on Canvas between turns would otherwise
-      change what a conversation has been calling that course. Rows here
-      are inserted once and never updated (see services/canvas.py
-      sync_courses_if_stale).
+    The app deliberately keeps two course-name sources:
+
+    - **Course** (``courses.name`` / ``course_code``): canonical,
+      host-scoped via ``canvas_url``, overwritten in place on every Canvas
+      sync — dashboards, prompts, and the rest of the UI read this row.
+    - **canvas_course_names** (this table): historical aliases keyed by
+      ``canvas_connection_id`` for ``services/chat.py`` only. A Canvas
+      rename updates Course but leaves prior aliases here so an instructor
+      can still refer to an earlier label mid-conversation. Prompt display
+      always prefers Course.name; ``last_seen_at`` marks the alias observed
+      on the most recent sync.
+
+    Course is keyed on ``(canvas_course_id, instructor_id, canvas_url)``,
+    so multi-institution numeric-ID collisions are already disambiguated
+    there. This table stays keyed by ``canvas_connection_id`` — the
+    connection's own PK, no token decryption — because chat resolution runs
+    in a connection context.
     """
 
     __tablename__ = "canvas_course_names"
-    __table_args__ = (UniqueConstraint("canvas_connection_id", "canvas_course_id", name="uq_connection_canvas_course"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "canvas_connection_id",
+            "canvas_course_id",
+            "name",
+            name="uq_connection_canvas_course_name",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
@@ -56,6 +66,11 @@ class CanvasCourseName(Base):
     # written before this column existed have no value, treated as "not
     # known to be completed" rather than excluded.
     workflow_state: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
