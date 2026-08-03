@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import { AuthPageShell } from "@/components/layouts/AuthPageShell";
 import { getLoginErrorMessage } from "@/lib/auth-errors";
@@ -14,21 +14,31 @@ import {
   requestPasswordReset,
 } from "@/services/auth";
 
+type ResetPasswordLocationState = {
+  resetToken?: string;
+};
+
 export function ResetPasswordPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
+  const tokenFromState = useMemo(() => {
+    const state = location.state as ResetPasswordLocationState | null;
+    return state?.resetToken?.trim() || null;
+  }, [location.state]);
   const tokenFromQuery = useMemo(
     () => searchParams.get("token")?.trim() || null,
     [searchParams],
   );
+  const initialToken = tokenFromState ?? tokenFromQuery;
 
-  const [resetToken, setResetToken] = useState<string | null>(tokenFromQuery);
+  const [resetToken, setResetToken] = useState<string | null>(initialToken);
   const [requestError, setRequestError] = useState<string | null>(null);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [isRequesting, setIsRequesting] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
   const [requestCompletedWithoutToken, setRequestCompletedWithoutToken] =
-    useState(false);
+    useState<string | null>(null);
   const [passwordUpdated, setPasswordUpdated] = useState(false);
 
   if (passwordUpdated) {
@@ -95,14 +105,13 @@ export function ResetPasswordPage() {
       {requestCompletedWithoutToken ? (
         <div className="space-y-4 text-center">
           <p className="text-sm leading-relaxed text-muted-foreground" role="status">
-            If an account exists for that email, a reset was started. Check your
-            inbox for the next step, or try again.
+            {requestCompletedWithoutToken}
           </p>
           <button
             type="button"
             className="text-sm font-semibold text-primary underline-offset-4 hover:underline"
             onClick={() => {
-              setRequestCompletedWithoutToken(false);
+              setRequestCompletedWithoutToken(null);
               setRequestError(null);
             }}
           >
@@ -124,12 +133,14 @@ export function ResetPasswordPage() {
               // step. Otherwise always show the same generic acknowledgement.
               if (result.reset_token) {
                 setResetToken(result.reset_token);
-                navigate(
-                  `${paths.resetPassword}?token=${encodeURIComponent(result.reset_token)}`,
-                  { replace: true },
-                );
+                // Keep DEBUG tokens out of URL history; emailed production
+                // links may still arrive with ?token= in the query string.
+                navigate(paths.resetPassword, {
+                  replace: true,
+                  state: { resetToken: result.reset_token },
+                });
               } else {
-                setRequestCompletedWithoutToken(true);
+                setRequestCompletedWithoutToken(result.message);
               }
             } catch (err) {
               setRequestError(

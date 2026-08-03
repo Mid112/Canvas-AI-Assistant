@@ -27,7 +27,11 @@ const mockedConfirm = vi.mocked(confirmPasswordReset);
 describe("ResetPasswordPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockedRequest.mockResolvedValue({ reset_token: "reset-token-abc" });
+    mockedRequest.mockResolvedValue({
+      message:
+        "If an account exists for that email, a password reset was started.",
+      reset_token: "reset-token-abc",
+    });
     mockedConfirm.mockResolvedValue(undefined);
   });
 
@@ -99,7 +103,11 @@ describe("ResetPasswordPage", () => {
 
   it("shows a generic message when no account token is returned", async () => {
     const user = userEvent.setup();
-    mockedRequest.mockResolvedValue({ reset_token: null });
+    mockedRequest.mockResolvedValue({
+      message:
+        "If an account exists for that email, a password reset was started.",
+      reset_token: null,
+    });
 
     renderWithRouter(<ResetPasswordPage />, {
       routerProps: { initialEntries: [paths.resetPassword] },
@@ -112,7 +120,8 @@ describe("ResetPasswordPage", () => {
     await user.click(screen.getByRole("button", { name: "Send Reset Link" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "If an account exists for that email",
+      "If an account exists for that email, a password reset was started.",
     );
+    expect(screen.queryByText(/check your inbox/i)).not.toBeInTheDocument();
   });
 });

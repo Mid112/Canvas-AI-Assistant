@@ -1,4 +1,3 @@
-import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request, status
@@ -50,7 +49,6 @@ from app.services.auth import (
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-logger = logging.getLogger(__name__)
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
@@ -86,7 +84,12 @@ async def logout(
 
 
 @router.post("/password-reset/request", response_model=PasswordResetRequestResponse)
-async def password_reset_request(body: PasswordResetRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def password_reset_request(
+    request: Request,
+    body: PasswordResetRequest,
+    db: AsyncSession = Depends(get_db),
+):
     # Always 200 with the same acknowledgement shape so callers cannot tell
     # whether the email matched an account. The raw token is a single-use
     # secret that belongs in an out-of-band channel (email) — never on this
@@ -94,13 +97,16 @@ async def password_reset_request(body: PasswordResetRequest, db: AsyncSession = 
     # the token so local testing can finish confirm without inbox delivery.
     token = await request_password_reset(db, body.email)
     debug_token = token if settings.DEBUG else None
-    if settings.DEBUG and token:
-        logger.info("DEBUG password-reset token for %s: %s", body.email, token)
     return PasswordResetRequestResponse(reset_token=debug_token)
 
 
 @router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)
-async def password_reset_confirm(body: PasswordResetConfirmRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def password_reset_confirm(
+    request: Request,
+    body: PasswordResetConfirmRequest,
+    db: AsyncSession = Depends(get_db),
+):
     await confirm_password_reset(db, body)
 
 
