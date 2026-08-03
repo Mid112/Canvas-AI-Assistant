@@ -1047,6 +1047,7 @@ def _new_quiz_response(item: dict, canvas_course_id: int) -> QuizResponse:
     )
 
 
+# Future prep: resolves the Canvas assignment id for quiz gradebook writes.
 def quiz_gradebook_assignment_id(quiz: QuizResponse) -> int:
     """Return the Canvas assignment id used for quiz gradebook writes.
 

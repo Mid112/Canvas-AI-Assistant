@@ -47,8 +47,8 @@ export function InstructorCourseQuizzesPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
-  const [togglingPublishQuizId, setTogglingPublishQuizId] = useState<
-    number | null
+  const [togglingPublishQuizKey, setTogglingPublishQuizKey] = useState<
+    string | null
   >(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -156,7 +156,7 @@ export function InstructorCourseQuizzesPage() {
     }
 
     setPublishError(null);
-    setTogglingPublishQuizId(quiz.id);
+    setTogglingPublishQuizKey(`${quiz.quiz_engine}-${quiz.id}`);
     try {
       const updated = await setQuizPublished(
         parsedLocalCourseId,
@@ -182,7 +182,7 @@ export function InstructorCourseQuizzesPage() {
           : "Unable to update quiz publish status. Please try again.",
       );
     } finally {
-      setTogglingPublishQuizId(null);
+      setTogglingPublishQuizKey(null);
     }
   };
 
@@ -331,7 +331,9 @@ export function InstructorCourseQuizzesPage() {
                   <TableBody>
                     {paginated.items.map((quiz) => {
                       const isPublished = quiz.published;
-                      const isTogglingPublish = togglingPublishQuizId === quiz.id;
+                      const isTogglingPublish =
+                        togglingPublishQuizKey ===
+                        `${quiz.quiz_engine}-${quiz.id}`;
                       return (
                         <TableRow key={`${quiz.quiz_engine}-${quiz.id}`}>
                           <TableCell>

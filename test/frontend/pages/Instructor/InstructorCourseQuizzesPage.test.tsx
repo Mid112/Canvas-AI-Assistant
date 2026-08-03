@@ -222,4 +222,55 @@ describe("InstructorCourseQuizzesPage", () => {
       "Canvas refused to unpublish this quiz",
     );
   });
+
+  // Verifies: Classic and New Quiz rows stay distinct when Canvas ids collide.
+  it("renders classic and New Quiz with the same id as separate rows", async () => {
+    mockedFetchCourseQuizzes.mockResolvedValue([
+      {
+        id: 42,
+        assignment_id: 4242,
+        title: "Shared Id Classic Quiz",
+        description: null,
+        due_at: "2026-12-15T12:00:00.000Z",
+        points_possible: 20,
+        course_id: 99,
+        quiz_type: "assignment",
+        allowed_attempts: 1,
+        time_limit: null,
+        published: true,
+        question_count: 2,
+        html_url: null,
+        quiz_engine: "classic",
+      },
+      {
+        id: 42,
+        assignment_id: 42,
+        title: "Shared Id New Quiz",
+        description: null,
+        due_at: "2026-12-16T12:00:00.000Z",
+        points_possible: 15,
+        course_id: 99,
+        quiz_type: "new_quizzes",
+        allowed_attempts: 1,
+        time_limit: null,
+        published: true,
+        question_count: 3,
+        html_url: null,
+        quiz_engine: "new_quizzes",
+      },
+    ]);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Shared Id Classic Quiz")).toBeInTheDocument();
+      expect(screen.getByText("Shared Id New Quiz")).toBeInTheDocument();
+    });
+
+    expect(screen.getByText(/Classic · ID: 42/)).toBeInTheDocument();
+    expect(screen.getByText(/New Quizzes · ID: 42/)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Unpublish" })).toHaveLength(
+      2,
+    );
+  });
 });
