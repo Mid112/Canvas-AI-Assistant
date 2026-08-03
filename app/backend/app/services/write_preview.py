@@ -144,6 +144,7 @@ def _preview_create_quiz(course: Course, params: dict) -> dict:
 
 def _preview_update_assignment(course: Course, params: dict) -> dict:
     assignment_id = params.get("assignment_id", "?")
+    assignment_name = params.get("assignment_name")
     title = params.get("title")
     description = params.get("description")
     due_date = params.get("due_date")
@@ -170,19 +171,30 @@ def _preview_update_assignment(course: Course, params: dict) -> dict:
         if value is None
     ]
 
+    assignment_label = (
+        f"'{assignment_name}'"
+        if assignment_name
+        else f"(ID {assignment_id})" if assignment_id != "?" else "the selected assignment"
+    )
+    resource_name = (
+        assignment_name
+        or (f"Assignment {assignment_id}" if assignment_id != "?" else "Unknown assignment")
+    )
+
     if changes:
         change_text = "; ".join(f"{k.replace('_', ' ')} → {v}" for k, v in changes.items())
-        summary = f"Update assignment (ID {assignment_id}) in {course.name}: {change_text}."
+        summary = f"Update assignment {assignment_label} in {course.name}: {change_text}."
         if unchanged:
             summary += f" Everything else ({', '.join(unchanged)}) stays the same."
     else:
-        summary = f"No fields were specified to update assignment (ID {assignment_id}) in {course.name}."
+        summary = f"No fields were specified to update assignment {assignment_label} in {course.name}."
 
     return {
         "action": "update_assignment",
         "course": course.name,
         "metadata": {
             "assignment_id": assignment_id,
+            "assignment_name": assignment_name,
             "changes": changes,
             "unchanged_fields": unchanged,
         },
@@ -192,7 +204,7 @@ def _preview_update_assignment(course: Course, params: dict) -> dict:
             {
                 "type": "assignment",
                 "id": assignment_id if assignment_id != "?" else None,
-                "name": None,
+                "name": resource_name,
                 "status": "modified",
                 "changed_fields": list(changes.keys()),
             },
