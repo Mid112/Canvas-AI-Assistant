@@ -90,13 +90,14 @@ CREATE INDEX idx_courses_instructor_id ON courses(instructor_id);
 
 -- ─────────────────────────────────────────────
 -- Canvas Course Names
--- A small, connection-scoped, write-once canvas_course_id -> name index
+-- A connection-scoped canvas_course_id -> observed-name alias index
 -- used only by the chat/LLM course-resolution pathway (services/chat.py).
 -- Separate from `courses` because it's keyed by canvas_connection_id (so
 -- two institutions with colliding numeric canvas_course_ids never
--- collide) and rows are never overwritten once inserted (so a rename on
--- Canvas mid-conversation doesn't retroactively change what an
--- in-progress conversation has been calling a course).
+-- collide). Prompt-facing names/codes are read from the current `courses`
+-- row first so Canvas renames do not leave chat stuck on stale labels,
+-- while aliases keep names instructors used earlier in a conversation
+-- resolvable after a rename.
 -- ─────────────────────────────────────────────
 CREATE TABLE canvas_course_names (
     id                      SERIAL PRIMARY KEY,
@@ -113,8 +114,9 @@ CREATE TABLE canvas_course_names (
     -- duplicate-name match (same course code taught in multiple terms) to
     -- the still-active offering instead of giving up outright.
     workflow_state          VARCHAR,
+    last_seen_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_at              TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT uq_connection_canvas_course UNIQUE (canvas_connection_id, canvas_course_id)
+    CONSTRAINT uq_connection_canvas_course_name UNIQUE (canvas_connection_id, canvas_course_id, name)
 );
 
 CREATE INDEX idx_canvas_course_names_connection_id ON canvas_course_names(canvas_connection_id);
@@ -672,4 +674,5 @@ INSERT INTO schema_migrations (filename) VALUES
     ('038_support_tickets.sql'),
     ('039_support_ticket_assigned_admin.sql'),
     ('040_grade_history_local_relationships.sql'),
-    ('041_course_unique_per_instructor_url.sql');
+    ('041_canvas_course_names_aliases.sql'),
+    ('042_course_unique_per_instructor_url.sql');
