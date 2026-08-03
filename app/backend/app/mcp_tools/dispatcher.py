@@ -24,8 +24,10 @@ from app.schemas.canvas import (
     SubmissionResponse,
     SubmissionStatus,
 )
-from app.services.canvas_timezone import get_instructor_canvas_timezone
-from app.services.due_date import normalize_due_date_to_utc_iso, parse_due_date
+from app.services.assignment_validation import (
+    validate_assignment_for_create,
+    validate_assignment_for_update,
+)
 from app.services.canvas import (
     _assert_no_executing_write,
     create_course_assignment,
@@ -46,7 +48,9 @@ from app.services.canvas_idempotency import (
     run_idempotent_canvas_write,
 )
 from app.services.canvas_status import CanvasWriteResult
+from app.services.canvas_timezone import get_instructor_canvas_timezone
 from app.services.course_access import get_owned_course_or_404
+from app.services.due_date import normalize_due_date_to_utc_iso, parse_due_date
 from app.services.grade_management import submit_grade_update
 from app.services.llm.json_extraction import extract_json_object as _extract_json
 from app.services.message_validation import check_message_profanity, validate_message_for_send
