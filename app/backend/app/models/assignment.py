@@ -17,8 +17,8 @@ class Assignment(Base):
     __tablename__ = "assignments"
     # canvas_assignment_id is only unique WITHIN a course, not globally — two
     # co-instructors on the same real Canvas course get separate local Course
-    # rows (courses is unique per (canvas_course_id, instructor_id), not
-    # globally), so each needs its own Assignment row for the same Canvas
+    # rows (courses is unique per (canvas_course_id, instructor_id, canvas_url),
+    # not globally), so each needs its own Assignment row for the same Canvas
     # assignment ID.
     __table_args__ = (UniqueConstraint("canvas_assignment_id", "course_id", name="uq_assignment_per_course"),)
 
