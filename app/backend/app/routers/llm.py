@@ -5,6 +5,7 @@ from app.core.database import get_db
 from app.dependencies import get_current_user
 from app.models.user import User
 from app.schemas.llm_provider import (
+    InstructorLlmProvider,
     InstructorLlmProviderConfig,
     LlmConnectionResponse,
     LlmConnectionUpdate,
@@ -29,7 +30,7 @@ async def instructor_llm_providers(
     return InstructorLlmProviderConfig(
         default_provider=config.provider,
         default_model=config.model,
-        providers=providers,
+        providers=[InstructorLlmProvider(**provider) for provider in providers],
     )
 
 
