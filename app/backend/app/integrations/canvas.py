@@ -146,6 +146,8 @@ async def _fetch_all_pages(
     page_params: dict | None = params
 
     for _ in range(_MAX_PAGES):
+        if next_url is None:
+            break
         response = await _get_with_retry(client, next_url, headers=headers, params=page_params)
         _raise_for_canvas_error(response)
         results.extend(response.json())
