@@ -3,10 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   assignmentToFormValues,
   buildAssignmentChanges,
+  datetimeLocalInTimeZoneToUtcIso,
+  formatDatetimeLocalForDisplay,
   formatDueDateForApi,
   formatDueDateForDisplay,
   formatDueDateForInput,
+  formatUtcInstantToDatetimeLocal,
   hasAssignmentChanges,
+  isDatetimeLocalValue,
   parseDueDate,
 } from "@/lib/assignment-utils";
 import type { Assignment } from "@/types/assignment";
@@ -59,10 +63,30 @@ describe("assignment-utils", () => {
     expect(parsed?.toISOString()).toBe("2026-08-13T23:59:00.000Z");
   });
 
-  // Verifies: Omitted seconds still round-trip through API conversion.
-  it("converts datetime-local values without seconds to UTC ISO", () => {
-    const apiValue = formatDueDateForApi("2026-08-13T17:00");
+  // Verifies: datetime-local strings are not treated as UTC when displaying.
+  it("displays datetime-local values without UTC offset shift", () => {
+    expect(isDatetimeLocalValue("2026-08-16T23:59")).toBe(true);
+    expect(formatDatetimeLocalForDisplay("2026-08-16T23:59")).toContain("11:59");
+  });
+
+  // Verifies: datetime-local round-trips through instructor timezone to UTC.
+  it("converts datetime-local values in instructor timezone to UTC ISO", () => {
+    const apiValue = formatDueDateForApi("2026-08-13T23:59", "America/Vancouver");
     expect(apiValue).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-    expect(formatDueDateForInput(apiValue)).toMatch(/T\d{2}:\d{2}$/);
+    expect(formatDueDateForInput(apiValue, "America/Vancouver")).toBe("2026-08-13T23:59");
+  });
+
+  // Verifies: UTC instants map to datetime-local in instructor timezone.
+  it("formats UTC API values for datetime-local in instructor timezone", () => {
+    const date = new Date("2026-09-12T06:59:00.000Z");
+    expect(formatUtcInstantToDatetimeLocal(date, "America/Vancouver")).toBe("2026-09-11T23:59");
+  });
+
+  // Verifies: Wall-clock conversion helper matches formatDueDateForApi.
+  it("datetimeLocalInTimeZoneToUtcIso matches formatDueDateForApi", () => {
+    const local = "2026-09-11T23:59";
+    expect(datetimeLocalInTimeZoneToUtcIso(local, "America/Vancouver")).toBe(
+      formatDueDateForApi(local, "America/Vancouver"),
+    );
   });
 });

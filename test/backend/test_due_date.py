@@ -1,6 +1,7 @@
 """Due-date normalization for assignment updates (#1435)."""
 
 from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 from app.services.due_date import (
     format_due_date_for_preview,
@@ -8,6 +9,8 @@ from app.services.due_date import (
     parse_due_date,
 )
 from app.services.write_preview import _format_due_date
+
+VANCOUVER = "America/Vancouver"
 
 
 # Verifies: Hour-only updates keep the date and fill omitted seconds in UTC.
@@ -30,6 +33,13 @@ def test_normalize_date_only_defaults_to_end_of_day():
 # Verifies: Naive ISO times are treated as UTC wall-clock.
 def test_normalize_naive_iso_assumes_utc():
     assert normalize_due_date_to_utc_iso("2026-08-13T23:59:00") == "2026-08-13T23:59:00+00:00"
+
+
+# Verifies: Date-only values use instructor Canvas timezone when provided.
+def test_normalize_date_only_uses_instructor_timezone():
+    normalized = normalize_due_date_to_utc_iso("2026-09-11", VANCOUVER)
+    local = parse_due_date(normalized).astimezone(ZoneInfo(VANCOUVER))
+    assert local.strftime("%Y-%m-%d %H:%M") == "2026-09-11 23:59"
 
 
 # Verifies: Ambiguous numeric dates are left alone for validation errors.

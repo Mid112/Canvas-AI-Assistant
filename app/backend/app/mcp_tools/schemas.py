@@ -3,16 +3,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.services.due_date import normalize_due_date_to_utc_iso
-
 
 def _normalize_due_date_str(value: str) -> str:
-    """The LLM sometimes emits natural-language dates (e.g. "July 30
-    2026") or naive/partial ISO times. Canonicalize to UTC ISO so
-    validate_assignment_for_create/_update and Canvas writes share one
-    representation (#1435); leave unparseable or ambiguous input as-is
-    so validation still produces a clean user-facing error."""
-    return normalize_due_date_to_utc_iso(value)
+    """Strip whitespace; instructor-timezone normalization happens at execution."""
+    return value.strip()
 
 
 class FetchCoursesAction(BaseModel):

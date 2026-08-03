@@ -24,10 +24,8 @@ from app.schemas.canvas import (
     SubmissionResponse,
     SubmissionStatus,
 )
-from app.services.assignment_validation import (
-    validate_assignment_for_create,
-    validate_assignment_for_update,
-)
+from app.services.canvas_timezone import get_instructor_canvas_timezone
+from app.services.due_date import normalize_due_date_to_utc_iso, parse_due_date
 from app.services.canvas import (
     _assert_no_executing_write,
     create_course_assignment,
@@ -334,7 +332,22 @@ def _send_message_missing_field(proposed: dict) -> str | None:
     return None
 
 
-def _create_assignment_due_date_in_past(due_date: str) -> bool:
+def _normalize_due_date_for_user(
+    due_date: str | None,
+    user: User,
+    canvas_url: str | None = None,
+) -> str | None:
+    if due_date is None:
+        return None
+    instructor_timezone = get_instructor_canvas_timezone(user, canvas_url)
+    return normalize_due_date_to_utc_iso(due_date, instructor_timezone)
+
+
+def _create_assignment_due_date_in_past(
+    due_date: str,
+    user: User,
+    canvas_url: str | None = None,
+) -> bool:
     """True if due_date parses to a date that has already passed.
 
     Mirrors assignment_validation._check_due_date's future-date rule,
@@ -343,10 +356,11 @@ def _create_assignment_due_date_in_past(due_date: str) -> bool:
     prompt tells the model what today is, but it doesn't reliably do the
     "nearest future occurrence" arithmetic itself — observed defaulting
     to the current year even when that puts the date in the past)."""
-    from app.services.due_date import parse_due_date
-
+    normalized = _normalize_due_date_for_user(due_date, user, canvas_url)
+    if normalized is None:
+        return False
     try:
-        due_dt = parse_due_date(due_date)
+        due_dt = parse_due_date(normalized, get_instructor_canvas_timezone(user, canvas_url))
     except (ValueError, TypeError, OverflowError):
         return False
     return due_dt <= datetime.now(UTC)
@@ -408,20 +422,26 @@ def _build_submissions_result(submissions: list[SubmissionResponse]) -> dict:
     }
 
 
-def _merge_assignment_update(current: AssignmentResponse, action: Any) -> AssignmentUpdate:
+def _merge_assignment_update(
+    current: AssignmentResponse,
+    action: Any,
+    user: User,
+    canvas_url: str | None = None,
+) -> AssignmentUpdate:
     """Canvas's assignment PUT is a full overwrite — fields left out of the
     payload get blanked, not left alone. Any field the user didn't ask to
     change is carried over from the just-fetched current Canvas state."""
-    from app.services.due_date import parse_due_date
+    instructor_timezone = get_instructor_canvas_timezone(user, canvas_url)
 
     if action.due_date is not None:
-        due_at = parse_due_date(action.due_date)
+        normalized = _normalize_due_date_for_user(action.due_date, user, canvas_url)
+        due_at = parse_due_date(normalized or action.due_date, instructor_timezone)
     else:
         due_at = current.due_at
         if isinstance(due_at, datetime) and due_at.tzinfo is None:
             due_at = due_at.replace(tzinfo=UTC)
         elif isinstance(due_at, str):
-            due_at = parse_due_date(due_at)
+            due_at = parse_due_date(due_at, instructor_timezone)
 
     return AssignmentUpdate(
         name=action.title if action.title is not None else current.name,
@@ -604,6 +624,7 @@ async def execute_tool(
         # handle_confirmed_action catches it as a ToolExecutionError.
         case "create_assignment":
             course = await _resolve_course(db, user, action.local_course_id)
+            due_date = _normalize_due_date_for_user(action.due_date, user, course.canvas_url)
 
             # re-validate at execution time — the preview may have been
             # shown seconds or minutes ago; Canvas state could have changed
@@ -612,7 +633,7 @@ async def execute_tool(
                 user,
                 action.title,
                 action.description,
-                action.due_date,
+                due_date,
                 action.points_possible,
                 db,
             )
@@ -620,7 +641,7 @@ async def execute_tool(
             assignment_payload = AssignmentCreate(
                 name=action.title,
                 description=action.description,
-                due_at=action.due_date,
+                due_at=due_date,
                 points_possible=action.points_possible,
             )
             if _mcp_enabled():
@@ -633,7 +654,7 @@ async def execute_tool(
                             "course_id": int(course.canvas_course_id),
                             "name": action.title,
                             "points_possible": action.points_possible,
-                            "due_at": action.due_date,
+                            "due_at": due_date,
                             "description": action.description,
                         },
                     )
@@ -770,13 +791,14 @@ async def execute_tool(
 
         case "update_assignment":
             course = await _resolve_course(db, user, action.local_course_id)
+            due_date = _normalize_due_date_for_user(action.due_date, user, course.canvas_url)
 
             await validate_assignment_for_update(
                 action.local_course_id,
                 user,
                 action.title,
                 action.description,
-                action.due_date,
+                due_date,
                 action.points_possible,
                 db,
             )
@@ -787,7 +809,9 @@ async def execute_tool(
             current = await get_assignment(
                 course.id, action.assignment_id, user, course.canvas_url, db
             )
-            update_payload = _merge_assignment_update(current, action)
+            update_payload = _merge_assignment_update(
+                current, action, user, course.canvas_url
+            )
 
             if _mcp_enabled():
                 async def _mcp_update_assignment() -> dict[str, Any]:
@@ -1170,7 +1194,12 @@ async def execute_tool(
                         "partial_plan": partial_plan,
                     }
 
-                if _create_assignment_due_date_in_past(proposed["due_date"]):
+                preview_course = await _resolve_course(db, user, proposed["local_course_id"])
+                if _create_assignment_due_date_in_past(
+                    proposed["due_date"],
+                    user,
+                    preview_course.canvas_url,
+                ):
                     partial_plan = {
                         key: value for key, value in proposed.items() if key not in ("action", "due_date")
                     }

@@ -8,6 +8,7 @@ export interface CanvasConnectionResponse {
   id: number;
   canvas_url: string;
   created_at: string;
+  time_zone?: string | null;
 }
 
 /** Matches GET /api/v1/auth/me and PATCH /api/v1/auth/me/canvas-token responses. */
