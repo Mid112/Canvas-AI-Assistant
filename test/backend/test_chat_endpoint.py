@@ -6,13 +6,16 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
-from sqlalchemy import delete
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.config import settings
 from app.core.security import decode_access_token
 from app.main import app
 from app.models.canvas_connection import CanvasConnection
+from app.models.canvas_course_name import CanvasCourseName
+from app.models.conversation import Conversation
+from app.models.course import Course
 
 
 @pytest.fixture(scope="module")
@@ -360,6 +363,98 @@ def test_chat_reuses_conversation_course_context_on_followup(client):
     # course-switch pre-resolver (call[1]), then the main call (call[2]).
     followup_user_message = mock_adapter.generate.call_args_list[2].args[1]
     assert "CURRENT COURSE FOR THIS CONVERSATION: COSC 310" in followup_user_message
+
+
+def test_chat_refreshes_renamed_course_context_and_matches_course_code(client):
+    headers = _register(client)
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "test-token", "canvas_url": "https://canvas.example.edu"},
+            headers=headers,
+        )
+
+    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock_courses:
+        mock_courses.return_value = [
+            {
+                "id": 499,
+                "name": "COSC 333",
+                "course_code": "COSC 333",
+                "enrollment_term_id": 1,
+                "workflow_state": "available",
+            }
+        ]
+        courses = client.get(
+            "/api/v1/canvas/courses?canvas_url=https://canvas.example.edu",
+            headers=headers,
+        )
+        local_course_id = courses.json()[0]["local_id"]
+        client.patch(
+            "/api/v1/canvas/active-course",
+            json={"local_course_id": local_course_id},
+            headers=headers,
+        )
+
+    user_id = int(decode_access_token(headers["Authorization"].removeprefix("Bearer "))[0])
+
+    async def _seed_stale_conversation():
+        engine = create_async_engine(settings.DATABASE_URL)
+        Session = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            async with Session() as db:
+                await db.execute(
+                    update(Course)
+                    .where(Course.id == local_course_id)
+                    .values(name="Capstone Project", course_code="COSC 499")
+                )
+                await db.execute(
+                    update(CanvasCourseName)
+                    .where(CanvasCourseName.local_course_id == local_course_id)
+                    .values(name="COSC 333")
+                )
+                conversation = Conversation(
+                    user_id=user_id,
+                    course_id=local_course_id,
+                    course_name="COSC 333",
+                )
+                db.add(conversation)
+                await db.commit()
+                return conversation.id
+        finally:
+            await engine.dispose()
+
+    conversation_id = asyncio.run(_seed_stale_conversation())
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        '{"action": "respond", "course_name": "COSC 499", "message": "Using COSC 499."}'
+    )
+
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": "Use COSC 499 for this chat", "conversation_id": conversation_id},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    generated_user_message = mock_adapter.generate.call_args.args[1]
+    assert "Capstone Project / COSC 499" in generated_user_message
+    assert "CURRENT COURSE FOR THIS CONVERSATION: Capstone Project" in generated_user_message
+    assert "COSC 333" not in generated_user_message
+
+    async def _conversation_name():
+        engine = create_async_engine(settings.DATABASE_URL)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+                return await db.scalar(
+                    select(Conversation.course_name).where(Conversation.id == conversation_id)
+                )
+        finally:
+            await engine.dispose()
+
+    assert asyncio.run(_conversation_name()) == "Capstone Project"
 
 
 def test_chat_followup_stays_on_conversation_course_despite_conflicting_active_course(
