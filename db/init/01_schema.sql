@@ -80,8 +80,10 @@ CREATE TABLE courses (
     total_students   INTEGER,
     instructor_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     created_at       TIMESTAMPTZ DEFAULT NOW(),
-    -- composite unique: the same Canvas course can exist once per instructor (co-instructors allowed)
-    CONSTRAINT uq_course_per_instructor UNIQUE (canvas_course_id, instructor_id)
+    -- composite unique: the same Canvas course can exist once per instructor
+    -- per Canvas instance (co-instructors allowed; multi-institution hosts
+    -- with colliding numeric IDs keep separate rows)
+    CONSTRAINT uq_course_per_instructor UNIQUE (canvas_course_id, instructor_id, canvas_url)
 );
 
 CREATE INDEX idx_courses_instructor_id ON courses(instructor_id);
@@ -672,4 +674,5 @@ INSERT INTO schema_migrations (filename) VALUES
     ('038_support_tickets.sql'),
     ('039_support_ticket_assigned_admin.sql'),
     ('040_grade_history_local_relationships.sql'),
-    ('041_canvas_course_names_aliases.sql');
+    ('041_canvas_course_names_aliases.sql'),
+    ('042_course_unique_per_instructor_url.sql');
