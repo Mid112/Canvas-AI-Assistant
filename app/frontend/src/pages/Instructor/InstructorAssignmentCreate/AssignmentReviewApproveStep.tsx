@@ -3,13 +3,14 @@ import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
+import { CanvasTimezoneReadout } from "@/components/canvas/CanvasTimezoneReadout";
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDueDateForDisplay } from "@/lib/assignment-utils";
+import { formatDatetimeLocalForDisplay } from "@/lib/assignment-utils";
 import { cn } from "@/lib/utils";
 import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
 import type { GeneratedAssignmentDraft } from "@/types/assignmentCreate";
@@ -29,6 +30,7 @@ interface AssignmentReviewApproveStepProps {
   onBack: () => void;
   /** Keep parent draft state in sync with form edits (for Save draft). */
   onDraftChange?: (values: GeneratedAssignmentDraft) => void;
+  instructorTimeZone?: string;
 }
 
 export function AssignmentReviewApproveStep({
@@ -39,6 +41,7 @@ export function AssignmentReviewApproveStep({
   onApprove,
   onBack,
   onDraftChange,
+  instructorTimeZone,
 }: AssignmentReviewApproveStepProps) {
   const {
     register,
@@ -153,8 +156,12 @@ export function AssignmentReviewApproveStep({
               aria-describedby={errors.dueDate ? "review-due-date-error" : undefined}
               {...register("dueDate")}
             />
+            <CanvasTimezoneReadout timeZone={instructorTimeZone} />
             <p className="text-sm text-muted-foreground">
-              Due: {formatDueDateForDisplay(dueDateValue || null)}
+              Due:{" "}
+              {dueDateValue
+                ? formatDatetimeLocalForDisplay(dueDateValue)
+                : "No due date"}
             </p>
             {errors.dueDate ? (
               <p

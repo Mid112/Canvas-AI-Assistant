@@ -708,7 +708,7 @@ FILES
     app/frontend/src/lib/canvas-timezone.ts
     app/frontend/src/lib/assignment-utils.ts
     app/frontend/src/lib/map-chat-reply.ts
-    db/migrations/044_course_timezone.sql
+    db/migrations/044_canvas_connection_time_zone.sql
 
 WHAT AND WHY
     Assignment due-date updates could skew hours when chat emitted naive or
@@ -1076,6 +1076,83 @@ WHAT AND WHY
     sets fall back to a count. assignment_label uses resolved title when known.
 
 ================================================================================
+21. fix/course-migration-maintainance
+   Ticket 10: course-name repair migration
+================================================================================
+
+COMMITS
+    91705b2  Add migration to repair canvas course names
+    120066f  Document course-name repair migration details
+
+FILES
+    db/init/01_schema.sql
+    db/migrations/043_repair_canvas_course_names.sql
+    db/migrations/README.md
+    test/backend/test_canvas.py
+
+WHAT AND WHY
+    Existing users can have stale chat course context in two places:
+      - canvas_course_names: the connection-scoped course-name resolver index
+      - conversations.course_name: the denormalized "current course for this
+        conversation" snapshot used in chat prompts and API responses
+
+    Earlier versions of this branch tried to repair canvas_course_names.name to
+    "Name / Code". That is NOT the final design. After #1475,
+    canvas_course_names is an ALIAS TABLE: it intentionally preserves
+    historical names so instructors can keep resolving a course by an older
+    label after Canvas renames it. Prompt-facing display labels are built from
+    the current Course row, using courses.name plus courses.course_code.
+
+    Final repair policy:
+      - preserve existing canvas_course_names aliases
+      - refresh alias workflow_state from courses.workflow_state
+      - ensure the current courses.name exists as an alias for each indexed
+        Canvas course
+      - backfill conversations.course_name from courses.name
+      - keep the migration idempotent by using deterministic UPDATEs and an
+        INSERT ... ON CONFLICT path against uq_connection_canvas_course_name
+
+    The migration is numbered 043_repair_canvas_course_names.sql, not 041 or
+    042. #1475 already owns 041_canvas_course_names_aliases.sql, and #1499 now
+    owns 042_course_unique_per_instructor_url.sql on develop.
+
+ARCHITECTURE DELTA
+    * Course display truth remains Course.name / Course.course_code.
+    * canvas_course_names is resolver state, not prompt display state. It may
+      contain multiple names for the same Canvas course after #1475.
+    * conversations.course_name is repaired as part of the same one-time data
+      maintenance so CURRENT COURSE and YOUR COURSES do not disagree in old
+      chats.
+
+*** SRP WARNINGS ***
+  ! Do not pack course_code into canvas_course_names.name. It duplicates
+    prompt formatting, disagrees with #1475, and the next sync/prompt helper
+    will treat the value as a plain alias.
+  ! Do not rewrite all aliases to courses.name. That destroys rename history
+    and can collapse rows into uq_connection_canvas_course_name conflicts.
+    Add the current name alias; preserve older aliases.
+  ! If another migration lands after 043 before this PR merges, renumber this
+    file and update db/init/01_schema.sql, db/migrations/README.md, and the
+    test path together.
+
+TEST POSTURE
+    Focused static checks run locally:
+      PYTHONPATH=./app/backend app/backend/.venv/bin/python -m py_compile \
+        test/backend/test_canvas.py \
+        app/backend/app/models/canvas_course_name.py \
+        app/backend/app/services/canvas.py \
+        app/backend/app/services/chat.py
+
+      git diff --check
+
+    DB-backed pytest was not rerun in the latest conflict-resolution pass
+    because local Postgres was not listening on localhost:5433. The focused
+    regression test is:
+      test/backend/test_canvas.py::
+        test_canvas_course_name_repair_migration_updates_stale_labels_from_courses
+
+
+================================================================================
 CROSS-CUTTING NOTES
 ================================================================================
 
@@ -1092,6 +1169,13 @@ FILES TOUCHED BY MULTIPLE BRANCHES (conflict + coupling hotspots)
         7115e25c, ea8a844c.
     app/backend/app/services/llm/student_context.py
         12cd0d0d, c84c3eb7.
+    test/backend/test_canvas.py
+        fix/stale-course-context (#1475), first-course Canvas URL resolution,
+        and fix/course-migration-maintainance all touch the course-name test
+        area. Preserve both alias-refresh behavior and the 043 repair test.
+    db/migrations/*
+        Migration numbers are actively contested around 041-043. Always check
+        origin/develop and open course-migration branches before renumbering.
 
 TEST POSTURE AT TIME OF WRITING
     Backend  : 1244 passed, 1 skipped
