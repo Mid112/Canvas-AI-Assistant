@@ -6,7 +6,8 @@
 
 Cycle 22 was a high-velocity post–Testing Event 2 stabilization cycle focused on closing regression tickets, hardening AI assistant trust/grounding behaviour, and preparing the application for Final Demo and final delivery. Rather than adding major new product surfaces, the team concentrated on fixing TE2 findings across Canvas workflows, messaging, quizzes/assignments, authentication/session security, and instructor UX polish.
 
-Hours below come from the official Clockify team summary export for **07/31/2026 – 08/03/2026** (total **81:46:54**). GitHub handles map as: **Mid112 → Mridul**, **StoneCA12 → Bao**.
+Hours below come from the official Clockify team summary export for **07/31/2026 – 08/03/2026** (total **81:46:54**).
+[Clockify_Time_Report_Summary_07_31_2026-08_03_2026.pdf](https://github.com/user-attachments/files/30715764/Clockify_Time_Report_Summary_07_31_2026-08_03_2026.pdf)
 
 Collectively the team logged **81 hours, 46 minutes, and 54 seconds**. Development activity produced a large set of merged regression and polish pull requests into `develop`, while a smaller set of high-priority PRs remained open for Final Demo readiness.
 
@@ -45,8 +46,9 @@ Cycle 22 continued the board’s shift from feature delivery into final regressi
 | In Review | **0 on board** (several polish PRs still open on GitHub — see below) |
 | Done | **1155 completed items** |
 
-Board snapshot pulled from GitHub Project **team 16 project board** (project #22) while drafting this report.
+Board snapshot pulled from GitHub Project **team 16 project board**  while drafting this report.
 
+<img width="1423" height="632" alt="Screenshot 2026-08-04 at 10 48 31 AM" src="https://github.com/user-attachments/assets/de23bc22-5ea5-4966-9bc4-ec19993dcfd5" />
 ---
 
 ## Completed and Merged Tasks (Cycle 22)
@@ -119,7 +121,8 @@ Additional effort this cycle also covered PR reviews, Testing Event report refin
 
 ## Burn-up Chart / Velocity
 
-<img width="1087" height="585" alt="Cycle 22 burn-up" src="../dashboard/assets/cycle-22-burnup.png" />
+<img width="876" height="663" alt="Screenshot 2026-08-04 at 11 33 03 AM" src="https://github.com/user-attachments/assets/a7d701c7-333d-4802-a07c-07f98624e51e" />
+
 
 ### Burn-up Summary
 
@@ -153,44 +156,30 @@ Source: official Clockify **Summary report** export `Clockify_Time_Report_Summar
 
 The team logged a combined **81 hours, 46 minutes, and 54 seconds** during Cycle 22. Effort concentrated on TE2 regression fixes, PR reviews, AI grounding/analysis work, messaging/course-context polish, and Final Demo preparation.
 
-<img width="904" height="527" alt="Cycle 22 team Clockify summary" src="../dashboard/assets/cycle-22-team-clockify.png" />
+<img width="1203" height="382" alt="Screenshot 2026-08-04 at 11 34 33 AM" src="https://github.com/user-attachments/assets/f60cb501-45db-4a13-b13a-b76cb30b58b9" />
+
 
 ---
 
 ### Individual Clockify Highlights (from export)
 
 #### Yerdana — **27:41:55**
-- ui improvement: 10:24:29
-- bugfix 2: 10:11:58
-- bugfix: 07:05:28
+<img width="885" height="207" alt="Screenshot 2026-08-04 at 11 42 26 AM" src="https://github.com/user-attachments/assets/8f3a75e6-cbaa-42d7-8f5a-ec623edf1ef1" />
 
-#### Mridul (Mid112) — **21:05:08**
-- ticket 23, 24, 25 and PR reviews: 06:55:58
-- ticket 2, 18 and 33: 05:19:43
-- team meeting: 03:04:12
-- ticket 9, 10: 03:04:18
-- ticket 9,10, 23, 24, 25 and PR reviews: 02:40:57
+
+#### Mridul — **21:05:08**
+
+<img width="879" height="269" alt="Screenshot 2026-08-04 at 11 42 47 AM" src="https://github.com/user-attachments/assets/654b7eab-d389-4759-bebe-6d7ab593d02c" />
 
 #### Jessica — **14:10:58**
-- working on bug fixes and reviewing prs: 08:49:18
-- team meeting: 01:55:53
-- working on bug fixes: 01:51:53
-- working on the testing report: 00:59:23
-- creating the summary report: 00:20:00
-- reviewing prs: 00:14:31
+<img width="877" height="329" alt="Screenshot 2026-08-04 at 11 42 52 AM" src="https://github.com/user-attachments/assets/11108a0e-b07f-4e62-9a76-7dd6f7f889c4" />
 
-#### Bao (StoneCA12) — **09:44:19**
-- PRs review: 04:36:06
-- PRs review + apply 2 fixes: 02:43:00
-- meeting: 02:25:13
+
+#### Bao  — **09:44:19**
+<img width="874" height="190" alt="Screenshot 2026-08-04 at 11 42 41 AM" src="https://github.com/user-attachments/assets/59315f4d-ef83-4fc0-a0f6-0a1b0b9f043c" />
 
 #### Rhythm — **09:04:34**
-- Ticket 19 (#1443): 03:08:57
-- Team Meeting: 02:55:46
-- PR Reviews: 01:04:31
-- Ticket 15 (#1439): 00:51:00
-- Ticket 16 (#1440): 00:35:09
-- Ticket 20 (#1444): 00:29:11
+<img width="885" height="444" alt="Screenshot 2026-08-04 at 11 42 35 AM" src="https://github.com/user-attachments/assets/670b15a2-d67f-4751-a939-3042b4272dbf" />
 
 ---
 
