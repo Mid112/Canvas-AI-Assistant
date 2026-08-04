@@ -13,6 +13,7 @@ import {
 import {
   fetchCurrentUser,
   loginUser,
+  logoutUser,
   registerUser,
 } from "@/services/auth";
 import type { User } from "@/types/user";
@@ -27,6 +28,7 @@ vi.mock("@/services/auth", () => ({
   loginUser: vi.fn(),
   registerUser: vi.fn(),
   fetchCurrentUser: vi.fn(),
+  logoutUser: vi.fn(),
   AuthApiError: class AuthApiError extends Error {
     status: number;
 
@@ -43,6 +45,7 @@ const mockedClearStoredToken = vi.mocked(clearStoredToken);
 const mockedLoginUser = vi.mocked(loginUser);
 const mockedRegisterUser = vi.mocked(registerUser);
 const mockedFetchCurrentUser = vi.mocked(fetchCurrentUser);
+const mockedLogoutUser = vi.mocked(logoutUser);
 
 const mockUserResponse = {
   id: 1,
@@ -295,10 +298,11 @@ describe("AuthContext", () => {
     expect(result.current.user?.email).toBe("new@university.edu");
   });
 
-  // Verifies: Logs out and clears auth state.
+  // Verifies: Logs out, revokes the server session, and clears auth state.
   it("logs out and clears auth state", async () => {
     mockedGetStoredToken.mockReturnValue("stored-token");
     mockedFetchCurrentUser.mockResolvedValue(mockUserResponse);
+    mockedLogoutUser.mockResolvedValue(undefined);
 
     const { result } = renderHook(() => useAuth(), { wrapper });
 
@@ -307,12 +311,70 @@ describe("AuthContext", () => {
     });
 
     act(() => {
-      result.current.logout();
+      void result.current.logout();
+    });
+
+    await waitFor(() => {
+      expect(result.current.isAuthenticated).toBe(false);
     });
 
     expect(mockedClearStoredToken).toHaveBeenCalledTimes(1);
-    expect(result.current.isAuthenticated).toBe(false);
+    expect(mockedLogoutUser).toHaveBeenCalledWith("stored-token");
     expect(result.current.user).toBeNull();
     expect(result.current.accessToken).toBeNull();
+  });
+
+  // Verifies: Ticket 37 — local logout still succeeds if session revoke fails.
+  it("clears local auth even when logout API fails", async () => {
+    mockedGetStoredToken.mockReturnValue("stored-token");
+    mockedFetchCurrentUser.mockResolvedValue(mockUserResponse);
+    mockedLogoutUser.mockRejectedValue(new Error("network"));
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isAuthenticated).toBe(true);
+    });
+
+    act(() => {
+      void result.current.logout();
+    });
+
+    await waitFor(() => {
+      expect(result.current.isAuthenticated).toBe(false);
+    });
+
+    expect(result.current.accessToken).toBeNull();
+  });
+
+  // Verifies: revoke is attempted before local auth is cleared.
+  it("awaits server revoke before clearing local auth", async () => {
+    mockedGetStoredToken.mockReturnValue("stored-token");
+    mockedFetchCurrentUser.mockResolvedValue(mockUserResponse);
+
+    let revokeStarted = false;
+    let clearedBeforeRevokeFinished = false;
+    mockedLogoutUser.mockImplementation(async () => {
+      revokeStarted = true;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    mockedClearStoredToken.mockImplementation(() => {
+      if (revokeStarted) {
+        clearedBeforeRevokeFinished = true;
+      }
+    });
+
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await waitFor(() => {
+      expect(result.current.isAuthenticated).toBe(true);
+    });
+
+    await act(async () => {
+      await result.current.logout();
+    });
+
+    expect(mockedLogoutUser).toHaveBeenCalledWith("stored-token");
+    expect(clearedBeforeRevokeFinished).toBe(true);
   });
 });

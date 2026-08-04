@@ -104,6 +104,25 @@ export async function loginUser(
   });
 }
 
+export const LOGOUT_REVOKE_TIMEOUT_MS = 2_000;
+
+/** Revoke the current server session. Uses keepalive so the request can finish during navigation. */
+export async function logoutUser(token: string): Promise<void> {
+  const headers = new Headers();
+  headers.set("Content-Type", "application/json");
+  headers.set("Authorization", `Bearer ${token}`);
+
+  const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+    method: "POST",
+    headers,
+    keepalive: true,
+  });
+
+  if (!response.ok) {
+    throw new AuthApiError(await parseError(response), response.status);
+  }
+}
+
 export async function registerUser(
   credentials: RegisterCredentials,
 ): Promise<TokenResponse> {
