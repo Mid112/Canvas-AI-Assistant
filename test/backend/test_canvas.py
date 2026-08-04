@@ -778,7 +778,16 @@ def test_update_assignment(client, auth_headers):
     }
     updated = MOCK_ASSIGNMENT | {"name": "Updated Assignment"}
 
-    with patch("app.services.canvas.update_assignment", new_callable=AsyncMock) as mock:
+    with (
+        # UI updates omit points_possible; update_course_assignment fetches the
+        # live assignment to preserve the existing score before Canvas PUT.
+        patch(
+            "app.services.canvas.fetch_assignment",
+            new_callable=AsyncMock,
+            return_value=MOCK_ASSIGNMENT,
+        ),
+        patch("app.services.canvas.update_assignment", new_callable=AsyncMock) as mock,
+    ):
         mock.return_value = updated
         response = client.patch(
             f"/api/v1/canvas/courses/{local_course_id}/assignments/10?canvas_url={CANVAS_URL}",
@@ -788,10 +797,12 @@ def test_update_assignment(client, auth_headers):
 
     assert response.status_code == 200
     assert response.json()["name"] == "Updated Assignment"
-    # payload passes through AssignmentUpdate, which fills in points_possible=None
-    # for any field the client didn't send
     mock.assert_awaited_once_with(
-        12345, 10, payload | {"points_possible": None}, "test-canvas-token", CANVAS_URL
+        12345,
+        10,
+        payload | {"points_possible": MOCK_ASSIGNMENT["points_possible"]},
+        "test-canvas-token",
+        CANVAS_URL,
     )
 
 

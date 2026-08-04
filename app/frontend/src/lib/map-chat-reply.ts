@@ -192,6 +192,7 @@ function buildInterpretedAction(
   previewMetadata: Record<string, unknown> | undefined,
   conversationId?: number,
   pendingMessageId?: number,
+  timeZone?: string,
 ): AssistantResponse["interpretedAction"] | undefined {
   if (!proposed) {
     return undefined;
@@ -268,7 +269,7 @@ function buildInterpretedAction(
           name: readString(proposed.title),
           description: readString(proposed.description),
           dueDate: readString(proposed.due_date)
-            ? formatDueDateForInput(readString(proposed.due_date)!)
+            ? formatDueDateForInput(readString(proposed.due_date)!, timeZone)
             : undefined,
           pointsPossible: readNumber(proposed.points_possible) ?? null,
         },
@@ -306,6 +307,7 @@ function readRiskMetadata(value: unknown): RiskMetadata | undefined {
 function buildQuizCreateDraftState(
   proposed: Record<string, unknown>,
   conversationId?: number,
+  timeZone?: string,
 ): Record<string, unknown> {
   const questions = Array.isArray(proposed.questions)
     ? proposed.questions.map((question) => {
@@ -339,7 +341,7 @@ function buildQuizCreateDraftState(
       name: readString(proposed.title),
       description: readString(proposed.description),
       dueDate: readString(proposed.due_date)
-        ? formatDueDateForInput(readString(proposed.due_date)!)
+        ? formatDueDateForInput(readString(proposed.due_date)!, timeZone)
         : undefined,
       pointsPossible: proposed.points_possible,
       allowedAttempts: proposed.allowed_attempts,
@@ -366,10 +368,11 @@ function buildQuizCreateDraftState(
 function buildQuizCreateNavigateTo(
   proposed: Record<string, unknown>,
   conversationId?: number,
+  timeZone?: string,
 ): NonNullable<AssistantResponse["navigateTo"]> {
   return {
     path: paths.instructor.quizCreate,
-    state: buildQuizCreateDraftState(proposed, conversationId),
+    state: buildQuizCreateDraftState(proposed, conversationId, timeZone),
   };
 }
 
@@ -482,12 +485,13 @@ function buildQuizCreateFormAction(
   proposed: Record<string, unknown>,
   previewMetadata: Record<string, unknown> | undefined,
   conversationId?: number,
+  timeZone?: string,
 ): NonNullable<AssistantResponse["interpretedAction"]> {
   const courseLabel =
     readString(previewMetadata?.course_name) ??
     readString(previewMetadata?.course) ??
     "Active course";
-  const draftState = buildQuizCreateDraftState(proposed, conversationId);
+  const draftState = buildQuizCreateDraftState(proposed, conversationId, timeZone);
 
   return {
     action: "Create Quiz",
@@ -527,6 +531,7 @@ export function mapChatReplyToAssistantResponse(
   reply: Record<string, unknown>,
   isError: boolean,
   conversationId?: number,
+  timeZone?: string,
 ): AssistantResponse {
   if (isError || reply.error) {
     const requiresCanvasToken = reply.requires_canvas_token === true;
@@ -580,11 +585,12 @@ export function mapChatReplyToAssistantResponse(
           "Opening the quiz creation form with your draft…",
         explanation:
           "Quiz creation happens in the dedicated form so the write is reviewed once and recorded in workflow history.",
-        navigateTo: buildQuizCreateNavigateTo(proposed, conversationId),
+        navigateTo: buildQuizCreateNavigateTo(proposed, conversationId, timeZone),
         interpretedAction: buildQuizCreateFormAction(
           proposed,
           previewMetadata,
           conversationId,
+          timeZone,
         ),
       };
     }
@@ -640,6 +646,7 @@ export function mapChatReplyToAssistantResponse(
         previewMetadata,
         conversationId,
         pendingMessageId,
+        timeZone,
       ),
       pendingMessageId,
       additionalPreviews,

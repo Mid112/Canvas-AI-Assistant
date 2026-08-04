@@ -1,7 +1,6 @@
 import html
 import json
 import re
-from datetime import datetime
 
 import httpx
 from fastapi import HTTPException, status
@@ -9,6 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.preview import AssignmentDraftRequest, AssignmentDraftResponse
 from app.services.ai_health import record_ai_call_outcome
+from app.services.canvas_timezone import get_instructor_canvas_timezone_for_user
+from app.services.due_date import normalize_due_date_to_utc_iso, parse_due_date
 from app.services.llm.json_extraction import loads_llm_json
 from app.services.llm.llm_setting import get_llm_adapter
 from app.services.llm.provider_registry import get_active_llm_config
@@ -99,11 +100,13 @@ async def generate_assignment_draft(
 
     await record_ai_call_outcome(db, user_id, llm_config.provider, operation="assignment_draft")
 
+    instructor_timezone = await get_instructor_canvas_timezone_for_user(db, user_id)
     due_at = None
     if data.get("due_at"):
+        normalized = normalize_due_date_to_utc_iso(str(data["due_at"]), instructor_timezone)
         try:
-            due_at = datetime.fromisoformat(str(data["due_at"]).replace("Z", "+00:00"))
-        except ValueError:
+            due_at = parse_due_date(normalized, instructor_timezone)
+        except (ValueError, TypeError, OverflowError):
             due_at = None
 
     return AssignmentDraftResponse(

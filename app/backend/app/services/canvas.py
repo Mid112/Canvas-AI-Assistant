@@ -1293,19 +1293,43 @@ async def update_course_assignment(
         exclude_workflow_id=exclude_workflow_id,
     )
 
+    # Canvas PUT is a full overwrite. The UI update form does not send
+    # points_possible, so None would wipe the existing score — fill from
+    # the live assignment first (#1435). Chat merges points before calling
+    # here, so skip the extra fetch when points are already present.
+    due_at = payload.due_at
+    if due_at is not None and due_at.tzinfo is None:
+        due_at = due_at.replace(tzinfo=UTC)
+    elif due_at is not None:
+        due_at = due_at.astimezone(UTC)
+
+    points_possible = payload.points_possible
+    if points_possible is None:
+        current = await get_assignment(
+            course.id, assignment_id, user, resolved_canvas_url, db
+        )
+        points_possible = current.points_possible
+
+    merged = AssignmentUpdate(
+        name=payload.name,
+        description=payload.description,
+        due_at=due_at,
+        points_possible=points_possible,
+    )
+
     key = idempotency_key or build_idempotency_key(
         "update_assignment",
         user.id,
         course.id,
         assignment_id,
-        payload.model_dump(mode="json"),
+        merged.model_dump(mode="json"),
     )
 
     async def _write() -> dict:
         return await update_assignment(
             int(course.canvas_course_id),
             assignment_id,
-            payload.model_dump(mode="json"),
+            merged.model_dump(mode="json"),
             token,
             resolved_canvas_url,
         )
