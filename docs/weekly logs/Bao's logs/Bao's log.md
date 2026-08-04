@@ -1147,3 +1147,54 @@ Total: 9 hours
 - Merge `bugfix/Permission-troubleshooting-page` into `develop`
 - Confirm/resolve the Vite dev-proxy bug, dev Postgres DB reset, and `make e2e-up` Windows compatibility — all still carried from Cycles 18–20
 - Audit other admin-facing free-text fields for the unredacted-credential class of bug (carried from Cycle 19)
+
+---
+
+# Cycle 22 Report: July 31 – August 3
+
+## Timesheet
+
+### Clockify Report
+
+- 31/7 (Friday): Team meeting – 2h 25m 13s 
+- 1/8 (Saturday): PR review – 3h 10m 44s 
+- 2/8 (Sunday): PR review + applied 2 bug fixes – 2h 43m 00s 
+- 3/8 (Monday night): PR review – 1h 25m 22s 
+
+**Total (clocked): ~9h 44m 19s**
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting (Friday, 31/7)
+- Attended the team meeting, 10:00AM–12:25PM.
+<img width="2215" height="125" alt="Screenshot 2026-08-04 110712" src="https://github.com/user-attachments/assets/6995354f-7b49-4bb1-959f-cdc722c31898" />
+
+### 2: Merged `bugfix/Permission-troubleshooting-page` into `develop` (Friday night, 31/7)
+- **PR #1462** merged into `develop` at 23:39 on 31/7, closing the "merge into develop" item carried from Cycle 21 — lands the Troubleshooting `needs_token_reset` gating and the Review Permissions "Reconnect Canvas" copy/icon fix from that branch.
+<img width="2244" height="131" alt="Screenshot 2026-08-04 110717" src="https://github.com/user-attachments/assets/6f1cab0e-a78f-4051-a82e-1711ff2e9e3d" />
+
+### 3: PR Review Sessions (Saturday 1/8, Sunday night 2/8, Monday night 3/8)
+- Reviewed teammate PRs across three sessions (3h10m44s Saturday, plus review time folded into the Sunday-night and Monday-night blocks below).
+<img width="2247" height="132" alt="Screenshot 2026-08-04 110721" src="https://github.com/user-attachments/assets/4c61facc-9c0d-42c2-829c-b2687b36905a" />
+
+### 4: Two Bug Fixes — Pending-Action Status Treatment + Active-Course Sidebar Badge (Sunday night 2/8, spilling into Monday 3/8)
+- `add bug fixes`:
+  - **Chat pending-action status**: `PendingActionControls.tsx`'s terminal states (confirmed/executing/superseded/failed/cancelled) were a single plain-text line with no visual distinction between them; replaced with a per-state icon + color treatment (spinner for "executing", muted check for "confirmed", destructive red with `role="alert"` for "failed", etc.) so a failed action reads distinctly from a routine confirmation.
+  - **Active-course sidebar badge**: new `ActiveCourseSidebarBadge.tsx`, mounted in `Sidebar.tsx` for the instructor role — surfaces the currently-selected course persistently in the nav sidebar instead of only on pages that have their own course switcher.
+  - Added matching test coverage/mocks in `DashboardLayout.test.tsx` and `Sidebar.test.tsx`.
+<img width="2244" height="130" alt="Screenshot 2026-08-04 110726" src="https://github.com/user-attachments/assets/afc03b54-77b2-4c91-ae7c-817cf6751544" />
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- One of Cycle 21's three carried goals landed cleanly: `bugfix/Permission-troubleshooting-page` is merged into `develop`. Two additional small fixes went out this cycle (pending-action status clarity, active-course sidebar visibility), alongside the meeting and PR review time.
+
+### Retrospective:
+- The Vite dev-proxy bug, dev Postgres DB reset, `make e2e-up` Windows compatibility, and the unredacted-credential field audit are all still untouched as well.
+
+## Next Cycle Goals
+- New from the issue board: **#1318** Deployment Package, **#1319** Deployment Validation, **#1320** Reliability & Error Handling Validation Service, **#1321** Reliability Validation
