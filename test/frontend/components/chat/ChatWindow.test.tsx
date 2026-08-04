@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
 import { MemoryRouter } from "react-router-dom";
@@ -251,6 +251,172 @@ describe("ChatWindow", () => {
     expect(
       screen.queryByText(/temporarily unavailable|Something went wrong/i),
     ).not.toBeInTheDocument();
+  });
+
+  // Verifies (#1439): Shows stage-aware loading feedback immediately and clears it on success.
+  it("shows stage-aware loading feedback immediately and clears it on success", async () => {
+    const user = userEvent.setup();
+    let resolveRequest!: (value: {
+      content: string;
+      conversationId: number;
+      explanation: string;
+    }) => void;
+
+    mockedSendAssistantMessage.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRequest = resolve;
+        }),
+    );
+
+    renderWithInstitution(<ChatWindow />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "Show missing submissions",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(
+      await screen.findByRole("status", { name: "Analyzing data…" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Analyzing data…")).toBeInTheDocument();
+
+    resolveRequest({
+      content: "Here are the missing submissions.",
+      conversationId: 1,
+      explanation: "Analyzed submission data.",
+    });
+
+    expect(
+      await screen.findByText("Here are the missing submissions."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("status", { name: "Analyzing data…" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Analyzing data…")).not.toBeInTheDocument();
+  });
+
+  // Verifies (#1439): Clears loading feedback on error so Retry is usable.
+  it("clears loading feedback when the request fails", async () => {
+    const user = userEvent.setup();
+
+    mockedSendAssistantMessage.mockRejectedValueOnce(
+      new AssistantApiError(
+        "The assistant is temporarily unavailable. Please try again.",
+      ),
+    );
+
+    renderWithInstitution(<ChatWindow />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "Create an assignment",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(
+      await screen.findByText(/assistant is temporarily unavailable/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Connecting to Canvas…")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();
+  });
+
+  // Verifies (#1439): Clears loading feedback on cancel/stop.
+  it("clears loading feedback when the request is stopped", async () => {
+    const user = userEvent.setup();
+
+    mockedSendAssistantMessage.mockImplementation(
+      (_token, _text, options) =>
+        new Promise((_resolve, reject) => {
+          const signal = options?.signal;
+          if (!signal) {
+            reject(new Error("expected abort signal"));
+            return;
+          }
+          signal.addEventListener("abort", () => {
+            reject(new DOMException("Aborted", "AbortError"));
+          });
+        }),
+    );
+
+    renderWithInstitution(<ChatWindow />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "What can you help me with?",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(
+      await screen.findByRole("status", { name: "Thinking…" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Stop response" }));
+
+    expect(await screen.findByText("Stopped.")).toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Thinking…" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Thinking…")).not.toBeInTheDocument();
+  });
+
+  // Verifies (#1439): Advances loading copy and shows a long-wait note while pending.
+  it("advances loading stage copy and shows a long-wait note", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+    });
+    let resolveRequest!: (value: {
+      content: string;
+      conversationId: number;
+      explanation: string;
+    }) => void;
+
+    mockedSendAssistantMessage.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveRequest = resolve;
+        }),
+    );
+
+    try {
+      renderWithInstitution(<ChatWindow />);
+
+      await user.type(
+        screen.getByRole("textbox", { name: "Chat message" }),
+        "What can you help me with?",
+      );
+      await user.click(screen.getByRole("button", { name: "Send message" }));
+
+      expect(
+        await screen.findByRole("status", { name: "Thinking…" }),
+      ).toBeInTheDocument();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(8000);
+      });
+
+      expect(
+        screen.getByRole("status", { name: "Generating response…" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("Taking longer than usual. You can stop and try again."),
+      ).toBeInTheDocument();
+
+      resolveRequest({
+        content: "I can help with Canvas tasks.",
+        conversationId: 1,
+        explanation: "General help.",
+      });
+
+      expect(
+        await screen.findByText("I can help with Canvas tasks."),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("Taking longer than usual. You can stop and try again."),
+      ).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // Verifies: Shows an error banner and retry button when the request fails.
