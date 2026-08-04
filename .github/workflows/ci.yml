@@ -371,6 +371,7 @@ jobs:
     - self-hosted
     - macOS
     - ARM64
+    timeout-minutes: 30
     needs: [backend-test, frontend-test, e2e-test]
     if: always() && !failure() && !cancelled()
     steps:
@@ -380,20 +381,23 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Build backend image
-        uses: docker/build-push-action@v5
+        timeout-minutes: 10
+        uses: docker/build-push-action@v6
         with:
           context: ./app/backend
           push: false
           tags: app-backend:test
       - name: Build frontend image
-        uses: docker/build-push-action@v5
+        timeout-minutes: 15
+        uses: docker/build-push-action@v6
         with:
           context: ./app/frontend
           push: false
           tags: app-frontend:test
       # Feature 13 (#862): verify the Dockerized MCP image still builds in CI.
       - name: Build MCP image
-        uses: docker/build-push-action@v5
+        timeout-minutes: 10
+        uses: docker/build-push-action@v6
         with:
           context: ./app/mcp
           push: false

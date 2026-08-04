@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.config import settings
 from app.main import app
+from app.models.canvas_course_name import CanvasCourseName
 from app.models.course import Course
 from app.models.user import User
 
@@ -113,12 +114,14 @@ def _register_with_canvas(client) -> dict:
     return headers
 
 
-def _sync_local_course(client, headers, canvas_id: int = 12345) -> int:
+def _sync_local_course(
+    client, headers, canvas_id: int = 12345, canvas_url: str = CANVAS_URL
+) -> int:
     courses = [_unique_course(canvas_id)]
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
         mock.return_value = courses
         response = client.get(
-            f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}",
+            f"/api/v1/canvas/courses?canvas_url={canvas_url}",
             headers=headers,
         )
 
@@ -241,6 +244,36 @@ def test_list_courses_upsert_is_idempotent(client, auth_headers):
     assert r1.json()[0]["local_id"] == r2.json()[0]["local_id"]
 
 
+# Verifies: Ticket 34 — same canvas_course_id under two canvas_urls for one
+# instructor must create two local course rows (unique constraint includes
+# canvas_url), without overwriting the other institution's row.
+def test_sync_same_canvas_course_id_across_institutions(client):
+    headers = _register_with_canvas(client)
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "other-token", "canvas_url": OTHER_CANVAS_URL},
+            headers=headers,
+        )
+
+    colliding_id = 34_001
+    local_a = _sync_local_course(
+        client, headers, canvas_id=colliding_id, canvas_url=CANVAS_URL
+    )
+    local_b = _sync_local_course(
+        client, headers, canvas_id=colliding_id, canvas_url=OTHER_CANVAS_URL
+    )
+
+    assert local_a != local_b
+
+    # Re-sync institution A: still the same row, and B remains distinct.
+    local_a_again = _sync_local_course(
+        client, headers, canvas_id=colliding_id, canvas_url=CANVAS_URL
+    )
+    assert local_a_again == local_a
+    assert local_a_again != local_b
+
+
 # Verifies: List courses term name populated.
 def test_list_courses_term_name_populated(client, auth_headers):
     """term_name is extracted from the nested Canvas term object."""
@@ -303,6 +336,54 @@ def test_create_course(client, auth_headers):
     assert body["name"] == "New Capstone"
     mock_create.assert_awaited_once()
     assert mock_create.await_args.kwargs["offer"] is True
+
+
+# Verifies: Ticket 34 — creating a course on a second institution with the
+# same Canvas course id as an existing local row must insert, not fail unique.
+def test_create_course_same_canvas_id_across_institutions(client):
+    headers = _register_with_canvas(client)
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": "other-token", "canvas_url": OTHER_CANVAS_URL},
+            headers=headers,
+        )
+
+    colliding_id = 34_002
+    local_a = _sync_local_course(
+        client, headers, canvas_id=colliding_id, canvas_url=CANVAS_URL
+    )
+    created = {
+        "id": colliding_id,
+        "name": "Other Host Course",
+        "course_code": "OHC",
+        "workflow_state": "unpublished",
+        "total_students": 0,
+    }
+    with (
+        patch(
+            "app.services.canvas.fetch_accounts",
+            new_callable=AsyncMock,
+            return_value=[{"id": 1, "parent_account_id": None}],
+        ),
+        patch(
+            "app.services.canvas.create_course",
+            new_callable=AsyncMock,
+            return_value=created,
+        ),
+    ):
+        response = client.post(
+            f"/api/v1/canvas/courses?canvas_url={OTHER_CANVAS_URL}",
+            json={"name": "Other Host Course", "course_code": "OHC"},
+            headers=headers,
+        )
+
+    assert response.status_code == 201, response.json()
+    body = response.json()
+    assert body["canvas_id"] == colliding_id
+    assert body["local_id"] is not None
+    assert body["local_id"] != local_a
+    assert body["name"] == "Other Host Course"
 
 
 # Verifies: Create course rejects empty name.
@@ -1185,12 +1266,11 @@ def test_sync_courses_if_stale_respects_cooldown(client):
         assert mock.call_count == 2
 
 
-# Verifies: canvas_course_names is never overwritten once synced.
-def test_canvas_course_names_never_overwritten_once_synced(client):
-    """canvas_course_names is insert-once (ON CONFLICT DO NOTHING) — a
-    rename on Canvas between syncs must not retroactively change what an
-    in-progress chat conversation has already been calling a course, even
-    though Course.name (the dashboard's view) does pick up the rename."""
+# Verifies: canvas_course_names preserves aliases when Canvas renames a course.
+def test_canvas_course_names_refreshed_on_sync(client):
+    """canvas_course_names is the chat resolver's connection-scoped alias
+    index: a Canvas rename must add the new name without dropping the old
+    one, while prompts still display only the current Course row."""
     from app.config import settings as app_settings
 
     headers = _register_with_canvas(client)
@@ -1220,16 +1300,32 @@ def test_canvas_course_names_never_overwritten_once_synced(client):
         # Course.name picks up the rename...
         assert set_resp_2.json()["name"] == "Renamed"
 
-    # ...but canvas_course_names — what the chat pipeline shows the LLM —
-    # keeps the name it first saw.
+    async def _alias_names() -> list[str]:
+        engine = create_async_engine(settings.DATABASE_URL)
+        try:
+            Session = async_sessionmaker(engine, expire_on_commit=False)
+            async with Session() as db:
+                rows = await db.scalars(
+                    select(CanvasCourseName)
+                    .where(CanvasCourseName.local_course_id == local_id)
+                    .order_by(CanvasCourseName.name)
+                )
+                return [row.name for row in rows]
+        finally:
+            await engine.dispose()
+
+    assert asyncio.run(_alias_names()) == ["Original Name", "Renamed"]
+
+    # The chat pipeline shows the current name, not the stale first-seen
+    # alias from canvas_course_names.
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = '{"action": "respond", "message": "OK."}'
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
         client.post("/api/v1/chat/", json={"message": "hi"}, headers=headers)
 
     sent_message = mock_adapter.generate.call_args.args[1]
-    assert "Original Name" in sent_message
-    assert "Renamed" not in sent_message
+    assert "Renamed" in sent_message
+    assert "Original Name" not in sent_message
 
 
 # ---------------------------------------------------------------------------
