@@ -1500,3 +1500,135 @@ The Kimi-K3 investigation was a good reminder to check runtime state before assu
 - Finish the live e2e verification against the Canvas sandbox (carryover)
 - Decide whether to extend natural language assignment resolution to update_assignment (carryover)
 
+
+
+
+
+
+
+
+
+
+# Cycle 22 personal log: 31/7 – 3/8 (July 31 – August 3)
+
+## Timesheet
+
+### Clockify Report
+<img width="1226" height="550" alt="Screenshot 2026-08-04 at 10 43 55 AM" src="https://github.com/user-attachments/assets/36894004-8300-4533-aa28-8f6fe884143b" />
+
+
+- **31/7 (Friday):** 07:05:28
+- **1/8 (Saturday):** 10:24:29
+- **2/8 (Sunday):** 10:11:58
+- **3/8 (Monday):** 07:23:28
+
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Separated PII redaction from output grounding (bugfix/pii-resolve, PR #1497)
+
+- Fixed bug 13 from manual QA. Redaction was being applied to text the instructor reads, not just to what the LLM receives
+- Root cause was one module doing two unrelated jobs: `student_context.py` handled both inbound PII minimisation and outbound fact grounding, so a privacy control started censoring the instructor's own message text in write previews
+- Split the two concerns. Redaction now applies only on the path into the model; the reply the instructor reads is left intact
+- Where a claim genuinely cannot be verified, the reply now carries an `unverified_claims` notice instead of blanking the number, so aggregates like a class average survive but are flagged
+
+### #2: Acted on review feedback for the grounding change (commit c84c3eb7)
+
+- A teammate raised two points on #1497. Checked both against the code rather than assuming, and both held
+- P1: my exemption for `intent_preview` summaries was too broad. Two different producers emit that shape, and only one of them is server-composed text. The other is model free text that can cite a Canvas ID nothing retrieved. Narrowed the exemption to server-composed summaries only, decided from the payload rather than a marker field so nothing leaks into stored message JSON
+- P2: an ID that the scrubber already rewrote to `[ID redacted]` was also being listed in the "could not be verified" notice, pointing the instructor at a figure no longer on screen. Dropped it from the notice
+- Proving P1 was a real regression mattered: `develop` had no gate at all on that path, so the over-broad exemption was something I had introduced, not a pre-existing gap
+- Later added the missing coverage for a fabricated statistic reaching a drafted announcement, which is the highest-stakes surface in the product
+
+### #3: Gave the dashboard's submission analysis a real Canvas read (bugfix/analyse-missing-submissions, PR #1498)
+
+- Fixed bug 12 from manual QA. The "Analyse Missing Submissions" button had no tool behind it, so the model answered from nothing and invented submission rates that contradicted the instructor's actual course
+- Added a course-wide chain that walks every assignment and reuses the existing `compute_submissions_by_status`, so "missing" and "late" keep exactly the definitions `resolved_set.py` already defines rather than being redefined in the chat layer
+
+### #4: Acted on five review points for the analysis chain
+
+- Verified all five against the code before changing anything. All five were valid
+- A late scan finding nothing was reporting that every student is "up to date". A late scan only proves nothing arrived late; it says nothing about work never submitted. Split the copy so the late case names the category it did not cover
+- Draft assignments were being counted, which makes every active student look missing on work they were never assigned. `course_overview.py` already drew this exact line for the dashboard with the same reasoning, so the chat answer was contradicting the dashboard. Filtered to published
+- Found a related gap the review did not catch: the MCP path drops `published` entirely when it rebuilds each assignment, so the filter would have been a no-op there. Added the field to that mapper
+- Truncated name lists were shown beside full counts, so a partial list read as the complete roster. Truncation is now tracked per assignment and the line says "showing N"
+- Per-assignment student names were being replayed into every later prompt in the conversation. Compacted this action's stored history to counts. The reviewer's suggested fix would still have leaked, because the summary embeds the same names, so the summary is only carried verbatim in the nothing-matched case
+- The roster was re-fetched from Canvas once per assignment. Extracted `active_roster_names` and fetch it once for the whole scan
+
+### #5: Bound saved drafts to their own course (bugfix/draft-course-persist)
+
+- Fixed a bug found in manual QA. A draft saved against one course reopened on whichever course happened to be active at resume time, silently retargeting the write
+- Drafts store no identifiers by design (#1239), so the fix persists the course's two display labels and resolves them back to an id at resume. Both labels are kept because either can change independently
+- Ambiguous matches deliberately resolve to nothing rather than guessing
+
+### #6: Acted on review feedback for per-draft gating
+
+- The course-selection gate was computed once for the whole panel, so one self-resolving draft turned it off for the entire list. A legacy draft's Resume stayed enabled and silently did nothing when clicked
+- Reproduced it before fixing. Resolution is now per draft, through one map that both the resume handler and the panel read, so the button's state and what resuming actually does cannot drift apart
+- Also caught a refactor that had dropped the `setDraft` call consuming the generator's result. The generator ran on every chat handoff and its output was discarded, so the vague description reached Review unchanged. CI reported this only as an unused variable
+
+### #7: Closed two audit holes on the assignment create endpoint (bugfix/creator-workflow-audit)
+
+- Conversation ownership was validated after the Canvas write, so a foreign id returned 404 with the assignment already created and no Workflow or AuditLog recorded. Moved the check ahead of the write
+- The workflow claim was held open past the audit insert, against `_claim_pending_workflow`'s documented contract. Because the Canvas write commits independently, any failure in that window rolled the pending to executed transition back while the assignment stayed live in Canvas, reproducing the exact bug the endpoint exists to fix
+- Reproduced that one in a test before fixing. It failed with `assert 'pending' == 'executed'`
+
+### #8: Fixed quiz point distribution and quiz/assignment routing (bugfix/quiz-assignment-diff, PR #1519)
+
+- Fixed bug 8. A generated quiz's per-question points did not add up to its stated total
+- Chose scaling over even splitting so a deliberately weighted quiz keeps its shape, with the rounding drift absorbed in the last question so the sum is exact
+- Made per-question and total points editable so an instructor can redistribute freely
+- Fixed bug 8b. The review step never showed the answer choices, so the instructor was approving a quiz they could not fully see
+- Fixed bug 9. Typing a quiz request into the assignment form now offers a dismissible switch to the Quiz Creator
+
+
+
+
+
+## Progress Update (since 31/07/2026)
+
+| TASK/ISSUE #                                                          | STATUS            |
+| --------------------------------------------------------------------- | ----------------- |
+| Fix bug 13, redact only for the LLM (PR #1497)                        | Merged (4/8)      |
+| Act on review feedback for the grounding exemption                    | Completed (2/8)   |
+| Add grounding coverage for a fabricated stat in a preview             | Completed (3/8)   |
+| Fix bug 12, real Canvas read behind submission analysis (PR #1498)    | Merged (4/8)      |
+| Act on five review points for the analysis chain                      | Completed (4/8)   |
+| Bind saved drafts to their own course                                 | Completed (2/8)   |
+| Act on review feedback, per-draft resume gating                       | Completed (3/8)   |
+| Close two audit holes on the assignment create endpoint               | Completed (3/8)   |
+| Fix bugs 8 and 9, quiz points and quiz/assignment routing (PR #1519)  | Merged (4/8)      |
+| Fix bug 19 and bug 21 diagnosis, timezone and preview identifiers     | Completed (1/8)   |
+| Write changes.txt architecture changelog (PR #1518)                   | Merged (2/8)      |
+| Diagnose docker-build CI failure                                      | Completed (3/8)   |
+| Investigate slow CI on the self-hosted runner                         | Completed (4/8)   |
+| Resolve merge conflicts across the branch stack                       | Completed (4/8)   |
+| Fix develop-wide backend failure from the Canvas timezone fetch       | Completed (4/8)   |
+| Review teammate branches: ticket-13, ticket-34, course-migration      | Completed (2/8)   |
+| Push and open PR for the Canvas timezone fix                          | Not Started       |
+| Live e2e verification against Canvas sandbox (carryover)              | Not Started       |
+| Decide on extending resolution to update_assignment (carryover)       | Not Started       |
+
+## Cycle 22 Goal Review
+
+### Reflection:
+
+Most of this cycle was responding to review feedback rather than writing new features, and the habit that paid off was reproducing each claim before touching anything. Every review point I acted on this cycle got a failing test first, and that changed the outcome twice. On the workflow claim, the failing test printed `assert 'pending' == 'executed'`, which confirmed the reviewer's reasoning exactly. On the per-draft gating, reproducing it showed the disabled-button scenario was real rather than theoretical.
+
+It also protected me in the other direction. When the backend suite collapsed after a merge, the instinct was to assume my conflict resolution broke it. Checking clean `origin/develop` first showed 11 of 13 tests failing there too, which turned a self-inflicted-looking problem into a develop-wide bug worth fixing for everyone. The same check on the `timeZone` scope bug showed develop's docker-build was already broken before my merge touched it.
+
+The other theme was scope discipline under review pressure. Twice I started making a change that was correct but out of scope, and backed it out: a `print` to `logger` conversion that belonged to a different branch's review and would have conflicted with it, and a comment asserting an import cycle I had not actually verified. Testing the cycle claim took one command and showed there was no cycle at all.
+
+### Retrospective:
+
+The reviewer's suggested fix for the history leak would not have worked. The advice was to compact the stored history to "the summary plus counts", but the summary embeds the same student names, so following it literally would have left the leak in place while looking fixed. Taking the reasoning rather than the prescription is what caught it. Worth remembering that a review comment identifies a problem correctly far more often than it prescribes the right fix.
+
+The `published` filter was a near miss in the same shape. The fix was correct for the normal path but silently a no-op under MCP, because that mapper rebuilds assignments field by field and drops `published`. Nothing in the review mentioned it. Next time I add a filter on a field, I should check every producer of that field, not just the one in front of me.
+
+## Next Cycle Goals
+
+- Work on the profanity a bit more to catch sneaky users from sneaking in offensive words
+- Finish the live e2e verification against the Canvas sandbox
+
+
+
