@@ -1,13 +1,17 @@
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Outlet, Route, Routes } from "react-router-dom";
 
 import { institutionCourseData } from "@/data/institutionCourseData";
-import { mockMessageDraft } from "@/data/mockMessageDraft";
+import {
+  mockMessageDraft,
+  mockMessageTemplates,
+} from "@/data/mockMessageDraft";
 import { InstructorCourseMessagesPage } from "@/pages/Instructor/InstructorCourse/InstructorCourseMessagesPage";
 import type { InstructorCourseOutletContext } from "@/pages/Instructor/InstructorCourse/instructorCourseLayoutContext";
 import { fetchMessageDraft, sendMessageDraft } from "@/services/messageDraft";
+import { listMessageTemplates } from "@/services/messageTemplates";
 import { fetchCourseStudentsWithSubmissionFallback } from "@/services/students";
 import type { InstructorCourse } from "@/types/course";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
@@ -25,6 +29,16 @@ vi.mock("@/services/messageDraft", () => ({
   isMessageDraftSendMocked: false,
   fetchMessageDraft: vi.fn(),
   sendMessageDraft: vi.fn(),
+}));
+
+vi.mock("@/services/messageTemplates", () => ({
+  MessageTemplateApiError: class MessageTemplateApiError extends Error {
+    name = "MessageTemplateApiError";
+  },
+  listMessageTemplates: vi.fn(),
+  createMessageTemplate: vi.fn(),
+  updateMessageTemplate: vi.fn(),
+  deleteMessageTemplate: vi.fn(),
 }));
 
 vi.mock("@/services/students", () => ({
@@ -58,6 +72,7 @@ vi.mock("@/contexts/AuthContext", async () => {
 const mockedFetchDraft = vi.mocked(fetchMessageDraft);
 const mockedSendDraft = vi.mocked(sendMessageDraft);
 const mockedFetchStudents = vi.mocked(fetchCourseStudentsWithSubmissionFallback);
+const mockedListTemplates = vi.mocked(listMessageTemplates);
 
 function CourseMessagesRoute({
   routeCourse = course,
@@ -84,6 +99,10 @@ function CourseMessagesRoute({
 }
 
 describe("InstructorCourseMessagesPage", () => {
+  beforeEach(() => {
+    mockedListTemplates.mockResolvedValue([...mockMessageTemplates]);
+  });
+
   // Verifies: Loads course recipients and renders the message draft editor.
   it("loads course recipients and renders the message draft editor", async () => {
     mockedFetchStudents.mockResolvedValue([
