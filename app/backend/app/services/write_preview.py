@@ -1,6 +1,4 @@
 # app/backend/app/services/write_preview.py
-from datetime import datetime
-
 from app.mcp_tools.schemas import get_risk_level, is_reversible
 from app.models.course import Course
 from app.services.risk import classify_action_risk
@@ -302,12 +300,10 @@ def _preview_generic(course: Course, params: dict) -> dict:
 
 
 def _format_due_date(due_date: str | None) -> str:
-    if not due_date:
-        return "No due date set"
-    try:
-        return datetime.fromisoformat(due_date).strftime("%B %d, %Y at %I:%M %p")
-    except ValueError:
-        return due_date
+    # Same UTC-normalized instant the update payload sends to Canvas (#1435).
+    from app.services.due_date import format_due_date_for_preview
+
+    return format_due_date_for_preview(due_date)
 
 
 def _preview_safety_fields(action_type: str, params: dict) -> dict:
