@@ -675,4 +675,5 @@ INSERT INTO schema_migrations (filename) VALUES
     ('039_support_ticket_assigned_admin.sql'),
     ('040_grade_history_local_relationships.sql'),
     ('041_canvas_course_names_aliases.sql'),
-    ('042_course_unique_per_instructor_url.sql');
+    ('042_course_unique_per_instructor_url.sql'),
+    ('043_repair_canvas_course_names.sql');
