@@ -12,7 +12,7 @@ from app.core.security import (
     hash_token,
     verify_password,
 )
-from app.integrations.canvas import validate_token
+from app.integrations.canvas import fetch_self, validate_token
 from app.models.audit_log_session import AuditLogSession
 from app.models.canvas_connection import CanvasConnection
 from app.models.password_reset_token import PasswordResetToken
@@ -301,6 +301,8 @@ async def remove_canvas_connection(db: AsyncSession, user: User, connection_id: 
 async def update_canvas_token(db: AsyncSession, user: User, canvas_token: str, canvas_url: str) -> User:
     await validate_token(canvas_token, canvas_url)
     encrypted = encrypt_canvas_token(canvas_token)
+    profile = await fetch_self(canvas_token, canvas_url)
+    canvas_time_zone = profile.get("time_zone") if isinstance(profile.get("time_zone"), str) else None
 
     existing = await db.scalar(
         select(CanvasConnection).where(
@@ -311,8 +313,16 @@ async def update_canvas_token(db: AsyncSession, user: User, canvas_token: str, c
     action = "canvas_connection_updated" if existing else "canvas_connection_added"
     if existing:
         existing.encrypted_token = encrypted
+        existing.time_zone = canvas_time_zone
     else:
-        db.add(CanvasConnection(user_id=user.id, canvas_url=canvas_url, encrypted_token=encrypted))
+        db.add(
+            CanvasConnection(
+                user_id=user.id,
+                canvas_url=canvas_url,
+                encrypted_token=encrypted,
+                time_zone=canvas_time_zone,
+            )
+        )
 
     db.add(AuditLogSession(user_id=user.id, action=action, details={"canvas_url": canvas_url}))
     await db.commit()
