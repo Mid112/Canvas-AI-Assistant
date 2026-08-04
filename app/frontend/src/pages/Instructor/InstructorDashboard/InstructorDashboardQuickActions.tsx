@@ -34,8 +34,11 @@ const actionIcons = {
 const quickActionPrompts: Record<string, string> = {
   "draft-announcement":
     "Draft a student message or course announcement for my active course. Propose a send_message action I can review and edit before sending.",
+  // Names the backing read action's job directly. The old wording ("grade
+  // and submission performance analysis") had no tool behind it, so the
+  // model answered from nothing and invented submission rates (#12).
   "grade-analysis":
-    "Give me a grade and submission performance analysis for my active course.",
+    "Analyse missing submissions for my active course. Show the overview and list the students who haven't submitted.",
 };
 
 export function InstructorDashboardQuickActions({
