@@ -308,6 +308,59 @@ def test_change_password_success(client):
     assert login_new.status_code == 200
 
 
+def test_change_password_revokes_other_sessions(client):
+    """Ticket 35 (#1480): password change keeps the current session and
+    invalidates every other active session for that user."""
+    import time
+
+    password = "secret123"
+    email = f"pwd_sess_{uuid.uuid4()}@example.com"
+    first = client.post(
+        "/api/v1/auth/register",
+        json={"name": "Pwd Session User", "email": email, "password": password},
+    )
+    assert first.status_code == 201
+    token_a = first.json()["access_token"]
+    headers_a = {"Authorization": f"Bearer {token_a}"}
+
+    # JWT payloads only encode second-resolution expiry — sleeping past the
+    # current second guarantees login mints a distinct token/session row.
+    time.sleep(1.1)
+    second = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": password},
+    )
+    assert second.status_code == 200
+    token_b = second.json()["access_token"]
+    headers_b = {"Authorization": f"Bearer {token_b}"}
+    assert token_a != token_b
+
+    before = client.get("/api/v1/auth/me/sessions", headers=headers_a)
+    assert before.status_code == 200
+    assert len(before.json()) >= 2
+
+    changed = client.post(
+        "/api/v1/auth/me/change-password",
+        json={"current_password": password, "new_password": "brandnew99"},
+        headers=headers_a,
+    )
+    assert changed.status_code == 204
+
+    # Current session (A) remains usable.
+    me_a = client.get("/api/v1/auth/me", headers=headers_a)
+    assert me_a.status_code == 200
+
+    # Other session (B) is revoked.
+    me_b = client.get("/api/v1/auth/me", headers=headers_b)
+    assert me_b.status_code == 401
+
+    after = client.get("/api/v1/auth/me/sessions", headers=headers_a)
+    assert after.status_code == 200
+    sessions = after.json()
+    assert len(sessions) == 1
+    assert sessions[0]["is_current"] is True
+
+
 def test_password_reset_confirm_success(client):
     email = f"reset_{uuid.uuid4()}@example.com"
     password = "secret123"

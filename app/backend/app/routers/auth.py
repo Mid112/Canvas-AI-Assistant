@@ -117,10 +117,11 @@ async def delete_me(
 @router.post("/me/change-password", status_code=status.HTTP_204_NO_CONTENT)
 async def change_password_endpoint(
     body: ChangePasswordRequest,
+    credentials: HTTPAuthorizationCredentials = Depends(bearer),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    await change_password(db, current_user, body)
+    await change_password(db, current_user, body, credentials.credentials)
 
 
 @router.get("/me/notifications")
