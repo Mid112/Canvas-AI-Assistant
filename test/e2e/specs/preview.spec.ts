@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { registerAndConnectCanvas } from "../helpers/auth";
 
 test.describe("Preview & confirmation workflows (#713)", () => {
-  test("mock dry-run preview loads and can be approved", async ({ page }) => {
+  test("mock dry-run preview loads and blocks fake Canvas approval", async ({ page }) => {
     await registerAndConnectCanvas(page);
 
     await page.goto("/instructor/actions/preview");
@@ -16,9 +16,13 @@ test.describe("Preview & confirmation workflows (#713)", () => {
     await expect(page.getByRole("button", { name: "Approve & Execute" })).toBeVisible();
 
     await page.getByRole("button", { name: "Approve & Execute" }).click();
+    await expect(page.getByRole("alert")).toContainText(
+      /cannot execute Canvas actions/i,
+      { timeout: 20_000 },
+    );
     await expect(
       page.getByRole("main").getByRole("heading", { name: "Workflow Approved" }),
-    ).toBeVisible({ timeout: 20_000 });
+    ).toHaveCount(0);
   });
 
   test("reject returns to the assistant gate", async ({ page }) => {
