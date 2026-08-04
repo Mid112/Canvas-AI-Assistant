@@ -1147,3 +1147,55 @@ Total: 9 hours
 - Merge `bugfix/Permission-troubleshooting-page` into `develop`
 - Confirm/resolve the Vite dev-proxy bug, dev Postgres DB reset, and `make e2e-up` Windows compatibility — all still carried from Cycles 18–20
 - Audit other admin-facing free-text fields for the unredacted-credential class of bug (carried from Cycle 19)
+
+---
+
+# Cycle 22 Report: July 31 – August 3
+
+## Timesheet
+
+### Clockify Report
+
+- 31/7 (Friday): Team meeting – 2h 25m 13s (10:00AM–12:25PM)
+- 1/8 (Saturday): PR review – 3h 10m 44s (1:17PM–4:27PM)
+- 2/8 (Sunday night, spilling into 3/8): PR review + applied 2 bug fixes – 2h 43m 00s (11:25PM–2:08AM)
+- 3/8 (Monday night, spilling into 4/8): PR review – 1h 25m 22s (11:15PM–12:40AM)
+
+**Total (clocked): ~9h 44m 19s**
+
+---
+
+## Completed Tasks
+
+### 1: Team Meeting (Friday, 31/7)
+- Attended the team meeting, 10:00AM–12:25PM.
+
+### 2: Merged `bugfix/Permission-troubleshooting-page` into `develop` (Friday night, 31/7)
+- **PR #1462** merged into `develop` at 23:39 on 31/7, closing the "merge into develop" item carried from Cycle 21 — lands the Troubleshooting `needs_token_reset` gating and the Review Permissions "Reconnect Canvas" copy/icon fix from that branch.
+
+### 3: PR Review Sessions (Saturday 1/8, Sunday night 2/8, Monday night 3/8)
+- Reviewed teammate PRs across three sessions (3h10m44s Saturday, plus review time folded into the Sunday-night and Monday-night blocks below).
+
+### 4: Two Bug Fixes — Pending-Action Status Treatment + Active-Course Sidebar Badge (Sunday night 2/8, spilling into Monday 3/8)
+- `add bug fixes`:
+  - **Chat pending-action status**: `PendingActionControls.tsx`'s terminal states (confirmed/executing/superseded/failed/cancelled) were a single plain-text line with no visual distinction between them; replaced with a per-state icon + color treatment (spinner for "executing", muted check for "confirmed", destructive red with `role="alert"` for "failed", etc.) so a failed action reads distinctly from a routine confirmation.
+  - **Active-course sidebar badge**: new `ActiveCourseSidebarBadge.tsx`, mounted in `Sidebar.tsx` for the instructor role — surfaces the currently-selected course persistently in the nav sidebar instead of only on pages that have their own course switcher.
+  - Added matching test coverage/mocks in `DashboardLayout.test.tsx` and `Sidebar.test.tsx`.
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+- One of Cycle 21's three carried goals landed cleanly: `bugfix/Permission-troubleshooting-page` is merged into `develop`. Two additional small fixes went out this cycle (pending-action status clarity, active-course sidebar visibility), alongside the meeting and PR review time.
+
+### Retrospective:
+- The Canvas URL SSRF-gate regression and the missing-`assignment_id` chain bug (both carried from Cycle 20) are still unresolved on `develop` — no commit this cycle touched either, so they're now carrying into a third cycle.
+- The Vite dev-proxy bug, dev Postgres DB reset, `make e2e-up` Windows compatibility, and the unredacted-credential field audit are all still untouched as well.
+
+## Next Cycle Goals
+- New from the issue board (milestone "7: Final Project D...", all `documentation`-labeled): **#1318** Deployment Package, **#1319** Deployment Validation, **#1320** Reliability & Error Handling Validation Service, **#1321** Reliability Validation
+- Fix the Canvas URL validator SSRF regression on `develop` (carried from Cycle 20, now 3rd cycle)
+- Fix `_run_resolve_missing_submissions_chain` to return its verified `assignment_id` (carried from Cycle 20, now 3rd cycle)
+- Confirm/resolve the Vite dev-proxy bug, dev Postgres DB reset, and `make e2e-up` Windows compatibility — all still carried from Cycles 18–20
+- Audit other admin-facing free-text fields for the unredacted-credential class of bug (carried from Cycle 19)
