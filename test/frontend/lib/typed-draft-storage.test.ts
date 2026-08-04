@@ -124,6 +124,72 @@ describe("typed-draft-storage", () => {
     });
   });
 
+  // Verifies: a quiz draft keeps the instructor's own attempt limit and
+  // timer. stripCanvasIdentifiers is a hard whitelist, so a field added to
+  // TypedDraftContent but not to it is dropped on save with no error — the
+  // same way the due date was lost before (#6).
+  it("stores a quiz draft's allowed attempts and time limit", () => {
+    const draft = saveTypedDraft(7, {
+      kind: "quiz",
+      content: {
+        title: "Midterm",
+        questions: "Q1",
+        allowedAttempts: 3,
+        timeLimit: 45,
+      },
+    });
+
+    expect(draft.content.allowedAttempts).toBe(3);
+    expect(draft.content.timeLimit).toBe(45);
+    expect(listTypedDrafts(7)[0]?.content.allowedAttempts).toBe(3);
+    expect(listTypedDrafts(7)[0]?.content.timeLimit).toBe(45);
+  });
+
+  // Verifies: null is a choice, not an absence. Unlimited attempts and "no
+  // time limit" have to round-trip, or resuming quietly reinstates whatever
+  // the generator defaults to.
+  it("keeps a quiz draft's null attempt limit and timer", () => {
+    const draft = saveTypedDraft(7, {
+      kind: "quiz",
+      content: {
+        title: "Midterm",
+        questions: "Q1",
+        allowedAttempts: null,
+        timeLimit: null,
+      },
+    });
+
+    expect(draft.content.allowedAttempts).toBeNull();
+    expect(draft.content.timeLimit).toBeNull();
+
+    const target = buildTypedDraftResumeTarget(draft, { courseId: 42 });
+    const seeded = (target.state as {
+      aiQuizDraft: { allowedAttempts?: unknown; timeLimit?: unknown };
+    }).aiQuizDraft;
+    expect(seeded.allowedAttempts).toBeNull();
+    expect(seeded.timeLimit).toBeNull();
+  });
+
+  // Verifies: a draft that never set them stays absent, so the generated
+  // values are left alone rather than being overwritten with a null.
+  it("omits attempts and time limit when the quiz draft never set them", () => {
+    const draft = saveTypedDraft(7, {
+      kind: "quiz",
+      content: { title: "Midterm", questions: "Q1" },
+    });
+
+    expect("allowedAttempts" in draft.content).toBe(false);
+    expect("timeLimit" in draft.content).toBe(false);
+
+    const seeded = (
+      buildTypedDraftResumeTarget(draft, { courseId: 42 }).state as {
+        aiQuizDraft: Record<string, unknown>;
+      }
+    ).aiQuizDraft;
+    expect("allowedAttempts" in seeded).toBe(false);
+    expect("timeLimit" in seeded).toBe(false);
+  });
+
   it("builds feedback resume targets without NaN ids", () => {
     const draft = saveTypedDraft(7, {
       kind: "feedback",

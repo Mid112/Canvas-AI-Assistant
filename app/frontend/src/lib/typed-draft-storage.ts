@@ -22,7 +22,20 @@ export interface TypedDraftContent {
    * GeneratedAssignmentDraft.dueDate. Not a Canvas identifier, so it's
    * safe to persist alongside title/description. */
   dueDate?: string;
-  pointsPossible?: number;
+  /** Mirrors GeneratedAssignmentDraft.pointsPossible, including its null:
+   * null means an ungraded assignment (Ticket 21), a value the instructor
+   * chose rather than "no points on this draft". Narrowing it to number
+   * made saving an ungraded assignment draft a type error, since that is
+   * exactly what the create page hands over. */
+  pointsPossible?: number | null;
+  /** Quiz drafts only. Both mirror GeneratedQuizDraft, including the null:
+   * null is a real instructor choice (unlimited attempts / no time limit),
+   * distinct from the field being absent because the draft never set it.
+   * Settings rather than content, but they are the instructor's own numbers
+   * and carry no Canvas identifier, so they belong here with dueDate and
+   * pointsPossible. */
+  allowedAttempts?: number | null;
+  timeLimit?: number | null;
   /** The course the draft was written against, stored as the two display
    * strings Canvas shows for it rather than any id. #1239 keeps Canvas and
    * local identifiers out of local storage; these are labels, the same
@@ -88,6 +101,8 @@ function stripCanvasIdentifiers(
     assignmentName,
     dueDate,
     pointsPossible,
+    allowedAttempts,
+    timeLimit,
     courseCode,
     courseName,
   } = content;
@@ -101,6 +116,10 @@ function stripCanvasIdentifiers(
     ...(assignmentName !== undefined ? { assignmentName } : {}),
     ...(dueDate !== undefined ? { dueDate } : {}),
     ...(pointsPossible !== undefined ? { pointsPossible } : {}),
+    // Tested against undefined, not truthiness: 0 attempts and a null
+    // "no time limit" are both values the instructor chose and must survive.
+    ...(allowedAttempts !== undefined ? { allowedAttempts } : {}),
+    ...(timeLimit !== undefined ? { timeLimit } : {}),
     ...(courseCode !== undefined ? { courseCode } : {}),
     ...(courseName !== undefined ? { courseName } : {}),
   };
@@ -244,6 +263,16 @@ export function buildTypedDraftResumeTarget(
             name: draft.content.title ?? "",
             description: draft.content.body ?? "",
             ...(prompt ? { prompt } : {}),
+            // Carried even though this resumes at describe: the create page
+            // reapplies them after regenerating, so the instructor's own
+            // attempt and time-limit choices are not replaced by whatever
+            // the generator happens to default to.
+            ...(draft.content.allowedAttempts !== undefined
+              ? { allowedAttempts: draft.content.allowedAttempts }
+              : {}),
+            ...(draft.content.timeLimit !== undefined
+              ? { timeLimit: draft.content.timeLimit }
+              : {}),
           },
         },
       };
