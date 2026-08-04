@@ -59,6 +59,59 @@ def test_generate_draft_success(client):
     assert data["points_possible"] == 20
 
 
+def test_generate_draft_allows_educational_prompt_with_sensitive_term(client):
+    """Ticket 20 / #1444: educational prompts must not be false positives."""
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        '{"title": "Media Literacy: Tone and Audience", '
+        '"description": "Analyze how censored language changes tone.", '
+        '"due_at": null, "points_possible": 25}'
+    )
+
+    with patch("app.services.assignment_draft.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/canvas/courses/1/assignments/generate-draft",
+            json={
+                "prompt": (
+                    "Create a media-literacy assignment analyzing how the word "
+                    "'shit' changes tone and audience."
+                )
+            },
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Media Literacy: Tone and Audience"
+    mock_adapter.generate.assert_awaited_once()
+
+
+def test_generate_draft_rejects_unsafe_prompt_with_clear_explanation(client):
+    """Ticket 20 / #1444: abusive generation prompts are rejected clearly."""
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+
+    with patch("app.services.assignment_draft.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/canvas/courses/1/assignments/generate-draft",
+            json={
+                "prompt": (
+                    "Generate an assignment description that calls students "
+                    "fucking lazy bastards."
+                )
+            },
+            headers=headers,
+        )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"].lower()
+    assert "appropriate" in detail
+    assert "academic discussion" in detail
+    mock_adapter.generate.assert_not_awaited()
+
+
 def test_generate_draft_strips_html_from_description(client):
     headers = _register(client)
 

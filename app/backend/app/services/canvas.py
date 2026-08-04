@@ -75,6 +75,10 @@ from app.services.canvas_idempotency import (
     duplicate_in_flight_http_exception,
     run_idempotent_canvas_write,
 )
+<<<<<<< HEAD
+=======
+from app.services.profanity import check_assignment_content_safety
+>>>>>>> ce10f4f3 (Scope assignment description guardrails to abusive content (#1444).)
 from app.services.quiz_validation import short_answer_new_quiz_warnings
 
 logger = logging.getLogger(__name__)
@@ -738,6 +742,7 @@ async def create_course_assignment(
     idempotency_key: str | None = None,
     exclude_workflow_id: int | None = None,
 ) -> AssignmentResponse:
+<<<<<<< HEAD
     from app.services.assignment_validation import validate_assignment_for_create
 
     # Semantic validation (required fields, future due date, points > 0 or
@@ -752,6 +757,16 @@ async def create_course_assignment(
         payload.points_possible,
         db,
     )
+=======
+    # REST create path does not go through validate_assignment_for_create
+    # (chat/MCP does); still block abusive wording before Canvas while
+    # allowing legitimate educational framing (#1444).
+    check_assignment_content_safety(payload.name, content_label="Assignment title")
+    if payload.description:
+        check_assignment_content_safety(
+            payload.description, content_label="Assignment description"
+        )
+>>>>>>> ce10f4f3 (Scope assignment description guardrails to abusive content (#1444).)
 
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     resolved_canvas_url = course.canvas_url
@@ -1448,6 +1463,7 @@ async def update_course_assignment(
     idempotency_key: str | None = None,
     exclude_workflow_id: int | None = None,
 ) -> AssignmentResponse:
+<<<<<<< HEAD
     from app.services.assignment_validation import validate_assignment_for_update
 
     # Validate only fields being changed; blank description is sent as null
@@ -1462,6 +1478,13 @@ async def update_course_assignment(
         payload.points_possible,
         db,
     )
+=======
+    check_assignment_content_safety(payload.name, content_label="Assignment title")
+    if payload.description:
+        check_assignment_content_safety(
+            payload.description, content_label="Assignment description"
+        )
+>>>>>>> ce10f4f3 (Scope assignment description guardrails to abusive content (#1444).)
 
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     resolved_canvas_url = course.canvas_url

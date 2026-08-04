@@ -1,8 +1,13 @@
 # app/backend/app/services/profanity.py
-"""Shared student-communication profanity safety net.
+"""Shared content-safety helpers for student-facing Canvas text.
 
-Intentionally small — not a moderation product. Used by messaging, feedback,
-assignment, and quiz write paths so student-facing Canvas text stays filtered.
+Intentionally small — not a moderation product.
+
+- ``check_message_profanity``: strict keyword filter for direct instructor→student
+  communication (messages, feedback, inbox replies).
+- ``check_assignment_content_safety``: same blocklist, but allows legitimate
+  educational framing so assignment-description generation is not falsely
+  rejected when instructors ask students to analyze sensitive language (#1444).
 """
 
 from __future__ import annotations
@@ -19,6 +24,19 @@ _PROFANITY_BODY = (
     r"dick(?:heads?|s)?|bastards?|sluts?|whores?"
 )
 _PROFANITY_PATTERN = re.compile(rf"\b({_PROFANITY_BODY})\b", re.IGNORECASE)
+
+# Academic / instructional framing around a sensitive term (Ticket 20 / #1444).
+# When present, a blocked token alone is not enough to reject assignment text.
+_EDUCATIONAL_CONTEXT_PATTERN = re.compile(
+    r"\b("
+    r"analy[sz]e|analysis|discuss(?:ion|ing)?|literature|history|"
+    r"media[\s-]?literacy|censor(?:ed|ship)?|quot(?:e|ed|ing|es)|"
+    r"archival|academic|essay|compare|contrast|rhetoric|tone|audience|"
+    r"workplace communication|professional language|sensitive language|"
+    r"slur(?:s)?|profanity"
+    r")\b",
+    re.IGNORECASE,
+)
 
 # Common Cyrillic / lookalike letters attackers substitute for Latin ones.
 _HOMOGLYPHS = str.maketrans(
@@ -75,5 +93,34 @@ def check_message_profanity(*parts: str, content_label: str = "Message") -> None
             detail=(
                 f"{content_label} contains language that is not appropriate for "
                 "student communication. Please revise and try again."
+            ),
+        )
+
+
+def text_contains_unsafe_assignment_content(*parts: str) -> bool:
+    """True when assignment text has blocked language without educational framing.
+
+    Direct abusive wording is rejected. Mentions of blocked words inside an
+    academic prompt/description (analyze, discuss, quote, media literacy, …)
+    are allowed so legitimate educational requests are not false positives.
+    """
+    combined = " ".join(part for part in parts if part)
+    if not combined or not text_contains_profanity(combined):
+        return False
+    normalized = _collapse_spaced_letters(_normalize_for_profanity(combined))
+    return not bool(_EDUCATIONAL_CONTEXT_PATTERN.search(normalized))
+
+
+def check_assignment_content_safety(
+    *parts: str, content_label: str = "Assignment content"
+) -> None:
+    """Raise 422 for abusive assignment text; allow educational context (#1444)."""
+    if text_contains_unsafe_assignment_content(*parts):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"{content_label} contains language that is not appropriate for "
+                "students. Academic discussion of sensitive language is allowed — "
+                "please revise abusive wording and try again."
             ),
         )

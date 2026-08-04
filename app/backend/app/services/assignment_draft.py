@@ -13,6 +13,7 @@ from app.services.due_date import normalize_due_date_to_utc_iso, parse_due_date
 from app.services.llm.json_extraction import loads_llm_json
 from app.services.llm.llm_setting import get_llm_adapter
 from app.services.llm.provider_registry import get_active_llm_config
+from app.services.profanity import check_assignment_content_safety
 
 _LIST_ITEM_RE = re.compile(r"<li[^>]*>", re.IGNORECASE)
 _BLOCK_BREAK_RE = re.compile(r"</(p|div|li|h[1-6])>|<br\s*/?>", re.IGNORECASE)
@@ -37,6 +38,13 @@ def _plain_text_description(value: str) -> str:
 async def generate_assignment_draft(
     body: AssignmentDraftRequest, db: AsyncSession, user_id: int
 ) -> AssignmentDraftResponse:
+    # Reject abusive generation prompts early with a clear explanation;
+    # educational prompts that mention sensitive language in academic
+    # context are allowed (Ticket 20 / #1444).
+    check_assignment_content_safety(
+        body.prompt, content_label="Assignment description prompt"
+    )
+
     system = (
         "You help instructors draft Canvas assignments. "
         "Respond with JSON only: "
