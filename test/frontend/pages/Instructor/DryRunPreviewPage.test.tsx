@@ -10,8 +10,13 @@ import { paths } from "@/routes/paths";
 import {
   confirmDryRunPreview,
   DryRunPreviewError,
+  fetchChatIntentPreview,
   fetchDryRunPreview,
 } from "@/services/dryRunPreview";
+import {
+  AssistantApiError,
+  modifyAssistantAction,
+} from "@/services/assistant";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 vi.mock("@/services/dryRunPreview", () => ({
@@ -19,38 +24,24 @@ vi.mock("@/services/dryRunPreview", () => ({
     name = "DryRunPreviewError";
   },
   fetchDryRunPreview: vi.fn(),
+  fetchChatIntentPreview: vi.fn(),
   confirmDryRunPreview: vi.fn(),
 }));
-
-vi.mock("@/contexts/AuthContext", async () => {
-  const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
-    "@/contexts/AuthContext",
-  );
-
-  return {
-    ...actual,
-    useAuth: () => ({
-      accessToken: "access-token",
-      user: { name: "Dr. Jane Doe", role: "instructor" },
-      isAuthenticated: true,
-      isLoading: false,
-      login: vi.fn(),
-      register: vi.fn(),
-      logout: vi.fn(),
-      refreshUser: vi.fn(),
-    }),
-  };
-});
 
 vi.mock("@/services/assistant", () => ({
   AssistantApiError: class AssistantApiError extends Error {
     name = "AssistantApiError";
   },
+  cancelAssistantAction: vi.fn(),
+  confirmAssistantAction: vi.fn(),
+  modifyAssistantAction: vi.fn(),
   sendAssistantMessage: vi.fn(),
 }));
 
 const mockedFetch = vi.mocked(fetchDryRunPreview);
+const mockedFetchChatPreview = vi.mocked(fetchChatIntentPreview);
 const mockedConfirm = vi.mocked(confirmDryRunPreview);
+const mockedModify = vi.mocked(modifyAssistantAction);
 const mockUseAuth = vi.fn();
 
 vi.mock("@/contexts/AuthContext", async () => {
@@ -177,5 +168,39 @@ describe("DryRunPreviewPage", () => {
       screen.queryByRole("heading", { name: "Workflow Approved" }),
     ).not.toBeInTheDocument();
     expect(mockedConfirm).toHaveBeenCalledWith(mockStudentReminderPreview.id);
+  });
+
+  it("shows backend validation errors when chat preview edits fail to regenerate", async () => {
+    const user = userEvent.setup();
+    mockedFetchChatPreview.mockResolvedValue({
+      ...mockStudentReminderPreview,
+      proposedPlan: [
+        {
+          field: "title",
+          label: "Title",
+          value: "Midterm",
+          rawValue: "Midterm",
+          editable: true,
+        },
+      ],
+    });
+    mockedModify.mockRejectedValue(
+      new AssistantApiError("Due date must be in the future."),
+    );
+
+    renderPage(
+      `${paths.instructor.dryRunPreview}?conversation=7&pending=42`,
+    );
+
+    await user.click(
+      await screen.findByRole("button", { name: "Save & regenerate preview" }),
+    );
+
+    expect(
+      await screen.findByRole("alert"),
+    ).toHaveTextContent("Due date must be in the future.");
+    expect(
+      screen.queryByRole("button", { name: /Approve & Execute/ }),
+    ).toBeInTheDocument();
   });
 });

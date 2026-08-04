@@ -189,9 +189,16 @@ describe("previewAssignmentDraft", () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(
         JSON.stringify({
-          summary: "Create assignment 'Quiz 1' in COSC 310",
+          summary:
+            "Create assignment 'Quiz 1' in COSC 310, due Dec 15, 2026, worth 100 points.",
           reversible: true,
           affected_resources: [{ type: "assignment", name: "Quiz 1" }],
+          metadata: {
+            title: "Quiz 1",
+            description_preview: "Details",
+            due_date: "Dec 15, 2026",
+            points_possible: "100 points",
+          },
         }),
         { status: 200 },
       ),
@@ -213,9 +220,14 @@ describe("previewAssignmentDraft", () => {
       expect.objectContaining({ method: "POST" }),
     );
     expect(preview).toEqual({
-      summary: "Create assignment 'Quiz 1' in COSC 310",
+      summary:
+        "Create assignment 'Quiz 1' in COSC 310, due Dec 15, 2026, worth 100 points.",
       reversible: true,
       affectedResources: [{ type: "assignment", name: "Quiz 1" }],
+      title: "Quiz 1",
+      descriptionPreview: "Details",
+      dueDate: "Dec 15, 2026",
+      pointsPossible: "100 points",
     });
   });
 });
