@@ -84,18 +84,23 @@ Time was tracked using Clockify for **Cycle 22 (Jul 31, 2026 – Aug 3, 2026).**
 
 
 <img width="1203" height="382" alt="Screenshot 2026-08-04 at 11 34 33 AM" src="https://github.com/user-attachments/assets/f72c2d7e-5a17-4902-a287-5f22b6230631" />
+
 **YERDANA:**
 
 <img width="885" height="207" alt="Screenshot 2026-08-04 at 11 42 26 AM" src="https://github.com/user-attachments/assets/9ef32d65-fa6c-4ca9-9899-ffaa3def494f" />
+
 **RHYTHM:**
 
 <img width="885" height="444" alt="Screenshot 2026-08-04 at 11 42 35 AM" src="https://github.com/user-attachments/assets/ac4a0142-45e5-4e50-b106-1e9ba55ce331" />
+
 **BAO:**
 
 <img width="874" height="190" alt="Screenshot 2026-08-04 at 11 42 41 AM" src="https://github.com/user-attachments/assets/6472cfd2-5f50-4930-ba74-364a00823fe8" />
+
 **MRIDUL:**
 
 <img width="879" height="269" alt="Screenshot 2026-08-04 at 11 42 47 AM" src="https://github.com/user-attachments/assets/3f43b0e6-e5fd-4a03-9ee8-ed73720d650f" />
+
 **JESSICA:**
 
 <img width="877" height="329" alt="Screenshot 2026-08-04 at 11 42 52 AM" src="https://github.com/user-attachments/assets/864cdf9b-f9b0-4164-9426-c4508c3a1ce5" />
