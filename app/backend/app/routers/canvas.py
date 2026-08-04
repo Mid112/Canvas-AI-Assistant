@@ -21,6 +21,7 @@ from app.schemas.canvas import (
     QuestionBankSummary,
     QuizCapabilities,
     QuizCreate,
+    QuizPublishUpdate,
     QuizResponse,
     SubmissionResponse,
 )
@@ -56,6 +57,7 @@ from app.services.canvas import (
     set_active_course,
     set_assignment_published,
     set_course_published,
+    set_quiz_published,
     update_course_assignment,
     update_course_grade,
 )
@@ -320,6 +322,30 @@ async def list_quizzes_endpoint(
     db: AsyncSession = Depends(get_db),
 ):
     return await get_course_quizzes(course_id, current_user, canvas_url, db)
+
+
+@router.patch(
+    "/courses/{course_id}/quizzes/{quiz_id}/publish",
+    response_model=QuizResponse,
+)
+async def publish_quiz_endpoint(
+    course_id: int,
+    quiz_id: int,
+    body: QuizPublishUpdate,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    quiz_engine: str = Query(default="classic"),
+    db: AsyncSession = Depends(get_db),
+):
+    return await set_quiz_published(
+        course_id,
+        quiz_id,
+        body,
+        current_user,
+        canvas_url,
+        db,
+        quiz_engine=quiz_engine,
+    )
 
 
 @router.get(
