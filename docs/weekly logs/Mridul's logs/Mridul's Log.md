@@ -2148,3 +2148,167 @@ The main area to continue improving is completing the remaining regression and m
 * **Goal 6:** Update testing documentation with completed fixes and validation results
 * **Goal 7:** Update the design document and analysis report with final project changes
 * **Goal 8:** Prepare for final project delivery and demo
+
+
+--- 
+
+<br> 
+
+
+# Cycle 22 Report: 31/07 – 03/08 (July 31 – August 3)
+
+## Timesheet
+
+### Clockify Report
+
+* **31/07 (Friday):** Using Clockify – Logged 8.40 hours
+  *(3 hours, 4 minutes, and 12 seconds for team meeting)*
+  *(5 hours, 19 minutes, and 43 seconds for Ticket 2, Ticket 18, and Ticket 33 work)*
+
+<img width="2410" height="330" alt="image" src="https://github.com/user-attachments/assets/ec907c04-fdc2-4a82-a033-5987731ba0eb" />
+
+
+* **01/08 (Saturday):** Using Clockify – Logged 3.07 hours
+  *(3 hours, 4 minutes, and 18 seconds for Ticket 9 and Ticket 10 work)*
+
+<img width="2404" height="194" alt="image" src="https://github.com/user-attachments/assets/43776aef-45df-469a-aa2d-7a57addca0b0" />
+
+
+* **02/08 (Sunday):** Using Clockify – Logged 2.68 hours
+  *(2 hours, 40 minutes, and 57 seconds for Ticket 9, Ticket 10, Ticket 23, Ticket 24, Ticket 25, and PR reviews)*
+
+<img width="2408" height="216" alt="image" src="https://github.com/user-attachments/assets/3bb931b8-2990-4188-a274-dc7bd437ea61" />
+
+
+* **03/08 (Monday):** Using Clockify – Logged 6.93 hours
+  *(6 hours, 55 minutes, and 58 seconds for Ticket 23, Ticket 24, Ticket 25, and PR reviews)*
+  
+<img width="2410" height="214" alt="image" src="https://github.com/user-attachments/assets/4100e974-90f2-480d-b551-a2f7c7131e74" />
+
+
+**Cycle Total:** 21 hours, 5 minutes, and 8 seconds
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Team meeting (July 31)
+
+* Worked for 3 hours, 4 minutes, and 12 seconds on team meeting activities.
+* Discussed remaining final delivery tasks, testing progress, and project board status.
+* Reviewed bugs and regression tickets from the final testing/demo milestone.
+* Helped align the team around final project delivery, demo readiness, and remaining documentation work.
+
+### #2: Ticket 2, Ticket 18, and Ticket 33 work (July 31)
+
+* Worked for 5 hours, 19 minutes, and 43 seconds on Ticket 2, Ticket 18, and Ticket 33.
+* Continued resolving regression and workflow issues connected to Canvas URL handling, chat window behavior, and assignment creation flow.
+* Worked on improving course context handling and ensuring features behaved consistently across workflows.
+* Supported final live demo readiness by fixing issues that affected user-facing workflows.
+
+### #3: Ticket 9 and Ticket 10 work (August 1)
+
+* Worked for 3 hours, 4 minutes, and 18 seconds on Ticket 9 and Ticket 10.
+* Focused on course name/code handling and related regression fixes.
+* Worked on improving how stale course context and course code matching are handled.
+* Supported backend/data consistency by working on course repair or migration-related behavior.
+
+### #4: Ticket 9, Ticket 10, Ticket 23, Ticket 24, Ticket 25, and PR reviews (August 2)
+
+* Worked for 2 hours, 40 minutes, and 57 seconds on multiple regression tickets and PR reviews.
+* Continued work on course code validation, course name repair, message preview synchronization, sent message state, and review status behavior.
+* Reviewed PRs connected to final project delivery issues.
+* Helped verify that fixes were ready for merge and aligned with final project expectations.
+
+### #5: Ticket 23, Ticket 24, Ticket 25, and PR reviews (August 3)
+
+* Worked for 6 hours, 55 minutes, and 58 seconds on Ticket 23, Ticket 24, Ticket 25, and PR reviews.
+* Focused on completing medium-severity regression fixes and reviewing final PRs.
+* Worked on validating course code format behavior, preserving sent draft snapshots, fixing message preview synchronization, and checking review status behavior after message sends.
+* Helped move remaining tickets toward completion for final project delivery and demo readiness.
+
+---
+
+## Completed Tasks This Cycle
+
+| Task ID | Description                                                              | Status    | Notes                                                           |
+| ------- | ------------------------------------------------------------------------ | --------- | --------------------------------------------------------------- |
+| 1426    | Ticket 2: Fix Canvas Institution URL Mismatch Across Workflows           | Completed | Fixed Canvas URL resolution across institution workflows        |
+| 1470    | Fix Ticket 18: Chat Window Layout                                        | Completed | Improved chat window layout behavior                            |
+| 1471    | Fix Ticket 18: AI Assistant Chat Window                                  | Completed | Fixed AI assistant chat window behavior                         |
+| 1459    | Ticket 33: Add per-course Create Assignment button to Assignments subtab | Completed | Added/fixed create assignment action from assignment context    |
+| 1475    | Fix Ticket 9: Refresh Course Names and Code Matching                     | Completed | Fixed stale course names and course code matching behavior      |
+| 1476    | Fix Ticket 10: Add Migration to Repair Canvas Course Names               | Completed | Added migration/repair support for Canvas course names          |
+| 1517    | Fix Ticket 23: Validate Course Code Format on Course Creation            | Completed | Added validation for course code format during course creation  |
+| 1516    | Fix Ticket 24/25: Preserve Sent Draft Snapshot on Success                | Completed | Fixed message preview and sent message synchronization behavior |
+| 1465    | Add Cycle 21 Logs                                                        | Completed | Added previous cycle documentation                              |
+| 286     | Update README                                                            | Completed | Updated project README documentation                            |
+| 287     | Add setup instructions                                                   | Completed | Added final setup instructions                                  |
+| 288     | Add Docker instructions                                                  | Completed | Added Docker-related documentation                              |
+| 289     | Add API documentation                                                    | Completed | Added API documentation                                         |
+| 290     | Add architecture diagram                                                 | Completed | Added architecture diagram documentation                        |
+| 291     | Add testing notes                                                        | Completed | Added testing notes for final documentation                     |
+| 292     | Add known limitations                                                    | Completed | Added known limitations section                                 |
+| 937     | Feature: Final Submission Package                                        | Completed | Completed final submission package work                         |
+| 938     | Feature: Requirements Traceability Review                                | Completed | Completed requirements traceability review                      |
+
+---
+
+## Progress Update (since 31/07/2026)
+
+| TASK/ISSUE #                                  | STATUS    |
+| --------------------------------------------- | --------- |
+| Team meeting                                  | Completed |
+| Ticket 2: Canvas institution URL mismatch     | Completed |
+| Ticket 18: Chat window layout                 | Completed |
+| Ticket 18: AI assistant chat window           | Completed |
+| Ticket 33: Create assignment from assignments | Completed |
+| Ticket 9: Course names and code matching      | Completed |
+| Ticket 10: Canvas course name repair          | Completed |
+| Ticket 23: Course code validation             | Completed |
+| Ticket 24: Review status after message send   | Completed |
+| Ticket 25: Message preview and sent sync      | Completed |
+| PR reviews                                    | Completed |
+| README updates                                | Completed |
+| Setup instructions                            | Completed |
+| Docker instructions                           | Completed |
+| API documentation                             | Completed |
+| Architecture diagram                          | Completed |
+| Testing notes                                 | Completed |
+| Known limitations                             | Completed |
+| Requirements traceability review              | Completed |
+| Final submission package                      | Completed |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This cycle focused on final regression fixes, PR reviews, documentation, and final project delivery preparation. On July 31, I worked on the team meeting and several important tickets, including Ticket 2, Ticket 18, and Ticket 33. These tasks helped address issues related to Canvas institution URL handling, AI assistant/chat behavior, and assignment creation workflows.
+
+On August 1, I worked on Ticket 9 and Ticket 10, which focused on course name handling, course code matching, and repair/migration support. These fixes were important because course context and course naming behavior affect several connected workflows across the application.
+
+On August 2 and August 3, I worked on Ticket 23, Ticket 24, Ticket 25, and PR reviews. This included work on course code validation, message preview behavior, sent message synchronization, and review status behavior after message sends. These fixes helped stabilize the system for final project delivery and demo readiness.
+
+This cycle also included major final documentation and submission work, including README updates, setup instructions, Docker instructions, API documentation, architecture diagram updates, testing notes, known limitations, requirements traceability review, and the final submission package.
+
+### Retrospective:
+
+This was a strong finalization cycle because the work focused on stabilizing the project after testing and preparing the final deliverables. The main value of this cycle came from closing regression tickets, reviewing PRs, and completing documentation needed for final delivery.
+
+The completed work helped improve reliability across Canvas workflows, course context handling, message synchronization, chat behavior, and assignment creation. The documentation work also helped make the project easier to understand, run, test, and evaluate.
+
+The main area to continue improving is final verification. Since many fixes and documentation updates were completed in this cycle, the next step should be carefully validating that the final demo flow works end-to-end and that the submission package is complete.
+
+---
+
+## Next Cycle Goals
+
+* **Goal 1:** Perform final end-to-end testing for the final live demo
+* **Goal 2:** Verify that all completed regression fixes work together without new issues
+* **Goal 3:** Review the final submission package for completeness
+* **Goal 4:** Confirm README, setup instructions, Docker instructions, API documentation, testing notes, and known limitations are accurate
+* **Goal 5:** Prepare final demo flow and backup screenshots
+* **Goal 6:** Support any last PR reviews or urgent bug fixes before final delivery
+* **Goal 7:** Finalize project delivery and demo readiness
