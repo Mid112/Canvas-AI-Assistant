@@ -61,6 +61,10 @@ async def test_list_message_templates_filters_by_owned_course():
     result = await list_message_templates(db, user, course_id=5)
 
     assert result == []
+    query = db.scalars.await_args.args[0]
+    where_clause = str(query.whereclause)
+    assert "course_id" in where_clause
+    assert "IS NULL" in where_clause.upper() or "NULL" in where_clause.upper()
 
 
 # ---------------------------------------------------------------------------
