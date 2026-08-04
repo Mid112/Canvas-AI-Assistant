@@ -497,6 +497,10 @@ describe("InstructorAssignmentCreatePage", () => {
     const saved = listTypedDrafts(1);
     expect(saved).toHaveLength(1);
     expect(saved[0]?.content.title).toBe("Edited Saved Title");
+    // Regression (#6): due date and points possible were previously dropped
+    // when saving a typed draft from the review step.
+    expect(saved[0]?.content.dueDate).toBe("2026-12-15T23:59");
+    expect(saved[0]?.content.pointsPossible).toBe(50);
 
     await user.click(screen.getByRole("button", { name: "Approve Assignment" }));
     await user.click(await screen.findByRole("button", { name: "Confirm & Create" }));
@@ -505,5 +509,44 @@ describe("InstructorAssignmentCreatePage", () => {
       expect(mockedApprove).toHaveBeenCalled();
     });
     expect(listTypedDrafts(1)).toHaveLength(0);
+  });
+
+  // Verifies: Regression (#6) — resuming a saved assignment draft restores
+  // the due date instead of leaving it empty.
+  it("restores due date and points possible when resuming a saved draft", async () => {
+    const user = userEvent.setup();
+    renderPage({
+      typedDraftId: undefined,
+      aiAssignmentDraft: {
+        courseId: 42,
+        name: "Python Functions Quiz",
+        description: "Cover functions and parameters",
+        dueDate: "2026-12-15T23:59",
+        pointsPossible: 75,
+      },
+    });
+
+    await user.click(await screen.findByRole("button", { name: "Save draft" }));
+    await screen.findByText(/Draft saved/i);
+
+    const drafts = listTypedDrafts(1);
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]?.content.dueDate).toBe("2026-12-15T23:59");
+    expect(drafts[0]?.content.pointsPossible).toBe(75);
+
+    cleanup();
+    renderPage({
+      typedDraftId: drafts[0]!.id,
+      aiAssignmentDraft: {
+        courseId: 42,
+        name: drafts[0]!.content.title ?? "",
+        description: drafts[0]!.content.body ?? "",
+        dueDate: drafts[0]!.content.dueDate,
+        pointsPossible: drafts[0]!.content.pointsPossible,
+      },
+    });
+
+    expect(await screen.findByLabelText("Due date")).toHaveValue("2026-12-15T23:59");
+    expect(screen.getByLabelText("Points possible")).toHaveValue(75);
   });
 });

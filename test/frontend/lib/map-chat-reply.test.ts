@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ChatReplyMappingError,
   mapChatReply,
+  mapChatReplyToAssistantResponse,
 } from "@/lib/map-chat-reply";
 
 describe("mapChatReply", () => {
@@ -511,5 +512,30 @@ describe("mapChatReply", () => {
       },
     });
     expect(result.interpretedAction).toBeUndefined();
+  });
+
+  // Verifies: Regression (#12, #13) — unverified_claims rides through to the
+  // UI so the reply can carry a warning instead of being rewritten.
+  it("carries unverified_claims through to the mapped response", () => {
+    const result = mapChatReplyToAssistantResponse(
+      {
+        action: "respond",
+        message: "Average overall grade 82 %.",
+        unverified_claims: ["grade"],
+      },
+      false,
+    );
+
+    expect(result.content).toBe("Average overall grade 82 %.");
+    expect(result.unverifiedClaims).toEqual(["grade"]);
+  });
+
+  it("leaves unverifiedClaims unset when the backend flagged nothing", () => {
+    const result = mapChatReplyToAssistantResponse(
+      { action: "respond", message: "Hello!" },
+      false,
+    );
+
+    expect(result.unverifiedClaims).toBeUndefined();
   });
 });

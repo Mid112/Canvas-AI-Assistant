@@ -50,6 +50,39 @@ describe("typed-draft-storage", () => {
     });
   });
 
+  it("carries dueDate and pointsPossible through an assignment resume target (#6)", () => {
+    const draft = saveTypedDraft(7, {
+      kind: "assignment",
+      content: {
+        title: "Lab 1",
+        body: "Write tests",
+        dueDate: "2026-08-15T23:59:00",
+        pointsPossible: 50,
+      },
+    });
+
+    expect(draft.content).toEqual({
+      title: "Lab 1",
+      body: "Write tests",
+      dueDate: "2026-08-15T23:59:00",
+      pointsPossible: 50,
+    });
+
+    expect(buildTypedDraftResumeTarget(draft, { courseId: 42 })).toEqual({
+      path: paths.instructor.assignmentCreate,
+      state: {
+        typedDraftId: draft.id,
+        aiAssignmentDraft: {
+          courseId: 42,
+          name: "Lab 1",
+          description: "Write tests",
+          dueDate: "2026-08-15T23:59:00",
+          pointsPossible: 50,
+        },
+      },
+    });
+  });
+
   it("resumes prompt-only assignment drafts to describe (no empty review)", () => {
     const draft = saveTypedDraft(7, {
       kind: "assignment",

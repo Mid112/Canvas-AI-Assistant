@@ -228,6 +228,7 @@ export function mapConversationToChatMessages(
             : undefined,
         deferredRequestId:
           "deferredRequestId" in mapped ? mapped.deferredRequestId : undefined,
+        unverifiedClaims: mapped.unverifiedClaims,
       }];
     }
 

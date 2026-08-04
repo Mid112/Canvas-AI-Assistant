@@ -175,6 +175,8 @@ export function InstructorAssignmentCreatePage() {
       ? {
           title: draft.name,
           body: draft.description,
+          dueDate: draft.dueDate,
+          pointsPossible: draft.pointsPossible,
         }
       : describeValues.prompt.trim()
         ? { body: describeValues.prompt.trim() }
