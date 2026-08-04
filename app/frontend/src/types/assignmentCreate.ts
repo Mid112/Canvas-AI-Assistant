@@ -31,4 +31,9 @@ export interface AssignmentPreviewSummary {
   summary: string;
   reversible: boolean;
   affectedResources: { type: string; name: string }[];
+  /** Display fields from write preview — mirrors what will be submitted. */
+  title?: string;
+  descriptionPreview?: string;
+  dueDate?: string;
+  pointsPossible?: string;
 }

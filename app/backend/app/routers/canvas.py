@@ -174,17 +174,57 @@ async def preview_assignment_endpoint(
     canvas_url: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    from app.services.canvas import get_owned_course, require_writable_course
+    from app.core.canvas_url import canvas_urls_equivalent, normalize_canvas_url
+    from app.services.assignment_validation import validate_assignment_for_create
+    from app.services.canvas import require_writable_course
 
-    course = await get_owned_course(course_id, current_user, canvas_url, db)
-    require_writable_course(course)
-    preview = build_action_preview(
-        "create_assignment",
-        f"Create assignment '{body.name}' in {course.name}",
-        body.model_dump(mode="json"),
-        course_name=course.name,
+    # Validate required fields before preview so the dry-run matches what
+    # create will accept — same gate as quiz/feedback preview paths.
+    course = await validate_assignment_for_create(
+        course_id,
+        current_user,
+        body.name,
+        body.description,
+        body.due_at.isoformat() if body.due_at else None,
+        body.points_possible,
+        db,
     )
-    return ActionPreviewResponse(**preview)
+    normalized_canvas_url = normalize_canvas_url(canvas_url or course.canvas_url)
+    if not canvas_urls_equivalent(course.canvas_url, normalized_canvas_url):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found or does not belong to you.",
+        )
+    if course.canvas_url != normalized_canvas_url:
+        course.canvas_url = normalized_canvas_url
+    require_writable_course(course)
+    proposed = {
+        "action": "create_assignment",
+        "local_course_id": course_id,
+        "title": body.name,
+        "description": body.description,
+        "due_date": body.due_at.isoformat() if body.due_at else None,
+        "points_possible": body.points_possible,
+    }
+    preview = generate_write_preview(proposed, course)
+    # Keep the exact payload that would be POSTed so the UI preview mirrors
+    # Canvas submission fields (name/due_at/points), not only display labels.
+    metadata = {
+        **preview["metadata"],
+        "name": body.name,
+        "description": body.description,
+        "due_at": body.due_at.isoformat() if body.due_at else None,
+        "points_possible_value": body.points_possible,
+        "submitted": body.model_dump(mode="json"),
+    }
+    return ActionPreviewResponse(
+        action=preview["action"],
+        summary=preview["summary"],
+        metadata=metadata,
+        reversible=preview["reversible"],
+        affected_resources=preview["affected_resources"],
+        risk_level=preview["risk_level"],
+    )
 
 
 @router.post("/courses/{course_id}/assignments", response_model=AssignmentResponse)
