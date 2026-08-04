@@ -6,9 +6,9 @@
 
 Cycle 22 was a high-velocity post–Testing Event 2 stabilization cycle focused on closing regression tickets, hardening AI assistant trust/grounding behaviour, and preparing the application for Final Demo and final delivery. Rather than adding major new product surfaces, the team concentrated on fixing TE2 findings across Canvas workflows, messaging, quizzes/assignments, authentication/session security, and instructor UX polish.
 
-Personal logs for Jessica, Mridul, Rhythm, and Yerdana are already merged into `logs`. Bao’s Cycle 22 personal log was not yet available when this team report was drafted, so Bao’s hours are marked **TBD** below and should be filled in once that personal log lands.
+Hours below come from the official Clockify team summary export for **07/31/2026 – 08/03/2026** (total **81:46:54**). GitHub handles map as: **Mid112 → Mridul**, **StoneCA12 → Bao**.
 
-Collectively, the four logged members recorded **79 hours, 26 minutes, and 3 seconds**. Development activity produced a large set of merged regression and polish pull requests into `develop`, while a smaller set of high-priority PRs remained open for Final Demo readiness.
+Collectively the team logged **81 hours, 46 minutes, and 54 seconds**. Development activity produced a large set of merged regression and polish pull requests into `develop`, while a smaller set of high-priority PRs remained open for Final Demo readiness.
 
 ---
 
@@ -39,14 +39,13 @@ Cycle 22 continued the board’s shift from feature delivery into final regressi
 
 | Status | Count / Notes |
 | --- | --- |
-| Backlog | **TBD — paste current count** |
-| Ready | **TBD — paste current count** |
-| In Progress | **TBD — paste current count** |
-| In Review | **Several open polish PRs (see below)** |
-| Done | **TBD — paste current count** |
+| Backlog | **107 active items** |
+| Ready | **3 active items** |
+| In Progress | **21 active items** |
+| In Review | **0 on board** (several polish PRs still open on GitHub — see below) |
+| Done | **1155 completed items** |
 
-<!-- TODO: replace with Cycle 22 project-board screenshot -->
-<!-- <img width="1426" height="738" alt="Cycle 22 project board" src="PASTE_BOARD_SCREENSHOT_URL" /> -->
+Board snapshot pulled from GitHub Project **team 16 project board** (project #22) while drafting this report.
 
 ---
 
@@ -102,7 +101,6 @@ Additional effort this cycle also covered PR reviews, Testing Event report refin
 | Ticket 36: Wire forgot-password flow to backend reset APIs (#1487) | Open |
 | Creator workflow audit (#1514) | Open |
 | Draft course persist (#1515) | Open |
-| Bao Cycle 22 personal log | Pending |
 
 ---
 
@@ -121,17 +119,17 @@ Additional effort this cycle also covered PR reviews, Testing Event report refin
 
 ## Burn-up Chart / Velocity
 
-<!-- TODO: replace with Cycle 22 burn-up screenshot -->
-<!-- <img width="1087" height="585" alt="Cycle 22 burn-up" src="PASTE_BURNUP_SCREENSHOT_URL" /> -->
+<img width="1087" height="585" alt="Cycle 22 burn-up" src="../dashboard/assets/cycle-22-burnup.png" />
 
 ### Burn-up Summary
 
-The burn-up chart for **Cycle 22 (Jul 31 – Aug 3)** should show a sharp rise in completed work as TE2 regression tickets and polish PRs landed, with open work concentrating on a smaller Final Demo / documentation set.
+The burn-up chart for **Cycle 22 (Jul 31 – Aug 3)** (GitHub Insights, `is:issue`, 1203 items) shows open scope starting near **~140** on Jul 31, rising to about **~160** by Aug 2–3 as new final-delivery / polish tickets were added. Completed work climbed gradually to roughly **~15** issues closed in the charted window. This matches a cycle dominated by PR merges and review iteration rather than a single massive Done-column dump on the issue burn-up.
 
 | Date Range | Trend |
 | --- | --- |
-| Jul 31 – Aug 3 | Completed work increased through regression merges |
-| Jul 31 – Aug 3 | Open work shifted toward Final Demo polish and docs |
+| Jul 31 | Open ~140; completed near baseline |
+| Aug 1–2 | Open scope rose to ~160 |
+| Aug 3 | Open held near ~160; completed ~15 for the cycle window |
 | Current Focus | Remaining open PRs, Final Demo, submission package |
 
 ---
@@ -140,96 +138,59 @@ The burn-up chart for **Cycle 22 (Jul 31 – Aug 3)** should show a sharp rise i
 
 Time was tracked using Clockify for **Cycle 22 (Jul 31, 2026 – Aug 3, 2026).**
 
-Hours below are taken from merged personal logs. **Bao’s Cycle 22 personal log was not yet available**, so team totals exclude Bao for now.
+Source: official Clockify **Summary report** export `Clockify_Time_Report_Summary_07_31_2026-08_03_2026.pdf`.
 
 ### Team Summary
 
-| Team Member | Clockify Username | Logged Time |
-| --- | --- | ---: |
-| Yerdana | yerdana | **35:05:23** |
-| Mridul | mridulnohria21 | **21:05:08** |
-| Jessica | jessica goel | **14:10:58** |
-| Rhythm | trivedirhythm | **09:04:34** |
-| Bao | thanhvoiban | **TBD** |
-| **Total (excl. Bao)** | | **79:26:03** |
+| Team Member | Clockify Username | GitHub | Logged Time | Share |
+| --- | --- | --- | ---: | ---: |
+| Yerdana | yerdana | Yerdana2002 | **27:41:55** | 33.87% |
+| Mridul | mridulnohria21 | Mid112 | **21:05:08** | 25.78% |
+| Jessica | jessica goel | jessica545 | **14:10:58** | 17.34% |
+| Bao | thanhvoiban | StoneCA12 | **09:44:19** | 11.91% |
+| Rhythm | trivedirhythm | rhythmt1 | **09:04:34** | 11.10% |
+| **Total** | | | **81:46:54** | **100%** |
 
-The four logged members recorded a combined **79 hours, 26 minutes, and 3 seconds** during Cycle 22. Friday and Saturday carried the heaviest meeting + bugfix load; Sunday/Monday continued stacked PR reviews, analysis/grounding fixes, and Final Demo prep.
+The team logged a combined **81 hours, 46 minutes, and 54 seconds** during Cycle 22. Effort concentrated on TE2 regression fixes, PR reviews, AI grounding/analysis work, messaging/course-context polish, and Final Demo preparation.
 
-### Daily Team Hours (excl. Bao)
-
-| Day | Hours |
-| --- | ---: |
-| Friday (31/7) | **22:59:59** |
-| Saturday (1/8) | **21:24:34** |
-| Sunday (2/8) | **14:54:24** |
-| Monday (3/8) | **20:07:06** |
-
-<!-- TODO: replace with team Clockify screenshot -->
-<!-- <img width="904" height="527" alt="Cycle 22 team Clockify" src="PASTE_TEAM_CLOCKIFY_URL" /> -->
+<img width="904" height="527" alt="Cycle 22 team Clockify summary" src="../dashboard/assets/cycle-22-team-clockify.png" />
 
 ---
 
-### Individual Clockify Reports
+### Individual Clockify Highlights (from export)
 
-#### Yerdana
+#### Yerdana — **27:41:55**
+- ui improvement: 10:24:29
+- bugfix 2: 10:11:58
+- bugfix: 07:05:28
 
-- **Friday:** 07:05:28
-- **Saturday:** 10:24:29
-- **Sunday:** 10:11:58
-- **Monday:** 07:23:28
-- **Total:** **35:05:23**
+#### Mridul (Mid112) — **21:05:08**
+- ticket 23, 24, 25 and PR reviews: 06:55:58
+- ticket 2, 18 and 33: 05:19:43
+- team meeting: 03:04:12
+- ticket 9, 10: 03:04:18
+- ticket 9,10, 23, 24, 25 and PR reviews: 02:40:57
 
-<img width="1226" height="550" alt="Yerdana Cycle 22 Clockify" src="https://github.com/user-attachments/assets/36894004-8300-4533-aa28-8f6fe884143b" />
+#### Jessica — **14:10:58**
+- working on bug fixes and reviewing prs: 08:49:18
+- team meeting: 01:55:53
+- working on bug fixes: 01:51:53
+- working on the testing report: 00:59:23
+- creating the summary report: 00:20:00
+- reviewing prs: 00:14:31
 
----
+#### Bao (StoneCA12) — **09:44:19**
+- PRs review: 04:36:06
+- PRs review + apply 2 fixes: 02:43:00
+- meeting: 02:25:13
 
-#### Mridul
-
-- **Friday:** 08:23:55
-- **Saturday:** 03:04:18
-- **Sunday:** 02:40:57
-- **Monday:** 06:55:58
-- **Total:** **21:05:08**
-
-<img width="2410" height="330" alt="Mridul Friday Clockify" src="https://github.com/user-attachments/assets/ec907c04-fdc2-4a82-a033-5987731ba0eb" />
-<img width="2404" height="194" alt="Mridul Saturday Clockify" src="https://github.com/user-attachments/assets/43776aef-45df-469a-aa2d-7a57addca0b0" />
-<img width="2408" height="216" alt="Mridul Sunday Clockify" src="https://github.com/user-attachments/assets/3bb931b8-2990-4188-a274-dc7bd437ea61" />
-<img width="2410" height="214" alt="Mridul Monday Clockify" src="https://github.com/user-attachments/assets/4100e974-90f2-480d-b551-a2f7c7131e74" />
-
----
-
-#### Jessica
-
-- **Friday:** 03:30:19
-- **Saturday:** 06:13:07
-- **Sunday:** 02:01:29
-- **Monday:** 02:26:03
-- **Total:** **14:10:58**
-
-<img width="1205" height="346" alt="Jessica Friday Clockify" src="https://github.com/user-attachments/assets/6ec2803b-e860-44b2-a1e5-b6310c19249a" />
-<img width="1201" height="229" alt="Jessica Saturday Clockify" src="https://github.com/user-attachments/assets/9b69e2a9-8946-459b-b65d-d4bfe0c32f19" />
-<img width="1199" height="102" alt="Jessica Sunday Clockify" src="https://github.com/user-attachments/assets/c4842686-0794-49f1-a0a8-cfd28c9f8849" />
-<img width="1200" height="172" alt="Jessica Monday Clockify" src="https://github.com/user-attachments/assets/ef424bb2-ceab-4128-8563-c3f3e8770c3d" />
-
----
-
-#### Rhythm
-
-- **Friday:** 04:00:17
-- **Saturday:** 01:42:40
-- **Sunday:** 00:00:00
-- **Monday:** 03:21:37
-- **Total:** **09:04:34**
-
-<img width="1208" height="170" alt="Rhythm Friday Clockify" src="https://github.com/user-attachments/assets/c460836d-8e7f-4fbe-9585-a156e2111bf8" />
-<img width="1208" height="110" alt="Rhythm Saturday Clockify" src="https://github.com/user-attachments/assets/530c2833-3996-4d2d-b702-a4c0cc5ac915" />
-<img width="1206" height="292" alt="Rhythm Monday Clockify" src="https://github.com/user-attachments/assets/740ba3ee-c570-486e-85ea-3b4afd949044" />
-
----
-
-#### Bao
-
-- **Total:** **TBD** (Cycle 22 personal log not yet merged)
+#### Rhythm — **09:04:34**
+- Ticket 19 (#1443): 03:08:57
+- Team Meeting: 02:55:46
+- PR Reviews: 01:04:31
+- Ticket 15 (#1439): 00:51:00
+- Ticket 16 (#1440): 00:35:09
+- Ticket 20 (#1444): 00:29:11
 
 ---
 
@@ -300,9 +261,9 @@ The project is in final stabilization ahead of the Final Demo and submission. Cy
 | --- | --- |
 | Documentation, reporting, TE2 ticket merges / reviews | Jessica |
 | AI grounding, submission analysis, quiz/assignment create audit | Yerdana |
-| Canvas URL / course naming / messaging draft sync / docs package | Mridul |
+| Canvas URL / course naming / messaging draft sync / docs package | Mridul (Mid112) |
 | AI loading UX, missing-fields clarify, guardrails, chat analytics | Rhythm |
-| Sidebar / audit / troubleshooting UI polish | Bao |
+| Sidebar / audit / troubleshooting UI polish | Bao (StoneCA12) |
 
 ---
 
@@ -311,10 +272,8 @@ The project is in final stabilization ahead of the Final Demo and submission. Cy
 | Risk / Gap | Impact | Next Step |
 | --- | --- | --- |
 | Open polish PRs (#1483, #1487, #1474, #1514, #1515, #1521, #1523, #1524) | Could delay Final Demo readiness | Finish review/merge before demo |
-| Bao Cycle 22 hours missing from team totals | Incomplete time reporting | Merge Bao personal log and update this report |
 | Live Canvas sandbox e2e verification | Real-environment gaps may remain | Complete sandbox verification |
 | Final documentation / submission package completeness | Delivery risk | Final docs + package review |
-| Board / burn-up screenshots not yet attached | Report incomplete visually | Add screenshots before final merge |
 
 Overall project risk remains **low to moderate**, with remaining work focused on polish, verification, and delivery packaging.
 
@@ -338,9 +297,9 @@ Led AI trust fixes (PII vs grounding separation, course submission analysis with
 
 Delivered AI loading/thinking feedback (merged), plus open work on missing-assignment analytics in chat, single-turn missing-field clarification, and softer assignment-description guardrails; also reviewed early TE2 PRs and aligned bug priorities in the Friday meeting.
 
-### Bao
+### Bao (StoneCA12)
 
-Cycle 22 personal log not yet available at draft time. Known open work associated with Bao includes sidebar / audit-log polish (#1521). Hours and detailed contributions should be filled in after the personal log merges.
+Logged **09:44:19** on Clockify (meeting, PR reviews, and applying review fixes). Open delivery work includes sidebar / audit-log polish (#1521).
 
 ---
 
@@ -353,6 +312,7 @@ Cycle 22 personal log not yet available at draft time. Known open work associate
 - Course context / naming / code validation improved for create and matching flows
 - Messaging draft sync + templates wired more correctly
 - Auth/session security gaps closed (logout revoke, password-change session revoke)
+- Official Clockify team total recorded: **81:46:54** (all five members)
 - Personal Cycle 22 logs merged for Jessica, Mridul, Rhythm, and Yerdana
 
 ---
@@ -363,7 +323,7 @@ Cycle 22 personal log not yet available at draft time. Known open work associate
 - Review feedback is most reliable when reproduced with a failing test before coding
 - AI product fixes must separate inbound privacy controls from outbound trust/grounding UX
 - Course-context bugs cascade across create, resume, messaging, and analytics — shared resolution helpers pay off
-- Team time reporting is incomplete until every member’s personal log is present
+- Official Clockify exports should be preferred over hand-summed personal-log hours when totals disagree
 
 ---
 
@@ -372,7 +332,7 @@ Cycle 22 personal log not yet available at draft time. Known open work associate
 - Merge remaining open polish PRs
 - Complete Final Demo rehearsal and end-to-end validation
 - Finish user/developer documentation and submission package checks
-- Attach board / burn-up / team Clockify screenshots and Bao hours to this report
+- Keep board counts current through Final Demo
 - Live Canvas sandbox verification
 - Final repository / project-board cleanup
 - Submit final deliverables
@@ -381,4 +341,4 @@ Cycle 22 personal log not yet available at draft time. Known open work associate
 
 # Team Outlook
 
-Cycle 22 moved the project from “many TE2 tickets open” to “mostly merged, short open list.” The application is substantially more stable for Final Demo. With remaining polish PRs closed and documentation/demo prep finished, the team is positioned to complete final delivery on schedule.
+Cycle 22 moved the project from “many TE2 tickets open” to “mostly merged, short open list.” The application is substantially more stable for Final Demo. With remaining polish PRs closed and documentation/demo prep finished, the team is positioned to complete final delivery on schedule. Cycle 22’s **81:46:54** Clockify total reflects sustained finalization effort across all five members.
