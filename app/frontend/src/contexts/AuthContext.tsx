@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -74,6 +75,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getStoredToken(),
   );
   const [isLoading, setIsLoading] = useState(() => getStoredToken() !== null);
+  // Keep logout referentially stable across token refreshes (review nit):
+  // read the latest token from a ref instead of closing over accessToken.
+  const accessTokenRef = useRef(accessToken);
+  accessTokenRef.current = accessToken;
 
   const loadUser = useCallback(async (token: string) => {
     const currentUser = await fetchCurrentUser(token);
@@ -161,7 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [accessToken, loadUser]);
 
   const logout = useCallback(async () => {
-    const token = accessToken ?? getStoredToken();
+    const token = accessTokenRef.current ?? getStoredToken();
     if (token) {
       try {
         await Promise.race([
@@ -177,7 +182,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearStoredToken();
     setAccessToken(null);
     setUser(null);
-  }, [accessToken]);
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
