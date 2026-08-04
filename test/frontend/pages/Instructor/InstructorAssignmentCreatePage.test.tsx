@@ -558,6 +558,30 @@ describe("InstructorAssignmentCreatePage", () => {
     expect(screen.getByLabelText("Points possible")).toHaveValue(75);
   });
 
+  // Verifies: a saved draft records which course it was written for, as
+  // labels rather than ids (#1239). Without this the assistant has nothing to
+  // resolve on resume and falls back to whatever course is active then.
+  it("stores the selected course's labels with a saved draft", async () => {
+    const user = userEvent.setup();
+    renderPage({
+      typedDraftId: undefined,
+      aiAssignmentDraft: {
+        courseId: 42,
+        name: "Python Functions Quiz",
+        description: "Cover functions and parameters",
+      },
+    });
+
+    await user.click(await screen.findByRole("button", { name: "Save draft" }));
+    await screen.findByText(/Draft saved/i);
+
+    const [saved] = listTypedDrafts(1);
+    expect(saved?.content.courseCode).toBe("CS 101");
+    expect(saved?.content.courseName).toBe("Introduction to Programming");
+    // The id itself must never reach local storage.
+    expect(JSON.stringify(saved?.content)).not.toContain("42");
+  });
+
   // Verifies: Regression (#15) — a chat handoff runs the same draft
   // generator the "+ Create Assignment" path uses, so the vague one-line
   // description the chat extracted gets written out before Review.

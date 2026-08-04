@@ -25,6 +25,7 @@ import {
   buildTypedDraftResumeTarget,
   discardTypedDraft,
   listTypedDrafts,
+  resolveTypedDraftCourseId,
   type TypedDraft,
 } from "@/lib/typed-draft-storage";
 import {
@@ -92,7 +93,7 @@ export function InstructorAssistantPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { accessToken, user } = useAuth();
-  const { activeCourse } = useActiveCourse();
+  const { activeCourse, availableCourses } = useActiveCourse();
   const suggestedActions = useMemo(
     () => buildSuggestedActions(activeCourse?.displayName),
     [activeCourse?.displayName],
@@ -155,6 +156,37 @@ export function InstructorAssistantPage() {
     void typedDraftRevision;
     return listTypedDrafts(user.id);
   }, [user?.id, typedDraftRevision]);
+
+  // The course each draft's Resume would open on, or undefined when nothing
+  // can supply one. Resolution is per draft because resumability is per
+  // draft: a draft carrying its own course needs no active course, while a
+  // legacy one saved before labels existed needs exactly that. A panel-level
+  // flag cannot express a list holding both — it either blocks the draft that
+  // is fine or lets through the one that is not.
+  //
+  // handleResumeTypedDraft reads the same map, so the button's enabled state
+  // and what resuming actually does cannot drift apart.
+  const typedDraftCourseIds = useMemo(
+    () =>
+      new Map(
+        typedDrafts.map((draft) => [
+          draft.id,
+          resolveTypedDraftCourseId(draft.content, availableCourses) ??
+            activeCourse?.localId,
+        ]),
+      ),
+    [activeCourse?.localId, availableCourses, typedDrafts],
+  );
+
+  const blockedTypedDraftIds = useMemo(
+    () =>
+      new Set(
+        typedDrafts
+          .filter((draft) => typedDraftCourseIds.get(draft.id) === undefined)
+          .map((draft) => draft.id),
+      ),
+    [typedDraftCourseIds, typedDrafts],
+  );
 
   const loadConversationList = useCallback(async () => {
     if (!accessToken) {
@@ -392,13 +424,19 @@ export function InstructorAssistantPage() {
 
   const handleResumeTypedDraft = (draftId: string) => {
     if (!user?.id) return;
-    if (!activeCourse) return;
     const draft = typedDrafts.find((entry) => entry.id === draftId);
     if (!draft) return;
+    // The draft's own course wins over whatever happens to be active now.
+    // Resuming used to seed the active course unconditionally, so switching
+    // courses between save and resume silently retargeted the draft at the
+    // new one. The active course is the fallback only when the draft predates
+    // this (no labels stored) or its course is no longer in the list.
+    // typedDraftCourseIds holds that resolution; the panel disables Resume for
+    // the drafts it cannot answer, so reaching this guard is defensive only.
+    const courseId = typedDraftCourseIds.get(draftId);
+    if (courseId === undefined) return;
     // Keep the draft until Canvas confirm/submit on the target create page.
-    const target = buildTypedDraftResumeTarget(draft, {
-      courseId: activeCourse.localId,
-    });
+    const target = buildTypedDraftResumeTarget(draft, { courseId });
     navigate(target.path, { state: target.state });
   };
 
@@ -434,7 +472,7 @@ export function InstructorAssistantPage() {
           isResuming={isResumingDeferred}
           discardingId={discardingDeferredId}
           discardingTypedId={discardingTypedId}
-          requiresCourseSelection={!activeCourse}
+          blockedTypedDraftIds={blockedTypedDraftIds}
         />
       ) : null}
 

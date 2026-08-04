@@ -76,6 +76,62 @@ describe("DraftWorkspacePanel", () => {
     ).toHaveClass("shrink-0");
   });
 
+  // Verifies: blocked drafts are gated individually, so one unresumable draft
+  // can't disable its resumable neighbours and vice versa.
+  it("disables Resume only for the drafts it was told are blocked", async () => {
+    const user = userEvent.setup();
+    const onResumeTypedDraft = vi.fn();
+
+    renderPanel([makeTypedDraft("1"), makeTypedDraft("2")], {
+      blockedTypedDraftIds: new Set(["2"]),
+      onResumeTypedDraft,
+    });
+
+    await user.click(screen.getByRole("button", { name: /Saved drafts \(2\)/ }));
+
+    const [first, second] = screen.getAllByRole("button", { name: "Resume" });
+    expect(first).toBeEnabled();
+    expect(second).toBeDisabled();
+
+    // The blocked one explains itself and is wired to the button for AT.
+    const reason = screen.getByText(/This draft has no saved course/);
+    expect(second).toHaveAttribute("aria-describedby", reason.id);
+
+    await user.click(first);
+    expect(onResumeTypedDraft).toHaveBeenCalledExactlyOnceWith("1");
+  });
+
+  // Verifies: the banner reflects a mixed list rather than claiming every
+  // draft needs a course selection.
+  it("shows the course notice only while some draft is blocked", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderPanel([makeTypedDraft("1")], {
+      blockedTypedDraftIds: new Set(["1"]),
+    });
+
+    await user.click(screen.getByRole("button", { name: /Saved drafts \(1\)/ }));
+    expect(
+      screen.getByText(/Select an active course to resume drafts/),
+    ).toBeInTheDocument();
+
+    rerender(
+      <DraftWorkspacePanel
+        items={[]}
+        typedDrafts={[makeTypedDraft("1")]}
+        onResume={vi.fn()}
+        onDiscard={vi.fn()}
+        onResumeTypedDraft={vi.fn()}
+        onDiscardTypedDraft={vi.fn()}
+        blockedTypedDraftIds={new Set()}
+      />,
+    );
+
+    expect(
+      screen.queryByText(/Select an active course to resume drafts/),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Resume" })).toBeEnabled();
+  });
+
   it("resumes and discards a typed draft", async () => {
     const user = userEvent.setup();
     const onResumeTypedDraft = vi.fn();

@@ -23,11 +23,38 @@ export interface TypedDraftContent {
    * safe to persist alongside title/description. */
   dueDate?: string;
   /** Mirrors GeneratedAssignmentDraft.pointsPossible, including its null:
-   * null means an ungraded assignment (Ticket 21), which is a value the
-   * instructor chose and not the same as "no points recorded on this
-   * draft". Narrowing it to number here made saving an ungraded draft a
-   * type error, since that is exactly what the create page hands over. */
+   * null means an ungraded assignment (Ticket 21), a value the instructor
+   * chose rather than "no points on this draft". Narrowing it to number
+   * made saving an ungraded assignment draft a type error, since that is
+   * exactly what the create page hands over. */
   pointsPossible?: number | null;
+  /** Quiz drafts only. Both mirror GeneratedQuizDraft, including the null:
+   * null is a real instructor choice (unlimited attempts / no time limit),
+   * distinct from the field being absent because the draft never set it.
+   * Settings rather than content, but they are the instructor's own numbers
+   * and carry no Canvas identifier, so they belong here with dueDate and
+   * pointsPossible. */
+  allowedAttempts?: number | null;
+  timeLimit?: number | null;
+  /** The course the draft was written against, stored as the two display
+   * strings Canvas shows for it rather than any id. #1239 keeps Canvas and
+   * local identifiers out of local storage; these are labels, the same
+   * category as studentName / assignmentName above, so they stay within it.
+   *
+   * Both are kept because either one can change on its own: a course renamed
+   * between save and resume still resolves on its code, and a re-coded one
+   * still resolves on its name. See resolveTypedDraftCourseId. */
+  courseCode?: string;
+  courseName?: string;
+}
+
+/** The subset of InstructorCourse resolveTypedDraftCourseId needs — kept
+ * structural so callers can pass their own already-filtered lists (e.g. only
+ * writable courses) without this module depending on course types. */
+export interface TypedDraftCourseCandidate {
+  id: number;
+  code: string;
+  name: string;
 }
 
 export interface TypedDraft {
@@ -38,7 +65,9 @@ export interface TypedDraft {
 }
 
 export interface BuildTypedDraftResumeOptions {
-  /** Active course local id — used to seed create forms, not persisted. */
+  /** Local course id the resumed form should open on. Callers resolve this
+   * from the draft's own course labels first and only fall back to the active
+   * course — see resolveTypedDraftCourseId. Seeds the form; never persisted. */
   courseId?: number;
 }
 
@@ -72,6 +101,10 @@ function stripCanvasIdentifiers(
     assignmentName,
     dueDate,
     pointsPossible,
+    allowedAttempts,
+    timeLimit,
+    courseCode,
+    courseName,
   } = content;
   return {
     ...(title !== undefined ? { title } : {}),
@@ -83,7 +116,55 @@ function stripCanvasIdentifiers(
     ...(assignmentName !== undefined ? { assignmentName } : {}),
     ...(dueDate !== undefined ? { dueDate } : {}),
     ...(pointsPossible !== undefined ? { pointsPossible } : {}),
+    // Tested against undefined, not truthiness: 0 attempts and a null
+    // "no time limit" are both values the instructor chose and must survive.
+    ...(allowedAttempts !== undefined ? { allowedAttempts } : {}),
+    ...(timeLimit !== undefined ? { timeLimit } : {}),
+    ...(courseCode !== undefined ? { courseCode } : {}),
+    ...(courseName !== undefined ? { courseName } : {}),
   };
+}
+
+function normalizeCourseLabel(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function matchUniqueCourse(
+  courses: TypedDraftCourseCandidate[],
+  label: string | undefined,
+  pick: (course: TypedDraftCourseCandidate) => string,
+): number | undefined {
+  const target = label ? normalizeCourseLabel(label) : "";
+  if (!target) {
+    return undefined;
+  }
+  const matches = courses.filter(
+    (course) => normalizeCourseLabel(pick(course)) === target,
+  );
+  // Two courses sharing a code (or a name) cannot be told apart from a label
+  // alone, so an ambiguous hit resolves to nothing rather than to a guess.
+  return matches.length === 1 ? matches[0].id : undefined;
+}
+
+/** Resolves a saved draft back to the course it was written for.
+ *
+ * Drafts persist labels, not ids (#1239), so the id has to be recovered from
+ * the current course list at resume time. Code is tried before name because
+ * it is the more stable of the two — instructors rename a course far more
+ * often than they re-code it.
+ *
+ * Returns undefined when neither label matches exactly one course: the course
+ * may have been deleted, unpublished out of the caller's list, or renamed on
+ * both halves at once. Callers fall back to the active course there, which is
+ * the only remaining signal. */
+export function resolveTypedDraftCourseId(
+  content: TypedDraftContent,
+  courses: TypedDraftCourseCandidate[],
+): number | undefined {
+  return (
+    matchUniqueCourse(courses, content.courseCode, (course) => course.code) ??
+    matchUniqueCourse(courses, content.courseName, (course) => course.name)
+  );
 }
 
 function writeDrafts(userId: number, drafts: TypedDraft[]): void {
@@ -182,6 +263,16 @@ export function buildTypedDraftResumeTarget(
             name: draft.content.title ?? "",
             description: draft.content.body ?? "",
             ...(prompt ? { prompt } : {}),
+            // Carried even though this resumes at describe: the create page
+            // reapplies them after regenerating, so the instructor's own
+            // attempt and time-limit choices are not replaced by whatever
+            // the generator happens to default to.
+            ...(draft.content.allowedAttempts !== undefined
+              ? { allowedAttempts: draft.content.allowedAttempts }
+              : {}),
+            ...(draft.content.timeLimit !== undefined
+              ? { timeLimit: draft.content.timeLimit }
+              : {}),
           },
         },
       };
