@@ -95,6 +95,32 @@ describe("Sidebar", () => {
     expect(screen.getByText("Instructor")).toBeInTheDocument();
   });
 
+  // Verifies: Shows the persistent active-course badge for the instructor role.
+  it("shows the active course badge for the instructor role", () => {
+    renderSidebar({
+      navItems: instructorNavItems,
+      role: "instructor",
+      roleLabel: "Instructor",
+    });
+
+    expect(screen.getByText("Active course")).toBeInTheDocument();
+    expect(
+      screen.getByText("CPSC 101: Intro to Programming"),
+    ).toBeInTheDocument();
+  });
+
+  // Verifies: Hides the active-course badge for the admin role, which isn't
+  // wrapped in ActiveCourseProvider.
+  it("does not show the active course badge for the admin role", () => {
+    renderSidebar({
+      navItems: instructorNavItems,
+      role: "admin",
+      roleLabel: "Admin",
+    });
+
+    expect(screen.queryByText("Active course")).not.toBeInTheDocument();
+  });
+
   // Verifies: Keeps the instructor role on the profile trigger.
   it("keeps the instructor role on the profile trigger", async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
