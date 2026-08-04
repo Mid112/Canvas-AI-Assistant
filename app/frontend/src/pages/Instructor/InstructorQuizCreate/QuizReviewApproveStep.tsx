@@ -21,6 +21,7 @@ import type {
   QuizQuestionDraft,
 } from "@/types/quizCreate";
 
+import { QuizQuestionCard } from "./QuizQuestionCard";
 import {
   quizReviewSchema,
   type QuizReviewFormInput,
@@ -327,11 +328,22 @@ export function QuizReviewApproveStep({
               <Input
                 id="quiz-review-points"
                 type="number"
-                min="0.01"
-                step="0.1"
+                min="0"
+                // "any" rather than a 0.1 step: the generator can produce
+                // values like 16.67 when a total divides unevenly, and a fixed
+                // step makes the browser reject them before validation runs.
+                step="any"
                 aria-invalid={Boolean(errors.pointsPossible)}
+                aria-describedby="quiz-review-points-hint"
                 {...register("pointsPossible", { valueAsNumber: true })}
               />
+              <p
+                id="quiz-review-points-hint"
+                className="text-sm text-muted-foreground"
+              >
+                Adjust points if necessary. This total must match the sum of the
+                question points below.
+              </p>
               {errors.pointsPossible ? (
                 <p role="alert" className="text-sm text-destructive">
                   {errors.pointsPossible.message}
@@ -616,33 +628,19 @@ export function QuizReviewApproveStep({
             <div>
               <p className="text-sm font-medium">Questions ({fields.length})</p>
               <p className="text-sm text-muted-foreground">
-                Edit question text before creating the quiz.
+                Edit question text, answers, and points before creating the
+                quiz. Adjust points if necessary — they must add up to the quiz
+                total above.
               </p>
             </div>
             {fields.map((field, index) => (
-              <div
+              <QuizQuestionCard
                 key={field.id}
-                className="space-y-2 rounded-lg border border-border/70 p-3"
-              >
-                <Label htmlFor={`quiz-question-${index}`}>
-                  Question {index + 1}
-                </Label>
-                <Textarea
-                  id={`quiz-question-${index}`}
-                  rows={3}
-                  {...register(`questions.${index}.questionText`)}
-                />
-                <input type="hidden" {...register(`questions.${index}.questionType`)} />
-                <Input
-                  type="number"
-                  min="0.01"
-                  step="0.1"
-                  aria-label={`Points for question ${index + 1}`}
-                  {...register(`questions.${index}.pointsPossible`, {
-                    valueAsNumber: true,
-                  })}
-                />
-              </div>
+                index={index}
+                register={register}
+                control={control}
+                setValue={setValue}
+              />
             ))}
           </div>
 
