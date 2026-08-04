@@ -6,6 +6,7 @@ import { Route, Routes } from "react-router-dom";
 import { StudentMessageDraftPage } from "@/pages/StudentMessageDraftPage";
 import { fetchMessageDraft, sendMessageDraft } from "@/services/messageDraft";
 import { emptyRecipientsMessageDraft, mockMessageDraft } from "@/data/mockMessageDraft";
+import type { FetchMessageDraftOptions } from "@/types/messageDraft";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 vi.mock("@/services/messageDraft", () => ({
@@ -40,10 +41,16 @@ vi.mock("@/contexts/AuthContext", async () => {
 const mockedFetch = vi.mocked(fetchMessageDraft);
 const mockedSend = vi.mocked(sendMessageDraft);
 
-function renderPage(initialEntry = "/instructor/messages") {
+function renderPage(
+  initialEntry = "/instructor/messages",
+  fetchOptions?: FetchMessageDraftOptions,
+) {
   return renderWithRouter(
     <Routes>
-      <Route path="/instructor/messages" element={<StudentMessageDraftPage />} />
+      <Route
+        path="/instructor/messages"
+        element={<StudentMessageDraftPage fetchOptions={fetchOptions} />}
+      />
     </Routes>,
     {
       routerProps: {
@@ -120,6 +127,7 @@ describe("StudentMessageDraftPage", () => {
         recipientIds: [],
         recipients: [],
         conversationId: undefined,
+        canvasUrl: undefined,
       });
     });
 
@@ -177,8 +185,59 @@ describe("StudentMessageDraftPage", () => {
           },
         ],
         conversationId: undefined,
+        canvasUrl: undefined,
       });
     });
+  });
+
+  // Verifies: Sent state uses the same draft content and Canvas URL that the
+  // confirmation reviewed.
+  it("sends the current draft snapshot with the draft course Canvas URL", async () => {
+    const user = userEvent.setup();
+    renderPage("/instructor/messages", {
+      courseId: 25,
+      canvasUrl: "https://canvas.course.example.edu",
+      recipients: [...mockMessageDraft.recipients],
+      preSelectedIds: ["student-3"],
+    });
+
+    const subjectField = await screen.findByLabelText("Subject");
+    await user.clear(subjectField);
+    await user.type(subjectField, "Final reminder");
+
+    const bodyField = screen.getByLabelText("Message body");
+    await user.clear(bodyField);
+    await user.type(bodyField, "Please submit by Friday.\nThanks!");
+
+    await user.click(screen.getByRole("button", { name: "Send" }));
+
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Final reminder");
+    expect(screen.getByRole("dialog")).toHaveTextContent("Please submit by Friday.");
+
+    await user.click(screen.getByRole("button", { name: "Confirm Send" }));
+
+    await waitFor(() => {
+      expect(mockedSend).toHaveBeenCalledWith("access-token", {
+        draftId: mockMessageDraft.id,
+        subject: "Final reminder",
+        body: "Please submit by Friday.\nThanks!",
+        recipientIds: ["student-3"],
+        recipients: [
+          {
+            id: "student-3",
+            name: "John Smith",
+            email: "john.smith@university.edu",
+          },
+        ],
+        conversationId: undefined,
+        canvasUrl: "https://canvas.course.example.edu",
+      });
+    });
+
+    expect(await screen.findByText("Message Sent")).toBeInTheDocument();
+    expect(screen.getByText("Final reminder")).toBeInTheDocument();
+    expect(screen.getByText(/Please submit by Friday\./)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Send" })).not.toBeInTheDocument();
   });
 
   // Verifies: Resets edits when cancel is clicked.

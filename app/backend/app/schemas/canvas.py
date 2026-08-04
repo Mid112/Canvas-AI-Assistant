@@ -1,8 +1,12 @@
+import re
 from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+COURSE_CODE_HELP_TEXT = "Use a subject and number like COSC 499 or COSC499."
+COURSE_CODE_PATTERN = re.compile(r"^[A-Za-z]{1,12}(?:\s?\d{2,4}[A-Za-z]?)?$")
 
 
 class CourseResponse(BaseModel):
@@ -36,6 +40,21 @@ class CourseCreate(BaseModel):
     course_code: str | None = Field(default=None, max_length=100)
     # When true, Canvas publishes the course immediately (`offer=true`).
     publish: bool = False
+
+    @field_validator("course_code")
+    @classmethod
+    def validate_course_code(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        course_code = value.strip()
+        if not course_code:
+            return None
+
+        if not COURSE_CODE_PATTERN.fullmatch(course_code):
+            raise ValueError(COURSE_CODE_HELP_TEXT)
+
+        return course_code
 
 
 class CoursePublishUpdate(BaseModel):
