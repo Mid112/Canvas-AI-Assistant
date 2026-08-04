@@ -73,14 +73,17 @@ export function AssignmentReviewApproveStep({
 
   useEffect(() => {
     if (!onDraftChange) return;
+    const watchedPoints = watchedValues.pointsPossible;
     onDraftChange({
       name: String(watchedValues.name ?? ""),
       description: String(watchedValues.description ?? ""),
       dueDate: String(watchedValues.dueDate ?? ""),
       pointsPossible:
-        typeof watchedValues.pointsPossible === "number"
-          ? watchedValues.pointsPossible
-          : draft.pointsPossible,
+        typeof watchedPoints === "number" &&
+        Number.isFinite(watchedPoints) &&
+        watchedPoints > 0
+          ? watchedPoints
+          : null,
     });
   }, [onDraftChange, watchedValues, draft.pointsPossible]);
 
