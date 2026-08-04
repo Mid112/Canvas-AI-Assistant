@@ -1,6 +1,6 @@
 import { CheckCircle2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import { formatDueDateForDisplay } from "@/lib/assignment-utils";
 import { useInstructorCanvasTimezone } from "@/lib/useInstructorCanvasTimezone";
 import { disambiguateCourseLabels } from "@/lib/disambiguate-course-labels";
 import { pageShellNarrow } from "@/lib/page-shell";
-import type { AiActionDraftLocationState } from "@/routes/paths";
+import { paths, type AiActionDraftLocationState } from "@/routes/paths";
 import {
   discardTypedDraft,
   saveTypedDraft,
@@ -44,6 +44,7 @@ const initialDescribeValues: AssignmentDescribeValues = {
 
 export function InstructorAssignmentCreatePage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const locationState = location.state as AiActionDraftLocationState | null;
   const seededDraft = locationState?.aiAssignmentDraft;
   const typedDraftId = locationState?.typedDraftId;
@@ -189,6 +190,24 @@ export function InstructorAssignmentCreatePage() {
     });
     setSavedTypedDraftId(saved.id);
     setDraftSaveStatus("Draft saved. Resume it anytime from the assistant.");
+  };
+
+  // Carries the prompt across rather than restarting it. Seeds the same
+  // aiQuizDraft state the assistant handoff and typed-draft resume already
+  // use, so the Quiz Creator opens on describe with the text in place.
+  const handleSwitchToQuiz = (prompt: string) => {
+    navigate(paths.instructor.quizCreate, {
+      state: {
+        aiQuizDraft: {
+          ...(describeValues.courseId
+            ? { courseId: Number(describeValues.courseId) }
+            : {}),
+          name: "",
+          description: "",
+          prompt,
+        },
+      },
+    });
   };
 
   const handleGenerate = async (values: AssignmentDescribeValues) => {
@@ -450,6 +469,7 @@ export function InstructorAssignmentCreatePage() {
           isLoadingCourses={isLoadingCourses}
           onGenerate={handleGenerate}
           onValuesChange={handleDescribeValuesChange}
+          onSwitchToQuiz={handleSwitchToQuiz}
         />
       ) : draft ? (
         <AssignmentReviewApproveStep

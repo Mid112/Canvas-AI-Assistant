@@ -1484,7 +1484,7 @@ def test_create_course_uses_saved_connection_when_canvas_url_omitted(client, mon
     created = {
         "id": 9001,
         "name": "Capstone Project",
-        "course_code": "COSC499",
+        "course_code": "COSC 499",
         "workflow_state": "unpublished",
         "total_students": 0,
     }
@@ -1502,14 +1502,34 @@ def test_create_course_uses_saved_connection_when_canvas_url_omitted(client, mon
     ):
         response = client.post(
             "/api/v1/canvas/courses",
-            json={"name": "Capstone Project", "course_code": "COSC499", "publish": False},
+            json={"name": "Capstone Project", "course_code": "COSC 499", "publish": False},
             headers=headers,
         )
 
     assert response.status_code == 201, response.text
     assert response.json()["name"] == "Capstone Project"
+    assert response.json()["course_code"] == "COSC 499"
     mock_create.assert_awaited_once()
+    assert mock_create.await_args.args[1]["course_code"] == "COSC 499"
     assert mock_create.await_args.args[3] == connection_url
+
+
+# Verifies: Course create rejects invalid course-code punctuation before Canvas is called.
+def test_create_course_rejects_invalid_course_code(client, auth_headers):
+    with (
+        patch("app.services.canvas.fetch_accounts", new=AsyncMock()) as mock_accounts,
+        patch("app.services.canvas.create_course", new=AsyncMock()) as mock_create,
+    ):
+        response = client.post(
+            "/api/v1/canvas/courses",
+            json={"name": "Capstone Project", "course_code": "COSC@499", "publish": False},
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 422
+    assert "Use a subject and number like COSC 499 or COSC499." in response.text
+    mock_accounts.assert_not_awaited()
+    mock_create.assert_not_awaited()
 
 
 # Verifies: Missing Canvas token on create returns reconnect guidance, not a raw PATCH path.
