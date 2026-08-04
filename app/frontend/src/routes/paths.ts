@@ -12,6 +12,7 @@ export const paths = {
     courses: "/instructor/courses",
     course: "/instructor/courses/:localCourseId",
     courseAssignments: "/instructor/courses/:localCourseId/assignments",
+    courseQuizzes: "/instructor/courses/:localCourseId/quizzes",
     courseStudents: "/instructor/courses/:localCourseId/students",
     courseGrades: "/instructor/courses/:localCourseId/grades",
     courseMessages: "/instructor/courses/:localCourseId/messages",
@@ -71,6 +72,10 @@ export function instructorCoursePath(localCourseId: number | string) {
 
 export function instructorCourseAssignmentsPath(localCourseId: number | string) {
   return `/instructor/courses/${localCourseId}/assignments`;
+}
+
+export function instructorCourseQuizzesPath(localCourseId: number | string) {
+  return `/instructor/courses/${localCourseId}/quizzes`;
 }
 
 export function instructorCourseStudentsPath(localCourseId: number | string) {
