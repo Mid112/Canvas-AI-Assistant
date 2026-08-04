@@ -70,6 +70,35 @@ describe("assignmentReviewSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  // Verifies: Ticket 21 — blank/null points create an ungraded assignment.
+  it("accepts null points possible for ungraded assignments", () => {
+    const result = assignmentReviewSchema.safeParse({
+      name: "Reading reflection",
+      description: "Ungraded check-in.",
+      dueDate: "2026-12-15T12:00",
+      pointsPossible: null,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.pointsPossible).toBeNull();
+    }
+  });
+
+  it("treats empty points input as ungraded null", () => {
+    const result = assignmentReviewSchema.safeParse({
+      name: "Reading reflection",
+      description: "Ungraded check-in.",
+      dueDate: "2026-12-15T12:00",
+      pointsPossible: Number.NaN,
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.pointsPossible).toBeNull();
+    }
+  });
+
   it("rejects zero or negative points possible", () => {
     const result = assignmentReviewSchema.safeParse({
       name: "Quiz",
