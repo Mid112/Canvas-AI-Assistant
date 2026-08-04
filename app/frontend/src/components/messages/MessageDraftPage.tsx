@@ -68,6 +68,12 @@ const TEMPLATE_PRESETS = {
 
 type MessageTemplateId = keyof typeof TEMPLATE_PRESETS;
 
+interface SentMessageSnapshot {
+  recipients: MessageRecipient[];
+  subject: string;
+  body: string;
+}
+
 const TEMPLATE_SUBJECTS = new Set<string>(
   Object.values(TEMPLATE_PRESETS).map((preset) => preset.subject),
 );
@@ -103,6 +109,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [sentMessage, setSentMessage] = useState<SentMessageSnapshot | null>(null);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [recipients, setRecipients] = useState<MessageRecipient[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>();
@@ -135,6 +142,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     setLoadError(null);
     setSendError(null);
     setSuccessMessage(null);
+    setSentMessage(null);
 
     try {
       if (!accessToken) {
@@ -327,6 +335,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
   const handleSendClick = () => {
     setSendError(null);
     setSuccessMessage(null);
+    setSentMessage(null);
     setIsConfirmOpen(true);
   };
 
@@ -363,12 +372,18 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
         throw new Error("You must be signed in to send messages.");
       }
 
-      await sendMessageDraft(accessToken, {
-        draftId: draft.id,
+      const messageToSend: SentMessageSnapshot = {
+        recipients: selectedRecipients,
         subject: subjectValue.trim(),
         body: bodyValue.trim(),
-        recipientIds: selectedRecipients.map((recipient) => recipient.id),
-        recipients: selectedRecipients,
+      };
+
+      await sendMessageDraft(accessToken, {
+        draftId: draft.id,
+        subject: messageToSend.subject,
+        body: messageToSend.body,
+        recipientIds: messageToSend.recipients.map((recipient) => recipient.id),
+        recipients: messageToSend.recipients,
         conversationId: fetchOptions?.conversationId,
         canvasUrl: fetchOptions?.canvasUrl,
       });
@@ -379,17 +394,19 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
       }
 
       setIsConfirmOpen(false);
+      setSentMessage(messageToSend);
+      setDraft(null);
       setSuccessMessage(
         isMessageDraftSendMocked
-          ? selectedRecipients.length === 0
+          ? messageToSend.recipients.length === 0
             ? "Course announcement draft approved. No announcement has been posted through Canvas yet."
-            : `Draft approved for ${selectedRecipients.length} student${
-                selectedRecipients.length === 1 ? "" : "s"
+            : `Draft approved for ${messageToSend.recipients.length} student${
+                messageToSend.recipients.length === 1 ? "" : "s"
               }. No message has been sent through Canvas yet.`
-          : selectedRecipients.length === 0
+          : messageToSend.recipients.length === 0
             ? "Course announcement posted successfully."
-            : `Message sent successfully to ${selectedRecipients.length} student${
-                selectedRecipients.length === 1 ? "" : "s"
+            : `Message sent successfully to ${messageToSend.recipients.length} student${
+                messageToSend.recipients.length === 1 ? "" : "s"
               }.`,
       );
       setPageState("success");
@@ -410,7 +427,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     void loadDraft();
   };
 
-  if (pageState === "success" && draft) {
+  if (pageState === "success" && sentMessage) {
     return (
       <div className="space-y-6">
         {successMessage ? (
@@ -439,9 +456,9 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
           </CardHeader>
           <CardContent className="space-y-4">
             <MessagePreview
-              recipients={selectedRecipients}
-              subject={subjectValue}
-              body={bodyValue}
+              recipients={sentMessage.recipients}
+              subject={sentMessage.subject}
+              body={sentMessage.body}
             />
           </CardContent>
           <CardFooter className="border-t bg-transparent">

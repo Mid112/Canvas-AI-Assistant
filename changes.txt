@@ -1153,6 +1153,151 @@ TEST POSTURE
 
 
 ================================================================================
+22. fix/message-workflow-bugs
+   Tickets 24/25: message review reset + draft/preview/send synchronization
+================================================================================
+
+COMMITS
+    ee95feb  Preserve sent draft snapshot on success
+
+FILES
+    app/frontend/src/components/messages/MessageDraftPage.tsx
+    test/frontend/pages/StudentMessageDraftPage.test.tsx
+
+WHAT AND WHY
+    Message compose had three closely related pieces of state: the editable
+    draft form, the confirmation preview, and the post-send success preview.
+    The send path used live form/watch state directly and the success view
+    continued to depend on the editable draft existing after send. That made it
+    too easy for stale review state to remain visible after a successful send,
+    and left the sent/success UI coupled to mutable compose state instead of to
+    the exact message the instructor confirmed.
+
+    The fix captures a SentMessageSnapshot at confirm time:
+      - recipients
+      - subject
+      - body
+
+    sendMessageDraft now receives values from that snapshot, including the
+    recipient IDs derived from the same recipient objects. On successful send,
+    MessageDraftPage stores the snapshot, clears the editable draft, and renders
+    the success preview from the immutable sent snapshot. That means the review
+    state clears after send, history/success UI reflects the delivered content,
+    and review only reappears when a new compose/draft load creates a new
+    reviewable change.
+
+    The regression test now edits the draft subject/body, checks that the
+    confirmation dialog shows those edits, confirms send, and asserts the
+    service call receives the same subject/body/recipient selection plus the
+    draft course canvasUrl. It also verifies the success screen shows the same
+    sent content and that the Send button is no longer present.
+
+ARCHITECTURE DELTA
+    * Message send state now has a stable boundary: editable draft state stops
+      at confirmation, and post-send rendering uses SentMessageSnapshot.
+    * Canvas URL forwarding remains owned by FetchMessageDraftOptions and is
+      passed through unchanged to sendMessageDraft. The branch does not add a
+      backend route change; backend draft-course Canvas URL fallback was already
+      covered separately.
+
+*** SRP WARNINGS ***
+  ! Do not render the success preview from react-hook-form watch values or
+    selectedRecipients again. Those are compose-state values and can drift or
+    reset independently of what was confirmed. Success must use the sent
+    snapshot.
+  ! Keep recipientIds and recipient objects derived from the same snapshot.
+    Splitting those sources reopens the stale-recipient bug where the backend
+    PATCH could persist a different target set than the instructor reviewed.
+  ! MessageDraftPage should not infer or rewrite canvasUrl. It should pass the
+    draft/course option through to the service; backend ownership handles
+    course-scoped Canvas URL fallback and validation.
+
+TEST POSTURE
+    Focused checks run locally on fix/message-workflow-bugs:
+      npm exec --yes --package node@22.13.0 -- \
+        node ./node_modules/vitest/vitest.mjs run --config vitest.config.ts \
+        pages/StudentMessageDraftPage.test.tsx \
+        services/messageDraft.test.ts
+        -> 17 passed
+
+      PYTHONPATH=./app/backend \
+      DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
+      app/backend/.venv/bin/pytest \
+        test/backend/test_message_send_validation.py::\
+        test_send_without_canvas_url_uses_draft_course_canvas_url -v
+        -> 1 passed
+
+
+================================================================================
+23. fix/course-code-validation
+   Ticket: course-code validation on instructor course creation
+================================================================================
+
+COMMITS
+    6185babc  Validate course code format on course creation
+
+FILES
+    app/backend/app/schemas/canvas.py
+    app/frontend/src/lib/course-code-validation.ts
+    app/frontend/src/pages/Instructor/InstructorCourses/CreateCourseDialog.tsx
+    test/backend/test_canvas.py
+    test/frontend/pages/Instructor/InstructorCourses/CreateCourseDialog.test.tsx
+
+WHAT AND WHY
+    Manual Canvas course creation accepted arbitrary course_code text and passed
+    it through to Canvas. That allowed punctuation or malformed codes such as
+    COSC@499 to leave the app boundary before the instructor saw a targeted
+    validation message.
+
+    The branch adds the same course-code shape in the backend request schema
+    and the frontend create-course dialog:
+      - optional course codes remain allowed
+      - blank course codes are normalized to null
+      - valid examples include COSC 499, COSC499, and subject-only codes
+      - malformed punctuation is rejected with:
+        "Use a subject and number like COSC 499 or COSC499."
+
+    The frontend now validates inline as the instructor types and on submit,
+    marks the input with aria-invalid when needed, and blocks createCourse
+    before making a Canvas request when the code is invalid. The backend keeps
+    the authoritative guard in CourseCreate so direct API callers get the same
+    422 behavior and Canvas is not called with invalid punctuation.
+
+ARCHITECTURE DELTA
+    * Course-code formatting has a small shared frontend helper for UI
+      validation while the backend schema remains the source of truth for API
+      enforcement.
+    * The create-course flow still owns trimming and nullable optional values
+      at the form boundary before calling the service.
+    * No Canvas service contract change is introduced; invalid requests are
+      stopped before service calls.
+
+*** SRP WARNINGS ***
+  ! Keep frontend and backend course-code rules aligned. The frontend helper is
+    for immediate UX only; backend CourseCreate must continue to enforce the
+    request contract for direct API and test clients.
+  ! Do not move Canvas-specific error handling into the course-code helper. It
+    should remain a narrow formatting validator used by the create-course form.
+  ! Preserve the optional nature of course_code. Empty input should keep sending
+    null rather than an empty string.
+
+TEST POSTURE
+    Focused checks run locally on fix/course-code-validation:
+      PYTHONPATH=./app/backend \
+      DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
+      app/backend/.venv/bin/pytest \
+        test/backend/test_canvas.py::test_create_course_rejects_invalid_course_code -v
+        -> 1 passed
+
+      From test/frontend:
+      npm exec --yes --package node@22.13.0 -- \
+        node ../../app/frontend/node_modules/vitest/vitest.mjs run \
+        --config vitest.config.ts \
+        pages/Instructor/InstructorCourses/CreateCourseDialog.test.tsx
+        -> 4 passed
+
+
+================================================================================
 CROSS-CUTTING NOTES
 ================================================================================
 

@@ -181,4 +181,20 @@ describe("PendingActionControls", () => {
     expect(onResume).toHaveBeenCalledTimes(1);
     expect(onCancel).not.toHaveBeenCalled();
   });
+
+  // Verifies (#1439): Confirm button shows stage-aware executing copy while loading.
+  it("shows executing Canvas action copy while confirming", () => {
+    render(
+      <PendingActionControls
+        status="pending"
+        isLoading
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Executing Canvas action…" }),
+    ).toBeDisabled();
+  });
 });
