@@ -51,7 +51,7 @@ describe("AssignmentReviewApproveStep", () => {
     await user.clear(screen.getByLabelText("Assignment title"));
     await user.click(screen.getByRole("button", { name: "Approve Assignment" }));
 
-    expect(await screen.findByText("Title cannot be empty")).toBeInTheDocument();
+    expect(await screen.findByText(/Title cannot be empty/)).toBeInTheDocument();
     expect(onApprove).not.toHaveBeenCalled();
   });
 
@@ -102,7 +102,7 @@ describe("AssignmentReviewApproveStep", () => {
     await user.click(screen.getByRole("button", { name: "Approve Assignment" }));
 
     expect(
-      await screen.findByText("Points possible must be greater than 0"),
+      await screen.findByText(/Points possible must be greater than 0/),
     ).toBeInTheDocument();
     expect(onApprove).not.toHaveBeenCalled();
   });

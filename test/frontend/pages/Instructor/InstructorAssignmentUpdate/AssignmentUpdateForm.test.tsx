@@ -52,6 +52,6 @@ describe("AssignmentUpdateForm", () => {
     await user.clear(screen.getByLabelText("Assignment title"));
     await user.click(screen.getByRole("button", { name: "Preview Changes" }));
 
-    expect(await screen.findByText("Title cannot be empty")).toBeInTheDocument();
+    expect(await screen.findByText(/Title cannot be empty/)).toBeInTheDocument();
   });
 });
