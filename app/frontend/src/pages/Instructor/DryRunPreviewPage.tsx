@@ -225,8 +225,8 @@ function DryRunPreviewContent({
         );
         setConfirmedMessage(result.content);
       } else {
-        const result = await confirmDryRunPreview(preview.id);
-        setConfirmedMessage(result.message);
+        // Always throws — mock/?preview demos cannot execute Canvas actions.
+        await confirmDryRunPreview(preview.id);
       }
 
       setShowSuccessToast(true);
