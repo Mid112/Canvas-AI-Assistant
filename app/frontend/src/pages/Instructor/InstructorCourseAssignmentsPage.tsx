@@ -35,6 +35,7 @@ import {
 import {
   AssignmentApiError,
   fetchCourseAssignments,
+  setAssignmentPublished,
 } from "@/services/assignments";
 import type { Assignment } from "@/types/assignment";
 import type { InstructorCourse } from "@/types/course";
@@ -48,6 +49,10 @@ export function InstructorCourseAssignmentsPage() {
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [togglingPublishAssignmentId, setTogglingPublishAssignmentId] = useState<
+    number | null
+  >(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -158,6 +163,42 @@ export function InstructorCourseAssignmentsPage() {
     setPage(1);
   };
 
+  const handleTogglePublish = async (
+    assignmentId: number,
+    published: boolean,
+  ) => {
+    if (!accessToken || !canvasUrl) {
+      return;
+    }
+
+    setPublishError(null);
+    setTogglingPublishAssignmentId(assignmentId);
+    try {
+      const updated = await setAssignmentPublished(
+        parsedLocalCourseId,
+        assignmentId,
+        published,
+        accessToken,
+        canvasUrl,
+      );
+      setAssignments((current) =>
+        current.map((assignment) =>
+          assignment.id === assignmentId
+            ? { ...assignment, ...updated, published: updated.published }
+            : assignment,
+        ),
+      );
+    } catch (error) {
+      setPublishError(
+        error instanceof AssignmentApiError
+          ? error.message
+          : "Unable to update assignment publish status. Please try again.",
+      );
+    } finally {
+      setTogglingPublishAssignmentId(null);
+    }
+  };
+
   if (!idIsValid) {
     return (
       <PageState
@@ -264,6 +305,16 @@ export function InstructorCourseAssignmentsPage() {
         searchPlaceholder="Search by name or ID..."
       />
 
+      {publishError ? (
+        <div
+          role="alert"
+          className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+        >
+          <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <p>{publishError}</p>
+        </div>
+      ) : null}
+
       {assignments.length === 0 ? (
         <Card className="shadow-sm ring-1 ring-border/60">
           <CardContent className="p-6 text-center text-sm text-muted-foreground">
@@ -288,61 +339,86 @@ export function InstructorCourseAssignmentsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginated.items.map((assignment) => (
-                      <TableRow key={assignment.id}>
-                        <TableCell>
-                          <div className="space-y-1">
-                            <p className="font-medium">
-                              {assignment.name}
-                              {!assignment.published ? (
-                                <span className="ml-2 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700">
-                                  Unpublished
-                                </span>
-                              ) : null}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              ID: {assignment.id}
-                            </p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {formatDueDateForDisplay(assignment.due_at)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex flex-wrap justify-end gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              render={
-                                <Link
-                                  to={instructorCourseSubmissionsPath(
-                                    parsedLocalCourseId,
+                    {paginated.items.map((assignment) => {
+                      const isPublished = assignment.published !== false;
+                      const isTogglingPublish =
+                        togglingPublishAssignmentId === assignment.id;
+                      return (
+                        <TableRow key={assignment.id}>
+                          <TableCell>
+                            <div className="space-y-1">
+                              <p className="font-medium">
+                                {assignment.name}
+                                {!isPublished ? (
+                                  <span className="ml-2 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700">
+                                    Unpublished
+                                  </span>
+                                ) : null}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                ID: {assignment.id}
+                              </p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {formatDueDateForDisplay(assignment.due_at)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                render={
+                                  <Link
+                                    to={instructorCourseSubmissionsPath(
+                                      parsedLocalCourseId,
+                                      assignment.id,
+                                    )}
+                                  />
+                                }
+                              >
+                                <Eye data-icon="inline-start" />
+                                Submissions
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isTogglingPublish}
+                                aria-busy={isTogglingPublish}
+                                onClick={() =>
+                                  void handleTogglePublish(
                                     assignment.id,
-                                  )}
-                                />
-                              }
-                            >
-                              <Eye data-icon="inline-start" />
-                              Submissions
-                            </Button>
-                            <Button
-                              size="sm"
-                              render={
-                                <Link
-                                  to={instructorAssignmentUpdatePath(
-                                    parsedLocalCourseId,
-                                    assignment.id,
-                                  )}
-                                />
-                              }
-                            >
-                              <Pencil data-icon="inline-start" />
-                              Edit
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                                    !isPublished,
+                                  )
+                                }
+                              >
+                                {isTogglingPublish ? (
+                                  <Loader2
+                                    data-icon="inline-start"
+                                    className="animate-spin"
+                                  />
+                                ) : null}
+                                {isPublished ? "Unpublish" : "Publish"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                render={
+                                  <Link
+                                    to={instructorAssignmentUpdatePath(
+                                      parsedLocalCourseId,
+                                      assignment.id,
+                                    )}
+                                  />
+                                }
+                              >
+                                <Pencil data-icon="inline-start" />
+                                Edit
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
                 <TablePagination
