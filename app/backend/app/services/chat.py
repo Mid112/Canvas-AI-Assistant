@@ -90,6 +90,7 @@ from app.services.llm.student_context import (
 )
 from app.services.quiz_validation import validate_quiz_for_create
 from app.services.resolved_set import (
+    active_roster_names,
     compute_submissions_by_status,
     create_resolved_set,
     materialize_resolved_set,
@@ -1093,6 +1094,24 @@ async def _run_resolve_missing_submissions_chain(
 _COURSE_ANALYSIS_MAX_NAMES = 50
 
 
+def _format_analysis_line(entry: dict) -> str:
+    """One assignment's line in the course-wide summary.
+
+    The count is always the full matched total while the names may have been
+    cut by the shared budget, so a truncated line says how many of the total
+    it is actually showing. "Assignment 1: 60 (Alice, Bob, ...)" otherwise
+    reads as the complete roster for that assignment.
+    """
+    name = entry["assignment_name"]
+    count = entry["count"]
+    students = entry["students"]
+    if not students:
+        return f"{name}: {count}"
+    if entry.get("students_truncated"):
+        return f"{name}: {count} (showing {len(students)}: {', '.join(students)})"
+    return f"{name}: {count} ({', '.join(students)})"
+
+
 async def _run_analyze_course_submissions_chain(
     db: AsyncSession,
     user: User,
@@ -1130,12 +1149,37 @@ async def _run_analyze_course_submissions_chain(
             "summary": f"{course.name} has no assignments yet, so there is nothing to analyse.",
         }
 
+    # Drafts are invisible to students and cannot have real submissions, so
+    # every active student looks "missing" on one. course_overview.py draws
+    # exactly this line for the dashboard's missing/late counts; the chat
+    # answer to the same question has to agree with it, or the assistant
+    # contradicts the course again — the bug this chain exists to fix.
+    # Defaulting to published matches AssignmentResponse.published and
+    # get_assignments' own item.get("published", True): an older Canvas
+    # payload that omits the field is a real assignment, not a draft.
+    published = [a for a in assignments if a.get("published", True)]
+    if not published:
+        return {
+            "action": "analyze_course_submissions",
+            "status": action.status,
+            "course": course.name,
+            "assignments": [],
+            "total": 0,
+            "summary": (
+                f"All {len(assignments)} assignment(s) in {course.name} are still "
+                "unpublished, so students have nothing to submit yet."
+            ),
+        }
+
     print(f"Checking {course.name} for {action.status} submissions")
+    # One roster for the whole scan. compute_submissions_by_status would
+    # otherwise re-fetch enrollments from Canvas for every assignment.
+    active_names = await active_roster_names(course, user, db)
     per_assignment: list[dict] = []
     names_budget = _COURSE_ANALYSIS_MAX_NAMES
     truncated = False
 
-    for assignment in assignments:
+    for assignment in published:
         canvas_assignment_id = assignment.get("id")
         if canvas_assignment_id is None:
             continue
@@ -1147,11 +1191,18 @@ async def _run_analyze_course_submissions_chain(
                 "status": action.status,
             },
             compute_submissions_by_status(
-                course, canvas_assignment_id, user, db, action.status
+                course, canvas_assignment_id, user, db, action.status,
+                active_names=active_names,
             ),
         )
         names = [student["name"] for student in matched]
-        if len(names) > names_budget:
+        # Truncation is tracked per assignment, not just globally: the budget
+        # is shared across the whole scan, so a later assignment can be cut
+        # short (or get no names at all) while an earlier one was listed in
+        # full. Rendering both the same way made a partial list read as the
+        # complete roster for that assignment.
+        entry_truncated = len(names) > names_budget
+        if entry_truncated:
             names = names[:names_budget]
             truncated = True
         names_budget -= len(names)
@@ -1162,32 +1213,41 @@ async def _run_analyze_course_submissions_chain(
                 "due_at": assignment.get("due_at"),
                 "count": len(matched),
                 "students": names,
+                "students_truncated": entry_truncated,
             }
         )
 
     total = sum(entry["count"] for entry in per_assignment)
     label = "missing" if action.status == "missing" else "late"
     if total == 0:
-        summary = (
-            f"No {label} submissions in {course.name} — every active student is "
-            f"up to date across all {len(per_assignment)} assignment(s)."
-        )
+        # A late scan only establishes that nothing was submitted late. It
+        # says nothing about work never submitted at all, so it must not
+        # claim students are up to date — that is the assistant contradicting
+        # the course, in the opposite direction from bug 12.
+        if action.status == "missing":
+            summary = (
+                f"No missing submissions in {course.name} — every active student "
+                f"has submitted all {len(per_assignment)} published assignment(s)."
+            )
+        else:
+            summary = (
+                f"No late submissions in {course.name} across "
+                f"{len(per_assignment)} published assignment(s). This does not "
+                "cover work that was never submitted — ask about missing "
+                "submissions for that."
+            )
     else:
         affected = [entry for entry in per_assignment if entry["count"]]
-        lines = "; ".join(
-            f"{entry['assignment_name']}: {entry['count']} ({', '.join(entry['students'])})"
-            if entry["students"]
-            else f"{entry['assignment_name']}: {entry['count']}"
-            for entry in affected
-        )
+        lines = "; ".join(_format_analysis_line(entry) for entry in affected)
         summary = (
             f"{total} {label} submission(s) across {len(affected)} of "
-            f"{len(per_assignment)} assignment(s) in {course.name}. {lines}."
+            f"{len(per_assignment)} published assignment(s) in {course.name}. {lines}."
         )
         if truncated:
             summary += (
-                f" Only the first {_COURSE_ANALYSIS_MAX_NAMES} student names are "
-                "listed; open the course Submissions view for the full list."
+                f" Student names are capped at {_COURSE_ANALYSIS_MAX_NAMES} for "
+                "the whole course; open the course Submissions view for the "
+                "full lists."
             )
 
     return {
@@ -2474,6 +2534,47 @@ def _summarize_assistant_history_content(role: str, content: str) -> str:
         return content
     if not isinstance(data, dict) or data.get("intent_preview"):
         return content
+    if data.get("action") == "analyze_course_submissions":
+        # This read action carries per-assignment student name lists, so the
+        # pass-through below would replay up to _COURSE_ANALYSIS_MAX_NAMES
+        # names into every later prompt in the conversation. Its sibling
+        # _run_resolve_missing_submissions_chain deliberately returns only
+        # {count, sample, handle} for the same reason. Counts are what a
+        # follow-up turn needs; names are re-resolvable server-side.
+        total = data.get("total")
+        entries = [
+            {
+                "assignment_id": entry.get("assignment_id"),
+                "assignment_name": entry.get("assignment_name"),
+                "count": entry.get("count"),
+            }
+            for entry in data.get("assignments", [])
+            if isinstance(entry, dict)
+        ]
+        # The stored summary embeds the same names whenever anything matched,
+        # so it is only safe to carry through verbatim in the nothing-matched
+        # case — where it holds the caveat that a late scan says nothing about
+        # missing work, which a follow-up turn should not lose.
+        compact_summary = (
+            data.get("summary")
+            if total == 0
+            else (
+                f"{total} {data.get('status')} submission(s) in "
+                f"{data.get('course')} across {len(entries)} published "
+                "assignment(s). Per-assignment counts included; student names "
+                "omitted from history."
+            )
+        )
+        return _json_dumps(
+            {
+                "action": "analyze_course_submissions",
+                "status": data.get("status"),
+                "course": data.get("course"),
+                "total": total,
+                "assignments": entries,
+                "summary": compact_summary,
+            }
+        )
     if data.get("action") == "clarify" and isinstance(data.get("partial_plan"), dict) and data["partial_plan"]:
         return _json_dumps(
             {

@@ -249,3 +249,223 @@ def test_analyze_course_submissions_errors_without_a_course(client):
     assert reply["action"] == "respond"
     assert "without knowing which course" in reply["message"]
     assert reply.get("question") is None
+
+
+_LATE = (
+    '{"action": "analyze_course_submissions", "course_name": "CPSC 310", '
+    '"status": "late"}'
+)
+
+
+def _assignment(aid: int, name: str, published: bool = True) -> dict:
+    return {
+        "id": aid, "name": name, "description": None,
+        "due_at": "2026-01-01T00:00:00+00:00", "points_possible": 10.0,
+        "course_id": 1, "published": published,
+    }
+
+
+# Verifies: a late scan that finds nothing must not claim students are up to
+# date. "late" only establishes that nothing arrived after the due date — it
+# says nothing about work never submitted at all, so the old shared copy was
+# bug 12 in the opposite direction: the assistant contradicting the course by
+# reassuring the instructor about a category it never looked at.
+def test_analyze_late_zero_does_not_claim_everyone_is_up_to_date(client):
+    headers, local_course_id = _register_with_canvas(client)
+    students = [_student("501", local_course_id, "Alice")]
+    # Alice is MISSING, not late. A late scan therefore matches nothing.
+    submissions = [_submission(501, SubmissionStatus.missing, "Alice")]
+
+    with (
+        patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=_two_assignments())),
+        patch("app.services.resolved_set.get_submissions", new=AsyncMock(return_value=submissions)),
+        patch("app.services.resolved_set.get_students", new=AsyncMock(return_value=students)),
+    ):
+        body = _chat(client, headers, "who submitted late?", _LATE)
+
+    reply = body["reply"]
+    assert reply["total"] == 0
+    summary = reply["summary"]
+    assert "No late submissions" in summary
+    # The false assurance, in any of its old phrasings.
+    assert "up to date" not in summary
+    assert "every active student" not in summary
+    # And it points at the category it did not cover.
+    assert "missing" in summary.lower()
+
+
+# Verifies: drafts are excluded. A draft is invisible to students and cannot
+# have real submissions, so counting it registers every active student as
+# missing something they were never assigned. course_overview.py draws this
+# exact line for the dashboard; the chat answer has to agree with it.
+def test_analyze_course_submissions_skips_unpublished_assignments(client):
+    headers, local_course_id = _register_with_canvas(client)
+    students = [_student("501", local_course_id, "Alice")]
+    submissions = [_submission(501, SubmissionStatus.missing, "Alice")]
+    assignments = [
+        _assignment(111, "Published Assignment"),
+        _assignment(999, "Draft Assignment", published=False),
+    ]
+
+    with (
+        patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=assignments)),
+        patch("app.services.resolved_set.get_submissions", new=AsyncMock(return_value=submissions)),
+        patch("app.services.resolved_set.get_students", new=AsyncMock(return_value=students)),
+    ):
+        body = _chat(client, headers, "analyse missing submissions", _ANALYZE)
+
+    reply = body["reply"]
+    names = [entry["assignment_name"] for entry in reply["assignments"]]
+    assert names == ["Published Assignment"]
+    assert "Draft Assignment" not in reply["summary"]
+    # Alice is missing on the one published assignment only, not on both.
+    assert reply["total"] == 1
+
+
+# Verifies: a course whose assignments are all drafts says so, rather than
+# reporting a bare zero that reads as "everyone has submitted everything".
+def test_analyze_course_submissions_reports_an_all_draft_course(client):
+    headers, local_course_id = _register_with_canvas(client)
+    students = [_student("501", local_course_id, "Alice")]
+    submissions = [_submission(501, SubmissionStatus.missing, "Alice")]
+    assignments = [_assignment(111, "Draft One", published=False)]
+
+    with (
+        patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=assignments)),
+        patch("app.services.resolved_set.get_submissions", new=AsyncMock(return_value=submissions)),
+        patch("app.services.resolved_set.get_students", new=AsyncMock(return_value=students)),
+    ):
+        body = _chat(client, headers, "analyse missing submissions", _ANALYZE)
+
+    reply = body["reply"]
+    assert reply["total"] == 0
+    assert "unpublished" in reply["summary"]
+    assert "up to date" not in reply["summary"]
+
+
+# Verifies: a truncated name list says how many of the total it is showing.
+# count is the full matched number while names are capped by a course-wide
+# budget, so "Assignment 1: 60 (Alice, Bob, ...)" read as the complete roster.
+def test_analyze_course_submissions_marks_truncated_name_lists(client):
+    headers, local_course_id = _register_with_canvas(client)
+    students = [_student(str(500 + i), local_course_id, f"Student{i}") for i in range(60)]
+    submissions = [
+        _submission(500 + i, SubmissionStatus.missing, f"Student{i}") for i in range(60)
+    ]
+
+    with (
+        patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=_two_assignments())),
+        patch("app.services.resolved_set.get_submissions", new=AsyncMock(return_value=submissions)),
+        patch("app.services.resolved_set.get_students", new=AsyncMock(return_value=students)),
+    ):
+        body = _chat(client, headers, "analyse missing submissions", _ANALYZE)
+
+    reply = body["reply"]
+    first, second = reply["assignments"]
+    # Full count preserved, names capped at the budget, and flagged.
+    assert first["count"] == 60
+    assert len(first["students"]) == 50
+    assert first["students_truncated"] is True
+    assert "showing 50" in reply["summary"]
+    # The budget is course-wide, so the second assignment gets no names at
+    # all — it must show a bare count, never a partial list read as complete.
+    assert second["count"] == 60
+    assert second["students"] == []
+    assert "Assignment 4: 60" in reply["summary"]
+
+
+# Verifies: the roster is fetched once for the whole scan. Every assignment
+# used to call compute_submissions_by_status, which re-fetched enrollments
+# from Canvas, turning one dashboard click into one roster call per
+# assignment.
+def test_analyze_course_submissions_fetches_the_roster_once(client):
+    headers, local_course_id = _register_with_canvas(client)
+    students = [_student("501", local_course_id, "Alice")]
+    submissions = [_submission(501, SubmissionStatus.missing, "Alice")]
+    roster_mock = AsyncMock(return_value=students)
+
+    assignments = [
+        _assignment(111, "Assignment 1"),
+        _assignment(222, "Assignment 2"),
+        _assignment(333, "Assignment 3"),
+    ]
+
+    with (
+        patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=assignments)),
+        patch("app.services.resolved_set.get_submissions", new=AsyncMock(return_value=submissions)),
+        patch("app.services.resolved_set.get_students", new=roster_mock),
+    ):
+        body = _chat(client, headers, "analyse missing submissions", _ANALYZE)
+
+    assert body["reply"]["total"] == 3, body["reply"]
+    # Three assignments, one roster call.
+    assert roster_mock.await_count == 1, roster_mock.await_count
+
+
+# Verifies: the per-assignment student name arrays never reach a later
+# prompt. Read-action results are otherwise replayed to the model as full
+# JSON, which would put up to 50 names per assignment into every subsequent
+# turn — exactly what the sibling resolve_missing_submissions chain avoids by
+# returning only {count, sample, handle}.
+def test_analyze_history_for_llm_drops_student_names():
+    import json
+
+    from app.services.chat import _summarize_assistant_history_content
+
+    stored = json.dumps(
+        {
+            "action": "analyze_course_submissions",
+            "status": "missing",
+            "course": "CPSC 310",
+            "total": 2,
+            "assignments": [
+                {
+                    "assignment_id": 111,
+                    "assignment_name": "Assignment 1",
+                    "due_at": None,
+                    "count": 2,
+                    "students": ["Alice Chen", "Bob Smith"],
+                }
+            ],
+            "summary": "2 missing submission(s) ... Assignment 1: 2 (Alice Chen, Bob Smith).",
+        }
+    )
+
+    compacted = _summarize_assistant_history_content("assistant", stored)
+
+    assert "Alice Chen" not in compacted
+    assert "Bob Smith" not in compacted
+    # The counts a follow-up turn actually needs survive.
+    data = json.loads(compacted)
+    assert data["total"] == 2
+    assert data["assignments"] == [
+        {"assignment_id": 111, "assignment_name": "Assignment 1", "count": 2}
+    ]
+
+
+# Verifies: the nothing-matched summary is carried through intact, because
+# that is where the "a late scan does not cover missing work" caveat lives
+# and a follow-up turn must not lose it. It contains no names by definition.
+def test_analyze_history_keeps_the_zero_result_caveat():
+    import json
+
+    from app.services.chat import _summarize_assistant_history_content
+
+    summary = (
+        "No late submissions in CPSC 310 across 2 published assignment(s). "
+        "This does not cover work that was never submitted — ask about "
+        "missing submissions for that."
+    )
+    stored = json.dumps(
+        {
+            "action": "analyze_course_submissions",
+            "status": "late",
+            "course": "CPSC 310",
+            "total": 0,
+            "assignments": [],
+            "summary": summary,
+        }
+    )
+
+    compacted = json.loads(_summarize_assistant_history_content("assistant", stored))
+    assert compacted["summary"] == summary
