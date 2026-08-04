@@ -727,13 +727,13 @@ def test_create_assignment(client, auth_headers):
     assert response.json()["id"] == 11
     mock.assert_awaited_once()
     # Ticket 21: omitted points become ungraded (grading_type=not_graded),
-    # not a invented numeric default.
+    # not a invented numeric default. Omit points_possible like the MCP server.
     assert mock.await_args.args[0] == 12345
     assert mock.await_args.args[1] == {
         **payload,
-        "points_possible": None,
         "grading_type": "not_graded",
     }
+    assert "points_possible" not in mock.await_args.args[1]
 
 
 # Verifies: Ungraded create sends Canvas grading_type=not_graded (Ticket 21).
@@ -764,8 +764,7 @@ def test_create_ungraded_assignment_sets_not_graded(client, auth_headers):
     mock.assert_awaited_once()
     canvas_body = mock.await_args.args[1]
     assert canvas_body["grading_type"] == "not_graded"
-    assert canvas_body["points_possible"] is None
-    assert canvas_body.get("points_possible", "missing") is None
+    assert "points_possible" not in canvas_body
 
 
 # Verifies: Update assignment.

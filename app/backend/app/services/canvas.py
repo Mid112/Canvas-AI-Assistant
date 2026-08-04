@@ -709,9 +709,13 @@ def _assignment_create_payload_for_canvas(payload: AssignmentCreate) -> dict:
     Ticket 21: null points_possible is ungraded. Canvas defaults omitted
     grading_type to "points", so we must send grading_type=not_graded
     instead of inventing a numeric points default (e.g. 10).
+
+    Match the MCP server behavior: omit ``points_possible`` entirely for
+    ungraded creates rather than sending an explicit JSON null.
     """
     body = payload.model_dump(mode="json")
     if payload.points_possible is None:
+        body.pop("points_possible", None)
         body["grading_type"] = "not_graded"
     else:
         body["grading_type"] = "points"
