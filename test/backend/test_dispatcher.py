@@ -161,9 +161,15 @@ def test_missing_field_detects_absent_due_date():
     assert _create_assignment_missing_field(proposal) == "due_date"
 
 
-# Verifies: Missing field detects null points possible.
-def test_missing_field_detects_null_points_possible():
+# Verifies: Explicit null points means ungraded and is complete (Ticket 21).
+def test_null_points_possible_means_ungraded_is_complete():
     proposal = {**_COMPLETE_PROPOSAL, "points_possible": None}
+    assert _create_assignment_missing_field(proposal) is None
+
+
+# Verifies: Absent points_possible still asks graded-vs-ungraded (Ticket 21).
+def test_missing_field_detects_absent_points_possible():
+    proposal = {k: v for k, v in _COMPLETE_PROPOSAL.items() if k != "points_possible"}
     assert _create_assignment_missing_field(proposal) == "points_possible"
 
 
