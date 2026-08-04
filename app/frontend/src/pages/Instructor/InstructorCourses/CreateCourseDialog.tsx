@@ -19,6 +19,10 @@ import {
   isCanvasConnectionRequiredError,
 } from "@/lib/canvas-connection";
 import { toBrowserCanvasUrl } from "@/lib/canvas-url";
+import {
+  COURSE_CODE_HELP_TEXT,
+  validateCourseCode,
+} from "@/lib/course-code-validation";
 import { instructorSettingsPath } from "@/routes/paths";
 import { CanvasApiError, createCourse } from "@/services/canvas";
 
@@ -37,6 +41,7 @@ export function CreateCourseDialog({
   const connectionUrl = useCanvasConnectionUrl();
   const [name, setName] = useState("");
   const [courseCode, setCourseCode] = useState("");
+  const [courseCodeError, setCourseCodeError] = useState<string | null>(null);
   const [publish, setPublish] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [needsReconnect, setNeedsReconnect] = useState(false);
@@ -52,6 +57,7 @@ export function CreateCourseDialog({
   const resetForm = () => {
     setName("");
     setCourseCode("");
+    setCourseCodeError(null);
     setPublish(false);
     setError(null);
     setNeedsReconnect(false);
@@ -90,6 +96,14 @@ export function CreateCourseDialog({
       setNeedsReconnect(true);
       return;
     }
+    const trimmedCourseCode = courseCode.trim();
+    const nextCourseCodeError = validateCourseCode(trimmedCourseCode);
+    if (nextCourseCodeError) {
+      setCourseCodeError(nextCourseCodeError);
+      setError(null);
+      setNeedsReconnect(false);
+      return;
+    }
 
     isSubmittingRef.current = true;
     setIsSubmitting(true);
@@ -99,7 +113,7 @@ export function CreateCourseDialog({
       await createCourse(
         {
           name: trimmedName,
-          course_code: courseCode.trim() || null,
+          course_code: trimmedCourseCode || null,
           publish,
         },
         accessToken,
@@ -155,10 +169,27 @@ export function CreateCourseDialog({
             <Input
               id="create-course-code"
               value={courseCode}
-              onChange={(event) => setCourseCode(event.target.value)}
-              placeholder="e.g. COSC499"
+              onChange={(event) => {
+                const nextCourseCode = event.target.value;
+                setCourseCode(nextCourseCode);
+                setCourseCodeError(validateCourseCode(nextCourseCode));
+              }}
+              onBlur={() => setCourseCodeError(validateCourseCode(courseCode))}
+              placeholder="e.g. COSC 499"
               disabled={isSubmitting}
+              aria-describedby="create-course-code-help"
+              aria-invalid={courseCodeError ? "true" : undefined}
             />
+            <p
+              id="create-course-code-help"
+              className={
+                courseCodeError
+                  ? "text-sm text-destructive"
+                  : "text-sm text-muted-foreground"
+              }
+            >
+              {courseCodeError ?? COURSE_CODE_HELP_TEXT}
+            </p>
           </div>
 
           <label className="flex items-center gap-2 text-sm">
