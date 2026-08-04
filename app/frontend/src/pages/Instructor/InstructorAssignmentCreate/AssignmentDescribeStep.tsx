@@ -1,12 +1,13 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { looksLikeQuizRequest } from "@/lib/quiz-intent";
 import { cn } from "@/lib/utils";
 import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
 import {
@@ -33,6 +34,9 @@ interface AssignmentDescribeStepProps {
   onGenerate: (values: AssignmentDescribeValues) => void;
   /** Keep parent describe state in sync (for Save draft before generate). */
   onValuesChange?: (values: AssignmentDescribeValues) => void;
+  /** Offered when the prompt reads like a quiz. The page owns navigation; this
+   * step only decides when to surface the option. Omit to suppress it. */
+  onSwitchToQuiz?: (prompt: string) => void;
 }
 
 const selectClassName = cn(
@@ -50,7 +54,9 @@ export function AssignmentDescribeStep({
   isLoadingCourses = false,
   onGenerate,
   onValuesChange,
+  onSwitchToQuiz,
 }: AssignmentDescribeStepProps) {
+  const [quizSuggestionDismissed, setQuizSuggestionDismissed] = useState(false);
   const {
     register,
     handleSubmit,
@@ -81,6 +87,11 @@ export function AssignmentDescribeStep({
   const applySuggestedPrompt = (text: string) => {
     setValue("prompt", text, { shouldValidate: true, shouldDirty: true });
   };
+
+  const showQuizSuggestion =
+    Boolean(onSwitchToQuiz) &&
+    !quizSuggestionDismissed &&
+    looksLikeQuizRequest(String(promptValue ?? ""));
 
   return (
     <Card className="shadow-sm ring-1 ring-border/60">
@@ -152,6 +163,40 @@ export function AssignmentDescribeStep({
                 specific topics to cover.
               </p>
             )}
+
+            {/* A quiz prompt typed here would otherwise be rendered as prose
+                into the assignment description — reading like a quiz but
+                producing nothing Canvas can administer. Offered, never
+                automatic: an assignment that legitimately describes a quiz is
+                a real thing to want. */}
+            {showQuizSuggestion ? (
+              <div
+                role="status"
+                className="flex flex-col gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200"
+              >
+                <span>
+                  This looks like a quiz. The Quiz Creator makes real question
+                  items; this page would put them in the description text.
+                </span>
+                <span className="flex shrink-0 gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => onSwitchToQuiz?.(promptValue ?? "")}
+                  >
+                    Switch to Quiz Creator
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setQuizSuggestionDismissed(true)}
+                  >
+                    Dismiss
+                  </Button>
+                </span>
+              </div>
+            ) : null}
           </div>
 
           <div className="space-y-3">
