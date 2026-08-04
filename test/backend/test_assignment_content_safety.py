@@ -19,6 +19,7 @@ from app.services.profanity import (
         "quote containing the word 'shit'.",
         "Create a media-literacy assignment analyzing how the word 'fuck' "
         "changes tone and audience.",
+        "Discuss the term shit in archival workplace communication samples.",
     ],
 )
 def test_educational_assignment_text_is_allowed(text):
@@ -32,6 +33,9 @@ def test_educational_assignment_text_is_allowed(text):
         "Complete this fucking worksheet.",
         "You are all lazy bastards — rewrite the lab.",
         "This assignment is for shitty students only.",
+        # Educational keyword elsewhere must not greenlight abuse (#1524 P1).
+        "Complete this fucking worksheet analyzing recursion.",
+        "Analyze recursion, then call students lazy bastards.",
     ],
 )
 def test_abusive_assignment_text_is_rejected(text):
