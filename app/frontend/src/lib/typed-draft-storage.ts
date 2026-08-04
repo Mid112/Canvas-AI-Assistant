@@ -22,7 +22,12 @@ export interface TypedDraftContent {
    * GeneratedAssignmentDraft.dueDate. Not a Canvas identifier, so it's
    * safe to persist alongside title/description. */
   dueDate?: string;
-  pointsPossible?: number;
+  /** Mirrors GeneratedAssignmentDraft.pointsPossible, including its null:
+   * null means an ungraded assignment (Ticket 21), which is a value the
+   * instructor chose and not the same as "no points recorded on this
+   * draft". Narrowing it to number here made saving an ungraded draft a
+   * type error, since that is exactly what the create page hands over. */
+  pointsPossible?: number | null;
 }
 
 export interface TypedDraft {
