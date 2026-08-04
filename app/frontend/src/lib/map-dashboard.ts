@@ -59,30 +59,74 @@ export function mapInstructorDashboardApiToData(
   response: InstructorDashboardApiResponse,
 ): InstructorDashboardData {
   const notifications: InstructorDashboardData["notifications"] = [];
+  // Stable label — intentionally not Date.now()/toISOString() so remapping the
+  // same dashboard payload does not regenerate timestamps on every render.
+  const timestamp = "Based on latest dashboard data";
+
+  // IDs match Settings → In-app notification preference toggles.
+  if (response.pending_workflows > 0) {
+    notifications.push({
+      id: "workflow-approvals",
+      message: `${response.pending_workflows} workflow${
+        response.pending_workflows === 1 ? "" : "s"
+      } awaiting approval`,
+      timestamp,
+      variant: "info" satisfies DashboardNotificationVariant,
+    });
+  }
+
+  const gradeRelated = response.recent_workflows.filter((workflow) => {
+    const action = workflow.action_name.toLowerCase();
+    return (
+      action.includes("grade") ||
+      action === "post_feedback" ||
+      action === "update_grade"
+    );
+  });
+  if (gradeRelated.length > 0) {
+    notifications.push({
+      id: "grade-updates",
+      message: `${gradeRelated.length} recent grade or feedback update${
+        gradeRelated.length === 1 ? "" : "s"
+      }`,
+      timestamp: gradeRelated[0]?.created_at ?? timestamp,
+      variant: "success" satisfies DashboardNotificationVariant,
+    });
+  }
 
   if (response.missing_submissions > 0) {
     notifications.push({
-      id: "missing-submissions",
-      message: `${response.missing_submissions} missing submissions need attention`,
-      timestamp: new Date().toISOString(),
+      id: "new-submissions",
+      message: `${response.missing_submissions} missing submission${
+        response.missing_submissions === 1 ? "" : "s"
+      } need attention`,
+      timestamp,
       variant: "warning" satisfies DashboardNotificationVariant,
     });
   }
 
   if (response.late_submissions > 0) {
     notifications.push({
-      id: "late-submissions",
-      message: `${response.late_submissions} late submissions detected`,
-      timestamp: new Date().toISOString(),
+      id: "urgent-workflows",
+      message: `${response.late_submissions} late submission${
+        response.late_submissions === 1 ? "" : "s"
+      } need urgent follow-up`,
+      timestamp,
       variant: "warning" satisfies DashboardNotificationVariant,
     });
   }
 
-  if (response.pending_workflows > 0) {
+  if (response.course_count > 0) {
     notifications.push({
-      id: "pending-workflows",
-      message: `${response.pending_workflows} workflows awaiting approval`,
-      timestamp: new Date().toISOString(),
+      id: "daily-summary",
+      message: `Course summary: ${response.course_count} course${
+        response.course_count === 1 ? "" : "s"
+      }, ${response.student_count} student${
+        response.student_count === 1 ? "" : "s"
+      }, ${response.assignment_count} assignment${
+        response.assignment_count === 1 ? "" : "s"
+      }`,
+      timestamp,
       variant: "info" satisfies DashboardNotificationVariant,
     });
   }

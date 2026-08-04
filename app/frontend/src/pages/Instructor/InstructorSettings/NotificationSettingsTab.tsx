@@ -1,77 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import {
+  buildDefaultNotificationSettings,
+  NOTIFICATION_PREFERENCE_GROUPS,
+} from "@/lib/notification-preferences";
+import { paths } from "@/routes/paths";
+import {
   fetchNotificationSettings,
   updateNotificationSettings,
 } from "@/services/auth";
 import type { NotificationSettings } from "@/types/auth";
 
-interface NotificationToggle {
-  id: string;
-  label: string;
-  description: string;
-  defaultChecked: boolean;
-}
-
-const notificationGroups: { title: string; items: NotificationToggle[] }[] = [
-  {
-    title: "Email Notifications",
-    items: [
-      {
-        id: "workflow-approvals",
-        label: "Workflow Approvals",
-        description: "Get notified when workflows need your approval",
-        defaultChecked: true,
-      },
-      {
-        id: "grade-updates",
-        label: "Grade Updates",
-        description: "Receive alerts about grade changes and summaries",
-        defaultChecked: true,
-      },
-      {
-        id: "new-submissions",
-        label: "New Submissions",
-        description: "Alert when students submit assignments",
-        defaultChecked: false,
-      },
-    ],
-  },
-  {
-    title: "Push Notifications",
-    items: [
-      {
-        id: "urgent-workflows",
-        label: "Urgent Workflows",
-        description: "Immediate alerts for time-sensitive actions",
-        defaultChecked: true,
-      },
-      {
-        id: "daily-summary",
-        label: "Daily Summary",
-        description: "Morning digest of course activity",
-        defaultChecked: false,
-      },
-    ],
-  },
-];
-
-function buildDefaultSettings(): NotificationSettings {
-  return notificationGroups
-    .flatMap((group) => group.items)
-    .reduce<NotificationSettings>((settings, item) => {
-      settings[item.id] = item.defaultChecked;
-      return settings;
-    }, {});
-}
-
 export function NotificationSettingsTab() {
   const { accessToken } = useAuth();
-  const defaults = useMemo(() => buildDefaultSettings(), []);
+  const defaults = useMemo(() => buildDefaultNotificationSettings(), []);
   const [settings, setSettings] = useState<NotificationSettings>(defaults);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -156,8 +103,15 @@ export function NotificationSettingsTab() {
       <CardHeader>
         <CardTitle>Notification Settings</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Choose how you want to be notified about course activity and workflow
-          updates.
+          Choose which alerts appear on your{" "}
+          <Link
+            to={paths.instructor.notifications}
+            className="font-medium text-foreground underline-offset-4 hover:underline"
+          >
+            Notifications
+          </Link>{" "}
+          page. These preferences control in-app alerts from your Canvas
+          dashboard data.
         </p>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -165,7 +119,7 @@ export function NotificationSettingsTab() {
           <p className="text-sm text-muted-foreground">Loading preferences...</p>
         ) : null}
 
-        {notificationGroups.map((group) => (
+        {NOTIFICATION_PREFERENCE_GROUPS.map((group) => (
           <div key={group.title} className="space-y-3">
             <p className="text-sm font-semibold">{group.title}</p>
             <ul className="space-y-3">
