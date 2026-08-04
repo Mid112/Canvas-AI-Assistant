@@ -401,7 +401,12 @@ async def test_change_password_rejects_wrong_current_password():
     user = SimpleNamespace(id=1, hashed_password=hash_password("correct"))
 
     with pytest.raises(HTTPException) as exc_info:
-        await change_password(db, user, ChangePasswordRequest(current_password="wrong", new_password="newsecret123"))
+        await change_password(
+            db,
+            user,
+            ChangePasswordRequest(current_password="wrong", new_password="newsecret123"),
+            current_token="current-jwt",
+        )
 
     assert exc_info.value.status_code == 401
 
@@ -411,10 +416,41 @@ async def test_change_password_success():
     db = _db_assigning_ids()
     user = SimpleNamespace(id=1, hashed_password=hash_password("correct"))
 
-    await change_password(db, user, ChangePasswordRequest(current_password="correct", new_password="newsecret123"))
+    with patch(
+        "app.services.auth.revoke_other_sessions",
+        new=AsyncMock(),
+    ) as mock_revoke:
+        await change_password(
+            db,
+            user,
+            ChangePasswordRequest(current_password="correct", new_password="newsecret123"),
+            current_token="current-jwt",
+        )
 
     assert user.hashed_password != hash_password("correct")
     db.add.assert_called_once()
+    mock_revoke.assert_awaited_once_with(db, user, "current-jwt")
+    # Password + audit are committed inside revoke_other_sessions, not here.
+    db.commit.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_change_password_does_not_revoke_when_current_password_wrong():
+    db = AsyncMock()
+    user = SimpleNamespace(id=1, hashed_password=hash_password("correct"))
+
+    with (
+        patch("app.services.auth.revoke_other_sessions", new=AsyncMock()) as mock_revoke,
+        pytest.raises(HTTPException),
+    ):
+        await change_password(
+            db,
+            user,
+            ChangePasswordRequest(current_password="wrong", new_password="newsecret123"),
+            current_token="current-jwt",
+        )
+
+    mock_revoke.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------
