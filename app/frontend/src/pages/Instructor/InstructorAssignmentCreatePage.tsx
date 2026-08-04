@@ -73,9 +73,11 @@ export function InstructorAssignmentCreatePage() {
           description: seededDraft.description ?? "",
           dueDate: seededDraft.dueDate ?? "",
           pointsPossible:
-            typeof seededDraft.pointsPossible === "number"
+            typeof seededDraft.pointsPossible === "number" &&
+            Number.isFinite(seededDraft.pointsPossible) &&
+            seededDraft.pointsPossible > 0
               ? seededDraft.pointsPossible
-              : 100,
+              : null,
         }
       : null,
   );
