@@ -4,7 +4,11 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { Route, Routes, useLocation } from "react-router-dom";
 
 import { InstructorCourseAssignmentsPage } from "@/pages/Instructor/InstructorCourseAssignmentsPage";
-import { fetchCourseAssignments } from "@/services/assignments";
+import {
+  AssignmentApiError,
+  fetchCourseAssignments,
+  setAssignmentPublished,
+} from "@/services/assignments";
 import { fetchActiveCourse, fetchCachedCourses, fetchCourses } from "@/services/canvas";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
@@ -25,13 +29,20 @@ vi.mock("@/services/canvas", () => ({
 
 vi.mock("@/services/assignments", () => ({
   AssignmentApiError: class AssignmentApiError extends Error {
-    status = 500;
+    status: number;
+
+    constructor(message: string, status = 500) {
+      super(message);
+      this.status = status;
+    }
   },
   fetchCourseAssignments: vi.fn(),
+  setAssignmentPublished: vi.fn(),
 }));
 
 const mockUseAuth = vi.fn();
 const mockedFetchCourseAssignments = vi.mocked(fetchCourseAssignments);
+const mockedSetAssignmentPublished = vi.mocked(setAssignmentPublished);
 const mockedFetchCourses = vi.mocked(fetchCourses);
 const mockedFetchCachedCourses = vi.mocked(fetchCachedCourses);
 const mockedFetchActiveCourse = vi.mocked(fetchActiveCourse);
@@ -126,6 +137,7 @@ describe("InstructorCourseAssignmentsPage", () => {
         due_at: "2026-12-15T12:00:00.000Z",
         points_possible: 50,
         course_id: 99,
+        published: true,
       },
     ]);
   });
@@ -157,6 +169,10 @@ describe("InstructorCourseAssignmentsPage", () => {
       "/instructor/courses/3/assignments/10/edit",
     );
 
+    expect(
+      screen.getByRole("button", { name: "Unpublish" }),
+    ).toBeInTheDocument();
+
     const createLinks = screen.getAllByRole("button", {
       name: "Create assignment",
     });
@@ -171,6 +187,77 @@ describe("InstructorCourseAssignmentsPage", () => {
     expect(screen.getByTestId("assignment-create-state")).toHaveTextContent(
       '"courseId":3',
     );
+  });
+
+  // Verifies: Publish/Unpublish toggles Canvas state and refreshes the row badge.
+  it("publishes an unpublished assignment and refreshes the badge", async () => {
+    const user = userEvent.setup();
+    mockedFetchCourseAssignments.mockResolvedValue([
+      {
+        id: 10,
+        name: "Lab 1",
+        description: "Complete the lab.",
+        due_at: "2026-12-15T12:00:00.000Z",
+        points_possible: 50,
+        course_id: 99,
+        published: false,
+      },
+    ]);
+    mockedSetAssignmentPublished.mockResolvedValue({
+      id: 10,
+      name: "Lab 1",
+      description: "Complete the lab.",
+      due_at: "2026-12-15T12:00:00.000Z",
+      points_possible: 50,
+      course_id: 99,
+      published: true,
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Unpublished")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Publish" }));
+
+    await waitFor(() => {
+      expect(mockedSetAssignmentPublished).toHaveBeenCalledWith(
+        3,
+        10,
+        true,
+        "token",
+        CANVAS_URL,
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Unpublished")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Unpublish" })).toBeInTheDocument();
+    });
+  });
+
+  // Verifies: Canvas unpublish refusals are shown to the instructor.
+  it("shows Canvas unpublish refusal errors", async () => {
+    const user = userEvent.setup();
+    mockedSetAssignmentPublished.mockRejectedValue(
+      new AssignmentApiError(
+        "Canvas refused to unpublish this assignment. Canvas API error: 400 - Can't unpublish if there are student submissions",
+        502,
+      ),
+    );
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Unpublish" })).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("button", { name: "Unpublish" }));
+
+    expect(
+      await screen.findByRole("alert"),
+    ).toHaveTextContent("Canvas refused to unpublish this assignment");
   });
 
   // Verifies: Shows connect Canvas prompt when no token is linked.

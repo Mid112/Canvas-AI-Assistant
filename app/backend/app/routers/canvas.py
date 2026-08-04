@@ -9,6 +9,7 @@ from app.schemas.canvas import (
     ActiveCourseResponse,
     ActiveCourseSet,
     AssignmentCreate,
+    AssignmentPublishUpdate,
     AssignmentResponse,
     AssignmentUpdate,
     CourseCreate,
@@ -53,6 +54,7 @@ from app.services.canvas import (
     get_submissions,
     resolve_institution_canvas_url,
     set_active_course,
+    set_assignment_published,
     set_course_published,
     update_course_assignment,
     update_course_grade,
@@ -559,6 +561,30 @@ async def update_assignment_endpoint(
         canvas_url,
         db,
     )
+
+
+@router.patch(
+    "/courses/{course_id}/assignments/{assignment_id}/publish",
+    response_model=AssignmentResponse,
+)
+async def publish_assignment_endpoint(
+    course_id: int,
+    assignment_id: int,
+    body: AssignmentPublishUpdate,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await set_assignment_published(
+        course_id,
+        assignment_id,
+        body,
+        current_user,
+        canvas_url,
+        db,
+    )
+    await db.commit()
+    return result
 
 
 @router.get(
