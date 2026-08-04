@@ -61,7 +61,7 @@ describe("CreateCourseDialog", () => {
       canvas_id: 9,
       local_id: 1,
       name: "Capstone Project",
-      course_code: "COSC499",
+      course_code: "COSC 499",
       workflow_state: "unpublished",
       total_students: null,
       term_name: null,
@@ -72,14 +72,14 @@ describe("CreateCourseDialog", () => {
     );
 
     await user.type(screen.getByLabelText("Course name"), "Capstone Project");
-    await user.type(screen.getByLabelText("Course code (optional)"), "COSC499");
+    await user.type(screen.getByLabelText("Course code (optional)"), "COSC 499");
     await user.click(screen.getByRole("button", { name: "Create course" }));
 
     await waitFor(() => {
       expect(mockCreateCourse).toHaveBeenCalledWith(
         {
           name: "Capstone Project",
-          course_code: "COSC499",
+          course_code: "COSC 499",
           publish: false,
         },
         "tok",
@@ -88,6 +88,26 @@ describe("CreateCourseDialog", () => {
     });
     expect(onCreated).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/PATCH to \/api\/v1/)).not.toBeInTheDocument();
+  });
+
+  // Verifies: Invalid course codes are blocked with concise inline guidance.
+  it("shows inline help and does not submit invalid course codes", async () => {
+    const user = userEvent.setup();
+
+    renderWithInstitution(
+      <CreateCourseDialog open onOpenChange={() => undefined} />,
+    );
+
+    const courseCodeInput = screen.getByLabelText("Course code (optional)");
+    await user.type(screen.getByLabelText("Course name"), "Capstone Project");
+    await user.type(courseCodeInput, "COSC@499");
+    await user.click(screen.getByRole("button", { name: "Create course" }));
+
+    expect(courseCodeInput).toHaveAttribute("aria-invalid", "true");
+    expect(
+      screen.getByText("Use a subject and number like COSC 499 or COSC499."),
+    ).toBeInTheDocument();
+    expect(mockCreateCourse).not.toHaveBeenCalled();
   });
 
   // Verifies: Missing Canvas token errors show reconnect guidance instead of raw API text.
