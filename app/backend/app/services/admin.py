@@ -374,12 +374,12 @@ async def reset_instructor_canvas_token(
     await _get_instructor(db, instructor_id)  # validates existence
 
     from app.core.security import encrypt_canvas_token
-    from app.integrations.canvas import fetch_self, validate_token
+    from app.integrations.canvas import validate_token
+    from app.services.canvas_timezone import fetch_canvas_time_zone
 
     await validate_token(canvas_token, canvas_url)
     encrypted = encrypt_canvas_token(canvas_token)
-    profile = await fetch_self(canvas_token, canvas_url)
-    canvas_time_zone = profile.get("time_zone") if isinstance(profile.get("time_zone"), str) else None
+    canvas_time_zone = await fetch_canvas_time_zone(canvas_token, canvas_url)
 
     existing = await db.scalar(
         select(CanvasConnection).where(

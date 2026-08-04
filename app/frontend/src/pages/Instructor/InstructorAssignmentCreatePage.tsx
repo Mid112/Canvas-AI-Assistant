@@ -42,6 +42,44 @@ const initialDescribeValues: AssignmentDescribeValues = {
   prompt: "",
 };
 
+/** Identifies one handoff into this page. Two navigations that differ in any
+ * of these are different pieces of work, not a re-render of the same one. */
+function handoffIdentity(state: AiActionDraftLocationState | null): string {
+  const draft = state?.aiAssignmentDraft;
+  return JSON.stringify([
+    draft?.conversationId ?? null,
+    draft?.pendingMessageId ?? null,
+    draft?.prompt ?? null,
+    draft?.courseId ?? null,
+    draft?.name ?? null,
+    state?.typedDraftId ?? null,
+  ]);
+}
+
+/** Remounts the page whenever the handoff identity changes.
+ *
+ * Nearly all of this page's state is seeded from location.state through
+ * useState initialisers and a useRef single-flight guard, none of which re-run
+ * on a state change alone. React Router reuses the element when the path is
+ * unchanged, so a second handoff arriving without an intervening unmount would
+ * keep the first one's step, draft, describe values and auto-generate guard —
+ * showing the previous assignment and silently skipping description expansion.
+ *
+ * No route navigates create -> create today, so this is not reachable from the
+ * current UI; it is one added link away from being reachable, and the failure
+ * is silent and shows one assignment's content under another's name. Keying is
+ * preferred over resetting the two guards because it covers every seeded value
+ * at once, including any added later.
+ */
+export function InstructorAssignmentCreateRoute() {
+  const location = useLocation();
+  return (
+    <InstructorAssignmentCreatePage
+      key={handoffIdentity(location.state as AiActionDraftLocationState | null)}
+    />
+  );
+}
+
 export function InstructorAssignmentCreatePage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -422,6 +460,11 @@ export function InstructorAssignmentCreatePage() {
       }, {
         accessToken,
         canvasUrl,
+        // Closes out the assistant preview's pending Workflow and audits
+        // the write. Undefined on the plain "+ Create Assignment" path,
+        // where the backend records a standalone Workflow instead.
+        conversationId: seededDraft?.conversationId,
+        pendingMessageId: seededDraft?.pendingMessageId,
         timeZone: instructorTimeZone,
       });
       if (user?.id && savedTypedDraftId) {
