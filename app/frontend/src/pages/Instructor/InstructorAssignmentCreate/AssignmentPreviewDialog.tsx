@@ -41,6 +41,37 @@ export function AssignmentPreviewDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {preview && (preview.title || preview.dueDate || preview.pointsPossible) ? (
+          <dl className="grid gap-2 rounded-md border border-border/70 p-3 text-sm">
+            {preview.title ? (
+              <div>
+                <dt className="text-muted-foreground">Title</dt>
+                <dd className="font-medium">{preview.title}</dd>
+              </div>
+            ) : null}
+            {preview.dueDate ? (
+              <div>
+                <dt className="text-muted-foreground">Due</dt>
+                <dd className="font-medium">{preview.dueDate}</dd>
+              </div>
+            ) : null}
+            {preview.pointsPossible ? (
+              <div>
+                <dt className="text-muted-foreground">Points</dt>
+                <dd className="font-medium">{preview.pointsPossible}</dd>
+              </div>
+            ) : null}
+            {preview.descriptionPreview ? (
+              <div className="sm:col-span-2">
+                <dt className="text-muted-foreground">Description</dt>
+                <dd className="font-medium whitespace-pre-wrap">
+                  {preview.descriptionPreview}
+                </dd>
+              </div>
+            ) : null}
+          </dl>
+        ) : null}
+
         {preview && preview.affectedResources.length > 0 ? (
           <ul className="space-y-1 text-sm text-muted-foreground">
             {preview.affectedResources.map((resource) => (
