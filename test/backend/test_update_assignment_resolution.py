@@ -176,6 +176,8 @@ def test_update_assignment_reference_resolves_and_builds_preview(client):
     assert reply["proposed_action"]["assignment_id"] == 222
     assert reply["proposed_action"]["due_date"] == "2026-08-13T23:59:00+00:00"
     assert reply["proposed_action"]["local_course_id"] == local_course_id
+    assert reply["proposed_action"]["assignment_name"] == "final exam"
+    assert "'final exam'" in reply["preview_metadata"]["summary"]
     # Only the requested field is present — title/description/points_possible
     # were never mentioned, so they must be omitted (preserved automatically).
     assert "title" not in reply["proposed_action"]
