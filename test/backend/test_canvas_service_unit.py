@@ -719,15 +719,18 @@ async def test_update_course_assignment_calls_integration():
     user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.example.edu")])
     raw = {"id": 30, "name": "Updated", "course_id": 100}
     payload = AssignmentUpdate(name="Updated")
+    current = SimpleNamespace(points_possible=50.0)
 
     with (
         patch("app.services.canvas.get_owned_course", new=AsyncMock(return_value=course)),
         patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
-        patch("app.services.canvas.update_assignment", new=AsyncMock(return_value=raw)),
+        patch("app.services.canvas.get_assignment", new=AsyncMock(return_value=current)),
+        patch("app.services.canvas.update_assignment", new=AsyncMock(return_value=raw)) as mock_update,
     ):
         result = await update_course_assignment(1, 30, payload, user, "https://canvas.example.edu", db)
 
     assert result.name == "Updated"
+    assert mock_update.await_args.args[2]["points_possible"] == 50.0
 
 
 # ---------------------------------------------------------------------------

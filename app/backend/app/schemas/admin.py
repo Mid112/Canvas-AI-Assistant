@@ -52,6 +52,7 @@ class AdminCanvasConnectionResponse(BaseModel):
     last_sync_error: str | None
     courses_synced_at: datetime | None
     created_at: datetime
+    time_zone: str | None = None
 
     model_config = {"from_attributes": True}
 
