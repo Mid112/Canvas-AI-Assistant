@@ -36,6 +36,9 @@ CREATE TABLE canvas_connections (
     -- Backs the admin System Health page's per-instructor Canvas
     -- connectivity summary (see db/migrations/029).
     last_sync_error     TEXT,
+    -- IANA timezone from Canvas /api/v1/users/self (see db/migrations/044).
+    -- Source of truth when interpreting naive assignment due dates.
+    time_zone           TEXT,
     CONSTRAINT uq_user_canvas_url UNIQUE (user_id, canvas_url)
 );
 
@@ -676,4 +679,5 @@ INSERT INTO schema_migrations (filename) VALUES
     ('040_grade_history_local_relationships.sql'),
     ('041_canvas_course_names_aliases.sql'),
     ('042_course_unique_per_instructor_url.sql'),
-    ('043_repair_canvas_course_names.sql');
+    ('043_repair_canvas_course_names.sql'),
+    ('044_canvas_connection_time_zone.sql');

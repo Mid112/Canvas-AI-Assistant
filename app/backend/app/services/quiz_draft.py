@@ -1,7 +1,6 @@
 import html
 import json
 import re
-from datetime import datetime
 from typing import Literal, cast
 
 import httpx
@@ -9,6 +8,7 @@ from fastapi import HTTPException, status
 
 from app.config import settings
 from app.schemas.preview import QuizDraftRequest, QuizDraftResponse, QuizQuestionDraft
+from app.services.due_date import normalize_due_date_to_utc_iso, parse_due_date
 from app.services.llm.json_extraction import loads_llm_json
 from app.services.llm.llm_setting import get_llm_adapter
 
@@ -80,9 +80,10 @@ async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
 
     due_at = None
     if data.get("due_at"):
+        normalized = normalize_due_date_to_utc_iso(str(data["due_at"]))
         try:
-            due_at = datetime.fromisoformat(str(data["due_at"]).replace("Z", "+00:00"))
-        except ValueError:
+            due_at = parse_due_date(normalized)
+        except (ValueError, TypeError, OverflowError):
             due_at = None
 
     questions: list[QuizQuestionDraft] = []

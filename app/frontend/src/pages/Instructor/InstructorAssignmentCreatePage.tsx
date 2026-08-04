@@ -10,6 +10,7 @@ import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useInstitution } from "@/contexts/useInstitution";
 import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
+import { useInstructorCanvasTimezone } from "@/lib/useInstructorCanvasTimezone";
 import { disambiguateCourseLabels } from "@/lib/disambiguate-course-labels";
 import { pageShellNarrow } from "@/lib/page-shell";
 import type { AiActionDraftLocationState } from "@/routes/paths";
@@ -94,6 +95,7 @@ export function InstructorAssignmentCreatePage() {
   );
 
   const canvasUrl = useCanvasConnectionUrl();
+  const instructorTimeZone = useInstructorCanvasTimezone(canvasUrl);
   const {
     availableCourses,
     isLoading: isLoadingCourses,
@@ -202,6 +204,7 @@ export function InstructorAssignmentCreatePage() {
       const generated = await generateAssignmentDraft(courseId, values.prompt, {
         accessToken,
         canvasUrl,
+        timeZone: instructorTimeZone,
       });
       resetPreviewState();
       setDraft(generated);
@@ -270,6 +273,7 @@ export function InstructorAssignmentCreatePage() {
       const previewSummary = await previewAssignmentDraft(payload, {
         accessToken,
         canvasUrl,
+        timeZone: instructorTimeZone,
       });
       setPreview(previewSummary);
       setPendingApproval(values);
@@ -304,6 +308,7 @@ export function InstructorAssignmentCreatePage() {
       }, {
         accessToken,
         canvasUrl,
+        timeZone: instructorTimeZone,
       });
       if (user?.id && savedTypedDraftId) {
         discardTypedDraft(user.id, savedTypedDraftId);
@@ -391,7 +396,9 @@ export function InstructorAssignmentCreatePage() {
             <div>
               <p className="font-medium">Due date</p>
               <p className="text-muted-foreground">
-                {formatDueDateForDisplay(approvedValues.dueDate)}
+                {formatDueDateForDisplay(approvedValues.dueDate, {
+                  treatAsDatetimeLocal: true,
+                })}
               </p>
             </div>
           </CardContent>
@@ -451,6 +458,7 @@ export function InstructorAssignmentCreatePage() {
           onApprove={handleRequestApproval}
           onBack={handleBack}
           onDraftChange={handleReviewDraftChange}
+          instructorTimeZone={instructorTimeZone}
         />
       ) : null}
 
