@@ -2694,11 +2694,12 @@ it seems related. due_date is required and must be a full ISO 8601
 string, e.g. "2026-07-11T23:59:00" — resolve it using today's date above.
 If the user gives a date but no time, default the time to 23:59:00. If
 the user does not give a due date at all, do not guess or leave due_date
-null — use the AMBIGUITY CHECK above and ask for it instead. Likewise, if
-the user does not mention points, ask rather than defaulting silently —
-only omit points_possible if the user explicitly says it's ungraded or
-has no point value. Never invent a value for a field the user didn't
-give you.
+null — use the AMBIGUITY CHECK above and ask for it instead. If the user
+does not mention points or grading, ask whether the assignment is graded
+(and if so, how many points) rather than inventing a value — never default
+to 10, 100, or any other number. Only set points_possible to null when the
+user explicitly says the assignment is ungraded or has no point value.
+Never invent a value for a field the user didn't give you.
 
 RESOLVING AN ASSIGNMENT FOR fetch_submissions:
 fetch_submissions needs an assignment, but you do not need to know its
