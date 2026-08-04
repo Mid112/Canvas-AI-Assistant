@@ -42,7 +42,9 @@ async def generate_assignment_draft(
         "Respond with JSON only: "
         '{"title": "...", "description": "...", "due_at": "ISO8601 or null", "points_possible": number or null}. '
         "The description must be plain text only: no HTML tags and no markdown formatting. "
-        'Separate paragraphs with a blank line and start list items with "- ".'
+        'Separate paragraphs with a blank line and start list items with "- ". '
+        "Use null for points_possible when the prompt describes an ungraded assignment. "
+        "Never invent a default point value such as 10 or 100."
     )
     llm_config = await get_active_llm_config(db)
     adapter_settings = {

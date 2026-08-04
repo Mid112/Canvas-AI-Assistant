@@ -187,6 +187,78 @@ async def test_create_assignment_mcp_path_uses_idempotency_guards():
 
 
 @pytest.mark.asyncio
+async def test_create_ungraded_assignment_mcp_args_send_not_graded():
+    """Ticket 21: MCP create must pass points_possible=None + grading_type=not_graded."""
+    from app.mcp_tools.schemas import CreateAssignmentAction
+
+    course = SimpleNamespace(
+        id=1,
+        canvas_url="https://canvas.example.edu",
+        name="COSC 111",
+        canvas_course_id="42",
+    )
+    db = AsyncMock()
+    db.scalar = AsyncMock(return_value=course)
+    user = SimpleNamespace(id=7)
+    action = CreateAssignmentAction(
+        local_course_id=1,
+        title="Reading Check-in",
+        description="ungraded participation",
+        due_date="2030-01-01T00:00:00",
+        points_possible=None,
+    )
+
+    async def _run_write(*_args, **kwargs):
+        return await kwargs["write"]()
+
+    with (
+        patch("app.mcp_tools.dispatcher.settings.MCP_ENABLED", True),
+        patch("app.mcp_tools.dispatcher.validate_assignment_for_create", new=AsyncMock()),
+        patch(
+            "app.mcp_tools.dispatcher._assert_no_executing_write",
+            new=AsyncMock(),
+        ),
+        patch(
+            "app.mcp_tools.dispatcher.run_idempotent_canvas_write",
+            new=AsyncMock(side_effect=_run_write),
+        ),
+        patch(
+            "app.mcp_tools.dispatcher._call_mcp_tool",
+            new=AsyncMock(
+                return_value={
+                    "success": True,
+                    "assignment": {
+                        "id": 88,
+                        "name": "Reading Check-in",
+                        "due_at": "2030-01-01T00:00:00Z",
+                        "points_possible": None,
+                        "published": False,
+                    },
+                }
+            ),
+        ) as call_mcp,
+        patch(
+            "app.mcp_tools.dispatcher.create_course_assignment",
+            new=AsyncMock(),
+        ) as create_direct,
+    ):
+        result = await execute_tool(db, user, action)
+
+    create_direct.assert_not_awaited()
+    call_mcp.assert_awaited_once()
+    _user, canvas_url, tool_name, mcp_arguments = call_mcp.await_args.args
+    assert canvas_url == "https://canvas.example.edu"
+    assert tool_name == "create_assignment"
+    assert mcp_arguments["course_id"] == 42
+    assert mcp_arguments["name"] == "Reading Check-in"
+    assert mcp_arguments["points_possible"] is None
+    assert mcp_arguments["grading_type"] == "not_graded"
+    assert result["via_mcp"] is True
+    assert result["data"]["id"] == 88
+    assert result["data"]["points_possible"] is None
+
+
+@pytest.mark.asyncio
 async def test_create_quiz_stays_on_direct_canvas_when_mcp_enabled():
     from app.mcp_tools.schemas import CreateQuizAction
 
