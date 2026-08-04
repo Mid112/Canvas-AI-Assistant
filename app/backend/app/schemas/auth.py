@@ -94,6 +94,7 @@ class CanvasConnectionResponse(BaseModel):
     id: int
     canvas_url: str
     created_at: datetime
+    time_zone: str | None = None
 
     model_config = {"from_attributes": True}
 
