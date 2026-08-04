@@ -121,6 +121,10 @@ describe("InstructorCourseTabs", () => {
       "href",
       `/instructor/courses/${course.id}/assignments`,
     );
+    expect(screen.getByRole("link", { name: "Quizzes" })).toHaveAttribute(
+      "href",
+      `/instructor/courses/${course.id}/quizzes`,
+    );
     expect(screen.getByRole("link", { name: "Students" })).toHaveAttribute(
       "href",
       `/instructor/courses/${course.id}/students`,
