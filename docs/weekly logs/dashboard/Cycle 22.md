@@ -4,7 +4,8 @@
 
 ## Burn-up Chart (Velocity)
 
-<img width="1087" height="585" alt="Cycle 22 burn-up" src="./assets/cycle-22-burnup.png" />
+<img width="876" height="663" alt="Screenshot 2026-08-04 at 11 33 03 AM" src="https://github.com/user-attachments/assets/0fcf3684-17e0-45ac-9614-d272a5b38a48" />
+
 
 ### Burn-up Summary
 
@@ -33,7 +34,8 @@ The project board remains in final-delivery mode. Most TE2 regression tickets mo
 | In Review | **0 on board** (open polish PRs still on GitHub: #1483, #1487, #1474, #1514, #1515, #1521, #1523, #1524, …) |
 | Done | **1155 completed items** |
 
-Counts from GitHub Project **team 16 project board** (project #22).
+Counts from GitHub Project **team 16 project board** .
+<img width="1423" height="632" alt="Screenshot 2026-08-04 at 10 48 31 AM" src="https://github.com/user-attachments/assets/1b1df60c-c103-4017-bc25-4b0dedea76e7" />
 
 ---
 
@@ -69,8 +71,6 @@ Major completed themes this cycle:
 
 Time was tracked using Clockify for **Cycle 22 (Jul 31, 2026 – Aug 3, 2026).**
 
-Source: official Clockify Summary report export. GitHub handles: **Mid112 → Mridul**, **StoneCA12 → Bao**.
-
 ### Team Summary
 
 | Team Member | Clockify Username | GitHub | Logged Time | Share |
@@ -82,7 +82,23 @@ Source: official Clockify Summary report export. GitHub handles: **Mid112 → Mr
 | Rhythm | trivedirhythm | rhythmt1 | **09:04:34** | 11.10% |
 | **Total** | | | **81:46:54** | **100%** |
 
-<img width="904" height="527" alt="Cycle 22 team Clockify summary" src="./assets/cycle-22-team-clockify.png" />
+
+<img width="1203" height="382" alt="Screenshot 2026-08-04 at 11 34 33 AM" src="https://github.com/user-attachments/assets/f72c2d7e-5a17-4902-a287-5f22b6230631" />
+**YERDANA:**
+
+<img width="885" height="207" alt="Screenshot 2026-08-04 at 11 42 26 AM" src="https://github.com/user-attachments/assets/9ef32d65-fa6c-4ca9-9899-ffaa3def494f" />
+**RHYTHM:**
+
+<img width="885" height="444" alt="Screenshot 2026-08-04 at 11 42 35 AM" src="https://github.com/user-attachments/assets/ac4a0142-45e5-4e50-b106-1e9ba55ce331" />
+**BAO:**
+
+<img width="874" height="190" alt="Screenshot 2026-08-04 at 11 42 41 AM" src="https://github.com/user-attachments/assets/6472cfd2-5f50-4930-ba74-364a00823fe8" />
+**MRIDUL:**
+
+<img width="879" height="269" alt="Screenshot 2026-08-04 at 11 42 47 AM" src="https://github.com/user-attachments/assets/3f43b0e6-e5fd-4a03-9ee8-ed73720d650f" />
+**JESSICA:**
+
+<img width="877" height="329" alt="Screenshot 2026-08-04 at 11 42 52 AM" src="https://github.com/user-attachments/assets/864cdf9b-f9b0-4164-9426-c4508c3a1ce5" />
 
 ---
 
