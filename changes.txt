@@ -708,7 +708,7 @@ FILES
     app/frontend/src/lib/canvas-timezone.ts
     app/frontend/src/lib/assignment-utils.ts
     app/frontend/src/lib/map-chat-reply.ts
-    db/migrations/044_course_timezone.sql
+    db/migrations/044_canvas_connection_time_zone.sql
 
 WHAT AND WHY
     Assignment due-date updates could skew hours when chat emitted naive or
