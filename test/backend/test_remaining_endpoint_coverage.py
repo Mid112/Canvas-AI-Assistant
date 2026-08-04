@@ -268,8 +268,29 @@ def test_assignment_preview_http_returns_dry_run_metadata(client):
     assert "COSC 310" in body["summary"]
     assert body["reversible"] is True
     assert body["metadata"]["name"] == "Midterm Exam"
+    assert body["metadata"]["title"] == "Midterm Exam"
+    assert "100" in str(body["metadata"]["points_possible"])
     assert any(r["type"] == "course" and r["name"] == "COSC 310" for r in body["affected_resources"])
     assert any(r["type"] == "assignment" for r in body["affected_resources"])
+
+
+def test_assignment_preview_rejects_blank_description(client):
+    """Ticket 22: blank description rejected on preview with actionable message."""
+    headers = _register_with_canvas(client)
+    local_course_id = _sync_course(client, headers)
+    response = client.post(
+        f"/api/v1/canvas/courses/{local_course_id}/assignments/preview"
+        f"?canvas_url={CANVAS_URL}",
+        json={
+            "name": "No Desc",
+            "description": "   ",
+            "due_at": "2026-12-15T23:59:00Z",
+            "points_possible": 50,
+        },
+        headers=headers,
+    )
+    assert response.status_code == 422
+    assert "description" in str(response.json()["detail"]).lower()
 
 
 def test_assignment_preview_unauthenticated(client):

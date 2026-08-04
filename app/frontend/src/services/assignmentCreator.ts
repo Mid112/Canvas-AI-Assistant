@@ -111,6 +111,12 @@ interface AssignmentPreviewApiResponse {
   summary: string;
   reversible: boolean;
   affected_resources: { type: string; name: string }[];
+  metadata?: {
+    title?: string;
+    description_preview?: string;
+    due_date?: string;
+    points_possible?: string;
+  };
 }
 
 interface PreviewAssignmentDraftOptions {
@@ -147,11 +153,16 @@ export async function previewAssignmentDraft(
   }
 
   const data = (await response.json()) as AssignmentPreviewApiResponse;
+  const metadata = data.metadata ?? {};
 
   return {
     summary: data.summary,
     reversible: data.reversible,
     affectedResources: data.affected_resources,
+    title: metadata.title,
+    descriptionPreview: metadata.description_preview,
+    dueDate: metadata.due_date,
+    pointsPossible: metadata.points_possible,
   };
 }
 
