@@ -15,7 +15,7 @@ function wrapper({ children }: { children: React.ReactNode }) {
 
 describe("InstitutionContext", () => {
   // Verifies: Defaults to the first institution and exposes its courses.
-  // Dashboard metrics stay empty until a successful API fetch (ticket 39).
+  // Dashboard metrics stay empty until a successful API fetch (tickets 26/39).
   it("defaults to the first institution and exposes its courses", () => {
     const { result } = renderHook(() => useInstitution(), { wrapper });
 
