@@ -99,6 +99,12 @@ function SavedConnectionCard({
             <p className="text-sm font-semibold">Connected</p>
           </div>
           <p className="text-sm font-medium">{connection.canvas_url}</p>
+          {connection.time_zone ? (
+            <p className="text-sm text-muted-foreground">
+              Canvas timezone:{" "}
+              <span className="font-medium text-foreground">{connection.time_zone}</span>
+            </p>
+          ) : null}
           <p className="text-sm text-muted-foreground">
             Last synced: {formatSyncedAt(connection.created_at)}
           </p>

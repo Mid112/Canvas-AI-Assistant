@@ -334,6 +334,7 @@ def _to_connection_response(conn: CanvasConnection) -> AdminCanvasConnectionResp
         last_sync_error=redact_secrets(conn.last_sync_error) if conn.last_sync_error else None,
         courses_synced_at=conn.courses_synced_at,
         created_at=conn.created_at,
+        time_zone=conn.time_zone,
     )
 
 
@@ -373,10 +374,12 @@ async def reset_instructor_canvas_token(
     await _get_instructor(db, instructor_id)  # validates existence
 
     from app.core.security import encrypt_canvas_token
-    from app.integrations.canvas import validate_token
+    from app.integrations.canvas import fetch_self, validate_token
 
     await validate_token(canvas_token, canvas_url)
     encrypted = encrypt_canvas_token(canvas_token)
+    profile = await fetch_self(canvas_token, canvas_url)
+    canvas_time_zone = profile.get("time_zone") if isinstance(profile.get("time_zone"), str) else None
 
     existing = await db.scalar(
         select(CanvasConnection).where(
@@ -387,9 +390,15 @@ async def reset_instructor_canvas_token(
     if existing:
         existing.encrypted_token = encrypted
         existing.last_sync_error = None
+        existing.time_zone = canvas_time_zone
     else:
         db.add(
-            CanvasConnection(user_id=instructor_id, canvas_url=canvas_url, encrypted_token=encrypted)
+            CanvasConnection(
+                user_id=instructor_id,
+                canvas_url=canvas_url,
+                encrypted_token=encrypted,
+                time_zone=canvas_time_zone,
+            )
         )
 
     db.add(AuditLogSession(
