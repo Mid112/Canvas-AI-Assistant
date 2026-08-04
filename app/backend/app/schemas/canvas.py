@@ -141,10 +141,19 @@ class QuizCreate(BaseModel):
     )
 
 
+class QuizPublishUpdate(BaseModel):
+    """Publish or unpublish a Canvas quiz (classic or New Quizzes)."""
+
+    published: bool
+
+
 class QuizResponse(BaseModel):
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
     id: int
+    # Canvas gradebook writes target the linked assignment, not the classic quiz id.
+    # Classic quizzes expose this separately; New Quizzes use assignment_id as id.
+    assignment_id: int | None = None
     title: str
     description: str | None = None
     due_at: datetime | None = None

@@ -216,7 +216,14 @@ interface ApproveQuizDraftOptions {
 export async function approveQuizDraft(
   payload: QuizApprovePayload,
   options: ApproveQuizDraftOptions,
-): Promise<{ id: number; title: string; warnings: string[] }> {
+): Promise<{
+  id: number;
+  title: string;
+  warnings: string[];
+  published: boolean;
+  quizEngine: "classic" | "new_quizzes";
+  assignmentId: number | null;
+}> {
   const request = toQuizCreateBody(payload);
   let createUrl = appendCanvasUrl(
     `${API_BASE_URL}/canvas/courses/${request.courseId}/quizzes`,
@@ -253,11 +260,17 @@ export async function approveQuizDraft(
       id: number;
       title: string;
       warnings?: string[];
+      published?: boolean;
+      quiz_engine?: "classic" | "new_quizzes";
+      assignment_id?: number | null;
     };
     return {
       id: data.id,
       title: data.title,
       warnings: data.warnings ?? [],
+      published: Boolean(data.published),
+      quizEngine: data.quiz_engine ?? payload.quizEngine ?? "classic",
+      assignmentId: data.assignment_id ?? null,
     };
   }
 
@@ -276,7 +289,14 @@ export async function approveQuizDraft(
 async function recoverCreatedQuiz(
   payload: QuizApprovePayload,
   options: ApproveQuizDraftOptions,
-): Promise<{ id: number; title: string; warnings: string[] } | null> {
+): Promise<{
+  id: number;
+  title: string;
+  warnings: string[];
+  published: boolean;
+  quizEngine: "classic" | "new_quizzes";
+  assignmentId: number | null;
+} | null> {
   try {
     const listResponse = await fetch(
       appendCanvasUrl(
@@ -298,8 +318,12 @@ async function recoverCreatedQuiz(
       points_possible?: number | null;
       question_count?: number | null;
       warnings?: string[];
+      published?: boolean;
+      quiz_engine?: "classic" | "new_quizzes";
+      assignment_id?: number | null;
     }>;
     const duePrefix = payload.dueDate.slice(0, 10);
+    const expectedEngine = payload.quizEngine ?? "classic";
     const expectedQuestionCount =
       payload.questions.length +
       (payload.questionBankGroups ?? []).reduce(
@@ -307,6 +331,9 @@ async function recoverCreatedQuiz(
         0,
       );
     const match = quizzes.find((quiz) => {
+      if ((quiz.quiz_engine ?? "classic") !== expectedEngine) {
+        return false;
+      }
       if (quiz.title !== payload.name) {
         return false;
       }
@@ -344,6 +371,9 @@ async function recoverCreatedQuiz(
       warnings: match.warnings ?? [
         "Best-effort recovery: matched an existing Canvas quiz by title, points, due date, description, and question count after the create response failed. Confirm in Canvas that this is the quiz you just submitted before editing further.",
       ],
+      published: Boolean(match.published),
+      quizEngine: match.quiz_engine ?? expectedEngine,
+      assignmentId: match.assignment_id ?? null,
     };
   } catch {
     return null;
