@@ -179,15 +179,25 @@ export function AssignmentReviewApproveStep({
             <Input
               id="review-points-possible"
               type="number"
-              min="0"
-              step="1"
+              min="0.01"
+              step="0.1"
               disabled={isApproving}
+              placeholder="Leave blank for ungraded"
               aria-invalid={Boolean(errors.pointsPossible)}
               aria-describedby={
-                errors.pointsPossible ? "review-points-possible-error" : undefined
+                errors.pointsPossible
+                  ? "review-points-possible-error"
+                  : "review-points-possible-hint"
               }
               {...register("pointsPossible", { valueAsNumber: true })}
             />
+            <p
+              id="review-points-possible-hint"
+              className="text-xs text-muted-foreground"
+            >
+              Leave blank to create an ungraded assignment. Do not invent a
+              default point value.
+            </p>
             {errors.pointsPossible ? (
               <p
                 id="review-points-possible-error"

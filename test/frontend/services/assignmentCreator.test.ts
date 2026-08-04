@@ -129,6 +129,26 @@ describe("generateAssignmentDraft", () => {
     expect(draft.pointsPossible).toBe(75);
   });
 
+  it("maps missing draft points to null instead of inventing 100", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          title: "Reading Check-in",
+          description: "Ungraded reflection.",
+          due_at: null,
+          points_possible: null,
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const draft = await generateAssignmentDraft(3, "Ungraded reading check-in", {
+      accessToken: "access-token",
+    });
+
+    expect(draft.pointsPossible).toBeNull();
+  });
+
   it("throws AssignmentCreatorApiError on a failed response", async () => {
     vi.mocked(fetch).mockResolvedValue(
       new Response(JSON.stringify({ detail: "Canvas token is invalid" }), {

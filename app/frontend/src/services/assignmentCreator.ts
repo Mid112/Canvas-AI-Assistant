@@ -77,7 +77,13 @@ export async function generateAssignmentDraft(
     dueDate: data.due_at
       ? formatDueDateForInput(data.due_at, options.timeZone)
       : defaultDueDate(options.timeZone),
-    pointsPossible: data.points_possible ?? 100,
+    // Ticket 21: preserve null for ungraded — never invent 10/100.
+    pointsPossible:
+      typeof data.points_possible === "number" &&
+      Number.isFinite(data.points_possible) &&
+      data.points_possible > 0
+        ? data.points_possible
+        : null,
   };
 }
 

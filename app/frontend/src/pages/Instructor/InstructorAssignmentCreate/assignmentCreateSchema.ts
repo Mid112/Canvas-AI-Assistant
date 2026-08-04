@@ -31,9 +31,21 @@ export const assignmentReviewSchema = z.object({
     .refine((value) => new Date(value).getTime() > Date.now(), {
       message: "Due date must be in the future. Choose a date and time after now.",
     }),
-  pointsPossible: z
-    .number({ error: "Points possible is required. Enter a positive point value." })
-    .positive("Points possible must be greater than 0. Enter a positive point value."),
+  // Ticket 21: null/empty = ungraded. Never invent a default like 10 or 100.
+  pointsPossible: z.preprocess((value) => {
+    if (value === "" || value === null || value === undefined) {
+      return null;
+    }
+    if (typeof value === "number" && Number.isNaN(value)) {
+      return null;
+    }
+    return value;
+  }, z
+    .number({ error: "Points possible must be a number when provided." })
+    .positive(
+      "Points possible must be greater than 0. Enter a positive point value, or leave blank for ungraded.",
+    )
+    .nullable()),
 });
 
 /** Form values after Zod coercion/validation (submit payload). */
