@@ -11,16 +11,25 @@ export const assignmentDescribeSchema = z.object({
 export type AssignmentDescribeFormSchema = z.infer<typeof assignmentDescribeSchema>;
 
 export const assignmentReviewSchema = z.object({
-  name: z.string().trim().min(1, "Title cannot be empty"),
-  description: z.string().trim().min(1, "Description cannot be empty"),
+  name: z
+    .string()
+    .trim()
+    .min(1, "Title cannot be empty. Enter a title before submitting."),
+  description: z
+    .string()
+    .trim()
+    .min(
+      1,
+      "Description cannot be empty. Add a short description of what students should do.",
+    ),
   dueDate: z
     .string()
-    .min(1, "Due date is required")
+    .min(1, "Due date is required. Set a due date before creating.")
     .refine((value) => !Number.isNaN(new Date(value).getTime()), {
-      message: "Due date must be a valid date",
+      message: "Due date must be a valid date. Use the date picker and try again.",
     })
     .refine((value) => new Date(value).getTime() > Date.now(), {
-      message: "Due date must be in the future",
+      message: "Due date must be in the future. Choose a date and time after now.",
     }),
   // Ticket 21: null/empty = ungraded. Never invent a default like 10 or 100.
   pointsPossible: z.preprocess((value) => {
@@ -31,7 +40,12 @@ export const assignmentReviewSchema = z.object({
       return null;
     }
     return value;
-  }, z.number().positive("Points possible must be greater than 0").nullable()),
+  }, z
+    .number({ error: "Points possible must be a number when provided." })
+    .positive(
+      "Points possible must be greater than 0. Enter a positive point value, or leave blank for ungraded.",
+    )
+    .nullable()),
 });
 
 /** Form values after Zod coercion/validation (submit payload). */
