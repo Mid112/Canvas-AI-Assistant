@@ -993,7 +993,9 @@ async def get_course_quizzes(
     try:
         new_items = await list_new_quizzes(canvas_course_id, token, resolved)
     except HTTPException as exc:
-        logger.info(
+        # Soft-fail so classic quizzes still load, but warn — temporary New
+        # Quizzes outages otherwise look like missing quizzes in the UI.
+        logger.warning(
             "Skipping New Quizzes list merge for course %s: %s",
             canvas_course_id,
             exc.detail,

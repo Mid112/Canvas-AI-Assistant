@@ -35,6 +35,7 @@ import {
   fetchCourseQuizzes,
   setQuizPublished,
 } from "@/services/quizzes";
+import { fetchQuizCapabilities } from "@/services/quizCreator";
 import type { Quiz } from "@/types/quiz";
 import type { InstructorCourse } from "@/types/course";
 
@@ -47,6 +48,7 @@ export function InstructorCourseQuizzesPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [newQuizzesNotice, setNewQuizzesNotice] = useState<string | null>(null);
   const [togglingPublishQuizKey, setTogglingPublishQuizKey] = useState<
     string | null
   >(null);
@@ -95,14 +97,26 @@ export function InstructorCourseQuizzesPage() {
 
     async function loadQuizzes() {
       try {
-        const data = await fetchCourseQuizzes(
-          parsedLocalCourseId,
-          token,
-          selectedCanvasUrl,
-        );
+        const [data, capabilities] = await Promise.all([
+          fetchCourseQuizzes(parsedLocalCourseId, token, selectedCanvasUrl),
+          fetchQuizCapabilities(parsedLocalCourseId, {
+            accessToken: token,
+            canvasUrl: selectedCanvasUrl,
+          }).catch(() => null),
+        ]);
         if (!cancelled) {
           setQuizzes(data);
           setLoadError(null);
+          // Ticket 13 review: if New Quizzes is unavailable/failing, classic
+          // quizzes still load — surface that so rows aren't silently missing.
+          if (capabilities && !capabilities.newQuizzes) {
+            setNewQuizzesNotice(
+              capabilities.newQuizzesUnavailableReason?.trim() ||
+                "New Quizzes could not be loaded for this course. Classic quizzes are still shown.",
+            );
+          } else {
+            setNewQuizzesNotice(null);
+          }
         }
       } catch (error) {
         if (!cancelled) {
@@ -112,6 +126,7 @@ export function InstructorCourseQuizzesPage() {
               : "Unable to load quizzes.";
           setLoadError(message);
           setQuizzes([]);
+          setNewQuizzesNotice(null);
         }
       } finally {
         if (!cancelled) {
@@ -302,6 +317,16 @@ export function InstructorCourseQuizzesPage() {
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <p>{publishError}</p>
+        </div>
+      ) : null}
+
+      {newQuizzesNotice ? (
+        <div
+          role="status"
+          className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100"
+        >
+          <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          <p>{newQuizzesNotice}</p>
         </div>
       ) : null}
 

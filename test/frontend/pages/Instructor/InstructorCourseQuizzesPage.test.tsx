@@ -5,6 +5,7 @@ import { Route, Routes } from "react-router-dom";
 
 import { InstructorCourseQuizzesPage } from "@/pages/Instructor/InstructorCourseQuizzesPage";
 import { fetchCourseQuizzes, setQuizPublished } from "@/services/quizzes";
+import { fetchQuizCapabilities } from "@/services/quizCreator";
 import { fetchActiveCourse, fetchCachedCourses, fetchCourses } from "@/services/canvas";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
@@ -36,6 +37,10 @@ vi.mock("@/services/quizzes", () => ({
   setQuizPublished: vi.fn(),
 }));
 
+vi.mock("@/services/quizCreator", () => ({
+  fetchQuizCapabilities: vi.fn(),
+}));
+
 vi.mock("@/services/assignments", () => ({
   setAssignmentPublished: vi.fn(),
 }));
@@ -43,6 +48,7 @@ vi.mock("@/services/assignments", () => ({
 const mockUseAuth = vi.fn();
 const mockedFetchCourseQuizzes = vi.mocked(fetchCourseQuizzes);
 const mockedSetQuizPublished = vi.mocked(setQuizPublished);
+const mockedFetchQuizCapabilities = vi.mocked(fetchQuizCapabilities);
 const mockedFetchCourses = vi.mocked(fetchCourses);
 const mockedFetchCachedCourses = vi.mocked(fetchCachedCourses);
 const mockedFetchActiveCourse = vi.mocked(fetchActiveCourse);
@@ -135,6 +141,12 @@ describe("InstructorCourseQuizzesPage", () => {
         quiz_engine: "classic",
       },
     ]);
+    mockedFetchQuizCapabilities.mockResolvedValue({
+      classicQuizzes: true,
+      newQuizzes: true,
+      questionBanks: true,
+      preferredEngine: "classic",
+    });
   });
 
   // Verifies: Loads quizzes through the quiz list API, not assignments.
@@ -272,5 +284,26 @@ describe("InstructorCourseQuizzesPage", () => {
     expect(screen.getAllByRole("button", { name: "Unpublish" })).toHaveLength(
       2,
     );
+  });
+
+  // Verifies: Ticket 13 review — New Quizzes soft-fail is visible, not silent.
+  it("shows a notice when New Quizzes capabilities are unavailable", async () => {
+    mockedFetchQuizCapabilities.mockResolvedValue({
+      classicQuizzes: true,
+      newQuizzes: false,
+      questionBanks: false,
+      preferredEngine: "classic",
+      newQuizzesUnavailableReason:
+        "New Quizzes API returned 403 for this course.",
+    });
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("New Quizzes API returned 403 for this course."),
+      ).toBeInTheDocument();
+    });
+    expect(screen.getByText("Recursion Quiz")).toBeInTheDocument();
   });
 });
