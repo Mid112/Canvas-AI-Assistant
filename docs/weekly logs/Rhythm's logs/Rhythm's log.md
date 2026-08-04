@@ -863,3 +863,80 @@ Managing team pull requests proved to be an essential exercise in maintaining ve
 *   Address PR review feedback for #1443 and successfully merge into `develop`.
 *   Take on additional high-priority post-TE2 bug fixes from the project board.
 *   Begin contributing to final project deliverables, specifically the Developer Documentation and User Guides.
+
+# Cycle 22: Friday (07/31) – Monday (08/03)
+
+## Timesheet & Daily Log
+
+**Total Cycle Time:** 09:04:34
+
+### **Friday (07/31) — 04:00:17**
+<img width="1208" height="170" alt="Untitled 3" src="https://github.com/user-attachments/assets/c460836d-8e7f-4fbe-9585-a156e2111bf8" />
+
+*   **Team Meeting & Planning:** Updated and merged my Cycle 21 personal logs (PR #1463) during our team meeting. We discussed how to assign the remaining bug fix tasks from Testing Event 2 and figured out our priority list.
+*   **PR Reviews:** 
+    *   Reviewed and approved PR #1457 (Fix course creation token error). Left some notes on non-blocking follow-ups regarding the global Canvas URL fallback and connection ordering.
+    *   Reviewed and approved PR #1471 (Fix Ticket 18 chat window layout). Left a few nits about global header changes and chat padding.
+
+### **Saturday (08/01) — 01:42:40**
+<img width="1208" height="110" alt="Untitled 4" src="https://github.com/user-attachments/assets/530c2833-3996-4d2d-b702-a4c0cc5ac915" />
+
+*   **Development:** Built Ticket 19 (Issue #1443). I added structured answers in the chat for missing assignments and submission rates, including a readable list, empty states, and a deep link to analytics. Opened PR #1474.
+
+### **Monday (08/03) — 03:21:37**
+<img width="1206" height="292" alt="Untitled 5" src="https://github.com/user-attachments/assets/740ba3ee-c570-486e-85ea-3b4afd949044" />
+
+*   **Development & Refinements:** 
+    *   Completed follow-ups on PR #1474 (Ticket 19) to ensure it says "No due date" when the due date is missing, and documented the stack changes.
+    *   Built Ticket 15 (Issue #1439): Added stage-aware AI loading feedback like "Thinking..." and long-wait tips. Opened PR #1522.
+    *   Built Ticket 16 (Issue #1440): Updated the chat to ask for all missing create-assignment fields in a single clarify turn instead of one by one. Opened PR #1523.
+    *   Built Ticket 20 (Issue #1444): Softened the AI guardrails for assignment descriptions so educational mentions are allowed while still blocking actual abuse. Opened PR #1524.
+
+---
+
+## Feature & Task Association
+
+| Feature / Topic | Concrete Tasks This Cycle | Status |
+| :--- | :--- | :--- |
+| **Log Management** | Merged Cycle 21 personal logs and aligned with the team on bug priorities. | **Completed** (PR #1463) |
+| **Peer Reviews** | Reviewed course creation token fixes and chat window layout fixes. | **Completed** (PR #1457, #1471) |
+| **Missing Assignments (Ticket 19)** | Built full feature for structured chat answers for missing assignments and analytics. | **PR Open** (#1474) |
+| **AI Loading States (Ticket 15)** | Built full feature for stage-aware loading feedback for the AI assistant. | **Completed** (PR #1522 Merged) |
+| **Missing Fields (Ticket 16)** | Built full feature combining missing assignment field prompts into a single clarify turn. | **PR Open** (#1523) |
+| **AI Guardrails (Ticket 20)** | Adjusted assignment description guardrails for better educational context. | **PR Open** (#1524) |
+
+---
+
+## Progress Status
+
+| TASK / ISSUE | STATUS |
+| :--- | :--- |
+| Cycle 21 personal logs (#1463) | Completed |
+| Review PR #1457 (Course creation token error) | Completed (Approved) |
+| Review PR #1471 (Chat window layout) | Completed (Approved) |
+| Ticket 15 / Issue #1439 (AI loading feedback) | Completed (Merged) |
+| Ticket 19 / Issue #1443 (Missing assignments in chat) | In Progress (PR #1474 open) |
+| Ticket 16 / Issue #1440 (Missing fields clarification) | In Progress (PR #1523 open) |
+| Ticket 20 / Issue #1444 (Softer assignment guardrails) | In Progress (PR #1524 open) |
+
+---
+
+## Cycle Goal Review & Reflection
+
+**Achievements vs. Cycle Goals:**
+*   **Team Alignment:** Met. Successfully got on the same page with the team regarding post-TE2 bug priorities.
+*   **Post-TE2 Bug Fixes:** Met and exceeded. I was able to build and open pull requests for four separate full-feature tickets (Tickets 15, 16, 19, and 20) over the weekend and Monday, successfully getting Ticket 15 completely merged. 
+*   **PR Reviews:** Met. Kept my teammates unblocked by thoroughly reviewing two important PRs.
+
+**Challenges & Learnings:**
+* Working on Ticket 20 made me realize how tricky it is to tune AI guardrails. It takes careful prompt engineering to ensure the assistant blocks actual abuse while still allowing regular educational terms that might accidentally trigger a false positive.
+* I learned that combining questions into a single turn and providing clear loading states makes the chat feel much faster and more human, which takes careful coordination between the client and server.
+
+---
+
+## Next Cycle Goals
+
+*   Address any remaining review comments to merge my open PRs (#1474, #1523, #1524).
+*   Create PRs for my remaining assigned bug fix issues.
+*   Begin working on the user guides documentation for the final handover.
+*   Review open PRs to help teammates close their issues and keep the board clear.
