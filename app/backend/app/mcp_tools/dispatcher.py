@@ -121,15 +121,17 @@ def parse_action(raw_llm_output: str) -> Any:
 
 
 # Friendly clarifying questions for create_assignment's fields, keyed in
-# the order they're checked. points_possible is Optional in
-# CreateAssignmentAction (str | None, to keep update_assignment's partial
-# updates and the data model flexible), but for a *new* assignment every
-# field should be an explicit user decision before a preview is shown.
+# the order they're checked. points_possible may be null for ungraded
+# assignments (Ticket 21) — ask graded-vs-ungraded when the model hasn't
+# addressed points at all, never invent a default like 10.
 _CREATE_ASSIGNMENT_FIELD_QUESTIONS = {
     "title": "What should this assignment be called?",
     "description": "What should the assignment description say?",
     "due_date": "When is this assignment due?",
-    "points_possible": "How many points is this assignment worth?",
+    "points_possible": (
+        "Is this assignment graded? If yes, how many points is it worth? "
+        "If it's ungraded, say so — do not invent a point value."
+    ),
 }
 
 # Kept for call-site compatibility; quiz field gathering happens in the
@@ -312,8 +314,17 @@ def _create_assignment_missing_field(proposed: dict) -> str | None:
         value = proposed.get(field)
         if not isinstance(value, str) or not value.strip():
             return field
-    if proposed.get("points_possible") is None:
+    # Ticket 21: missing key → ask graded-vs-ungraded. Explicit null means
+    # ungraded and is complete; never treat null as "default to 10 points".
+    if "points_possible" not in proposed:
         return "points_possible"
+    points = proposed.get("points_possible")
+    if points is not None:
+        try:
+            if float(points) <= 0:
+                return "points_possible"
+        except (TypeError, ValueError):
+            return "points_possible"
     return None
 
 
@@ -650,17 +661,24 @@ async def execute_tool(
             )
             if _mcp_enabled():
                 async def _mcp_create_assignment() -> dict[str, Any]:
+                    mcp_arguments: dict[str, Any] = {
+                        "course_id": int(course.canvas_course_id),
+                        "name": action.title,
+                        "due_at": action.due_date,
+                        "description": action.description,
+                    }
+                    if action.points_possible is None:
+                        # Ticket 21: ungraded — do not invent a points default.
+                        mcp_arguments["points_possible"] = None
+                        mcp_arguments["grading_type"] = "not_graded"
+                    else:
+                        mcp_arguments["points_possible"] = action.points_possible
+                        mcp_arguments["grading_type"] = "points"
                     mcp_result = await _call_mcp_tool(
                         user,
                         course.canvas_url,
                         "create_assignment",
-                        {
-                            "course_id": int(course.canvas_course_id),
-                            "name": action.title,
-                            "points_possible": action.points_possible,
-                            "due_at": due_date,
-                            "description": action.description,
-                        },
+                        mcp_arguments,
                     )
                     if not mcp_result.get("success") or not mcp_result.get("assignment"):
                         raise ToolExecutionError(
@@ -668,13 +686,15 @@ async def execute_tool(
                             log_detail=f"MCP create_assignment response: {mcp_result!r}",
                         )
                     created = mcp_result["assignment"]
+                    created_points = created.get("points_possible")
+                    if created_points is None:
+                        created_points = action.points_possible
                     return AssignmentResponse(
                         id=int(created.get("id")),
                         name=created.get("name") or action.title,
                         description=action.description,
                         due_at=created.get("due_at"),
-                        points_possible=created.get("points_possible")
-                        or action.points_possible,
+                        points_possible=created_points,
                         course_id=int(course.canvas_course_id),
                         published=bool(created.get("published", False)),
                     ).model_dump(mode="json")
