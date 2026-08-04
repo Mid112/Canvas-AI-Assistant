@@ -30,14 +30,19 @@ from app.integrations.canvas import (
     fetch_assignment,
     fetch_assignments,
     fetch_courses,
+    fetch_new_quiz,
+    fetch_quiz,
     fetch_submissions,
     fetch_user_profile,
+    list_new_quizzes,
     list_question_banks,
     list_quizzes,
     probe_new_quizzes,
     send_conversation,
     update_assignment,
     update_course,
+    update_new_quiz,
+    update_quiz,
     update_submission_grade,
 )
 from app.models.assignment import Assignment
@@ -60,6 +65,7 @@ from app.schemas.canvas import (
     QuestionBankSummary,
     QuizCapabilities,
     QuizCreate,
+    QuizPublishUpdate,
     QuizResponse,
     SubmissionResponse,
     SubmissionStatus,
@@ -827,6 +833,9 @@ def _new_quiz_payload_for_canvas(payload: QuizCreate) -> dict:
         "due_at": payload.due_at.isoformat() if payload.due_at else None,
         "points_possible": payload.points_possible,
         "grading_type": "points",
+        # Keep published=False on create; never drop the field the way we
+        # drop nulls below — New Quizzes treat omitted published as ambient.
+        "published": payload.published,
         "quiz_settings": {
             "multiple_attempts": {
                 "multiple_attempts_enabled": attempts_enabled,
@@ -840,7 +849,11 @@ def _new_quiz_payload_for_canvas(payload: QuizCreate) -> dict:
             ),
         },
     }
-    return {key: value for key, value in body.items() if value is not None}
+    return {
+        key: value
+        for key, value in body.items()
+        if value is not None or key == "published"
+    }
 
 
 def _new_quiz_item_payload(question, position: int) -> dict:
@@ -989,27 +1002,172 @@ async def get_course_quizzes(
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     resolved = course.canvas_url
     token = require_canvas_token(user, resolved)
-    raw = await list_quizzes(int(course.canvas_course_id), token, resolved)
-    quizzes: list[QuizResponse] = []
-    for item in raw:
-        quizzes.append(
-            QuizResponse(
-                id=item["id"],
-                title=item.get("title") or "Untitled Quiz",
-                description=item.get("description"),
-                due_at=item.get("due_at"),
-                points_possible=item.get("points_possible"),
-                course_id=int(course.canvas_course_id),
-                quiz_type=item.get("quiz_type"),
-                allowed_attempts=item.get("allowed_attempts"),
-                time_limit=item.get("time_limit"),
-                published=bool(item.get("published", False)),
-                question_count=item.get("question_count"),
-                html_url=item.get("html_url"),
-                quiz_engine="classic",
-            )
+    canvas_course_id = int(course.canvas_course_id)
+
+    quizzes = [
+        _classic_quiz_response(item, canvas_course_id)
+        for item in await list_quizzes(canvas_course_id, token, resolved)
+    ]
+
+    # New Quizzes live on a separate API and were previously invisible after
+    # refresh because only classic /quizzes was polled (Ticket 13).
+    try:
+        new_items = await list_new_quizzes(canvas_course_id, token, resolved)
+    except HTTPException as exc:
+        # Soft-fail so classic quizzes still load, but warn — temporary New
+        # Quizzes outages otherwise look like missing quizzes in the UI.
+        logger.warning(
+            "Skipping New Quizzes list merge for course %s: %s",
+            canvas_course_id,
+            exc.detail,
         )
+    else:
+        quizzes.extend(
+            _new_quiz_response(item, canvas_course_id) for item in new_items
+        )
+
     return quizzes
+
+
+def _classic_quiz_response(item: dict, canvas_course_id: int) -> QuizResponse:
+    assignment_id = item.get("assignment_id")
+    return QuizResponse(
+        id=int(item["id"]),
+        assignment_id=int(assignment_id) if assignment_id is not None else None,
+        title=item.get("title") or "Untitled Quiz",
+        description=item.get("description"),
+        due_at=item.get("due_at"),
+        points_possible=item.get("points_possible"),
+        course_id=canvas_course_id,
+        quiz_type=item.get("quiz_type"),
+        allowed_attempts=item.get("allowed_attempts"),
+        time_limit=item.get("time_limit"),
+        published=bool(item.get("published", False)),
+        question_count=item.get("question_count"),
+        html_url=item.get("html_url"),
+        quiz_engine="classic",
+    )
+
+
+def _new_quiz_response(item: dict, canvas_course_id: int) -> QuizResponse:
+    # New Quizzes are keyed by the linked Canvas assignment id.
+    assignment_id = int(item.get("assignment_id") or item["id"])
+    return QuizResponse(
+        id=assignment_id,
+        assignment_id=assignment_id,
+        title=item.get("title") or "Untitled Quiz",
+        description=item.get("instructions") or item.get("description"),
+        due_at=item.get("due_at"),
+        points_possible=item.get("points_possible"),
+        course_id=canvas_course_id,
+        quiz_type="new_quizzes",
+        allowed_attempts=None,
+        time_limit=None,
+        published=bool(item.get("published", False)),
+        question_count=item.get("question_count") or item.get("items_count"),
+        html_url=item.get("html_url"),
+        quiz_engine="new_quizzes",
+    )
+
+
+# Future prep: resolves the Canvas assignment id for quiz gradebook writes.
+def quiz_gradebook_assignment_id(quiz: QuizResponse) -> int:
+    """Return the Canvas assignment id used for quiz gradebook writes.
+
+    Classic quiz ids are not valid assignment submission targets. New Quizzes
+    already use assignment_id as their primary id.
+    """
+    if quiz.assignment_id is not None:
+        return quiz.assignment_id
+    if quiz.quiz_engine == "new_quizzes":
+        return quiz.id
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=(
+            "This classic quiz has no linked gradebook assignment yet, so it "
+            "can't be marked through the assignment submission API."
+        ),
+    )
+
+
+async def set_quiz_published(
+    local_course_id: int,
+    quiz_id: int,
+    payload: QuizPublishUpdate,
+    user: User,
+    canvas_url: str | None,
+    db: AsyncSession,
+    *,
+    quiz_engine: str = "classic",
+) -> QuizResponse:
+    """Publish or unpublish a quiz via the quiz-engine-specific Canvas API."""
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
+    require_writable_course(course)
+    canvas_course_id = int(course.canvas_course_id)
+    engine = "new_quizzes" if quiz_engine == "new_quizzes" else "classic"
+
+    if engine == "new_quizzes":
+        current = await fetch_new_quiz(
+            canvas_course_id, quiz_id, token, resolved_canvas_url
+        )
+        currently_published = bool(current.get("published", False))
+        if payload.published == currently_published:
+            return _new_quiz_response(current, canvas_course_id)
+        try:
+            data = await update_new_quiz(
+                canvas_course_id,
+                quiz_id,
+                {"published": payload.published},
+                token,
+                resolved_canvas_url,
+            )
+        except HTTPException as exc:
+            if not payload.published:
+                canvas_detail = (
+                    exc.detail if isinstance(exc.detail, str) else "Unknown Canvas error."
+                )
+                raise HTTPException(
+                    status_code=exc.status_code,
+                    detail=(
+                        "Canvas refused to unpublish this quiz. "
+                        f"{canvas_detail}"
+                    ),
+                ) from exc
+            raise
+        return _new_quiz_response(data, canvas_course_id)
+
+    current = await fetch_quiz(
+        canvas_course_id, quiz_id, token, resolved_canvas_url
+    )
+    currently_published = bool(current.get("published", False))
+    if payload.published == currently_published:
+        return _classic_quiz_response(current, canvas_course_id)
+
+    try:
+        data = await update_quiz(
+            canvas_course_id,
+            quiz_id,
+            {"published": payload.published},
+            token,
+            resolved_canvas_url,
+        )
+    except HTTPException as exc:
+        if not payload.published:
+            canvas_detail = (
+                exc.detail if isinstance(exc.detail, str) else "Unknown Canvas error."
+            )
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail=(
+                    "Canvas refused to unpublish this quiz. "
+                    f"{canvas_detail}"
+                ),
+            ) from exc
+        raise
+
+    return _classic_quiz_response(data, canvas_course_id)
 
 
 async def create_course_quiz(
@@ -1127,6 +1285,7 @@ async def _create_course_quiz_uncached(
             raise
         return QuizResponse(
             id=assignment_id,
+            assignment_id=assignment_id,
             title=data.get("title") or payload.title,
             description=data.get("instructions") or payload.description,
             due_at=data.get("due_at") or payload.due_at,
@@ -1135,7 +1294,7 @@ async def _create_course_quiz_uncached(
             quiz_type="new_quizzes",
             allowed_attempts=payload.allowed_attempts,
             time_limit=payload.time_limit,
-            published=bool(data.get("published", False)),
+            published=bool(data.get("published", payload.published)),
             question_count=len(payload.questions),
             html_url=data.get("html_url"),
             quiz_engine="new_quizzes",
@@ -1227,6 +1386,9 @@ async def _create_course_quiz_uncached(
         raise
     return QuizResponse(
         id=quiz_id,
+        assignment_id=(
+            int(data["assignment_id"]) if data.get("assignment_id") is not None else None
+        ),
         title=data.get("title") or payload.title,
         description=data.get("description") or payload.description,
         due_at=data.get("due_at") or payload.due_at,
