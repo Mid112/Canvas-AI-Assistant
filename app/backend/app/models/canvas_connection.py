@@ -31,6 +31,8 @@ class CanvasConnection(Base):
     # (Feature 9 Phase 2) at zero extra Canvas calls, since the sweep
     # already hits every connection on its own ~60s cadence regardless.
     last_sync_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # IANA timezone from Canvas /users/self (e.g. America/Vancouver).
+    time_zone: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # one token per user per school — prevents duplicate rows for the same Canvas URL
     __table_args__ = (UniqueConstraint("user_id", "canvas_url", name="uq_user_canvas_url"),)
