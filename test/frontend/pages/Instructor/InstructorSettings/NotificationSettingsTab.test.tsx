@@ -43,6 +43,10 @@ describe("NotificationSettingsTab", () => {
 
     expect(await screen.findByLabelText("New Submissions")).toBeChecked();
     expect(screen.getByLabelText("Daily Summary")).not.toBeChecked();
+    expect(screen.getByText("In-app notifications")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Notifications" }),
+    ).toHaveAttribute("href", "/instructor/notifications");
   });
 
   it("toggles a preference before saving", async () => {
