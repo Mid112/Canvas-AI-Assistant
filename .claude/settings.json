@@ -1,4 +1,10 @@
+
+
 {
+  "attribution": {
+    "commit": "",
+    "pr": ""
+  },
   "permissions": {
     "allow": [
       "Bash(git mv *)",
