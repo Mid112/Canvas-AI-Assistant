@@ -126,4 +126,33 @@ describe("PreviewPanel", () => {
       points_possible: 50,
     });
   });
+
+  it("shows save edit errors in the editable review form", () => {
+    render(
+      <PreviewPanel
+        preview={{
+          ...mockStudentReminderPreview,
+          actionName: "create_assignment",
+          proposedPlan: [
+            {
+              field: "title",
+              label: "Title",
+              value: "Midterm",
+              rawValue: "Midterm",
+              editable: true,
+            },
+          ],
+        }}
+        saveEditsError="Due date must be in the future."
+        onSaveEdits={vi.fn()}
+        onReject={vi.fn()}
+        onModify={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Due date must be in the future.",
+    );
+  });
 });
