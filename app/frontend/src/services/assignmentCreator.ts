@@ -24,16 +24,17 @@ function appendCanvasUrl(url: string, canvasUrl?: string): string {
   return `${url}?${new URLSearchParams({ canvas_url: canvasUrl }).toString()}`;
 }
 
-function defaultDueDate(): string {
+function defaultDueDate(timeZone?: string): string {
   const date = new Date();
   date.setDate(date.getDate() + 14);
   date.setHours(23, 59, 0, 0);
-  return formatDueDateForInput(date.toISOString());
+  return formatDueDateForInput(date.toISOString(), timeZone);
 }
 
 interface GenerateAssignmentDraftOptions {
   accessToken: string;
   canvasUrl?: string;
+  timeZone?: string;
 }
 
 interface AssignmentDraftApiResponse {
@@ -73,13 +74,22 @@ export async function generateAssignmentDraft(
   return {
     name: data.title,
     description: data.description,
-    dueDate: data.due_at ? formatDueDateForInput(data.due_at) : defaultDueDate(),
-    pointsPossible: data.points_possible ?? 100,
+    dueDate: data.due_at
+      ? formatDueDateForInput(data.due_at, options.timeZone)
+      : defaultDueDate(options.timeZone),
+    // Ticket 21: preserve null for ungraded — never invent 10/100.
+    pointsPossible:
+      typeof data.points_possible === "number" &&
+      Number.isFinite(data.points_possible) &&
+      data.points_possible > 0
+        ? data.points_possible
+        : null,
   };
 }
 
 export function toAssignmentCreateRequest(
   payload: AssignmentApprovePayload,
+  timeZone?: string,
 ): { courseId: number; assignment: AssignmentCreatePayload } {
   const courseId = Number(payload.courseId);
   if (!Number.isInteger(courseId) || courseId <= 0) {
@@ -91,7 +101,7 @@ export function toAssignmentCreateRequest(
     assignment: {
       name: payload.name.trim(),
       description: payload.description.trim() || null,
-      due_at: payload.dueDate ? formatDueDateForApi(payload.dueDate) : null,
+      due_at: payload.dueDate ? formatDueDateForApi(payload.dueDate, timeZone) : null,
       points_possible: payload.pointsPossible,
     },
   };
@@ -101,11 +111,18 @@ interface AssignmentPreviewApiResponse {
   summary: string;
   reversible: boolean;
   affected_resources: { type: string; name: string }[];
+  metadata?: {
+    title?: string;
+    description_preview?: string;
+    due_date?: string;
+    points_possible?: string;
+  };
 }
 
 interface PreviewAssignmentDraftOptions {
   accessToken: string;
   canvasUrl?: string;
+  timeZone?: string;
 }
 
 /** Calls the backend's dry-run preview endpoint — the same explicit-confirmation
@@ -114,7 +131,7 @@ export async function previewAssignmentDraft(
   payload: AssignmentApprovePayload,
   options: PreviewAssignmentDraftOptions,
 ): Promise<AssignmentPreviewSummary> {
-  const request = toAssignmentCreateRequest(payload);
+  const request = toAssignmentCreateRequest(payload, options.timeZone);
 
   const response = await fetch(
     appendCanvasUrl(
@@ -136,11 +153,16 @@ export async function previewAssignmentDraft(
   }
 
   const data = (await response.json()) as AssignmentPreviewApiResponse;
+  const metadata = data.metadata ?? {};
 
   return {
     summary: data.summary,
     reversible: data.reversible,
     affectedResources: data.affected_resources,
+    title: metadata.title,
+    descriptionPreview: metadata.description_preview,
+    dueDate: metadata.due_date,
+    pointsPossible: metadata.points_possible,
   };
 }
 
@@ -151,13 +173,14 @@ interface ApproveAssignmentDraftOptions {
    * pending Workflow chat opened for it gets closed out and audited. */
   conversationId?: number;
   pendingMessageId?: number;
+  timeZone?: string;
 }
 
 export async function approveAssignmentDraft(
   payload: AssignmentApprovePayload,
   options: ApproveAssignmentDraftOptions,
 ): Promise<void> {
-  const request = toAssignmentCreateRequest(payload);
+  const request = toAssignmentCreateRequest(payload, options.timeZone);
   // Omitted entirely on the plain "+ Create Assignment" path so that call
   // keeps its original shape — there is no preview to close out there.
   const workflowLink =

@@ -382,9 +382,10 @@ async def fetch_quizzes(course_id: int) -> dict[str, Any]:
 async def create_assignment(
     course_id: int,
     name: str,
-    points_possible: float,
+    points_possible: float | None = None,
     due_at: str | None = None,
     description: str | None = None,
+    grading_type: str | None = None,
 ) -> dict[str, Any]:
     """
     Create a new assignment in Canvas for a given course.
@@ -394,21 +395,32 @@ async def create_assignment(
     Args:
         course_id: The Canvas course ID.
         name: Assignment name.
-        points_possible: Maximum points for the assignment.
+        points_possible: Maximum points for a graded assignment. Omit or null
+            for ungraded (Ticket 21) — do not invent a default like 10.
         due_at: ISO 8601 due date string e.g. '2026-07-01T23:59:00Z'. Optional.
         description: Assignment description. Optional.
+        grading_type: Canvas grading_type. Use 'not_graded' for ungraded
+            assignments; defaults to 'points' when points_possible is set.
     """
-    payload: dict[str, Any] = {
-        "assignment": {
-            "name": name,
-            "points_possible": points_possible,
-            "published": False,
-        }
+    resolved_grading_type = grading_type
+    if resolved_grading_type is None:
+        resolved_grading_type = (
+            "not_graded" if points_possible is None else "points"
+        )
+
+    assignment_body: dict[str, Any] = {
+        "name": name,
+        "published": False,
+        "grading_type": resolved_grading_type,
     }
+    if points_possible is not None:
+        assignment_body["points_possible"] = points_possible
     if due_at:
-        payload["assignment"]["due_at"] = due_at
+        assignment_body["due_at"] = due_at
     if description:
-        payload["assignment"]["description"] = description
+        assignment_body["description"] = description
+
+    payload: dict[str, Any] = {"assignment": assignment_body}
 
     try:
         async with httpx.AsyncClient() as client:
@@ -431,6 +443,7 @@ async def create_assignment(
                 "points_possible": created.get("points_possible"),
                 "published": created.get("published"),
                 "course_id": course_id,
+                "grading_type": created.get("grading_type", resolved_grading_type),
             },
         }
     except httpx.RequestError as e:

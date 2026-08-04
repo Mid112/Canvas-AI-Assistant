@@ -17,10 +17,11 @@ import { InstructorCourseLayout } from "@/pages/Instructor/InstructorCourse/Inst
 import { InstructorCourseMessagesPage } from "@/pages/Instructor/InstructorCourse/InstructorCourseMessagesPage";
 import { InstructorCourseOverviewPage } from "@/pages/Instructor/InstructorCourse/InstructorCourseOverviewPage";
 import { InstructorCourseAssignmentsPage } from "@/pages/Instructor/InstructorCourseAssignmentsPage";
+import { InstructorCourseQuizzesPage } from "@/pages/Instructor/InstructorCourseQuizzesPage";
 import { InstructorCourseStudentsPage } from "@/pages/Instructor/InstructorCourseStudentsPage";
 import { InstructorCourseGradesPage } from "@/pages/Instructor/InstructorCourseGradesPage";
 import { InstructorCourseSubmissionsPage } from "@/pages/Instructor/InstructorCourseSubmissionsPage";
-import { InstructorAssignmentCreatePage } from "@/pages/Instructor/InstructorAssignmentCreatePage";
+import { InstructorAssignmentCreateRoute } from "@/pages/Instructor/InstructorAssignmentCreatePage";
 import { InstructorQuizCreatePage } from "@/pages/Instructor/InstructorQuizCreatePage";
 import { InstructorFeedbackCreatePage } from "@/pages/Instructor/InstructorFeedbackCreatePage";
 import { InstructorAssignmentUpdatePage } from "@/pages/Instructor/InstructorAssignmentUpdatePage";
@@ -105,6 +106,10 @@ export const router = createBrowserRouter([
                         element: <InstructorCourseAssignmentsPage />,
                       },
                       {
+                        path: "quizzes",
+                        element: <InstructorCourseQuizzesPage />,
+                      },
+                      {
                         path: "students",
                         element: <InstructorCourseStudentsPage />,
                       },
@@ -132,7 +137,7 @@ export const router = createBrowserRouter([
                   },
                   {
                     path: paths.instructor.assignmentCreate,
-                    element: <InstructorAssignmentCreatePage />,
+                    element: <InstructorAssignmentCreateRoute />,
                   },
                   {
                     path: paths.instructor.quizCreate,

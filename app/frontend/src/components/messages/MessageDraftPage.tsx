@@ -18,7 +18,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
-import { mockMessageTemplates } from "@/data/mockMessageDraft";
 import {
   discardTypedDraft,
   saveTypedDraft,
@@ -30,11 +29,17 @@ import {
   isMessageDraftSendMocked,
   sendMessageDraft,
 } from "@/services/messageDraft";
+import {
+  createMessageTemplate,
+  deleteMessageTemplate,
+  listMessageTemplates,
+} from "@/services/messageTemplates";
 import type {
   FetchMessageDraftOptions,
   MessageDraft,
   MessageDraftPageState,
   MessageRecipient,
+  MessageTemplate,
 } from "@/types/messageDraft";
 
 interface MessageDraftPageProps {
@@ -67,6 +72,12 @@ const TEMPLATE_PRESETS = {
 } as const;
 
 type MessageTemplateId = keyof typeof TEMPLATE_PRESETS;
+
+interface SentMessageSnapshot {
+  recipients: MessageRecipient[];
+  subject: string;
+  body: string;
+}
 
 const TEMPLATE_SUBJECTS = new Set<string>(
   Object.values(TEMPLATE_PRESETS).map((preset) => preset.subject),
@@ -103,10 +114,14 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
   const [loadError, setLoadError] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [sentMessage, setSentMessage] = useState<SentMessageSnapshot | null>(null);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [recipients, setRecipients] = useState<MessageRecipient[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>();
   const [selectedTemplateName, setSelectedTemplateName] = useState<string | undefined>();
+  const [templates, setTemplates] = useState<MessageTemplate[]>([]);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<Set<string>>(
     new Set(),
   );
@@ -135,6 +150,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     setLoadError(null);
     setSendError(null);
     setSuccessMessage(null);
+    setSentMessage(null);
 
     try {
       if (!accessToken) {
@@ -284,26 +300,103 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
   };
 
   const handleSelectTemplate = (templateId: string) => {
-    const template = mockMessageTemplates.find((item) => item.id === templateId);
-    setSelectedTemplateId(template?.id);
-    setSelectedTemplateName(template?.name);
-
-    if (!isMessageTemplateId(templateId)) {
+    const template = templates.find((item) => item.id === templateId);
+    if (!template) {
       return;
     }
 
-    if (templateId !== "course-announcement" && selectedRecipientIds.size === 0) {
-      // Student-message templates need at least one selected student. With an
-      // empty audience, stay in the explicit announcement path.
-      applyTemplatePreset("course-announcement");
+    setSelectedTemplateId(template.id);
+    setSelectedTemplateName(template.name);
+    setTemplateError(null);
+    setValue("subject", template.name, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setValue("body", template.content ?? template.description, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  };
+
+  const refreshTemplates = useCallback(async () => {
+    if (!accessToken) {
+      return;
+    }
+    try {
+      const loaded = await listMessageTemplates(
+        accessToken,
+        fetchOptions?.courseId,
+      );
+      setTemplates(loaded);
+    } catch (error) {
+      setTemplateError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load message templates.",
+      );
+    }
+  }, [accessToken, fetchOptions]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async template list load on mount/auth changes
+    void refreshTemplates();
+  }, [refreshTemplates]);
+
+  const handleSaveCurrentAsTemplate = async () => {
+    if (!accessToken) {
+      setTemplateError("You must be signed in to save templates.");
+      return;
+    }
+    const title = subjectValue.trim();
+    const content = bodyValue.trim();
+    if (!title || !content) {
+      setTemplateError("Add a subject and body before saving a template.");
       return;
     }
 
-    if (templateId === "course-announcement") {
-      setSelectedRecipientIds(new Set());
+    setIsSavingTemplate(true);
+    setTemplateError(null);
+    try {
+      const created = await createMessageTemplate(accessToken, {
+        title,
+        content,
+        courseId: fetchOptions?.courseId,
+      });
+      setTemplates((current) => [created, ...current]);
+      setSelectedTemplateId(created.id);
+      setSelectedTemplateName(created.name);
+    } catch (error) {
+      setTemplateError(
+        error instanceof Error
+          ? error.message
+          : "Unable to save message template.",
+      );
+    } finally {
+      setIsSavingTemplate(false);
     }
+  };
 
-    applyTemplatePreset(templateId, { force: true });
+  const handleDeleteTemplate = async (templateId: string) => {
+    if (!accessToken) {
+      return;
+    }
+    setTemplateError(null);
+    try {
+      await deleteMessageTemplate(accessToken, templateId);
+      setTemplates((current) =>
+        current.filter((template) => template.id !== templateId),
+      );
+      if (selectedTemplateId === templateId) {
+        setSelectedTemplateId(undefined);
+        setSelectedTemplateName(undefined);
+      }
+    } catch (error) {
+      setTemplateError(
+        error instanceof Error
+          ? error.message
+          : "Unable to delete message template.",
+      );
+    }
   };
 
   const handleCancel = () => {
@@ -327,6 +420,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
   const handleSendClick = () => {
     setSendError(null);
     setSuccessMessage(null);
+    setSentMessage(null);
     setIsConfirmOpen(true);
   };
 
@@ -363,12 +457,18 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
         throw new Error("You must be signed in to send messages.");
       }
 
-      await sendMessageDraft(accessToken, {
-        draftId: draft.id,
+      const messageToSend: SentMessageSnapshot = {
+        recipients: selectedRecipients,
         subject: subjectValue.trim(),
         body: bodyValue.trim(),
-        recipientIds: selectedRecipients.map((recipient) => recipient.id),
-        recipients: selectedRecipients,
+      };
+
+      await sendMessageDraft(accessToken, {
+        draftId: draft.id,
+        subject: messageToSend.subject,
+        body: messageToSend.body,
+        recipientIds: messageToSend.recipients.map((recipient) => recipient.id),
+        recipients: messageToSend.recipients,
         conversationId: fetchOptions?.conversationId,
         canvasUrl: fetchOptions?.canvasUrl,
       });
@@ -379,17 +479,19 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
       }
 
       setIsConfirmOpen(false);
+      setSentMessage(messageToSend);
+      setDraft(null);
       setSuccessMessage(
         isMessageDraftSendMocked
-          ? selectedRecipients.length === 0
+          ? messageToSend.recipients.length === 0
             ? "Course announcement draft approved. No announcement has been posted through Canvas yet."
-            : `Draft approved for ${selectedRecipients.length} student${
-                selectedRecipients.length === 1 ? "" : "s"
+            : `Draft approved for ${messageToSend.recipients.length} student${
+                messageToSend.recipients.length === 1 ? "" : "s"
               }. No message has been sent through Canvas yet.`
-          : selectedRecipients.length === 0
+          : messageToSend.recipients.length === 0
             ? "Course announcement posted successfully."
-            : `Message sent successfully to ${selectedRecipients.length} student${
-                selectedRecipients.length === 1 ? "" : "s"
+            : `Message sent successfully to ${messageToSend.recipients.length} student${
+                messageToSend.recipients.length === 1 ? "" : "s"
               }.`,
       );
       setPageState("success");
@@ -410,7 +512,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     void loadDraft();
   };
 
-  if (pageState === "success" && draft) {
+  if (pageState === "success" && sentMessage) {
     return (
       <div className="space-y-6">
         {successMessage ? (
@@ -439,9 +541,9 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
           </CardHeader>
           <CardContent className="space-y-4">
             <MessagePreview
-              recipients={selectedRecipients}
-              subject={subjectValue}
-              body={bodyValue}
+              recipients={sentMessage.recipients}
+              subject={sentMessage.subject}
+              body={sentMessage.body}
             />
           </CardContent>
           <CardFooter className="border-t bg-transparent">
@@ -499,10 +601,23 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
             onSelectAll={handleSelectAllRecipients}
           />
           <MessageTemplateSummary
+            templates={templates}
             selectedTemplateId={selectedTemplateId}
             selectedTemplateName={selectedTemplateName}
             onSelectTemplate={handleSelectTemplate}
+            onDeleteTemplate={(templateId) => {
+              void handleDeleteTemplate(templateId);
+            }}
+            onSaveCurrentAsTemplate={() => {
+              void handleSaveCurrentAsTemplate();
+            }}
+            isSavingTemplate={isSavingTemplate}
           />
+          {templateError ? (
+            <p className="text-sm text-destructive" role="alert">
+              {templateError}
+            </p>
+          ) : null}
         </aside>
 
         <section>

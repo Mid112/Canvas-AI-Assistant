@@ -36,6 +36,9 @@ CREATE TABLE canvas_connections (
     -- Backs the admin System Health page's per-instructor Canvas
     -- connectivity summary (see db/migrations/029).
     last_sync_error     TEXT,
+    -- IANA timezone from Canvas /api/v1/users/self (see db/migrations/044).
+    -- Source of truth when interpreting naive assignment due dates.
+    time_zone           TEXT,
     CONSTRAINT uq_user_canvas_url UNIQUE (user_id, canvas_url)
 );
 
@@ -80,21 +83,24 @@ CREATE TABLE courses (
     total_students   INTEGER,
     instructor_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     created_at       TIMESTAMPTZ DEFAULT NOW(),
-    -- composite unique: the same Canvas course can exist once per instructor (co-instructors allowed)
-    CONSTRAINT uq_course_per_instructor UNIQUE (canvas_course_id, instructor_id)
+    -- composite unique: the same Canvas course can exist once per instructor
+    -- per Canvas instance (co-instructors allowed; multi-institution hosts
+    -- with colliding numeric IDs keep separate rows)
+    CONSTRAINT uq_course_per_instructor UNIQUE (canvas_course_id, instructor_id, canvas_url)
 );
 
 CREATE INDEX idx_courses_instructor_id ON courses(instructor_id);
 
 -- ─────────────────────────────────────────────
 -- Canvas Course Names
--- A small, connection-scoped, write-once canvas_course_id -> name index
+-- A connection-scoped canvas_course_id -> observed-name alias index
 -- used only by the chat/LLM course-resolution pathway (services/chat.py).
 -- Separate from `courses` because it's keyed by canvas_connection_id (so
 -- two institutions with colliding numeric canvas_course_ids never
--- collide) and rows are never overwritten once inserted (so a rename on
--- Canvas mid-conversation doesn't retroactively change what an
--- in-progress conversation has been calling a course).
+-- collide). Prompt-facing names/codes are read from the current `courses`
+-- row first so Canvas renames do not leave chat stuck on stale labels,
+-- while aliases keep names instructors used earlier in a conversation
+-- resolvable after a rename.
 -- ─────────────────────────────────────────────
 CREATE TABLE canvas_course_names (
     id                      SERIAL PRIMARY KEY,
@@ -111,8 +117,9 @@ CREATE TABLE canvas_course_names (
     -- duplicate-name match (same course code taught in multiple terms) to
     -- the still-active offering instead of giving up outright.
     workflow_state          VARCHAR,
+    last_seen_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     created_at              TIMESTAMPTZ DEFAULT NOW(),
-    CONSTRAINT uq_connection_canvas_course UNIQUE (canvas_connection_id, canvas_course_id)
+    CONSTRAINT uq_connection_canvas_course_name UNIQUE (canvas_connection_id, canvas_course_id, name)
 );
 
 CREATE INDEX idx_canvas_course_names_connection_id ON canvas_course_names(canvas_connection_id);
@@ -669,4 +676,8 @@ INSERT INTO schema_migrations (filename) VALUES
     ('037_failed_operations_human_summary.sql'),
     ('038_support_tickets.sql'),
     ('039_support_ticket_assigned_admin.sql'),
-    ('040_grade_history_local_relationships.sql');
+    ('040_grade_history_local_relationships.sql'),
+    ('041_canvas_course_names_aliases.sql'),
+    ('042_course_unique_per_instructor_url.sql'),
+    ('043_repair_canvas_course_names.sql'),
+    ('044_canvas_connection_time_zone.sql');

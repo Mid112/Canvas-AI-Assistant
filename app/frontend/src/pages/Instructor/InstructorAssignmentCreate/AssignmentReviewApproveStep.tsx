@@ -3,13 +3,14 @@ import { Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
+import { CanvasTimezoneReadout } from "@/components/canvas/CanvasTimezoneReadout";
 import { ErrorAlert } from "@/components/common/ErrorAlert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { formatDueDateForDisplay } from "@/lib/assignment-utils";
+import { formatDatetimeLocalForDisplay } from "@/lib/assignment-utils";
 import { cn } from "@/lib/utils";
 import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
 import type { GeneratedAssignmentDraft } from "@/types/assignmentCreate";
@@ -29,6 +30,7 @@ interface AssignmentReviewApproveStepProps {
   onBack: () => void;
   /** Keep parent draft state in sync with form edits (for Save draft). */
   onDraftChange?: (values: GeneratedAssignmentDraft) => void;
+  instructorTimeZone?: string;
 }
 
 export function AssignmentReviewApproveStep({
@@ -39,6 +41,7 @@ export function AssignmentReviewApproveStep({
   onApprove,
   onBack,
   onDraftChange,
+  instructorTimeZone,
 }: AssignmentReviewApproveStepProps) {
   const {
     register,
@@ -70,14 +73,17 @@ export function AssignmentReviewApproveStep({
 
   useEffect(() => {
     if (!onDraftChange) return;
+    const watchedPoints = watchedValues.pointsPossible;
     onDraftChange({
       name: String(watchedValues.name ?? ""),
       description: String(watchedValues.description ?? ""),
       dueDate: String(watchedValues.dueDate ?? ""),
       pointsPossible:
-        typeof watchedValues.pointsPossible === "number"
-          ? watchedValues.pointsPossible
-          : draft.pointsPossible,
+        typeof watchedPoints === "number" &&
+        Number.isFinite(watchedPoints) &&
+        watchedPoints > 0
+          ? watchedPoints
+          : null,
     });
   }, [onDraftChange, watchedValues, draft.pointsPossible]);
 
@@ -153,8 +159,12 @@ export function AssignmentReviewApproveStep({
               aria-describedby={errors.dueDate ? "review-due-date-error" : undefined}
               {...register("dueDate")}
             />
+            <CanvasTimezoneReadout timeZone={instructorTimeZone} />
             <p className="text-sm text-muted-foreground">
-              Due: {formatDueDateForDisplay(dueDateValue || null)}
+              Due:{" "}
+              {dueDateValue
+                ? formatDatetimeLocalForDisplay(dueDateValue)
+                : "No due date"}
             </p>
             {errors.dueDate ? (
               <p
@@ -172,15 +182,25 @@ export function AssignmentReviewApproveStep({
             <Input
               id="review-points-possible"
               type="number"
-              min="0"
-              step="1"
+              min="0.01"
+              step="0.1"
               disabled={isApproving}
+              placeholder="Leave blank for ungraded"
               aria-invalid={Boolean(errors.pointsPossible)}
               aria-describedby={
-                errors.pointsPossible ? "review-points-possible-error" : undefined
+                errors.pointsPossible
+                  ? "review-points-possible-error"
+                  : "review-points-possible-hint"
               }
               {...register("pointsPossible", { valueAsNumber: true })}
             />
+            <p
+              id="review-points-possible-hint"
+              className="text-xs text-muted-foreground"
+            >
+              Leave blank to create an ungraded assignment. Do not invent a
+              default point value.
+            </p>
             {errors.pointsPossible ? (
               <p
                 id="review-points-possible-error"

@@ -1,6 +1,4 @@
 # app/backend/app/services/write_preview.py
-from datetime import datetime
-
 from app.mcp_tools.schemas import get_risk_level, is_reversible
 from app.models.course import Course
 from app.services.risk import classify_action_risk
@@ -46,7 +44,7 @@ def _reversibility_fields(action_type: str) -> dict:
     """Shared #581 metadata every write preview carries — single source
     of truth is is_reversible(), never hand-duplicated per builder."""
     reversible = is_reversible(action_type)
-    fields = {
+    fields: dict[str, object] = {
         "reversible": reversible,
         "risk_level": get_risk_level(action_type),
     }
@@ -144,6 +142,7 @@ def _preview_create_quiz(course: Course, params: dict) -> dict:
 
 def _preview_update_assignment(course: Course, params: dict) -> dict:
     assignment_id = params.get("assignment_id", "?")
+    assignment_name = params.get("assignment_name")
     title = params.get("title")
     description = params.get("description")
     due_date = params.get("due_date")
@@ -170,19 +169,30 @@ def _preview_update_assignment(course: Course, params: dict) -> dict:
         if value is None
     ]
 
+    assignment_label = (
+        f"'{assignment_name}'"
+        if assignment_name
+        else f"(ID {assignment_id})" if assignment_id != "?" else "the selected assignment"
+    )
+    resource_name = (
+        assignment_name
+        or (f"Assignment {assignment_id}" if assignment_id != "?" else "Unknown assignment")
+    )
+
     if changes:
         change_text = "; ".join(f"{k.replace('_', ' ')} → {v}" for k, v in changes.items())
-        summary = f"Update assignment (ID {assignment_id}) in {course.name}: {change_text}."
+        summary = f"Update assignment {assignment_label} in {course.name}: {change_text}."
         if unchanged:
             summary += f" Everything else ({', '.join(unchanged)}) stays the same."
     else:
-        summary = f"No fields were specified to update assignment (ID {assignment_id}) in {course.name}."
+        summary = f"No fields were specified to update assignment {assignment_label} in {course.name}."
 
     return {
         "action": "update_assignment",
         "course": course.name,
         "metadata": {
             "assignment_id": assignment_id,
+            "assignment_name": assignment_name,
             "changes": changes,
             "unchanged_fields": unchanged,
         },
@@ -192,7 +202,7 @@ def _preview_update_assignment(course: Course, params: dict) -> dict:
             {
                 "type": "assignment",
                 "id": assignment_id if assignment_id != "?" else None,
-                "name": None,
+                "name": resource_name,
                 "status": "modified",
                 "changed_fields": list(changes.keys()),
             },
@@ -302,12 +312,10 @@ def _preview_generic(course: Course, params: dict) -> dict:
 
 
 def _format_due_date(due_date: str | None) -> str:
-    if not due_date:
-        return "No due date set"
-    try:
-        return datetime.fromisoformat(due_date).strftime("%B %d, %Y at %I:%M %p")
-    except ValueError:
-        return due_date
+    # Same UTC-normalized instant the update payload sends to Canvas (#1435).
+    from app.services.due_date import format_due_date_for_preview
+
+    return format_due_date_for_preview(due_date)
 
 
 def _preview_safety_fields(action_type: str, params: dict) -> dict:

@@ -28,7 +28,8 @@ from app.schemas.auth import (
     TokenResponse,
 )
 from app.services.admin import get_admin_settings
-from app.services.sessions import issue_token_for_user, revoke_session
+from app.services.canvas_timezone import fetch_canvas_time_zone
+from app.services.sessions import issue_token_for_user, revoke_other_sessions, revoke_session
 
 
 async def register_user(db: AsyncSession, body: RegisterRequest) -> TokenResponse:
@@ -165,12 +166,15 @@ async def update_profile(db: AsyncSession, user: User, body: ProfileUpdateReques
     )
     await db.commit()
 
-    return await db.scalar(
+    refreshed = await db.scalar(
         select(User)
         .where(User.id == user.id)
         .options(selectinload(User.canvas_connections))
         .execution_options(populate_existing=True)
     )
+    if refreshed is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return refreshed
 
 
 async def delete_account(db: AsyncSession, user: User, password: str) -> None:
@@ -184,13 +188,19 @@ async def delete_account(db: AsyncSession, user: User, password: str) -> None:
     await db.commit()
 
 
-async def change_password(db: AsyncSession, user: User, body: ChangePasswordRequest) -> None:
+async def change_password(
+    db: AsyncSession, user: User, body: ChangePasswordRequest, current_token: str
+) -> None:
     if not verify_password(body.current_password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Current password is incorrect")
 
     user.hashed_password = hash_password(body.new_password)
     db.add(AuditLogSession(user_id=user.id, action="password_changed", details={}))
-    await db.commit()
+    # Keep the Settings session that performed the change usable; revoke every
+    # other device session so a stolen/old token cannot outlive the password
+    # change (mirrors confirm_password_reset, but preserves current — #1480).
+    # revoke_other_sessions commits the password update + session deletes together.
+    await revoke_other_sessions(db, user, current_token)
 
 
 async def request_password_reset(db: AsyncSession, email: str) -> str | None:
@@ -298,6 +308,7 @@ async def remove_canvas_connection(db: AsyncSession, user: User, connection_id: 
 async def update_canvas_token(db: AsyncSession, user: User, canvas_token: str, canvas_url: str) -> User:
     await validate_token(canvas_token, canvas_url)
     encrypted = encrypt_canvas_token(canvas_token)
+    canvas_time_zone = await fetch_canvas_time_zone(canvas_token, canvas_url)
 
     existing = await db.scalar(
         select(CanvasConnection).where(
@@ -308,15 +319,26 @@ async def update_canvas_token(db: AsyncSession, user: User, canvas_token: str, c
     action = "canvas_connection_updated" if existing else "canvas_connection_added"
     if existing:
         existing.encrypted_token = encrypted
+        existing.time_zone = canvas_time_zone
     else:
-        db.add(CanvasConnection(user_id=user.id, canvas_url=canvas_url, encrypted_token=encrypted))
+        db.add(
+            CanvasConnection(
+                user_id=user.id,
+                canvas_url=canvas_url,
+                encrypted_token=encrypted,
+                time_zone=canvas_time_zone,
+            )
+        )
 
     db.add(AuditLogSession(user_id=user.id, action=action, details={"canvas_url": canvas_url}))
     await db.commit()
 
-    return await db.scalar(
+    refreshed = await db.scalar(
         select(User)
         .where(User.id == user.id)
         .options(selectinload(User.canvas_connections))
         .execution_options(populate_existing=True)
     )
+    if refreshed is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    return refreshed

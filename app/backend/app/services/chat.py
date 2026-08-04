@@ -6,15 +6,16 @@ import re
 from collections.abc import Coroutine
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
-from typing import Any, TypeVar
+from typing import Any, TypeVar, cast
 
 import httpx
 from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy import desc, func, select
 from sqlalchemy import update as sa_update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.canvas_url import canvas_urls_equivalent
 from app.core.database import AsyncSessionLocal
@@ -90,6 +91,7 @@ from app.services.llm.student_context import (
 )
 from app.services.quiz_validation import validate_quiz_for_create
 from app.services.resolved_set import (
+    active_roster_names,
     compute_submissions_by_status,
     create_resolved_set,
     materialize_resolved_set,
@@ -363,36 +365,113 @@ async def get_or_create_conversation(
 
 
 async def _stable_course_name(db: AsyncSession, local_course_id: int, fallback: str) -> str:
-    """Prefers canvas_course_names' write-once name over Course.name
-    (overwritten in place on every Canvas sync) for anything that becomes
-    a Conversation.course_name snapshot — same rename-stability rationale
-    as CanvasCourseName's docstring: a course renamed on Canvas
-    mid-conversation must not change what that conversation has already
-    been calling it. Falls back to the given Course.name only when this
-    course has never been synced into canvas_course_names yet (e.g. its
-    connection's first sync hasn't run)."""
-    stable_name = await db.scalar(
-        select(CanvasCourseName.name).where(CanvasCourseName.local_course_id == local_course_id)
+    """Return the current Course.name for conversation snapshots.
+
+    Conversation.course_name is denormalized for prompt/API ergonomics,
+    but Course is the canonical row. Refreshing from Course here prevents
+    existing chats from carrying a stale Canvas name after a rename.
+    """
+    current_name = await db.scalar(select(Course.name).where(Course.id == local_course_id))
+    return current_name if current_name is not None else fallback
+
+
+async def _refresh_conversation_course_snapshot(db: AsyncSession, conversation: Conversation, user: User) -> None:
+    if conversation.course_id is None:
+        return
+    current_name = await db.scalar(
+        select(Course.name).where(
+            Course.id == conversation.course_id,
+            Course.instructor_id == user.id,
+        )
     )
-    return stable_name if stable_name is not None else fallback
+    if current_name is not None and conversation.course_name != current_name:
+        conversation.course_name = current_name
 
 
 async def _get_course_names_for_user(db: AsyncSession, user: User) -> list[CanvasCourseName]:
     """The full canvas_course_names index across every Canvas connection
-    this user has — the only source of course names the LLM is ever shown
-    (see _build_llm_message) and the only thing course_name is matched
-    against (see _match_course_name). Never queries `courses` directly for
-    this purpose: canvas_course_names is connection-scoped (so two
-    institutions with colliding numeric canvas_course_ids never collide)
-    and write-once (so a mid-conversation Canvas rename can't retroactively
-    change what a conversation has been calling a course)."""
+    this user has, with the canonical Course row eagerly loaded. The
+    connection-scoped alias index avoids cross-institution Canvas ID
+    collisions; the joined Course supplies the current prompt-facing
+    name/code while historical alias rows remain matchable."""
     return list(
         await db.scalars(
             select(CanvasCourseName)
+            .options(joinedload(CanvasCourseName.course))
             .join(CanvasConnection, CanvasCourseName.canvas_connection_id == CanvasConnection.id)
             .where(CanvasConnection.user_id == user.id)
         )
     )
+
+
+def _course_display_name(course_name: CanvasCourseName) -> str:
+    return course_name.course.name if course_name.course is not None else course_name.name
+
+
+def _course_code(course_name: CanvasCourseName) -> str | None:
+    if course_name.course is None:
+        return None
+    code = course_name.course.course_code
+    return code.strip() if code and code.strip() else None
+
+
+def _course_prompt_label(course_name: CanvasCourseName) -> str:
+    name = _course_display_name(course_name)
+    code = _course_code(course_name)
+    if code and _normalize_course_text(code) != _normalize_course_text(name):
+        return f"{name} / {code}"
+    return name
+
+
+def _course_identity(course_name: CanvasCourseName) -> tuple[str, int] | tuple[str, int, str]:
+    if course_name.local_course_id is not None:
+        return ("local", course_name.local_course_id)
+    return ("canvas", course_name.canvas_connection_id, course_name.canvas_course_id)
+
+
+def _dedupe_course_aliases(course_names: list[CanvasCourseName]) -> list[CanvasCourseName]:
+    deduped: dict[tuple[str, int] | tuple[str, int, str], CanvasCourseName] = {}
+    for course_name in course_names:
+        identity = _course_identity(course_name)
+        existing = deduped.get(identity)
+        if existing is None:
+            deduped[identity] = course_name
+            continue
+        existing_seen = existing.last_seen_at or existing.created_at or datetime.min.replace(tzinfo=UTC)
+        candidate_seen = course_name.last_seen_at or course_name.created_at or datetime.min.replace(tzinfo=UTC)
+        if candidate_seen > existing_seen:
+            deduped[identity] = course_name
+    return list(deduped.values())
+
+
+def _course_prompt_labels(course_names: list[CanvasCourseName]) -> list[str]:
+    labels: list[str] = []
+    seen: set[str] = set()
+    for course_name in _dedupe_course_aliases(course_names):
+        label = _course_prompt_label(course_name)
+        normalized = _normalize_course_text(label)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        labels.append(label)
+    return labels
+
+
+def _course_exact_match_texts(course_name: CanvasCourseName) -> tuple[str, ...]:
+    display_name = _course_display_name(course_name)
+    values = [display_name, course_name.name]
+    code = _course_code(course_name)
+    if code:
+        values.append(code)
+        values.append(f"{display_name} {code}")
+        values.append(f"{display_name} / {code}")
+        values.append(f"{course_name.name} {code}")
+        values.append(f"{course_name.name} / {code}")
+    return tuple(values)
+
+
+def _course_substring_match_texts(course_name: CanvasCourseName) -> tuple[str, ...]:
+    return (_course_display_name(course_name), course_name.name)
 
 
 _COURSE_NAME_FUZZY_MATCH_MIN_LENGTH = 4
@@ -401,10 +480,8 @@ _COURSE_NAME_FUZZY_MATCH_MIN_LENGTH = 4
 def _resolve_duplicate_course_name_matches(
     matches: list[CanvasCourseName],
 ) -> CanvasCourseName | None:
-    """canvas_course_names is write-once and fetch_courses deliberately
-    includes completed (past-term) courses alongside active ones (so a
-    Canvas rename mid-conversation can never retroactively change what an
-    in-progress conversation has been calling a course) — so an instructor
+    """fetch_courses deliberately includes completed (past-term) courses
+    alongside active ones, so an instructor
     who has taught the same course code more than once accumulates
     multiple rows with an identical name. That's the normal steady state
     for a returning instructor, not a rare edge case, so a same-name
@@ -413,31 +490,27 @@ def _resolve_duplicate_course_name_matches(
     that doesn't narrow to exactly one — e.g. two genuinely active
     sections, or a legacy row with no workflow_state recorded at all
     sitting alongside another candidate."""
-    still_relevant = [cn for cn in matches if cn.workflow_state != "completed"]
+    logical_matches = _dedupe_course_aliases(matches)
+    if len(logical_matches) == 1:
+        return logical_matches[0]
+    still_relevant = [cn for cn in logical_matches if cn.workflow_state != "completed"]
     return still_relevant[0] if len(still_relevant) == 1 else None
 
 
 def _match_course_name(course_names: list[CanvasCourseName], course_name: str | None) -> CanvasCourseName | None:
-    """Exact (normalized) match first; a normalized substring match only
-    if that finds nothing, since the model is given the literal course
-    name strings in YOUR COURSES and told to copy one verbatim, so exact
-    is both the expected and the safest case. The substring fallback
-    exists only for a smaller/weaker model paraphrasing or abbreviating
-    despite that instruction — restricted to a single unambiguous
-    candidate (in either substring direction) and a minimum normalized
-    length, so a short/generic fragment can't spuriously match half the
-    course list. Either stage can still hit a same-name collision across
-    terms (see _resolve_duplicate_course_name_matches); if that's also
-    ambiguous, this returns None either way — no match is ever guessed,
-    only ever resolved to something already unambiguous — and the caller
-    falls back to its existing sticky-course behavior, same
-    belt-and-suspenders philosophy as dispatcher.py's
-    _create_assignment_missing_field."""
+    """Exact (normalized) match first across display names and course
+    codes; a normalized substring match only if that finds nothing, and
+    only against display names. Course codes are short identifiers, so a
+    prefix like "COSC" must not bind to the one available COSC course just
+    because historical completed terms were narrowed away."""
     if not course_name:
         return None
     normalized_target = _normalize_course_text(course_name)
 
-    exact_matches = [cn for cn in course_names if _normalize_course_text(cn.name) == normalized_target]
+    exact_matches = [
+        cn for cn in course_names
+        if any(_normalize_course_text(value) == normalized_target for value in _course_exact_match_texts(cn))
+    ]
     if len(exact_matches) == 1:
         return exact_matches[0]
     if len(exact_matches) > 1:
@@ -447,8 +520,11 @@ def _match_course_name(course_names: list[CanvasCourseName], course_name: str | 
         return None
     substring_matches = [
         cn for cn in course_names
-        if normalized_target in _normalize_course_text(cn.name)
-        or _normalize_course_text(cn.name) in normalized_target
+        if any(
+            normalized_target in _normalize_course_text(value)
+            or _normalize_course_text(value) in normalized_target
+            for value in _course_substring_match_texts(cn)
+        )
     ]
     if len(substring_matches) == 1:
         return substring_matches[0]
@@ -513,15 +589,15 @@ message is asking about a course OTHER than the one their conversation is
 currently about, given the real list of their courses.
 
 Respond with exactly one JSON object and nothing else:
-{"switched_to": "<exact course name from CURRENT COURSES, or null>"}
+{"switched_to": "<exact course display name or code from CURRENT COURSES, or null>"}
 
-Set switched_to to the exact name of a course from CURRENT COURSES —
-copied verbatim, never invented — ONLY when the message clearly asks about
-a course that is NOT the current one: naming a different course directly,
-or asking to switch/open a different one. If the message doesn't name a
-course at all, is a plain follow-up about the current course, or doesn't
-clearly and unambiguously point at one specific different course, respond
-with {"switched_to": null} instead of guessing."""
+Set switched_to to the exact display name or course code of a course from
+CURRENT COURSES — copied verbatim, never invented — ONLY when the message
+clearly asks about a course that is NOT the current one: naming a different
+course directly, or asking to switch/open a different one. If the message
+doesn't name a course at all, is a plain follow-up about the current course,
+or doesn't clearly and unambiguously point at one specific different course,
+respond with {"switched_to": null} instead of guessing."""
 
 COURSE_SWITCH_RESOLVER_TIMEOUT_SECONDS = 30.0
 
@@ -553,7 +629,7 @@ async def _resolve_course_switch(
     if not course_names or current_course_name is None:
         return None
 
-    listing = "\n".join(f"- {cn.name}" for cn in course_names)
+    listing = "\n".join(f"- {label}" for label in _course_prompt_labels(course_names))
     prompt = (
         f"CURRENT COURSES:\n{listing}\n\n"
         f"This conversation is currently about: {current_course_name}\n"
@@ -1093,6 +1169,24 @@ async def _run_resolve_missing_submissions_chain(
 _COURSE_ANALYSIS_MAX_NAMES = 50
 
 
+def _format_analysis_line(entry: dict) -> str:
+    """One assignment's line in the course-wide summary.
+
+    The count is always the full matched total while the names may have been
+    cut by the shared budget, so a truncated line says how many of the total
+    it is actually showing. "Assignment 1: 60 (Alice, Bob, ...)" otherwise
+    reads as the complete roster for that assignment.
+    """
+    name = entry["assignment_name"]
+    count = entry["count"]
+    students = entry["students"]
+    if not students:
+        return f"{name}: {count}"
+    if entry.get("students_truncated"):
+        return f"{name}: {count} (showing {len(students)}: {', '.join(students)})"
+    return f"{name}: {count} ({', '.join(students)})"
+
+
 async def _run_analyze_course_submissions_chain(
     db: AsyncSession,
     user: User,
@@ -1113,7 +1207,7 @@ async def _run_analyze_course_submissions_chain(
     """
     course = await resolve_course(db, user, action.local_course_id)
 
-    print(f"Gathering {course.name} assignments")
+    logger.info("Gathering %s assignments", course.name)
     fetch_action = FetchAssignmentsAction(local_course_id=course.id)
     assignments_result = await _run_tracked_read(
         db, user, conversation, user_msg.id, "fetch_assignments",
@@ -1130,12 +1224,39 @@ async def _run_analyze_course_submissions_chain(
             "summary": f"{course.name} has no assignments yet, so there is nothing to analyse.",
         }
 
-    print(f"Checking {course.name} for {action.status} submissions")
+    # Drafts are invisible to students and cannot have real submissions, so
+    # every active student looks "missing" on one. course_overview.py draws
+    # exactly this line for the dashboard's missing/late counts; the chat
+    # answer to the same question has to agree with it, or the assistant
+    # contradicts the course again — the bug this chain exists to fix.
+    # Defaulting to published matches AssignmentResponse.published and
+    # get_assignments' own item.get("published", True): an older Canvas
+    # payload that omits the field is a real assignment, not a draft.
+    published = [a for a in assignments if a.get("published", True)]
+    if not published:
+        return {
+            "action": "analyze_course_submissions",
+            "status": action.status,
+            "course": course.name,
+            "assignments": [],
+            "total": 0,
+            "summary": (
+                f"All {len(assignments)} assignment(s) in {course.name} are still "
+                "unpublished, so students have nothing to submit yet."
+            ),
+        }
+
+    logger.info(
+        "Checking %s for %s submissions", course.name, action.status
+    )
+    # One roster for the whole scan. compute_submissions_by_status would
+    # otherwise re-fetch enrollments from Canvas for every assignment.
+    active_names = await active_roster_names(course, user, db)
     per_assignment: list[dict] = []
     names_budget = _COURSE_ANALYSIS_MAX_NAMES
     truncated = False
 
-    for assignment in assignments:
+    for assignment in published:
         canvas_assignment_id = assignment.get("id")
         if canvas_assignment_id is None:
             continue
@@ -1147,11 +1268,18 @@ async def _run_analyze_course_submissions_chain(
                 "status": action.status,
             },
             compute_submissions_by_status(
-                course, canvas_assignment_id, user, db, action.status
+                course, canvas_assignment_id, user, db, action.status,
+                active_names=active_names,
             ),
         )
         names = [student["name"] for student in matched]
-        if len(names) > names_budget:
+        # Truncation is tracked per assignment, not just globally: the budget
+        # is shared across the whole scan, so a later assignment can be cut
+        # short (or get no names at all) while an earlier one was listed in
+        # full. Rendering both the same way made a partial list read as the
+        # complete roster for that assignment.
+        entry_truncated = len(names) > names_budget
+        if entry_truncated:
             names = names[:names_budget]
             truncated = True
         names_budget -= len(names)
@@ -1162,32 +1290,41 @@ async def _run_analyze_course_submissions_chain(
                 "due_at": assignment.get("due_at"),
                 "count": len(matched),
                 "students": names,
+                "students_truncated": entry_truncated,
             }
         )
 
     total = sum(entry["count"] for entry in per_assignment)
     label = "missing" if action.status == "missing" else "late"
     if total == 0:
-        summary = (
-            f"No {label} submissions in {course.name} — every active student is "
-            f"up to date across all {len(per_assignment)} assignment(s)."
-        )
+        # A late scan only establishes that nothing was submitted late. It
+        # says nothing about work never submitted at all, so it must not
+        # claim students are up to date — that is the assistant contradicting
+        # the course, in the opposite direction from bug 12.
+        if action.status == "missing":
+            summary = (
+                f"No missing submissions in {course.name} — every active student "
+                f"has submitted all {len(per_assignment)} published assignment(s)."
+            )
+        else:
+            summary = (
+                f"No late submissions in {course.name} across "
+                f"{len(per_assignment)} published assignment(s). This does not "
+                "cover work that was never submitted — ask about missing "
+                "submissions for that."
+            )
     else:
         affected = [entry for entry in per_assignment if entry["count"]]
-        lines = "; ".join(
-            f"{entry['assignment_name']}: {entry['count']} ({', '.join(entry['students'])})"
-            if entry["students"]
-            else f"{entry['assignment_name']}: {entry['count']}"
-            for entry in affected
-        )
+        lines = "; ".join(_format_analysis_line(entry) for entry in affected)
         summary = (
             f"{total} {label} submission(s) across {len(affected)} of "
-            f"{len(per_assignment)} assignment(s) in {course.name}. {lines}."
+            f"{len(per_assignment)} published assignment(s) in {course.name}. {lines}."
         )
         if truncated:
             summary += (
-                f" Only the first {_COURSE_ANALYSIS_MAX_NAMES} student names are "
-                "listed; open the course Submissions view for the full list."
+                f" Student names are capped at {_COURSE_ANALYSIS_MAX_NAMES} for "
+                "the whole course; open the course Submissions view for the "
+                "full lists."
             )
 
     return {
@@ -1320,11 +1457,21 @@ async def _run_update_assignment_chain(
         return resolved
     course, assignment_id = resolved
 
+    assignment_row = await db.scalar(
+        select(Assignment).where(
+            Assignment.course_id == course.id,
+            Assignment.canvas_assignment_id == str(assignment_id),
+        )
+    )
+    assignment_name = assignment_row.title if assignment_row else None
+
     proposed_action: dict[str, Any] = {
         "action": "update_assignment",
         "local_course_id": course.id,
         "assignment_id": assignment_id,
     }
+    if assignment_name:
+        proposed_action["assignment_name"] = assignment_name
     for field_name in _UPDATE_ASSIGNMENT_FIELDS:
         value = getattr(action, field_name)
         if value is not None:
@@ -1389,6 +1536,14 @@ async def _resolve_grade_target(
         if student_id not in valid_ids:
             student_id = None
 
+    assignment_row = await db.scalar(
+        select(Assignment).where(
+            Assignment.course_id == course.id,
+            Assignment.canvas_assignment_id == str(assignment_id),
+        )
+    )
+    assignment_name = assignment_row.title if assignment_row else None
+
     if bulk_update:
         return _build_grade_handoff_result(
             course,
@@ -1396,6 +1551,7 @@ async def _resolve_grade_target(
             submissions,
             action.new_grade,
             action.reason,
+            assignment_name=assignment_name,
         )
 
     if student_id is None and action.student_reference:
@@ -1436,7 +1592,30 @@ async def _resolve_grade_target(
         [selected],
         action.new_grade,
         action.reason,
+        assignment_name=assignment_name,
     )
+
+
+_GRADE_HANDOFF_NAMED_STUDENT_LIMIT = 3
+
+
+def _grade_handoff_student_phrase(submissions: list[dict], student_count: int) -> str:
+    """Name a small resolved set in the assistant bubble; fall back to count."""
+    if student_count > _GRADE_HANDOFF_NAMED_STUDENT_LIMIT:
+        return f"{student_count} student{'s' if student_count != 1 else ''}"
+
+    names = [
+        submission.get("student_name") or f"Student {submission.get('user_id')}"
+        for submission in submissions
+        if _coerce_int(submission.get("user_id")) is not None
+    ]
+    if not names:
+        return f"{student_count} student{'s' if student_count != 1 else ''}"
+    if len(names) == 1:
+        return names[0]
+    if len(names) == 2:
+        return f"{names[0]} and {names[1]}"
+    return f"{names[0]}, {names[1]}, and {names[2]}"
 
 
 def _build_grade_handoff_result(
@@ -1445,6 +1624,8 @@ def _build_grade_handoff_result(
     submissions: list[dict],
     new_grade: str,
     reason: str | None,
+    *,
+    assignment_name: str | None = None,
 ) -> dict:
     """Return a chat response that opens the dedicated Grades tab.
 
@@ -1477,13 +1658,17 @@ def _build_grade_handoff_result(
         }
 
     student_count = len(student_ids)
-    assignment_label = f'assignment "{assignment_id}"'
+    assignment_label = (
+        f'assignment "{assignment_name}"'
+        if assignment_name
+        else f'assignment "{assignment_id}"'
+    )
+    student_phrase = _grade_handoff_student_phrase(submissions, student_count)
     # Keep the assistant bubble brief; the action card carries the actual link
     # and the Grades tab carries the detailed warnings/confirmation state.
     message = (
-        f"I found {student_count} student{'s' if student_count != 1 else ''} for "
-        f"{course.name}. Open the Grades tab to review the Canvas preview, warnings, "
-        "and approval step before anything is submitted."
+        f"I found {student_phrase} for {course.name}. Open the Grades tab to review "
+        "the Canvas preview, warnings, and approval step before anything is submitted."
     )
     return {
         "action": "respond",
@@ -2033,7 +2218,7 @@ def _build_llm_message(
     (description, points_possible) that the model fails to carry forward
     from scrollback on its own.
 
-    Course context is name-only, by design — never a numeric ID. The
+    Course context is display-name/course-code only, by design — never a numeric ID. The
     model resolves which course (if any) this message is about itself,
     from this list, and reports it back via the top-level course_name
     field (see build_system_prompt's COURSE RESOLUTION section); the app
@@ -2047,7 +2232,7 @@ def _build_llm_message(
     parts = []
 
     if course_names:
-        names = "\n".join(f"- {cn.name}" for cn in course_names)
+        names = "\n".join(f"- {label}" for label in _course_prompt_labels(course_names))
         parts.append(
             "YOUR COURSES:\n"
             f"{names}\n\n"
@@ -2342,7 +2527,7 @@ async def _sync_workflow_for_preview(
     unhandled IntegrityError instead of the graceful "course not found"
     message _resolve_course already produces at confirm time. Leaving it
     unset here means that existing, tested error path still fires."""
-    action_name = proposed_action.get("action")
+    action_name = str(proposed_action.get("action") or "")
     resources = affected_resources or []
 
     if conversation.course_id is None:
@@ -2474,6 +2659,47 @@ def _summarize_assistant_history_content(role: str, content: str) -> str:
         return content
     if not isinstance(data, dict) or data.get("intent_preview"):
         return content
+    if data.get("action") == "analyze_course_submissions":
+        # This read action carries per-assignment student name lists, so the
+        # pass-through below would replay up to _COURSE_ANALYSIS_MAX_NAMES
+        # names into every later prompt in the conversation. Its sibling
+        # _run_resolve_missing_submissions_chain deliberately returns only
+        # {count, sample, handle} for the same reason. Counts are what a
+        # follow-up turn needs; names are re-resolvable server-side.
+        total = data.get("total")
+        entries = [
+            {
+                "assignment_id": entry.get("assignment_id"),
+                "assignment_name": entry.get("assignment_name"),
+                "count": entry.get("count"),
+            }
+            for entry in data.get("assignments", [])
+            if isinstance(entry, dict)
+        ]
+        # The stored summary embeds the same names whenever anything matched,
+        # so it is only safe to carry through verbatim in the nothing-matched
+        # case — where it holds the caveat that a late scan says nothing about
+        # missing work, which a follow-up turn should not lose.
+        compact_summary = (
+            data.get("summary")
+            if total == 0
+            else (
+                f"{total} {data.get('status')} submission(s) in "
+                f"{data.get('course')} across {len(entries)} published "
+                "assignment(s). Per-assignment counts included; student names "
+                "omitted from history."
+            )
+        )
+        return _json_dumps(
+            {
+                "action": "analyze_course_submissions",
+                "status": data.get("status"),
+                "course": data.get("course"),
+                "total": total,
+                "assignments": entries,
+                "summary": compact_summary,
+            }
+        )
     if data.get("action") == "clarify" and isinstance(data.get("partial_plan"), dict) and data["partial_plan"]:
         return _json_dumps(
             {
@@ -2663,10 +2889,10 @@ before responding.
 COURSE RESOLUTION:
 Every response must include a top-level "course_name" field naming
 exactly one course from YOUR COURSES (see the list injected with each
-message) — copy the name exactly as given, character for character.
-Never invent a course name, never output a course ID (local or Canvas),
-and never ask the user for one — they only know their courses by name,
-never by an internal ID.
+message). Use either that course's display name or its course code exactly
+as listed. Never invent a course name/code, never output a course ID
+(local or Canvas), and never ask the user for one — they only know their
+courses by name/code, never by an internal ID.
 
 GROUNDING — retrieved Canvas data only (Feature 13 #855):
 Never invent Canvas facts that were not returned by a tool in this
@@ -2678,8 +2904,9 @@ Never fabricate numeric Canvas IDs.
 
 - If the message clearly names one of YOUR COURSES, even a partial name
   (e.g. "Intro to Programming" for "COSC 111 - Introduction to
-  Programming with Java"), set course_name to that course's exact full
-  name and use it as the subject of this and future turns.
+  Programming with Java") or a course code, set course_name to that
+  course's exact display name or course code and use it as the subject of
+  this and future turns.
 - If a partial name could match more than one course in YOUR COURSES
   (e.g. "Intro to Programming" when both COSC 111 and COSC 121 exist),
   do not guess — use the AMBIGUITY CHECK format to ask which one,
@@ -2706,11 +2933,12 @@ it seems related. due_date is required and must be a full ISO 8601
 string, e.g. "2026-07-11T23:59:00" — resolve it using today's date above.
 If the user gives a date but no time, default the time to 23:59:00. If
 the user does not give a due date at all, do not guess or leave due_date
-null — use the AMBIGUITY CHECK above and ask for it instead. Likewise, if
-the user does not mention points, ask rather than defaulting silently —
-only omit points_possible if the user explicitly says it's ungraded or
-has no point value. Never invent a value for a field the user didn't
-give you.
+null — use the AMBIGUITY CHECK above and ask for it instead. If the user
+does not mention points or grading, ask whether the assignment is graded
+(and if so, how many points) rather than inventing a value — never default
+to 10, 100, or any other number. Only set points_possible to null when the
+user explicitly says the assignment is ungraded or has no point value.
+Never invent a value for a field the user didn't give you.
 
 RESOLVING AN ASSIGNMENT FOR fetch_submissions:
 fetch_submissions needs an assignment, but you do not need to know its
@@ -2970,9 +3198,10 @@ async def handle_chat_message(
     never a numeric ID; the app matches that name back to a real course
     only after the LLM call returns (see below).
 
-    Course data (canvas_course_names) is never fetched from Canvas live,
-    in-band, as part of handling a message — this turn only ever reads
-    it. Keeping it fresh is a decoupled background concern: a periodic
+    Course data is never fetched from Canvas live, in-band, as part of
+    handling a message — this turn only ever reads local Course rows via
+    the connection-scoped canvas_course_names index. Keeping it fresh is
+    a decoupled background concern: a periodic
     sweep (see app.main's lifespan) and a refresh right after a
     successful write (handle_confirmed_action) — both live in
     app.services.canvas. A chat turn is a pure local-DB read for course
@@ -2982,6 +3211,7 @@ async def handle_chat_message(
     conversation = await get_or_create_conversation(db, user, conversation_id, local_course_id)
     user_msg = await log_message(db, conversation, role="user", content=message)
     course_names = await _get_course_names_for_user(db, user)
+    await _refresh_conversation_course_snapshot(db, conversation, user)
     history = await _get_recent_messages(db, conversation.id)
 
     # Instructors choose a connected provider/model. Credentials are resolved
@@ -3056,11 +3286,11 @@ async def handle_chat_message(
             if conversation.course_id is None:
                 conversation.course_id = selected_course.local_course_id
                 conversation.course_name = await _stable_course_name(
-                    db, selected_course.local_course_id, selected_course.name
+                    db, selected_course.local_course_id, _course_display_name(selected_course)
                 )
             elif selected_course.local_course_id != conversation.course_id:
                 target = await _find_or_fork_conversation_for_course(
-                    db, user, selected_course.local_course_id, selected_course.name
+                    db, user, selected_course.local_course_id, _course_display_name(selected_course)
                 )
                 user_msg.conversation_id = target.id
                 conversation = target
@@ -3112,7 +3342,7 @@ async def handle_chat_message(
             and switched.local_course_id != conversation.course_id
         ):
             target = await _find_or_fork_conversation_for_course(
-                db, user, switched.local_course_id, switched.name
+                db, user, switched.local_course_id, _course_display_name(switched)
             )
             user_msg.conversation_id = target.id
             conversation = target
@@ -3334,7 +3564,7 @@ async def handle_chat_message(
                         # seeded course don't leak into the new one (#1306).
                         clear_course_scoped_field_memory(conversation)
                     conversation.course_id = matched_local_course_id
-                    conversation.course_name = matched.name
+                    conversation.course_name = _course_display_name(matched)
                     resolved_local_course_id = matched_local_course_id
                 elif (
                     pending_message_id is None
@@ -3362,7 +3592,7 @@ async def handle_chat_message(
                     # name the model merely echoed from message text, and
                     # wins outright rather than being silently overridden.
                     target = await _find_or_fork_conversation_for_course(
-                        db, user, matched_local_course_id, matched.name
+                        db, user, matched_local_course_id, _course_display_name(matched)
                     )
                     user_msg.conversation_id = target.id
                     conversation = target
@@ -3764,7 +3994,7 @@ async def _claim_pending_workflow(db: AsyncSession, workflow: Workflow, new_stat
         .where(Workflow.id == workflow.id, Workflow.status == "pending")
         .values(status=new_status)
     )
-    if claim.rowcount > 0:
+    if cast(CursorResult, claim).rowcount > 0:
         return True
     # SQLAlchemy's default synchronize_session='evaluate' strategy re-checks
     # the bulk UPDATE's WHERE clause against workflow's in-memory attributes,
@@ -3990,11 +4220,14 @@ async def handle_confirmed_action(
     # loaded in a different session context, causing greenlet errors when
     # execute_tool accesses them during async execution
     from sqlalchemy import select as sa_select
-    user = await db.scalar(
+    loaded_user = await db.scalar(
         sa_select(User)
         .where(User.id == user.id)
         .options(selectinload(User.canvas_connections))
     )
+    if loaded_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    user = loaded_user
 
     await log_message(db, conversation, role="user", content="[confirmed action]")
 

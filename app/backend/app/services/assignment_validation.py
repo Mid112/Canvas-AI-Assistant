@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.course import Course
 from app.models.user import User
+from app.services.canvas_timezone import get_instructor_canvas_timezone
 from app.services.course_access import get_owned_course_or_404
 from app.services.profanity import check_message_profanity
 
@@ -14,7 +15,7 @@ def _check_title(title: str) -> None:
     if not title or not title.strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Assignment title cannot be empty.",
+            detail="Assignment title cannot be empty. Enter a title before submitting.",
         )
     check_message_profanity(title, content_label="Assignment title")
 
@@ -23,25 +24,34 @@ def _check_description(description: str) -> None:
     if not description or not description.strip():
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Assignment description cannot be empty.",
+            detail=(
+                "Assignment description cannot be empty. "
+                "Add a short description of what students should do."
+            ),
         )
     check_message_profanity(description, content_label="Assignment description")
 
 
-def _check_due_date(due_date: str) -> None:
+def _check_due_date(due_date: str, instructor_timezone: str | None = None) -> None:
+    from app.services.due_date import parse_due_date
+
     try:
-        due_dt = datetime.fromisoformat(due_date)
-        if due_dt.tzinfo is None:
-            due_dt = due_dt.replace(tzinfo=UTC)
+        due_dt = parse_due_date(due_date, instructor_timezone)
         if due_dt <= datetime.now(UTC):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Due date must be in the future.",
+                detail=(
+                    "Due date must be in the future. "
+                    "Choose a date and time after now, then try again."
+                ),
             )
-    except ValueError:
+    except (ValueError, TypeError, OverflowError):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid due date format: {due_date}. Use ISO 8601, e.g. 2026-09-01T23:59:00.",
+            detail=(
+                f"Invalid due date format: {due_date}. "
+                "Use ISO 8601 with timezone when possible, e.g. 2026-09-01T23:59:00Z."
+            ),
         )
 
 
@@ -49,7 +59,10 @@ def _check_points_possible(points_possible: float) -> None:
     if points_possible <= 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Points possible must be greater than zero.",
+            detail=(
+                "Points possible must be greater than zero. "
+                "Enter a positive point value, or leave points blank for an ungraded assignment."
+            ),
         )
 
 
@@ -70,16 +83,25 @@ async def validate_assignment_for_create(
     not have to look it up again."""
 
     course = await get_owned_course_or_404(local_course_id, user, db)
+    instructor_timezone = get_instructor_canvas_timezone(user, course.canvas_url)
 
     _check_title(title)
+    if description is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Description is required for assignments.",
+        )
     _check_description(description)
 
     if not due_date:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Due date is required for assignments.",
+            detail=(
+                "Due date is required for assignments. "
+                "Set a due date before creating or previewing."
+            ),
         )
-    _check_due_date(due_date)
+    _check_due_date(due_date, instructor_timezone)
 
     if points_possible is not None:
         _check_points_possible(points_possible)
@@ -104,6 +126,7 @@ async def validate_assignment_for_update(
     since that check only ever applies to a newly-provided due date."""
 
     course = await get_owned_course_or_404(local_course_id, user, db)
+    instructor_timezone = get_instructor_canvas_timezone(user, course.canvas_url)
 
     if title is None and description is None and due_date is None and points_possible is None:
         raise HTTPException(
@@ -117,7 +140,7 @@ async def validate_assignment_for_update(
     if description is not None:
         _check_description(description)
     if due_date is not None:
-        _check_due_date(due_date)
+        _check_due_date(due_date, instructor_timezone)
     if points_possible is not None:
         _check_points_possible(points_possible)
 

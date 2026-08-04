@@ -9,6 +9,7 @@ import type { PlanField } from "@/types/dryRunPreview";
 
 interface EditableReviewFormProps {
   fields: PlanField[];
+  error?: string | null;
   isSaving?: boolean;
   onSave: (changes: Record<string, unknown>) => void;
 }
@@ -33,6 +34,7 @@ function parseValue(field: PlanField, value: string): unknown {
 
 export function EditableReviewForm({
   fields,
+  error,
   isSaving = false,
   onSave,
 }: EditableReviewFormProps) {
@@ -144,6 +146,14 @@ export function EditableReviewForm({
               </div>
             );
           })}
+          {error ? (
+            <p
+              role="alert"
+              className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+            >
+              {error}
+            </p>
+          ) : null}
           <Button type="submit" disabled={isSaving}>
             {isSaving ? "Regenerating preview..." : "Save & regenerate preview"}
           </Button>

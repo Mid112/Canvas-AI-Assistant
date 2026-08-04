@@ -1,6 +1,6 @@
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,10 @@ import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useInstitution } from "@/contexts/useInstitution";
 import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
+import { useInstructorCanvasTimezone } from "@/lib/useInstructorCanvasTimezone";
 import { disambiguateCourseLabels } from "@/lib/disambiguate-course-labels";
 import { pageShellNarrow } from "@/lib/page-shell";
-import type { AiActionDraftLocationState } from "@/routes/paths";
+import { paths, type AiActionDraftLocationState } from "@/routes/paths";
 import {
   discardTypedDraft,
   saveTypedDraft,
@@ -41,8 +42,47 @@ const initialDescribeValues: AssignmentDescribeValues = {
   prompt: "",
 };
 
+/** Identifies one handoff into this page. Two navigations that differ in any
+ * of these are different pieces of work, not a re-render of the same one. */
+function handoffIdentity(state: AiActionDraftLocationState | null): string {
+  const draft = state?.aiAssignmentDraft;
+  return JSON.stringify([
+    draft?.conversationId ?? null,
+    draft?.pendingMessageId ?? null,
+    draft?.prompt ?? null,
+    draft?.courseId ?? null,
+    draft?.name ?? null,
+    state?.typedDraftId ?? null,
+  ]);
+}
+
+/** Remounts the page whenever the handoff identity changes.
+ *
+ * Nearly all of this page's state is seeded from location.state through
+ * useState initialisers and a useRef single-flight guard, none of which re-run
+ * on a state change alone. React Router reuses the element when the path is
+ * unchanged, so a second handoff arriving without an intervening unmount would
+ * keep the first one's step, draft, describe values and auto-generate guard —
+ * showing the previous assignment and silently skipping description expansion.
+ *
+ * No route navigates create -> create today, so this is not reachable from the
+ * current UI; it is one added link away from being reachable, and the failure
+ * is silent and shows one assignment's content under another's name. Keying is
+ * preferred over resetting the two guards because it covers every seeded value
+ * at once, including any added later.
+ */
+export function InstructorAssignmentCreateRoute() {
+  const location = useLocation();
+  return (
+    <InstructorAssignmentCreatePage
+      key={handoffIdentity(location.state as AiActionDraftLocationState | null)}
+    />
+  );
+}
+
 export function InstructorAssignmentCreatePage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const locationState = location.state as AiActionDraftLocationState | null;
   const seededDraft = locationState?.aiAssignmentDraft;
   const typedDraftId = locationState?.typedDraftId;
@@ -88,9 +128,11 @@ export function InstructorAssignmentCreatePage() {
           description: seededDraft.description ?? "",
           dueDate: seededDraft.dueDate ?? "",
           pointsPossible:
-            typeof seededDraft.pointsPossible === "number"
+            typeof seededDraft.pointsPossible === "number" &&
+            Number.isFinite(seededDraft.pointsPossible) &&
+            seededDraft.pointsPossible > 0
               ? seededDraft.pointsPossible
-              : 100,
+              : null,
         }
       : null,
   );
@@ -111,6 +153,7 @@ export function InstructorAssignmentCreatePage() {
   );
 
   const canvasUrl = useCanvasConnectionUrl();
+  const instructorTimeZone = useInstructorCanvasTimezone(canvasUrl);
   const {
     availableCourses,
     isLoading: isLoadingCourses,
@@ -194,15 +237,26 @@ export function InstructorAssignmentCreatePage() {
           assistantPrompt,
           { accessToken, canvasUrl },
         );
+        // An empty expansion is a failed expansion, not a no-op. Silently
+        // keeping the chat's one-liner cleared the spinner and left the
+        // instructor on Review looking at the vague description this call
+        // exists to replace, with nothing to say it had not worked. Raising
+        // it routes into the same catch as a request failure, so the two
+        // look identical to the instructor: an error, and Describe with the
+        // prompt intact to retry or edit.
+        const expanded = generated.description.trim();
+        if (!expanded) {
+          throw new Error(
+            "The expanded description came back empty. Review or edit it below.",
+          );
+        }
         // Only the description is taken. The assistant already resolved
         // title, due date, and points from what the instructor explicitly
         // asked for ("worth 120 points, due Friday at 11:59 PM") — letting
         // the generator's own defaults overwrite those would be a worse
         // regression than the vague description this is fixing.
         setDraft((current) =>
-          current && generated.description.trim()
-            ? { ...current, description: generated.description }
-            : current,
+          current ? { ...current, description: expanded } : current,
         );
       } catch (error) {
         // Drop to Describe with the prompt intact so the instructor can
@@ -280,6 +334,24 @@ export function InstructorAssignmentCreatePage() {
     setDraftSaveStatus("Draft saved. Resume it anytime from the assistant.");
   };
 
+  // Carries the prompt across rather than restarting it. Seeds the same
+  // aiQuizDraft state the assistant handoff and typed-draft resume already
+  // use, so the Quiz Creator opens on describe with the text in place.
+  const handleSwitchToQuiz = (prompt: string) => {
+    navigate(paths.instructor.quizCreate, {
+      state: {
+        aiQuizDraft: {
+          ...(describeValues.courseId
+            ? { courseId: Number(describeValues.courseId) }
+            : {}),
+          name: "",
+          description: "",
+          prompt,
+        },
+      },
+    });
+  };
+
   const handleGenerate = async (values: AssignmentDescribeValues) => {
     if (!accessToken) {
       setGenerateError("Your session has expired. Please sign in again.");
@@ -295,6 +367,7 @@ export function InstructorAssignmentCreatePage() {
       const generated = await generateAssignmentDraft(courseId, values.prompt, {
         accessToken,
         canvasUrl,
+        timeZone: instructorTimeZone,
       });
       resetPreviewState();
       setDraft(generated);
@@ -363,6 +436,7 @@ export function InstructorAssignmentCreatePage() {
       const previewSummary = await previewAssignmentDraft(payload, {
         accessToken,
         canvasUrl,
+        timeZone: instructorTimeZone,
       });
       setPreview(previewSummary);
       setPendingApproval(values);
@@ -402,6 +476,7 @@ export function InstructorAssignmentCreatePage() {
         // where the backend records a standalone Workflow instead.
         conversationId: seededDraft?.conversationId,
         pendingMessageId: seededDraft?.pendingMessageId,
+        timeZone: instructorTimeZone,
       });
       if (user?.id && savedTypedDraftId) {
         discardTypedDraft(user.id, savedTypedDraftId);
@@ -489,7 +564,9 @@ export function InstructorAssignmentCreatePage() {
             <div>
               <p className="font-medium">Due date</p>
               <p className="text-muted-foreground">
-                {formatDueDateForDisplay(approvedValues.dueDate)}
+                {formatDueDateForDisplay(approvedValues.dueDate, {
+                  treatAsDatetimeLocal: true,
+                })}
               </p>
             </div>
           </CardContent>
@@ -548,6 +625,7 @@ export function InstructorAssignmentCreatePage() {
           isLoadingCourses={isLoadingCourses}
           onGenerate={handleGenerate}
           onValuesChange={handleDescribeValuesChange}
+          onSwitchToQuiz={handleSwitchToQuiz}
         />
       ) : isEnhancingDescription ? (
         /* There's a real LLM round-trip between the assistant handoff and a
@@ -573,6 +651,7 @@ export function InstructorAssignmentCreatePage() {
           onApprove={handleRequestApproval}
           onBack={handleBack}
           onDraftChange={handleReviewDraftChange}
+          instructorTimeZone={instructorTimeZone}
         />
       ) : null}
 

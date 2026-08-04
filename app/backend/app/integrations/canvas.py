@@ -146,6 +146,8 @@ async def _fetch_all_pages(
     page_params: dict | None = params
 
     for _ in range(_MAX_PAGES):
+        if next_url is None:
+            break
         response = await _get_with_retry(client, next_url, headers=headers, params=page_params)
         _raise_for_canvas_error(response)
         results.extend(response.json())
@@ -757,9 +759,58 @@ async def list_quizzes(
     canvas_url = resolve_server_canvas_url(canvas_url)
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            response = await client.get(
+            return await _fetch_all_pages(
+                client,
                 f"{canvas_url}/api/v1/courses/{course_id}/quizzes",
                 headers=_headers(token),
+                params={"per_page": 100},
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
+async def fetch_quiz(
+    course_id: int,
+    quiz_id: int,
+    token: str,
+    canvas_url: str,
+) -> dict:
+    """Fetch one classic quiz — not an assignment; IDs are not interchangeable."""
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await _get_with_retry(
+                client,
+                f"{canvas_url}/api/v1/courses/{course_id}/quizzes/{quiz_id}",
+                headers=_headers(token),
+            )
+            _raise_for_canvas_error(response)
+            return response.json()
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail="Canvas API timed out")
+    except httpx.RequestError as e:
+        logger.error("Could not reach Canvas at %s: %s", canvas_url, e)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not reach Canvas")
+
+
+async def update_quiz(
+    course_id: int,
+    quiz_id: int,
+    payload: dict,
+    token: str,
+    canvas_url: str,
+) -> dict:
+    """Update a classic quiz via the Quizzes API (not Assignments PUT)."""
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.put(
+                f"{canvas_url}/api/v1/courses/{course_id}/quizzes/{quiz_id}",
+                headers=_headers(token),
+                json={"quiz": payload},
             )
             _raise_for_canvas_error(response)
             return response.json()
@@ -966,6 +1017,73 @@ async def create_new_quiz(
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             response = await client.post(
                 f"{canvas_url}/api/quiz/v1/courses/{course_id}/quizzes",
+                headers=_headers(token),
+                json={"quiz": payload},
+            )
+            _raise_for_canvas_error(response)
+            return response.json()
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Canvas New Quizzes API timed out",
+        )
+    except httpx.RequestError as exc:
+        logger.error("Could not reach Canvas New Quizzes at %s: %s", canvas_url, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach Canvas New Quizzes",
+        ) from exc
+
+
+async def fetch_new_quiz(
+    course_id: int,
+    assignment_id: int,
+    token: str,
+    canvas_url: str,
+) -> dict:
+    """Fetch one New Quiz. Canvas keys New Quizzes by assignment_id."""
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await _get_with_retry(
+                client,
+                (
+                    f"{canvas_url}/api/quiz/v1/courses/{course_id}/quizzes/"
+                    f"{assignment_id}"
+                ),
+                headers=_headers(token),
+            )
+            _raise_for_canvas_error(response)
+            return response.json()
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Canvas New Quizzes API timed out",
+        )
+    except httpx.RequestError as exc:
+        logger.error("Could not reach Canvas New Quizzes at %s: %s", canvas_url, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not reach Canvas New Quizzes",
+        ) from exc
+
+
+async def update_new_quiz(
+    course_id: int,
+    assignment_id: int,
+    payload: dict,
+    token: str,
+    canvas_url: str,
+) -> dict:
+    """Patch a New Quiz via the New Quizzes API (not classic Quizzes PUT)."""
+    canvas_url = resolve_server_canvas_url(canvas_url)
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            response = await client.patch(
+                (
+                    f"{canvas_url}/api/quiz/v1/courses/{course_id}/quizzes/"
+                    f"{assignment_id}"
+                ),
                 headers=_headers(token),
                 json={"quiz": payload},
             )

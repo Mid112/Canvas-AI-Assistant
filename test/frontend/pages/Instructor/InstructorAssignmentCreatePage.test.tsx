@@ -1,9 +1,12 @@
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useNavigate } from "react-router-dom";
 
-import { InstructorAssignmentCreatePage } from "@/pages/Instructor/InstructorAssignmentCreatePage";
+import {
+  InstructorAssignmentCreatePage,
+  InstructorAssignmentCreateRoute,
+} from "@/pages/Instructor/InstructorAssignmentCreatePage";
 import {
   listTypedDrafts,
   saveTypedDraft,
@@ -624,6 +627,115 @@ describe("InstructorAssignmentCreatePage", () => {
     expect(screen.queryByDisplayValue("999")).not.toBeInTheDocument();
   });
 
+  // Verifies: a second handoff onto the already-mounted route is treated as
+  // new work. React Router reuses the element when the path is unchanged, and
+  // every seeded value here comes from a useState initialiser or a useRef
+  // single-flight guard — none of which re-run on a state change. Without the
+  // identity key the page would keep the first handoff's draft and skip
+  // expansion entirely, showing one assignment's content under another's name.
+  it("re-seeds and re-expands when a second handoff reuses the mounted route", async () => {
+    const user = userEvent.setup();
+    mockedGenerate
+      .mockResolvedValueOnce({
+        name: "Ignored",
+        description: "Expanded description for the first handoff.",
+        dueDate: "2099-01-01T00:00",
+        pointsPossible: 999,
+      })
+      .mockResolvedValueOnce({
+        name: "Ignored",
+        description: "Expanded description for the second handoff.",
+        dueDate: "2099-01-01T00:00",
+        pointsPossible: 999,
+      });
+
+    const secondHandoff = {
+      aiAssignmentDraft: {
+        courseId: 42,
+        name: "Homework 4",
+        description: "it is about sorting",
+        dueDate: "2026-09-09T23:59",
+        pointsPossible: 60,
+        prompt: "Homework 4. it is about sorting",
+      },
+    };
+
+    // Lives outside <Routes> so it survives the navigation and can trigger a
+    // create -> create transition without unmounting the page.
+    function SecondHandoffButton() {
+      const navigate = useNavigate();
+      return (
+        <button
+          type="button"
+          onClick={() =>
+            navigate("/instructor/assignments/create", { state: secondHandoff })
+          }
+        >
+          send second handoff
+        </button>
+      );
+    }
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: "/instructor/assignments/create",
+            state: {
+              aiAssignmentDraft: {
+                courseId: 42,
+                name: "Homework 3",
+                description: "it is about beef corndogs",
+                dueDate: "2026-08-04T23:59",
+                pointsPossible: 120,
+                prompt: "Homework 3. it is about beef corndogs",
+              },
+            },
+          },
+        ]}
+      >
+        <SecondHandoffButton />
+        <Routes>
+          <Route
+            path="/instructor/assignments/create"
+            element={<InstructorAssignmentCreateRoute />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(
+      await screen.findByDisplayValue(
+        "Expanded description for the first handoff.",
+      ),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "send second handoff" }),
+    );
+
+    // The generator runs again for the new prompt rather than being refused
+    // by the first handoff's guard.
+    await waitFor(() => {
+      expect(mockedGenerate).toHaveBeenCalledWith(
+        42,
+        "Homework 4. it is about sorting",
+        expect.anything(),
+      );
+    });
+    expect(
+      await screen.findByDisplayValue(
+        "Expanded description for the second handoff.",
+      ),
+    ).toBeInTheDocument();
+
+    // And the form shows the second assignment, not the first one's values.
+    expect(screen.getByDisplayValue("Homework 4")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("2026-09-09T23:59")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("60")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Homework 3")).not.toBeInTheDocument();
+  });
+
   // Verifies: Regression (#15) — the LLM round-trip is visible rather than
   // flashing the chat's one-liner and swapping it under the instructor.
   it("shows a generating state while expanding the description", async () => {
@@ -667,6 +779,38 @@ describe("InstructorAssignmentCreatePage", () => {
 
   // Verifies: Regression (#15) — a generator failure drops to Describe with
   // the prompt intact, rather than stranding the instructor on Review.
+  // Verifies: an empty expansion is a failure, not a silent no-op. It used
+  // to clear the spinner and leave the instructor on Review still looking at
+  // the chat's one-liner — the exact text this call exists to replace — with
+  // nothing to say it had not worked.
+  it("treats an empty expanded description as a failure", async () => {
+    mockedGenerate.mockResolvedValue({
+      name: "Ignored Title",
+      description: "   ",
+      dueDate: "2099-01-01T00:00",
+      pointsPossible: 999,
+    });
+
+    renderPage({
+      aiAssignmentDraft: {
+        courseId: 42,
+        name: "Homework 3",
+        description: "it is about beef corndogs",
+        dueDate: "2026-08-04T23:59",
+        pointsPossible: 120,
+        prompt: "Homework 3. it is about beef corndogs",
+      },
+    });
+
+    expect(
+      await screen.findByText(/expanded description came back empty/i),
+    ).toBeInTheDocument();
+    // Dropped back to Describe with the prompt intact, same as a failed call.
+    expect(
+      screen.getByDisplayValue("Homework 3. it is about beef corndogs"),
+    ).toBeInTheDocument();
+  });
+
   it("falls back to the describe step when expansion fails", async () => {
     mockedGenerate.mockRejectedValue(new Error("Generator unavailable"));
 
