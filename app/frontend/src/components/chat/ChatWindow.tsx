@@ -22,6 +22,15 @@ import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useInstitution } from "@/contexts/useInstitution";
 import { seedChatMessages } from "@/data/assistantSeedData";
 import { isAbortError } from "@/lib/api-request";
+import {
+  ASSISTANT_LOADING_COPY,
+  LOADING_NOTE_AFTER_MS,
+  LOADING_STAGE_ADVANCE_MS,
+  LONG_WAIT_NOTE,
+  inferAssistantLoadingStage,
+  nextAssistantLoadingStage,
+  type AssistantLoadingStage,
+} from "@/lib/assistant-loading-stage";
 import { isCancellationPhrase } from "@/lib/chat-cancellation";
 import { setStoredDeferredDraft } from "@/lib/deferred-assistant-storage";
 import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
@@ -195,6 +204,9 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
     return initialPendingMessageId !== undefined ? [initialPendingMessageId] : [];
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingStage, setLoadingStage] =
+    useState<AssistantLoadingStage>("thinking");
+  const [loadingNote, setLoadingNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [inputError, setInputError] = useState<string | null>(null);
   const [retryMessage, setRetryMessage] = useState<string | null>(null);
@@ -223,6 +235,45 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
     initialDeferredRequestId ?? null,
   );
   const abortControllerRef = useRef<AbortController | null>(null);
+  const loadingTimersRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+
+  const clearLoadingFeedback = useCallback(() => {
+    for (const timerId of loadingTimersRef.current) {
+      clearTimeout(timerId);
+    }
+    loadingTimersRef.current = [];
+    setLoadingNote(null);
+    setLoadingStage("thinking");
+  }, []);
+
+  const startLoadingFeedback = useCallback(
+    (userText: string) => {
+      clearLoadingFeedback();
+      const initialStage = inferAssistantLoadingStage(userText);
+      setLoadingStage(initialStage);
+      setLoadingNote(null);
+      loadingTimersRef.current = [
+        setTimeout(() => {
+          setLoadingStage((current) => nextAssistantLoadingStage(current));
+        }, LOADING_STAGE_ADVANCE_MS),
+        setTimeout(() => {
+          setLoadingNote(LONG_WAIT_NOTE);
+        }, LOADING_NOTE_AFTER_MS),
+      ];
+    },
+    [clearLoadingFeedback],
+  );
+
+  // Clear stage timers on unmount so a mid-flight navigate cannot call
+  // setLoadingStage / setLoadingNote after this component is gone.
+  useEffect(() => {
+    return () => {
+      for (const timerId of loadingTimersRef.current) {
+        clearTimeout(timerId);
+      }
+      loadingTimersRef.current = [];
+    };
+  }, []);
 
   const assistantContext = useMemo(
     () => ({
@@ -459,6 +510,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
 
       isDeliveringRef.current = true;
       setIsLoading(true);
+      startLoadingFeedback(userText);
       setError(null);
       setRetryMessage(userText);
 
@@ -544,6 +596,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
           abortControllerRef.current = null;
         }
         isDeliveringRef.current = false;
+        clearLoadingFeedback();
         setIsLoading(false);
       }
     },
@@ -552,11 +605,13 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       activePendingMessageIds,
       appendAssistantMessage,
       assistantContext,
+      clearLoadingFeedback,
       conversationId,
       modelSettings,
       onConversationChange,
       onDeferredRequest,
       onDeferredResumeComplete,
+      startLoadingFeedback,
       onModifyContextConsumed,
       user?.id,
     ],
@@ -1080,7 +1135,12 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
             ),
           )}
 
-          {isLoading ? <LoadingIndicator /> : null}
+          {isLoading ? (
+            <LoadingIndicator
+              label={ASSISTANT_LOADING_COPY[loadingStage]}
+              note={loadingNote}
+            />
+          ) : null}
         </div>
 
         {error ? (
