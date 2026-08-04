@@ -38,6 +38,19 @@ describe("toAssignmentCreateRequest", () => {
     });
   });
 
+  // Verifies: Ticket 21 — ungraded approve payload keeps points_possible null.
+  it("maps ungraded reviews without inventing a points default", () => {
+    const result = toAssignmentCreateRequest({
+      courseId: "3",
+      name: "Reading reflection",
+      description: "Ungraded check-in.",
+      dueDate: "2026-12-15T23:59",
+      pointsPossible: null,
+    });
+
+    expect(result.assignment.points_possible).toBeNull();
+  });
+
   // Verifies: Rejects invalid course ids.
   it("rejects invalid course ids", () => {
     expect(() =>
@@ -127,6 +140,27 @@ describe("generateAssignmentDraft", () => {
     expect(draft.name).toBe("Recursion Practice Set");
     expect(draft.description).toBe("Solve three recursion problems.");
     expect(draft.pointsPossible).toBe(75);
+  });
+
+  // Verifies: Ticket 21 — null draft points stay null (no 10/100 default).
+  it("preserves null points_possible for ungraded drafts", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          title: "Reading reflection",
+          description: "Ungraded check-in.",
+          due_at: "2026-12-15T23:59:00+00:00",
+          points_possible: null,
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const draft = await generateAssignmentDraft(3, "Ungraded reading reflection", {
+      accessToken: "access-token",
+    });
+
+    expect(draft.pointsPossible).toBeNull();
   });
 
   it("throws AssignmentCreatorApiError on a failed response", async () => {
