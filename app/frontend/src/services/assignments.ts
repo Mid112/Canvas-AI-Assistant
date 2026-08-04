@@ -150,3 +150,24 @@ export async function updateAssignment(
     },
   );
 }
+
+/** Publish or unpublish an assignment in Canvas from Course Assignments. */
+export async function setAssignmentPublished(
+  localCourseId: number,
+  assignmentId: number,
+  published: boolean,
+  accessToken: string,
+  canvasUrl?: string,
+): Promise<Assignment> {
+  return request<Assignment>(
+    appendCanvasUrl(
+      `${API_BASE_URL}/canvas/courses/${localCourseId}/assignments/${assignmentId}/publish`,
+      canvasUrl,
+    ),
+    accessToken,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ published }),
+    },
+  );
+}
