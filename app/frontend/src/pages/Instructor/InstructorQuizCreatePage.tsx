@@ -1,6 +1,6 @@
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,10 @@ import {
   discardTypedDraft,
   saveTypedDraft,
 } from "@/lib/typed-draft-storage";
-import type { AiActionDraftLocationState } from "@/routes/paths";
+import {
+  instructorCourseQuizzesPath,
+  type AiActionDraftLocationState,
+} from "@/routes/paths";
 import {
   approveQuizDraft,
   fetchQuestionBanks,
@@ -24,6 +27,7 @@ import {
   generateQuizDraft,
   previewQuizDraft,
 } from "@/services/quizCreator";
+import { QuizApiError, setQuizPublished } from "@/services/quizzes";
 import type {
   GeneratedQuizDraft,
   QuizCreateCourseOption,
@@ -33,6 +37,7 @@ import type {
   QuizPreviewSummary,
   QuizQuestionBank,
 } from "@/types/quizCreate";
+import type { QuizEngine } from "@/types/quiz";
 
 import { QuizCreateStepper } from "./InstructorQuizCreate/QuizCreateStepper";
 import { QuizDescribeStep } from "./InstructorQuizCreate/QuizDescribeStep";
@@ -100,6 +105,15 @@ export function InstructorQuizCreatePage() {
   );
   const [approvedValues, setApprovedValues] =
     useState<QuizReviewFormSchema | null>(null);
+  const [createdQuiz, setCreatedQuiz] = useState<{
+    id: number;
+    published: boolean;
+    quizEngine: QuizEngine;
+  } | null>(null);
+  const [isPublishingCreatedQuiz, setIsPublishingCreatedQuiz] = useState(false);
+  const [publishCreatedQuizError, setPublishCreatedQuizError] = useState<
+    string | null
+  >(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
@@ -382,7 +396,7 @@ export function InstructorQuizCreatePage() {
     setIsApproving(true);
 
     try {
-      await approveQuizDraft(
+      const created = await approveQuizDraft(
         {
           courseId: resolvedCourseId,
           name: pendingApproval.name,
@@ -405,6 +419,12 @@ export function InstructorQuizCreatePage() {
         discardTypedDraft(user.id, savedTypedDraftId);
         setSavedTypedDraftId(undefined);
       }
+      setCreatedQuiz({
+        id: created.id,
+        published: created.published,
+        quizEngine: created.quizEngine,
+      });
+      setPublishCreatedQuizError(null);
       setApprovedValues(pendingApproval);
       setIsPreviewOpen(false);
       void refreshActiveCourse();
@@ -439,6 +459,8 @@ export function InstructorQuizCreatePage() {
     setDescribeValues(initialDescribeValues);
     setDraft(null);
     setApprovedValues(null);
+    setCreatedQuiz(null);
+    setPublishCreatedQuizError(null);
     setGenerateError(null);
     setApproveError(null);
     setPendingApproval(null);
@@ -451,6 +473,43 @@ export function InstructorQuizCreatePage() {
   };
 
   if (approvedValues) {
+    const handlePublishCreatedQuiz = async () => {
+      if (!accessToken || !canvasUrl || !createdQuiz || !resolvedCourseId) {
+        setPublishCreatedQuizError(
+          "Unable to publish this quiz. Reload the course quizzes list and try again.",
+        );
+        return;
+      }
+
+      setIsPublishingCreatedQuiz(true);
+      setPublishCreatedQuizError(null);
+      try {
+        const updated = await setQuizPublished(
+          Number(resolvedCourseId),
+          createdQuiz.id,
+          true,
+          accessToken,
+          {
+            canvasUrl,
+            quizEngine: createdQuiz.quizEngine,
+          },
+        );
+        setCreatedQuiz({
+          id: updated.id,
+          published: updated.published,
+          quizEngine: updated.quiz_engine,
+        });
+      } catch (error) {
+        setPublishCreatedQuizError(
+          error instanceof QuizApiError
+            ? error.message
+            : "Unable to publish quiz. Please try again.",
+        );
+      } finally {
+        setIsPublishingCreatedQuiz(false);
+      }
+    };
+
     return (
       <div className={pageShellNarrow}>
         <header className="space-y-1">
@@ -467,7 +526,9 @@ export function InstructorQuizCreatePage() {
               <CardTitle>Quiz Created</CardTitle>
             </div>
             <p className="text-sm text-muted-foreground">
-              Your quiz has been created in Canvas as a draft.
+              {createdQuiz?.published
+                ? "Your quiz has been created and published in Canvas."
+                : "Your quiz has been created in Canvas as a draft."}
             </p>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
@@ -489,9 +550,38 @@ export function InstructorQuizCreatePage() {
               <p className="font-medium">Questions</p>
               <p className="text-muted-foreground">{approvedValues.questions.length}</p>
             </div>
+            {publishCreatedQuizError ? (
+              <p role="alert" className="text-destructive">
+                {publishCreatedQuizError}
+              </p>
+            ) : null}
           </CardContent>
-          <CardFooter className="border-t bg-transparent">
-            <Button type="button" onClick={handleCreateAnother}>
+          <CardFooter className="flex flex-wrap gap-2 border-t bg-transparent">
+            {createdQuiz && !createdQuiz.published ? (
+              <Button
+                type="button"
+                disabled={isPublishingCreatedQuiz}
+                aria-busy={isPublishingCreatedQuiz}
+                onClick={() => void handlePublishCreatedQuiz()}
+              >
+                {isPublishingCreatedQuiz ? (
+                  <Loader2 data-icon="inline-start" className="animate-spin" />
+                ) : null}
+                Publish quiz
+              </Button>
+            ) : null}
+            {resolvedCourseId ? (
+              <Button
+                type="button"
+                variant="outline"
+                render={
+                  <Link to={instructorCourseQuizzesPath(resolvedCourseId)} />
+                }
+              >
+                View course quizzes
+              </Button>
+            ) : null}
+            <Button type="button" variant="outline" onClick={handleCreateAnother}>
               Create Another Quiz
             </Button>
           </CardFooter>
