@@ -4,6 +4,7 @@ import {
   buildTypedDraftResumeTarget,
   discardTypedDraft,
   listTypedDrafts,
+  resolveTypedDraftCourseId,
   saveTypedDraft,
   type TypedDraftContent,
 } from "@/lib/typed-draft-storage";
@@ -50,6 +51,39 @@ describe("typed-draft-storage", () => {
     });
   });
 
+  it("carries dueDate and pointsPossible through an assignment resume target (#6)", () => {
+    const draft = saveTypedDraft(7, {
+      kind: "assignment",
+      content: {
+        title: "Lab 1",
+        body: "Write tests",
+        dueDate: "2026-08-15T23:59:00",
+        pointsPossible: 50,
+      },
+    });
+
+    expect(draft.content).toEqual({
+      title: "Lab 1",
+      body: "Write tests",
+      dueDate: "2026-08-15T23:59:00",
+      pointsPossible: 50,
+    });
+
+    expect(buildTypedDraftResumeTarget(draft, { courseId: 42 })).toEqual({
+      path: paths.instructor.assignmentCreate,
+      state: {
+        typedDraftId: draft.id,
+        aiAssignmentDraft: {
+          courseId: 42,
+          name: "Lab 1",
+          description: "Write tests",
+          dueDate: "2026-08-15T23:59:00",
+          pointsPossible: 50,
+        },
+      },
+    });
+  });
+
   it("resumes prompt-only assignment drafts to describe (no empty review)", () => {
     const draft = saveTypedDraft(7, {
       kind: "assignment",
@@ -88,6 +122,72 @@ describe("typed-draft-storage", () => {
         },
       },
     });
+  });
+
+  // Verifies: a quiz draft keeps the instructor's own attempt limit and
+  // timer. stripCanvasIdentifiers is a hard whitelist, so a field added to
+  // TypedDraftContent but not to it is dropped on save with no error — the
+  // same way the due date was lost before (#6).
+  it("stores a quiz draft's allowed attempts and time limit", () => {
+    const draft = saveTypedDraft(7, {
+      kind: "quiz",
+      content: {
+        title: "Midterm",
+        questions: "Q1",
+        allowedAttempts: 3,
+        timeLimit: 45,
+      },
+    });
+
+    expect(draft.content.allowedAttempts).toBe(3);
+    expect(draft.content.timeLimit).toBe(45);
+    expect(listTypedDrafts(7)[0]?.content.allowedAttempts).toBe(3);
+    expect(listTypedDrafts(7)[0]?.content.timeLimit).toBe(45);
+  });
+
+  // Verifies: null is a choice, not an absence. Unlimited attempts and "no
+  // time limit" have to round-trip, or resuming quietly reinstates whatever
+  // the generator defaults to.
+  it("keeps a quiz draft's null attempt limit and timer", () => {
+    const draft = saveTypedDraft(7, {
+      kind: "quiz",
+      content: {
+        title: "Midterm",
+        questions: "Q1",
+        allowedAttempts: null,
+        timeLimit: null,
+      },
+    });
+
+    expect(draft.content.allowedAttempts).toBeNull();
+    expect(draft.content.timeLimit).toBeNull();
+
+    const target = buildTypedDraftResumeTarget(draft, { courseId: 42 });
+    const seeded = (target.state as {
+      aiQuizDraft: { allowedAttempts?: unknown; timeLimit?: unknown };
+    }).aiQuizDraft;
+    expect(seeded.allowedAttempts).toBeNull();
+    expect(seeded.timeLimit).toBeNull();
+  });
+
+  // Verifies: a draft that never set them stays absent, so the generated
+  // values are left alone rather than being overwritten with a null.
+  it("omits attempts and time limit when the quiz draft never set them", () => {
+    const draft = saveTypedDraft(7, {
+      kind: "quiz",
+      content: { title: "Midterm", questions: "Q1" },
+    });
+
+    expect("allowedAttempts" in draft.content).toBe(false);
+    expect("timeLimit" in draft.content).toBe(false);
+
+    const seeded = (
+      buildTypedDraftResumeTarget(draft, { courseId: 42 }).state as {
+        aiQuizDraft: Record<string, unknown>;
+      }
+    ).aiQuizDraft;
+    expect("allowedAttempts" in seeded).toBe(false);
+    expect("timeLimit" in seeded).toBe(false);
   });
 
   it("builds feedback resume targets without NaN ids", () => {
@@ -182,5 +282,94 @@ describe("typed-draft-storage", () => {
 
     discardTypedDraft(7, draft.id);
     expect(listTypedDrafts(7)).toHaveLength(0);
+  });
+
+  // A draft's course has to survive the round-trip through local storage
+  // without ever storing an id (#1239), so it is kept as the two labels
+  // Canvas already displays and resolved back to an id at resume time.
+  describe("course binding", () => {
+    const courses = [
+      { id: 3, code: "COSC 499", name: "Capstone Project" },
+      { id: 4, code: "MATH 101", name: "Calculus" },
+    ];
+
+    it("persists course labels but still strips identifiers", () => {
+      const draft = saveTypedDraft(7, {
+        kind: "assignment",
+        content: {
+          title: "Lab 1",
+          courseCode: "COSC 499",
+          courseName: "Capstone Project",
+          courseId: 3,
+        } as TypedDraftContent,
+      });
+
+      expect(draft.content).toEqual({
+        title: "Lab 1",
+        courseCode: "COSC 499",
+        courseName: "Capstone Project",
+      });
+      expect(listTypedDrafts(7)[0].content.courseCode).toBe("COSC 499");
+    });
+
+    it("resolves a stored course by code", () => {
+      expect(
+        resolveTypedDraftCourseId(
+          { courseCode: "COSC 499", courseName: "Capstone Project" },
+          courses,
+        ),
+      ).toBe(3);
+    });
+
+    it("ignores case and spacing differences in the stored code", () => {
+      expect(
+        resolveTypedDraftCourseId({ courseCode: "  cosc  499 " }, courses),
+      ).toBe(3);
+    });
+
+    // The whole point of keeping both labels: a rename between save and
+    // resume leaves the code intact, so the draft still finds its course.
+    it("still resolves after the course was renamed", () => {
+      expect(
+        resolveTypedDraftCourseId(
+          { courseCode: "COSC 499", courseName: "Capstone Project" },
+          [{ id: 3, code: "COSC 499", name: "Senior Design" }],
+        ),
+      ).toBe(3);
+    });
+
+    // ...and the mirror case, where the course was re-coded instead.
+    it("falls back to the name when the code no longer matches", () => {
+      expect(
+        resolveTypedDraftCourseId(
+          { courseCode: "COSC 499", courseName: "Capstone Project" },
+          [{ id: 3, code: "COSC 599", name: "Capstone Project" }],
+        ),
+      ).toBe(3);
+    });
+
+    it("returns undefined when the course is gone entirely", () => {
+      expect(
+        resolveTypedDraftCourseId(
+          { courseCode: "PHYS 200", courseName: "Mechanics" },
+          courses,
+        ),
+      ).toBeUndefined();
+    });
+
+    it("returns undefined for drafts saved before course labels existed", () => {
+      expect(resolveTypedDraftCourseId({ title: "Lab 1" }, courses)).toBeUndefined();
+    });
+
+    // Two courses sharing a code cannot be told apart from a label, so the
+    // caller falls back to the active course rather than picking one.
+    it("returns undefined when the code is ambiguous", () => {
+      expect(
+        resolveTypedDraftCourseId({ courseCode: "COSC 499" }, [
+          { id: 3, code: "COSC 499", name: "Capstone Project" },
+          { id: 9, code: "COSC 499", name: "Capstone Project (2nd section)" },
+        ]),
+      ).toBeUndefined();
+    });
   });
 });

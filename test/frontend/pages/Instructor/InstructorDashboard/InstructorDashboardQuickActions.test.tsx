@@ -29,7 +29,7 @@ describe("InstructorDashboardQuickActions", () => {
     expect(screen.getByText("Quick AI Actions")).toBeInTheDocument();
     expect(screen.getByText("Create Assignment")).toBeInTheDocument();
     expect(screen.getByText("Draft Announcement")).toBeInTheDocument();
-    expect(screen.getByText("Grade Analysis")).toBeInTheDocument();
+    expect(screen.getByText("Analyse Missing Submissions")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Open AI Assistant" }),
     ).toBeInTheDocument();
@@ -63,11 +63,13 @@ describe("InstructorDashboardQuickActions", () => {
     });
 
     mockNavigate.mockClear();
-    await user.click(screen.getByRole("button", { name: /Grade Analysis/i }));
+    await user.click(
+      screen.getByRole("button", { name: /Analyse Missing Submissions/i }),
+    );
     expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant, {
       state: {
         initialPrompt:
-          "Give me a grade and submission performance analysis for my active course.",
+          "Analyse missing submissions for my active course. Show the overview and list the students who haven't submitted.",
       },
     });
 

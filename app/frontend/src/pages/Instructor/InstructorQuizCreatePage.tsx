@@ -50,6 +50,19 @@ const initialDescribeValues: QuizDescribeValues = {
   prompt: "",
 };
 
+/** Reads an attempt limit / time limit out of untyped location state.
+ *
+ * Three-way on purpose. undefined means the draft never carried the setting
+ * and the generator's value should stand; null is the instructor choosing
+ * unlimited attempts or no timer, which has to survive a regenerate exactly
+ * like a number would. Collapsing the two would make "no time limit" decay
+ * back into whatever the generator picked. */
+function readQuizLimit(value: unknown): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 export function InstructorQuizCreatePage() {
   const location = useLocation();
   const locationState = location.state as AiActionDraftLocationState | null;
@@ -57,6 +70,10 @@ export function InstructorQuizCreatePage() {
   const typedDraftId = locationState?.typedDraftId;
   const hasStructuredQuestions =
     Array.isArray(seededDraft?.questions) && seededDraft.questions.length > 0;
+  // A resumed quiz draft lands on describe and regenerates, so these are
+  // reapplied after generation rather than only seeding the initial draft.
+  const seededAllowedAttempts = readQuizLimit(seededDraft?.allowedAttempts);
+  const seededTimeLimit = readQuizLimit(seededDraft?.timeLimit);
   const { accessToken, user } = useAuth();
   const [step, setStep] = useState<QuizCreateStep>(
     hasStructuredQuestions ? "review" : "describe",
@@ -89,14 +106,8 @@ export function InstructorQuizCreatePage() {
             typeof seededDraft.pointsPossible === "number"
               ? seededDraft.pointsPossible
               : 100,
-          allowedAttempts:
-            typeof seededDraft.allowedAttempts === "number"
-              ? seededDraft.allowedAttempts
-              : null,
-          timeLimit:
-            typeof seededDraft.timeLimit === "number"
-              ? seededDraft.timeLimit
-              : null,
+          allowedAttempts: seededAllowedAttempts ?? null,
+          timeLimit: seededTimeLimit ?? null,
           quizEngine: seededDraft.quizEngine ?? "classic",
           questions: seededDraft.questions ?? [],
           questionBankGroups: seededDraft.questionBankGroups ?? [],
@@ -174,6 +185,11 @@ export function InstructorQuizCreatePage() {
   const effectiveCourseLoadError = needsCanvasConnection
     ? "Connect your Canvas account to load courses."
     : courseLoadError;
+  // Persisted with saved drafts so resuming targets this course rather than
+  // whatever is active later. Labels only — see TypedDraftContent (#1239).
+  const selectedCourse = writableCourses.find(
+    (course) => String(course.id) === resolvedCourseId,
+  );
 
   const handleDescribeValuesChange = useCallback((values: QuizDescribeValues) => {
     setDescribeValues((current) =>
@@ -213,6 +229,12 @@ export function InstructorQuizCreatePage() {
           title: draft.name,
           body: draft.description,
           questions: draft.questions.map((question) => question.questionText).join("\n"),
+          // Saved alongside the text because they are the instructor's own
+          // settings, not generator output. Resuming used to hand the quiz
+          // back with whatever the generator defaulted to, silently
+          // discarding an attempt limit or timer they had set.
+          allowedAttempts: draft.allowedAttempts,
+          timeLimit: draft.timeLimit,
         }
       : describeValues.prompt.trim()
         ? { questions: describeValues.prompt.trim() }
@@ -229,7 +251,12 @@ export function InstructorQuizCreatePage() {
     const saved = saveTypedDraft(user.id, {
       id: savedTypedDraftId,
       kind: "quiz",
-      content,
+      content: {
+        ...content,
+        ...(selectedCourse
+          ? { courseCode: selectedCourse.code, courseName: selectedCourse.name }
+          : {}),
+      },
     });
     setSavedTypedDraftId(saved.id);
     setDraftSaveStatus("Draft saved. Resume it anytime from the assistant.");
@@ -327,7 +354,16 @@ export function InstructorQuizCreatePage() {
         accessToken,
         canvasUrl,
       });
-      setDraft(generated);
+      // The generator does not know what the instructor had already chosen,
+      // so a resumed draft's own attempt limit and timer win over its
+      // defaults. Absent settings leave the generated values alone.
+      setDraft({
+        ...generated,
+        ...(seededAllowedAttempts !== undefined
+          ? { allowedAttempts: seededAllowedAttempts }
+          : {}),
+        ...(seededTimeLimit !== undefined ? { timeLimit: seededTimeLimit } : {}),
+      });
       setStep("review");
     } catch (error) {
       setGenerateError(

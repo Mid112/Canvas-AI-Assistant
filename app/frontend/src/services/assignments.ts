@@ -123,15 +123,23 @@ export async function createAssignment(
   payload: AssignmentCreatePayload,
   accessToken: string,
   canvasUrl?: string,
+  /** Present only when this create came from an assistant intent_preview.
+   * The backend uses them to close out that preview's pending Workflow and
+   * audit the write instead of leaving it pending. */
+  workflowLink?: { conversationId?: number; pendingMessageId?: number },
 ): Promise<Assignment> {
-  return request<Assignment>(
-    buildCourseAssignmentsUrl(localCourseId, canvasUrl),
-    accessToken,
-    {
-      method: "POST",
-      body: JSON.stringify(payload),
-    },
-  );
+  let url = buildCourseAssignmentsUrl(localCourseId, canvasUrl);
+  if (
+    workflowLink?.conversationId != null &&
+    workflowLink.pendingMessageId != null
+  ) {
+    const separator = url.includes("?") ? "&" : "?";
+    url += `${separator}conversation_id=${workflowLink.conversationId}&preview_message_id=${workflowLink.pendingMessageId}`;
+  }
+  return request<Assignment>(url, accessToken, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function updateAssignment(

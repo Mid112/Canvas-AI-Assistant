@@ -242,6 +242,12 @@ def _map_mcp_assignments_result(mcp_result: dict[str, Any]) -> dict[str, Any]:
                 "due_at": item.get("due_at"),
                 "points_possible": item.get("points_possible"),
                 "course_id": item.get("course_id") or course_id,
+                # Carried so callers can tell drafts apart — course-wide
+                # missing/late analysis must skip unpublished assignments,
+                # and dropping the field here made every assignment look
+                # published on the MCP path. Same default as
+                # AssignmentResponse.published.
+                "published": item.get("published", True),
             }
         )
     return {"assignments": assignments}

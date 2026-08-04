@@ -204,6 +204,67 @@ describe("InstructorQuizCreatePage typed drafts", () => {
     expect(screen.queryByLabelText("Quiz title")).not.toBeInTheDocument();
   });
 
+  // Verifies: the attempt limit and timer are the instructor's own settings,
+  // so saving a draft has to carry them. They were dropped before, and the
+  // quiz came back with whatever the generator defaulted to.
+  it("saves the allowed attempts and time limit onto the typed draft", async () => {
+    const user = userEvent.setup();
+    renderPage({ aiQuizDraft: reviewSeed });
+
+    const attempts = await screen.findByLabelText("Allowed attempts");
+    await user.clear(attempts);
+    await user.type(attempts, "3");
+    const timeLimit = screen.getByLabelText("Time limit (minutes)");
+    await user.clear(timeLimit);
+    await user.type(timeLimit, "45");
+
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await screen.findByText(/Draft saved/i);
+
+    const saved = listTypedDrafts(1);
+    expect(saved[0]?.content.allowedAttempts).toBe(3);
+    expect(saved[0]?.content.timeLimit).toBe(45);
+  });
+
+  // Verifies: a resumed quiz draft lands on describe and regenerates, so the
+  // saved settings have to be reapplied over the generator's output. Without
+  // that, storing them changes nothing the instructor can see.
+  it("reapplies the draft's attempts and time limit after regenerating", async () => {
+    const user = userEvent.setup();
+    mockedGenerate.mockResolvedValue({
+      name: "Generated Quiz",
+      description: "Generated instructions",
+      dueDate: "2026-12-15T23:59",
+      pointsPossible: 10,
+      // The generator's own defaults, which must lose to the draft's values.
+      allowedAttempts: 1,
+      timeLimit: null,
+      quizEngine: "classic",
+      questions: reviewSeed.questions,
+      questionBankGroups: [],
+    });
+
+    renderPage({
+      aiQuizDraft: {
+        courseId: 42,
+        name: "Midterm",
+        description: "",
+        prompt: "Create a midterm quiz covering the first half of the term",
+        allowedAttempts: 3,
+        timeLimit: 45,
+      },
+    });
+
+    const generate = await screen.findByRole("button", {
+      name: "Generate Quiz Draft",
+    });
+    await waitFor(() => expect(generate).toBeEnabled());
+    await user.click(generate);
+
+    expect(await screen.findByLabelText("Allowed attempts")).toHaveValue(3);
+    expect(screen.getByLabelText("Time limit (minutes)")).toHaveValue(45);
+  });
+
   it("saves edited review fields and discards the typed draft after Canvas confirm", async () => {
     const user = userEvent.setup();
     const existing = saveTypedDraft(1, {
