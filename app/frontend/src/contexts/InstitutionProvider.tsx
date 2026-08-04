@@ -233,9 +233,7 @@ export function InstitutionProvider({ children }: { children: ReactNode }) {
       setSelectedInstitution,
       courses: institutionData?.courses ?? [],
       analytics: institutionData?.analytics ?? EMPTY_ANALYTICS,
-      dashboard: withSharedQuickActions(
-        apiDashboard ?? institutionData?.dashboard ?? EMPTY_DASHBOARD,
-      ),
+      dashboard: withSharedQuickActions(apiDashboard ?? EMPTY_DASHBOARD),
       refreshDashboard,
     }),
     [
