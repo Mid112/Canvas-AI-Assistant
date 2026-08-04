@@ -1169,18 +1169,22 @@ Total: 9 hours
 
 ### 1: Team Meeting (Friday, 31/7)
 - Attended the team meeting, 10:00AM–12:25PM.
+<img width="2215" height="125" alt="Screenshot 2026-08-04 110712" src="https://github.com/user-attachments/assets/6995354f-7b49-4bb1-959f-cdc722c31898" />
 
 ### 2: Merged `bugfix/Permission-troubleshooting-page` into `develop` (Friday night, 31/7)
 - **PR #1462** merged into `develop` at 23:39 on 31/7, closing the "merge into develop" item carried from Cycle 21 — lands the Troubleshooting `needs_token_reset` gating and the Review Permissions "Reconnect Canvas" copy/icon fix from that branch.
+<img width="2244" height="131" alt="Screenshot 2026-08-04 110717" src="https://github.com/user-attachments/assets/6f1cab0e-a78f-4051-a82e-1711ff2e9e3d" />
 
 ### 3: PR Review Sessions (Saturday 1/8, Sunday night 2/8, Monday night 3/8)
 - Reviewed teammate PRs across three sessions (3h10m44s Saturday, plus review time folded into the Sunday-night and Monday-night blocks below).
+<img width="2247" height="132" alt="Screenshot 2026-08-04 110721" src="https://github.com/user-attachments/assets/4c61facc-9c0d-42c2-829c-b2687b36905a" />
 
 ### 4: Two Bug Fixes — Pending-Action Status Treatment + Active-Course Sidebar Badge (Sunday night 2/8, spilling into Monday 3/8)
 - `add bug fixes`:
   - **Chat pending-action status**: `PendingActionControls.tsx`'s terminal states (confirmed/executing/superseded/failed/cancelled) were a single plain-text line with no visual distinction between them; replaced with a per-state icon + color treatment (spinner for "executing", muted check for "confirmed", destructive red with `role="alert"` for "failed", etc.) so a failed action reads distinctly from a routine confirmation.
   - **Active-course sidebar badge**: new `ActiveCourseSidebarBadge.tsx`, mounted in `Sidebar.tsx` for the instructor role — surfaces the currently-selected course persistently in the nav sidebar instead of only on pages that have their own course switcher.
   - Added matching test coverage/mocks in `DashboardLayout.test.tsx` and `Sidebar.test.tsx`.
+<img width="2244" height="130" alt="Screenshot 2026-08-04 110726" src="https://github.com/user-attachments/assets/afc03b54-77b2-4c91-ae7c-817cf6751544" />
 
 ---
 
