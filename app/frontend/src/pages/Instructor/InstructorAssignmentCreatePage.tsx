@@ -1,5 +1,5 @@
-import { CheckCircle2 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { CheckCircle2, Loader2 } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
@@ -42,6 +42,44 @@ const initialDescribeValues: AssignmentDescribeValues = {
   prompt: "",
 };
 
+/** Identifies one handoff into this page. Two navigations that differ in any
+ * of these are different pieces of work, not a re-render of the same one. */
+function handoffIdentity(state: AiActionDraftLocationState | null): string {
+  const draft = state?.aiAssignmentDraft;
+  return JSON.stringify([
+    draft?.conversationId ?? null,
+    draft?.pendingMessageId ?? null,
+    draft?.prompt ?? null,
+    draft?.courseId ?? null,
+    draft?.name ?? null,
+    state?.typedDraftId ?? null,
+  ]);
+}
+
+/** Remounts the page whenever the handoff identity changes.
+ *
+ * Nearly all of this page's state is seeded from location.state through
+ * useState initialisers and a useRef single-flight guard, none of which re-run
+ * on a state change alone. React Router reuses the element when the path is
+ * unchanged, so a second handoff arriving without an intervening unmount would
+ * keep the first one's step, draft, describe values and auto-generate guard —
+ * showing the previous assignment and silently skipping description expansion.
+ *
+ * No route navigates create -> create today, so this is not reachable from the
+ * current UI; it is one added link away from being reachable, and the failure
+ * is silent and shows one assignment's content under another's name. Keying is
+ * preferred over resetting the two guards because it covers every seeded value
+ * at once, including any added later.
+ */
+export function InstructorAssignmentCreateRoute() {
+  const location = useLocation();
+  return (
+    <InstructorAssignmentCreatePage
+      key={handoffIdentity(location.state as AiActionDraftLocationState | null)}
+    />
+  );
+}
+
 export function InstructorAssignmentCreatePage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -50,19 +88,36 @@ export function InstructorAssignmentCreatePage() {
   const typedDraftId = locationState?.typedDraftId;
   const hasGeneratedAssignment = Boolean(seededDraft?.name?.trim());
   const { accessToken, user } = useAuth();
+  // The chat extracts a one-line description ("it is about beef corndogs")
+  // where the "+ Create Assignment" path runs that same text through the
+  // draft generator and gets a written-out one. A chat handoff now carries
+  // the prompt that produced it so this page can run the identical
+  // generator call and land on Review at the same quality (#15). Absent on
+  // older handoffs and on the per-course Create button, which correctly
+  // leaves both paths untouched.
+  const assistantPrompt = seededDraft?.prompt?.trim() ?? "";
+  const shouldEnhanceDescription = Boolean(
+    hasGeneratedAssignment && assistantPrompt && seededDraft?.courseId && accessToken,
+  );
   const [step, setStep] = useState<AssignmentCreateStep>(
     hasGeneratedAssignment ? "review" : "describe",
   );
+  // Derived rather than stored: accessToken can settle after mount, and a
+  // stored initial value computed before that would leave the spinner off
+  // for the whole generate call.
+  const [hasEnhancementSettled, setHasEnhancementSettled] = useState(false);
+  const isEnhancingDescription =
+    shouldEnhanceDescription && !hasEnhancementSettled;
   const [describeValues, setDescribeValues] =
     useState<AssignmentDescribeValues>(
       seededDraft
         ? {
             courseId: String(seededDraft.courseId ?? ""),
-            prompt: hasGeneratedAssignment
-              ? "Drafted in the AI Assistant"
-              : seededDraft.prompt?.trim() ||
-                seededDraft.description?.trim() ||
-                "",
+            // Show the prompt that was actually sent, so stepping back to
+            // Describe is editable and re-runnable rather than showing the
+            // old "Drafted in the AI Assistant" placeholder.
+            prompt:
+              assistantPrompt || seededDraft.description?.trim() || "",
           }
         : initialDescribeValues,
     );
@@ -131,6 +186,11 @@ export function InstructorAssignmentCreatePage() {
   const courseLabel =
     courseOptions.find((course) => course.id === describeValues.courseId)
       ?.label ?? "your course";
+  // Persisted with saved drafts so resuming targets this course rather than
+  // whatever is active later. Labels only — see TypedDraftContent (#1239).
+  const selectedCourse = writableCourses.find(
+    (course) => String(course.id) === describeValues.courseId,
+  );
   const effectiveCourseLoadError = needsCanvasConnection
     ? "Connect your Canvas account to load courses."
     : courseLoadError;
@@ -143,6 +203,81 @@ export function InstructorAssignmentCreatePage() {
     setPreview(null);
     setIsPreviewOpen(false);
   }, []);
+
+  // Fires once per chat handoff. The ref is the single-flight guard, and
+  // deliberately the ONLY one: canvasUrl resolves out of AuthContext /
+  // InstitutionContext, so it is undefined on the first render and populated
+  // a tick later. That dep change re-runs this effect while the request is
+  // still in flight. An in-flight-cancel on cleanup looks right here but
+  // deadlocks against the ref — the first run gets cancelled, the second is
+  // refused as a duplicate, and nothing is left to clear the spinner or
+  // deliver the description. The backend answers in well under a second;
+  // the hang was entirely this. So: never cancel, always settle, and let
+  // the ref keep it to one call.
+  const hasAutoGeneratedRef = useRef(false);
+
+  useEffect(() => {
+    // shouldEnhanceDescription already requires accessToken, so no session
+    // means no spinner and no call — the assistant's own description stands.
+    // It is repeated in this guard only so TypeScript narrows accessToken to
+    // string for the call below; Boolean(...) hides that from the compiler.
+    // Narrowing here rather than in a branch of its own keeps this a plain
+    // return: settling state in the effect body instead would trip
+    // react-hooks/set-state-in-effect, and would be dead code besides.
+    if (!shouldEnhanceDescription || !accessToken || hasAutoGeneratedRef.current) {
+      return;
+    }
+
+    hasAutoGeneratedRef.current = true;
+
+    void (async () => {
+      try {
+        const generated = await generateAssignmentDraft(
+          Number(seededDraft?.courseId),
+          assistantPrompt,
+          { accessToken, canvasUrl },
+        );
+        // An empty expansion is a failed expansion, not a no-op. Silently
+        // keeping the chat's one-liner cleared the spinner and left the
+        // instructor on Review looking at the vague description this call
+        // exists to replace, with nothing to say it had not worked. Raising
+        // it routes into the same catch as a request failure, so the two
+        // look identical to the instructor: an error, and Describe with the
+        // prompt intact to retry or edit.
+        const expanded = generated.description.trim();
+        if (!expanded) {
+          throw new Error(
+            "The expanded description came back empty. Review or edit it below.",
+          );
+        }
+        // Only the description is taken. The assistant already resolved
+        // title, due date, and points from what the instructor explicitly
+        // asked for ("worth 120 points, due Friday at 11:59 PM") — letting
+        // the generator's own defaults overwrite those would be a worse
+        // regression than the vague description this is fixing.
+        setDraft((current) =>
+          current ? { ...current, description: expanded } : current,
+        );
+      } catch (error) {
+        // Drop to Describe with the prompt intact so the instructor can
+        // retry or edit, instead of stranding them on Review.
+        setGenerateError(
+          error instanceof Error
+            ? error.message
+            : "Unable to expand the description. Review or edit it below.",
+        );
+        setStep("describe");
+      } finally {
+        setHasEnhancementSettled(true);
+      }
+    })();
+  }, [
+    shouldEnhanceDescription,
+    accessToken,
+    canvasUrl,
+    assistantPrompt,
+    seededDraft?.courseId,
+  ]);
 
   const handleDescribeValuesChange = useCallback((values: AssignmentDescribeValues) => {
     setDescribeValues((current) =>
@@ -175,6 +310,8 @@ export function InstructorAssignmentCreatePage() {
       ? {
           title: draft.name,
           body: draft.description,
+          dueDate: draft.dueDate,
+          pointsPossible: draft.pointsPossible,
         }
       : describeValues.prompt.trim()
         ? { body: describeValues.prompt.trim() }
@@ -186,7 +323,12 @@ export function InstructorAssignmentCreatePage() {
     const saved = saveTypedDraft(user.id, {
       id: savedTypedDraftId,
       kind: "assignment",
-      content,
+      content: {
+        ...content,
+        ...(selectedCourse
+          ? { courseCode: selectedCourse.code, courseName: selectedCourse.name }
+          : {}),
+      },
     });
     setSavedTypedDraftId(saved.id);
     setDraftSaveStatus("Draft saved. Resume it anytime from the assistant.");
@@ -329,6 +471,11 @@ export function InstructorAssignmentCreatePage() {
       }, {
         accessToken,
         canvasUrl,
+        // Closes out the assistant preview's pending Workflow and audits
+        // the write. Undefined on the plain "+ Create Assignment" path,
+        // where the backend records a standalone Workflow instead.
+        conversationId: seededDraft?.conversationId,
+        pendingMessageId: seededDraft?.pendingMessageId,
         timeZone: instructorTimeZone,
       });
       if (user?.id && savedTypedDraftId) {
@@ -449,7 +596,16 @@ export function InstructorAssignmentCreatePage() {
       />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={handleSaveTypedDraft}>
+        {/* Saving mid-expansion captured the pre-expansion description and
+            left a second resumable copy of an assignment the chat already
+            had a pending workflow for. Wait for the draft to settle. */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={isEnhancingDescription}
+          onClick={handleSaveTypedDraft}
+        >
           Save draft
         </Button>
         {draftSaveStatus ? (
@@ -471,6 +627,21 @@ export function InstructorAssignmentCreatePage() {
           onValuesChange={handleDescribeValuesChange}
           onSwitchToQuiz={handleSwitchToQuiz}
         />
+      ) : isEnhancingDescription ? (
+        /* There's a real LLM round-trip between the assistant handoff and a
+           reviewable draft now, so say so rather than flashing the chat's
+           one-line description and swapping it under the instructor (#15). */
+        <Card>
+          <CardContent className="flex items-center gap-3 py-8">
+            <Loader2
+              className="size-5 shrink-0 animate-spin text-muted-foreground"
+              aria-hidden="true"
+            />
+            <p role="status" className="text-sm text-muted-foreground">
+              Writing a full description from your request…
+            </p>
+          </CardContent>
+        </Card>
       ) : draft ? (
         <AssignmentReviewApproveStep
           courseLabel={courseLabel}

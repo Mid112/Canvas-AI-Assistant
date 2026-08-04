@@ -76,7 +76,7 @@ export const sharedDashboardQuickActions: DashboardQuickAction[] = [
   },
   {
     id: "grade-analysis",
-    title: "Grade Analysis",
-    description: "Analyze student performance",
+    title: "Analyse Missing Submissions",
+    description: "See who hasn't submitted",
   },
 ];

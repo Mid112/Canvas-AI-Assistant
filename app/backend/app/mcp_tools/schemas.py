@@ -60,6 +60,24 @@ class ResolveMissingSubmissionsAction(BaseModel):
     status: Literal["missing", "late"] = "missing"
 
 
+class AnalyzeCourseSubmissionsAction(BaseModel):
+    """Course-wide submission overview, across every assignment at once.
+
+    Deliberately separate from ResolveMissingSubmissionsAction rather than
+    making that action's assignment optional: widening it would let the
+    model silently drop an assignment the instructor *did* name and answer
+    a broader question than was asked. This action takes no assignment at
+    all, so the two intents can't be confused.
+    """
+
+    action: Literal["analyze_course_submissions"] = "analyze_course_submissions"
+    local_course_id: int
+    # Same mutually-exclusive categories as resolve_missing_submissions —
+    # see compute_submissions_by_status in services/resolved_set.py for
+    # exactly what each one means.
+    status: Literal["missing", "late"] = "missing"
+
+
 class FindAssignmentBySubmissionRateAction(BaseModel):
     action: Literal["find_assignment_by_submission_rate"] = "find_assignment_by_submission_rate"
     local_course_id: int
@@ -289,6 +307,7 @@ ACTION_SCHEMAS: dict[str, type[BaseModel]] = {
     "fetch_students": FetchStudentsAction,
     "fetch_quizzes": FetchQuizzesAction,
     "resolve_missing_submissions": ResolveMissingSubmissionsAction,
+    "analyze_course_submissions": AnalyzeCourseSubmissionsAction,
     "find_assignment_by_submission_rate": FindAssignmentBySubmissionRateAction,
     "set_active_course": SetActiveCourseAction,
     "get_active_course": GetActiveCourseAction,
@@ -321,6 +340,7 @@ ACTION_CLASSIFICATION: dict[str, ActionClassification] = {
     "fetch_students": "read_only",
     "fetch_quizzes": "read_only",
     "resolve_missing_submissions": "read_only",
+    "analyze_course_submissions": "read_only",
     "find_assignment_by_submission_rate": "read_only",
     "get_active_course": "read_only",
     # Writes a local UserPreference row only — no Canvas footprint, and not

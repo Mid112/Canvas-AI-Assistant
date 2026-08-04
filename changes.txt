@@ -1377,3 +1377,245 @@ acquiring a second responsibility:
 
 When extending any component below, ask which of its responsibilities you are
 extending. If the answer is "a new one", extract instead of adding.
+
+
+================================================================================
+21. REVIEW ROUND — bugfix/assignment-create, creator-workflow-audit,
+    draft-course-persist, pii-resolve
+    Changes made in response to PR review comments, 2026-08-03
+================================================================================
+
+AUTHORS
+    Yerdana <84761341+Yerdana2002@users.noreply.github.com>
+    Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>
+    Reviewers who raised these: <FILL IN — reviewer names per PR>
+
+--------------------------------------------------------------------------------
+21a. bugfix/draft-course-persist — per-draft resume gating
+--------------------------------------------------------------------------------
+
+COMMITS
+    399643eb  Gate draft resume per draft instead of across the whole panel
+    925a50f8  Restore the generated description and drop the unreachable token
+              branch
+
+FILES
+    app/frontend/src/pages/Instructor/InstructorAssistantPage.tsx
+    app/frontend/src/components/chat/DraftWorkspacePanel.tsx
+    app/frontend/src/pages/Instructor/InstructorAssignmentCreatePage.tsx
+    test/frontend/components/chat/DraftWorkspacePanel.test.tsx
+    test/frontend/pages/Instructor/InstructorAssistantDraftCourse.test.tsx
+
+WHAT AND WHY
+    Resumability is a property of each draft, but the course-selection gate was
+    computed once for the whole panel: false as soon as ANY draft could resolve
+    its own course. A list holding a labelled draft and a legacy one (no stored
+    labels), with no active course, therefore hid the notice AND left the legacy
+    draft's Resume enabled. Clicking it hit the undefined-course guard in
+    handleResumeTypedDraft and returned with no feedback whatsoever.
+
+    The page now builds one Map of draft id -> resolved course id, read by both
+    handleResumeTypedDraft and the panel, so the button's enabled state and what
+    resuming actually does cannot drift apart. DraftWorkspacePanel took
+    blockedTypedDraftIds: ReadonlySet<string> in place of the boolean
+    requiresCourseSelection.
+
+    Separately, a refactor of the auto-generate effect had dropped the setDraft
+    call that consumes generateAssignmentDraft's result — the generator ran on
+    every chat handoff and its output was discarded, so the assistant's vague
+    description reached Review unchanged. CI reported this only as an unused
+    variable. The accessToken branch it was traded for was unreachable
+    (shouldEnhanceDescription already requires accessToken) and its only real
+    effect was tripping react-hooks/set-state-in-effect.
+
+ARCHITECTURAL DIFFERENCE
+    A panel-wide boolean cannot express a heterogeneous list. Any per-item
+    capability must be computed per item, and the same resolution must drive
+    both the affordance and the action.
+
+WARNING FOR FUTURE CHANGES (SRP)
+    * blockedTypedDraftIds is DERIVED state. Do not let DraftWorkspacePanel
+      compute resumability itself — it would need course data, which is the
+      page's responsibility, and the two copies would drift.
+    * If you add a new fallback source for a draft's course, add it to
+      typedDraftCourseIds ONLY. The resume handler and the panel both read that
+      Map; adding a fallback in the handler alone re-creates the exact bug —
+      a disabled button for a draft that would in fact resume.
+    * A disabled control in a list whose neighbours are enabled MUST say why.
+      The inline reason is wired via aria-describedby, not a title attribute
+      (disabled buttons do not reliably surface tooltips).
+
+--------------------------------------------------------------------------------
+21b. bugfix/creator-workflow-audit — audit integrity on the create endpoint
+--------------------------------------------------------------------------------
+
+COMMITS
+    b41654f2  Close the two audit holes on the assignment create endpoint
+    d4482699  Log the analysis chain's step markers instead of printing them
+    1bc10e9b  Fix the docker-build typecheck and reset the page per handoff
+
+FILES
+    app/backend/app/routers/canvas.py
+    app/backend/app/services/chat.py
+    app/frontend/src/pages/Instructor/InstructorAssignmentCreatePage.tsx
+    app/frontend/src/routes/index.tsx
+    test/backend/test_assignment_create_audit.py
+    test/frontend/pages/Instructor/InstructorAssignmentCreatePage.test.tsx
+
+WHAT AND WHY
+    (1) Conversation ownership was validated AFTER the Canvas write. A foreign
+    or unknown conversation_id returned 404 with the assignment already created
+    in Canvas and neither a Workflow nor an AuditLog recorded — an unaudited
+    real write, precisely the hole this endpoint exists to close. The lookup now
+    runs before create_course_assignment.
+
+    (2) The workflow claim was held open past the audit insert, violating
+    _claim_pending_workflow's documented contract that callers commit
+    immediately (handle_confirmed_action and handle_cancelled_action both do).
+    create_course_assignment writes through run_idempotent_canvas_write, which
+    commits independently, so ANY failure between the claim and the final commit
+    rolled the pending->executed transition back while the Canvas assignment
+    stayed durable — leaving "pending" for an assignment that exists, i.e. the
+    exact bug this endpoint was written to fix, plus a 500 on a create that
+    actually succeeded. Reproduced in test, which failed with
+    "assert 'pending' == 'executed'" before the fix.
+
+    (3) Two step markers went to stdout; chat.py already has a module logger.
+    The eleven older print() markers are left alone — documented as a deliberate
+    placeholder at chat.py:882.
+
+    (4) tsc rejected accessToken as string | null at the generateAssignmentDraft
+    call. This was the docker-build failure: app/frontend/Dockerfile runs
+    "npm run build" = "tsc -b && vite build", while backend-test and
+    frontend-test never typecheck, so every other check stayed green.
+
+    (5) The create page never reset when the route was reused with new
+    location.state. Every seeded value comes from a useState initialiser or the
+    useRef single-flight guard, none of which re-run on a state change, and
+    React Router reuses the element when the path is unchanged. A route wrapper
+    now keys the page on the handoff identity.
+
+ARCHITECTURAL DIFFERENCE
+    The endpoint now has three ordered phases with different durability
+    requirements: validate (may 404 freely, nothing written), write (durable
+    the moment Canvas returns, independent of this transaction), record (must
+    not be able to undo phase 2's bookkeeping).
+
+WARNING FOR FUTURE CHANGES (SRP)
+    * NOTHING that can raise may be added between create_course_assignment and
+      the claim commit. The Canvas write is already durable at that point; a
+      raise there rolls back only the bookkeeping, which is worse than failing
+      before the write.
+    * Any new caller of _claim_pending_workflow MUST commit immediately after a
+      successful claim. The docstring says so; three callers now follow it.
+      Treat "I'll batch the commit with my other writes" as a bug.
+    * Do not add validation that can 404/403 after phase 2. Validate in phase 1.
+    * create_quiz_endpoint does NOT call _claim_pending_workflow, so it is not
+      subject to (2). If you ever make it claim, it inherits the whole contract.
+    * Keying a route on identity is not the same as resetting two guards. If you
+      replace the key with targeted resets, you must reset EVERY useState
+      initialiser seeded from location.state, including ones added later.
+
+--------------------------------------------------------------------------------
+21c. bugfix/assignment-create — empty expansion, and the build gate
+--------------------------------------------------------------------------------
+
+COMMITS
+    b26e9777  Treat an empty expanded description as a failure, and fix the
+              build
+    cf824616  Merge remote-tracking branch 'origin/develop'
+
+FILES
+    app/frontend/src/pages/Instructor/InstructorAssignmentCreatePage.tsx
+    test/frontend/pages/Instructor/InstructorAssignmentCreatePage.test.tsx
+
+WHAT AND WHY
+    An expansion that came back empty or whitespace fell through setDraft
+    unchanged, set no error, and still settled in the finally block. The spinner
+    cleared and the instructor was left on Review reading the chat's vague
+    one-liner — the exact text the call exists to replace — with nothing to say
+    it had not worked. Empty now raises into the same catch a failed request
+    uses, so both surface an error and drop back to Describe with the prompt
+    intact.
+
+    The develop merge also restores CI hardening this branch was silently
+    reverting: develop had added timeout-minutes to docker-build and its three
+    build steps and moved to docker/build-push-action@v6, and the stale branch
+    still carried v5 with no timeouts. Merging a stale branch would have undone
+    that.
+
+WARNING FOR FUTURE CHANGES (SRP)
+    * "Generator returned successfully" and "generator produced usable output"
+      are different conditions. The effect owns BOTH the request and the
+      decision about whether its result is usable; keep the second one explicit.
+      A silent no-op on empty output is indistinguishable from success to the
+      instructor.
+    * .github/workflows/ci.yml is edited on feature branches in this repo. Any
+      long-lived branch WILL revert someone else's CI change on merge. Diff it
+      against develop before merging, every time.
+
+--------------------------------------------------------------------------------
+21d. bugfix/pii-resolve — grounding coverage for write previews
+--------------------------------------------------------------------------------
+
+COMMITS
+    25c8c05a  Pin the bug 12 shape reaching a write preview
+
+FILES
+    test/backend/test_student_context.py
+
+WHAT AND WHY
+    c84c3eb7 narrowed the intent_preview scrub exemption so model-authored
+    preview summaries are grounded, but its tests only covered ungrounded IDs.
+    The claim type the "could not be verified" notice actually exists for — a
+    fabricated statistic, the bug 12 shape — had no coverage on the preview
+    path. A drafted send_message or announcement is prose the instructor is
+    about to send to students under their own name, so this is the
+    highest-stakes surface in the product.
+
+    Two tests, because one alone is satisfied by the wrong rule: an ungrounded
+    stat in a model-authored preview is flagged and left VISIBLE (grades are
+    detected, never rewritten — an average is unrepresentable in facts.grades by
+    construction, bug 13), and a stat a tool actually returned is NOT flagged,
+    so the notice keeps meaning something. The first fails against the blanket
+    exemption with KeyError: 'unverified_claims'.
+
+WARNING FOR FUTURE CHANGES (SRP)
+    * action_is_llm_prose decides authorship from the PAYLOAD (summary vs
+      preview_metadata["summary"]), not from a marker field. This is deliberate:
+      several chat.py sites persist their result via log_message before
+      grounding runs, and handle_modified_action never grounds at all, so an
+      added marker key would leak into stored message JSON. Do not "simplify"
+      this to a flag.
+    * If you add a claim type to _SELF_EVIDENT_CLAIMS, it must be one the
+      scrubber ALREADY rewrites in the prose. Adding a type that stays visible
+      silently removes the only warning the instructor gets.
+    * Grounding and PII minimization remain separate concerns in this file.
+      Adding redaction to the grounding path re-creates bugs 2 and 13.
+
+--------------------------------------------------------------------------------
+21e. OUTSTANDING — not fixed here
+--------------------------------------------------------------------------------
+
+    CI "changes" job failing on bugfix/assignment-create, skipping every
+    downstream job. Root cause NOT determined from the repo — the job is
+    dorny/paths-filter@v3 on a self-hosted macOS ARM64 runner, and diagnosing it
+    needs the Actions log, not the workflow file. What IS verified: the branch's
+    ci.yml was stale and has now been brought current with develop, which is the
+    "rebase onto the correct stack base" remedy. If it still fails, check runner
+    availability first — every job in this workflow needs: changes, so a runner
+    that cannot pick up that one job skips the entire pipeline.
+
+    c84c3eb7 is NOT in the ancestry of creator-workflow-audit,
+    draft-course-persist, or assignment-create. Those branches carry the
+    pre-review student_context.py. With true merge commits (the repo's current
+    practice) git resolves this correctly; a SQUASH merge of #1497 would break
+    ancestry and let a careless conflict resolution reinstate the blanket
+    exemption. Merge #1497 first.
+
+    Pre-existing backend failures on the shared dev Postgres, unrelated to this
+    round and identical on clean HEAD: 12 tests across test_canvas.py,
+    test_chat_endpoint.py, test_course_resolution_robustness.py and
+    test_course_switch_resolution.py, all failing with "there is no unique or
+    exclusion constraint matching the ON CONFLICT specification" — the local DB
+    is missing the ticket-34 constraint. Reset the dev database.

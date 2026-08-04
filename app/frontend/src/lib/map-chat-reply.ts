@@ -272,6 +272,19 @@ function buildInterpretedAction(
             ? formatDueDateForInput(readString(proposed.due_date)!, timeZone)
             : undefined,
           pointsPossible: readNumber(proposed.points_possible) ?? null,
+          // Seeds the same describe-step generator the "+ Create Assignment"
+          // button uses, so a chat-initiated assignment gets a written-out
+          // description instead of the one-liner the chat extracted (#15).
+          // Title + description only: the raw chat message also carries
+          // points/due-date instructions the assistant has already resolved
+          // into their own fields, and re-feeding those makes the generator
+          // re-answer them and fight the values it just set.
+          prompt: buildAssignmentGenerationPrompt(proposed),
+          // Lets the create page close out the pending Workflow this
+          // preview opened, so approving in the form audits the write
+          // instead of leaving chat history stuck on "pending".
+          conversationId,
+          pendingMessageId,
         },
       },
     };
@@ -285,6 +298,26 @@ function buildInterpretedAction(
   }
 
   return interpretedAction;
+}
+
+/** Composes the describe-step prompt for a chat-initiated assignment.
+ * Undefined when there's nothing to work from, which leaves the create page
+ * on its existing behaviour rather than calling the generator with an empty
+ * string. */
+export function buildAssignmentGenerationPrompt(
+  proposed: Record<string, unknown>,
+): string | undefined {
+  const title = readString(proposed.title)?.trim();
+  const description = readString(proposed.description)?.trim();
+
+  if (title && description) {
+    // Trailing period keeps the two from running together when the title
+    // has no punctuation of its own.
+    return /[.!?]$/.test(title)
+      ? `${title} ${description}`
+      : `${title}. ${description}`;
+  }
+  return title || description || undefined;
 }
 
 function readRiskMetadata(value: unknown): RiskMetadata | undefined {
@@ -524,7 +557,32 @@ function buildQuizCreateFormAction(
   };
 }
 
+/** Claim types the backend found in this reply that no Canvas read backs.
+ * Absent whenever every claim checks out, so this stays quiet on ordinary
+ * replies rather than crying wolf until instructors tune it out. */
+function readUnverifiedClaims(
+  reply: Record<string, unknown>,
+): string[] | undefined {
+  const claims = reply.unverified_claims;
+  if (!Array.isArray(claims) || claims.length === 0) {
+    return undefined;
+  }
+  const names = claims.filter((claim): claim is string => typeof claim === "string");
+  return names.length > 0 ? names : undefined;
+}
+
 export function mapChatReplyToAssistantResponse(
+  reply: Record<string, unknown>,
+  isError: boolean,
+  conversationId?: number,
+  timeZone?: string,
+): AssistantResponse {
+  const mapped = mapReplyBody(reply, isError, conversationId, timeZone);
+  const unverifiedClaims = readUnverifiedClaims(reply);
+  return unverifiedClaims ? { ...mapped, unverifiedClaims } : mapped;
+}
+
+function mapReplyBody(
   reply: Record<string, unknown>,
   isError: boolean,
   conversationId?: number,
