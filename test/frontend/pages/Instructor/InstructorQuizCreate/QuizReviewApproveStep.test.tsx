@@ -201,4 +201,145 @@ describe("QuizReviewApproveStep", () => {
       expect.anything(),
     );
   });
+
+  // Answers rode along in form state straight to Canvas without ever being
+  // rendered, so instructors approved options — and a correct answer — they
+  // had never seen. Canvas only showed them after the quiz existed.
+  describe("answers", () => {
+    function renderWithQuestions(
+      questions: Parameters<typeof QuizReviewApproveStep>[0]["draft"]["questions"],
+      onApprove = vi.fn(),
+    ) {
+      render(
+        <QuizReviewApproveStep
+          courseLabel="CPSC 310"
+          draft={{
+            name: "Cell Biology Quiz",
+            description: "Covers organelles and cell division.",
+            dueDate: "2030-12-15T23:59",
+            pointsPossible: questions.reduce((sum, q) => sum + q.pointsPossible, 0),
+            allowedAttempts: 1,
+            timeLimit: null,
+            questions,
+          }}
+          isApproving={false}
+          onApprove={onApprove}
+          onBack={vi.fn()}
+        />,
+      );
+      return onApprove;
+    }
+
+    const mcq = {
+      questionText: "Which organelle makes ATP?",
+      questionType: "multiple_choice_question" as const,
+      pointsPossible: 10,
+      answers: [
+        { text: "Mitochondria", weight: 100 },
+        { text: "Ribosome", weight: 0 },
+      ],
+    };
+
+    it("shows the generated answer options", () => {
+      renderWithQuestions([mcq]);
+
+      expect(screen.getByLabelText("Answer 1 of question 1")).toHaveValue(
+        "Mitochondria",
+      );
+      expect(screen.getByLabelText("Answer 2 of question 1")).toHaveValue(
+        "Ribosome",
+      );
+    });
+
+    it("marks which answer is correct", () => {
+      renderWithQuestions([mcq]);
+
+      expect(
+        screen.getByLabelText("Mark answer 1 of question 1 as correct"),
+      ).toBeChecked();
+      expect(
+        screen.getByLabelText("Mark answer 2 of question 1 as correct"),
+      ).not.toBeChecked();
+    });
+
+    // Canvas requires exactly one answer at weight 100; picking a new correct
+    // answer must clear the old one rather than produce two.
+    it("moves the correct answer instead of adding a second", async () => {
+      const user = userEvent.setup();
+      const onApprove = renderWithQuestions([mcq]);
+
+      await user.click(
+        screen.getByLabelText("Mark answer 2 of question 1 as correct"),
+      );
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Preview & Approve Quiz" }),
+        ).toBeEnabled(),
+      );
+      await user.click(
+        screen.getByRole("button", { name: "Preview & Approve Quiz" }),
+      );
+
+      expect(onApprove).toHaveBeenCalledWith(
+        expect.objectContaining({
+          questions: [
+            expect.objectContaining({
+              answers: [
+                { text: "Mitochondria", weight: 0 },
+                { text: "Ribosome", weight: 100 },
+              ],
+            }),
+          ],
+        }),
+        expect.anything(),
+      );
+    });
+
+    // Essay and short-answer items are instructor-scored and carry no options.
+    it("omits the answer block for essay questions", () => {
+      renderWithQuestions([
+        {
+          questionText: "Explain mitosis in your own words.",
+          questionType: "essay_question",
+          pointsPossible: 10,
+          answers: [],
+        },
+      ]);
+
+      expect(
+        screen.queryByLabelText("Answer 1 of question 1"),
+      ).not.toBeInTheDocument();
+    });
+
+    // Points must be freely redistributable, down to fractions — a fixed
+    // step="1" blocked that and also rejected generated values like 16.67.
+    it("accepts fractional question points", async () => {
+      const user = userEvent.setup();
+      const onApprove = renderWithQuestions([mcq]);
+
+      const points = screen.getByLabelText("Points for question 1");
+      await user.clear(points);
+      await user.type(points, "9.5");
+      const total = screen.getByLabelText("Points possible");
+      await user.clear(total);
+      await user.type(total, "9.5");
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "Preview & Approve Quiz" }),
+        ).toBeEnabled(),
+      );
+      await user.click(
+        screen.getByRole("button", { name: "Preview & Approve Quiz" }),
+      );
+
+      expect(onApprove).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pointsPossible: 9.5,
+          questions: [expect.objectContaining({ pointsPossible: 9.5 })],
+        }),
+        expect.anything(),
+      );
+    });
+  });
 });

@@ -1,6 +1,7 @@
 import { Bell, Bot, FileWarning, UserPlus } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+import { notificationPreferenceLabel } from "@/lib/notification-preferences";
 import { cn } from "@/lib/utils";
 import type {
   DashboardNotification,
@@ -54,7 +55,8 @@ export function NotificationList({
         </div>
         <p className="text-sm font-medium">No notifications yet</p>
         <p className="text-sm text-muted-foreground">
-          Updates about submissions, workflows, and enrollments will appear here.
+          Enabled alerts for submissions, workflows, grades, and daily summaries
+          will appear here when there is course activity.
         </p>
       </div>
     );
@@ -65,6 +67,7 @@ export function NotificationList({
       {notifications.map((notification) => {
         const { icon: Icon, iconClassName } =
           notificationConfig[notification.variant];
+        const category = notificationPreferenceLabel(notification.id);
 
         return (
           <li key={notification.id} className="flex gap-3">
@@ -77,6 +80,11 @@ export function NotificationList({
               <Icon className="size-4" aria-hidden="true" />
             </div>
             <div className="min-w-0 space-y-0.5">
+              {category ? (
+                <p className="text-xs font-medium text-muted-foreground">
+                  {category}
+                </p>
+              ) : null}
               <p className="text-sm font-medium">{notification.message}</p>
               <p className="text-xs text-muted-foreground">
                 {notification.timestamp}

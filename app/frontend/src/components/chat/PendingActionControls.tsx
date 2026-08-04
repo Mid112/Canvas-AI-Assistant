@@ -212,7 +212,7 @@ export function PendingActionControls({
           onClick={onConfirm}
           disabled={isLoading || !canConfirm}
         >
-          {isLoading ? "Updating..." : "Confirm"}
+          {isLoading ? "Executing Canvas action…" : "Confirm"}
         </Button>
         {onModify ? (
           <Button

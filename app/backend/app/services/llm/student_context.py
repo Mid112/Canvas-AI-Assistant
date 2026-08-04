@@ -80,6 +80,7 @@ def llm_safe_submission_dict(submission: Any) -> dict[str, Any]:
         raw = dict(submission)
     else:
         status = getattr(submission, "status", None)
+        status_value = status.value if status is not None and hasattr(status, "value") else status
         raw = {
             "id": getattr(submission, "id", None),
             "assignment_id": getattr(submission, "assignment_id", None),
@@ -87,7 +88,7 @@ def llm_safe_submission_dict(submission: Any) -> dict[str, Any]:
             "student_name": getattr(submission, "student_name", None),
             "submitted_at": getattr(submission, "submitted_at", None),
             "workflow_state": getattr(submission, "workflow_state", None),
-            "status": status.value if hasattr(status, "value") else status,
+            "status": status_value,
             "score": getattr(submission, "score", None),
             "grade": getattr(submission, "grade", None),
             "graded_at": getattr(submission, "graded_at", None),
@@ -349,17 +350,49 @@ _RETRIEVED_REF_KEYS = frozenset(
 
 _LLM_PROSE_ACTIONS = frozenset({"respond", "clarify", "out_of_scope"})
 
+# Claim types strip_ungrounded_canvas_facts already rewrites in place.
+# detect_unverified_claims and strip_ungrounded_canvas_id_claims share a
+# pattern and a grounded set, so an ID it detects is always one it redacts —
+# the instructor reads "[ID redacted]" in the prose itself. Repeating that in
+# the "could not be verified" notice points them at a figure no longer on
+# screen. Only claims left standing in the text need the warning, which today
+# means grades: deliberately not rewritten, so the number is still shown and
+# still needs qualifying (bug 12).
+_SELF_EVIDENT_CLAIMS = frozenset({"canvas_id"})
+
 
 def action_is_llm_prose(result: dict[str, Any]) -> bool:
     """True when the result's prose was written by the model, not the server.
 
-    intent_preview carries a write-preview summary built by
-    services/write_preview.py; every other non-conversational action is a
-    tool echo whose summary comes from a resolver chain. Neither is model
-    free text, so neither should be scrubbed.
+    Two producers emit intent_preview results with identical shapes, and only
+    one of them is server text:
+
+    * The resolver chains in services/chat.py set ``summary`` to
+      generate_write_preview's output — the same string they also hand back
+      as ``preview_metadata["summary"]``. That text is composed from
+      already-validated params, and scrubbing it hid the instructor's own
+      subject/body from the approval step (bug 2).
+    * dispatcher.py's generic ``case "intent_preview":`` — the primary write
+      preview path — passes the model's own ``IntentPreviewAction.summary``
+      straight through, with preview_metadata built separately alongside it.
+      That is free text and can cite a Canvas ID nothing ever retrieved.
+
+    So the two are told apart by whether ``summary`` is the very string
+    write_preview produced. Deciding this from the payload rather than a
+    marker field is deliberate: several of the chat.py sites persist their
+    result via log_message before grounding runs, and handle_modified_action
+    never grounds at all, so an added key would leak into stored message JSON
+    and into that response.
+
+    Anything untagged and non-conversational is a tool echo whose summary
+    comes from a resolver chain, so it stays exempt as before.
     """
     if result.get("intent_preview"):
-        return False
+        metadata = result.get("preview_metadata")
+        server_summary = (
+            metadata.get("summary") if isinstance(metadata, dict) else None
+        )
+        return result.get("summary") != server_summary
     return result.get("action") in _LLM_PROSE_ACTIONS
 
 
@@ -442,9 +475,12 @@ def ground_assistant_result(
     # on the bug 12 shape — the model answering "average grade is 82%" with
     # no Canvas read behind it — instead of the number being silently
     # rewritten to "[grade redacted]". Absent when everything checks out, so
-    # ordinary replies carry no extra payload.
-    if unverified:
-        out["unverified_claims"] = sorted(unverified)
+    # ordinary replies carry no extra payload. Claims the scrubber already
+    # rewrote are dropped here: the text shows the redaction, so warning
+    # about them too would flag a figure that is no longer displayed.
+    surfaced = unverified - _SELF_EVIDENT_CLAIMS
+    if surfaced:
+        out["unverified_claims"] = sorted(surfaced)
 
     # Only newly observed tool facts should be appended; prior_facts are
     # already stored. Callers merge tool_facts into memory.

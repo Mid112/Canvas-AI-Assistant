@@ -30,14 +30,19 @@ from app.integrations.canvas import (
     fetch_assignment,
     fetch_assignments,
     fetch_courses,
+    fetch_new_quiz,
+    fetch_quiz,
     fetch_submissions,
     fetch_user_profile,
+    list_new_quizzes,
     list_question_banks,
     list_quizzes,
     probe_new_quizzes,
     send_conversation,
     update_assignment,
     update_course,
+    update_new_quiz,
+    update_quiz,
     update_submission_grade,
 )
 from app.models.assignment import Assignment
@@ -50,6 +55,7 @@ from app.models.workflow import Workflow
 from app.schemas.canvas import (
     ActiveCourseResponse,
     AssignmentCreate,
+    AssignmentPublishUpdate,
     AssignmentResponse,
     AssignmentUpdate,
     CourseCreate,
@@ -59,6 +65,7 @@ from app.schemas.canvas import (
     QuestionBankSummary,
     QuizCapabilities,
     QuizCreate,
+    QuizPublishUpdate,
     QuizResponse,
     SubmissionResponse,
     SubmissionStatus,
@@ -68,7 +75,6 @@ from app.services.canvas_idempotency import (
     duplicate_in_flight_http_exception,
     run_idempotent_canvas_write,
 )
-from app.services.profanity import check_message_profanity
 from app.services.quiz_validation import short_answer_new_quiz_warnings
 
 logger = logging.getLogger(__name__)
@@ -192,7 +198,7 @@ def resolve_institution_canvas_url(user: User, canvas_url: str | None) -> str:
     )
 
 
-def _is_expected_canvas_token_sync_error(exc: Exception) -> bool:
+def _is_expected_canvas_token_sync_error(exc: BaseException) -> bool:
     """Background sync treats missing/invalid/corrupted Canvas tokens as
     expected account state, not infrastructure failure. Interactive endpoints
     still raise the original status, but sweeps should only log a concise
@@ -283,8 +289,13 @@ async def get_owned_course(
             Course.instructor_id == user.id,
         )
     )
-    normalized = normalize_canvas_url(canvas_url or course.canvas_url) if course else None
-    if not course or not canvas_urls_equivalent(course.canvas_url, normalized):
+    if course is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found or does not belong to you.",
+        )
+    normalized = normalize_canvas_url(canvas_url or course.canvas_url)
+    if not canvas_urls_equivalent(course.canvas_url, normalized):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Course not found or does not belong to you.",
@@ -499,8 +510,8 @@ async def get_courses(user: User, canvas_url: str, db: AsyncSession) -> list[Cou
     # instructor with multiple Canvas connections (different institutions) must
     # not have this sync mark or reconcile courses that belong to a different
     # canvas_url, since Canvas course ids are only unique within one instance.
-    # Known limitation: canvas_course_id is globally UNIQUE, so two co-instructors
-    # on the same Canvas course will conflict on INSERT — tracked for follow-up.
+    # Uniqueness is (canvas_course_id, instructor_id, canvas_url), so
+    # co-instructors on the same Canvas course still each get their own row.
     rows = await db.scalars(select(Course).where(Course.instructor_id == user.id))
     course_map: dict[str, Course] = {
         c.canvas_course_id: c
@@ -698,6 +709,25 @@ async def get_assignment(
     return AssignmentResponse(**data)
 
 
+def _assignment_create_payload_for_canvas(payload: AssignmentCreate) -> dict:
+    """Map AssignmentCreate to a Canvas assignment body.
+
+    Ticket 21: null points_possible is ungraded. Canvas defaults omitted
+    grading_type to "points", so we must send grading_type=not_graded
+    instead of inventing a numeric points default (e.g. 10).
+
+    Match the MCP server behavior: omit ``points_possible`` entirely for
+    ungraded creates rather than sending an explicit JSON null.
+    """
+    body = payload.model_dump(mode="json")
+    if payload.points_possible is None:
+        body.pop("points_possible", None)
+        body["grading_type"] = "not_graded"
+    else:
+        body["grading_type"] = "points"
+    return body
+
+
 async def create_course_assignment(
     local_course_id: int,
     payload: AssignmentCreate,
@@ -708,13 +738,20 @@ async def create_course_assignment(
     idempotency_key: str | None = None,
     exclude_workflow_id: int | None = None,
 ) -> AssignmentResponse:
-    # REST create path does not go through validate_assignment_for_create
-    # (chat/MCP does); still block student-facing profanity before Canvas.
-    check_message_profanity(payload.name, content_label="Assignment title")
-    if payload.description:
-        check_message_profanity(
-            payload.description, content_label="Assignment description"
-        )
+    from app.services.assignment_validation import validate_assignment_for_create
+
+    # Semantic validation (required fields, future due date, points > 0 or
+    # intentional null for ungraded) before any Canvas write — same rules as
+    # chat/MCP confirm. Profanity is checked inside the validators.
+    await validate_assignment_for_create(
+        local_course_id,
+        user,
+        payload.name,
+        payload.description,
+        payload.due_at.isoformat() if payload.due_at else None,
+        payload.points_possible,
+        db,
+    )
 
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     resolved_canvas_url = course.canvas_url
@@ -728,17 +765,18 @@ async def create_course_assignment(
         exclude_workflow_id=exclude_workflow_id,
     )
 
+    canvas_body = _assignment_create_payload_for_canvas(payload)
     key = idempotency_key or build_idempotency_key(
         "create_assignment",
         user.id,
         course.id,
-        payload.model_dump(mode="json"),
+        canvas_body,
     )
 
     async def _write() -> dict:
         return await create_assignment(
             int(course.canvas_course_id),
-            payload.model_dump(mode="json"),
+            canvas_body,
             token,
             resolved_canvas_url,
         )
@@ -801,6 +839,9 @@ def _new_quiz_payload_for_canvas(payload: QuizCreate) -> dict:
         "due_at": payload.due_at.isoformat() if payload.due_at else None,
         "points_possible": payload.points_possible,
         "grading_type": "points",
+        # Keep published=False on create; never drop the field the way we
+        # drop nulls below — New Quizzes treat omitted published as ambient.
+        "published": payload.published,
         "quiz_settings": {
             "multiple_attempts": {
                 "multiple_attempts_enabled": attempts_enabled,
@@ -814,7 +855,11 @@ def _new_quiz_payload_for_canvas(payload: QuizCreate) -> dict:
             ),
         },
     }
-    return {key: value for key, value in body.items() if value is not None}
+    return {
+        key: value
+        for key, value in body.items()
+        if value is not None or key == "published"
+    }
 
 
 def _new_quiz_item_payload(question, position: int) -> dict:
@@ -963,27 +1008,172 @@ async def get_course_quizzes(
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     resolved = course.canvas_url
     token = require_canvas_token(user, resolved)
-    raw = await list_quizzes(int(course.canvas_course_id), token, resolved)
-    quizzes: list[QuizResponse] = []
-    for item in raw:
-        quizzes.append(
-            QuizResponse(
-                id=item["id"],
-                title=item.get("title") or "Untitled Quiz",
-                description=item.get("description"),
-                due_at=item.get("due_at"),
-                points_possible=item.get("points_possible"),
-                course_id=int(course.canvas_course_id),
-                quiz_type=item.get("quiz_type"),
-                allowed_attempts=item.get("allowed_attempts"),
-                time_limit=item.get("time_limit"),
-                published=bool(item.get("published", False)),
-                question_count=item.get("question_count"),
-                html_url=item.get("html_url"),
-                quiz_engine="classic",
-            )
+    canvas_course_id = int(course.canvas_course_id)
+
+    quizzes = [
+        _classic_quiz_response(item, canvas_course_id)
+        for item in await list_quizzes(canvas_course_id, token, resolved)
+    ]
+
+    # New Quizzes live on a separate API and were previously invisible after
+    # refresh because only classic /quizzes was polled (Ticket 13).
+    try:
+        new_items = await list_new_quizzes(canvas_course_id, token, resolved)
+    except HTTPException as exc:
+        # Soft-fail so classic quizzes still load, but warn — temporary New
+        # Quizzes outages otherwise look like missing quizzes in the UI.
+        logger.warning(
+            "Skipping New Quizzes list merge for course %s: %s",
+            canvas_course_id,
+            exc.detail,
         )
+    else:
+        quizzes.extend(
+            _new_quiz_response(item, canvas_course_id) for item in new_items
+        )
+
     return quizzes
+
+
+def _classic_quiz_response(item: dict, canvas_course_id: int) -> QuizResponse:
+    assignment_id = item.get("assignment_id")
+    return QuizResponse(
+        id=int(item["id"]),
+        assignment_id=int(assignment_id) if assignment_id is not None else None,
+        title=item.get("title") or "Untitled Quiz",
+        description=item.get("description"),
+        due_at=item.get("due_at"),
+        points_possible=item.get("points_possible"),
+        course_id=canvas_course_id,
+        quiz_type=item.get("quiz_type"),
+        allowed_attempts=item.get("allowed_attempts"),
+        time_limit=item.get("time_limit"),
+        published=bool(item.get("published", False)),
+        question_count=item.get("question_count"),
+        html_url=item.get("html_url"),
+        quiz_engine="classic",
+    )
+
+
+def _new_quiz_response(item: dict, canvas_course_id: int) -> QuizResponse:
+    # New Quizzes are keyed by the linked Canvas assignment id.
+    assignment_id = int(item.get("assignment_id") or item["id"])
+    return QuizResponse(
+        id=assignment_id,
+        assignment_id=assignment_id,
+        title=item.get("title") or "Untitled Quiz",
+        description=item.get("instructions") or item.get("description"),
+        due_at=item.get("due_at"),
+        points_possible=item.get("points_possible"),
+        course_id=canvas_course_id,
+        quiz_type="new_quizzes",
+        allowed_attempts=None,
+        time_limit=None,
+        published=bool(item.get("published", False)),
+        question_count=item.get("question_count") or item.get("items_count"),
+        html_url=item.get("html_url"),
+        quiz_engine="new_quizzes",
+    )
+
+
+# Future prep: resolves the Canvas assignment id for quiz gradebook writes.
+def quiz_gradebook_assignment_id(quiz: QuizResponse) -> int:
+    """Return the Canvas assignment id used for quiz gradebook writes.
+
+    Classic quiz ids are not valid assignment submission targets. New Quizzes
+    already use assignment_id as their primary id.
+    """
+    if quiz.assignment_id is not None:
+        return quiz.assignment_id
+    if quiz.quiz_engine == "new_quizzes":
+        return quiz.id
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=(
+            "This classic quiz has no linked gradebook assignment yet, so it "
+            "can't be marked through the assignment submission API."
+        ),
+    )
+
+
+async def set_quiz_published(
+    local_course_id: int,
+    quiz_id: int,
+    payload: QuizPublishUpdate,
+    user: User,
+    canvas_url: str | None,
+    db: AsyncSession,
+    *,
+    quiz_engine: str = "classic",
+) -> QuizResponse:
+    """Publish or unpublish a quiz via the quiz-engine-specific Canvas API."""
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
+    require_writable_course(course)
+    canvas_course_id = int(course.canvas_course_id)
+    engine = "new_quizzes" if quiz_engine == "new_quizzes" else "classic"
+
+    if engine == "new_quizzes":
+        current = await fetch_new_quiz(
+            canvas_course_id, quiz_id, token, resolved_canvas_url
+        )
+        currently_published = bool(current.get("published", False))
+        if payload.published == currently_published:
+            return _new_quiz_response(current, canvas_course_id)
+        try:
+            data = await update_new_quiz(
+                canvas_course_id,
+                quiz_id,
+                {"published": payload.published},
+                token,
+                resolved_canvas_url,
+            )
+        except HTTPException as exc:
+            if not payload.published:
+                canvas_detail = (
+                    exc.detail if isinstance(exc.detail, str) else "Unknown Canvas error."
+                )
+                raise HTTPException(
+                    status_code=exc.status_code,
+                    detail=(
+                        "Canvas refused to unpublish this quiz. "
+                        f"{canvas_detail}"
+                    ),
+                ) from exc
+            raise
+        return _new_quiz_response(data, canvas_course_id)
+
+    current = await fetch_quiz(
+        canvas_course_id, quiz_id, token, resolved_canvas_url
+    )
+    currently_published = bool(current.get("published", False))
+    if payload.published == currently_published:
+        return _classic_quiz_response(current, canvas_course_id)
+
+    try:
+        data = await update_quiz(
+            canvas_course_id,
+            quiz_id,
+            {"published": payload.published},
+            token,
+            resolved_canvas_url,
+        )
+    except HTTPException as exc:
+        if not payload.published:
+            canvas_detail = (
+                exc.detail if isinstance(exc.detail, str) else "Unknown Canvas error."
+            )
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail=(
+                    "Canvas refused to unpublish this quiz. "
+                    f"{canvas_detail}"
+                ),
+            ) from exc
+        raise
+
+    return _classic_quiz_response(data, canvas_course_id)
 
 
 async def create_course_quiz(
@@ -1101,6 +1291,7 @@ async def _create_course_quiz_uncached(
             raise
         return QuizResponse(
             id=assignment_id,
+            assignment_id=assignment_id,
             title=data.get("title") or payload.title,
             description=data.get("instructions") or payload.description,
             due_at=data.get("due_at") or payload.due_at,
@@ -1109,7 +1300,7 @@ async def _create_course_quiz_uncached(
             quiz_type="new_quizzes",
             allowed_attempts=payload.allowed_attempts,
             time_limit=payload.time_limit,
-            published=bool(data.get("published", False)),
+            published=bool(data.get("published", payload.published)),
             question_count=len(payload.questions),
             html_url=data.get("html_url"),
             quiz_engine="new_quizzes",
@@ -1201,6 +1392,9 @@ async def _create_course_quiz_uncached(
         raise
     return QuizResponse(
         id=quiz_id,
+        assignment_id=(
+            int(data["assignment_id"]) if data.get("assignment_id") is not None else None
+        ),
         title=data.get("title") or payload.title,
         description=data.get("description") or payload.description,
         due_at=data.get("due_at") or payload.due_at,
@@ -1254,11 +1448,20 @@ async def update_course_assignment(
     idempotency_key: str | None = None,
     exclude_workflow_id: int | None = None,
 ) -> AssignmentResponse:
-    check_message_profanity(payload.name, content_label="Assignment title")
-    if payload.description:
-        check_message_profanity(
-            payload.description, content_label="Assignment description"
-        )
+    from app.services.assignment_validation import validate_assignment_for_update
+
+    # Validate only fields being changed; blank description is sent as null
+    # (intentional clear / leave optional), empty strings are rejected with
+    # fix-it messages before Canvas sees them.
+    await validate_assignment_for_update(
+        local_course_id,
+        user,
+        payload.name,
+        payload.description,
+        payload.due_at.isoformat() if payload.due_at else None,
+        payload.points_possible,
+        db,
+    )
 
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     resolved_canvas_url = course.canvas_url
@@ -1272,19 +1475,43 @@ async def update_course_assignment(
         exclude_workflow_id=exclude_workflow_id,
     )
 
+    # Canvas PUT is a full overwrite. The UI update form does not send
+    # points_possible, so None would wipe the existing score — fill from
+    # the live assignment first (#1435). Chat merges points before calling
+    # here, so skip the extra fetch when points are already present.
+    due_at = payload.due_at
+    if due_at is not None and due_at.tzinfo is None:
+        due_at = due_at.replace(tzinfo=UTC)
+    elif due_at is not None:
+        due_at = due_at.astimezone(UTC)
+
+    points_possible = payload.points_possible
+    if points_possible is None:
+        current = await get_assignment(
+            course.id, assignment_id, user, resolved_canvas_url, db
+        )
+        points_possible = current.points_possible
+
+    merged = AssignmentUpdate(
+        name=payload.name,
+        description=payload.description,
+        due_at=due_at,
+        points_possible=points_possible,
+    )
+
     key = idempotency_key or build_idempotency_key(
         "update_assignment",
         user.id,
         course.id,
         assignment_id,
-        payload.model_dump(mode="json"),
+        merged.model_dump(mode="json"),
     )
 
     async def _write() -> dict:
         return await update_assignment(
             int(course.canvas_course_id),
             assignment_id,
-            payload.model_dump(mode="json"),
+            merged.model_dump(mode="json"),
             token,
             resolved_canvas_url,
         )
@@ -1297,6 +1524,169 @@ async def update_course_assignment(
         write=_write,
     )
     return AssignmentResponse(**data)
+
+
+async def _sync_local_assignment_published(
+    db: AsyncSession,
+    course_id: int,
+    assignment_id: int,
+    published: bool,
+) -> Assignment | None:
+    """Mirror Canvas published state onto the local assignment row when present."""
+    local = await db.scalar(
+        select(Assignment).where(
+            Assignment.canvas_assignment_id == str(assignment_id),
+            Assignment.course_id == course_id,
+        )
+    )
+    if local is not None:
+        local.published = published
+    return local
+
+
+def _format_unpublish_error(canvas_detail: str) -> str:
+    """Map Canvas unpublish failures to user-facing messages."""
+    lowered = canvas_detail.lower()
+    if (
+        ("can't unpublish" in lowered or "cannot unpublish" in lowered)
+        and "submission" in lowered
+    ):
+        return (
+            "Canvas refused to unpublish this assignment. "
+            f"{canvas_detail}"
+        )
+    return f"Failed to unpublish this assignment. {canvas_detail}"
+
+
+async def _record_assignment_publish_audit(
+    db: AsyncSession,
+    user: User,
+    course: Course,
+    assignment_id: int,
+    *,
+    published: bool,
+    previous_data: dict,
+    result_data: dict,
+) -> None:
+    """Record workflow history and audit for assignment publish/unpublish writes."""
+    from app.services.chat import record_write_audit
+
+    assignment_name = (
+        result_data.get("name")
+        or previous_data.get("name")
+        or f"Assignment {assignment_id}"
+    )
+    proposed_action = {
+        "action": "update_assignment",
+        "local_course_id": course.id,
+        "assignment_id": assignment_id,
+        "published": published,
+    }
+    workflow = Workflow(
+        conversation_id=None,
+        user_id=user.id,
+        course_id=course.id,
+        source_user_message_id=None,
+        preview_message_id=None,
+        action_name="update_assignment",
+        user_prompt=(
+            f"{'Publish' if published else 'Unpublish'} assignment "
+            f"'{assignment_name}' from Course Assignments"
+        ),
+        proposed_action=proposed_action,
+        affected_resources=[
+            {
+                "type": "assignment",
+                "id": assignment_id,
+                "name": assignment_name,
+                "status": "updated",
+            },
+        ],
+        status="executed",
+        executed_at=datetime.now(UTC),
+    )
+    db.add(workflow)
+    await db.flush()
+
+    await record_write_audit(
+        db,
+        user,
+        workflow,
+        {
+            "data": result_data,
+            "previous_data": previous_data,
+            "affected_resources": workflow.affected_resources,
+        },
+    )
+
+
+async def set_assignment_published(
+    local_course_id: int,
+    assignment_id: int,
+    payload: AssignmentPublishUpdate,
+    user: User,
+    canvas_url: str | None,
+    db: AsyncSession,
+) -> AssignmentResponse:
+    """Publish or unpublish an assignment via Canvas assignment.published."""
+    course = await get_owned_course(local_course_id, user, canvas_url, db)
+    resolved_canvas_url = course.canvas_url
+    token = require_canvas_token(user, resolved_canvas_url)
+    require_writable_course(course)
+
+    current = await fetch_assignment(
+        int(course.canvas_course_id),
+        assignment_id,
+        token,
+        resolved_canvas_url,
+    )
+    currently_published = bool(current.get("published", True))
+
+    if payload.published == currently_published:
+        local = await _sync_local_assignment_published(
+            db, course.id, assignment_id, currently_published
+        )
+        return AssignmentResponse.model_validate(
+            {**current, "local_id": local.id if local else None}
+        )
+
+    try:
+        data = await update_assignment(
+            int(course.canvas_course_id),
+            assignment_id,
+            {"published": payload.published},
+            token,
+            resolved_canvas_url,
+        )
+    except HTTPException as exc:
+        # Ticket 12: surface known Canvas unpublish refusals (e.g. submissions
+        # exist) explicitly; other unpublish failures get a generic prefix.
+        if not payload.published:
+            canvas_detail = (
+                exc.detail if isinstance(exc.detail, str) else "Unknown Canvas error."
+            )
+            raise HTTPException(
+                status_code=exc.status_code,
+                detail=_format_unpublish_error(canvas_detail),
+            ) from exc
+        raise
+
+    published = bool(data.get("published", payload.published))
+    local = await _sync_local_assignment_published(
+        db, course.id, assignment_id, published
+    )
+    await _record_assignment_publish_audit(
+        db,
+        user,
+        course,
+        assignment_id,
+        published=published,
+        previous_data={**current, "published": currently_published},
+        result_data=data,
+    )
+    return AssignmentResponse.model_validate(
+        {**data, "local_id": local.id if local else None}
+    )
 
 
 async def update_course_grade(
@@ -1632,11 +2022,12 @@ async def sync_courses_if_stale(user: User, connection: CanvasConnection, db: As
     connection can never fail a chat turn that doesn't even need fresh
     course data.
 
-    Also upserts canvas_course_names — the small, connection-scoped,
-    write-once canvas_course_id -> name index services/chat.py uses to
-    resolve a course by name without ever exposing a numeric ID to the
-    LLM. Rows there are inserted once and never overwritten
-    (ON CONFLICT DO NOTHING) — see CanvasCourseName's docstring for why.
+    Also upserts canvas_course_names — the connection-scoped alias index
+    services/chat.py uses to resolve a course by name without exposing a
+    numeric ID to the LLM. Unlike the old single-label index, it keeps
+    historical aliases while refreshing last_seen_at on the current alias.
+    Prompt display still comes from Course.name/Course.course_code, so chat
+    stays aligned with the rest of the app after Canvas renames.
 
     get_courses() itself is unmodified; this wrapper only adds the
     cooldown gate and the name-index upsert around it.
@@ -1654,21 +2045,28 @@ async def sync_courses_if_stale(user: User, connection: CanvasConnection, db: As
 
     courses = await get_courses(user, connection.canvas_url, db)
     if courses:
+        insert_names = pg_insert(CanvasCourseName).values(
+            [
+                {
+                    "canvas_connection_id": connection.id,
+                    "canvas_course_id": str(course.canvas_id),
+                    "local_course_id": course.local_id,
+                    "name": course.name,
+                    "workflow_state": course.workflow_state,
+                    "last_seen_at": now,
+                }
+                for course in courses
+            ]
+        )
         await db.execute(
-            pg_insert(CanvasCourseName)
-            .values(
-                [
-                    {
-                        "canvas_connection_id": connection.id,
-                        "canvas_course_id": str(course.canvas_id),
-                        "local_course_id": course.local_id,
-                        "name": course.name,
-                        "workflow_state": course.workflow_state,
-                    }
-                    for course in courses
-                ]
+            insert_names.on_conflict_do_update(
+                index_elements=["canvas_connection_id", "canvas_course_id", "name"],
+                set_={
+                    "local_course_id": insert_names.excluded.local_course_id,
+                    "workflow_state": insert_names.excluded.workflow_state,
+                    "last_seen_at": insert_names.excluded.last_seen_at,
+                },
             )
-            .on_conflict_do_nothing(index_elements=["canvas_connection_id", "canvas_course_id"])
         )
 
     connection.courses_synced_at = now
@@ -1745,7 +2143,7 @@ async def run_course_sync_sweep(db: AsyncSession) -> None:
                 if expected_token_issue:
                     logger.warning(
                         "course sync sweep skipped canvas_connection_id=%s user_id=%s: %s",
-                        connection_id, user_id, exc.detail,
+                        connection_id, user_id, getattr(exc, "detail", str(exc)),
                     )
                 else:
                     logger.warning(
@@ -1878,7 +2276,7 @@ async def set_active_course(user: User, local_course_id: int, db: AsyncSession) 
                     if _is_expected_canvas_token_sync_error(exc):
                         logger.warning(
                             "set_active_course sync skipped canvas_connection_id=%s user_id=%s: %s",
-                            connection.id, user.id, exc.detail,
+                            connection.id, user.id, getattr(exc, "detail", str(exc)),
                         )
                     else:
                         logger.warning(

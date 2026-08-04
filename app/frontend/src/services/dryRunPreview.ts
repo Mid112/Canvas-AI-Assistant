@@ -7,7 +7,6 @@ import { fetchConversation } from "@/services/assistant";
 import type { DryRunPreviewData } from "@/types/dryRunPreview";
 
 const MOCK_LOAD_DELAY_MS = 600;
-const MOCK_CONFIRM_DELAY_MS = 1200;
 
 export class DryRunPreviewError extends Error {
   constructor(message: string) {
@@ -61,15 +60,11 @@ export async function fetchChatIntentPreview(
 
 export async function confirmDryRunPreview(
   previewId: string,
-): Promise<{ success: true; message: string }> {
-  await delay(MOCK_CONFIRM_DELAY_MS);
-
-  if (previewId === "confirm-error") {
-    throw new DryRunPreviewError("Unable to approve this workflow. Please try again.");
-  }
-
-  return {
-    success: true,
-    message: "Workflow approved. Canvas actions will be executed shortly.",
-  };
+): Promise<never> {
+  // Ticket 38: mock/?preview= demos must not claim Canvas execution. Real
+  // confirms go through confirmAssistantAction on the chat preview path.
+  void previewId;
+  throw new DryRunPreviewError(
+    "This demo preview cannot execute Canvas actions. Approve a preview from the assistant chat instead.",
+  );
 }

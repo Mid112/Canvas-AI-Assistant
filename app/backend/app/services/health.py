@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import httpx
 from sqlalchemy import delete, select
@@ -47,6 +48,12 @@ def _status_for_latency(latency_ms: int, timeout_seconds: float) -> HealthStatus
 
 def _overall_status(statuses: list[HealthStatus]) -> HealthStatus:
     return max(statuses, key=lambda status: _STATUS_SEVERITY[status])
+
+
+def _health_status(raw: str) -> HealthStatus:
+    if raw in ("healthy", "degraded", "down"):
+        return cast(HealthStatus, raw)
+    return "down"
 
 
 async def check_backend(started_at: float) -> ServiceHealth:
@@ -141,7 +148,7 @@ async def check_ai(db: AsyncSession) -> ServiceHealth:
         # means the provider responded normally -- it's our credential/quota
         # that needs attention, not the service itself, so it's "degraded"
         # rather than "down".
-        status = "down" if e.response.is_server_error else "degraded"
+        status: HealthStatus = "down" if e.response.is_server_error else "degraded"
         return ServiceHealth(
             status=status,
             error_detail=f"AI service returned {e.response.status_code}",
@@ -227,12 +234,12 @@ async def get_latest_health_status(db: AsyncSession) -> LatestHealthResponse:
 
     services = {
         row.service: ServiceHealth(
-            status=row.status, latency_ms=row.latency_ms, error_detail=row.error_detail
+            status=_health_status(row.status), latency_ms=row.latency_ms, error_detail=row.error_detail
         )
         for row in rows
     }
     return LatestHealthResponse(
-        overall_status=_overall_status([row.status for row in rows]),
+        overall_status=_overall_status([_health_status(row.status) for row in rows]),
         checked_at=max(row.checked_at for row in rows),
         services=services,
     )
@@ -255,6 +262,6 @@ async def get_health_history(db: AsyncSession, hours: int = 24) -> HealthHistory
     }
     for row in rows:
         services.setdefault(row.service, []).append(
-            HealthHistoryEntry(status=row.status, latency_ms=row.latency_ms, checked_at=row.checked_at)
+            HealthHistoryEntry(status=_health_status(row.status), latency_ms=row.latency_ms, checked_at=row.checked_at)
         )
     return HealthHistoryResponse(services=services)

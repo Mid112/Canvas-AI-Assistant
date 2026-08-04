@@ -71,6 +71,7 @@ function DryRunPreviewContent({
   const [isConfirming, setIsConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [isSavingEdits, setIsSavingEdits] = useState(false);
+  const [saveEditsError, setSaveEditsError] = useState<string | null>(null);
   const [confirmedMessage, setConfirmedMessage] = useState<string | null>(null);
   const [showSuccessToast, setShowSuccessToast] = useState(false);
 
@@ -224,8 +225,8 @@ function DryRunPreviewContent({
         );
         setConfirmedMessage(result.content);
       } else {
-        const result = await confirmDryRunPreview(preview.id);
-        setConfirmedMessage(result.message);
+        // Always throws — mock/?preview demos cannot execute Canvas actions.
+        await confirmDryRunPreview(preview.id);
       }
 
       setShowSuccessToast(true);
@@ -249,12 +250,12 @@ function DryRunPreviewContent({
       conversationId === undefined ||
       pendingMessageId === undefined
     ) {
-      setConfirmError("This preview cannot be edited here.");
+      setSaveEditsError("This preview cannot be edited here.");
       return;
     }
 
     setIsSavingEdits(true);
-    setConfirmError(null);
+    setSaveEditsError(null);
     try {
       await modifyAssistantAction(
         accessToken,
@@ -264,8 +265,9 @@ function DryRunPreviewContent({
       );
       const refreshed = await loadPreview();
       setPreview(refreshed);
+      setSaveEditsError(null);
     } catch (error) {
-      setConfirmError(
+      setSaveEditsError(
         error instanceof AssistantApiError
           ? error.message
           : "Unable to regenerate this preview.",
@@ -352,6 +354,7 @@ function DryRunPreviewContent({
         isConfirming={isConfirming}
         confirmError={confirmError}
         isSavingEdits={isSavingEdits}
+        saveEditsError={saveEditsError}
         onSaveEdits={isChatPreview ? handleSaveEdits : undefined}
         onReject={() => void handleReject()}
         onModify={handleModify}

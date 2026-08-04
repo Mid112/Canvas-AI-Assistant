@@ -1,8 +1,12 @@
+import re
 from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+COURSE_CODE_HELP_TEXT = "Use a subject and number like COSC 499 or COSC499."
+COURSE_CODE_PATTERN = re.compile(r"^[A-Za-z]{1,12}(?:\s?\d{2,4}[A-Za-z]?)?$")
 
 
 class CourseResponse(BaseModel):
@@ -37,9 +41,30 @@ class CourseCreate(BaseModel):
     # When true, Canvas publishes the course immediately (`offer=true`).
     publish: bool = False
 
+    @field_validator("course_code")
+    @classmethod
+    def validate_course_code(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+
+        course_code = value.strip()
+        if not course_code:
+            return None
+
+        if not COURSE_CODE_PATTERN.fullmatch(course_code):
+            raise ValueError(COURSE_CODE_HELP_TEXT)
+
+        return course_code
+
 
 class CoursePublishUpdate(BaseModel):
     """Publish (`offer`) or unpublish (`claim`) a Canvas course from Course Management."""
+
+    published: bool
+
+
+class AssignmentPublishUpdate(BaseModel):
+    """Publish or unpublish a Canvas assignment from Course Assignments."""
 
     published: bool
 
@@ -115,10 +140,19 @@ class QuizCreate(BaseModel):
     )
 
 
+class QuizPublishUpdate(BaseModel):
+    """Publish or unpublish a Canvas quiz (classic or New Quizzes)."""
+
+    published: bool
+
+
 class QuizResponse(BaseModel):
     model_config = ConfigDict(extra="ignore", populate_by_name=True)
 
     id: int
+    # Canvas gradebook writes target the linked assignment, not the classic quiz id.
+    # Classic quizzes expose this separately; New Quizzes use assignment_id as id.
+    assignment_id: int | None = None
     title: str
     description: str | None = None
     due_at: datetime | None = None

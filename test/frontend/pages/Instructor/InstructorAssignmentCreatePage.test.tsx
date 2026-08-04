@@ -755,6 +755,38 @@ describe("InstructorAssignmentCreatePage", () => {
 
   // Verifies: Regression (#15) — a generator failure drops to Describe with
   // the prompt intact, rather than stranding the instructor on Review.
+  // Verifies: an empty expansion is a failure, not a silent no-op. It used
+  // to clear the spinner and leave the instructor on Review still looking at
+  // the chat's one-liner — the exact text this call exists to replace — with
+  // nothing to say it had not worked.
+  it("treats an empty expanded description as a failure", async () => {
+    mockedGenerate.mockResolvedValue({
+      name: "Ignored Title",
+      description: "   ",
+      dueDate: "2099-01-01T00:00",
+      pointsPossible: 999,
+    });
+
+    renderPage({
+      aiAssignmentDraft: {
+        courseId: 42,
+        name: "Homework 3",
+        description: "it is about beef corndogs",
+        dueDate: "2026-08-04T23:59",
+        pointsPossible: 120,
+        prompt: "Homework 3. it is about beef corndogs",
+      },
+    });
+
+    expect(
+      await screen.findByText(/expanded description came back empty/i),
+    ).toBeInTheDocument();
+    // Dropped back to Describe with the prompt intact, same as a failed call.
+    expect(
+      screen.getByDisplayValue("Homework 3. it is about beef corndogs"),
+    ).toBeInTheDocument();
+  });
+
   it("falls back to the describe step when expansion fails", async () => {
     mockedGenerate.mockRejectedValue(new Error("Generator unavailable"));
 
