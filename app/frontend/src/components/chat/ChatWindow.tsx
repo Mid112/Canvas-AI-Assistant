@@ -264,6 +264,17 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
     [clearLoadingFeedback],
   );
 
+  // Clear stage timers on unmount so a mid-flight navigate cannot call
+  // setLoadingStage / setLoadingNote after this component is gone.
+  useEffect(() => {
+    return () => {
+      for (const timerId of loadingTimersRef.current) {
+        clearTimeout(timerId);
+      }
+      loadingTimersRef.current = [];
+    };
+  }, []);
+
   const assistantContext = useMemo(
     () => ({
       activeCourseLabel: activeCourse?.displayName,

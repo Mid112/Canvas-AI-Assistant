@@ -29,14 +29,21 @@ export const LOADING_STAGE_ADVANCE_MS = 2500;
 export const LOADING_NOTE_AFTER_MS = 8000;
 
 const ANALYZE_PATTERN =
-  /\b(analy[sz]e|analytics|missing|submission|late|grade|performance|engagement|who hasn'?t)\b/i;
+  /\b(analy[sz]e|analytics|missing|submission|late|performance|engagement|who hasn'?t)\b/i;
 
 const CANVAS_PATTERN =
-  /\b(canvas|create|publish|sync|update|delete|assignment|quiz|course|module|announcement)\b/i;
+  /\b(canvas|create|publish|sync|update|delete|assignment|quiz|course|module|announcement|grade)\b/i;
+
+const WRITE_PATTERN = /\b(update|create|publish|delete|sync)\b/i;
 
 export function inferAssistantLoadingStage(
   userText: string,
 ): AssistantLoadingStage {
+  // Prefer Canvas/write staging for mutation phrasing so analytics-adjacent
+  // words (e.g. "grade" in "update a grade") do not show "Analyzing data…".
+  if (WRITE_PATTERN.test(userText)) {
+    return "connecting";
+  }
   if (ANALYZE_PATTERN.test(userText)) {
     return "analyzing";
   }

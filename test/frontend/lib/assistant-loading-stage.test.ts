@@ -25,6 +25,14 @@ describe("inferAssistantLoadingStage", () => {
     );
   });
 
+  it("prefers connecting over analyzing for grade update phrasing", () => {
+    // "grade" alone used to win ANALYZE_PATTERN first and show Analyzing…
+    expect(inferAssistantLoadingStage("update a grade")).toBe("connecting");
+    expect(inferAssistantLoadingStage("Update grades for the midterm")).toBe(
+      "connecting",
+    );
+  });
+
   it("defaults to thinking for general questions", () => {
     expect(inferAssistantLoadingStage("What can you help me with?")).toBe(
       "thinking",
