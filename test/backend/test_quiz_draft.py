@@ -180,40 +180,38 @@ def _questions_payload(points: list[float], total) -> str:
     )
 
 
-# Verifies: the reported bug. Regenerating a "50 points total" quiz produced
-# five 5-point questions summing to 25, which both validators then rejected —
-# leaving the instructor on a Review step whose submit button was disabled.
-def test_generate_quiz_draft_reconciles_points_to_the_requested_total(client):
+# Verifies: when the model returns an inconsistent quiz total, question points
+# are preserved and the quiz total is realigned to their sum (Ticket 14).
+def test_generate_quiz_draft_realigns_total_to_question_sum(client):
     headers, _ = _register(client)
 
     data = _draft(client, headers, _questions_payload([5, 5, 5, 5, 5], 50))
 
-    assert data["points_possible"] == 50
-    assert [q["points_possible"] for q in data["questions"]] == [10, 10, 10, 10, 10]
+    assert [q["points_possible"] for q in data["questions"]] == [5, 5, 5, 5, 5]
+    assert data["points_possible"] == 25
 
 
-# Verifies: reconciliation scales rather than flattening, so a deliberately
-# weighted quiz (one heavy question among light ones) keeps its shape.
+# Verifies: multi-point relative weights are kept as authored; only the quiz
+# total is corrected when it does not match.
 def test_generate_quiz_draft_preserves_relative_weighting(client):
     headers, _ = _register(client)
 
     data = _draft(client, headers, _questions_payload([20, 5, 5, 5, 5], 50))
 
     points = [q["points_possible"] for q in data["questions"]]
-    assert points == [25, 6.25, 6.25, 6.25, 6.25]
-    assert sum(points) == 50
+    assert points == [20, 5, 5, 5, 5]
+    assert data["points_possible"] == 40
 
 
-# Verifies: a total that does not divide evenly still sums exactly, rather
-# than leaving a rounding residue that trips the 0.01 consistency tolerance.
-def test_generate_quiz_draft_distributes_uneven_totals_exactly(client):
+# Verifies: an inconsistent total does not redistribute points across questions.
+def test_generate_quiz_draft_does_not_redistribute_uneven_totals(client):
     headers, _ = _register(client)
 
     data = _draft(client, headers, _questions_payload([1, 1, 1], 50))
 
     points = [q["points_possible"] for q in data["questions"]]
-    assert points == [16.67, 16.67, 16.66]
-    assert round(sum(points), 2) == 50
+    assert points == [1, 1, 1]
+    assert data["points_possible"] == 3
 
 
 # Verifies: with no total from the model, the questions define it rather than
