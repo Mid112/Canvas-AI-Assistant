@@ -11,14 +11,19 @@ on:
   push:
     branches: [main, develop]
 
-
-
 # Cancels older in-progress runs for the same branch/PR when a new
 # commit is pushed. Prevents CI minutes being wasted on stale runs
 # and means only the latest push actually finishes running.
+#
+# Keep this true while CI runs on a single self-hosted runner. Setting it
+# false does not make superseded runs finish alongside the new one — the
+# concurrency group still admits one run at a time, so the new run queues
+# behind the old one instead of replacing it. Three pushes then cost three
+# full sequential runs on the one machine, and every other PR waits behind
+# them.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   # Helps setup-node use the runner's writable _work/_tool cache.
