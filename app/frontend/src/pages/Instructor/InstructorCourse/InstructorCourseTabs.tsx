@@ -7,6 +7,7 @@ import {
   instructorCourseGradesPath,
   instructorCourseMessagesPath,
   instructorCoursePath,
+  instructorCourseQuizzesPath,
   instructorCourseStudentsPath,
 } from "@/routes/paths";
 
@@ -23,6 +24,11 @@ export function InstructorCourseTabs({ localCourseId }: InstructorCourseTabsProp
     {
       label: "Assignments",
       to: instructorCourseAssignmentsPath(localCourseId),
+      end: false,
+    },
+    {
+      label: "Quizzes",
+      to: instructorCourseQuizzesPath(localCourseId),
       end: false,
     },
     {
