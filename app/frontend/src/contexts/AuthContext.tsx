@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -16,7 +17,9 @@ import {
 import {
   AuthApiError,
   fetchCurrentUser,
+  LOGOUT_REVOKE_TIMEOUT_MS,
   loginUser,
+  logoutUser,
   registerUser,
 } from "@/services/auth";
 import type {
@@ -34,7 +37,7 @@ interface AuthContextValue {
   login: (credentials: LoginCredentials) => Promise<User>;
   register: (credentials: RegisterCredentials) => Promise<User>;
   refreshUser: () => Promise<User | null>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -72,6 +75,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     getStoredToken(),
   );
   const [isLoading, setIsLoading] = useState(() => getStoredToken() !== null);
+  // Keep logout referentially stable across token refreshes (review nit):
+  // read the latest token from a ref instead of closing over accessToken.
+  const accessTokenRef = useRef(accessToken);
+  accessTokenRef.current = accessToken;
 
   const loadUser = useCallback(async (token: string) => {
     const currentUser = await fetchCurrentUser(token);
@@ -158,7 +165,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [accessToken, loadUser]);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    const token = accessTokenRef.current ?? getStoredToken();
+    if (token) {
+      try {
+        await Promise.race([
+          logoutUser(token),
+          new Promise<void>((resolve) => {
+            setTimeout(resolve, LOGOUT_REVOKE_TIMEOUT_MS);
+          }),
+        ]);
+      } catch {
+        // Revoke failed or timed out — still sign out locally below.
+      }
+    }
     clearStoredToken();
     setAccessToken(null);
     setUser(null);
