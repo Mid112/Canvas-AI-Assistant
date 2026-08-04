@@ -145,8 +145,67 @@ def test_assignment_preview_success(client):
     assert "Midterm Exam" in body["summary"]
     assert body["reversible"] is True
     assert body["metadata"]["name"] == "Midterm Exam"
+    assert body["metadata"]["title"] == "Midterm Exam"
+    assert "due" in body["summary"].lower() or "Due" in body["summary"]
+    assert "100" in body["summary"] or "100 points" in body["metadata"]["points_possible"]
+    assert body["metadata"]["submitted"]["name"] == "Midterm Exam"
     assert any(r["type"] == "course" for r in body["affected_resources"])
     assert any(r["type"] == "assignment" for r in body["affected_resources"])
+
+
+def test_assignment_preview_rejects_missing_required_fields(client):
+    """Ticket 22: preview validates before Canvas — missing due date is a 422."""
+    headers, local_course_id = _register_with_canvas(client)
+    resp = client.post(
+        f"/api/v1/canvas/courses/{local_course_id}/assignments/preview"
+        f"?canvas_url={CANVAS_URL}",
+        json={"name": "No Due", "description": "Missing due date"},
+        headers=headers,
+    )
+    assert resp.status_code == 422
+    detail = resp.json()["detail"]
+    assert "due date" in str(detail).lower()
+
+
+def test_assignment_preview_rejects_empty_title(client):
+    """Ticket 22: empty title is rejected with a fix-it message before submit."""
+    headers, local_course_id = _register_with_canvas(client)
+    resp = client.post(
+        f"/api/v1/canvas/courses/{local_course_id}/assignments/preview"
+        f"?canvas_url={CANVAS_URL}",
+        json={
+            "name": "   ",
+            "description": "Has description",
+            "due_at": "2030-12-15T23:59:00Z",
+            "points_possible": 10,
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 422
+    assert "title" in str(resp.json()["detail"]).lower()
+
+
+def test_assignment_create_rejects_past_due_date(client):
+    """Ticket 22: REST create validates before Canvas write."""
+    headers, local_course_id = _register_with_canvas(client)
+    with patch(
+        "app.services.canvas.create_assignment",
+        new_callable=AsyncMock,
+    ) as mock_create:
+        resp = client.post(
+            f"/api/v1/canvas/courses/{local_course_id}/assignments"
+            f"?canvas_url={CANVAS_URL}",
+            json={
+                "name": "Late Lab",
+                "description": "Past due",
+                "due_at": "2020-01-01T23:59:00Z",
+                "points_possible": 10,
+            },
+            headers=headers,
+        )
+    assert resp.status_code == 422
+    assert "future" in str(resp.json()["detail"]).lower()
+    mock_create.assert_not_called()
 
 
 def test_assignment_preview_course_not_owned(client):

@@ -696,9 +696,18 @@ async def test_create_course_assignment_calls_integration_with_course_id():
     )
     user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.example.edu")])
     raw = {"id": 30, "name": "New Assignment", "course_id": 100}
-    payload = AssignmentCreate(name="New Assignment")
+    payload = AssignmentCreate(
+        name="New Assignment",
+        description="Write up your findings.",
+        due_at="2030-12-15T23:59:00Z",
+        points_possible=25,
+    )
 
     with (
+        patch(
+            "app.services.assignment_validation.get_owned_course_or_404",
+            new=AsyncMock(return_value=course),
+        ),
         patch("app.services.canvas.get_owned_course", new=AsyncMock(return_value=course)),
         patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
         patch("app.services.canvas.create_assignment", new=AsyncMock(return_value=raw)) as mock_create,
@@ -708,6 +717,31 @@ async def test_create_course_assignment_calls_integration_with_course_id():
     assert result.id == 30
     mock_create.assert_awaited_once()
     assert mock_create.call_args.args[0] == 100  # canvas_course_id, coerced to int
+
+
+@pytest.mark.asyncio
+async def test_create_course_assignment_rejects_missing_due_date_before_canvas():
+    """Ticket 22: REST create validates required fields before Canvas."""
+    db = AsyncMock()
+    course = SimpleNamespace(
+        id=1, canvas_course_id="100", canvas_url="https://canvas.example.edu", workflow_state="available",
+    )
+    user = SimpleNamespace(id=1, canvas_connections=[_connection("https://canvas.example.edu")])
+    payload = AssignmentCreate(name="Missing Due", description="Needs a due date")
+
+    with (
+        patch(
+            "app.services.assignment_validation.get_owned_course_or_404",
+            new=AsyncMock(return_value=course),
+        ),
+        patch("app.services.canvas.create_assignment", new=AsyncMock()) as mock_create,
+        pytest.raises(HTTPException) as exc,
+    ):
+        await create_course_assignment(1, payload, user, "https://canvas.example.edu", db)
+
+    assert exc.value.status_code == 422
+    assert "due date" in exc.value.detail.lower()
+    mock_create.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -722,6 +756,10 @@ async def test_update_course_assignment_calls_integration():
     current = SimpleNamespace(points_possible=50.0)
 
     with (
+        patch(
+            "app.services.assignment_validation.get_owned_course_or_404",
+            new=AsyncMock(return_value=course),
+        ),
         patch("app.services.canvas.get_owned_course", new=AsyncMock(return_value=course)),
         patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
         patch("app.services.canvas.get_assignment", new=AsyncMock(return_value=current)),
