@@ -516,6 +516,37 @@ async def test_execute_intent_preview_create_assignment_missing_field_downgrades
 
 
 @pytest.mark.asyncio
+async def test_execute_intent_preview_create_assignment_lists_all_missing_fields():
+    """Ticket 16 / #1440: ask for every missing required field together."""
+    db = AsyncMock()
+    user = MagicMock(id=1)
+    action = IntentPreviewAction(
+        summary="create an assignment",
+        proposed_action={
+            "action": "create_assignment",
+            "local_course_id": 1,
+            "title": "HW1",
+            "description": "",
+            "due_date": "2030-01-01T00:00:00",
+            # points_possible omitted
+        },
+    )
+
+    result = await execute_tool(db, user, action)
+
+    assert result["action"] == "clarify"
+    question = result["question"].lower()
+    assert "description" in question
+    assert "point" in question
+    assert "one message" in question
+    # Already-known fields stay in partial_plan; missing ones do not.
+    assert result["partial_plan"]["title"] == "HW1"
+    assert result["partial_plan"]["due_date"] == "2030-01-01T00:00:00"
+    assert "description" not in result["partial_plan"]
+    assert "points_possible" not in result["partial_plan"]
+
+
+@pytest.mark.asyncio
 async def test_execute_intent_preview_create_assignment_past_due_date_downgrades_to_clarify():
     db = AsyncMock()
     user = MagicMock(id=1)

@@ -120,10 +120,11 @@ def parse_action(raw_llm_output: str) -> Any:
         )
 
 
-# Friendly clarifying questions for create_assignment's fields, keyed in
-# the order they're checked. points_possible may be null for ungraded
-# assignments (Ticket 21) — ask graded-vs-ungraded when the model hasn't
-# addressed points at all, never invent a default like 10.
+# Friendly clarifying questions / labels for create_assignment's fields,
+# keyed in the order they're checked. points_possible may be null for
+# ungraded assignments (Ticket 21) — ask graded-vs-ungraded when the model
+# hasn't addressed points at all, never invent a default like 10. Ticket 16
+# (#1440) asks for every still-missing required field in one clarify turn.
 _CREATE_ASSIGNMENT_FIELD_QUESTIONS = {
     "title": "What should this assignment be called?",
     "description": "What should the assignment description say?",
@@ -132,6 +133,13 @@ _CREATE_ASSIGNMENT_FIELD_QUESTIONS = {
         "Is this assignment graded? If yes, how many points is it worth? "
         "If it's ungraded, say so — do not invent a point value."
     ),
+}
+
+_CREATE_ASSIGNMENT_FIELD_LABELS = {
+    "title": "title",
+    "description": "description",
+    "due_date": "due date",
+    "points_possible": "point value",
 }
 
 # Kept for call-site compatibility; quiz field gathering happens in the
@@ -302,10 +310,9 @@ def _map_mcp_submissions_result(mcp_result: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _create_assignment_missing_field(proposed: dict) -> str | None:
-    """Returns the name of the first required create_assignment field
-    that's missing or effectively empty, or None if the proposal is
-    complete.
+def _create_assignment_missing_fields(proposed: dict) -> list[str]:
+    """Returns every required create_assignment field that is missing or
+    effectively empty, in fixed check order. Empty list means complete.
 
     This can't be left to schema validation alone: proposed_action is a
     loosely typed dict at preview time (see the 'intent_preview' case
@@ -315,23 +322,59 @@ def _create_assignment_missing_field(proposed: dict) -> str | None:
     REQUIRED FIELDS in the system prompt entirely undetected (observed in
     practice with the instruct model). Checking here is a server-side
     guarantee that doesn't depend on the model reliably following that
-    prompt instruction."""
+    prompt instruction.
+
+    All missing required fields are returned together so the clarify
+    prompt can ask for them in one turn (Ticket 16 / #1440)."""
+    missing: list[str] = []
     for field in ("title", "description", "due_date"):
         value = proposed.get(field)
         if not isinstance(value, str) or not value.strip():
-            return field
+            missing.append(field)
     # Ticket 21: missing key → ask graded-vs-ungraded. Explicit null means
     # ungraded and is complete; never treat null as "default to 10 points".
     if "points_possible" not in proposed:
-        return "points_possible"
-    points = proposed.get("points_possible")
-    if points is not None:
-        try:
-            if float(points) <= 0:
-                return "points_possible"
-        except (TypeError, ValueError):
-            return "points_possible"
-    return None
+        missing.append("points_possible")
+    else:
+        points = proposed.get("points_possible")
+        if points is not None:
+            try:
+                if float(points) <= 0:
+                    missing.append("points_possible")
+            except (TypeError, ValueError):
+                missing.append("points_possible")
+    return missing
+
+
+def _create_assignment_missing_field(proposed: dict) -> str | None:
+    """Back-compat wrapper: first missing field, or None if complete."""
+    missing = _create_assignment_missing_fields(proposed)
+    return missing[0] if missing else None
+
+
+def _join_field_labels(labels: list[str]) -> str:
+    if len(labels) == 1:
+        return labels[0]
+    if len(labels) == 2:
+        return f"{labels[0]} and {labels[1]}"
+    return ", ".join(labels[:-1]) + f", and {labels[-1]}"
+
+
+def _build_create_assignment_missing_fields_question(
+    missing_fields: list[str],
+) -> str:
+    """One clarify question naming every missing required field."""
+    if len(missing_fields) == 1:
+        return _CREATE_ASSIGNMENT_FIELD_QUESTIONS[missing_fields[0]]
+
+    labels = [
+        _CREATE_ASSIGNMENT_FIELD_LABELS[field] for field in missing_fields
+    ]
+    return (
+        "To create this assignment I still need: "
+        f"{_join_field_labels(labels)}. "
+        "You can provide all of these in one message."
+    )
 
 
 def _create_quiz_missing_field(proposed: dict) -> str | None:
@@ -1210,17 +1253,20 @@ async def execute_tool(
                 )
 
             if proposed.get("action") == "create_assignment":
-                missing_field = _create_assignment_missing_field(proposed)
-                if missing_field:
+                missing_fields = _create_assignment_missing_fields(proposed)
+                if missing_fields:
+                    missing_set = set(missing_fields)
                     partial_plan = {
                         key: value
                         for key, value in proposed.items()
-                        if key not in ("action", missing_field)
+                        if key != "action" and key not in missing_set
                     }
                     return {
                         "action": "clarify",
                         "clarify": True,
-                        "question": _CREATE_ASSIGNMENT_FIELD_QUESTIONS[missing_field],
+                        "question": _build_create_assignment_missing_fields_question(
+                            missing_fields
+                        ),
                         "partial_plan": partial_plan,
                     }
 

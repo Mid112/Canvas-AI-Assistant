@@ -328,7 +328,10 @@ def test_incomplete_create_assignment_is_clarified_not_previewed(client):
     of asking, since proposed_action isn't validated against
     CreateAssignmentAction's schema until confirm time. This must be
     caught before a preview is ever shown, not just documented as a
-    system prompt instruction the model might not follow."""
+    system prompt instruction the model might not follow.
+
+    Ticket 16 / #1440: when description and points are both missing,
+    the clarify question must list both so the user can answer once."""
     headers, local_course_id = _register_with_canvas(client)
 
     mock_adapter = AsyncMock()
@@ -348,7 +351,13 @@ def test_incomplete_create_assignment_is_clarified_not_previewed(client):
     assert response.status_code == 200
     reply = response.json()["reply"]
     assert reply["action"] == "clarify"
-    assert "description" in reply["question"].lower()
+    question = reply["question"].lower()
+    assert "description" in question
+    assert "point" in question
+    assert "one message" in question
+    assert reply["partial_plan"]["title"] == "test4"
+    assert "description" not in reply["partial_plan"]
+    assert "points_possible" not in reply["partial_plan"]
     assert "intent_preview" not in reply
 
 

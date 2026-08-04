@@ -49,3 +49,16 @@ def test_build_system_prompt_keeps_feedback_message_clarification_exception():
 
     assert "Exception: if the user asks to \"give feedback\"" in normalized_prompt
     assert "assignment feedback on a submission or a private message" in normalized_prompt
+
+
+def test_build_system_prompt_asks_for_all_missing_required_fields_together():
+    # Ticket 16 / #1440: clarify must list every missing required field in
+    # one turn so the instructor can answer them together.
+    prompt = build_system_prompt()
+    normalized_prompt = " ".join(prompt.split())
+
+    assert "list ALL of them together" in normalized_prompt
+    assert "answer them in one reply" in normalized_prompt
+    assert "label it clearly as optional" in normalized_prompt
+    assert "Do not re-ask for fields already present" in normalized_prompt
+    assert "Only ask ONE question per turn" not in prompt

@@ -216,6 +216,26 @@ def test_merge_field_memory_with_partial_plan_safe_keys_strips_ids():
     assert conversation.field_memory["due_date"] == "2026-08-04T23:59:00"
 
 
+def test_merge_field_memory_keeps_all_supplied_create_assignment_fields():
+    """Ticket 16 / #1440: when the user answers multiple missing fields in
+    one reply, every safe draft field persists so they are not re-asked."""
+    conversation = Conversation(field_memory={"title": "HW1"})
+    merge_field_memory(
+        conversation,
+        {
+            "title": "HW1",
+            "description": "Covers recursion",
+            "due_date": "2030-11-20T23:59:00",
+            "points_possible": 25,
+        },
+        allowed_keys=_PARTIAL_PLAN_SAFE_KEYS,
+    )
+    assert conversation.field_memory["title"] == "HW1"
+    assert conversation.field_memory["description"] == "Covers recursion"
+    assert conversation.field_memory["due_date"] == "2030-11-20T23:59:00"
+    assert conversation.field_memory["points_possible"] == 25
+
+
 def test_clear_course_scoped_field_memory_removes_entity_refs():
     """Switching courses must clear assignment/student-scoped fields so
     they don't leak into the new course's context (#1306)."""
