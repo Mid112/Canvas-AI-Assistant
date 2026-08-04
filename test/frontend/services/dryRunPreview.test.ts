@@ -34,13 +34,13 @@ describe("dryRunPreview service", () => {
     await assertion;
   });
 
-  // Verifies: Confirms a workflow with a success message.
-  it("confirms a workflow with a success message", async () => {
-    const promise = confirmDryRunPreview(mockStudentReminderPreview.id);
-    await vi.advanceTimersByTimeAsync(1200);
-    const result = await promise;
-
-    expect(result.success).toBe(true);
-    expect(result.message).toContain("approved");
+  // Verifies: Ticket 38 — mock confirm never reports Canvas execution success.
+  it("rejects mock confirm so Canvas execution is not faked", async () => {
+    await expect(
+      confirmDryRunPreview(mockStudentReminderPreview.id),
+    ).rejects.toBeInstanceOf(DryRunPreviewError);
+    await expect(
+      confirmDryRunPreview(mockStudentReminderPreview.id),
+    ).rejects.toThrow(/cannot execute Canvas actions/i);
   });
 });
