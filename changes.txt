@@ -708,7 +708,7 @@ FILES
     app/frontend/src/lib/canvas-timezone.ts
     app/frontend/src/lib/assignment-utils.ts
     app/frontend/src/lib/map-chat-reply.ts
-    db/migrations/044_course_timezone.sql
+    db/migrations/044_canvas_connection_time_zone.sql
 
 WHAT AND WHY
     Assignment due-date updates could skew hours when chat emitted naive or
@@ -1059,6 +1059,7 @@ WHAT AND WHY
 
 COMMITS
     3346931  Use resolved assignment and student names in previews and grade handoff
+    4ec2130  Restore field-memory persistence regression test from #1477
 
 FILES
     app/backend/app/services/write_preview.py
@@ -1066,6 +1067,7 @@ FILES
     test/backend/test_write_preview.py
     test/backend/test_update_assignment_resolution.py
     test/backend/test_update_grade_resolution.py
+    test/backend/test_field_memory_persistence.py
 
 WHAT AND WHY
     Follow-up to Yerdana UX review on #1477 (persist assignment/student refs,
@@ -1074,6 +1076,236 @@ WHAT AND WHY
     use the resolved assignment title; affected_resources no longer leaves
     assignment name as None. Grade handoff names 1-3 resolved students; larger
     sets fall back to a count. assignment_label uses resolved title when known.
+
+    Restored test/backend/test_field_memory_persistence.py (removed from develop
+    via #1518 after #1477 merged). Unit coverage for merge helpers lives in
+    test_field_memory_unit.py; this module closes the remaining acceptance gap:
+    a successful fetch_assignments or fetch_students read must persist refs into
+    conversation.field_memory, and a follow-up chat turn must inject FIELD MEMORY
+    so the model can reuse "that assignment" / "the first student" without
+    clarifying (#1432).
+
+================================================================================
+21. fix/course-migration-maintainance
+   Ticket 10: course-name repair migration
+================================================================================
+
+COMMITS
+    91705b2  Add migration to repair canvas course names
+    120066f  Document course-name repair migration details
+
+FILES
+    db/init/01_schema.sql
+    db/migrations/043_repair_canvas_course_names.sql
+    db/migrations/README.md
+    test/backend/test_canvas.py
+
+WHAT AND WHY
+    Existing users can have stale chat course context in two places:
+      - canvas_course_names: the connection-scoped course-name resolver index
+      - conversations.course_name: the denormalized "current course for this
+        conversation" snapshot used in chat prompts and API responses
+
+    Earlier versions of this branch tried to repair canvas_course_names.name to
+    "Name / Code". That is NOT the final design. After #1475,
+    canvas_course_names is an ALIAS TABLE: it intentionally preserves
+    historical names so instructors can keep resolving a course by an older
+    label after Canvas renames it. Prompt-facing display labels are built from
+    the current Course row, using courses.name plus courses.course_code.
+
+    Final repair policy:
+      - preserve existing canvas_course_names aliases
+      - refresh alias workflow_state from courses.workflow_state
+      - ensure the current courses.name exists as an alias for each indexed
+        Canvas course
+      - backfill conversations.course_name from courses.name
+      - keep the migration idempotent by using deterministic UPDATEs and an
+        INSERT ... ON CONFLICT path against uq_connection_canvas_course_name
+
+    The migration is numbered 043_repair_canvas_course_names.sql, not 041 or
+    042. #1475 already owns 041_canvas_course_names_aliases.sql, and #1499 now
+    owns 042_course_unique_per_instructor_url.sql on develop.
+
+ARCHITECTURE DELTA
+    * Course display truth remains Course.name / Course.course_code.
+    * canvas_course_names is resolver state, not prompt display state. It may
+      contain multiple names for the same Canvas course after #1475.
+    * conversations.course_name is repaired as part of the same one-time data
+      maintenance so CURRENT COURSE and YOUR COURSES do not disagree in old
+      chats.
+
+*** SRP WARNINGS ***
+  ! Do not pack course_code into canvas_course_names.name. It duplicates
+    prompt formatting, disagrees with #1475, and the next sync/prompt helper
+    will treat the value as a plain alias.
+  ! Do not rewrite all aliases to courses.name. That destroys rename history
+    and can collapse rows into uq_connection_canvas_course_name conflicts.
+    Add the current name alias; preserve older aliases.
+  ! If another migration lands after 043 before this PR merges, renumber this
+    file and update db/init/01_schema.sql, db/migrations/README.md, and the
+    test path together.
+
+TEST POSTURE
+    Focused static checks run locally:
+      PYTHONPATH=./app/backend app/backend/.venv/bin/python -m py_compile \
+        test/backend/test_canvas.py \
+        app/backend/app/models/canvas_course_name.py \
+        app/backend/app/services/canvas.py \
+        app/backend/app/services/chat.py
+
+      git diff --check
+
+    DB-backed pytest was not rerun in the latest conflict-resolution pass
+    because local Postgres was not listening on localhost:5433. The focused
+    regression test is:
+      test/backend/test_canvas.py::
+        test_canvas_course_name_repair_migration_updates_stale_labels_from_courses
+
+
+================================================================================
+22. fix/message-workflow-bugs
+   Tickets 24/25: message review reset + draft/preview/send synchronization
+================================================================================
+
+COMMITS
+    ee95feb  Preserve sent draft snapshot on success
+
+FILES
+    app/frontend/src/components/messages/MessageDraftPage.tsx
+    test/frontend/pages/StudentMessageDraftPage.test.tsx
+
+WHAT AND WHY
+    Message compose had three closely related pieces of state: the editable
+    draft form, the confirmation preview, and the post-send success preview.
+    The send path used live form/watch state directly and the success view
+    continued to depend on the editable draft existing after send. That made it
+    too easy for stale review state to remain visible after a successful send,
+    and left the sent/success UI coupled to mutable compose state instead of to
+    the exact message the instructor confirmed.
+
+    The fix captures a SentMessageSnapshot at confirm time:
+      - recipients
+      - subject
+      - body
+
+    sendMessageDraft now receives values from that snapshot, including the
+    recipient IDs derived from the same recipient objects. On successful send,
+    MessageDraftPage stores the snapshot, clears the editable draft, and renders
+    the success preview from the immutable sent snapshot. That means the review
+    state clears after send, history/success UI reflects the delivered content,
+    and review only reappears when a new compose/draft load creates a new
+    reviewable change.
+
+    The regression test now edits the draft subject/body, checks that the
+    confirmation dialog shows those edits, confirms send, and asserts the
+    service call receives the same subject/body/recipient selection plus the
+    draft course canvasUrl. It also verifies the success screen shows the same
+    sent content and that the Send button is no longer present.
+
+ARCHITECTURE DELTA
+    * Message send state now has a stable boundary: editable draft state stops
+      at confirmation, and post-send rendering uses SentMessageSnapshot.
+    * Canvas URL forwarding remains owned by FetchMessageDraftOptions and is
+      passed through unchanged to sendMessageDraft. The branch does not add a
+      backend route change; backend draft-course Canvas URL fallback was already
+      covered separately.
+
+*** SRP WARNINGS ***
+  ! Do not render the success preview from react-hook-form watch values or
+    selectedRecipients again. Those are compose-state values and can drift or
+    reset independently of what was confirmed. Success must use the sent
+    snapshot.
+  ! Keep recipientIds and recipient objects derived from the same snapshot.
+    Splitting those sources reopens the stale-recipient bug where the backend
+    PATCH could persist a different target set than the instructor reviewed.
+  ! MessageDraftPage should not infer or rewrite canvasUrl. It should pass the
+    draft/course option through to the service; backend ownership handles
+    course-scoped Canvas URL fallback and validation.
+
+TEST POSTURE
+    Focused checks run locally on fix/message-workflow-bugs:
+      npm exec --yes --package node@22.13.0 -- \
+        node ./node_modules/vitest/vitest.mjs run --config vitest.config.ts \
+        pages/StudentMessageDraftPage.test.tsx \
+        services/messageDraft.test.ts
+        -> 17 passed
+
+      PYTHONPATH=./app/backend \
+      DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
+      app/backend/.venv/bin/pytest \
+        test/backend/test_message_send_validation.py::\
+        test_send_without_canvas_url_uses_draft_course_canvas_url -v
+        -> 1 passed
+
+
+================================================================================
+23. fix/course-code-validation
+   Ticket: course-code validation on instructor course creation
+================================================================================
+
+COMMITS
+    6185babc  Validate course code format on course creation
+
+FILES
+    app/backend/app/schemas/canvas.py
+    app/frontend/src/lib/course-code-validation.ts
+    app/frontend/src/pages/Instructor/InstructorCourses/CreateCourseDialog.tsx
+    test/backend/test_canvas.py
+    test/frontend/pages/Instructor/InstructorCourses/CreateCourseDialog.test.tsx
+
+WHAT AND WHY
+    Manual Canvas course creation accepted arbitrary course_code text and passed
+    it through to Canvas. That allowed punctuation or malformed codes such as
+    COSC@499 to leave the app boundary before the instructor saw a targeted
+    validation message.
+
+    The branch adds the same course-code shape in the backend request schema
+    and the frontend create-course dialog:
+      - optional course codes remain allowed
+      - blank course codes are normalized to null
+      - valid examples include COSC 499, COSC499, and subject-only codes
+      - malformed punctuation is rejected with:
+        "Use a subject and number like COSC 499 or COSC499."
+
+    The frontend now validates inline as the instructor types and on submit,
+    marks the input with aria-invalid when needed, and blocks createCourse
+    before making a Canvas request when the code is invalid. The backend keeps
+    the authoritative guard in CourseCreate so direct API callers get the same
+    422 behavior and Canvas is not called with invalid punctuation.
+
+ARCHITECTURE DELTA
+    * Course-code formatting has a small shared frontend helper for UI
+      validation while the backend schema remains the source of truth for API
+      enforcement.
+    * The create-course flow still owns trimming and nullable optional values
+      at the form boundary before calling the service.
+    * No Canvas service contract change is introduced; invalid requests are
+      stopped before service calls.
+
+*** SRP WARNINGS ***
+  ! Keep frontend and backend course-code rules aligned. The frontend helper is
+    for immediate UX only; backend CourseCreate must continue to enforce the
+    request contract for direct API and test clients.
+  ! Do not move Canvas-specific error handling into the course-code helper. It
+    should remain a narrow formatting validator used by the create-course form.
+  ! Preserve the optional nature of course_code. Empty input should keep sending
+    null rather than an empty string.
+
+TEST POSTURE
+    Focused checks run locally on fix/course-code-validation:
+      PYTHONPATH=./app/backend \
+      DATABASE_URL=postgresql+asyncpg://appuser:localdev@localhost:5433/appdb \
+      app/backend/.venv/bin/pytest \
+        test/backend/test_canvas.py::test_create_course_rejects_invalid_course_code -v
+        -> 1 passed
+
+      From test/frontend:
+      npm exec --yes --package node@22.13.0 -- \
+        node ../../app/frontend/node_modules/vitest/vitest.mjs run \
+        --config vitest.config.ts \
+        pages/Instructor/InstructorCourses/CreateCourseDialog.test.tsx
+        -> 4 passed
+
 
 ================================================================================
 CROSS-CUTTING NOTES
@@ -1092,6 +1324,13 @@ FILES TOUCHED BY MULTIPLE BRANCHES (conflict + coupling hotspots)
         7115e25c, ea8a844c.
     app/backend/app/services/llm/student_context.py
         12cd0d0d, c84c3eb7.
+    test/backend/test_canvas.py
+        fix/stale-course-context (#1475), first-course Canvas URL resolution,
+        and fix/course-migration-maintainance all touch the course-name test
+        area. Preserve both alias-refresh behavior and the 043 repair test.
+    db/migrations/*
+        Migration numbers are actively contested around 041-043. Always check
+        origin/develop and open course-migration branches before renumbering.
 
 TEST POSTURE AT TIME OF WRITING
     Backend  : 1244 passed, 1 skipped

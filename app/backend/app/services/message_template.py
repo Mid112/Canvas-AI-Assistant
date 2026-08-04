@@ -1,5 +1,5 @@
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.course import Course
@@ -17,7 +17,14 @@ async def list_message_templates(
     query = select(MessageTemplate).where(MessageTemplate.user_id == user.id)
     if course_id is not None:
         await _require_owned_course(db, user, course_id)
-        query = query.where(MessageTemplate.course_id == course_id)
+        # Course-scoped compose should surface both course templates and
+        # user-wide templates (course_id IS NULL).
+        query = query.where(
+            or_(
+                MessageTemplate.course_id == course_id,
+                MessageTemplate.course_id.is_(None),
+            )
+        )
     result = await db.scalars(query.order_by(MessageTemplate.created_at.desc()))
     return list(result)
 

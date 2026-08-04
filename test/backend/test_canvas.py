@@ -1,5 +1,6 @@
 import uuid
 import asyncio
+from pathlib import Path
 import pytest
 from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException, status
@@ -9,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from app.config import settings
 from app.main import app
 from app.models.canvas_course_name import CanvasCourseName
+from app.models.conversation import Conversation
 from app.models.course import Course
 from app.models.user import User
 
@@ -724,9 +726,45 @@ def test_create_assignment(client, auth_headers):
     assert response.status_code == 200
     assert response.json()["id"] == 11
     mock.assert_awaited_once()
-    # payload passes through AssignmentCreate, which fills in points_possible=None
-    # for any field the client didn't send
-    assert mock.await_args.args[:2] == (12345, payload | {"points_possible": None})
+    # Ticket 21: omitted points become ungraded (grading_type=not_graded),
+    # not a invented numeric default. Omit points_possible like the MCP server.
+    assert mock.await_args.args[0] == 12345
+    assert mock.await_args.args[1] == {
+        **payload,
+        "grading_type": "not_graded",
+    }
+    assert "points_possible" not in mock.await_args.args[1]
+
+
+# Verifies: Ungraded create sends Canvas grading_type=not_graded (Ticket 21).
+def test_create_ungraded_assignment_sets_not_graded(client, auth_headers):
+    local_course_id = _sync_local_course(client, auth_headers)
+    payload = {
+        "name": "Reading Check-in",
+        "description": "Ungraded reflection",
+        "due_at": "2026-12-15T23:59:00Z",
+        "points_possible": None,
+    }
+    created = MOCK_ASSIGNMENT | {
+        "id": 12,
+        "name": "Reading Check-in",
+        "points_possible": None,
+        "grading_type": "not_graded",
+    }
+
+    with patch("app.services.canvas.create_assignment", new_callable=AsyncMock) as mock:
+        mock.return_value = created
+        response = client.post(
+            f"/api/v1/canvas/courses/{local_course_id}/assignments?canvas_url={CANVAS_URL}",
+            json=payload,
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 200
+    mock.assert_awaited_once()
+    canvas_body = mock.await_args.args[1]
+    assert canvas_body["grading_type"] == "not_graded"
+    assert "points_possible" not in canvas_body
 
 
 # Verifies: Update assignment.
@@ -739,7 +777,16 @@ def test_update_assignment(client, auth_headers):
     }
     updated = MOCK_ASSIGNMENT | {"name": "Updated Assignment"}
 
-    with patch("app.services.canvas.update_assignment", new_callable=AsyncMock) as mock:
+    with (
+        # UI updates omit points_possible; update_course_assignment fetches the
+        # live assignment to preserve the existing score before Canvas PUT.
+        patch(
+            "app.services.canvas.fetch_assignment",
+            new_callable=AsyncMock,
+            return_value=MOCK_ASSIGNMENT,
+        ),
+        patch("app.services.canvas.update_assignment", new_callable=AsyncMock) as mock,
+    ):
         mock.return_value = updated
         response = client.patch(
             f"/api/v1/canvas/courses/{local_course_id}/assignments/10?canvas_url={CANVAS_URL}",
@@ -749,10 +796,12 @@ def test_update_assignment(client, auth_headers):
 
     assert response.status_code == 200
     assert response.json()["name"] == "Updated Assignment"
-    # payload passes through AssignmentUpdate, which fills in points_possible=None
-    # for any field the client didn't send
     mock.assert_awaited_once_with(
-        12345, 10, payload | {"points_possible": None}, "test-canvas-token", CANVAS_URL
+        12345,
+        10,
+        payload | {"points_possible": MOCK_ASSIGNMENT["points_possible"]},
+        "test-canvas-token",
+        CANVAS_URL,
     )
 
 
@@ -1328,6 +1377,78 @@ def test_canvas_course_names_refreshed_on_sync(client):
     assert "Original Name" not in sent_message
 
 
+# Verifies: the one-time repair migration preserves aliases, inserts the
+# current course-name alias, repairs workflow state, and remains idempotent.
+def test_canvas_course_name_repair_migration_updates_stale_labels_from_courses(client):
+    from app.config import settings as app_settings
+
+    headers = _register_with_canvas(client)
+    canvas_id = uuid.uuid4().int % 10_000_000
+
+    with (
+        patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock,
+        patch.object(app_settings, "CANVAS_COURSE_SYNC_COOLDOWN_SECONDS", 0),
+    ):
+        mock.return_value = [_unique_course(canvas_id) | {"name": "COSC 333", "course_code": "COSC333"}]
+        fetch_resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
+        assert fetch_resp.status_code == 200
+        local_id = fetch_resp.json()[0]["local_id"]
+
+        set_resp = client.patch(
+            "/api/v1/canvas/active-course", json={"local_course_id": local_id}, headers=headers
+        )
+        assert set_resp.status_code == 200
+
+    async def _corrupt_repair_and_read() -> tuple[list[tuple[str, str | None]], str | None]:
+        engine = create_async_engine(settings.DATABASE_URL)
+        Session = async_sessionmaker(engine, expire_on_commit=False)
+        try:
+            async with Session() as db:
+                course = await db.get(Course, local_id)
+                assert course is not None
+                user_id = course.instructor_id
+                course.name = "Capstone Project"
+                course.course_code = "COSC 499"
+                course.workflow_state = "available"
+
+                indexed = await db.scalar(
+                    select(CanvasCourseName).where(CanvasCourseName.local_course_id == local_id)
+                )
+                assert indexed is not None
+                indexed.name = "COSC 333"
+                indexed.workflow_state = "completed"
+                db.add(Conversation(user_id=user_id, course_id=local_id, course_name="COSC 333"))
+                await db.commit()
+
+            migration_sql = (
+                Path(__file__).resolve().parents[2] / "db/migrations/043_repair_canvas_course_names.sql"
+            ).read_text()
+            async with engine.begin() as conn:
+                raw_connection = await conn.get_raw_connection()
+                asyncpg_connection = raw_connection.driver_connection
+                assert asyncpg_connection is not None
+                await asyncpg_connection.execute(migration_sql)
+                await asyncpg_connection.execute(migration_sql)
+
+            async with Session() as db:
+                aliases = await db.execute(
+                    select(CanvasCourseName.name, CanvasCourseName.workflow_state)
+                    .where(CanvasCourseName.local_course_id == local_id)
+                    .order_by(CanvasCourseName.name)
+                )
+                conversation_name = await db.scalar(
+                    select(Conversation.course_name).where(Conversation.course_id == local_id)
+                )
+                return [(name, state) for name, state in aliases.all()], conversation_name
+        finally:
+            await engine.dispose()
+
+    repaired_aliases, repaired_conversation_name = asyncio.run(_corrupt_repair_and_read())
+
+    assert set(repaired_aliases) == {("COSC 333", "available"), ("Capstone Project", "available")}
+    assert repaired_conversation_name == "Capstone Project"
+
+
 # ---------------------------------------------------------------------------
 # POST /canvas/courses — new-account token URL resolution (#1425)
 # ---------------------------------------------------------------------------
@@ -1363,7 +1484,7 @@ def test_create_course_uses_saved_connection_when_canvas_url_omitted(client, mon
     created = {
         "id": 9001,
         "name": "Capstone Project",
-        "course_code": "COSC499",
+        "course_code": "COSC 499",
         "workflow_state": "unpublished",
         "total_students": 0,
     }
@@ -1381,14 +1502,34 @@ def test_create_course_uses_saved_connection_when_canvas_url_omitted(client, mon
     ):
         response = client.post(
             "/api/v1/canvas/courses",
-            json={"name": "Capstone Project", "course_code": "COSC499", "publish": False},
+            json={"name": "Capstone Project", "course_code": "COSC 499", "publish": False},
             headers=headers,
         )
 
     assert response.status_code == 201, response.text
     assert response.json()["name"] == "Capstone Project"
+    assert response.json()["course_code"] == "COSC 499"
     mock_create.assert_awaited_once()
+    assert mock_create.await_args.args[1]["course_code"] == "COSC 499"
     assert mock_create.await_args.args[3] == connection_url
+
+
+# Verifies: Course create rejects invalid course-code punctuation before Canvas is called.
+def test_create_course_rejects_invalid_course_code(client, auth_headers):
+    with (
+        patch("app.services.canvas.fetch_accounts", new=AsyncMock()) as mock_accounts,
+        patch("app.services.canvas.create_course", new=AsyncMock()) as mock_create,
+    ):
+        response = client.post(
+            "/api/v1/canvas/courses",
+            json={"name": "Capstone Project", "course_code": "COSC@499", "publish": False},
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 422
+    assert "Use a subject and number like COSC 499 or COSC499." in response.text
+    mock_accounts.assert_not_awaited()
+    mock_create.assert_not_awaited()
 
 
 # Verifies: Missing Canvas token on create returns reconnect guidance, not a raw PATCH path.

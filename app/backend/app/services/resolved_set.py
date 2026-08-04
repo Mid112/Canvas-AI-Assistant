@@ -53,12 +53,32 @@ _STATUS_FILTERS: dict[SubmissionStatusFilter, frozenset[SubmissionStatus]] = {
 }
 
 
+async def active_roster_names(
+    course: Course,
+    user: User,
+    db: AsyncSession,
+) -> dict[int, str]:
+    """Active enrollments as {canvas_user_id: name}.
+
+    Split out of compute_submissions_by_status so a caller walking several
+    assignments in one turn can fetch the roster once and hand it back in.
+    get_students hits Canvas (fetch_enrollments) and then reconciles every
+    local Student row, so repeating it per assignment turns one course-wide
+    question into one Canvas roster call per assignment."""
+    students = await get_students(course.id, user, course.canvas_url, db)
+    return {
+        int(s.canvas_user_id): s.name for s in students if s.enrollment_state == "active"
+    }
+
+
 async def compute_submissions_by_status(
     course: Course,
     assignment_id: int,
     user: User,
     db: AsyncSession,
     status: SubmissionStatusFilter,
+    *,
+    active_names: dict[int, str] | None = None,
 ) -> list[dict]:
     """Students matching a submission-status category on this assignment
     — see _STATUS_FILTERS for exactly what "missing" and "late" each
@@ -67,14 +87,17 @@ async def compute_submissions_by_status(
     withdrawn/inactive enrollment's stale submission record never
     produces a message target.
 
+    Pass active_names to reuse a roster already fetched this turn (see
+    active_roster_names); omitted, it is fetched here as before. The
+    roster is per course, not per assignment, so sharing it across
+    assignments changes nothing about the result.
+
     Returns [{"user_id": int, "name": str}, ...], deduped by construction
     (one submission row per student per assignment)."""
     matching_statuses = _STATUS_FILTERS[status]
     submissions = await get_submissions(course.id, assignment_id, user, course.canvas_url, db)
-    students = await get_students(course.id, user, course.canvas_url, db)
-    active_names = {
-        int(s.canvas_user_id): s.name for s in students if s.enrollment_state == "active"
-    }
+    if active_names is None:
+        active_names = await active_roster_names(course, user, db)
 
     return [
         {"user_id": s.user_id, "name": active_names[s.user_id] or s.student_name or f"Student {s.user_id}"}

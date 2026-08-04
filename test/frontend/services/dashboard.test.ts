@@ -40,6 +40,13 @@ describe("dashboard service", () => {
       }),
     );
     expect(result.metrics.activeCourses).toBe(1);
-    expect(result.notifications).toEqual([]);
+    expect(result.notifications).toEqual([
+      {
+        id: "daily-summary",
+        message: "Course summary: 1 course, 20 students, 4 assignments",
+        timestamp: "Based on latest dashboard data",
+        variant: "info",
+      },
+    ]);
   });
 });

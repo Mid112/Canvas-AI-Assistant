@@ -1,6 +1,6 @@
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,10 @@ import { useActiveCourse } from "@/contexts/useActiveCourse";
 import { useInstitution } from "@/contexts/useInstitution";
 import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
+import { useInstructorCanvasTimezone } from "@/lib/useInstructorCanvasTimezone";
 import { disambiguateCourseLabels } from "@/lib/disambiguate-course-labels";
 import { pageShellNarrow } from "@/lib/page-shell";
-import type { AiActionDraftLocationState } from "@/routes/paths";
+import { paths, type AiActionDraftLocationState } from "@/routes/paths";
 import {
   discardTypedDraft,
   saveTypedDraft,
@@ -43,6 +44,7 @@ const initialDescribeValues: AssignmentDescribeValues = {
 
 export function InstructorAssignmentCreatePage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const locationState = location.state as AiActionDraftLocationState | null;
   const seededDraft = locationState?.aiAssignmentDraft;
   const typedDraftId = locationState?.typedDraftId;
@@ -88,9 +90,11 @@ export function InstructorAssignmentCreatePage() {
           description: seededDraft.description ?? "",
           dueDate: seededDraft.dueDate ?? "",
           pointsPossible:
-            typeof seededDraft.pointsPossible === "number"
+            typeof seededDraft.pointsPossible === "number" &&
+            Number.isFinite(seededDraft.pointsPossible) &&
+            seededDraft.pointsPossible > 0
               ? seededDraft.pointsPossible
-              : 100,
+              : null,
         }
       : null,
   );
@@ -111,6 +115,7 @@ export function InstructorAssignmentCreatePage() {
   );
 
   const canvasUrl = useCanvasConnectionUrl();
+  const instructorTimeZone = useInstructorCanvasTimezone(canvasUrl);
   const {
     availableCourses,
     isLoading: isLoadingCourses,
@@ -280,6 +285,24 @@ export function InstructorAssignmentCreatePage() {
     setDraftSaveStatus("Draft saved. Resume it anytime from the assistant.");
   };
 
+  // Carries the prompt across rather than restarting it. Seeds the same
+  // aiQuizDraft state the assistant handoff and typed-draft resume already
+  // use, so the Quiz Creator opens on describe with the text in place.
+  const handleSwitchToQuiz = (prompt: string) => {
+    navigate(paths.instructor.quizCreate, {
+      state: {
+        aiQuizDraft: {
+          ...(describeValues.courseId
+            ? { courseId: Number(describeValues.courseId) }
+            : {}),
+          name: "",
+          description: "",
+          prompt,
+        },
+      },
+    });
+  };
+
   const handleGenerate = async (values: AssignmentDescribeValues) => {
     if (!accessToken) {
       setGenerateError("Your session has expired. Please sign in again.");
@@ -295,6 +318,7 @@ export function InstructorAssignmentCreatePage() {
       const generated = await generateAssignmentDraft(courseId, values.prompt, {
         accessToken,
         canvasUrl,
+        timeZone: instructorTimeZone,
       });
       resetPreviewState();
       setDraft(generated);
@@ -363,6 +387,7 @@ export function InstructorAssignmentCreatePage() {
       const previewSummary = await previewAssignmentDraft(payload, {
         accessToken,
         canvasUrl,
+        timeZone: instructorTimeZone,
       });
       setPreview(previewSummary);
       setPendingApproval(values);
@@ -397,6 +422,7 @@ export function InstructorAssignmentCreatePage() {
       }, {
         accessToken,
         canvasUrl,
+        timeZone: instructorTimeZone,
       });
       if (user?.id && savedTypedDraftId) {
         discardTypedDraft(user.id, savedTypedDraftId);
@@ -484,7 +510,9 @@ export function InstructorAssignmentCreatePage() {
             <div>
               <p className="font-medium">Due date</p>
               <p className="text-muted-foreground">
-                {formatDueDateForDisplay(approvedValues.dueDate)}
+                {formatDueDateForDisplay(approvedValues.dueDate, {
+                  treatAsDatetimeLocal: true,
+                })}
               </p>
             </div>
           </CardContent>
@@ -543,6 +571,7 @@ export function InstructorAssignmentCreatePage() {
           isLoadingCourses={isLoadingCourses}
           onGenerate={handleGenerate}
           onValuesChange={handleDescribeValuesChange}
+          onSwitchToQuiz={handleSwitchToQuiz}
         />
       ) : isEnhancingDescription ? (
         /* There's a real LLM round-trip between the assistant handoff and a
@@ -568,6 +597,7 @@ export function InstructorAssignmentCreatePage() {
           onApprove={handleRequestApproval}
           onBack={handleBack}
           onDraftChange={handleReviewDraftChange}
+          instructorTimeZone={instructorTimeZone}
         />
       ) : null}
 

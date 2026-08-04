@@ -1,7 +1,6 @@
 import html
 import json
 import re
-from datetime import datetime
 from typing import Literal, cast
 
 import httpx
@@ -9,6 +8,7 @@ from fastapi import HTTPException, status
 
 from app.config import settings
 from app.schemas.preview import QuizDraftRequest, QuizDraftResponse, QuizQuestionDraft
+from app.services.due_date import normalize_due_date_to_utc_iso, parse_due_date
 from app.services.llm.json_extraction import loads_llm_json
 from app.services.llm.llm_setting import get_llm_adapter
 
@@ -32,6 +32,74 @@ def _plain_text(value: str) -> str:
     return "\n".join(line for line in lines if line).strip()
 
 
+# Both validators reject a quiz whose per-question points don't add up to the
+# total: services/quiz_validation.py's _check_points_consistency and the
+# client's quizCreateSchema superRefine, both at a 0.01 tolerance.
+_POINTS_TOLERANCE = 0.01
+# Below this, an even split would round some question to zero, which
+# _check_questions rejects outright ("points_possible must be greater than
+# zero"). Let the questions define the total instead of forcing the split.
+_MIN_QUESTION_POINTS = 0.01
+
+
+def _reconcile_points(
+    points_possible: float | None,
+    questions: list[QuizQuestionDraft],
+) -> tuple[float | None, list[QuizQuestionDraft]]:
+    """Make the draft's total and its per-question points agree before anyone
+    sees it.
+
+    The generator used to return both numbers exactly as the model emitted
+    them, with nothing tying them together. Regenerating a quiz — e.g. after
+    editing one word of the description — produced a fresh, independent guess
+    at per-question points, so a "50 points total" quiz could come back as five
+    5-point questions summing to 25. Both validators then rejected it and the
+    Review step disabled its own submit button, leaving the instructor stuck on
+    a draft they could not approve and had not authored.
+
+    Reconciling here rather than in the client keeps one answer for every entry
+    point (form, assistant handoff, regeneration). The instructor is still free
+    to redistribute afterwards; this only guarantees the *starting* draft is
+    internally consistent.
+    """
+    if not questions:
+        return points_possible, questions
+
+    scored = sum(question.points_possible for question in questions)
+
+    # No usable total: the questions define it.
+    if points_possible is None or points_possible <= 0:
+        return round(scored, 2), questions
+
+    if abs(scored - points_possible) <= _POINTS_TOLERANCE:
+        return points_possible, questions
+
+    # Scale rather than split evenly, so a deliberately weighted quiz (one
+    # 20-point essay among 5-point recall questions) keeps its shape.
+    if scored > 0:
+        factor = points_possible / scored
+        scaled = [
+            round(question.points_possible * factor, 2) for question in questions
+        ]
+    else:
+        even = round(points_possible / len(questions), 2)
+        scaled = [even] * len(questions)
+
+    # Absorb the rounding drift in the last question so the sum is exact:
+    # 50 over 3 becomes 16.67 / 16.67 / 16.66, not 16.67 * 3 = 50.01.
+    scaled[-1] = round(points_possible - sum(scaled[:-1]), 2)
+
+    if any(value < _MIN_QUESTION_POINTS for value in scaled):
+        # The total cannot be represented across this many questions without
+        # zeroing one out. The questions win; the instructor can still edit.
+        return round(scored, 2), questions
+
+    return points_possible, [
+        question.model_copy(update={"points_possible": value})
+        for question, value in zip(questions, scaled, strict=True)
+    ]
+
+
 async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
     system = (
         "You help instructors draft Canvas quizzes. "
@@ -42,7 +110,11 @@ async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
         '"questions": [{"question_text": "...", "question_type": '
         '"multiple_choice_question"|"true_false_question"|"short_answer_question"|"essay_question", '
         '"points_possible": number, "answers": [{"text": "...", "weight": 100 or 0}]}]}. '
-        "Include 3-5 questions when the prompt implies a quiz with questions. "
+        "Honour the number of questions the prompt asks for; when it does not "
+        "say, include 3-5 questions if it implies a quiz with questions. "
+        "The per-question points_possible values MUST add up exactly to the "
+        "quiz's points_possible. If the prompt names a total, divide it across "
+        "the questions rather than inventing a different total. "
         "For multiple_choice_question and true_false_question, set weight 100 on the "
         "correct answer and 0 on incorrect ones. "
         "Description and question_text must be plain text only."
@@ -77,9 +149,10 @@ async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
 
     due_at = None
     if data.get("due_at"):
+        normalized = normalize_due_date_to_utc_iso(str(data["due_at"]))
         try:
-            due_at = datetime.fromisoformat(str(data["due_at"]).replace("Z", "+00:00"))
-        except ValueError:
+            due_at = parse_due_date(normalized)
+        except (ValueError, TypeError, OverflowError):
             due_at = None
 
     questions: list[QuizQuestionDraft] = []
@@ -139,11 +212,19 @@ async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
     except (TypeError, ValueError):
         time_limit_value = None
 
+    raw_points = data.get("points_possible")
+    requested_total: float | None
+    try:
+        requested_total = float(raw_points) if raw_points is not None else None
+    except (TypeError, ValueError):
+        requested_total = None
+    total_points, questions = _reconcile_points(requested_total, questions)
+
     return QuizDraftResponse(
         title=str(data.get("title") or "Untitled Quiz"),
         description=_plain_text(str(data.get("description") or body.prompt)),
         due_at=due_at,
-        points_possible=data.get("points_possible"),
+        points_possible=total_points,
         allowed_attempts=allowed_attempts_value,
         time_limit=time_limit_value,
         questions=questions,

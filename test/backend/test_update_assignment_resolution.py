@@ -174,8 +174,10 @@ def test_update_assignment_reference_resolves_and_builds_preview(client):
     reply = body["reply"]
     assert reply["action"] == "intent_preview"
     assert reply["proposed_action"]["assignment_id"] == 222
-    assert reply["proposed_action"]["due_date"] == "2026-08-13T23:59:00"
+    assert reply["proposed_action"]["due_date"] == "2026-08-13T23:59:00+00:00"
     assert reply["proposed_action"]["local_course_id"] == local_course_id
+    assert reply["proposed_action"]["assignment_name"] == "final exam"
+    assert "'final exam'" in reply["preview_metadata"]["summary"]
     # Only the requested field is present — title/description/points_possible
     # were never mentioned, so they must be omitted (preserved automatically).
     assert "title" not in reply["proposed_action"]
@@ -207,7 +209,7 @@ def test_update_assignment_reference_all_fields(client):
     assert proposed["assignment_id"] == 111
     assert proposed["title"] == "Assignment One"
     assert proposed["description"] == "Updated instructions"
-    assert proposed["due_date"] == "2026-08-20T23:59:00"
+    assert proposed["due_date"] == "2026-08-20T23:59:00+00:00"
     assert proposed["points_possible"] == 60
 
 
@@ -256,9 +258,29 @@ def test_update_assignment_with_known_id_is_unaffected(client):
     assert _tool_call_log_actions(body["conversation_id"]) == []
 
 
-# Verifies: end to end — a resolved-reference preview confirms and
-# actually calls Canvas with the resolved assignment_id.
-def test_update_assignment_reference_confirm_writes_to_canvas(client):
+# Verifies: hour-only due-date updates normalize omitted seconds and keep
+# preview copy aligned with the proposed_action UTC payload (#1435).
+def test_update_assignment_hour_change_normalizes_and_matches_preview(client):
+    headers, _local_course_id = _register_with_canvas(client)
+
+    llm_outputs = [
+        '{"action": "update_assignment", "course_name": "CPSC 310", '
+        '"assignment_reference": "final exam", "due_date": "2026-08-13T17:00"}',
+        '{"assignment_id": 222}',
+    ]
+    with patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=_assignments())):
+        body = _chat(
+            client,
+            headers,
+            "change the final exam due time to 5 PM on August 13 2026",
+            llm_outputs,
+        )
+
+    assert body["is_error"] is False, body
+    reply = body["reply"]
+    assert reply["proposed_action"]["due_date"] == "2026-08-13T17:00:00+00:00"
+    assert "August 13, 2026 at 05:00 PM UTC" in reply["summary"]
+
     headers, local_course_id = _register_with_canvas(client)
 
     llm_outputs = [

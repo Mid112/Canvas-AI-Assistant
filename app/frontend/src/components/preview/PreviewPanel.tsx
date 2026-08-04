@@ -15,6 +15,7 @@ interface PreviewPanelProps {
   isConfirming?: boolean;
   confirmError?: string | null;
   isSavingEdits?: boolean;
+  saveEditsError?: string | null;
   onSaveEdits?: (changes: Record<string, unknown>) => void;
   onReject: () => void;
   onModify: () => void;
@@ -26,6 +27,7 @@ export function PreviewPanel({
   isConfirming = false,
   confirmError,
   isSavingEdits = false,
+  saveEditsError,
   onSaveEdits,
   onReject,
   onModify,
@@ -75,6 +77,7 @@ export function PreviewPanel({
             ]),
           )}
           fields={preview.proposedPlan}
+          error={saveEditsError}
           isSaving={isSavingEdits}
           onSave={onSaveEdits}
         />

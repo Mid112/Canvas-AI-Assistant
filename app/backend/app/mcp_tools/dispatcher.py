@@ -4,7 +4,6 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
-from dateutil import parser as date_parser
 from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,7 +48,9 @@ from app.services.canvas_idempotency import (
     run_idempotent_canvas_write,
 )
 from app.services.canvas_status import CanvasWriteResult
+from app.services.canvas_timezone import get_instructor_canvas_timezone
 from app.services.course_access import get_owned_course_or_404
+from app.services.due_date import normalize_due_date_to_utc_iso, parse_due_date
 from app.services.grade_management import submit_grade_update
 from app.services.llm.json_extraction import extract_json_object as _extract_json
 from app.services.message_validation import check_message_profanity, validate_message_for_send
@@ -120,15 +121,17 @@ def parse_action(raw_llm_output: str) -> Any:
 
 
 # Friendly clarifying questions for create_assignment's fields, keyed in
-# the order they're checked. points_possible is Optional in
-# CreateAssignmentAction (str | None, to keep update_assignment's partial
-# updates and the data model flexible), but for a *new* assignment every
-# field should be an explicit user decision before a preview is shown.
+# the order they're checked. points_possible may be null for ungraded
+# assignments (Ticket 21) — ask graded-vs-ungraded when the model hasn't
+# addressed points at all, never invent a default like 10.
 _CREATE_ASSIGNMENT_FIELD_QUESTIONS = {
     "title": "What should this assignment be called?",
     "description": "What should the assignment description say?",
     "due_date": "When is this assignment due?",
-    "points_possible": "How many points is this assignment worth?",
+    "points_possible": (
+        "Is this assignment graded? If yes, how many points is it worth? "
+        "If it's ungraded, say so — do not invent a point value."
+    ),
 }
 
 # Kept for call-site compatibility; quiz field gathering happens in the
@@ -239,6 +242,12 @@ def _map_mcp_assignments_result(mcp_result: dict[str, Any]) -> dict[str, Any]:
                 "due_at": item.get("due_at"),
                 "points_possible": item.get("points_possible"),
                 "course_id": item.get("course_id") or course_id,
+                # Carried so callers can tell drafts apart — course-wide
+                # missing/late analysis must skip unpublished assignments,
+                # and dropping the field here made every assignment look
+                # published on the MCP path. Same default as
+                # AssignmentResponse.published.
+                "published": item.get("published", True),
             }
         )
     return {"assignments": assignments}
@@ -311,8 +320,17 @@ def _create_assignment_missing_field(proposed: dict) -> str | None:
         value = proposed.get(field)
         if not isinstance(value, str) or not value.strip():
             return field
-    if proposed.get("points_possible") is None:
+    # Ticket 21: missing key → ask graded-vs-ungraded. Explicit null means
+    # ungraded and is complete; never treat null as "default to 10 points".
+    if "points_possible" not in proposed:
         return "points_possible"
+    points = proposed.get("points_possible")
+    if points is not None:
+        try:
+            if float(points) <= 0:
+                return "points_possible"
+        except (TypeError, ValueError):
+            return "points_possible"
     return None
 
 
@@ -335,7 +353,22 @@ def _send_message_missing_field(proposed: dict) -> str | None:
     return None
 
 
-def _create_assignment_due_date_in_past(due_date: str) -> bool:
+def _normalize_due_date_for_user(
+    due_date: str | None,
+    user: User,
+    canvas_url: str | None = None,
+) -> str | None:
+    if due_date is None:
+        return None
+    instructor_timezone = get_instructor_canvas_timezone(user, canvas_url)
+    return normalize_due_date_to_utc_iso(due_date, instructor_timezone)
+
+
+def _create_assignment_due_date_in_past(
+    due_date: str,
+    user: User,
+    canvas_url: str | None = None,
+) -> bool:
     """True if due_date parses to a date that has already passed.
 
     Mirrors assignment_validation._check_due_date's future-date rule,
@@ -344,12 +377,13 @@ def _create_assignment_due_date_in_past(due_date: str) -> bool:
     prompt tells the model what today is, but it doesn't reliably do the
     "nearest future occurrence" arithmetic itself — observed defaulting
     to the current year even when that puts the date in the past)."""
-    try:
-        due_dt = date_parser.parse(due_date)
-    except (date_parser.ParserError, ValueError, OverflowError, TypeError):
+    normalized = _normalize_due_date_for_user(due_date, user, canvas_url)
+    if normalized is None:
         return False
-    if due_dt.tzinfo is None:
-        due_dt = due_dt.replace(tzinfo=UTC)
+    try:
+        due_dt = parse_due_date(normalized, get_instructor_canvas_timezone(user, canvas_url))
+    except (ValueError, TypeError, OverflowError):
+        return False
     return due_dt <= datetime.now(UTC)
 
 
@@ -409,14 +443,31 @@ def _build_submissions_result(submissions: list[SubmissionResponse]) -> dict:
     }
 
 
-def _merge_assignment_update(current: AssignmentResponse, action: Any) -> AssignmentUpdate:
+def _merge_assignment_update(
+    current: AssignmentResponse,
+    action: Any,
+    user: User,
+    canvas_url: str | None = None,
+) -> AssignmentUpdate:
     """Canvas's assignment PUT is a full overwrite — fields left out of the
     payload get blanked, not left alone. Any field the user didn't ask to
     change is carried over from the just-fetched current Canvas state."""
+    instructor_timezone = get_instructor_canvas_timezone(user, canvas_url)
+
+    if action.due_date is not None:
+        normalized = _normalize_due_date_for_user(action.due_date, user, canvas_url)
+        due_at = parse_due_date(normalized or action.due_date, instructor_timezone)
+    else:
+        due_at = current.due_at
+        if isinstance(due_at, datetime) and due_at.tzinfo is None:
+            due_at = due_at.replace(tzinfo=UTC)
+        elif isinstance(due_at, str):
+            due_at = parse_due_date(due_at, instructor_timezone)
+
     return AssignmentUpdate(
         name=action.title if action.title is not None else current.name,
         description=action.description if action.description is not None else current.description,
-        due_at=action.due_date if action.due_date is not None else current.due_at,
+        due_at=due_at,
         points_possible=action.points_possible if action.points_possible is not None else current.points_possible,
     )
 
@@ -594,6 +645,7 @@ async def execute_tool(
         # handle_confirmed_action catches it as a ToolExecutionError.
         case "create_assignment":
             course = await _resolve_course(db, user, action.local_course_id)
+            due_date = _normalize_due_date_for_user(action.due_date, user, course.canvas_url)
 
             # re-validate at execution time — the preview may have been
             # shown seconds or minutes ago; Canvas state could have changed
@@ -602,7 +654,7 @@ async def execute_tool(
                 user,
                 action.title,
                 action.description,
-                action.due_date,
+                due_date,
                 action.points_possible,
                 db,
             )
@@ -610,22 +662,29 @@ async def execute_tool(
             assignment_payload = AssignmentCreate(
                 name=action.title,
                 description=action.description,
-                due_at=action.due_date,
+                due_at=due_date,
                 points_possible=action.points_possible,
             )
             if _mcp_enabled():
                 async def _mcp_create_assignment() -> dict[str, Any]:
+                    mcp_arguments: dict[str, Any] = {
+                        "course_id": int(course.canvas_course_id),
+                        "name": action.title,
+                        "due_at": action.due_date,
+                        "description": action.description,
+                    }
+                    if action.points_possible is None:
+                        # Ticket 21: ungraded — do not invent a points default.
+                        mcp_arguments["points_possible"] = None
+                        mcp_arguments["grading_type"] = "not_graded"
+                    else:
+                        mcp_arguments["points_possible"] = action.points_possible
+                        mcp_arguments["grading_type"] = "points"
                     mcp_result = await _call_mcp_tool(
                         user,
                         course.canvas_url,
                         "create_assignment",
-                        {
-                            "course_id": int(course.canvas_course_id),
-                            "name": action.title,
-                            "points_possible": action.points_possible,
-                            "due_at": action.due_date,
-                            "description": action.description,
-                        },
+                        mcp_arguments,
                     )
                     if not mcp_result.get("success") or not mcp_result.get("assignment"):
                         raise ToolExecutionError(
@@ -633,13 +692,15 @@ async def execute_tool(
                             log_detail=f"MCP create_assignment response: {mcp_result!r}",
                         )
                     created = mcp_result["assignment"]
+                    created_points = created.get("points_possible")
+                    if created_points is None:
+                        created_points = action.points_possible
                     return AssignmentResponse(
                         id=int(created.get("id")),
                         name=created.get("name") or action.title,
                         description=action.description,
                         due_at=created.get("due_at"),
-                        points_possible=created.get("points_possible")
-                        or action.points_possible,
+                        points_possible=created_points,
                         course_id=int(course.canvas_course_id),
                         published=bool(created.get("published", False)),
                     ).model_dump(mode="json")
@@ -760,13 +821,14 @@ async def execute_tool(
 
         case "update_assignment":
             course = await _resolve_course(db, user, action.local_course_id)
+            due_date = _normalize_due_date_for_user(action.due_date, user, course.canvas_url)
 
             await validate_assignment_for_update(
                 action.local_course_id,
                 user,
                 action.title,
                 action.description,
-                action.due_date,
+                due_date,
                 action.points_possible,
                 db,
             )
@@ -777,7 +839,9 @@ async def execute_tool(
             current = await get_assignment(
                 course.id, action.assignment_id, user, course.canvas_url, db
             )
-            update_payload = _merge_assignment_update(current, action)
+            update_payload = _merge_assignment_update(
+                current, action, user, course.canvas_url
+            )
 
             if _mcp_enabled():
                 async def _mcp_update_assignment() -> dict[str, Any]:
@@ -1160,7 +1224,12 @@ async def execute_tool(
                         "partial_plan": partial_plan,
                     }
 
-                if _create_assignment_due_date_in_past(proposed["due_date"]):
+                preview_course = await _resolve_course(db, user, proposed["local_course_id"])
+                if _create_assignment_due_date_in_past(
+                    proposed["due_date"],
+                    user,
+                    preview_course.canvas_url,
+                ):
                     partial_plan = {
                         key: value for key, value in proposed.items() if key not in ("action", "due_date")
                     }
