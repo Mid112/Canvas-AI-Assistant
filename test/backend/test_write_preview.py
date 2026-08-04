@@ -31,7 +31,26 @@ def test_update_assignment_preview_resources_reflect_changed_fields():
     assert resources["course"]["status"] == "unchanged"
     assert resources["assignment"]["status"] == "modified"
     assert resources["assignment"]["id"] == 42
+    assert resources["assignment"]["name"] == "Assignment 42"
     assert resources["assignment"]["changed_fields"] == ["points_possible"]
+    assert "(ID 42)" in preview["summary"]
+
+
+# Verifies: Update assignment preview prefers the resolved assignment name.
+def test_update_assignment_preview_uses_assignment_name_when_available():
+    preview = generate_write_preview(
+        {
+            "action": "update_assignment",
+            "assignment_id": 42,
+            "assignment_name": "Final Project",
+            "due_date": "2030-01-01T00:00:00",
+        },
+        COURSE,
+    )
+    assert "'Final Project'" in preview["summary"]
+    assert "(ID 42)" not in preview["summary"]
+    resources = {r["type"]: r for r in preview["affected_resources"]}
+    assert resources["assignment"]["name"] == "Final Project"
 
 
 # Verifies: Send message preview is irreversible with note and audience.

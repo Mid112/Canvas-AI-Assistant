@@ -1259,11 +1259,21 @@ async def _run_update_assignment_chain(
         return resolved
     course, assignment_id = resolved
 
+    assignment_row = await db.scalar(
+        select(Assignment).where(
+            Assignment.course_id == course.id,
+            Assignment.canvas_assignment_id == str(assignment_id),
+        )
+    )
+    assignment_name = assignment_row.title if assignment_row else None
+
     proposed_action: dict[str, Any] = {
         "action": "update_assignment",
         "local_course_id": course.id,
         "assignment_id": assignment_id,
     }
+    if assignment_name:
+        proposed_action["assignment_name"] = assignment_name
     for field_name in _UPDATE_ASSIGNMENT_FIELDS:
         value = getattr(action, field_name)
         if value is not None:
@@ -1328,6 +1338,14 @@ async def _resolve_grade_target(
         if student_id not in valid_ids:
             student_id = None
 
+    assignment_row = await db.scalar(
+        select(Assignment).where(
+            Assignment.course_id == course.id,
+            Assignment.canvas_assignment_id == str(assignment_id),
+        )
+    )
+    assignment_name = assignment_row.title if assignment_row else None
+
     if bulk_update:
         return _build_grade_handoff_result(
             course,
@@ -1335,6 +1353,7 @@ async def _resolve_grade_target(
             submissions,
             action.new_grade,
             action.reason,
+            assignment_name=assignment_name,
         )
 
     if student_id is None and action.student_reference:
@@ -1375,7 +1394,30 @@ async def _resolve_grade_target(
         [selected],
         action.new_grade,
         action.reason,
+        assignment_name=assignment_name,
     )
+
+
+_GRADE_HANDOFF_NAMED_STUDENT_LIMIT = 3
+
+
+def _grade_handoff_student_phrase(submissions: list[dict], student_count: int) -> str:
+    """Name a small resolved set in the assistant bubble; fall back to count."""
+    if student_count > _GRADE_HANDOFF_NAMED_STUDENT_LIMIT:
+        return f"{student_count} student{'s' if student_count != 1 else ''}"
+
+    names = [
+        submission.get("student_name") or f"Student {submission.get('user_id')}"
+        for submission in submissions
+        if _coerce_int(submission.get("user_id")) is not None
+    ]
+    if not names:
+        return f"{student_count} student{'s' if student_count != 1 else ''}"
+    if len(names) == 1:
+        return names[0]
+    if len(names) == 2:
+        return f"{names[0]} and {names[1]}"
+    return f"{names[0]}, {names[1]}, and {names[2]}"
 
 
 def _build_grade_handoff_result(
@@ -1384,6 +1426,8 @@ def _build_grade_handoff_result(
     submissions: list[dict],
     new_grade: str,
     reason: str | None,
+    *,
+    assignment_name: str | None = None,
 ) -> dict:
     """Return a chat response that opens the dedicated Grades tab.
 
@@ -1416,13 +1460,17 @@ def _build_grade_handoff_result(
         }
 
     student_count = len(student_ids)
-    assignment_label = f'assignment "{assignment_id}"'
+    assignment_label = (
+        f'assignment "{assignment_name}"'
+        if assignment_name
+        else f'assignment "{assignment_id}"'
+    )
+    student_phrase = _grade_handoff_student_phrase(submissions, student_count)
     # Keep the assistant bubble brief; the action card carries the actual link
     # and the Grades tab carries the detailed warnings/confirmation state.
     message = (
-        f"I found {student_count} student{'s' if student_count != 1 else ''} for "
-        f"{course.name}. Open the Grades tab to review the Canvas preview, warnings, "
-        "and approval step before anything is submitted."
+        f"I found {student_phrase} for {course.name}. Open the Grades tab to review "
+        "the Canvas preview, warnings, and approval step before anything is submitted."
     )
     return {
         "action": "respond",
