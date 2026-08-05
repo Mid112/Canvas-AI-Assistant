@@ -4,6 +4,8 @@ import {
   MessageDraftPage,
   MessageDraftPageHeader,
 } from "@/components/messages/MessageDraftPage";
+import { MessageSentPanel } from "@/components/messages/MessageSentPanel";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,11 +17,27 @@ import {
 import { fetchCourseStudentsWithSubmissionFallback } from "@/services/students";
 import { toStudentEmailRecipients } from "@/lib/student-analytics";
 import type { FetchMessageDraftOptions } from "@/types/messageDraft";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2, PenSquare } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 
 const RECIPIENT_LOAD_TIMEOUT_MS = 5000;
+
+const MESSAGES_TABS = ["inbox", "announcements", "sent", "compose"] as const;
+type MessagesTab = (typeof MESSAGES_TABS)[number];
+
+function parseMessagesTab(
+  raw: string | null,
+  hasAiDraft: boolean,
+): MessagesTab {
+  if (hasAiDraft || raw === "compose") {
+    return "compose";
+  }
+  if (raw === "announcements" || raw === "sent" || raw === "inbox") {
+    return raw;
+  }
+  return "inbox";
+}
 
 export function InstructorMessagesPage() {
   const { accessToken, user } = useAuth();
@@ -30,7 +48,7 @@ export function InstructorMessagesPage() {
   } = useActiveCourse();
   const canvasUrl = useCanvasConnectionUrl();
   const location = useLocation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [fetchOptions, setFetchOptions] =
     useState<FetchMessageDraftOptions | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -39,15 +57,23 @@ export function InstructorMessagesPage() {
   // Seed from the URL/AI draft on first paint so "?tab=compose" does not
   // briefly mount the inbox panel (which made Subject-field assertions flake
   // when the roster error banner appeared first).
-  const [tab, setTab] = useState(() =>
-    searchParams.get("tab") === "compose" || aiDraft ? "compose" : "inbox",
+  const [tab, setTab] = useState<MessagesTab>(() =>
+    parseMessagesTab(searchParams.get("tab"), Boolean(aiDraft)),
   );
 
+  const courseLabel = activeCourse?.displayName;
   const basePrompt = useMemo(
     () =>
       activeCourse ?
         `Draft a message for students in ${activeCourse.displayName}.`
       : "Draft a message for students in the active course.",
+    [activeCourse],
+  );
+  const announcementPrompt = useMemo(
+    () =>
+      activeCourse ?
+        `Draft a course announcement for ${activeCourse.displayName}.`
+      : "Draft a course announcement for the active course.",
     [activeCourse],
   );
   const activeFetchOptions =
@@ -76,6 +102,28 @@ export function InstructorMessagesPage() {
       : null,
     [activeCourse, aiDraft, basePrompt, canvasUrl],
   );
+  const announcementFetchOptions = useMemo<FetchMessageDraftOptions | null>(
+    () =>
+      activeCourse ?
+        {
+          courseId: activeCourse.localId,
+          prompt: announcementPrompt,
+          templateId: "course-announcement",
+          templateName: "Course Announcement",
+          emptyRecipients: true,
+          canvasUrl,
+        }
+      : null,
+    [activeCourse, announcementPrompt, canvasUrl],
+  );
+  const courseNameById = useMemo(() => {
+    const map: Record<number, string> = {};
+    for (const course of availableCourses) {
+      map[course.id] =
+        course.code?.trim() || course.name?.trim() || `Course ${course.id}`;
+    }
+    return map;
+  }, [availableCourses]);
   const draftSeedKey = [
     aiDraft?.subject ?? "",
     aiDraft?.body ?? "",
@@ -84,12 +132,20 @@ export function InstructorMessagesPage() {
     (aiDraft?.recipientIds ?? []).join(","),
   ].join("|");
 
-  useEffect(() => {
-    const tabParam = searchParams.get("tab");
-    if (tabParam === "compose" || aiDraft) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync tab to URL/AI draft on load
-      setTab("compose");
+  const handleTabChange = (value: string) => {
+    const next = parseMessagesTab(value, false);
+    setTab(next);
+    if (next === "inbox") {
+      setSearchParams({}, { replace: true });
+    } else {
+      setSearchParams({ tab: next }, { replace: true });
     }
+  };
+
+  useEffect(() => {
+    const next = parseMessagesTab(searchParams.get("tab"), Boolean(aiDraft));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync tab to URL/AI draft on load
+    setTab(next);
   }, [aiDraft, searchParams]);
 
   useEffect(() => {
@@ -216,8 +272,28 @@ export function InstructorMessagesPage() {
     );
   }
 
+  const composeContent =
+    !activeCourse ? (
+      <Card className="shadow-sm ring-1 ring-border/60">
+        <CardContent className="p-6 text-sm text-muted-foreground">
+          Select an active course to compose a new message.
+        </CardContent>
+      </Card>
+    ) : (
+      <>
+        <MessageDraftPageHeader />
+        <MessageDraftPage
+          key={draftSeedKey || "default-draft"}
+          fetchOptions={
+            activeFetchOptions ?? fallbackFetchOptions ?? undefined
+          }
+          onCancel={() => handleTabChange("inbox")}
+        />
+      </>
+    );
+
   return (
-    <div className="flex flex-1 flex-col gap-4 p-4 md:p-6 lg:p-8">
+    <div className="relative flex flex-1 flex-col gap-4 p-4 md:p-6 lg:p-8">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
           Messages
@@ -244,35 +320,68 @@ export function InstructorMessagesPage() {
         </Card>
       ) : null}
 
-      <Tabs value={tab} onValueChange={setTab}>
+      <Tabs value={tab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="inbox">Inbox & replies</TabsTrigger>
-          <TabsTrigger value="compose">Compose</TabsTrigger>
+          <TabsTrigger value="announcements">Announcements</TabsTrigger>
+          <TabsTrigger value="sent">Sent</TabsTrigger>
         </TabsList>
         <TabsContent value="inbox" className="mt-4">
-          <MessageInboxPanel courseId={activeCourse?.localId} />
+          <MessageInboxPanel
+            courseId={activeCourse?.localId}
+            courseLabel={courseLabel}
+          />
         </TabsContent>
-        <TabsContent value="compose" className="mt-4 space-y-6">
+        <TabsContent value="announcements" className="mt-4 space-y-6">
           {!activeCourse ? (
             <Card className="shadow-sm ring-1 ring-border/60">
               <CardContent className="p-6 text-sm text-muted-foreground">
-                Select an active course to compose a new message.
+                Select an active course to post a course announcement.
               </CardContent>
             </Card>
           ) : (
             <>
-              <MessageDraftPageHeader />
+              <div className="space-y-1">
+                <h2 className="text-lg font-semibold tracking-tight">
+                  Course announcement
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Post to all students in {activeCourse.displayName}. This uses
+                  Canvas announcements (not a private conversation).
+                </p>
+              </div>
               <MessageDraftPage
-                key={draftSeedKey || "default-draft"}
-                fetchOptions={
-                  activeFetchOptions ?? fallbackFetchOptions ?? undefined
-                }
-                onCancel={() => setTab("inbox")}
+                key={`announcement-${activeCourse.localId}`}
+                fetchOptions={announcementFetchOptions ?? undefined}
+                onCancel={() => handleTabChange("inbox")}
               />
             </>
           )}
         </TabsContent>
+        <TabsContent value="sent" className="mt-4">
+          <MessageSentPanel
+            courseId={activeCourse?.localId}
+            courseLabel={courseLabel}
+            courseNameById={courseNameById}
+          />
+        </TabsContent>
+        <TabsContent value="compose" className="mt-4 space-y-6">
+          {composeContent}
+        </TabsContent>
       </Tabs>
+
+      {tab !== "compose" ? (
+        <Button
+          type="button"
+          size="lg"
+          className="fixed bottom-6 right-6 z-40 h-14 gap-2 rounded-full px-5 shadow-lg"
+          aria-label="Compose message"
+          onClick={() => handleTabChange("compose")}
+        >
+          <PenSquare className="size-5" aria-hidden="true" />
+          Compose
+        </Button>
+      ) : null}
     </div>
   );
 }
