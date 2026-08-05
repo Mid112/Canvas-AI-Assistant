@@ -517,3 +517,86 @@ def test_course_overview_matches_submissions_without_prior_visit(client):
 
     assert overview_payload["missing_submissions"] == missing_count == 1
     assert overview_payload["recent_assignments"][0]["submitted_count"] == submitted_count == 1
+
+
+# Regression test for review feedback on #1508: one assignment's Canvas
+# submissions fetch failing (timeout, 404, etc.) must not abort the whole
+# Overview response — other published assignments' live-refreshed counts
+# should still come through and the endpoint must still return 200.
+def test_course_overview_survives_one_assignment_canvas_failure(client):
+    headers = _register_with_canvas(client)
+    local_id = _sync_local_course(client, headers)
+    failing_assignment_id = uuid.uuid4().int % 10_000_000
+    healthy_assignment_id = failing_assignment_id + 1
+
+    assignments = [
+        {
+            "id": failing_assignment_id,
+            "name": "Flaky Canvas Assignment",
+            "description": None,
+            "due_at": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
+            "points_possible": 100.0,
+            "course_id": 1,
+        },
+        {
+            "id": healthy_assignment_id,
+            "name": "Healthy Assignment",
+            "description": None,
+            "due_at": (datetime.now(UTC) - timedelta(days=1)).isoformat(),
+            "points_possible": 100.0,
+            "course_id": 1,
+        },
+    ]
+    with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock:
+        mock.return_value = assignments
+        client.get(
+            f"/api/v1/canvas/courses/{local_id}/assignments?canvas_url={CANVAS_URL}",
+            headers=headers,
+        )
+
+    enrollments = [
+        {
+            "user_id": 6001,
+            "enrollment_state": "active",
+            "user": {"name": "Ada Lovelace", "sortable_name": "Lovelace, Ada"},
+        },
+    ]
+    healthy_submissions = [
+        {
+            "id": uuid.uuid4().int % 10_000_000,
+            "assignment_id": healthy_assignment_id,
+            "user_id": 6001,
+            "score": None,
+            "grade": None,
+            "submitted_at": "2026-01-02T12:00:00Z",
+            "workflow_state": "submitted",
+        },
+    ]
+
+    def _fetch_submissions_side_effect(_course_id, assignment_id, *_args, **_kwargs):
+        if assignment_id == failing_assignment_id:
+            raise TimeoutError("Canvas request timed out")
+        return healthy_submissions
+
+    with (
+        patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock_enrollments,
+        patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock_assignments,
+        patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock_submissions,
+    ):
+        mock_enrollments.return_value = enrollments
+        mock_assignments.return_value = assignments
+        mock_submissions.side_effect = _fetch_submissions_side_effect
+        response = client.get(
+            f"/api/v1/canvas/courses/{local_id}/overview?canvas_url={CANVAS_URL}",
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["assignment_count"] == 2
+    # The healthy assignment's submission is still counted even though the
+    # other assignment's Canvas fetch raised.
+    submitted_titles = {
+        item["title"] for item in payload["recent_assignments"] if item["submitted_count"] > 0
+    }
+    assert submitted_titles == {"Healthy Assignment"}
