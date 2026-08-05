@@ -55,7 +55,7 @@ def _issue_token_patch():
 async def test_register_user_rejects_when_self_registration_disabled():
     db = _db_assigning_ids()
     db.scalar = AsyncMock(return_value=None)
-    body = RegisterRequest(name="New User", email="new@example.com", password="secret123")
+    body = RegisterRequest(name="New User", email="new@example.com", password="Secret123!")
 
     with patch(
         "app.services.auth.get_admin_settings",
@@ -71,7 +71,7 @@ async def test_register_user_rejects_when_self_registration_disabled():
 async def test_register_user_rejects_duplicate_email():
     db = _db_assigning_ids()
     db.scalar = AsyncMock(return_value=SimpleNamespace(id=1))
-    body = RegisterRequest(name="New User", email="dup@example.com", password="secret123")
+    body = RegisterRequest(name="New User", email="dup@example.com", password="Secret123!")
 
     with patch(
         "app.services.auth.get_admin_settings",
@@ -87,7 +87,7 @@ async def test_register_user_rejects_duplicate_email():
 async def test_register_user_success_issues_token():
     db = _db_assigning_ids()
     db.scalar = AsyncMock(return_value=None)
-    body = RegisterRequest(name="New User", email="new@example.com", password="secret123")
+    body = RegisterRequest(name="New User", email="new@example.com", password="Secret123!")
 
     with (
         patch(
