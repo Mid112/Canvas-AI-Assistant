@@ -289,6 +289,7 @@ export function InstructorAssistantPage() {
       if (draft.deferredRequestId != null) {
         setPendingDeferredRequestId(draft.deferredRequestId);
       }
+      setShowStarterGuidance(false);
       setChatSessionKey((current) => current + 1);
     }, 0);
     return () => window.clearTimeout(timer);
@@ -507,7 +508,7 @@ export function InstructorAssistantPage() {
             onClick={() => setIsHistoryExpanded((current) => !current)}
             aria-expanded={isHistoryExpanded}
             aria-controls="assistant-history-content"
-            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <History className="size-4 shrink-0 text-muted-foreground" />
             <h2

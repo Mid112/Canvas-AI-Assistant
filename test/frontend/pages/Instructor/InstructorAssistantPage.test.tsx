@@ -2,6 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setStoredDeferredDraft } from "@/lib/deferred-assistant-storage";
 import { InstructorAssistantPage } from "@/pages/Instructor/InstructorAssistantPage";
 import { sendAssistantMessage } from "@/services/assistant";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
@@ -333,6 +334,25 @@ describe("InstructorAssistantPage", () => {
 
     await waitFor(() => {
       expect(mockResumeDeferred).toHaveBeenCalledWith("token", 4);
+    });
+    expect(
+      screen.queryByRole("region", { name: "Starter prompts" }),
+    ).not.toBeInTheDocument();
+  });
+
+  // Verifies the review fix for #1454: auto-restoring a locally cached
+  // deferred draft after Canvas connects must hide starters too, the same
+  // way the explicit "Resume" action does.
+  it("hides starter prompts when a locally cached deferred draft auto-restores after Canvas connects", async () => {
+    setStoredDeferredDraft(1, { message: "Auto-restored draft message" });
+    mockListDeferred.mockResolvedValue({ items: [] });
+
+    renderWithInstitution(<InstructorAssistantPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("textbox", { name: "Chat message" }),
+      ).toHaveValue("Auto-restored draft message");
     });
     expect(
       screen.queryByRole("region", { name: "Starter prompts" }),
