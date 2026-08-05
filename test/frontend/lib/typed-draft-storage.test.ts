@@ -244,6 +244,56 @@ describe("typed-draft-storage", () => {
     expect(listTypedDrafts(7)[0]?.content.timeLimit).toBe(45);
   });
 
+  // Verifies: question-bank picks persist by name only — never Canvas bankId
+  // (#1239 / #1505 review).
+  it("strips Canvas bankId from quizQuestionBankGroups on save", () => {
+    const draft = saveTypedDraft(7, {
+      kind: "quiz",
+      content: {
+        title: "Banks Quiz",
+        body: "With banks",
+        quizQuestions: [
+          {
+            questionText: "Q1",
+            questionType: "essay_question",
+            pointsPossible: 1,
+            answers: [],
+          },
+        ],
+        // Live form groups include bankId; strip must drop it before persist.
+        quizQuestionBankGroups: [
+          {
+            bankName: "Chapter 1 Bank",
+            pickCount: 2,
+            questionPoints: 5,
+            bankId: 31,
+          },
+        ] as TypedDraftContent["quizQuestionBankGroups"],
+      },
+    });
+
+    expect(draft.content.quizQuestionBankGroups).toEqual([
+      {
+        bankName: "Chapter 1 Bank",
+        pickCount: 2,
+        questionPoints: 5,
+      },
+    ]);
+    expect(
+      JSON.stringify(listTypedDrafts(7)[0]?.content.quizQuestionBankGroups),
+    ).not.toContain('"bankId"');
+
+    const target = buildTypedDraftResumeTarget(draft, { courseId: 42 });
+    const groups = (
+      target.state.aiQuizDraft as {
+        questionBankGroups?: Array<{ bankId: number; bankName: string }>;
+      }
+    ).questionBankGroups;
+    expect(groups?.[0]?.bankName).toBe("Chapter 1 Bank");
+    // Placeholder until the create page rematches by name after banks load.
+    expect(groups?.[0]?.bankId).toBe(0);
+  });
+
   // Verifies: null is a choice, not an absence. Unlimited attempts and "no
   // time limit" have to round-trip, or resuming quietly reinstates whatever
   // the generator defaults to.

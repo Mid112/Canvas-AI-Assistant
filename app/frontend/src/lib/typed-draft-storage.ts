@@ -1,9 +1,5 @@
 import { instructorMessagesPath, paths } from "@/routes/paths";
-import type {
-  QuizEngine,
-  QuizQuestionBankGroup,
-  QuizQuestionDraft,
-} from "@/types/quizCreate";
+import type { QuizEngine, QuizQuestionDraft } from "@/types/quizCreate";
 
 const TYPED_DRAFT_PREFIX = "assistant-typed-drafts:";
 
@@ -46,7 +42,12 @@ export interface TypedDraftContent {
    * GeneratedQuizDraft fields the review step needs to reconstruct the
    * draft exactly rather than falling back to defaults. */
   quizEngine?: QuizEngine;
-  quizQuestionBankGroups?: QuizQuestionBankGroup[];
+  /** Content-only bank picks — bankName + counts/points, never Canvas bankId (#1239 / #1505). */
+  quizQuestionBankGroups?: Array<{
+    bankName: string;
+    pickCount: number;
+    questionPoints: number;
+  }>;
   /** Quiz drafts only. Both mirror GeneratedQuizDraft, including the null:
    * null is a real instructor choice (unlimited attempts / no time limit),
    * distinct from the field being absent because the draft never set it.
@@ -140,7 +141,16 @@ function stripCanvasIdentifiers(
     ...(pointsPossible !== undefined ? { pointsPossible } : {}),
     ...(quizQuestions !== undefined ? { quizQuestions } : {}),
     ...(quizEngine !== undefined ? { quizEngine } : {}),
-    ...(quizQuestionBankGroups !== undefined ? { quizQuestionBankGroups } : {}),
+    // Persist bank picks by name only — never Canvas bankId (#1239 / #1505).
+    ...(quizQuestionBankGroups !== undefined
+      ? {
+          quizQuestionBankGroups: quizQuestionBankGroups.map((group) => ({
+            bankName: group.bankName,
+            pickCount: group.pickCount,
+            questionPoints: group.questionPoints,
+          })),
+        }
+      : {}),
     // Tested against undefined, not truthiness: 0 attempts and a null
     // "no time limit" are both values the instructor chose and must survive.
     ...(allowedAttempts !== undefined ? { allowedAttempts } : {}),
@@ -302,7 +312,18 @@ export function buildTypedDraftResumeTarget(
                 ? { quizEngine: draft.content.quizEngine }
                 : {}),
               ...(draft.content.quizQuestionBankGroups !== undefined
-                ? { questionBankGroups: draft.content.quizQuestionBankGroups }
+                ? {
+                    // bankId is resolved on the create page after banks load
+                    // (content-only drafts store bankName, never Canvas ids).
+                    questionBankGroups: draft.content.quizQuestionBankGroups.map(
+                      (group) => ({
+                        bankId: 0,
+                        bankName: group.bankName,
+                        pickCount: group.pickCount,
+                        questionPoints: group.questionPoints,
+                      }),
+                    ),
+                  }
                 : {}),
             },
           },

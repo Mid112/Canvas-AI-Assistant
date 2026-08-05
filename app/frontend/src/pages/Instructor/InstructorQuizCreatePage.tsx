@@ -37,6 +37,7 @@ import type {
   QuizDescribeValues,
   QuizPreviewSummary,
   QuizQuestionBank,
+  QuizQuestionBankGroup,
 } from "@/types/quizCreate";
 import type { QuizEngine } from "@/types/quiz";
 
@@ -143,6 +144,42 @@ export function InstructorQuizCreatePage() {
   const [savedTypedDraftId, setSavedTypedDraftId] = useState<string | undefined>(
     typedDraftId,
   );
+
+  // Typed drafts store bank picks by name only, never the raw Canvas bankId
+  // (#1239). Once Classic banks load, rematch unresolved groups (bankId 0)
+  // by name so approve can send real ids. A name that matches more than one
+  // bank can't be told apart, and one that matches none means the bank was
+  // renamed or deleted — either way, leave it unresolved rather than guess
+  // (same fallback resolveTypedDraftCourseId uses for an unresolvable
+  // course); the instructor can remove that group or re-add the bank by
+  // name. The array is never filtered here — QuizReviewApproveStep's own
+  // bank-group fields are matched back to this list by index, so dropping
+  // an entry here would desync the two instead of just leaving it at 0.
+  useEffect(() => {
+    if (questionBanks.length === 0) {
+      return;
+    }
+    setDraft((current) => {
+      if (!current?.questionBankGroups?.some((group) => group.bankId <= 0)) {
+        return current;
+      }
+      const nextGroups: QuizQuestionBankGroup[] = current.questionBankGroups.map(
+        (group) => {
+          if (group.bankId > 0) {
+            return group;
+          }
+          const target = group.bankName.trim().toLowerCase();
+          const matches = questionBanks.filter(
+            (bank) => bank.title.trim().toLowerCase() === target,
+          );
+          return matches.length === 1
+            ? { ...group, bankId: matches[0].id }
+            : group;
+        },
+      );
+      return { ...current, questionBankGroups: nextGroups };
+    });
+  }, [questionBanks]);
 
   const canvasUrl = useCanvasConnectionUrl();
   const {
