@@ -124,6 +124,10 @@ describe("InstructorAssistantPage", () => {
     expect(
       screen.getByRole("textbox", { name: "Chat message" }),
     ).toBeInTheDocument();
+    // Verifies (#1454): History stays collapsed so chat remains the primary surface.
+    expect(
+      screen.getByRole("button", { name: /Conversation History \(0\)/ }),
+    ).toHaveAttribute("aria-expanded", "false");
   });
 
   // Verifies (#1441): Starter prompts hide after the user starts chatting.
@@ -261,15 +265,19 @@ describe("InstructorAssistantPage", () => {
 
     renderWithInstitution(<InstructorAssistantPage />);
 
-    expect(
-      await screen.findByRole("button", { name: "Resume next request" }),
-    ).toBeInTheDocument();
+    await user.click(
+      await screen.findByRole("button", { name: /Saved drafts \(3\)/ }),
+    );
+    const resumeButtons = await screen.findAllByRole("button", {
+      name: "Resume",
+    });
+    expect(resumeButtons.length).toBeGreaterThan(0);
 
     expect(
       screen.getByRole("region", { name: "Starter prompts" }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Resume next request" }));
+    await user.click(resumeButtons[0]!);
 
     await waitFor(() => {
       expect(mockResumeDeferred).toHaveBeenCalledTimes(1);
@@ -277,7 +285,7 @@ describe("InstructorAssistantPage", () => {
     expect(mockResumeDeferred).toHaveBeenCalledWith("token", 3);
     // Resume peeks without consuming — queue stays until chat send succeeds.
     expect(
-      await screen.findByRole("button", { name: "Resume next request" }),
+      await screen.findByRole("button", { name: /Saved drafts \(3\)/ }),
     ).toBeInTheDocument();
     // Verifies (#1441): Resume clears starters directly, not only via auto-send.
     expect(
@@ -319,8 +327,9 @@ describe("InstructorAssistantPage", () => {
     ).toBeInTheDocument();
 
     await user.click(
-      await screen.findByRole("button", { name: "Resume saved request" }),
+      await screen.findByRole("button", { name: /Saved drafts \(1\)/ }),
     );
+    await user.click(screen.getByRole("button", { name: "Resume" }));
 
     await waitFor(() => {
       expect(mockResumeDeferred).toHaveBeenCalledWith("token", 4);
@@ -376,9 +385,16 @@ describe("InstructorAssistantPage", () => {
       screen.getByRole("region", { name: "Starter prompts" }),
     ).toBeInTheDocument();
 
-    await user.click(await screen.findByRole("button", {
-      name: /Previous conversation/,
-    }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Conversation History \(1\)/,
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Previous conversation/,
+      }),
+    );
 
     expect(await screen.findByText("Previous question")).toBeInTheDocument();
     expect(

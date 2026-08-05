@@ -1,4 +1,4 @@
-import { History, Loader2, RefreshCw } from "lucide-react";
+import { ChevronDown, History, Loader2, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -28,6 +28,7 @@ import {
   resolveTypedDraftCourseId,
   type TypedDraft,
 } from "@/lib/typed-draft-storage";
+import { cn } from "@/lib/utils";
 import {
   fetchInstructorLlmProviders,
   resolveConnectedSettings,
@@ -151,6 +152,8 @@ export function InstructorAssistantPage() {
   const [discardingTypedId, setDiscardingTypedId] = useState<string | null>(
     null,
   );
+  // Collapsed by default so chat stays the primary surface (#1454).
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
   const chatWindowRef = useRef<ChatWindowHandle>(null);
   const conversationLoadRequestRef = useRef(0);
   const limitedMode = Boolean(user && !user.has_canvas_token);
@@ -464,13 +467,6 @@ export function InstructorAssistantPage() {
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 overflow-hidden p-4 md:p-5 lg:p-6">
       {limitedMode ? (
         <AssistantLimitedModeBanner deferredCount={deferredRequests.length} />
-      ) : deferredRequests.length > 0 ? (
-        <AssistantLimitedModeBanner
-          resumeOnly
-          deferredCount={deferredRequests.length}
-          onResumeNext={() => void handleResumeDeferred()}
-          isResuming={isResumingDeferred}
-        />
       ) : null}
 
       {deferredRequests.length > 0 || typedDrafts.length > 0 ? (
@@ -501,11 +497,120 @@ export function InstructorAssistantPage() {
         visible={showStarterGuidance}
       />
 
+      <section
+        aria-labelledby="assistant-history-heading"
+        className="flex shrink-0 flex-col overflow-hidden rounded-lg border border-border/70 bg-background px-3 py-2 shadow-sm"
+      >
+        <div className="flex items-center justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setIsHistoryExpanded((current) => !current)}
+            aria-expanded={isHistoryExpanded}
+            aria-controls="assistant-history-content"
+            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          >
+            <History className="size-4 shrink-0 text-muted-foreground" />
+            <h2
+              id="assistant-history-heading"
+              className="truncate text-sm font-semibold text-foreground"
+            >
+              Conversation History ({conversations.length})
+            </h2>
+            <ChevronDown
+              className={cn(
+                "size-4 shrink-0 text-muted-foreground transition-transform",
+                isHistoryExpanded && "rotate-180",
+              )}
+              aria-hidden="true"
+            />
+          </button>
+          {isHistoryExpanded ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => void loadConversationList()}
+              disabled={isHistoryLoading}
+              aria-label="Refresh conversation history"
+              title="Refresh conversation history"
+            >
+              {isHistoryLoading ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <RefreshCw className="size-4" />
+              )}
+            </Button>
+          ) : null}
+        </div>
+
+        {isHistoryExpanded ? (
+          <div id="assistant-history-content" className="mt-2">
+            {historyError ? (
+              <p role="alert" className="mb-2 text-sm text-destructive">
+                {historyError}
+              </p>
+            ) : null}
+
+            <div className="max-h-56 space-y-1.5 overflow-y-auto">
+              {conversations.length === 0 && !isHistoryLoading ? (
+                <p className="rounded-lg border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
+                  Previous conversations appear here.
+                </p>
+              ) : null}
+
+              {conversations.map((conversation) => {
+                const isSelected =
+                  selectedConversation?.id === conversation.id ||
+                  pendingConversationId === conversation.id;
+                const isLoadingConversation =
+                  loadingConversationId === conversation.id;
+
+                return (
+                  <button
+                    key={conversation.id}
+                    type="button"
+                    onClick={() => void handleLoadConversation(conversation.id)}
+                    disabled={isLoadingConversation}
+                    className={[
+                      "w-full rounded-lg border px-3 py-2.5 text-left transition",
+                      "hover:border-blue-500/40 hover:bg-blue-500/5",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      isSelected
+                        ? "border-blue-500/50 bg-blue-500/10"
+                        : "border-border/70 bg-muted/20",
+                    ].join(" ")}
+                  >
+                    <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                      <span>
+                        {formatConversationTime(conversation.updated_at)}
+                      </span>
+                      {conversation.pending_action_count > 0 ? (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-900">
+                          Pending
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="mt-1 line-clamp-2 block text-[13px] font-medium leading-snug text-foreground">
+                      {isLoadingConversation
+                        ? "Loading conversation..."
+                        : formatConversationPreview(conversation.preview)}
+                    </span>
+                    <span className="mt-1 block text-xs leading-none text-muted-foreground">
+                      {conversation.message_count} messages
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : null}
+      </section>
+
       {/* The chat is the primary surface: it takes every pixel the collapsed
           panels above don't need (min-h-0 + flex-1), and all scrolling happens
-          inside it (or inside the history sidebar) rather than on the page
-          frame, so the input never scrolls out of reach (#1, #10). */}
-      <div className="grid min-h-0 flex-1 gap-4 overflow-hidden xl:grid-cols-[minmax(0,1fr)_20rem]">
+          inside it rather than on the page frame, so the input never scrolls
+          out of reach (#1, #10, #1454). */}
+      <div className="min-h-0 flex-1 overflow-hidden">
         <ChatWindow
           ref={chatWindowRef}
           key={chatSessionKey}
@@ -535,94 +640,6 @@ export function InstructorAssistantPage() {
           llmProviders={llmProviders}
           onModelProviderChange={handleModelProviderChange}
         />
-
-        <section
-          aria-labelledby="assistant-history-heading"
-          className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-border/70 bg-background p-2.5 shadow-sm"
-        >
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <History className="size-4 shrink-0 text-muted-foreground" />
-              <h2
-                id="assistant-history-heading"
-                className="truncate text-sm font-semibold text-foreground"
-              >
-                Conversation History
-              </h2>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => void loadConversationList()}
-              disabled={isHistoryLoading}
-              aria-label="Refresh conversation history"
-              title="Refresh conversation history"
-            >
-              {isHistoryLoading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <RefreshCw className="size-4" />
-              )}
-            </Button>
-          </div>
-
-          {historyError ? (
-            <p role="alert" className="mb-3 text-sm text-destructive">
-              {historyError}
-            </p>
-          ) : null}
-
-          <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto">
-            {conversations.length === 0 && !isHistoryLoading ? (
-              <p className="rounded-lg border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
-                Previous assistant conversations will appear here.
-              </p>
-            ) : null}
-
-            {conversations.map((conversation) => {
-              const isSelected =
-                selectedConversation?.id === conversation.id ||
-                pendingConversationId === conversation.id;
-              const isLoadingConversation =
-                loadingConversationId === conversation.id;
-
-              return (
-                <button
-                  key={conversation.id}
-                  type="button"
-                  onClick={() => void handleLoadConversation(conversation.id)}
-                  disabled={isLoadingConversation}
-                  className={[
-                    "w-full rounded-lg border px-3 py-2.5 text-left transition",
-                    "hover:border-blue-500/40 hover:bg-blue-500/5",
-                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                    isSelected
-                      ? "border-blue-500/50 bg-blue-500/10"
-                      : "border-border/70 bg-muted/20",
-                  ].join(" ")}
-                >
-                  <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                    <span>{formatConversationTime(conversation.updated_at)}</span>
-                    {conversation.pending_action_count > 0 ? (
-                      <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-900">
-                        Pending
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className="mt-1 line-clamp-2 block text-[13px] font-medium leading-snug text-foreground">
-                    {isLoadingConversation
-                      ? "Loading conversation..."
-                      : formatConversationPreview(conversation.preview)}
-                  </span>
-                  <span className="mt-1 block text-xs leading-none text-muted-foreground">
-                    {conversation.message_count} messages
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
       </div>
     </div>
   );
