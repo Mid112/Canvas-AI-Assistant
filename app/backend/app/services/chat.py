@@ -1130,6 +1130,20 @@ async def _run_resolve_missing_submissions_chain(
         return resolved
     course, assignment_id = resolved
 
+    # Local row is normally populated by fetch_assignments inside
+    # _resolve_course_and_assignment; the generic "Assignment {id}" label
+    # is only a fallback when that sync somehow missed the row.
+    assignment_row = await db.scalar(
+        select(Assignment).where(
+            Assignment.course_id == course.id,
+            Assignment.canvas_assignment_id == str(assignment_id),
+        )
+    )
+    assignment_name = (
+        assignment_row.title if assignment_row else f"Assignment {assignment_id}"
+    )
+    due_at = assignment_row.due_date if assignment_row else None
+
     print(f"Checking {course.name} for {action.status} submissions")
     matched = await _run_tracked_read(
         db, user, conversation, user_msg.id, "resolve_missing_submissions",
@@ -1144,16 +1158,23 @@ async def _run_resolve_missing_submissions_chain(
     )
 
     sample = [r["name"] for r in matched[:_RESOLVED_SET_SAMPLE_SIZE]]
-    if action.status == "missing":
-        summary = f"{len(matched)} active student(s) in {course.name} are missing this assignment."
-    else:
-        summary = f"{len(matched)} active student(s) in {course.name} submitted this assignment late."
-    if sample:
-        summary += f" Examples: {', '.join(sample)}."
+    summary = _build_resolve_missing_summary(
+        course_name=course.name,
+        assignment_name=assignment_name,
+        due_at=due_at,
+        status=action.status,
+        matched_count=len(matched),
+        sample=sample,
+    )
 
     return {
         "action": "resolve_missing_submissions",
         "status": action.status,
+        "local_course_id": course.id,
+        "course_name": course.name,
+        "assignment_id": assignment_id,
+        "assignment_name": assignment_name,
+        "due_at": due_at.isoformat() if due_at else None,
         "count": len(matched),
         "sample": sample,
         "handle": resolved_set.handle,
@@ -1336,6 +1357,38 @@ async def _run_analyze_course_submissions_chain(
         "truncated": truncated,
         "summary": summary,
     }
+def _build_resolve_missing_summary(
+    *,
+    course_name: str,
+    assignment_name: str,
+    due_at: datetime | None,
+    status: str,
+    matched_count: int,
+    sample: list[str],
+) -> str:
+    """Name the assignment/course explicitly and explain empty results
+    clearly — mirrors _build_fetch_submissions_summary so chat analytics
+    are scannable even when the model paraphrases in a follow-up respond."""
+    due_part = f" (due {due_at.strftime('%B %d, %Y at %I:%M %p')})" if due_at else ""
+    if matched_count == 0:
+        if status == "late":
+            return (
+                f'No active students submitted "{assignment_name}"{due_part} '
+                f"late in {course_name}."
+            )
+        return (
+            f'No active students are missing "{assignment_name}"{due_part} '
+            f"in {course_name}."
+        )
+
+    verb = "submitted late" if status == "late" else "are missing"
+    summary = (
+        f'{matched_count} active student(s) in {course_name} {verb} '
+        f'"{assignment_name}"{due_part}.'
+    )
+    if sample:
+        summary += f" Examples: {', '.join(sample)}."
+    return summary
 
 
 async def _run_find_assignment_by_submission_rate_chain(
@@ -1374,11 +1427,16 @@ async def _run_find_assignment_by_submission_rate_chain(
         return {
             "action": "find_assignment_by_submission_rate",
             "matched": False,
+            "local_course_id": course.id,
+            "course_name": course.name,
             "assignment_id": None,
             "assignment_name": None,
-            "due_date": None,
+            "due_at": None,
             "submission_rate_percent": None,
-            "summary": f"{course.name} has no assignments yet.",
+            "summary": (
+                f"{course.name} has no assignments yet, so submission-rate "
+                "analytics are unavailable."
+            ),
         }
 
     print(f"Checking {course.name} assignment submission rates")
@@ -1398,9 +1456,11 @@ async def _run_find_assignment_by_submission_rate_chain(
         return {
             "action": "find_assignment_by_submission_rate",
             "matched": False,
+            "local_course_id": course.id,
+            "course_name": course.name,
             "assignment_id": None,
             "assignment_name": None,
-            "due_date": None,
+            "due_at": None,
             "submission_rate_percent": None,
             "summary": (
                 f"No assignment in {course.name} currently has a submission rate "
@@ -1409,18 +1469,20 @@ async def _run_find_assignment_by_submission_rate_chain(
         }
 
     best = max(matches, key=lambda m: m["due_at"] or datetime.min.replace(tzinfo=UTC))
-    due_date = best["due_at"].isoformat() if best["due_at"] else None
+    due_at = best["due_at"].isoformat() if best["due_at"] else None
     rate = round(best["rate_percent"], 1)
     return {
         "action": "find_assignment_by_submission_rate",
         "matched": True,
+        "local_course_id": course.id,
+        "course_name": course.name,
         "assignment_id": best["id"],
         "assignment_name": best["name"],
-        "due_date": due_date,
+        "due_at": due_at,
         "submission_rate_percent": rate,
         "summary": (
             f'"{best["name"]}" in {course.name} has a {rate}% submission rate '
-            f'(current due date: {due_date or "not set"}).'
+            f'(current due date: {due_at or "not set"}).'
         ),
     }
 
@@ -2402,6 +2464,81 @@ def _step_budget_exhausted_response(loop_steps: list[dict]) -> dict:
             message += f" Here's what I found so far: {last_summary}"
     message += " Could you narrow down what you'd like me to do next?"
     return {"action": "respond", "message": message}
+
+
+_STRUCTURED_ANALYTICS_ACTIONS = frozenset(
+    {"resolve_missing_submissions", "find_assignment_by_submission_rate"}
+)
+_STRUCTURED_ANALYTICS_FIELDS = (
+    "action",
+    "status",
+    "count",
+    "sample",
+    "summary",
+    "local_course_id",
+    "course_name",
+    "assignment_id",
+    "assignment_name",
+    "due_at",
+    "matched",
+    "submission_rate_percent",
+    "handle",
+)
+
+
+def _attach_structured_analytics_from_chain(
+    result: dict,
+    loop_steps: list[dict],
+) -> dict:
+    """Preserve scannable missing/analytics fields when a chainable read
+    is followed by a free-form respond in the same turn.
+
+    resolve_missing_submissions / find_assignment_by_submission_rate are
+    chainable so the model can propose send_message next — but when the
+    instructor only asked "who's missing?", the terminal reply is usually
+    respond prose that would otherwise drop the structured payload the
+    frontend needs for a readable list + analytics link (#1443).
+
+    Skip intent_preview / clarify / out_of_scope terminals so a follow-up
+    write preview is not polluted with analytics fields."""
+    if not loop_steps or not isinstance(result, dict):
+        return result
+
+    terminal_action = result.get("action")
+    if terminal_action not in _STRUCTURED_ANALYTICS_ACTIONS | {"respond"}:
+        return result
+
+    analytics_source: dict | None = None
+    if terminal_action in _STRUCTURED_ANALYTICS_ACTIONS:
+        analytics_source = result
+    else:
+        for step in reversed(loop_steps):
+            step_result = step.get("result")
+            if (
+                isinstance(step_result, dict)
+                and step_result.get("action") in _STRUCTURED_ANALYTICS_ACTIONS
+            ):
+                analytics_source = step_result
+                break
+
+    if analytics_source is None:
+        return result
+
+    structured = {
+        key: analytics_source[key]
+        for key in _STRUCTURED_ANALYTICS_FIELDS
+        if key in analytics_source
+    }
+    if not structured:
+        return result
+
+    attached = dict(result)
+    attached["structured_analytics"] = structured
+    # Prefer the grounded tool summary when respond left message empty or
+    # just restated without naming the assignment.
+    if not attached.get("summary") and structured.get("summary"):
+        attached["summary"] = structured["summary"]
+    return attached
 
 
 async def log_message(
@@ -3854,6 +3991,7 @@ async def handle_chat_message(
         grades=new_tool_facts.grades,
         dates=new_tool_facts.dates,
     )
+    result = _attach_structured_analytics_from_chain(result, loop_steps)
 
     # Only terminal conversational responses are cacheable. Canvas reads,
     # writes, previews, clarification flows, and multi-step turns always bypass

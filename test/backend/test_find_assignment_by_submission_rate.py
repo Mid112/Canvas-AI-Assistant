@@ -184,7 +184,9 @@ def test_picks_latest_due_date_among_qualifying_assignments_and_chains_into_upda
     reply = body["reply"]
     assert reply["action"] == "intent_preview"
     assert reply["proposed_action"]["assignment_id"] == 222
-    assert reply["proposed_action"]["due_date"] == "2026-06-04T00:00:00+00:00"
+    # Intent-preview surfaces the model's due_date string; timezone
+    # normalization runs later on confirm/write when instructor TZ is known.
+    assert reply["proposed_action"]["due_date"] == "2026-06-04T00:00:00"
 
     logs = _tool_call_log_actions(body["conversation_id"])
     assert logs == ["fetch_assignments", "find_assignment_by_submission_rate"]
@@ -266,12 +268,18 @@ def test_no_matching_assignment_still_chains_to_a_response(client):
     reply = body["reply"]
     assert reply["action"] == "respond"
     assert "clarify" not in reply
+    analytics = reply["structured_analytics"]
+    assert analytics["action"] == "find_assignment_by_submission_rate"
+    assert analytics["matched"] is False
+    assert analytics["local_course_id"] == local_course_id
+    assert analytics["course_name"] == "CPSC 310"
+    assert "No assignment in CPSC 310" in analytics["summary"]
 
 
 # Verifies: a course with no assignments yet also chains (matched: false
 # with a plain explanation reaches the follow-up call), not an error.
 def test_no_assignments_still_chains_to_a_response(client):
-    headers, _ = _register_with_canvas(client)
+    headers, local_course_id = _register_with_canvas(client)
 
     llm_outputs = [
         '{"action": "find_assignment_by_submission_rate", "course_name": "CPSC 310", '
@@ -290,3 +298,8 @@ def test_no_assignments_still_chains_to_a_response(client):
     assert "no assignments yet" in followup_prompt
 
     assert body["reply"]["action"] == "respond"
+    analytics = body["reply"]["structured_analytics"]
+    assert analytics["matched"] is False
+    assert analytics["local_course_id"] == local_course_id
+    assert "no assignments yet" in analytics["summary"]
+    assert "analytics are unavailable" in analytics["summary"]

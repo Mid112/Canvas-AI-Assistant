@@ -18,6 +18,10 @@ Adjacent work by other team members, referenced but NOT part of this stack:
     Mridul Nohria — fix/stale-course-context (backend course resolution,
                     bugs 16/17). Independent of everything below; test-merged
                     against bugfix/creator-workflow-audit with no conflicts.
+    Rhythm Trivedi — bugfix/chat-missing-assignments-analytics-1443 (PR #1474)
+                    Ticket 19 / #1443: structured missing + submission-rate
+                    analytics in chat. Bases on develop independently of this
+                    stack; overlaps map-chat-reply.ts and chat.py (see §6).
     <FILL IN>     — published vs unpublished courses PR (why assignments
                     created in this stack land as "unpublished")
 
@@ -1308,15 +1312,125 @@ TEST POSTURE
 
 
 ================================================================================
+6. Independent — bugfix/chat-missing-assignments-analytics-1443 (PR #1474)
+   Ticket / Bug: #1443 (Ticket 19 — Show Missing Assignments and Analytics
+   Clearly in Chat)
+   Author: Rhythm Trivedi <141282629+rhythmt1@users.noreply.github.com>
+   *** NOT PART OF THE LINEAR STACK ABOVE — bases on develop independently ***
+================================================================================
+
+COMMITS
+    98be4e22  Show missing assignments and analytics clearly in chat.
+    2a678f01  Fix analytics chat due-line when no due date is set.
+
+FILES
+    app/backend/app/services/chat.py
+    app/frontend/src/lib/map-chat-reply.ts
+    test/backend/test_resolve_missing_submissions.py
+    test/backend/test_find_assignment_by_submission_rate.py
+    test/frontend/lib/map-chat-reply.test.ts
+
+SYMBOLS
+    _build_resolve_missing_summary()              (new)
+    _STRUCTURED_ANALYTICS_ACTIONS                 (frozenset)
+    _STRUCTURED_ANALYTICS_FIELDS                  (tuple of payload keys)
+    _attach_structured_analytics_from_chain()     (new)
+    resolve_missing / find_assignment payloads:
+        local_course_id, course_name, assignment_id, assignment_name,
+        due_at, count/sample/handle OR matched/submission_rate_percent,
+        summary
+    frontend:
+        buildAnalyticsPrimaryLink()
+        analyticsExplanation()
+        buildStructuredAnalyticsResponse()
+        mapChatReply: respond + structured_analytics path;
+                      resolve_missing_submissions /
+                      find_assignment_by_submission_rate as terminal actions
+        readNumber("") -> undefined               (empty-string guard)
+
+WHAT AND WHY
+    resolve_missing_submissions and find_assignment_by_submission_rate are
+    chainable reads so the model can propose a follow-up write (e.g.
+    send_message). When the instructor only asks "who's missing?" / "which
+    assignment has <30% submissions?", the terminal reply is usually a free-
+    form `respond`. That previously DROPPED the structured tool payload, so
+    the UI got paraphrased prose with no scannable student list, no empty-
+    state clarity, and no deep link into course analytics (#1443).
+
+    Fix — preserve, then map:
+      1. Backend tool results now carry course + assignment context, due_at
+         when known, clearer empty/unavailable summaries, and (for missing)
+         count + sample names.
+      2. After the turn loop, _attach_structured_analytics_from_chain copies
+         those fields onto the terminal reply as `structured_analytics` when
+         the terminal action is respond OR the analytics action itself.
+         Skips intent_preview / clarify / out_of_scope so write previews are
+         not polluted.
+      3. Frontend map-chat-reply turns that payload into a bulleted chat body
+         (assignment · course, optional Due:, sample list or zero-state) plus
+         an Interpreted Action card with "Open course analytics"
+         (?status=missing|late and/or ?assignmentId=), which InstructorAnalyticsPage
+         already understands.
+
+    Review follow-up (2a678f01):
+      formatDueDateForDisplay(null) returns the always-truthy string
+      "No due date". Guarding `if (dueLabel)` after formatting therefore still
+      rendered `Due: No due date`. Now the raw due_at/due_date string is
+      checked BEFORE formatting; mapper test asserts the Due: line is omitted
+      when both are null. Submission-rate payloads unified on `due_at` (was
+      due_date). Zero-state content prefers the backend summary so wording
+      cannot drift between layers.
+
+ARCHITECTURE DELTA
+    * Analytics tool results are no longer "ephemeral chain steps" — they are
+      a first-class structured envelope the UI can render even when the model
+      ends on respond prose.
+    * Single deep-link contract into the existing analytics page (status /
+      assignmentId query params) instead of inventing a second roster UI in
+      chat.
+    * Sample list is intentionally capped (_RESOLVED_SET_SAMPLE_SIZE = 5) +
+      "…and N more"; the FULL roster is via the analytics link, not chat.
+
+*** SRP WARNINGS ***
+  ! _attach_structured_analytics_from_chain must NOT attach onto
+    intent_preview / clarify / out_of_scope. Widening the terminal allowlist
+    will smear analytics fields onto write-preview cards and confuse confirm
+    flows.
+  ! The chat body shows only the SAMPLE (5 names). Do not "fix" truncation
+    by dumping the full roster into the LLM context or the message bubble —
+    that reopens the payload-size / PII surface resolve_missing was designed
+    to avoid. Point instructors at Open course analytics instead.
+  ! Assignment title/due are read from the local Assignment row after
+    _resolve_course_and_assignment's fetch_assignments upsert. Falling back
+    to `Assignment {id}` / omitted due is uncommon; if it becomes common,
+    fix the sync path — do not invent titles in the mapper.
+  ! dueLabel must be derived from a RAW date string, never from
+    formatDueDateForDisplay's fallback ("No due date" is truthy).
+  ! Zero-state copy should prefer analytics.summary from the backend. Hard-
+    coding a second zero-state string in map-chat-reply will drift from
+    _build_resolve_missing_summary the next time either side is edited.
+  ! readNumber("") now returns undefined. That helper is shared with the
+    grade-handoff path; empty-string IDs must stay "no signal", not 0.
+  ! map-chat-reply.ts is already a multi-concern hub in this stack (see
+    CROSS-CUTTING). This PR adds a fourth family (structured analytics).
+    Prefer extracting per-action mappers before piling on more.
+
+
+================================================================================
 CROSS-CUTTING NOTES
 ================================================================================
 
 FILES TOUCHED BY MULTIPLE BRANCHES (conflict + coupling hotspots)
     app/frontend/src/lib/map-chat-reply.ts
         12cd0d0d (unverified claims), 5efae76c (generation prompt),
-        a3f08b50 (workflow ids). This mapper is becoming a hub — it now
-        translates three unrelated concerns. Consider splitting per action
-        family before adding a fourth.
+        a3f08b50 (workflow ids), 98be4e22/2a678f01 (PR #1474 structured
+        analytics — adjacent, bases on develop). This mapper is becoming a
+        hub — it now translates four unrelated concerns. Consider splitting
+        per action family before adding a fifth.
+    app/backend/app/services/chat.py
+        d165ffb6 (analyse-missing-submissions chain), 98be4e22/2a678f01
+        (PR #1474 structured analytics attach). Expect merge attention if
+        the stack and #1474 land near each other.
     app/frontend/src/pages/Instructor/InstructorAssignmentCreatePage.tsx
         7115e25c, 5efae76c, c5a00521, a3f08b50, ea8a844c — five commits across
         four branches. Highest-risk merge target in the stack.

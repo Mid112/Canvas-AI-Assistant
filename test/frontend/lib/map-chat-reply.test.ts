@@ -570,6 +570,133 @@ describe("mapChatReply", () => {
       "Homework 3. it is about beef corndogs",
     );
   });
+
+  it("maps structured missing-submission analytics into a scannable list", () => {
+    const result = mapChatReply(
+      {
+        action: "respond",
+        message: "Here is the missing list for Assignment 4.",
+        structured_analytics: {
+          action: "resolve_missing_submissions",
+          status: "missing",
+          count: 2,
+          sample: ["Alice", "Bob"],
+          local_course_id: 12,
+          course_name: "CPSC 310",
+          assignment_id: 222,
+          assignment_name: "Assignment 4",
+          due_at: "2026-06-01T00:00:00+00:00",
+          summary:
+            '2 active student(s) in CPSC 310 are missing "Assignment 4". Examples: Alice, Bob.',
+        },
+      },
+      false,
+    );
+
+    expect(result.content).toContain("Assignment 4 · CPSC 310");
+    expect(result.content).toContain("Due:");
+    expect(result.content).toContain("2 students missing:");
+    expect(result.content).toContain("- Alice");
+    expect(result.content).toContain("- Bob");
+    expect(result.explanation).toBe(
+      "Here is the missing list for Assignment 4.",
+    );
+    expect(result.interpretedAction?.action).toBe("Missing submissions");
+    expect(result.interpretedAction?.primaryLink).toEqual({
+      label: "Open course analytics",
+      href: "/instructor/courses/12/analytics?status=missing&assignmentId=222",
+    });
+  });
+
+  it("maps empty missing analytics with a clear zero-state message", () => {
+    const result = mapChatReply(
+      {
+        action: "resolve_missing_submissions",
+        status: "missing",
+        count: 0,
+        sample: [],
+        local_course_id: 12,
+        course_name: "CPSC 310",
+        assignment_id: 222,
+        assignment_name: "Assignment 4",
+        due_at: null,
+        summary:
+          'No active students are missing "Assignment 4" in CPSC 310.',
+      },
+      false,
+    );
+
+    expect(result.content).toContain(
+      'No active students are missing "Assignment 4" in CPSC 310.',
+    );
+    expect(result.content).not.toContain("Due:");
+    // Summary already lives in content — don't duplicate it in ExplanationCard.
+    expect(result.explanation).toBeUndefined();
+    expect(result.interpretedAction?.affectedStudents).toBe("0 students");
+    expect(result.interpretedAction?.primaryLink?.href).toContain(
+      "status=missing",
+    );
+  });
+
+  it("omits the due line when due_at and due_date are null", () => {
+    const result = mapChatReply(
+      {
+        action: "respond",
+        message: "2 students are missing Assignment 4.",
+        structured_analytics: {
+          action: "resolve_missing_submissions",
+          status: "missing",
+          count: 2,
+          sample: ["Alice", "Bob"],
+          local_course_id: 12,
+          course_name: "CPSC 310",
+          assignment_id: 222,
+          assignment_name: "Assignment 4",
+          due_at: null,
+          due_date: null,
+          summary:
+            '2 active student(s) in CPSC 310 are missing "Assignment 4". Examples: Alice, Bob.',
+        },
+      },
+      false,
+    );
+
+    expect(result.content).toContain("Assignment 4 · CPSC 310");
+    expect(result.content).not.toContain("Due:");
+    expect(result.content).not.toContain("No due date");
+  });
+
+  it("maps unavailable submission-rate analytics clearly", () => {
+    const result = mapChatReply(
+      {
+        action: "respond",
+        message: "CPSC 310 has no assignments yet.",
+        structured_analytics: {
+          action: "find_assignment_by_submission_rate",
+          matched: false,
+          local_course_id: 12,
+          course_name: "CPSC 310",
+          assignment_id: null,
+          assignment_name: null,
+          due_at: null,
+          submission_rate_percent: null,
+          summary:
+            "CPSC 310 has no assignments yet, so submission-rate analytics are unavailable.",
+        },
+      },
+      false,
+    );
+
+    expect(result.content).toContain("Submission-rate analytics · CPSC 310");
+    expect(result.content).toContain(
+      "CPSC 310 has no assignments yet, so submission-rate analytics are unavailable.",
+    );
+    expect(result.content).not.toContain("Due:");
+    expect(result.interpretedAction?.affectedStudents).toBe("No match");
+    expect(result.interpretedAction?.primaryLink?.href).toBe(
+      "/instructor/courses/12/analytics",
+    );
+  });
 });
 
 describe("buildAssignmentGenerationPrompt", () => {

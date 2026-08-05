@@ -11,7 +11,11 @@ import {
   instructorSettingsPath,
   paths,
 } from "@/routes/paths";
-import type { AssistantResponse, RiskMetadata } from "@/types/chat";
+import type {
+  ActionLink,
+  AssistantResponse,
+  RiskMetadata,
+} from "@/types/chat";
 
 export class ChatReplyMappingError extends Error {
   constructor(message: string) {
@@ -92,8 +96,164 @@ function readNumberArray(value: unknown): number[] | undefined {
 }
 
 function readNumber(value: unknown): number | undefined {
+  if (value == null || value === "") {
+    return undefined;
+  }
   const number = typeof value === "number" ? value : Number(value);
   return Number.isFinite(number) ? number : undefined;
+}
+
+function analyticsExplanation(
+  fallbackMessage: string | undefined,
+  summary: string | undefined,
+): string | undefined {
+  // Content already carries the scannable list/summary. Only keep an
+  // explanation card when the model added distinct prose on top.
+  if (!fallbackMessage || !fallbackMessage.trim()) {
+    return undefined;
+  }
+  if (summary && fallbackMessage.trim() === summary.trim()) {
+    return undefined;
+  }
+  return fallbackMessage;
+}
+
+function buildAnalyticsPrimaryLink(
+  courseId: number | undefined,
+  options?: {
+    status?: string;
+    assignmentId?: number;
+  },
+): ActionLink | undefined {
+  if (courseId == null) {
+    return undefined;
+  }
+  const params = new URLSearchParams();
+  if (options?.status === "missing" || options?.status === "late") {
+    params.set("status", options.status);
+  }
+  if (options?.assignmentId != null) {
+    params.set("assignmentId", String(options.assignmentId));
+  }
+  const query = params.toString();
+  return {
+    label: "Open course analytics",
+    href: `${instructorCourseAnalyticsPath(courseId)}${query ? `?${query}` : ""}`,
+  };
+}
+
+function buildStructuredAnalyticsResponse(
+  analytics: Record<string, unknown>,
+  fallbackMessage?: string,
+): AssistantResponse | undefined {
+  const action = readString(analytics.action);
+  const courseId = readNumber(analytics.local_course_id);
+  const courseName = readString(analytics.course_name) ?? "this course";
+  const assignmentName =
+    readString(analytics.assignment_name) ?? "this assignment";
+  const assignmentId = readNumber(analytics.assignment_id);
+  const summary = readString(analytics.summary);
+  // formatDueDateForDisplay(null) returns "No due date" — only format when a
+  // real due timestamp is present so we don't render "Due: No due date".
+  const rawDue =
+    readString(analytics.due_at) ?? readString(analytics.due_date);
+  const dueLabel = rawDue ? formatDueDateForDisplay(rawDue) : undefined;
+
+  if (action === "resolve_missing_submissions") {
+    const status = readString(analytics.status) ?? "missing";
+    const count = readNumber(analytics.count) ?? 0;
+    const sample = Array.isArray(analytics.sample)
+      ? analytics.sample.filter(
+          (entry): entry is string =>
+            typeof entry === "string" && entry.trim().length > 0,
+        )
+      : [];
+    const verb = status === "late" ? "submitted late" : "missing";
+    const lines: string[] = [`${assignmentName} · ${courseName}`];
+    if (dueLabel) {
+      lines.push(`Due: ${dueLabel}`);
+    }
+
+    if (count === 0) {
+      // Prefer the backend summary so zero-state wording stays in one place.
+      lines.push(
+        summary ??
+          (status === "late"
+            ? `No active students submitted this assignment late.`
+            : `No active students are missing this assignment.`),
+      );
+    } else {
+      lines.push(`${count} student${count === 1 ? "" : "s"} ${verb}:`);
+      for (const name of sample) {
+        lines.push(`- ${name}`);
+      }
+      // sample is capped server-side (_RESOLVED_SET_SAMPLE_SIZE); the
+      // analytics deep-link below is the path to the full roster.
+      if (count > sample.length) {
+        lines.push(`- …and ${count - sample.length} more`);
+      }
+    }
+
+    const primaryLink = buildAnalyticsPrimaryLink(courseId, {
+      status,
+      assignmentId,
+    });
+
+    return {
+      content: lines.join("\n"),
+      explanation: analyticsExplanation(fallbackMessage, summary),
+      interpretedAction: primaryLink
+        ? {
+            action: status === "late" ? "Late submissions" : "Missing submissions",
+            course: courseName,
+            affectedStudents: `${count} student${count === 1 ? "" : "s"}`,
+            primaryLink,
+          }
+        : undefined,
+    };
+  }
+
+  if (action === "find_assignment_by_submission_rate") {
+    const matched = analytics.matched === true;
+    const rate = readNumber(analytics.submission_rate_percent);
+    const lines: string[] = [`Submission-rate analytics · ${courseName}`];
+
+    if (!matched) {
+      lines.push(
+        summary ??
+          "No matching assignment is available for this analytics request.",
+      );
+    } else {
+      lines.push(`Assignment: ${assignmentName}`);
+      if (rate != null) {
+        lines.push(`Submission rate: ${rate}%`);
+      }
+      if (dueLabel) {
+        lines.push(`Due: ${dueLabel}`);
+      }
+    }
+
+    const primaryLink = buildAnalyticsPrimaryLink(courseId, { assignmentId });
+
+    return {
+      content: lines.join("\n"),
+      explanation: analyticsExplanation(fallbackMessage, summary),
+      interpretedAction: primaryLink
+        ? {
+            action: "Assignment analytics",
+            course: courseName,
+            affectedStudents: matched
+              ? rate != null
+                ? `${rate}% submitted`
+                : "—"
+              : "No match",
+            primaryLink,
+          }
+        : undefined,
+    };
+  }
+
+  return undefined;
 }
 
 function buildGradeHandoffAction(
@@ -755,12 +915,41 @@ function mapReplyBody(
   }
 
   if (reply.action === "respond") {
+    const gradeHandoff = buildGradeHandoffAction(
+      reply.grade_handoff as Record<string, unknown> | undefined,
+    );
+    if (gradeHandoff) {
+      return {
+        content: readString(reply.message) ?? "Here's what I found.",
+        interpretedAction: gradeHandoff,
+      };
+    }
+    const structured = reply.structured_analytics;
+    if (structured && typeof structured === "object") {
+      const analyticsResponse = buildStructuredAnalyticsResponse(
+        structured as Record<string, unknown>,
+        readString(reply.message),
+      );
+      if (analyticsResponse) {
+        return analyticsResponse;
+      }
+    }
     return {
       content: readString(reply.message) ?? "Here's what I found.",
-      interpretedAction: buildGradeHandoffAction(
-        reply.grade_handoff as Record<string, unknown> | undefined,
-      ),
     };
+  }
+
+  if (
+    reply.action === "resolve_missing_submissions" ||
+    reply.action === "find_assignment_by_submission_rate"
+  ) {
+    const analyticsResponse = buildStructuredAnalyticsResponse(
+      reply,
+      readString(reply.message),
+    );
+    if (analyticsResponse) {
+      return analyticsResponse;
+    }
   }
 
   if (reply.success === true) {
