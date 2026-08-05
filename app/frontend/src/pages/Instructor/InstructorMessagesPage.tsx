@@ -23,8 +23,7 @@ import { useLocation, useSearchParams } from "react-router-dom";
 
 const RECIPIENT_LOAD_TIMEOUT_MS = 5000;
 
-const MESSAGES_TABS = ["inbox", "announcements", "sent", "compose"] as const;
-type MessagesTab = (typeof MESSAGES_TABS)[number];
+type MessagesTab = "inbox" | "announcements" | "sent" | "compose";
 
 function parseMessagesTab(raw: string | null): MessagesTab {
   if (raw === "compose") {
@@ -153,11 +152,9 @@ export function InstructorMessagesPage() {
       if (raw !== "compose") {
         setSearchParams({ tab: "compose" }, { replace: true });
       }
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- seed compose from AI handoff
       setTab("compose");
       return;
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync tab to URL
     setTab(parseMessagesTab(raw));
   }, [aiDraft, searchParams, setSearchParams]);
 
