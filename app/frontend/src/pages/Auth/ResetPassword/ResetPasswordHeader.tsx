@@ -10,8 +10,8 @@ export function ResetPasswordHeader() {
         Reset Your Password
       </h1>
       <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-        Enter your email address and we&apos;ll send you a link to reset your
-        password
+        Enter your email address and we&apos;ll start a password reset for your
+        account.
       </p>
     </div>
   );

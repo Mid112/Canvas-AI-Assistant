@@ -7,11 +7,16 @@ import { isValidEmail } from "@/lib/validation";
 
 interface ResetPasswordFormProps {
   onSubmit: (email: string) => void | Promise<void>;
+  error?: string | null;
+  isSubmitting?: boolean;
 }
 
-export function ResetPasswordForm({ onSubmit }: ResetPasswordFormProps) {
+export function ResetPasswordForm({
+  onSubmit,
+  error = null,
+  isSubmitting = false,
+}: ResetPasswordFormProps) {
   const [email, setEmail] = useState("");
-  const [submitted, setSubmitted] = useState(false);
 
   const trimmedEmail = email.trim();
   const showEmailError = trimmedEmail !== "" && !isValidEmail(trimmedEmail);
@@ -19,29 +24,15 @@ export function ResetPasswordForm({ onSubmit }: ResetPasswordFormProps) {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!isFormComplete) {
+    if (!isFormComplete || isSubmitting) {
       return;
     }
 
     await onSubmit(trimmedEmail);
-    setSubmitted(true);
   };
 
-  if (submitted) {
-    return (
-      <div className="space-y-4 text-center">
-        <p className="text-sm leading-relaxed text-muted-foreground" role="status">
-          If an account exists for{" "}
-          <span className="font-semibold text-foreground">{trimmedEmail}</span>,
-          we sent a password reset link. Check your inbox and follow the
-          instructions.
-        </p>
-      </div>
-    );
-  }
-
   return (
-    <form className="space-y-5" onSubmit={handleSubmit}>
+    <form className="space-y-5" onSubmit={(event) => void handleSubmit(event)}>
       <div className="space-y-2">
         <label
           htmlFor="reset-email"
@@ -61,6 +52,7 @@ export function ResetPasswordForm({ onSubmit }: ResetPasswordFormProps) {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             aria-invalid={showEmailError}
+            disabled={isSubmitting}
             className="h-11 rounded-lg border-border bg-card pr-3.5 pl-10 text-foreground shadow-none placeholder:text-muted-foreground"
           />
         </div>
@@ -72,12 +64,18 @@ export function ResetPasswordForm({ onSubmit }: ResetPasswordFormProps) {
         </p>
       )}
 
+      {error ? (
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      ) : null}
+
       <Button
         type="submit"
-        disabled={!isFormComplete}
+        disabled={!isFormComplete || isSubmitting}
         className="h-11 w-full text-base font-semibold"
       >
-        Send Reset Link
+        {isSubmitting ? "Sending..." : "Send Reset Link"}
       </Button>
     </form>
   );

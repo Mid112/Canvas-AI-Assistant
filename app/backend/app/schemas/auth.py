@@ -31,6 +31,17 @@ class PasswordResetRequest(BaseModel):
     email: EmailStr
 
 
+class PasswordResetRequestResponse(BaseModel):
+    # Always the same generic acknowledgement so responses do not reveal
+    # whether the email matched an account. ``reset_token`` is only populated
+    # when settings.DEBUG is true (local/e2e without SMTP); production never
+    # returns the raw token on this public endpoint.
+    message: str = (
+        "If an account exists for that email, a password reset was started."
+    )
+    reset_token: str | None = None
+
+
 class PasswordResetConfirmRequest(BaseModel):
     token: str = Field(min_length=1)
     new_password: str = Field(min_length=8)

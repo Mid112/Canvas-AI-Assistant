@@ -5,6 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.database import get_db
 from app.core.limiter import limiter
 from app.dependencies import bearer, get_current_user
@@ -20,6 +21,7 @@ from app.schemas.auth import (
     NotificationSettingsUpdate,
     PasswordResetConfirmRequest,
     PasswordResetRequest,
+    PasswordResetRequestResponse,
     ProfileUpdateRequest,
     RegisterRequest,
     SecurityStatusResponse,
@@ -81,13 +83,30 @@ async def logout(
         await logout_user(db, credentials.credentials, current_user)
 
 
-@router.post("/password-reset/request", status_code=status.HTTP_204_NO_CONTENT)
-async def password_reset_request(body: PasswordResetRequest, db: AsyncSession = Depends(get_db)):
-    await request_password_reset(db, body.email)
+@router.post("/password-reset/request", response_model=PasswordResetRequestResponse)
+@limiter.limit("5/minute")
+async def password_reset_request(
+    request: Request,
+    body: PasswordResetRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    # Always 200 with the same acknowledgement shape so callers cannot tell
+    # whether the email matched an account. The raw token is a single-use
+    # secret that belongs in an out-of-band channel (email) — never on this
+    # public response in production. With no SMTP yet, DEBUG/e2e may include
+    # the token so local testing can finish confirm without inbox delivery.
+    token = await request_password_reset(db, body.email)
+    debug_token = token if settings.DEBUG else None
+    return PasswordResetRequestResponse(reset_token=debug_token)
 
 
 @router.post("/password-reset/confirm", status_code=status.HTTP_204_NO_CONTENT)
-async def password_reset_confirm(body: PasswordResetConfirmRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("5/minute")
+async def password_reset_confirm(
+    request: Request,
+    body: PasswordResetConfirmRequest,
+    db: AsyncSession = Depends(get_db),
+):
     await confirm_password_reset(db, body)
 
 

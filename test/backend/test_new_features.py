@@ -60,14 +60,60 @@ def test_notification_settings(client):
 
 
 # Verifies: Password reset flow.
-def test_password_reset_flow(client):
+def test_password_reset_flow(client, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "DEBUG", True)
     email = f"reset_{uuid.uuid4()}@example.com"
     client.post(
         "/api/v1/auth/register",
         json={"name": "Reset User", "email": email, "password": "secret123"},
     )
     request = client.post("/api/v1/auth/password-reset/request", json={"email": email})
-    assert request.status_code == 204
+    assert request.status_code == 200
+    body = request.json()
+    assert "If an account exists" in body["message"]
+    token = body["reset_token"]
+    assert token
+
+    confirm = client.post(
+        "/api/v1/auth/password-reset/confirm",
+        json={"token": token, "new_password": "brandnew99"},
+    )
+    assert confirm.status_code == 204
+
+    login = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "brandnew99"},
+    )
+    assert login.status_code == 200
+
+
+def test_password_reset_request_unknown_email_returns_null_token(client):
+    request = client.post(
+        "/api/v1/auth/password-reset/request",
+        json={"email": f"missing_{uuid.uuid4()}@example.com"},
+    )
+    assert request.status_code == 200
+    body = request.json()
+    assert "If an account exists" in body["message"]
+    assert body["reset_token"] is None
+
+
+def test_password_reset_request_hides_token_when_debug_disabled(client, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "DEBUG", False)
+    email = f"reset_prod_{uuid.uuid4()}@example.com"
+    client.post(
+        "/api/v1/auth/register",
+        json={"name": "Reset User", "email": email, "password": "secret123"},
+    )
+    request = client.post("/api/v1/auth/password-reset/request", json={"email": email})
+    assert request.status_code == 200
+    body = request.json()
+    assert "If an account exists" in body["message"]
+    assert body["reset_token"] is None
 
 
 # Verifies: Security status.

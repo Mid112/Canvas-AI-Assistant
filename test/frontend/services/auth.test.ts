@@ -380,3 +380,56 @@ describe("auth service requests", () => {
     );
   });
 });
+
+describe("password reset API", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("requests a password reset token", async () => {
+    const { requestPasswordReset } = await import("@/services/auth");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          message: "If an account exists for that email, a password reset was started.",
+          reset_token: "tok-123",
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await expect(requestPasswordReset("you@university.edu")).resolves.toEqual({
+      message: "If an account exists for that email, a password reset was started.",
+      reset_token: "tok-123",
+    });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/auth/password-reset/request",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("confirms a password reset", async () => {
+    const { confirmPasswordReset } = await import("@/services/auth");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, { status: 204 }),
+    );
+
+    await expect(
+      confirmPasswordReset("tok-123", "newpass123"),
+    ).resolves.toBeUndefined();
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/auth/password-reset/confirm",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          token: "tok-123",
+          new_password: "newpass123",
+        }),
+      }),
+    );
+  });
+});

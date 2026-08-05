@@ -19,7 +19,7 @@ describe("ResetPasswordHeader", () => {
 
     expect(
       screen.getByText(
-        "Enter your email address and we'll send you a link to reset your password",
+        "Enter your email address and we'll start a password reset for your account.",
       ),
     ).toBeInTheDocument();
   });
