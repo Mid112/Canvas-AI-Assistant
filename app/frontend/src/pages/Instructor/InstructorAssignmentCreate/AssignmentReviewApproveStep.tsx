@@ -75,9 +75,9 @@ export function AssignmentReviewApproveStep({
     if (!onDraftChange) return;
     const watchedPoints = watchedValues.pointsPossible;
     onDraftChange({
-      name: String(watchedValues.name ?? ""),
-      description: String(watchedValues.description ?? ""),
-      dueDate: String(watchedValues.dueDate ?? ""),
+      name: String(watchedValues.name ?? draft.name),
+      description: String(watchedValues.description ?? draft.description),
+      dueDate: String(watchedValues.dueDate ?? draft.dueDate),
       pointsPossible:
         typeof watchedPoints === "number" &&
         Number.isFinite(watchedPoints) &&
@@ -85,7 +85,14 @@ export function AssignmentReviewApproveStep({
           ? watchedPoints
           : null,
     });
-  }, [onDraftChange, watchedValues, draft.pointsPossible]);
+  }, [
+    onDraftChange,
+    watchedValues,
+    draft.name,
+    draft.description,
+    draft.dueDate,
+    draft.pointsPossible,
+  ]);
 
   return (
     <Card className="shadow-sm ring-1 ring-border/60">
