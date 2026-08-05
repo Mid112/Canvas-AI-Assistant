@@ -319,6 +319,10 @@ describe("InstructorAssistantPage", () => {
 
     renderWithInstitution(<InstructorAssistantPage />);
 
+    expect(
+      screen.getByRole("region", { name: "Starter prompts" }),
+    ).toBeInTheDocument();
+
     await user.click(await screen.findByRole("button", {
       name: /Previous conversation/,
     }));
@@ -327,6 +331,10 @@ describe("InstructorAssistantPage", () => {
     expect(
       screen.getByText(/Hello! I'm your Canvas AI Assistant/),
     ).toBeInTheDocument();
+    // Verifies (#1441): Loading history also clears first-time starter guidance.
+    expect(
+      screen.queryByRole("region", { name: "Starter prompts" }),
+    ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /New Chat/i }));
 
@@ -335,6 +343,9 @@ describe("InstructorAssistantPage", () => {
     });
     expect(
       screen.getByText(/Hello! I'm your Canvas AI Assistant/),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("region", { name: "Starter prompts" }),
     ).toBeInTheDocument();
   });
 });
