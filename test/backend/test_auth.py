@@ -27,7 +27,7 @@ def test_register(client):
     email = f"test_{uuid.uuid4()}@example.com"
     response = client.post(
         "/api/v1/auth/register",
-        json={"name": "Test User", "email": email, "password": "secret123"}
+        json={"name": "Test User", "email": email, "password": "Secret123!"}
     )
     assert response.status_code == 201
     assert "access_token" in response.json()
@@ -39,11 +39,11 @@ def test_login(client):
     email = f"test_{uuid.uuid4()}@example.com"
     client.post(
         "/api/v1/auth/register",
-        json={"name": "Test User", "email": email, "password": "secret123"}
+        json={"name": "Test User", "email": email, "password": "Secret123!"}
     )
     response = client.post(
         "/api/v1/auth/login",
-        json={"email": email, "password": "secret123"}
+        json={"email": email, "password": "Secret123!"}
     )
     assert response.status_code == 200
     assert "access_token" in response.json()
@@ -54,7 +54,7 @@ def test_login_wrong_password(client):
     email = f"test_{uuid.uuid4()}@example.com"
     client.post(
         "/api/v1/auth/register",
-        json={"name": "Test User", "email": email, "password": "secret123"}
+        json={"name": "Test User", "email": email, "password": "Secret123!"}
     )
     response = client.post(
         "/api/v1/auth/login",
@@ -69,7 +69,7 @@ def test_expired_session_rejected(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Test User", "email": email, "password": "secret123"},
+        json={"name": "Test User", "email": email, "password": "Secret123!"},
     )
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -99,11 +99,11 @@ def test_register_duplicate_email(client):
     email = f"test_{uuid.uuid4()}@example.com"
     client.post(
         "/api/v1/auth/register",
-        json={"name": "Test User", "email": email, "password": "secret123"}
+        json={"name": "Test User", "email": email, "password": "Secret123!"}
     )
     response = client.post(
         "/api/v1/auth/register",
-        json={"name": "Test User", "email": email, "password": "secret123"}
+        json={"name": "Test User", "email": email, "password": "Secret123!"}
     )
     assert response.status_code == 400
 
@@ -113,7 +113,7 @@ def test_get_current_user(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Test User", "email": email, "password": "secret123"}
+        json={"name": "Test User", "email": email, "password": "Secret123!"}
     )
     token = reg.json()["access_token"]
     response = client.get(
@@ -144,7 +144,7 @@ def test_update_current_user(client):
     new_email = f"updated_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Test User", "email": email, "password": "secret123"}
+        json={"name": "Test User", "email": email, "password": "Secret123!"}
     )
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
 
@@ -165,11 +165,11 @@ def test_update_current_user_duplicate_email(client):
     email_b = f"test_{uuid.uuid4()}@example.com"
     client.post(
         "/api/v1/auth/register",
-        json={"name": "User A", "email": email_a, "password": "secret123"}
+        json={"name": "User A", "email": email_a, "password": "Secret123!"}
     )
     reg_b = client.post(
         "/api/v1/auth/register",
-        json={"name": "User B", "email": email_b, "password": "secret123"}
+        json={"name": "User B", "email": email_b, "password": "Secret123!"}
     )
     headers_b = {"Authorization": f"Bearer {reg_b.json()['access_token']}"}
 
@@ -187,7 +187,7 @@ def test_delete_current_user(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Delete Me", "email": email, "password": "secret123"}
+        json={"name": "Delete Me", "email": email, "password": "Secret123!"}
     )
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
 
@@ -197,7 +197,7 @@ def test_delete_current_user(client):
     response = client.request(
         "DELETE",
         "/api/v1/auth/me",
-        json={"password": "secret123"},
+        json={"password": "Secret123!"},
         headers=headers,
     )
 
@@ -208,7 +208,7 @@ def test_delete_current_user(client):
 # Verifies: Set canvas token.
 def test_set_canvas_token(client):
     email = f"test_{uuid.uuid4()}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -230,7 +230,7 @@ def test_set_canvas_token(client):
 # Verifies: Validate canvas token.
 def test_validate_canvas_token(client):
     email = f"test_{uuid.uuid4()}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -260,7 +260,7 @@ def test_validate_canvas_token_requires_auth(client):
 # Verifies: Canvas token save requires a Canvas URL.
 def test_set_canvas_token_requires_canvas_url(client):
     email = f"test_{uuid.uuid4()}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
 
     resp = client.patch(
@@ -275,7 +275,7 @@ def test_set_canvas_token_requires_canvas_url(client):
 # Verifies: Canvas token validation requires a Canvas URL.
 def test_validate_canvas_token_requires_canvas_url(client):
     email = f"test_{uuid.uuid4()}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
 
     resp = client.post(
@@ -290,7 +290,7 @@ def test_validate_canvas_token_requires_canvas_url(client):
 # Verifies: Set canvas token second school.
 def test_set_canvas_token_second_school(client):
     email = f"test_{uuid.uuid4()}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -308,7 +308,7 @@ def test_set_canvas_token_second_school(client):
 # Verifies: Set canvas token upsert same school.
 def test_set_canvas_token_upsert_same_school(client):
     email = f"test_{uuid.uuid4()}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -333,7 +333,7 @@ def test_set_canvas_token_invalid_returns_422(client):
     from fastapi import HTTPException
 
     email = f"test_{uuid.uuid4()}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -356,7 +356,7 @@ def test_set_canvas_token_invalid_returns_422(client):
 # Verifies: Set canvas token empty string rejected.
 def test_set_canvas_token_empty_string_rejected(client):
     email = f"test_{uuid.uuid4()}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -371,7 +371,7 @@ def test_set_canvas_token_empty_string_rejected(client):
 # Verifies: Canvas url must be https.
 def test_canvas_url_must_be_https(client):
     email = f"test_{uuid.uuid4()}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -383,7 +383,7 @@ def test_canvas_url_must_be_https(client):
 def test_debug_allows_canvas_lms_http_url(client, monkeypatch):
     monkeypatch.setattr(settings, "DEBUG", True)
     email = f"test_{uuid.uuid4()}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -401,7 +401,7 @@ def test_debug_allows_canvas_lms_http_url(client, monkeypatch):
 def test_debug_rejects_untrusted_http_url(client, monkeypatch):
     monkeypatch.setattr(settings, "DEBUG", True)
     email = f"test_{uuid.uuid4()}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -414,7 +414,7 @@ def test_debug_rejects_untrusted_http_url(client, monkeypatch):
 def test_non_debug_allows_localhost_http_url(client, monkeypatch):
     monkeypatch.setattr(settings, "DEBUG", False)
     email = f"test_{uuid.uuid4()}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -430,7 +430,7 @@ def test_non_debug_allows_localhost_http_url(client, monkeypatch):
 # Verifies: Delete canvas connection.
 def test_delete_canvas_connection(client):
     email = f"test_{uuid.uuid4()}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -449,7 +449,7 @@ def test_delete_canvas_connection(client):
 # Verifies: Delete canvas connection not found.
 def test_delete_canvas_connection_not_found(client):
     email = f"test_{uuid.uuid4()}@example.com"
-    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "secret123", "name": "Test User"})
+    reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -460,8 +460,8 @@ def test_delete_canvas_connection_not_found(client):
 def test_delete_canvas_connection_wrong_user(client):
     email_a = f"test_{uuid.uuid4()}@example.com"
     email_b = f"test_{uuid.uuid4()}@example.com"
-    reg_a = client.post("/api/v1/auth/register", json={"email": email_a, "password": "secret123", "name": "User A"})
-    reg_b = client.post("/api/v1/auth/register", json={"email": email_b, "password": "secret123", "name": "User B"})
+    reg_a = client.post("/api/v1/auth/register", json={"email": email_a, "password": "Secret123!", "name": "User A"})
+    reg_b = client.post("/api/v1/auth/register", json={"email": email_b, "password": "Secret123!", "name": "User B"})
     headers_a = {"Authorization": f"Bearer {reg_a.json()['access_token']}"}
     headers_b = {"Authorization": f"Bearer {reg_b.json()['access_token']}"}
 

@@ -4,7 +4,15 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { isValidEmail, isValidPassword, MIN_PASSWORD_LENGTH } from "@/lib/validation";
+import { isValidEmail, isValidPassword } from "@/lib/validation";
+import { PasswordInput } from "@/pages/Auth/PasswordInput";
+import {
+  PasswordMatchStatus,
+  PasswordMismatchAlert,
+  passwordMismatchInputClassName,
+  passwordValidInputClassName,
+} from "@/pages/Auth/PasswordMismatchAlert";
+import { PasswordRequirementsChecklist } from "@/pages/Auth/PasswordRequirementsChecklist";
 import type { RegisterCredentials } from "@/types/auth";
 
 interface RegisterFormProps {
@@ -30,18 +38,26 @@ export function RegisterForm({
   const [confirmPassword, setConfirmPassword] = useState("");
   const [acceptedTerms, setAcceptedTerms] = useState(false);
 
+  const trimmedFirstName = firstName.trim();
+  const trimmedLastName = lastName.trim();
   const trimmedEmail = email.trim();
-  const showEmailError = trimmedEmail !== "" && !isValidEmail(trimmedEmail);
-  const showPasswordError = password !== "" && !isValidPassword(password);
+  const firstNameIsValid = trimmedFirstName !== "";
+  const lastNameIsValid = trimmedLastName !== "";
+  const emailIsValid = isValidEmail(trimmedEmail);
+  const showEmailError = trimmedEmail !== "" && !emailIsValid;
+  const passwordIsValid = isValidPassword(password);
+  const passwordIsInvalid = password !== "" && !passwordIsValid;
   const passwordsMatch = password === confirmPassword;
   const showPasswordMismatchError =
     confirmPassword !== "" && !passwordsMatch;
+  const showConfirmPasswordValid =
+    confirmPassword !== "" && passwordsMatch && passwordIsValid;
 
   const hasRequiredFields =
-    firstName.trim() !== "" &&
-    lastName.trim() !== "" &&
-    isValidEmail(trimmedEmail) &&
-    isValidPassword(password) &&
+    firstNameIsValid &&
+    lastNameIsValid &&
+    emailIsValid &&
+    passwordIsValid &&
     confirmPassword !== "" &&
     passwordsMatch;
 
@@ -55,7 +71,7 @@ export function RegisterForm({
     }
 
     await onSubmit({
-      name: [firstName.trim(), lastName.trim()].join(" "),
+      name: [trimmedFirstName, trimmedLastName].join(" "),
       email: trimmedEmail,
       password,
     });
@@ -74,7 +90,10 @@ export function RegisterForm({
             placeholder="Jane"
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
-            className={inputClassName}
+            className={cn(
+              inputClassName,
+              firstNameIsValid && passwordValidInputClassName,
+            )}
           />
         </div>
 
@@ -88,7 +107,10 @@ export function RegisterForm({
             placeholder="Smith"
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
-            className={inputClassName}
+            className={cn(
+              inputClassName,
+              lastNameIsValid && passwordValidInputClassName,
+            )}
           />
         </div>
       </div>
@@ -104,7 +126,10 @@ export function RegisterForm({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           aria-invalid={showEmailError}
-          className={inputClassName}
+          className={cn(
+            inputClassName,
+            emailIsValid && passwordValidInputClassName,
+          )}
         />
       </div>
 
@@ -118,49 +143,56 @@ export function RegisterForm({
         <label htmlFor="password" className={labelClassName}>
           Password
         </label>
-        <Input
+        <PasswordInput
           id="password"
-          type="password"
           placeholder="Create a strong password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          aria-invalid={showPasswordError}
-          className={inputClassName}
+          aria-invalid={passwordIsInvalid}
+          aria-describedby="password-requirements"
+          autoComplete="new-password"
+          className={cn(
+            inputClassName,
+            passwordIsValid && passwordValidInputClassName,
+          )}
+        />
+        <PasswordRequirementsChecklist
+          id="password-requirements"
+          password={password}
         />
       </div>
-
-      {showPasswordError && (
-        <p className="text-sm text-destructive" role="alert">
-          Password must be at least {MIN_PASSWORD_LENGTH} characters
-        </p>
-      )}
 
       <div className="space-y-2">
         <label htmlFor="confirm-password" className={labelClassName}>
           Confirm Password
         </label>
-        <Input
+        <PasswordInput
           id="confirm-password"
-          type="password"
           placeholder="Re-enter your password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           aria-invalid={showPasswordMismatchError}
           aria-describedby={
-            showPasswordMismatchError ? "confirm-password-mismatch" : undefined
+            showPasswordMismatchError
+              ? "confirm-password-mismatch"
+              : showConfirmPasswordValid
+                ? "confirm-password-match"
+                : undefined
           }
-          className={inputClassName}
+          autoComplete="new-password"
+          className={cn(
+            inputClassName,
+            showPasswordMismatchError && passwordMismatchInputClassName,
+            showConfirmPasswordValid && passwordValidInputClassName,
+          )}
         />
-        {/* Ticket 27 / #1451: keep mismatch feedback next to the confirm field
-            so users can tell which value to correct before submit. */}
+        {/* Ticket 27 / #1451: keep mismatch/match feedback next to the confirm
+            field so users can tell which value to correct before submit. */}
         {showPasswordMismatchError ? (
-          <p
-            id="confirm-password-mismatch"
-            className="text-sm text-destructive"
-            role="alert"
-          >
-            Confirm password must match the password above
-          </p>
+          <PasswordMismatchAlert id="confirm-password-mismatch" />
+        ) : null}
+        {showConfirmPasswordValid ? (
+          <PasswordMatchStatus id="confirm-password-match" />
         ) : null}
       </div>
 

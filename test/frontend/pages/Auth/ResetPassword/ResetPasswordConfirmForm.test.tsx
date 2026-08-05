@@ -12,7 +12,7 @@ describe("ResetPasswordConfirmForm", () => {
 
     renderWithRouter(<ResetPasswordConfirmForm onSubmit={vi.fn()} />);
 
-    await user.type(screen.getByLabelText("New Password"), "secret123");
+    await user.type(screen.getByLabelText("New Password"), "Secret123!");
     await user.type(screen.getByLabelText("Confirm Password"), "different");
 
     const confirmPasswordInput = screen.getByLabelText("Confirm Password");
@@ -26,7 +26,9 @@ describe("ResetPasswordConfirmForm", () => {
       "aria-describedby",
       "reset-confirm-password-mismatch",
     );
-    expect(confirmPasswordInput.parentElement).toContainElement(mismatchAlert);
+    expect(
+      confirmPasswordInput.closest(".space-y-2"),
+    ).toContainElement(mismatchAlert);
     expect(
       screen.getByRole("button", { name: "Update Password" }),
     ).toBeDisabled();
@@ -37,7 +39,7 @@ describe("ResetPasswordConfirmForm", () => {
 
     renderWithRouter(<ResetPasswordConfirmForm onSubmit={vi.fn()} />);
 
-    await user.type(screen.getByLabelText("New Password"), "secret123");
+    await user.type(screen.getByLabelText("New Password"), "Secret123!");
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -49,14 +51,17 @@ describe("ResetPasswordConfirmForm", () => {
 
     const confirmPasswordInput = screen.getByLabelText("Confirm Password");
 
-    await user.type(screen.getByLabelText("New Password"), "secret123");
+    await user.type(screen.getByLabelText("New Password"), "Secret123!");
     await user.type(confirmPasswordInput, "different");
     expect(screen.getByRole("alert")).toBeInTheDocument();
 
     await user.clear(confirmPasswordInput);
-    await user.type(confirmPasswordInput, "secret123");
+    await user.type(confirmPasswordInput, "Secret123!");
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Password confirmation" }),
+    ).toHaveTextContent("Passwords match");
     expect(confirmPasswordInput).not.toHaveAttribute("aria-invalid", "true");
     expect(
       screen.getByRole("button", { name: "Update Password" }),
@@ -69,10 +74,10 @@ describe("ResetPasswordConfirmForm", () => {
 
     renderWithRouter(<ResetPasswordConfirmForm onSubmit={onSubmit} />);
 
-    await user.type(screen.getByLabelText("New Password"), "secret123");
-    await user.type(screen.getByLabelText("Confirm Password"), "secret123");
+    await user.type(screen.getByLabelText("New Password"), "Secret123!");
+    await user.type(screen.getByLabelText("Confirm Password"), "Secret123!");
     await user.click(screen.getByRole("button", { name: "Update Password" }));
 
-    expect(onSubmit).toHaveBeenCalledWith("secret123");
+    expect(onSubmit).toHaveBeenCalledWith("Secret123!");
   });
 });

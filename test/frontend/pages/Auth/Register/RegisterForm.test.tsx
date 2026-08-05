@@ -9,8 +9,8 @@ async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText("First Name"), "Jane");
   await user.type(screen.getByLabelText("Last Name"), "Smith");
   await user.type(screen.getByLabelText("Email Address"), "professor@university.edu");
-  await user.type(screen.getByLabelText("Password"), "secret123");
-  await user.type(screen.getByLabelText("Confirm Password"), "secret123");
+  await user.type(screen.getByLabelText("Password"), "Secret123!");
+  await user.type(screen.getByLabelText("Confirm Password"), "Secret123!");
   await user.click(
     screen.getByLabelText(
       "I agree to the Terms of Service and Privacy Policy",
@@ -88,8 +88,8 @@ describe("RegisterForm", () => {
     expect(submitButton).toBeDisabled();
 
     await user.type(screen.getByLabelText("Email Address"), "professor@university.edu");
-    await user.type(screen.getByLabelText("Password"), "secret123");
-    await user.type(screen.getByLabelText("Confirm Password"), "secret123");
+    await user.type(screen.getByLabelText("Password"), "Secret123!");
+    await user.type(screen.getByLabelText("Confirm Password"), "Secret123!");
     expect(submitButton).toBeDisabled();
 
     await user.click(
@@ -106,7 +106,7 @@ describe("RegisterForm", () => {
 
     renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
 
-    await user.type(screen.getByLabelText("Password"), "secret123");
+    await user.type(screen.getByLabelText("Password"), "Secret123!");
     await user.type(screen.getByLabelText("Confirm Password"), "different");
 
     const confirmPasswordInput = screen.getByLabelText("Confirm Password");
@@ -120,7 +120,9 @@ describe("RegisterForm", () => {
       "aria-describedby",
       "confirm-password-mismatch",
     );
-    expect(confirmPasswordInput.parentElement).toContainElement(mismatchAlert);
+    expect(
+      confirmPasswordInput.closest(".space-y-2"),
+    ).toContainElement(mismatchAlert);
     expect(
       screen.getByRole("button", { name: "Create Account" }),
     ).toBeDisabled();
@@ -132,7 +134,7 @@ describe("RegisterForm", () => {
 
     renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
 
-    await user.type(screen.getByLabelText("Password"), "secret123");
+    await user.type(screen.getByLabelText("Password"), "Secret123!");
 
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -145,13 +147,16 @@ describe("RegisterForm", () => {
 
     const confirmPasswordInput = screen.getByLabelText("Confirm Password");
 
-    await user.type(screen.getByLabelText("Password"), "secret123");
+    await user.type(screen.getByLabelText("Password"), "Secret123!");
     await user.type(confirmPasswordInput, "different");
     expect(screen.getByRole("alert")).toBeInTheDocument();
 
     await user.clear(confirmPasswordInput);
-    await user.type(confirmPasswordInput, "secret123");
+    await user.type(confirmPasswordInput, "Secret123!");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Password confirmation" }),
+    ).toHaveTextContent("Passwords match");
     expect(confirmPasswordInput).not.toHaveAttribute("aria-invalid", "true");
   });
 
@@ -168,7 +173,7 @@ describe("RegisterForm", () => {
     expect(onSubmit).toHaveBeenCalledWith({
       name: "Jane Smith",
       email: "professor@university.edu",
-      password: "secret123",
+      password: "Secret123!",
     });
   });
 
@@ -187,14 +192,14 @@ describe("RegisterForm", () => {
     await user.type(firstNameInput, "Jane");
     await user.type(lastNameInput, "Smith");
     await user.type(emailInput, "professor@university.edu");
-    await user.type(passwordInput, "secret123");
-    await user.type(confirmPasswordInput, "secret123");
+    await user.type(passwordInput, "Secret123!");
+    await user.type(confirmPasswordInput, "Secret123!");
 
     expect(firstNameInput).toHaveValue("Jane");
     expect(lastNameInput).toHaveValue("Smith");
     expect(emailInput).toHaveValue("professor@university.edu");
-    expect(passwordInput).toHaveValue("secret123");
-    expect(confirmPasswordInput).toHaveValue("secret123");
+    expect(passwordInput).toHaveValue("Secret123!");
+    expect(confirmPasswordInput).toHaveValue("Secret123!");
   });
 
   // Verifies: Shows an email validation error for invalid addresses.
@@ -213,17 +218,34 @@ describe("RegisterForm", () => {
     ).toBeDisabled();
   });
 
-  // Verifies: Shows a password length error for short passwords.
-  it("shows a password length error for short passwords", async () => {
+  // Verifies (#1451): Password checklist appears and checks off met rules.
+  it("shows a password requirements checklist that updates as rules are met", async () => {
     const user = userEvent.setup();
 
     renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
 
-    await user.type(screen.getByLabelText("Password"), "short");
+    const checklist = screen.getByRole("list", { name: "Password requirements" });
+    expect(
+      checklist.querySelector('[data-requirement="length"]'),
+    ).toHaveAttribute("data-met", "false");
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Password must be at least 8 characters",
-    );
+    await user.type(screen.getByLabelText("Password"), "Secret123!");
+
+    expect(
+      checklist.querySelector('[data-requirement="length"]'),
+    ).toHaveAttribute("data-met", "true");
+    expect(
+      checklist.querySelector('[data-requirement="uppercase"]'),
+    ).toHaveAttribute("data-met", "true");
+    expect(
+      checklist.querySelector('[data-requirement="lowercase"]'),
+    ).toHaveAttribute("data-met", "true");
+    expect(
+      checklist.querySelector('[data-requirement="number"]'),
+    ).toHaveAttribute("data-met", "true");
+    expect(
+      checklist.querySelector('[data-requirement="symbol"]'),
+    ).toHaveAttribute("data-met", "true");
     expect(
       screen.getByRole("button", { name: "Create Account" }),
     ).toBeDisabled();
@@ -238,12 +260,17 @@ describe("RegisterForm", () => {
     await user.type(screen.getByLabelText("First Name"), "Jane");
     await user.type(screen.getByLabelText("Last Name"), "Smith");
     await user.type(screen.getByLabelText("Email Address"), "professor@university.edu");
-    await user.type(screen.getByLabelText("Password"), "secret123");
-    await user.type(screen.getByLabelText("Confirm Password"), "secret123");
+    await user.type(screen.getByLabelText("Password"), "Secret123!");
+    await user.type(screen.getByLabelText("Confirm Password"), "Secret123!");
 
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Accept the Terms of Service and Privacy Policy to continue.",
-    );
+    expect(
+      screen.getByText(
+        "Accept the Terms of Service and Privacy Policy to continue.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("status", { name: "Password confirmation" }),
+    ).toHaveTextContent("Passwords match");
   });
 
   // Verifies: Does not submit when the form is incomplete.

@@ -53,7 +53,7 @@ def _register(client) -> dict:
     email = f"perm_{uuid.uuid4()}@example.com"
     resp = client.post(
         "/api/v1/auth/register",
-        json={"name": "Perm Test", "email": email, "password": "secret123"},
+        json={"name": "Perm Test", "email": email, "password": "Secret123!"},
     )
     assert resp.status_code == 201, resp.json()
     token = resp.json()["access_token"]

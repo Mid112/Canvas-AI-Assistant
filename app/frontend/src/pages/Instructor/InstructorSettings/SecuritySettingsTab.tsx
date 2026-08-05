@@ -2,9 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
+import { cn } from "@/lib/utils";
+import { isValidPassword } from "@/lib/validation";
+import { PasswordInput } from "@/pages/Auth/PasswordInput";
+import { passwordValidInputClassName } from "@/pages/Auth/PasswordMismatchAlert";
+import { PasswordRequirementsChecklist } from "@/pages/Auth/PasswordRequirementsChecklist";
 import {
   changeCurrentPassword,
   fetchSecurityStatus,
@@ -98,6 +102,14 @@ export function SecuritySettingsTab() {
       return;
     }
 
+    if (!isValidPassword(newPassword)) {
+      setErrorMessage(
+        "New password must be at least 8 characters and include uppercase, lowercase, a number, and a symbol.",
+      );
+      setMessage(null);
+      return;
+    }
+
     setIsSavingPassword(true);
     setErrorMessage(null);
     setMessage(null);
@@ -174,9 +186,8 @@ export function SecuritySettingsTab() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="current-password">Current Password</Label>
-              <Input
+              <PasswordInput
                 id="current-password"
-                type="password"
                 value={currentPassword}
                 onChange={(event) => setCurrentPassword(event.target.value)}
                 autoComplete="current-password"
@@ -184,19 +195,31 @@ export function SecuritySettingsTab() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="new-password">New Password</Label>
-              <Input
+              <PasswordInput
                 id="new-password"
-                type="password"
                 value={newPassword}
                 onChange={(event) => setNewPassword(event.target.value)}
+                aria-invalid={newPassword !== "" && !isValidPassword(newPassword)}
+                aria-describedby="settings-password-requirements"
                 autoComplete="new-password"
+                className={cn(
+                  isValidPassword(newPassword) && passwordValidInputClassName,
+                )}
               />
             </div>
           </div>
+          <PasswordRequirementsChecklist
+            id="settings-password-requirements"
+            password={newPassword}
+          />
           <Button
             type="button"
             variant="outline"
-            disabled={isSavingPassword}
+            disabled={
+              isSavingPassword ||
+              !currentPassword ||
+              !isValidPassword(newPassword)
+            }
             onClick={() => void handlePasswordChange()}
           >
             {isSavingPassword ? "Changing..." : "Change Password"}

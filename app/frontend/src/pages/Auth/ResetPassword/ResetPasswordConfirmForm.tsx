@@ -1,7 +1,16 @@
 import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { isValidPassword } from "@/lib/validation";
+import { PasswordInput } from "@/pages/Auth/PasswordInput";
+import {
+  PasswordMatchStatus,
+  PasswordMismatchAlert,
+  passwordMismatchInputClassName,
+  passwordValidInputClassName,
+} from "@/pages/Auth/PasswordMismatchAlert";
+import { PasswordRequirementsChecklist } from "@/pages/Auth/PasswordRequirementsChecklist";
 
 interface ResetPasswordConfirmFormProps {
   onSubmit: (password: string) => void | Promise<void>;
@@ -17,12 +26,15 @@ export function ResetPasswordConfirmForm({
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
 
+  const passwordIsValid = isValidPassword(password);
   const passwordsMatch = password === confirmPassword;
-  const showPasswordLengthError = password !== "" && password.length < 8;
+  const passwordIsInvalid = password !== "" && !passwordIsValid;
   const showMismatch =
     confirmPassword !== "" && password !== "" && !passwordsMatch;
+  const showConfirmPasswordValid =
+    confirmPassword !== "" && passwordsMatch && passwordIsValid;
   const isFormComplete =
-    password.length >= 8 && confirmPassword.length >= 8 && passwordsMatch;
+    passwordIsValid && confirmPassword !== "" && passwordsMatch;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -42,28 +54,24 @@ export function ResetPasswordConfirmForm({
         >
           New Password
         </label>
-        <Input
+        <PasswordInput
           id="reset-new-password"
-          type="password"
-          placeholder="At least 8 characters"
+          placeholder="Create a strong password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          aria-invalid={showPasswordLengthError}
-          aria-describedby={
-            showPasswordLengthError ? "reset-password-length" : undefined
-          }
+          aria-invalid={passwordIsInvalid}
+          aria-describedby="reset-password-requirements"
+          autoComplete="new-password"
           disabled={isSubmitting}
-          className="h-11 rounded-lg border-border bg-card px-3.5 text-foreground shadow-none placeholder:text-muted-foreground"
+          className={cn(
+            "h-11 rounded-lg border-border bg-card px-3.5 text-foreground shadow-none placeholder:text-muted-foreground",
+            passwordIsValid && passwordValidInputClassName,
+          )}
         />
-        {showPasswordLengthError ? (
-          <p
-            id="reset-password-length"
-            className="text-sm text-destructive"
-            role="alert"
-          >
-            Password must be at least 8 characters.
-          </p>
-        ) : null}
+        <PasswordRequirementsChecklist
+          id="reset-password-requirements"
+          password={password}
+        />
       </div>
 
       <div className="space-y-2">
@@ -73,28 +81,33 @@ export function ResetPasswordConfirmForm({
         >
           Confirm Password
         </label>
-        <Input
+        <PasswordInput
           id="reset-confirm-password"
-          type="password"
           placeholder="Re-enter your new password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           aria-invalid={showMismatch}
           aria-describedby={
-            showMismatch ? "reset-confirm-password-mismatch" : undefined
+            showMismatch
+              ? "reset-confirm-password-mismatch"
+              : showConfirmPasswordValid
+                ? "reset-confirm-password-match"
+                : undefined
           }
+          autoComplete="new-password"
           disabled={isSubmitting}
-          className="h-11 rounded-lg border-border bg-card px-3.5 text-foreground shadow-none placeholder:text-muted-foreground"
+          className={cn(
+            "h-11 rounded-lg border-border bg-card px-3.5 text-foreground shadow-none placeholder:text-muted-foreground",
+            showMismatch && passwordMismatchInputClassName,
+            showConfirmPasswordValid && passwordValidInputClassName,
+          )}
         />
-        {/* Ticket 27 / #1451: mismatch feedback stays under Confirm Password. */}
+        {/* Ticket 27 / #1451: mismatch/match feedback under Confirm Password. */}
         {showMismatch ? (
-          <p
-            id="reset-confirm-password-mismatch"
-            className="text-sm text-destructive"
-            role="alert"
-          >
-            Confirm password must match the password above
-          </p>
+          <PasswordMismatchAlert id="reset-confirm-password-mismatch" />
+        ) : null}
+        {showConfirmPasswordValid ? (
+          <PasswordMatchStatus id="reset-confirm-password-match" />
         ) : null}
       </div>
 

@@ -80,7 +80,7 @@ def test_change_password_success_and_rejects_wrong_current(client):
 
     wrong = client.post(
         "/api/v1/auth/me/change-password",
-        json={"current_password": "not-the-password", "new_password": "newpass123"},
+        json={"current_password": "not-the-password", "new_password": "Newpass123!"},
         headers=headers,
     )
     assert wrong.status_code == 401
@@ -88,7 +88,7 @@ def test_change_password_success_and_rejects_wrong_current(client):
 
     ok = client.post(
         "/api/v1/auth/me/change-password",
-        json={"current_password": "oldpass123", "new_password": "newpass123"},
+        json={"current_password": "oldpass123", "new_password": "Newpass123!"},
         headers=headers,
     )
     assert ok.status_code == 204
@@ -102,7 +102,7 @@ def test_change_password_success_and_rejects_wrong_current(client):
     )
     login = client.post(
         "/api/v1/auth/login",
-        json={"email": email, "password": "newpass123"},
+        json={"email": email, "password": "Newpass123!"},
     )
     assert login.status_code == 200
     assert "access_token" in login.json()
@@ -111,7 +111,7 @@ def test_change_password_success_and_rejects_wrong_current(client):
 def test_change_password_requires_auth(client):
     resp = client.post(
         "/api/v1/auth/me/change-password",
-        json={"current_password": "oldpass123", "new_password": "newpass123"},
+        json={"current_password": "oldpass123", "new_password": "Newpass123!"},
     )
     assert resp.status_code == 401
 
@@ -134,7 +134,7 @@ def test_list_and_revoke_sessions(client):
     time.sleep(1.1)
     login_b = client.post(
         "/api/v1/auth/login",
-        json={"email": email, "password": "secret123"},
+        json={"email": email, "password": "Secret123!"},
     )
     assert login_b.status_code == 200
     headers_b = {"Authorization": f"Bearer {login_b.json()['access_token']}"}
@@ -189,14 +189,14 @@ def test_password_reset_confirm_success_and_invalid_token(client, monkeypatch):
 
     bad = client.post(
         "/api/v1/auth/password-reset/confirm",
-        json={"token": "not-a-real-token", "new_password": "brandnew12"},
+        json={"token": "not-a-real-token", "new_password": "Brandnew12!"},
     )
     assert bad.status_code == 400
     assert bad.json()["detail"] == "Invalid or expired reset token"
 
     confirm = client.post(
         "/api/v1/auth/password-reset/confirm",
-        json={"token": known_token, "new_password": "brandnew12"},
+        json={"token": known_token, "new_password": "Brandnew12!"},
     )
     assert confirm.status_code == 204
 
@@ -211,14 +211,14 @@ def test_password_reset_confirm_success_and_invalid_token(client, monkeypatch):
     )
     login = client.post(
         "/api/v1/auth/login",
-        json={"email": email, "password": "brandnew12"},
+        json={"email": email, "password": "Brandnew12!"},
     )
     assert login.status_code == 200
 
     # Token is single-use.
     reuse = client.post(
         "/api/v1/auth/password-reset/confirm",
-        json={"token": known_token, "new_password": "anotherone1"},
+        json={"token": known_token, "new_password": "Anotherone1!"},
     )
     assert reuse.status_code == 400
 

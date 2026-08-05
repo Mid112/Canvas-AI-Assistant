@@ -19,7 +19,7 @@ def _register(client) -> dict:
     email = f"dash_{uuid.uuid4()}@example.com"
     response = client.post(
         "/api/v1/auth/register",
-        json={"name": "Dashboard Instructor", "email": email, "password": "secret123"},
+        json={"name": "Dashboard Instructor", "email": email, "password": "Secret123!"},
     )
     assert response.status_code == 201
     return {"Authorization": f"Bearer {response.json()['access_token']}"}

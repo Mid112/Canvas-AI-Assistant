@@ -31,7 +31,7 @@ def test_password_reset_request_6th_request_in_a_minute_returns_429(client):
 
 
 def test_password_reset_confirm_6th_request_in_a_minute_returns_429(client):
-    payload = {"token": "invalid-token", "new_password": "newsecret123"}
+    payload = {"token": "invalid-token", "new_password": "Newsecret123!"}
 
     for _ in range(5):
         resp = client.post("/api/v1/auth/password-reset/confirm", json=payload)

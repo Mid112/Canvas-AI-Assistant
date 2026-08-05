@@ -105,7 +105,7 @@ def test_instructor_canvas_connections_never_exposes_canvas_token(client, admin_
     email = f"tokencheck_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Token Check Connections", "email": email, "password": "secret123"},
+        json={"name": "Token Check Connections", "email": email, "password": "Secret123!"},
     )
     headers = auth(reg.json()["access_token"])
 
@@ -129,7 +129,7 @@ def test_troubleshoot_diagnostics_never_exposes_canvas_token(client, admin_heade
     email = f"tokencheck_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Token Check", "email": email, "password": "secret123"},
+        json={"name": "Token Check", "email": email, "password": "Secret123!"},
     )
     headers = auth(reg.json()["access_token"])
 

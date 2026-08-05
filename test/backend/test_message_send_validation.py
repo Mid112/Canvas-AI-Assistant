@@ -38,7 +38,7 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     email = f"msgsend_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Message Sender", "email": email, "password": "secret123"},
+        json={"name": "Message Sender", "email": email, "password": "Secret123!"},
     )
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -69,7 +69,7 @@ def _register_with_canvas_url(client, canvas_url: str) -> tuple[dict, int]:
     email = f"msgsend_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Message Sender", "email": email, "password": "secret123"},
+        json={"name": "Message Sender", "email": email, "password": "Secret123!"},
     )
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
