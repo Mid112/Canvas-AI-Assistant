@@ -1,9 +1,13 @@
+from unittest.mock import MagicMock
+
 import pytest
 
 from app.mcp_tools.dispatcher import (
     ToolExecutionError,
+    _build_create_assignment_missing_fields_question,
     _create_assignment_due_date_in_past,
     _create_assignment_missing_field,
+    _create_assignment_missing_fields,
     _extract_json,
     parse_action,
 )
@@ -122,7 +126,7 @@ def test_wrong_type():
         parse_action('{"action": "fetch_assignments", "local_course_id": "not_a_number"}')
 
 
-#testing _create_assignment_missing_field
+# testing _create_assignment_missing_fields / batch clarify (#1440)
 
 _COMPLETE_PROPOSAL = {
     "action": "create_assignment",
@@ -134,49 +138,76 @@ _COMPLETE_PROPOSAL = {
 }
 
 
-# Verifies: Missing field none when all fields present.
-def test_missing_field_none_when_all_fields_present():
+# Verifies: Missing fields empty when all fields present.
+def test_missing_fields_none_when_all_fields_present():
+    assert _create_assignment_missing_fields(_COMPLETE_PROPOSAL) == []
     assert _create_assignment_missing_field(_COMPLETE_PROPOSAL) is None
 
 
-# Verifies: Missing field detects empty string description.
-def test_missing_field_detects_empty_string_description():
+# Verifies: Missing fields detects empty string description.
+def test_missing_fields_detects_empty_string_description():
     # The regression this guards: a model can satisfy Pydantic's `str`
     # type with "" instead of actually asking, which schema validation
     # alone doesn't catch since proposed_action isn't validated against
     # CreateAssignmentAction until confirm time.
     proposal = {**_COMPLETE_PROPOSAL, "description": ""}
+    assert _create_assignment_missing_fields(proposal) == ["description"]
     assert _create_assignment_missing_field(proposal) == "description"
 
 
-# Verifies: Missing field detects whitespace only title.
-def test_missing_field_detects_whitespace_only_title():
+# Verifies: Missing fields detects whitespace only title.
+def test_missing_fields_detects_whitespace_only_title():
     proposal = {**_COMPLETE_PROPOSAL, "title": "   "}
-    assert _create_assignment_missing_field(proposal) == "title"
+    assert _create_assignment_missing_fields(proposal) == ["title"]
 
 
-# Verifies: Missing field detects absent due date.
-def test_missing_field_detects_absent_due_date():
+# Verifies: Missing fields detects absent due date.
+def test_missing_fields_detects_absent_due_date():
     proposal = {k: v for k, v in _COMPLETE_PROPOSAL.items() if k != "due_date"}
-    assert _create_assignment_missing_field(proposal) == "due_date"
+    assert _create_assignment_missing_fields(proposal) == ["due_date"]
 
 
 # Verifies: Explicit null points means ungraded and is complete (Ticket 21).
 def test_null_points_possible_means_ungraded_is_complete():
     proposal = {**_COMPLETE_PROPOSAL, "points_possible": None}
+    assert _create_assignment_missing_fields(proposal) == []
     assert _create_assignment_missing_field(proposal) is None
 
 
 # Verifies: Absent points_possible still asks graded-vs-ungraded (Ticket 21).
 def test_missing_field_detects_absent_points_possible():
     proposal = {k: v for k, v in _COMPLETE_PROPOSAL.items() if k != "points_possible"}
+    assert _create_assignment_missing_fields(proposal) == ["points_possible"]
     assert _create_assignment_missing_field(proposal) == "points_possible"
 
 
-# Verifies: Missing field checks title before description.
-def test_missing_field_checks_title_before_description():
-    proposal = {**_COMPLETE_PROPOSAL, "title": "", "description": ""}
+# Verifies (#1440): Lists every missing required field together, in order.
+def test_missing_fields_lists_all_missing_required_fields():
+    proposal = {
+        **{k: v for k, v in _COMPLETE_PROPOSAL.items() if k != "points_possible"},
+        "title": "",
+        "description": "",
+    }
+    assert _create_assignment_missing_fields(proposal) == [
+        "title",
+        "description",
+        "points_possible",
+    ]
+    # Back-compat wrapper still returns the first missing field.
     assert _create_assignment_missing_field(proposal) == "title"
+
+
+# Verifies (#1440): Batch clarify copy names every missing field.
+def test_build_create_assignment_missing_fields_question_lists_all():
+    question = _build_create_assignment_missing_fields_question(
+        ["description", "points_possible"]
+    )
+    assert "description" in question
+    assert "point value" in question
+    assert "one message" in question
+
+    single = _build_create_assignment_missing_fields_question(["due_date"])
+    assert single == "When is this assignment due?"
 
 
 #testing _create_assignment_due_date_in_past
@@ -186,16 +217,16 @@ def test_due_date_in_past_true_for_stale_date():
     # The regression this guards: the model has no innate sense of
     # "today" beyond the TODAY'S DATE prompt line and doesn't reliably
     # apply it, so it can hand back a same-year date that's already gone.
-    assert _create_assignment_due_date_in_past("2020-01-01") is True
+    assert _create_assignment_due_date_in_past("2020-01-01", MagicMock(canvas_connections=[])) is True
 
 
 # Verifies: Due date in past false for future date.
 def test_due_date_in_past_false_for_future_date():
-    assert _create_assignment_due_date_in_past("2030-01-01") is False
+    assert _create_assignment_due_date_in_past("2030-01-01", MagicMock(canvas_connections=[])) is False
 
 
 # Verifies: Due date in past false for unparseable string.
 def test_due_date_in_past_false_for_unparseable_string():
     # Leave format errors to the existing due_date validators — this
     # check only judges dates it can actually parse.
-    assert _create_assignment_due_date_in_past("not a date") is False
+    assert _create_assignment_due_date_in_past("not a date", MagicMock(canvas_connections=[])) is False
