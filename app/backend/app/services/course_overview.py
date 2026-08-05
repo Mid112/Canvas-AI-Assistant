@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 from datetime import UTC, datetime
 from typing import Literal
 
@@ -7,6 +9,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.database import AsyncSessionLocal
 from app.models.assignment import Assignment
 from app.models.course import Course
 from app.models.submission import Submission
@@ -21,6 +24,8 @@ from app.services.canvas import get_assignments, get_submissions
 from app.services.resolved_set import STATUS_FILTERS
 from app.services.student import get_students
 
+logger = logging.getLogger(__name__)
+
 _SUBMITTED_STATUSES = ("submitted", "graded", "late")
 # Reuses resolved_set's canonical "missing" category (Canvas's own overdue
 # `missing` flag OR not-yet-due-and-nothing-turned-in `unsubmitted`) instead
@@ -28,6 +33,10 @@ _SUBMITTED_STATUSES = ("submitted", "graded", "late")
 # every assignment that isn't past its due date yet (#1508).
 _MISSING_STATUSES = tuple(status.value for status in STATUS_FILTERS["missing"])
 _LATE_STATUSES = tuple(status.value for status in STATUS_FILTERS["late"])
+
+# Caps concurrent Canvas submission fetches on Overview load so a course with
+# many published assignments does not open dozens of simultaneous requests.
+_MAX_CONCURRENT_SUBMISSION_REFRESHES = 4
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -63,6 +72,83 @@ def _activity_action(status: str, assignment_title: str) -> str:
     if status == "graded":
         return f"Received grade on {assignment_title}"
     return f"Submitted {assignment_title}"
+
+
+async def _refresh_assignment_submissions(
+    local_course_id: int,
+    canvas_assignment_id: int,
+    user: User,
+    canvas_url: str | None,
+    semaphore: asyncio.Semaphore,
+) -> None:
+    """Refresh one assignment's submissions via the Submissions source of truth.
+
+    Uses its own DB session so concurrent refreshes stay safe (AsyncSession is
+    not concurrent). get_submissions write-through-caches into Postgres so
+    Overview aggregates below match Assignment Submissions / Analytics.
+    """
+    async with semaphore, AsyncSessionLocal() as session:
+        try:
+            await get_submissions(
+                local_course_id,
+                canvas_assignment_id,
+                user,
+                canvas_url,
+                session,
+            )
+        except Exception as exc:
+            # One assignment's Canvas failure must not blank the whole Overview —
+            # fall back to whatever is already cached for that assignment.
+            logger.warning(
+                "Overview submission refresh failed for course_id=%s "
+                "assignment_id=%s: %s",
+                local_course_id,
+                canvas_assignment_id,
+                exc,
+            )
+
+
+async def _refresh_published_submissions(
+    local_course_id: int,
+    published_assignments: list[Assignment],
+    user: User,
+    canvas_url: str | None,
+) -> None:
+    """Pull live Canvas submissions for every published assignment.
+
+    Assignment Submissions is the source of truth for Overview counts; without
+    this refresh Overview only reads the local submissions mirror, which stays
+    stale until Analytics/Submissions happens to populate it (and Sync from
+    Canvas does not touch submissions at all).
+    """
+    canvas_ids: list[int] = []
+    for assignment in published_assignments:
+        try:
+            canvas_ids.append(int(assignment.canvas_assignment_id))
+        except (TypeError, ValueError):
+            logger.warning(
+                "Skipping Overview submission refresh for assignment local_id=%s "
+                "with non-integer canvas_assignment_id=%r",
+                assignment.id,
+                assignment.canvas_assignment_id,
+            )
+
+    if not canvas_ids:
+        return
+
+    semaphore = asyncio.Semaphore(_MAX_CONCURRENT_SUBMISSION_REFRESHES)
+    await asyncio.gather(
+        *(
+            _refresh_assignment_submissions(
+                local_course_id,
+                canvas_assignment_id,
+                user,
+                canvas_url,
+                semaphore,
+            )
+            for canvas_assignment_id in canvas_ids
+        )
+    )
 
 
 async def get_course_overview(
@@ -102,22 +188,16 @@ async def get_course_overview(
     assignment_count = len(assignments)
     published_assignments = [a for a in assignments if a.published]
     published_assignment_count = len(published_assignments)
+    # Same path as Assignment Submissions / Analytics: live Canvas fetch +
+    # write-through cache (bounded concurrency), so Overview counts stay in
+    # parity on page load without requiring a prior visit to Analytics (#1508).
+    await _refresh_published_submissions(
+        local_course_id,
+        published_assignments,
+        user,
+        canvas_url,
+    )
     assignment_ids = [assignment.id for assignment in published_assignments]
-
-    # Refresh the local submission mirror for every published assignment from
-    # Canvas before aggregating the counts below — this is the same
-    # get_submissions() call the Assignment Submissions page makes for a
-    # single assignment, so Overview's counts can never drift from what that
-    # page (the source of truth) shows without an instructor having to detour
-    # through Analytics first to incidentally warm the cache (#1508).
-    for assignment in published_assignments:
-        await get_submissions(
-            local_course_id,
-            int(assignment.canvas_assignment_id),
-            user,
-            canvas_url,
-            db,
-        )
 
     missing_count = 0
     late_count = 0
