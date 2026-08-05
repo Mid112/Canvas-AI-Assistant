@@ -9,8 +9,8 @@ import { AssignmentReviewApproveStep } from "@/pages/Instructor/InstructorAssign
 // can report a field as `undefined` for a render or two before its subscription
 // settles. Real timing for that race isn't reliable to force in jsdom, so this
 // mock reproduces it deterministically: the very first bare (no `name`) watch
-// read for each mounted form comes back with `dueDate` stripped, exactly like
-// an unsettled watch would.
+// read for each mounted form comes back with `dueDate` and `pointsPossible`
+// stripped, exactly like an unsettled watch would.
 vi.mock("react-hook-form", async () => {
   const actual =
     await vi.importActual<typeof import("react-hook-form")>("react-hook-form");
@@ -24,7 +24,11 @@ vi.mock("react-hook-form", async () => {
       const isBareWatch = !options?.name;
       if (isBareWatch && !hasSettledRef.current) {
         hasSettledRef.current = true;
-        return { ...(result as object), dueDate: undefined };
+        return {
+          ...(result as object),
+          dueDate: undefined,
+          pointsPossible: undefined,
+        };
       }
       return result;
     },
@@ -138,7 +142,9 @@ describe("AssignmentReviewApproveStep", () => {
   // fall back to an empty string whenever the watched field hadn't settled
   // yet, wiping the parent draft's due date before the instructor ever saved.
   // Quiz already fell back to draft.dueDate; assignment must match.
-  it("never reports an empty due date while the draft already has one", async () => {
+  // Same for pointsPossible (#1504 nit): unsettled watch must not flip a
+  // scored assignment to ungraded (null) in parent state.
+  it("never reports an empty due date or null points while the draft already has them", async () => {
     const onDraftChange = vi.fn();
 
     render(
@@ -157,8 +163,9 @@ describe("AssignmentReviewApproveStep", () => {
     });
 
     for (const call of onDraftChange.mock.calls) {
-      const [values] = call as [{ dueDate: string }];
+      const [values] = call as [{ dueDate: string; pointsPossible: number | null }];
       expect(values.dueDate).toBe(draft.dueDate);
+      expect(values.pointsPossible).toBe(draft.pointsPossible);
     }
   });
 
