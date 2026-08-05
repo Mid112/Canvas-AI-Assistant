@@ -28,7 +28,7 @@ def _register(client) -> dict:
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Test User", "email": email, "password": "secret123"},
+        json={"name": "Test User", "email": email, "password": "Secret123!"},
     )
     token = reg.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
@@ -965,7 +965,7 @@ def test_canvas_failure_returns_chat_error(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Test User", "email": email, "password": "secret123"},
+        json={"name": "Test User", "email": email, "password": "Secret123!"},
     )
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}

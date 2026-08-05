@@ -18,7 +18,7 @@ def _register(client) -> dict:
     email = f"feat_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Feature User", "email": email, "password": "secret123"},
+        json={"name": "Feature User", "email": email, "password": "Secret123!"},
     )
     assert reg.status_code == 201
     token = reg.json()["access_token"]
@@ -67,7 +67,7 @@ def test_password_reset_flow(client, monkeypatch):
     email = f"reset_{uuid.uuid4()}@example.com"
     client.post(
         "/api/v1/auth/register",
-        json={"name": "Reset User", "email": email, "password": "secret123"},
+        json={"name": "Reset User", "email": email, "password": "Secret123!"},
     )
     request = client.post("/api/v1/auth/password-reset/request", json={"email": email})
     assert request.status_code == 200
@@ -78,13 +78,13 @@ def test_password_reset_flow(client, monkeypatch):
 
     confirm = client.post(
         "/api/v1/auth/password-reset/confirm",
-        json={"token": token, "new_password": "brandnew99"},
+        json={"token": token, "new_password": "Brandnew99!"},
     )
     assert confirm.status_code == 204
 
     login = client.post(
         "/api/v1/auth/login",
-        json={"email": email, "password": "brandnew99"},
+        json={"email": email, "password": "Brandnew99!"},
     )
     assert login.status_code == 200
 
@@ -107,7 +107,7 @@ def test_password_reset_request_hides_token_when_debug_disabled(client, monkeypa
     email = f"reset_prod_{uuid.uuid4()}@example.com"
     client.post(
         "/api/v1/auth/register",
-        json={"name": "Reset User", "email": email, "password": "secret123"},
+        json={"name": "Reset User", "email": email, "password": "Secret123!"},
     )
     request = client.post("/api/v1/auth/password-reset/request", json={"email": email})
     assert request.status_code == 200

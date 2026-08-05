@@ -32,7 +32,7 @@ def _register(client) -> dict:
     email = f"errtest_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Error Test User", "email": email, "password": "secret123"},
+        json={"name": "Error Test User", "email": email, "password": "Secret123!"},
     )
     token = reg.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
@@ -48,7 +48,7 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     email = f"errtest_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Error Test User", "email": email, "password": "secret123"},
+        json={"name": "Error Test User", "email": email, "password": "Secret123!"},
     )
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}

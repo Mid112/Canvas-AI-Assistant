@@ -87,8 +87,8 @@ describe("RegisterPage", () => {
       screen.getByLabelText("Email Address"),
       "professor@university.edu",
     );
-    await user.type(screen.getByLabelText("Password"), "secret123");
-    await user.type(screen.getByLabelText("Confirm Password"), "secret123");
+    await user.type(screen.getByLabelText("Password"), "Secret123!");
+    await user.type(screen.getByLabelText("Confirm Password"), "Secret123!");
     await user.click(
       screen.getByLabelText(
         "I agree to the Terms of Service and Privacy Policy",
@@ -99,7 +99,7 @@ describe("RegisterPage", () => {
     expect(mockRegister).toHaveBeenCalledWith({
       name: "Jane Smith",
       email: "professor@university.edu",
-      password: "secret123",
+      password: "Secret123!",
     });
     expect(mockNavigate).toHaveBeenCalledWith(
       getPostAuthPath({
@@ -132,8 +132,8 @@ describe("RegisterPage", () => {
       screen.getByLabelText("Email Address"),
       "professor@university.edu",
     );
-    await user.type(screen.getByLabelText("Password"), "secret123");
-    await user.type(screen.getByLabelText("Confirm Password"), "secret123");
+    await user.type(screen.getByLabelText("Password"), "Secret123!");
+    await user.type(screen.getByLabelText("Confirm Password"), "Secret123!");
     await user.click(
       screen.getByLabelText(
         "I agree to the Terms of Service and Privacy Policy",

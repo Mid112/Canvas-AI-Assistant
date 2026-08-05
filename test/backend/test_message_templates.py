@@ -19,7 +19,7 @@ def _headers(client: TestClient, name: str = "Template User") -> dict[str, str]:
     email = f"templates_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": name, "email": email, "password": "secret123"},
+        json={"name": name, "email": email, "password": "Secret123!"},
     )
     return {"Authorization": f"Bearer {reg.json()['access_token']}"}
 

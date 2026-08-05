@@ -65,16 +65,26 @@ describe("SecuritySettingsTab", () => {
     expect(screen.getByText("2 active sessions")).toBeInTheDocument();
   });
 
-  it("validates password fields before submitting", async () => {
+  it("keeps change-password disabled until the new password meets strength rules", async () => {
     const user = userEvent.setup();
     renderWithRouter(<SecuritySettingsTab />);
 
     await screen.findByText("Current Session");
-    await user.click(screen.getByRole("button", { name: "Change Password" }));
+
+    const changeButton = screen.getByRole("button", { name: "Change Password" });
+    expect(changeButton).toBeDisabled();
 
     expect(
-      screen.getByRole("alert"),
-    ).toHaveTextContent("Enter your current password and a new password.");
+      screen.getByRole("list", { name: "Password requirements" }),
+    ).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Current Password"), "old-password");
+    await user.type(screen.getByLabelText("New Password"), "weak");
+    expect(changeButton).toBeDisabled();
+
+    await user.clear(screen.getByLabelText("New Password"));
+    await user.type(screen.getByLabelText("New Password"), "New-password1!");
+    expect(changeButton).toBeEnabled();
   });
 
   it("changes the password successfully", async () => {
@@ -83,13 +93,13 @@ describe("SecuritySettingsTab", () => {
 
     await screen.findByText("Current Session");
     await user.type(screen.getByLabelText("Current Password"), "old-password");
-    await user.type(screen.getByLabelText("New Password"), "new-password");
+    await user.type(screen.getByLabelText("New Password"), "New-password1!");
     await user.click(screen.getByRole("button", { name: "Change Password" }));
 
     await waitFor(() => {
       expect(mockedChangeCurrentPassword).toHaveBeenCalledWith("access-token", {
         currentPassword: "old-password",
-        newPassword: "new-password",
+        newPassword: "New-password1!",
       });
     });
     expect(screen.getByRole("status")).toHaveTextContent("Password updated.");
@@ -107,7 +117,7 @@ describe("SecuritySettingsTab", () => {
 
     await screen.findByText("Current Session");
     await user.type(screen.getByLabelText("Current Password"), "wrong");
-    await user.type(screen.getByLabelText("New Password"), "new-password");
+    await user.type(screen.getByLabelText("New Password"), "New-password1!");
     await user.click(screen.getByRole("button", { name: "Change Password" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(

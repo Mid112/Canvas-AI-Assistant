@@ -28,7 +28,7 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     email = f"missingsubs_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Missing Submissions Instructor", "email": email, "password": "secret123"},
+        json={"name": "Missing Submissions Instructor", "email": email, "password": "Secret123!"},
     )
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}

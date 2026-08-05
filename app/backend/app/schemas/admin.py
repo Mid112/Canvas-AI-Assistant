@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from app.core.password_policy import validate_password_strength
 
 
 class AdminDashboardResponse(BaseModel):
@@ -23,11 +25,21 @@ class CreateAdminRequest(BaseModel):
     email: EmailStr
     password: str
 
+    @field_validator("password")
+    @classmethod
+    def _password_strength(cls, value: str) -> str:
+        return validate_password_strength(value)
+
 
 class CreateInstructorRequest(BaseModel):
     name: str
     email: EmailStr
     password: str
+
+    @field_validator("password")
+    @classmethod
+    def _password_strength(cls, value: str) -> str:
+        return validate_password_strength(value)
 
 
 class UpdateInstructorRequest(BaseModel):

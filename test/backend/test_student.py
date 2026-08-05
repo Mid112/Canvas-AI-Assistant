@@ -36,7 +36,7 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Instructor", "email": email, "password": "secret123"},
+        json={"name": "Instructor", "email": email, "password": "Secret123!"},
     )
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -81,7 +81,7 @@ def test_list_students_no_canvas_token(client, create_local_course_for_user_emai
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "No Token", "email": email, "password": "secret123"},
+        json={"name": "No Token", "email": email, "password": "Secret123!"},
     )
     token = reg.json()["access_token"]
     local_course_id = create_local_course_for_user_email(email, canvas_url=CANVAS_URL)
