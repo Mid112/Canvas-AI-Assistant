@@ -742,7 +742,8 @@ async def create_course_assignment(
 
     # Semantic validation (required fields, future due date, points > 0 or
     # intentional null for ungraded) before any Canvas write — same rules as
-    # chat/MCP confirm. Profanity is checked inside the validators.
+    # chat/MCP confirm. Assignment content safety (#1444) runs inside the
+    # validators.
     await validate_assignment_for_create(
         local_course_id,
         user,
@@ -1452,7 +1453,8 @@ async def update_course_assignment(
 
     # Validate only fields being changed; blank description is sent as null
     # (intentional clear / leave optional), empty strings are rejected with
-    # fix-it messages before Canvas sees them.
+    # fix-it messages before Canvas sees them. Content safety (#1444) is
+    # enforced inside the validators.
     await validate_assignment_for_update(
         local_course_id,
         user,

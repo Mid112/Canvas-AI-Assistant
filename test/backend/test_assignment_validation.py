@@ -97,7 +97,9 @@ async def test_create_rejects_profanity_in_description(db):
     with pytest.raises(HTTPException) as exc:
         await _create(db, description="Complete this fucking worksheet.")
     assert exc.value.status_code == 422
-    assert "appropriate" in exc.value.detail.lower()
+    detail = exc.value.detail.lower()
+    assert "appropriate" in detail
+    assert "academic discussion" in detail
 
 
 @pytest.mark.asyncio
@@ -106,6 +108,19 @@ async def test_update_rejects_profanity_in_title(db):
         await _update(db, title="Midterm shit review")
     assert exc.value.status_code == 422
     assert "appropriate" in exc.value.detail.lower()
+
+
+@pytest.mark.asyncio
+async def test_create_allows_educational_description_with_sensitive_term(db):
+    """Ticket 20 / #1444: academic framing must not be a false positive."""
+    course = await _create(
+        db,
+        description=(
+            "Write a short essay analyzing how the word 'shit' changes tone "
+            "and audience in workplace communication."
+        ),
+    )
+    assert course is COURSE
 
 
 @pytest.mark.asyncio

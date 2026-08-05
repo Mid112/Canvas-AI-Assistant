@@ -8,7 +8,7 @@ from app.models.course import Course
 from app.models.user import User
 from app.services.canvas_timezone import get_instructor_canvas_timezone
 from app.services.course_access import get_owned_course_or_404
-from app.services.profanity import check_message_profanity
+from app.services.profanity import check_assignment_content_safety
 
 
 def _check_title(title: str) -> None:
@@ -17,7 +17,7 @@ def _check_title(title: str) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Assignment title cannot be empty. Enter a title before submitting.",
         )
-    check_message_profanity(title, content_label="Assignment title")
+    check_assignment_content_safety(title, content_label="Assignment title")
 
 
 def _check_description(description: str) -> None:
@@ -29,7 +29,9 @@ def _check_description(description: str) -> None:
                 "Add a short description of what students should do."
             ),
         )
-    check_message_profanity(description, content_label="Assignment description")
+    check_assignment_content_safety(
+        description, content_label="Assignment description"
+    )
 
 
 def _check_due_date(due_date: str, instructor_timezone: str | None = None) -> None:
