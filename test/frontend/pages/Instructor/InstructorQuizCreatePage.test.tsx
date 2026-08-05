@@ -303,4 +303,38 @@ describe("InstructorQuizCreatePage typed drafts", () => {
     });
     expect(listTypedDrafts(1)).toHaveLength(0);
   });
+
+  // Verifies: #1512 — name-only chat seed without prompt must not invent
+  // a `Title: …` describe string that steers generation to the title domain.
+  it("does not invent a Title-only describe prompt from a name-only seed", () => {
+    renderPage({
+      aiQuizDraft: {
+        courseId: 42,
+        name: "recursion principles",
+        description: "",
+      },
+    });
+
+    const description = screen.getByLabelText("Quiz description");
+    expect(description).toHaveValue("recursion principles");
+    expect(description).not.toHaveValue("Title: recursion principles");
+  });
+
+  // Verifies: chat-stamped full utterance wins over title for describe seed.
+  it("seeds describe with the full generation prompt when provided", () => {
+    const utterance =
+      "Create a quiz called 'recursion principles' with 5 multiple-choice questions about cell biology.";
+    renderPage({
+      aiQuizDraft: {
+        courseId: 42,
+        name: "recursion principles",
+        description: "",
+        prompt: utterance,
+        pointsPossible: 50,
+        timeLimit: 30,
+      },
+    });
+
+    expect(screen.getByLabelText("Quiz description")).toHaveValue(utterance);
+  });
 });
