@@ -132,6 +132,8 @@ interface ChatWindowProps {
   onLoadingChange?: (isLoading: boolean) => void;
   /** True while a reply is streaming or a preview awaits confirm/cancel. */
   onPendingWorkChange?: (hasPendingWork: boolean) => void;
+  /** Fires once a valid user message is accepted (typed or starter prompt). */
+  onConversationStarted?: () => void;
   onStartNewChat?: () => void;
   modelSettings?: LlmProviderSettings | null;
   llmProviders?: InstructorLlmProvider[];
@@ -156,6 +158,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   onDeferredResumeComplete,
   onLoadingChange,
   onPendingWorkChange,
+  onConversationStarted,
   onStartNewChat,
   modelSettings = null,
   llmProviders = [],
@@ -965,6 +968,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
 
       setInputError(null);
       stickToBottomRef.current = true;
+      onConversationStarted?.();
 
       const userMessage: ChatMessage = {
         id: createMessageId(),
@@ -1007,6 +1011,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       activePendingMessageIds,
       deliverAssistantResponse,
       messages,
+      onConversationStarted,
       resolvePendingAction,
     ],
   );

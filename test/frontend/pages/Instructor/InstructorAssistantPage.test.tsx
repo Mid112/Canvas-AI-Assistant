@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { InstructorAssistantPage } from "@/pages/Instructor/InstructorAssistantPage";
+import { sendAssistantMessage } from "@/services/assistant";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 const mockUseAuth = vi.fn();
@@ -11,6 +12,7 @@ const mockFetchConversation = vi.hoisted(() => vi.fn());
 const mockFetchProviders = vi.hoisted(() => vi.fn());
 const mockListDeferred = vi.hoisted(() => vi.fn());
 const mockResumeDeferred = vi.hoisted(() => vi.fn());
+const mockedSendAssistantMessage = vi.mocked(sendAssistantMessage);
 
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
@@ -106,10 +108,16 @@ beforeEach(() => {
 
 describe("InstructorAssistantPage", () => {
   // Verifies: Renders the assistant page body; the global layout owns the title.
-  it("renders suggested actions and chat", () => {
+  it("renders starter prompts and chat", () => {
     renderWithInstitution(<InstructorAssistantPage />);
 
-    expect(screen.getByText("Suggested actions")).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Starter prompts" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Create an assignment")).toBeInTheDocument();
+    expect(screen.getByText("Create a quiz")).toBeInTheDocument();
+    expect(screen.getByText("Analyze course performance")).toBeInTheDocument();
+    expect(screen.getByText("Draft a student message")).toBeInTheDocument();
     expect(
       screen.getByText(/Hello! I'm your Canvas AI Assistant/),
     ).toBeInTheDocument();
@@ -118,20 +126,62 @@ describe("InstructorAssistantPage", () => {
     ).toBeInTheDocument();
   });
 
-  // Verifies: Regression (#1) — suggested actions start collapsed so the chat
-  // window owns the vertical space, and expand on demand.
-  it("collapses suggested actions by default and expands them on click", async () => {
+  // Verifies (#1441): Starter prompts hide after the user starts chatting.
+  it("hides starter prompts after the first message and restores them on New Chat", async () => {
     const user = userEvent.setup();
+    mockedSendAssistantMessage.mockResolvedValue({
+      content: "Here is a draft.",
+      conversationId: 42,
+      explanation: "Started from a typed prompt.",
+    });
+
     renderWithInstitution(<InstructorAssistantPage />);
 
-    const toggle = screen.getByRole("button", { name: /Suggested actions/ });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(screen.queryByText("Show missing submissions")).not.toBeInTheDocument();
+    expect(screen.getByText("Create an assignment")).toBeInTheDocument();
 
-    await user.click(toggle);
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "What can you help me with?",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
 
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("Show missing submissions")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Here is a draft."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Create an assignment")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Starter prompts" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "New Chat" }));
+
+    expect(
+      await screen.findByRole("region", { name: "Starter prompts" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Create a quiz")).toBeInTheDocument();
+  });
+
+  // Verifies (#1441): Choosing a starter prompt also clears the guidance.
+  it("hides starter prompts after selecting a starter action", async () => {
+    const user = userEvent.setup();
+    mockedSendAssistantMessage.mockResolvedValue({
+      content: "Assignment draft ready.",
+      conversationId: 7,
+      explanation: "Started from a starter prompt.",
+    });
+
+    renderWithInstitution(<InstructorAssistantPage />);
+
+    await user.click(
+      screen.getByRole("button", { name: /Create an assignment/i }),
+    );
+
+    expect(
+      await screen.findByText("Assignment draft ready."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "Starter prompts" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows limited mode when Canvas is not connected", async () => {

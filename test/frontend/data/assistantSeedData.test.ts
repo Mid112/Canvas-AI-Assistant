@@ -3,14 +3,20 @@ import { describe, expect, it } from "vitest";
 import { buildSuggestedActions } from "@/data/assistantSeedData";
 
 describe("buildSuggestedActions", () => {
-  it("references the real active course name in every prompt", () => {
+  it("covers assignment, quiz, analytics, and message starter prompts", () => {
     const actions = buildSuggestedActions("COSC 501");
 
     expect(actions).toHaveLength(4);
+    expect(actions.map((action) => action.id)).toEqual([
+      "create-assignment",
+      "create-quiz",
+      "course-analytics",
+      "draft-student-message",
+    ]);
     expect(actions.map((action) => action.prompt)).toEqual([
-      "Show missing submissions for COSC 501",
-      "Show late assignments in COSC 501",
-      "View course performance for COSC 501",
+      "Help me create an assignment in COSC 501. Ask for any missing details, then propose a create_assignment preview I can review.",
+      "Help me create a quiz in COSC 501. Propose a create_quiz preview I can review in the quiz creator.",
+      "Show missing submissions and course performance for COSC 501",
       "Draft a message to students in COSC 501 about an upcoming deadline. Propose a send_message action I can review and edit before sending.",
     ]);
   });
@@ -26,9 +32,9 @@ describe("buildSuggestedActions", () => {
     }
 
     expect(actions.map((action) => action.prompt)).toEqual([
-      "Show missing submissions",
-      "Show late assignments",
-      "View course performance",
+      "Help me create an assignment. Ask for any missing details, then propose a create_assignment preview I can review.",
+      "Help me create a quiz. Propose a create_quiz preview I can review in the quiz creator.",
+      "Show missing submissions and course performance",
       "Draft a message to students about an upcoming deadline. Propose a send_message action I can review and edit before sending.",
     ]);
   });
