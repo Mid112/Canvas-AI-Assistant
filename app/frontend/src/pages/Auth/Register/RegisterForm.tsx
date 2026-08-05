@@ -9,9 +9,11 @@ import { PasswordInput } from "@/pages/Auth/PasswordInput";
 import {
   PasswordMatchStatus,
   PasswordMismatchAlert,
+} from "@/pages/Auth/PasswordMismatchAlert";
+import {
   passwordMismatchInputClassName,
   passwordValidInputClassName,
-} from "@/pages/Auth/PasswordMismatchAlert";
+} from "@/pages/Auth/passwordFieldStyles";
 import { PasswordRequirementsChecklist } from "@/pages/Auth/PasswordRequirementsChecklist";
 import type { RegisterCredentials } from "@/types/auth";
 
@@ -49,7 +51,7 @@ export function RegisterForm({
   const passwordIsInvalid = password !== "" && !passwordIsValid;
   const passwordsMatch = password === confirmPassword;
   const showPasswordMismatchError =
-    confirmPassword !== "" && !passwordsMatch;
+    confirmPassword !== "" && password !== "" && !passwordsMatch;
   const showConfirmPasswordValid =
     confirmPassword !== "" && passwordsMatch && passwordIsValid;
 

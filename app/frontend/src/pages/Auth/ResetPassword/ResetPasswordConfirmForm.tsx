@@ -7,9 +7,11 @@ import { PasswordInput } from "@/pages/Auth/PasswordInput";
 import {
   PasswordMatchStatus,
   PasswordMismatchAlert,
+} from "@/pages/Auth/PasswordMismatchAlert";
+import {
   passwordMismatchInputClassName,
   passwordValidInputClassName,
-} from "@/pages/Auth/PasswordMismatchAlert";
+} from "@/pages/Auth/passwordFieldStyles";
 import { PasswordRequirementsChecklist } from "@/pages/Auth/PasswordRequirementsChecklist";
 
 interface ResetPasswordConfirmFormProps {

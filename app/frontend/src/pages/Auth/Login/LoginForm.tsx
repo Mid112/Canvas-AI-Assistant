@@ -10,7 +10,7 @@ import { PasswordInput } from "@/pages/Auth/PasswordInput";
 import {
   passwordMismatchInputClassName,
   passwordValidInputClassName,
-} from "@/pages/Auth/PasswordMismatchAlert";
+} from "@/pages/Auth/passwordFieldStyles";
 
 interface LoginFormProps {
   onSubmit: (credentials: { email: string; password: string }) => void | Promise<void>;

@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { isValidPassword } from "@/lib/validation";
 import { PasswordInput } from "@/pages/Auth/PasswordInput";
-import { passwordValidInputClassName } from "@/pages/Auth/PasswordMismatchAlert";
+import { passwordValidInputClassName } from "@/pages/Auth/passwordFieldStyles";
 import { PasswordRequirementsChecklist } from "@/pages/Auth/PasswordRequirementsChecklist";
 import {
   changeCurrentPassword,

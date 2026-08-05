@@ -300,4 +300,22 @@ describe("RegisterForm", () => {
 
     expect(onSubmit).not.toHaveBeenCalled();
   });
+
+  // Verifies (#1451): Confirm-first typing must not show mismatch against a blank password.
+  it("does not show mismatch when password is still empty", async () => {
+    const user = userEvent.setup();
+
+    renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
+
+    await user.type(screen.getByLabelText("Confirm Password"), "Secret123!");
+
+    expect(
+      screen.queryByText("Confirm password must match the password above"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Confirm Password")).not.toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
+  });
+
 });
