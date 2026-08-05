@@ -17,10 +17,17 @@ from app.schemas.course_overview import (
     RecentAssignmentSummary,
     StudentActivityItem,
 )
-from app.services.canvas import get_assignments
+from app.services.canvas import get_assignments, get_submissions
+from app.services.resolved_set import STATUS_FILTERS
 from app.services.student import get_students
 
 _SUBMITTED_STATUSES = ("submitted", "graded", "late")
+# Reuses resolved_set's canonical "missing" category (Canvas's own overdue
+# `missing` flag OR not-yet-due-and-nothing-turned-in `unsubmitted`) instead
+# of re-deriving it — counting only `missing` here previously undercounted
+# every assignment that isn't past its due date yet (#1508).
+_MISSING_STATUSES = tuple(status.value for status in STATUS_FILTERS["missing"])
+_LATE_STATUSES = tuple(status.value for status in STATUS_FILTERS["late"])
 
 
 def _as_utc(value: datetime | None) -> datetime | None:
@@ -97,6 +104,21 @@ async def get_course_overview(
     published_assignment_count = len(published_assignments)
     assignment_ids = [assignment.id for assignment in published_assignments]
 
+    # Refresh the local submission mirror for every published assignment from
+    # Canvas before aggregating the counts below — this is the same
+    # get_submissions() call the Assignment Submissions page makes for a
+    # single assignment, so Overview's counts can never drift from what that
+    # page (the source of truth) shows without an instructor having to detour
+    # through Analytics first to incidentally warm the cache (#1508).
+    for assignment in published_assignments:
+        await get_submissions(
+            local_course_id,
+            int(assignment.canvas_assignment_id),
+            user,
+            canvas_url,
+            db,
+        )
+
     missing_count = 0
     late_count = 0
     submitted_count = 0
@@ -107,7 +129,7 @@ async def get_course_overview(
                 .select_from(Submission)
                 .where(
                     Submission.assignment_id.in_(assignment_ids),
-                    Submission.status == "missing",
+                    Submission.status.in_(_MISSING_STATUSES),
                 )
             )
             or 0
@@ -118,7 +140,7 @@ async def get_course_overview(
                 .select_from(Submission)
                 .where(
                     Submission.assignment_id.in_(assignment_ids),
-                    Submission.status == "late",
+                    Submission.status.in_(_LATE_STATUSES),
                 )
             )
             or 0
