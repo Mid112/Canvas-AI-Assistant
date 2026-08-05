@@ -252,10 +252,11 @@ describe("InstructorAssistantPage course sync fork adoption", () => {
     const user = userEvent.setup();
     render(<CourseSwitchHarness />);
 
+    // Fresh visit has no conversation id — sync must not create an empty row.
     await waitFor(() => {
-      expect(mockSyncCourseContext).toHaveBeenCalled();
+      expect(screen.getByTestId("chat-window")).toBeInTheDocument();
     });
-    const callsAfterHydrate = mockSyncCourseContext.mock.calls.length;
+    expect(mockSyncCourseContext).not.toHaveBeenCalled();
 
     await user.click(
       await screen.findByRole("button", { name: /Previous conversation/ }),
@@ -267,7 +268,24 @@ describe("InstructorAssistantPage course sync fork adoption", () => {
       ).toBe(true);
     });
 
-    expect(mockSyncCourseContext.mock.calls.length).toBe(callsAfterHydrate);
+    // History select alone still must not POST course-context.
+    expect(mockSyncCourseContext).not.toHaveBeenCalled();
     expect(chatPropsLog.at(-1)?.loadedConversationId).toBe(7);
+  });
+
+  // Verifies (#1507 StoneCA12): visiting Assistant with an active course but no
+  // conversation must not POST /chat/course-context (that always creates an
+  // empty Conversation and fills history with "No messages yet").
+  it("does not create a conversation when syncing course context with no id", async () => {
+    render(<CourseSwitchHarness />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("chat-window")).toBeInTheDocument();
+    });
+    await waitFor(() => {
+      expect(mockListDeferred).toHaveBeenCalled();
+    });
+
+    expect(mockSyncCourseContext).not.toHaveBeenCalled();
   });
 });

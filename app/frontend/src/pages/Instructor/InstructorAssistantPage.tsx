@@ -262,10 +262,8 @@ export function InstructorAssistantPage() {
     const courseId = activeCourse.localId;
     const pendingId = pendingConversationIdRef.current;
     // When there is no pending conversation yet, wait for deferred-draft
-    // hydration to finish before syncing without an explicit conversation
-    // id. Otherwise this effect and the draft-restore effect (or
-    // ChatWindow's own first send) can each call get_or_create_conversation
-    // with no id around the same time and create two conversations.
+    // hydration to finish before deciding whether we have a conversation
+    // id to sync against (restore may supply one shortly after mount).
     if (pendingId === undefined && !deferredListLoaded) {
       return;
     }
@@ -276,15 +274,22 @@ export function InstructorAssistantPage() {
     if (lastSyncedCourseIdRef.current === courseId) {
       return;
     }
-    // Prefer a stored deferred draft's conversation id when sync would
-    // otherwise create a brand-new conversation before the restore
-    // timeout applies it (#1507 re-review).
+    // Prefer a stored deferred draft's conversation id when the pending id
+    // is still unset (restore applies it on a timeout).
     let conversationIdForSync = pendingId;
     if (conversationIdForSync === undefined && user?.id) {
       const storedDraft = getStoredDeferredDraft(user.id);
       if (storedDraft?.conversationId !== undefined) {
         conversationIdForSync = storedDraft.conversationId;
       }
+    }
+    // Never POST /chat/course-context without a conversation id: that path
+    // always creates a fresh Conversation row, so every Assistant visit
+    // would accumulate empty "No messages yet" history entries (#1507).
+    // Course context is still written on the first real chat turn via
+    // get_or_create_conversation.
+    if (conversationIdForSync === undefined) {
+      return;
     }
     let cancelled = false;
     void syncAssistantCourseContext(accessToken, {
@@ -314,8 +319,9 @@ export function InstructorAssistantPage() {
       cancelled = true;
     };
     // pendingConversationId is intentionally omitted: read via ref so history
-    // load does not re-trigger sync. deferredListLoaded only unlocks the
-    // first no-id hydrate; lastSyncedCourseIdRef prevents a second pass.
+    // load does not re-trigger sync. deferredListLoaded unlocks reading a
+    // stored draft id after hydrate; lastSyncedCourseIdRef prevents a second
+    // pass for the same course.
   }, [
     accessToken,
     activeCourse?.localId,
