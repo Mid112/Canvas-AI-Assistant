@@ -188,7 +188,7 @@ def test_admin_route_rejects_instructor_token(client):
     reg = _register(client)
     resp = client.post(
         "/api/v1/admin/users",
-        json={"name": "N", "email": f"x_{uuid.uuid4()}@example.com", "password": "p"},
+        json={"name": "N", "email": f"x_{uuid.uuid4()}@example.com", "password": "Secret123!"},
         headers=reg["headers"],
     )
     assert resp.status_code == 403
@@ -198,7 +198,7 @@ def test_admin_route_rejects_instructor_token(client):
 def test_admin_route_rejects_unauthenticated(client):
     resp = client.post(
         "/api/v1/admin/users",
-        json={"name": "N", "email": f"x_{uuid.uuid4()}@example.com", "password": "p"},
+        json={"name": "N", "email": f"x_{uuid.uuid4()}@example.com", "password": "Secret123!"},
     )
     assert resp.status_code == 401
 
@@ -240,7 +240,7 @@ def test_admin_route_rejects_admin_demoted_after_token_issued(client, admin_cred
 
     resp = client.post(
         "/api/v1/admin/users",
-        json={"name": "N", "email": f"x_{uuid.uuid4()}@example.com", "password": "p"},
+        json={"name": "N", "email": f"x_{uuid.uuid4()}@example.com", "password": "Secret123!"},
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 403
