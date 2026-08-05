@@ -38,6 +38,10 @@ async def test_generate_draft_allows_educational_prompt():
             "app.services.assignment_draft.record_ai_call_outcome",
             new=AsyncMock(),
         ),
+        patch(
+            "app.services.assignment_draft.get_instructor_canvas_timezone_for_user",
+            new=AsyncMock(return_value="America/Vancouver"),
+        ),
     ):
         result = await generate_assignment_draft(body, db, user_id=1)
 
