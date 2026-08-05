@@ -124,6 +124,31 @@ describe("typed-draft-storage", () => {
     });
   });
 
+  // Regression for #1506: scored per-question points must survive save and
+  // resume as priorQuestionPoints so Generate can restore them.
+  it("stores quiz questionPoints and resumes them as priorQuestionPoints", () => {
+    const draft = saveTypedDraft(7, {
+      kind: "quiz",
+      content: {
+        title: "Cell Biology",
+        questions: "Q1\nQ2",
+        questionPoints: [10, 10],
+        pointsPossible: 20,
+      },
+    });
+
+    expect(draft.content.questionPoints).toEqual([10, 10]);
+    expect(listTypedDrafts(7)[0]?.content.questionPoints).toEqual([10, 10]);
+
+    const target = buildTypedDraftResumeTarget(draft, { courseId: 42 });
+    const seeded = target.state.aiQuizDraft as {
+      priorQuestionPoints?: number[];
+      pointsPossible?: number;
+    };
+    expect(seeded.priorQuestionPoints).toEqual([10, 10]);
+    expect(seeded.pointsPossible).toBe(20);
+  });
+
   // Verifies: a quiz draft keeps the instructor's own attempt limit and
   // timer. stripCanvasIdentifiers is a hard whitelist, so a field added to
   // TypedDraftContent but not to it is dropped on save with no error — the

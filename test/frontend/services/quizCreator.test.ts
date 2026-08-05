@@ -1,11 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  applyPriorQuestionPoints,
   approveQuizDraft,
   fetchQuestionBanks,
   fetchQuizCapabilities,
   generateQuizDraft,
+  preserveQuestionPoints,
   previewQuizDraft,
+  sumQuestionPoints,
 } from "@/services/quizCreator";
 
 const payload = {
@@ -241,5 +244,44 @@ describe("quizCreator", () => {
     ).resolves.toEqual([
       { id: 31, title: "Recursion Bank", questionCount: 12 },
     ]);
+  });
+});
+
+describe("preserveQuestionPoints (#1506)", () => {
+  const ten = { pointsPossible: 10, questionText: "A" };
+  const five = { pointsPossible: 5, questionText: "B" };
+
+  it("keeps prior points when the question count is unchanged", () => {
+    const next = [
+      { ...five, questionText: "Edited A" },
+      { ...five, questionText: "Edited B" },
+    ];
+    expect(
+      preserveQuestionPoints(
+        [
+          { ...ten, questionText: "A" },
+          { ...ten, questionText: "B" },
+        ],
+        next,
+      ),
+    ).toEqual([
+      { pointsPossible: 10, questionText: "Edited A" },
+      { pointsPossible: 10, questionText: "Edited B" },
+    ]);
+    expect(sumQuestionPoints(preserveQuestionPoints([ten, ten], next))).toBe(20);
+  });
+
+  it("leaves generated points alone when the count changes", () => {
+    const next = [five, five, five];
+    expect(preserveQuestionPoints([ten, ten], next)).toBe(next);
+  });
+
+  it("applies a resumed priorQuestionPoints array by index", () => {
+    const next = [five, five];
+    expect(applyPriorQuestionPoints([10, 10], next)).toEqual([
+      { pointsPossible: 10, questionText: "B" },
+      { pointsPossible: 10, questionText: "B" },
+    ]);
+    expect(applyPriorQuestionPoints([10], next)).toBe(next);
   });
 });

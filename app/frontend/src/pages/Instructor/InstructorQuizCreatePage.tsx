@@ -22,10 +22,13 @@ import {
 } from "@/routes/paths";
 import {
   approveQuizDraft,
+  applyPriorQuestionPoints,
   fetchQuestionBanks,
   fetchQuizCapabilities,
   generateQuizDraft,
+  preserveQuestionPoints,
   previewQuizDraft,
+  sumQuestionPoints,
 } from "@/services/quizCreator";
 import { QuizApiError, setQuizPublished } from "@/services/quizzes";
 import type {
@@ -74,6 +77,12 @@ export function InstructorQuizCreatePage() {
   // reapplied after generation rather than only seeding the initial draft.
   const seededAllowedAttempts = readQuizLimit(seededDraft?.allowedAttempts);
   const seededTimeLimit = readQuizLimit(seededDraft?.timeLimit);
+  const seededPriorQuestionPoints = Array.isArray(seededDraft?.priorQuestionPoints)
+    ? seededDraft.priorQuestionPoints.filter(
+        (points): points is number =>
+          typeof points === "number" && Number.isFinite(points) && points > 0,
+      )
+    : undefined;
   const { accessToken, user } = useAuth();
   const [step, setStep] = useState<QuizCreateStep>(
     hasStructuredQuestions ? "review" : "describe",
@@ -229,6 +238,10 @@ export function InstructorQuizCreatePage() {
           title: draft.name,
           body: draft.description,
           questions: draft.questions.map((question) => question.questionText).join("\n"),
+          // Ticket 45 / #1506: keep the scored allocation across save → resume
+          // → Generate so a minor description edit does not reset 10→5 pts.
+          questionPoints: draft.questions.map((question) => question.pointsPossible),
+          pointsPossible: draft.pointsPossible,
           // Saved alongside the text because they are the instructor's own
           // settings, not generator output. Resuming used to hand the quiz
           // back with whatever the generator defaulted to, silently
@@ -354,11 +367,27 @@ export function InstructorQuizCreatePage() {
         accessToken,
         canvasUrl,
       });
+      // Ticket 45 / #1506: prefer the prior scored allocation when the
+      // question count is unchanged — either from the in-memory draft
+      // (Back → edit → Generate) or from a resumed typed draft's
+      // questionPoints. Otherwise the model freely reallocates (10 → 5)
+      // and the quiz-total validation fails against the expected sum.
+      const questionsWithPriorPoints = preserveQuestionPoints(
+        draft?.questions,
+        applyPriorQuestionPoints(seededPriorQuestionPoints, generated.questions),
+      );
+      const preservedAllocation =
+        questionsWithPriorPoints !== generated.questions;
+      const pointsPossible = preservedAllocation
+        ? sumQuestionPoints(questionsWithPriorPoints)
+        : generated.pointsPossible;
       // The generator does not know what the instructor had already chosen,
       // so a resumed draft's own attempt limit and timer win over its
       // defaults. Absent settings leave the generated values alone.
       setDraft({
         ...generated,
+        questions: questionsWithPriorPoints,
+        pointsPossible,
         ...(seededAllowedAttempts !== undefined
           ? { allowedAttempts: seededAllowedAttempts }
           : {}),

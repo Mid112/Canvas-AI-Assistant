@@ -36,6 +36,11 @@ export interface TypedDraftContent {
    * pointsPossible. */
   allowedAttempts?: number | null;
   timeLimit?: number | null;
+  /** Quiz drafts only (#1506) — per-question points from a scored draft, kept
+   * even when questions are stored as free text so a resume → Generate with
+   * the same question count can restore the prior allocation instead of the
+   * model's fresh 5-pt defaults. */
+  questionPoints?: number[];
   /** The course the draft was written against, stored as the two display
    * strings Canvas shows for it rather than any id. #1239 keeps Canvas and
    * local identifiers out of local storage; these are labels, the same
@@ -103,6 +108,7 @@ function stripCanvasIdentifiers(
     pointsPossible,
     allowedAttempts,
     timeLimit,
+    questionPoints,
     courseCode,
     courseName,
   } = content;
@@ -120,6 +126,7 @@ function stripCanvasIdentifiers(
     // "no time limit" are both values the instructor chose and must survive.
     ...(allowedAttempts !== undefined ? { allowedAttempts } : {}),
     ...(timeLimit !== undefined ? { timeLimit } : {}),
+    ...(questionPoints !== undefined ? { questionPoints } : {}),
     ...(courseCode !== undefined ? { courseCode } : {}),
     ...(courseName !== undefined ? { courseName } : {}),
   };
@@ -272,6 +279,15 @@ export function buildTypedDraftResumeTarget(
               : {}),
             ...(draft.content.timeLimit !== undefined
               ? { timeLimit: draft.content.timeLimit }
+              : {}),
+            // Ticket 45 / #1506: carry prior per-question points so Generate
+            // after resume can restore them when the question count matches.
+            ...(Array.isArray(draft.content.questionPoints) &&
+            draft.content.questionPoints.length > 0
+              ? { priorQuestionPoints: draft.content.questionPoints }
+              : {}),
+            ...(draft.content.pointsPossible !== undefined
+              ? { pointsPossible: draft.content.pointsPossible }
               : {}),
           },
         },
