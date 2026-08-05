@@ -272,6 +272,53 @@ describe("InstructorMessagesPage", () => {
     expect(screen.getByText("sent:10:COSC 499")).toBeInTheDocument();
   });
 
+  // Verifies: AI handoff opens compose, then Cancel/Inbox stay off compose (#1510 review).
+  it("opens compose from an AI draft handoff and lets Cancel return to inbox", async () => {
+    const user = userEvent.setup();
+    mockUseAuth.mockReturnValue({
+      accessToken: "token",
+      user: {
+        id: 1,
+        name: "Dr. Jane Doe",
+        role: "instructor",
+        has_canvas_token: true,
+      },
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    });
+
+    renderWithRouter(<InstructorMessagesPage />, {
+      routerProps: {
+        initialEntries: [
+          {
+            pathname: "/",
+            state: {
+              aiMessageDraft: {
+                subject: "Handoff subject",
+                body: "Handoff body",
+                prompt: "Draft a note",
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    // AI handoff should land on compose (subject field present).
+    expect(await screen.findByLabelText("Subject")).toBeInTheDocument();
+    expect(screen.queryByText("inbox:10:COSC 499")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /cancel/i }));
+    expect(await screen.findByText("inbox:10:COSC 499")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Sent" }));
+    expect(screen.getByText("sent:10:COSC 499")).toBeInTheDocument();
+  });
+
   // Verifies: With course + Canvas, the draft composer loads.
   it("loads the message draft when Canvas and an active course are available", async () => {
     mockUseAuth.mockReturnValue({

@@ -18,7 +18,7 @@ import { fetchCourseStudentsWithSubmissionFallback } from "@/services/students";
 import { toStudentEmailRecipients } from "@/lib/student-analytics";
 import type { FetchMessageDraftOptions } from "@/types/messageDraft";
 import { AlertCircle, Loader2, PenSquare } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 
 const RECIPIENT_LOAD_TIMEOUT_MS = 5000;
@@ -26,11 +26,8 @@ const RECIPIENT_LOAD_TIMEOUT_MS = 5000;
 const MESSAGES_TABS = ["inbox", "announcements", "sent", "compose"] as const;
 type MessagesTab = (typeof MESSAGES_TABS)[number];
 
-function parseMessagesTab(
-  raw: string | null,
-  hasAiDraft: boolean,
-): MessagesTab {
-  if (hasAiDraft || raw === "compose") {
+function parseMessagesTab(raw: string | null): MessagesTab {
+  if (raw === "compose") {
     return "compose";
   }
   if (raw === "announcements" || raw === "sent" || raw === "inbox") {
@@ -54,12 +51,13 @@ export function InstructorMessagesPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const aiDraft = (location.state as AiMessageDraftLocationState | null)
     ?.aiMessageDraft;
-  // Seed from the URL/AI draft on first paint so "?tab=compose" does not
-  // briefly mount the inbox panel (which made Subject-field assertions flake
-  // when the roster error banner appeared first).
+  // Seed compose from an AI handoff on first paint only. The URL-sync effect
+  // below must not keep re-forcing compose while location.state.aiMessageDraft
+  // remains — otherwise Cancel / Inbox / Sent snap back to compose (#1510).
   const [tab, setTab] = useState<MessagesTab>(() =>
-    parseMessagesTab(searchParams.get("tab"), Boolean(aiDraft)),
+    aiDraft ? "compose" : parseMessagesTab(searchParams.get("tab")),
   );
+  const aiComposeSeededRef = useRef(false);
 
   const courseLabel = activeCourse?.displayName;
   const basePrompt = useMemo(
@@ -133,7 +131,7 @@ export function InstructorMessagesPage() {
   ].join("|");
 
   const handleTabChange = (value: string) => {
-    const next = parseMessagesTab(value, false);
+    const next = parseMessagesTab(value);
     setTab(next);
     if (next === "inbox") {
       setSearchParams({}, { replace: true });
@@ -143,10 +141,25 @@ export function InstructorMessagesPage() {
   };
 
   useEffect(() => {
-    const next = parseMessagesTab(searchParams.get("tab"), Boolean(aiDraft));
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync tab to URL/AI draft on load
-    setTab(next);
-  }, [aiDraft, searchParams]);
+    const raw = searchParams.get("tab");
+    // One-time handoff seed: write ?tab=compose so Cancel/Inbox (which clear
+    // or change the URL) are not overridden by a sticky aiDraft flag.
+    if (
+      aiDraft &&
+      !aiComposeSeededRef.current &&
+      (raw == null || raw === "compose")
+    ) {
+      aiComposeSeededRef.current = true;
+      if (raw !== "compose") {
+        setSearchParams({ tab: "compose" }, { replace: true });
+      }
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- seed compose from AI handoff
+      setTab("compose");
+      return;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- sync tab to URL
+    setTab(parseMessagesTab(raw));
+  }, [aiDraft, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (!activeCourse) {
