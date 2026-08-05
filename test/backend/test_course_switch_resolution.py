@@ -27,7 +27,7 @@ def _register_with_two_courses(client) -> tuple[dict, dict]:
     email = f"courseswitch_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Course Switch Instructor", "email": email, "password": "secret123"},
+        json={"name": "Course Switch Instructor", "email": email, "password": "Secret123!"},
     )
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}

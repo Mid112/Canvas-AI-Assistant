@@ -404,7 +404,7 @@ async def test_change_password_rejects_wrong_current_password():
         await change_password(
             db,
             user,
-            ChangePasswordRequest(current_password="wrong", new_password="newsecret123"),
+            ChangePasswordRequest(current_password="wrong", new_password="Newsecret123!"),
             current_token="current-jwt",
         )
 
@@ -423,7 +423,7 @@ async def test_change_password_success():
         await change_password(
             db,
             user,
-            ChangePasswordRequest(current_password="correct", new_password="newsecret123"),
+            ChangePasswordRequest(current_password="correct", new_password="Newsecret123!"),
             current_token="current-jwt",
         )
 
@@ -446,7 +446,7 @@ async def test_change_password_does_not_revoke_when_current_password_wrong():
         await change_password(
             db,
             user,
-            ChangePasswordRequest(current_password="wrong", new_password="newsecret123"),
+            ChangePasswordRequest(current_password="wrong", new_password="Newsecret123!"),
             current_token="current-jwt",
         )
 
@@ -490,7 +490,7 @@ async def test_confirm_password_reset_rejects_invalid_or_expired_token():
     db.scalar = AsyncMock(return_value=None)
 
     with pytest.raises(HTTPException) as exc_info:
-        await confirm_password_reset(db, PasswordResetConfirmRequest(token="bad-token", new_password="newsecret123"))
+        await confirm_password_reset(db, PasswordResetConfirmRequest(token="bad-token", new_password="Newsecret123!"))
 
     assert exc_info.value.status_code == 400
 
@@ -503,7 +503,7 @@ async def test_confirm_password_reset_rejects_missing_user():
     db.get = AsyncMock(return_value=None)
 
     with pytest.raises(HTTPException) as exc_info:
-        await confirm_password_reset(db, PasswordResetConfirmRequest(token="tok", new_password="newsecret123"))
+        await confirm_password_reset(db, PasswordResetConfirmRequest(token="tok", new_password="Newsecret123!"))
 
     assert exc_info.value.status_code == 400
 
@@ -516,7 +516,7 @@ async def test_confirm_password_reset_success():
     db.scalar = AsyncMock(return_value=token_row)
     db.get = AsyncMock(return_value=user)
 
-    await confirm_password_reset(db, PasswordResetConfirmRequest(token="tok", new_password="newsecret123"))
+    await confirm_password_reset(db, PasswordResetConfirmRequest(token="tok", new_password="Newsecret123!"))
 
     assert user.hashed_password != hash_password("old")
     assert token_row.used_at is not None

@@ -21,7 +21,7 @@ def test_chat_uses_persisted_active_course_when_local_course_id_omitted(client):
     email = f"active_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Active Course Instructor", "email": email, "password": "secret123"},
+        json={"name": "Active Course Instructor", "email": email, "password": "Secret123!"},
     )
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
 

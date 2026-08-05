@@ -154,4 +154,50 @@ describe("LoginForm", () => {
 
     expect(onSubmit).not.toHaveBeenCalled();
   });
+
+  // Verifies (#1451): Login password field uses the shared show/hide control.
+  it("toggles password visibility from the shared PasswordInput control", async () => {
+    const user = userEvent.setup();
+
+    renderWithRouter(<LoginForm onSubmit={vi.fn()} />);
+
+    const passwordInput = screen.getByLabelText("Password");
+    expect(passwordInput).toHaveAttribute("type", "password");
+
+    await user.click(screen.getByRole("button", { name: "Show password" }));
+    expect(passwordInput).toHaveAttribute("type", "text");
+
+    await user.click(screen.getByRole("button", { name: "Hide password" }));
+    expect(passwordInput).toHaveAttribute("type", "password");
+  });
+
+  // Verifies (#1451): Valid email gets the same success border treatment as register.
+  it("marks a valid email with aria-invalid false after correcting an invalid value", async () => {
+    const user = userEvent.setup();
+
+    renderWithRouter(<LoginForm onSubmit={vi.fn()} />);
+
+    const emailInput = screen.getByLabelText("Email Address");
+    await user.type(emailInput, "invalid-email");
+    expect(emailInput).toHaveAttribute("aria-invalid", "true");
+
+    await user.clear(emailInput);
+    await user.type(emailInput, "professor@university.edu");
+    expect(emailInput).toHaveAttribute("aria-invalid", "false");
+  });
+
+
+  // Verifies (#1451): Non-empty login password uses the success border (not strength red).
+  it("applies the success border class once the password field has a value", async () => {
+    const user = userEvent.setup();
+
+    renderWithRouter(<LoginForm onSubmit={vi.fn()} />);
+
+    const passwordInput = screen.getByLabelText("Password");
+    expect(passwordInput.className).not.toMatch(/border-emerald/);
+
+    await user.type(passwordInput, "any-password");
+    expect(passwordInput.className).toMatch(/border-emerald/);
+  });
+
 });
