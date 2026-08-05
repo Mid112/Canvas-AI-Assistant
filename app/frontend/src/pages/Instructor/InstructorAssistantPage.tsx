@@ -251,6 +251,14 @@ export function InstructorAssistantPage() {
     if (!accessToken || !activeCourse?.localId) {
       return;
     }
+    // When there is no pending conversation yet, wait for deferred-draft
+    // hydration to finish before syncing without an explicit conversation
+    // id. Otherwise this effect and the draft-restore effect (or
+    // ChatWindow's own first send) can each call get_or_create_conversation
+    // with no id around the same time and create two conversations.
+    if (pendingConversationId === undefined && !deferredListLoaded) {
+      return;
+    }
     let cancelled = false;
     void syncAssistantCourseContext(accessToken, {
       localCourseId: activeCourse.localId,
@@ -258,7 +266,12 @@ export function InstructorAssistantPage() {
     })
       .then((result) => {
         if (cancelled) return;
-        if (pendingConversationId === undefined) {
+        // Course switches on an existing thread fork onto a different
+        // conversation server-side (get_or_create_conversation), so the
+        // returned id must always be adopted when it differs — not only
+        // when nothing was pending — or ChatWindow keeps posting to the
+        // old conversation while the synced envelope lives on the fork.
+        if (result.conversationId !== pendingConversationId) {
           setPendingConversationId(result.conversationId);
         }
       })
@@ -268,7 +281,12 @@ export function InstructorAssistantPage() {
     return () => {
       cancelled = true;
     };
-  }, [accessToken, activeCourse?.localId, pendingConversationId]);
+  }, [
+    accessToken,
+    activeCourse?.localId,
+    pendingConversationId,
+    deferredListLoaded,
+  ]);
 
   useEffect(() => {
     if (!accessToken || !user) return;
