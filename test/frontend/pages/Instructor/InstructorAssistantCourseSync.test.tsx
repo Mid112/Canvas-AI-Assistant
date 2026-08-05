@@ -245,4 +245,29 @@ describe("InstructorAssistantPage course sync fork adoption", () => {
       expect(latest?.loadedConversationId).toBeNull();
     });
   });
+
+  // Verifies (#1507 re-review): selecting history must not re-POST course-context
+  // for the active course — that forks and drops the opened transcript.
+  it("does not re-sync course context when loading a history conversation", async () => {
+    const user = userEvent.setup();
+    render(<CourseSwitchHarness />);
+
+    await waitFor(() => {
+      expect(mockSyncCourseContext).toHaveBeenCalled();
+    });
+    const callsAfterHydrate = mockSyncCourseContext.mock.calls.length;
+
+    await user.click(
+      await screen.findByRole("button", { name: /Previous conversation/ }),
+    );
+
+    await waitFor(() => {
+      expect(
+        chatPropsLog.some((entry) => entry.loadedConversationId === 7),
+      ).toBe(true);
+    });
+
+    expect(mockSyncCourseContext.mock.calls.length).toBe(callsAfterHydrate);
+    expect(chatPropsLog.at(-1)?.loadedConversationId).toBe(7);
+  });
 });

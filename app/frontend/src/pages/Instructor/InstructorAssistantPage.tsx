@@ -148,6 +148,14 @@ export function InstructorAssistantPage() {
   const [discardingDeferredId, setDiscardingDeferredId] = useState<
     number | null
   >(null);
+  // Course-context sync must follow activeCourse changes, not every history
+  // selection. pendingConversationId is read from a ref inside the effect so
+  // loading a transcript does not POST /chat/course-context and fork away
+  // from the conversation the instructor just opened (#1507 re-review).
+  const pendingConversationIdRef = useRef(pendingConversationId);
+  pendingConversationIdRef.current = pendingConversationId;
+  const lastSyncedCourseIdRef = useRef<number | null>(null);
+
   const [typedDraftRevision, setTypedDraftRevision] = useState(0);
   const [discardingTypedId, setDiscardingTypedId] = useState<string | null>(
     null,
@@ -251,18 +259,27 @@ export function InstructorAssistantPage() {
     if (!accessToken || !activeCourse?.localId) {
       return;
     }
+    const courseId = activeCourse.localId;
+    const pendingId = pendingConversationIdRef.current;
     // When there is no pending conversation yet, wait for deferred-draft
     // hydration to finish before syncing without an explicit conversation
     // id. Otherwise this effect and the draft-restore effect (or
     // ChatWindow's own first send) can each call get_or_create_conversation
     // with no id around the same time and create two conversations.
-    if (pendingConversationId === undefined && !deferredListLoaded) {
+    if (pendingId === undefined && !deferredListLoaded) {
+      return;
+    }
+    // History selection updates pendingConversationId without changing the
+    // active course. That must not re-POST course-context — syncing the
+    // loaded id against a different sidebar course forks and the success
+    // handler would drop the transcript the instructor just opened.
+    if (lastSyncedCourseIdRef.current === courseId) {
       return;
     }
     // Prefer a stored deferred draft's conversation id when sync would
     // otherwise create a brand-new conversation before the restore
     // timeout applies it (#1507 re-review).
-    let conversationIdForSync = pendingConversationId;
+    let conversationIdForSync = pendingId;
     if (conversationIdForSync === undefined && user?.id) {
       const storedDraft = getStoredDeferredDraft(user.id);
       if (storedDraft?.conversationId !== undefined) {
@@ -271,11 +288,12 @@ export function InstructorAssistantPage() {
     }
     let cancelled = false;
     void syncAssistantCourseContext(accessToken, {
-      localCourseId: activeCourse.localId,
+      localCourseId: courseId,
       conversationId: conversationIdForSync,
     })
       .then((result) => {
         if (cancelled) return;
+        lastSyncedCourseIdRef.current = courseId;
         // Course switches on an existing thread fork onto a different
         // conversation server-side (get_or_create_conversation), so the
         // returned id must always be adopted when it differs — not only
@@ -283,7 +301,7 @@ export function InstructorAssistantPage() {
         // old conversation while the synced envelope lives on the fork.
         // Clear loaded history + remount chat: ChatWindow skips hydrating
         // from initialConversationId while loadedConversation is set.
-        if (result.conversationId !== pendingConversationId) {
+        if (result.conversationId !== pendingConversationIdRef.current) {
           setPendingConversationId(result.conversationId);
           setSelectedConversation(null);
           setChatSessionKey((key) => key + 1);
@@ -295,10 +313,12 @@ export function InstructorAssistantPage() {
     return () => {
       cancelled = true;
     };
+    // pendingConversationId is intentionally omitted: read via ref so history
+    // load does not re-trigger sync. deferredListLoaded only unlocks the
+    // first no-id hydrate; lastSyncedCourseIdRef prevents a second pass.
   }, [
     accessToken,
     activeCourse?.localId,
-    pendingConversationId,
     deferredListLoaded,
     user?.id,
   ]);
@@ -341,7 +361,15 @@ export function InstructorAssistantPage() {
     const timer = window.setTimeout(() => {
       setPendingDraft(draft.message);
       if (draft.conversationId !== undefined) {
-        setPendingConversationId(draft.conversationId);
+        // Don't clobber a newer id course-sync already adopted while this
+        // timeout was queued (pre-fork draft id would put chat back on the
+        // old thread while course_context lives on the fork).
+        setPendingConversationId((current) => {
+          if (current !== undefined && current !== draft.conversationId) {
+            return current;
+          }
+          return draft.conversationId;
+        });
       }
       if (draft.deferredRequestId != null) {
         setPendingDeferredRequestId(draft.deferredRequestId);
