@@ -29,7 +29,7 @@ def _register(client: TestClient) -> dict:
     email = f"history_{uuid.uuid4()}@example.com"
     resp = client.post(
         "/api/v1/auth/register",
-        json={"name": "History User", "email": email, "password": "secret123"},
+        json={"name": "History User", "email": email, "password": "Secret123!"},
     )
     assert resp.status_code == 201
     return {"email": email, "token": resp.json()["access_token"]}

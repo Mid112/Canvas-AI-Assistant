@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, computed_field, field_validator
 
+from app.core.password_policy import validate_password_strength
+
 _LOCAL_HTTP_HOSTS = {"localhost", "127.0.0.1", "canvas_lms"}
 
 
@@ -10,6 +12,11 @@ class RegisterRequest(BaseModel):
     name: str
     email: EmailStr
     password: str
+
+    @field_validator("password")
+    @classmethod
+    def _password_strength(cls, value: str) -> str:
+        return validate_password_strength(value)
 
 
 class LoginRequest(BaseModel):
@@ -44,12 +51,22 @@ class PasswordResetRequestResponse(BaseModel):
 
 class PasswordResetConfirmRequest(BaseModel):
     token: str = Field(min_length=1)
-    new_password: str = Field(min_length=8)
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def _password_strength(cls, value: str) -> str:
+        return validate_password_strength(value)
 
 
 class ChangePasswordRequest(BaseModel):
     current_password: str
-    new_password: str = Field(min_length=8)
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def _password_strength(cls, value: str) -> str:
+        return validate_password_strength(value)
 
 
 class ProfileUpdateRequest(BaseModel):

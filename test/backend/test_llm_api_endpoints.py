@@ -25,7 +25,7 @@ def _register(client: TestClient) -> dict:
     email = f"llm_api_{uuid.uuid4()}@example.com"
     resp = client.post(
         "/api/v1/auth/register",
-        json={"name": "LLM API Test", "email": email, "password": "secret123"},
+        json={"name": "LLM API Test", "email": email, "password": "Secret123!"},
     )
     assert resp.status_code == 201, resp.json()
     token = resp.json()["access_token"]

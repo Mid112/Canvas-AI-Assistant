@@ -89,12 +89,12 @@ describe("ResetPasswordPage", () => {
       screen.getByRole("heading", { name: "Choose a New Password" }),
     ).toBeInTheDocument();
 
-    await user.type(screen.getByLabelText("New Password"), "newpass123");
-    await user.type(screen.getByLabelText("Confirm Password"), "newpass123");
+    await user.type(screen.getByLabelText("New Password"), "Newpass123!");
+    await user.type(screen.getByLabelText("Confirm Password"), "Newpass123!");
     await user.click(screen.getByRole("button", { name: "Update Password" }));
 
     await waitFor(() => {
-      expect(mockedConfirm).toHaveBeenCalledWith("from-query", "newpass123");
+      expect(mockedConfirm).toHaveBeenCalledWith("from-query", "Newpass123!");
     });
     expect(screen.getByRole("status")).toHaveTextContent(
       "Your password has been updated",

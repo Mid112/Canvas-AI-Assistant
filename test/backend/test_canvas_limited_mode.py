@@ -25,7 +25,7 @@ def _register(client):
     email = f"limited_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Limited User", "email": email, "password": "secret123"},
+        json={"name": "Limited User", "email": email, "password": "Secret123!"},
     )
     token = reg.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
