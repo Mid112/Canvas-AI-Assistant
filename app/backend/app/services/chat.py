@@ -2782,11 +2782,18 @@ def _attach_quiz_generation_prompt(
     (topic, question type, points, time limit), not a title-only fallback.
     Attaching here — before the assistant message is persisted — means both
     live navigation and history "Open quiz creation form" carry the same seed.
+
+    Keep an existing non-empty generation_prompt: refine/modify follow-ups that
+    still emit create_quiz intent_preview often send a short utterance
+    ("make it harder") that must not replace the original constraints.
     """
     if not result.get("intent_preview"):
         return result
     proposed = result.get("proposed_action")
     if not isinstance(proposed, dict) or proposed.get("action") != "create_quiz":
+        return result
+    existing = proposed.get("generation_prompt")
+    if isinstance(existing, str) and existing.strip():
         return result
     prompt = user_message.strip() if isinstance(user_message, str) else ""
     if not prompt:

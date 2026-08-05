@@ -337,4 +337,26 @@ describe("InstructorQuizCreatePage typed drafts", () => {
 
     expect(screen.getByLabelText("Quiz description")).toHaveValue(utterance);
   });
+
+  // Verifies: structured handoff keeps the stamped prompt for Back to Describe (#1512).
+  it("keeps the generation prompt when a structured handoff returns to describe", async () => {
+    const user = userEvent.setup();
+    const utterance =
+      "Create a quiz called 'recursion principles' with 5 multiple-choice questions about cell biology. 50 points, 30 minutes.";
+    renderPage({
+      aiQuizDraft: {
+        ...reviewSeed,
+        prompt: utterance,
+      },
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Preview & Approve Quiz" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Back to Describe" }));
+    expect(screen.getByLabelText("Quiz description")).toHaveValue(utterance);
+    expect(screen.getByLabelText("Quiz description")).not.toHaveValue(
+      "Drafted in the AI Assistant",
+    );
+  });
 });

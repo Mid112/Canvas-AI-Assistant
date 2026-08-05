@@ -120,6 +120,27 @@ def test_attach_quiz_generation_prompt_stamps_create_quiz():
     assert "generation_prompt" not in result["proposed_action"]
 
 
+# Verifies: refine follow-ups must not overwrite the first full utterance (#1512).
+def test_attach_quiz_generation_prompt_keeps_existing_prompt():
+    original = (
+        "Create a quiz called 'recursion principles' with 5 multiple-choice "
+        "questions about cell biology. 50 points, 30-minute time limit."
+    )
+    result = {
+        "intent_preview": True,
+        "proposed_action": {
+            "action": "create_quiz",
+            "title": "recursion principles",
+            "generation_prompt": original,
+        },
+    }
+
+    stamped = _attach_quiz_generation_prompt(result, "make it harder")
+
+    assert stamped is result
+    assert stamped["proposed_action"]["generation_prompt"] == original
+
+
 def test_attach_quiz_generation_prompt_skips_non_quiz_and_blank():
     assignment = {
         "intent_preview": True,

@@ -86,9 +86,11 @@ export function InstructorQuizCreatePage() {
             courseId: String(seededDraft.courseId ?? ""),
             // Prefer the chat-stamped full utterance (#1512). Never invent a
             // `Title: …` generation string — that made the model follow the
-            // title domain when the body topic differed.
+            // title domain when the body topic differed. Structured handoffs
+            // still keep the stamped prompt so Back to Describe does not
+            // collapse to a stub (#1512 review).
             prompt: hasStructuredQuestions
-              ? "Drafted in the AI Assistant"
+              ? seededDraft.prompt?.trim() || "Drafted in the AI Assistant"
               : seededDraft.prompt?.trim() ||
                 buildAssignmentGenerationPrompt({
                   title: seededDraft.name,
