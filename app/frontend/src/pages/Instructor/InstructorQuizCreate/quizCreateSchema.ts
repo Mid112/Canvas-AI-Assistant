@@ -24,7 +24,9 @@ const quizQuestionSchema = z
       "short_answer_question",
       "essay_question",
     ]),
-    pointsPossible: z.number().positive("Question points must be greater than 0"),
+    pointsPossible: z
+      .number({ error: "Question points must be a number" })
+      .positive("Question points must be greater than 0"),
     answers: z.array(quizAnswerSchema),
   })
   .superRefine((question, context) => {

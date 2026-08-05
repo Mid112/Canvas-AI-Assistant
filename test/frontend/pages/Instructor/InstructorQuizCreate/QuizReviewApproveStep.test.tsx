@@ -64,6 +64,64 @@ describe("QuizReviewApproveStep", () => {
     );
   });
 
+  // Verifies: Ticket 14 — editing a question above 1 point keeps the form valid
+  // by syncing quiz points_possible to the scored total.
+  it("lets instructors set question points greater than 1", async () => {
+    const user = userEvent.setup();
+    const onApprove = vi.fn();
+    render(
+      <QuizReviewApproveStep
+        courseLabel="CPSC 310"
+        draft={{
+          name: "Recursion Quiz",
+          description: "Covers base cases and recursive definitions.",
+          dueDate: "2030-12-15T23:59",
+          pointsPossible: 1,
+          allowedAttempts: 1,
+          timeLimit: null,
+          questions: [
+            {
+              questionText: "Explain recursion",
+              questionType: "essay_question",
+              pointsPossible: 1,
+              answers: [],
+            },
+          ],
+        }}
+        isApproving={false}
+        onApprove={onApprove}
+        onBack={vi.fn()}
+      />,
+    );
+
+    const pointsInput = screen.getByRole("spinbutton", {
+      name: "Points for question 1",
+    });
+    await user.clear(pointsInput);
+    await user.type(pointsInput, "5");
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Preview & Approve Quiz" }),
+      ).toBeEnabled(),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Preview & Approve Quiz" }),
+    );
+
+    expect(onApprove).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pointsPossible: 5,
+        questions: [
+          expect.objectContaining({
+            pointsPossible: 5,
+          }),
+        ],
+      }),
+      expect.anything(),
+    );
+  });
+
   it("lets Classic quizzes link a randomized Canvas question bank", async () => {
     const user = userEvent.setup();
     const onApprove = vi.fn();
