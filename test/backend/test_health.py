@@ -607,7 +607,7 @@ def test_admin_health_rejects_instructor_token(client):
     email = f"inst_{uuid.uuid4()}@example.com"
     token = client.post(
         "/api/v1/auth/register",
-        json={"name": "I", "email": email, "password": "pass"},
+        json={"name": "I", "email": email, "password": "Secret123!"},
     ).json()["access_token"]
 
     resp = client.get(
@@ -684,7 +684,7 @@ def test_admin_health_latest_and_history_require_admin(client):
     email = f"inst_{uuid.uuid4()}@example.com"
     token = client.post(
         "/api/v1/auth/register",
-        json={"name": "I", "email": email, "password": "pass"},
+        json={"name": "I", "email": email, "password": "Secret123!"},
     ).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 

@@ -143,7 +143,7 @@ async def test_create_admin_user_rejects_duplicate_email():
     db = AsyncMock()
     db.scalar = AsyncMock(return_value=SimpleNamespace(id=1))
     admin = SimpleNamespace(id=1)
-    body = CreateAdminRequest(name="New Admin", email="dup@example.com", password="secret123")
+    body = CreateAdminRequest(name="New Admin", email="dup@example.com", password="Secret123!")
 
     with pytest.raises(HTTPException) as exc_info:
         await create_admin_user(db, body, admin)
@@ -156,7 +156,7 @@ async def test_create_admin_user_success_writes_audit_log():
     db = _db_assigning_ids()
     db.scalar = AsyncMock(return_value=None)
     admin = SimpleNamespace(id=1)
-    body = CreateAdminRequest(name="New Admin", email="new@example.com", password="secret123")
+    body = CreateAdminRequest(name="New Admin", email="new@example.com", password="Secret123!")
 
     user = await create_admin_user(db, body, admin)
 
@@ -171,7 +171,7 @@ async def test_create_instructor_rejects_duplicate_email():
     db = AsyncMock()
     db.scalar = AsyncMock(return_value=SimpleNamespace(id=1))
     admin = SimpleNamespace(id=1)
-    body = CreateInstructorRequest(name="New Instructor", email="dup@example.com", password="secret123")
+    body = CreateInstructorRequest(name="New Instructor", email="dup@example.com", password="Secret123!")
 
     with pytest.raises(HTTPException) as exc_info:
         await create_instructor(db, body, admin)
@@ -184,7 +184,7 @@ async def test_create_instructor_success():
     db = _db_assigning_ids()
     db.scalar = AsyncMock(return_value=None)
     admin = SimpleNamespace(id=1)
-    body = CreateInstructorRequest(name="New Instructor", email="new@example.com", password="secret123")
+    body = CreateInstructorRequest(name="New Instructor", email="new@example.com", password="Secret123!")
 
     instructor = await create_instructor(db, body, admin)
 
