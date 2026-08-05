@@ -1,3 +1,5 @@
+from unittest.mock import MagicMock
+
 import pytest
 
 from app.mcp_tools.dispatcher import (
@@ -215,16 +217,16 @@ def test_due_date_in_past_true_for_stale_date():
     # The regression this guards: the model has no innate sense of
     # "today" beyond the TODAY'S DATE prompt line and doesn't reliably
     # apply it, so it can hand back a same-year date that's already gone.
-    assert _create_assignment_due_date_in_past("2020-01-01") is True
+    assert _create_assignment_due_date_in_past("2020-01-01", MagicMock(canvas_connections=[])) is True
 
 
 # Verifies: Due date in past false for future date.
 def test_due_date_in_past_false_for_future_date():
-    assert _create_assignment_due_date_in_past("2030-01-01") is False
+    assert _create_assignment_due_date_in_past("2030-01-01", MagicMock(canvas_connections=[])) is False
 
 
 # Verifies: Due date in past false for unparseable string.
 def test_due_date_in_past_false_for_unparseable_string():
     # Leave format errors to the existing due_date validators — this
     # check only judges dates it can actually parse.
-    assert _create_assignment_due_date_in_past("not a date") is False
+    assert _create_assignment_due_date_in_past("not a date", MagicMock(canvas_connections=[])) is False
