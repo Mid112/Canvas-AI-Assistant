@@ -392,6 +392,9 @@ export function InstructorAssistantPage() {
         setPendingConversationId(resumed.conversation_id);
       }
       setSelectedConversation(null);
+      // Hide starters here — don't wait for ChatWindow's initialPrompt auto-send
+      // (which skips when resumed.message is empty/falsy).
+      setShowStarterGuidance(false);
       setChatSessionKey((current) => current + 1);
       if (user) {
         clearStoredDeferredDraft(user.id);

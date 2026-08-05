@@ -265,6 +265,10 @@ describe("InstructorAssistantPage", () => {
       await screen.findByRole("button", { name: "Resume next request" }),
     ).toBeInTheDocument();
 
+    expect(
+      screen.getByRole("region", { name: "Starter prompts" }),
+    ).toBeInTheDocument();
+
     await user.click(screen.getByRole("button", { name: "Resume next request" }));
 
     await waitFor(() => {
@@ -275,6 +279,55 @@ describe("InstructorAssistantPage", () => {
     expect(
       await screen.findByRole("button", { name: "Resume next request" }),
     ).toBeInTheDocument();
+    // Verifies (#1441): Resume clears starters directly, not only via auto-send.
+    expect(
+      screen.queryByRole("region", { name: "Starter prompts" }),
+    ).not.toBeInTheDocument();
+  });
+
+  // Verifies (#1441): Empty resumed message still hides starters (auto-send would skip).
+  it("hides starter prompts when resuming a deferred request with an empty message", async () => {
+    const user = userEvent.setup();
+
+    mockListDeferred.mockResolvedValue({
+      items: [
+        {
+          id: 4,
+          conversation_id: null,
+          message: "",
+          proposed_action: null,
+          status: "deferred",
+          created_at: "2026-07-21T12:04:00.000Z",
+          resumed_at: null,
+        },
+      ],
+    });
+    mockResumeDeferred.mockResolvedValue({
+      id: 4,
+      conversation_id: null,
+      message: "",
+      proposed_action: null,
+      status: "deferred",
+      created_at: "2026-07-21T12:04:00.000Z",
+      resumed_at: null,
+    });
+
+    renderWithInstitution(<InstructorAssistantPage />);
+
+    expect(
+      await screen.findByRole("region", { name: "Starter prompts" }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Resume saved request" }),
+    );
+
+    await waitFor(() => {
+      expect(mockResumeDeferred).toHaveBeenCalledWith("token", 4);
+    });
+    expect(
+      screen.queryByRole("region", { name: "Starter prompts" }),
+    ).not.toBeInTheDocument();
   });
 
   it("starts a fresh chat from a loaded conversation", async () => {
