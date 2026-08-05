@@ -233,7 +233,7 @@ def test_support_tickets_endpoints_require_admin(client):
     email = f"inst_{uuid.uuid4()}@example.com"
     token = client.post(
         "/api/v1/auth/register",
-        json={"name": "I", "email": email, "password": "pass"},
+        json={"name": "I", "email": email, "password": "Secret123!"},
     ).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
