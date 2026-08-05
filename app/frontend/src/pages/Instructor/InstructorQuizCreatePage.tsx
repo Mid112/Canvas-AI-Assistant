@@ -159,6 +159,7 @@ export function InstructorQuizCreatePage() {
     if (questionBanks.length === 0) {
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- rematch resumed bank groups once Canvas banks load
     setDraft((current) => {
       if (!current?.questionBankGroups?.some((group) => group.bankId <= 0)) {
         return current;
