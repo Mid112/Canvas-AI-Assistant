@@ -259,10 +259,20 @@ export function InstructorAssistantPage() {
     if (pendingConversationId === undefined && !deferredListLoaded) {
       return;
     }
+    // Prefer a stored deferred draft's conversation id when sync would
+    // otherwise create a brand-new conversation before the restore
+    // timeout applies it (#1507 re-review).
+    let conversationIdForSync = pendingConversationId;
+    if (conversationIdForSync === undefined && user?.id) {
+      const storedDraft = getStoredDeferredDraft(user.id);
+      if (storedDraft?.conversationId !== undefined) {
+        conversationIdForSync = storedDraft.conversationId;
+      }
+    }
     let cancelled = false;
     void syncAssistantCourseContext(accessToken, {
       localCourseId: activeCourse.localId,
-      conversationId: pendingConversationId,
+      conversationId: conversationIdForSync,
     })
       .then((result) => {
         if (cancelled) return;
@@ -271,8 +281,12 @@ export function InstructorAssistantPage() {
         // returned id must always be adopted when it differs — not only
         // when nothing was pending — or ChatWindow keeps posting to the
         // old conversation while the synced envelope lives on the fork.
+        // Clear loaded history + remount chat: ChatWindow skips hydrating
+        // from initialConversationId while loadedConversation is set.
         if (result.conversationId !== pendingConversationId) {
           setPendingConversationId(result.conversationId);
+          setSelectedConversation(null);
+          setChatSessionKey((key) => key + 1);
         }
       })
       .catch(() => {
@@ -286,6 +300,7 @@ export function InstructorAssistantPage() {
     activeCourse?.localId,
     pendingConversationId,
     deferredListLoaded,
+    user?.id,
   ]);
 
   useEffect(() => {
