@@ -184,7 +184,9 @@ def test_picks_latest_due_date_among_qualifying_assignments_and_chains_into_upda
     reply = body["reply"]
     assert reply["action"] == "intent_preview"
     assert reply["proposed_action"]["assignment_id"] == 222
-    assert reply["proposed_action"]["due_date"] == "2026-06-04T00:00:00+00:00"
+    # Intent-preview surfaces the model's due_date string; timezone
+    # normalization runs later on confirm/write when instructor TZ is known.
+    assert reply["proposed_action"]["due_date"] == "2026-06-04T00:00:00"
 
     logs = _tool_call_log_actions(body["conversation_id"])
     assert logs == ["fetch_assignments", "find_assignment_by_submission_rate"]
