@@ -78,7 +78,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Keep logout referentially stable across token refreshes (review nit):
   // read the latest token from a ref instead of closing over accessToken.
   const accessTokenRef = useRef(accessToken);
-  accessTokenRef.current = accessToken;
+  useEffect(() => {
+    accessTokenRef.current = accessToken;
+  }, [accessToken]);
 
   const loadUser = useCallback(async (token: string) => {
     const currentUser = await fetchCurrentUser(token);

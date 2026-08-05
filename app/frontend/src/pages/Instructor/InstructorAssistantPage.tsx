@@ -115,6 +115,12 @@ export function InstructorAssistantPage() {
   const [pendingMessageId, setPendingMessageId] = useState<number | undefined>(
     () => locationState.initialPendingMessageId,
   );
+  // Ticket 17 / #1441: show starter prompts only on an empty new chat.
+  const [showStarterGuidance, setShowStarterGuidance] = useState(
+    () =>
+      !locationState.initialPrompt &&
+      locationState.initialConversationId === undefined,
+  );
   const [chatSessionKey, setChatSessionKey] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [hasPendingAssistantWork, setHasPendingAssistantWork] = useState(false);
@@ -307,6 +313,7 @@ export function InstructorAssistantPage() {
 
   const handleSuggestedAction = (prompt: string) => {
     setSelectedConversation(null);
+    setShowStarterGuidance(false);
     chatWindowRef.current?.sendPrompt(prompt);
   };
 
@@ -318,6 +325,7 @@ export function InstructorAssistantPage() {
     setPendingMessageId(undefined);
     setPendingDeferredRequestId(null);
     setHistoryError(null);
+    setShowStarterGuidance(true);
     setChatSessionKey((current) => current + 1);
   };
 
@@ -342,6 +350,7 @@ export function InstructorAssistantPage() {
       setPendingDeferredRequestId(null);
       setPendingConversationId(conversation.id);
       setPendingMessageId(undefined);
+      setShowStarterGuidance(false);
       setChatSessionKey((current) => current + 1);
     } catch (requestError) {
       if (conversationLoadRequestRef.current !== requestId) {
@@ -383,6 +392,9 @@ export function InstructorAssistantPage() {
         setPendingConversationId(resumed.conversation_id);
       }
       setSelectedConversation(null);
+      // Hide starters here — don't wait for ChatWindow's initialPrompt auto-send
+      // (which skips when resumed.message is empty/falsy).
+      setShowStarterGuidance(false);
       setChatSessionKey((current) => current + 1);
       if (user) {
         clearStoredDeferredDraft(user.id);
@@ -486,6 +498,7 @@ export function InstructorAssistantPage() {
         actions={suggestedActions}
         onSelect={handleSuggestedAction}
         disabled={isLoading}
+        visible={showStarterGuidance}
       />
 
       {/* The chat is the primary surface: it takes every pixel the collapsed
@@ -515,6 +528,7 @@ export function InstructorAssistantPage() {
             void loadDeferredRequests();
           }}
           onLoadingChange={setIsLoading}
+          onConversationStarted={() => setShowStarterGuidance(false)}
           onPendingWorkChange={setHasPendingAssistantWork}
           onStartNewChat={handleStartNewChat}
           modelSettings={llmSettings}
