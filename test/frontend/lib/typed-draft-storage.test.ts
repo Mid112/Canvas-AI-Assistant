@@ -124,6 +124,105 @@ describe("typed-draft-storage", () => {
     });
   });
 
+  // Regression for #1505: a draft saved AFTER generation must carry its
+  // structured questions through, not a newline-joined dump of question
+  // text stuffed into the description/prompt.
+  it("persists a generated quiz draft's structured questions (#1505)", () => {
+    const questions = [
+      {
+        questionText: "What is 2 + 2?",
+        questionType: "multiple_choice_question" as const,
+        pointsPossible: 1,
+        answers: [
+          { text: "3", weight: 0 },
+          { text: "4", weight: 100 },
+        ],
+      },
+    ];
+    const draft = saveTypedDraft(7, {
+      kind: "quiz",
+      content: {
+        title: "Midterm",
+        body: "Covers chapters 1-3",
+        quizQuestions: questions,
+        dueDate: "2026-08-15T23:59:00",
+        pointsPossible: 20,
+        allowedAttempts: 2,
+        timeLimit: 30,
+      },
+    });
+
+    expect(draft.content.quizQuestions).toEqual(questions);
+    // The description is the instructor/generator's own text — it must not
+    // be replaced by a dump of the question texts.
+    expect(draft.content.body).toBe("Covers chapters 1-3");
+  });
+
+  // Regression for #1505: resuming a draft with structured questions must
+  // land the create page on review (via aiQuizDraft.questions), not
+  // re-describe with the question text jammed into the prompt.
+  it("builds quiz resume targets that land on review with structured questions (#1505)", () => {
+    const questions = [
+      {
+        questionText: "What is 2 + 2?",
+        questionType: "multiple_choice_question" as const,
+        pointsPossible: 1,
+        answers: [
+          { text: "3", weight: 0 },
+          { text: "4", weight: 100 },
+        ],
+      },
+    ];
+    const draft = saveTypedDraft(7, {
+      kind: "quiz",
+      content: {
+        title: "Midterm",
+        body: "Covers chapters 1-3",
+        quizQuestions: questions,
+        dueDate: "2026-08-15T23:59:00",
+        pointsPossible: 20,
+        allowedAttempts: 2,
+        timeLimit: 30,
+      },
+    });
+
+    const target = buildTypedDraftResumeTarget(draft, { courseId: 42 });
+    expect(target).toEqual({
+      path: paths.instructor.quizCreate,
+      state: {
+        typedDraftId: draft.id,
+        aiQuizDraft: {
+          courseId: 42,
+          name: "Midterm",
+          description: "Covers chapters 1-3",
+          questions,
+          dueDate: "2026-08-15T23:59:00",
+          pointsPossible: 20,
+          allowedAttempts: 2,
+          timeLimit: 30,
+        },
+      },
+    });
+    // The description must be the original text, never the question dump
+    // that used to land here (#1505's reported symptom).
+    const aiQuizDraft = target.state.aiQuizDraft as { description: string };
+    expect(aiQuizDraft.description).not.toContain("What is 2 + 2?");
+  });
+
+  // A quiz with no structured questions saved (prompt-only, or a generated
+  // draft with an empty question list) must still fall back to describe —
+  // hasStructuredQuestions requires a non-empty array, not just presence.
+  it("falls back to describe when a quiz draft's structured questions are empty", () => {
+    const draft = saveTypedDraft(7, {
+      kind: "quiz",
+      content: { title: "Midterm", body: "No questions yet", quizQuestions: [] },
+    });
+
+    const target = buildTypedDraftResumeTarget(draft, { courseId: 42 });
+    const aiQuizDraft = target.state.aiQuizDraft as Record<string, unknown>;
+    expect(aiQuizDraft).not.toHaveProperty("questions");
+  });
+
   // Verifies: a quiz draft keeps the instructor's own attempt limit and
   // timer. stripCanvasIdentifiers is a hard whitelist, so a field added to
   // TypedDraftContent but not to it is dropped on save with no error — the

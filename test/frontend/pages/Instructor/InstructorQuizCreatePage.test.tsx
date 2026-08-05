@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Route, Routes } from "react-router-dom";
 
 import {
+  buildTypedDraftResumeTarget,
   listTypedDrafts,
   saveTypedDraft,
 } from "@/lib/typed-draft-storage";
@@ -302,5 +303,50 @@ describe("InstructorQuizCreatePage typed drafts", () => {
       expect(mockedApprove).toHaveBeenCalled();
     });
     expect(listTypedDrafts(1)).toHaveLength(0);
+  });
+
+  // Regression for #1505: saving a draft AFTER questions were generated,
+  // then resuming it, must land back on review with those questions intact
+  // instead of re-describing with the question text dumped into the prompt.
+  it("saves a generated quiz draft and resumes straight to review (#1505)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(
+      screen.getByLabelText("Quiz description"),
+      "Create a quiz on Python functions with 1 multiple-choice question",
+    );
+    const generate = await screen.findByRole("button", {
+      name: "Generate Quiz Draft",
+    });
+    await waitFor(() => expect(generate).toBeEnabled());
+    await user.click(generate);
+
+    await screen.findByLabelText("Quiz title");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await screen.findByText(/Draft saved/i);
+
+    const saved = listTypedDrafts(1);
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.content.quizQuestions).toEqual(reviewSeed.questions);
+    // The description must stay the generator's own text, never a dump of
+    // the question texts (#1505's reported symptom).
+    expect(saved[0]?.content.body).toBe("Generated instructions");
+    expect(saved[0]?.content.body).not.toContain("What is 2+2?");
+
+    const target = buildTypedDraftResumeTarget(saved[0]!, { courseId: 42 });
+
+    cleanup();
+    renderPage(target.state as Record<string, unknown>);
+
+    expect(await screen.findByLabelText("Quiz title")).toHaveValue(
+      "Generated Quiz",
+    );
+    expect(screen.queryByText("Describe Your Quiz")).not.toBeInTheDocument();
+    const instructions = screen.getByLabelText(
+      "Quiz instructions",
+    ) as HTMLTextAreaElement;
+    expect(instructions.value).toBe("Generated instructions");
+    expect(instructions.value).not.toContain("What is 2+2?");
   });
 });

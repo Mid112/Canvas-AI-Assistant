@@ -15,6 +15,7 @@ import { pageShellNarrow } from "@/lib/page-shell";
 import {
   discardTypedDraft,
   saveTypedDraft,
+  type TypedDraftContent,
 } from "@/lib/typed-draft-storage";
 import {
   instructorCourseQuizzesPath,
@@ -224,27 +225,37 @@ export function InstructorQuizCreatePage() {
 
   const handleSaveTypedDraft = () => {
     if (!user?.id) return;
-    const content = draft
+    // A generated draft keeps its questions structured (#1505) — the
+    // description stays whatever the instructor/generator wrote, never the
+    // question text flattened into it. Resuming reads quizQuestions to
+    // decide whether to land back on review instead of describe.
+    const content: TypedDraftContent | null = draft
       ? {
           title: draft.name,
           body: draft.description,
-          questions: draft.questions.map((question) => question.questionText).join("\n"),
-          // Saved alongside the text because they are the instructor's own
-          // settings, not generator output. Resuming used to hand the quiz
-          // back with whatever the generator defaulted to, silently
+          quizQuestions: draft.questions,
+          dueDate: draft.dueDate,
+          pointsPossible: draft.pointsPossible,
+          // Saved alongside the questions because they are the instructor's
+          // own settings, not generator output. Resuming used to hand the
+          // quiz back with whatever the generator defaulted to, silently
           // discarding an attempt limit or timer they had set.
           allowedAttempts: draft.allowedAttempts,
           timeLimit: draft.timeLimit,
+          ...(draft.quizEngine ? { quizEngine: draft.quizEngine } : {}),
+          ...(draft.questionBankGroups?.length
+            ? { quizQuestionBankGroups: draft.questionBankGroups }
+            : {}),
         }
       : describeValues.prompt.trim()
         ? { questions: describeValues.prompt.trim() }
         : null;
-    if (
-      !content ||
-      (!content.title?.trim() &&
-        !content.body?.trim() &&
-        !content.questions?.trim())
-    ) {
+    const hasContent =
+      Boolean(content?.title?.trim()) ||
+      Boolean(content?.body?.trim()) ||
+      Boolean(content?.quizQuestions?.length) ||
+      Boolean(content?.questions?.trim());
+    if (!content || !hasContent) {
       setDraftSaveStatus("Add quiz details before saving a draft.");
       return;
     }
