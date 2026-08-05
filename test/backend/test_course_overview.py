@@ -20,7 +20,7 @@ def _register_with_canvas(client) -> dict:
     email = f"overview_{uuid.uuid4()}@example.com"
     response = client.post(
         "/api/v1/auth/register",
-        json={"name": "Overview Instructor", "email": email, "password": "secret123"},
+        json={"name": "Overview Instructor", "email": email, "password": "Secret123!"},
     )
     token = response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}

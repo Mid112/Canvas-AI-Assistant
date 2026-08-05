@@ -290,7 +290,7 @@ def test_change_password_success(client):
     reg = _register(client, password=password)
     resp = client.post(
         "/api/v1/auth/me/change-password",
-        json={"current_password": password, "new_password": "brandnew99"},
+        json={"current_password": password, "new_password": "Brandnew99!"},
         headers=reg["headers"],
     )
     assert resp.status_code == 204
@@ -303,7 +303,7 @@ def test_change_password_success(client):
 
     login_new = client.post(
         "/api/v1/auth/login",
-        json={"email": reg["email"], "password": "brandnew99"},
+        json={"email": reg["email"], "password": "Brandnew99!"},
     )
     assert login_new.status_code == 200
 
@@ -341,7 +341,7 @@ def test_change_password_revokes_other_sessions(client):
 
     changed = client.post(
         "/api/v1/auth/me/change-password",
-        json={"current_password": password, "new_password": "brandnew99"},
+        json={"current_password": password, "new_password": "Brandnew99!"},
         headers=headers_a,
     )
     assert changed.status_code == 204
@@ -380,13 +380,13 @@ def test_password_reset_confirm_success(client):
     raw_token = asyncio.run(_issue_token())
     confirm = client.post(
         "/api/v1/auth/password-reset/confirm",
-        json={"token": raw_token, "new_password": "resetpass99"},
+        json={"token": raw_token, "new_password": "Resetpass99!"},
     )
     assert confirm.status_code == 204
 
     login = client.post(
         "/api/v1/auth/login",
-        json={"email": email, "password": "resetpass99"},
+        json={"email": email, "password": "Resetpass99!"},
     )
     assert login.status_code == 200
 
@@ -394,7 +394,7 @@ def test_password_reset_confirm_success(client):
 def test_password_reset_confirm_rejects_invalid_token(client):
     resp = client.post(
         "/api/v1/auth/password-reset/confirm",
-        json={"token": "not-a-real-token", "new_password": "resetpass99"},
+        json={"token": "not-a-real-token", "new_password": "Resetpass99!"},
     )
     assert resp.status_code == 400
     assert "invalid" in resp.json()["detail"].lower() or "expired" in resp.json()["detail"].lower()

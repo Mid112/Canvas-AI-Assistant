@@ -78,7 +78,7 @@ def auth_headers(client):
     email = f"test_{uuid.uuid4()}@example.com"
     response = client.post(
         "/api/v1/auth/register",
-        json={"name": "Test User", "email": email, "password": "secret123"},
+        json={"name": "Test User", "email": email, "password": "Secret123!"},
     )
     token = response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -103,7 +103,7 @@ def _register_with_canvas(client) -> dict:
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Test User", "email": email, "password": "secret123"},
+        json={"name": "Test User", "email": email, "password": "Secret123!"},
     )
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -487,7 +487,7 @@ def test_list_courses_no_canvas_token(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "No Token User", "email": email, "password": "secret123"},
+        json={"name": "No Token User", "email": email, "password": "Secret123!"},
     )
     token = reg.json()["access_token"]
     response = client.get(
@@ -625,7 +625,7 @@ def test_list_assignments_no_canvas_token(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "No Token", "email": email, "password": "secret123"},
+        json={"name": "No Token", "email": email, "password": "Secret123!"},
     )
     token = reg.json()["access_token"]
     response = client.get(
@@ -657,7 +657,7 @@ def test_list_assignments_local_url_alias(client, monkeypatch):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Local Canvas User", "email": email, "password": "secret123"},
+        json={"name": "Local Canvas User", "email": email, "password": "Secret123!"},
     )
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
@@ -908,7 +908,7 @@ def test_list_submissions_no_canvas_token(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "No Token", "email": email, "password": "secret123"}
+        json={"name": "No Token", "email": email, "password": "Secret123!"}
     )
     token = reg.json()["access_token"]
     local_course_id = _create_local_course_for_user_email(email)
@@ -1149,7 +1149,7 @@ def test_get_active_course_no_preference(client):
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "Fresh User", "email": email, "password": "secret123"},
+        json={"name": "Fresh User", "email": email, "password": "Secret123!"},
     )
     token = reg.json()["access_token"]
     response = client.get(
@@ -1468,7 +1468,7 @@ def test_create_course_uses_saved_connection_when_canvas_url_omitted(client, mon
     email = f"new_acct_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "New Instructor", "email": email, "password": "secret123"},
+        json={"name": "New Instructor", "email": email, "password": "Secret123!"},
     )
     assert reg.status_code == 201
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
@@ -1543,7 +1543,7 @@ def test_create_course_missing_token_returns_reconnect_guidance(client, monkeypa
     email = f"no_token_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
-        json={"name": "No Token", "email": email, "password": "secret123"},
+        json={"name": "No Token", "email": email, "password": "Secret123!"},
     )
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
 

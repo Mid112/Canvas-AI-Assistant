@@ -6,6 +6,11 @@ import { paths } from "@/routes/paths";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { isValidEmail } from "@/lib/validation";
+import { PasswordInput } from "@/pages/Auth/PasswordInput";
+import {
+  passwordMismatchInputClassName,
+  passwordValidInputClassName,
+} from "@/pages/Auth/passwordFieldStyles";
 
 interface LoginFormProps {
   onSubmit: (credentials: { email: string; password: string }) => void | Promise<void>;
@@ -50,7 +55,11 @@ export function LoginForm({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           aria-invalid={showEmailError}
-          className="h-11 rounded-lg border-border bg-card px-3.5 text-foreground shadow-none placeholder:text-muted-foreground"
+          className={cn(
+            "h-11 rounded-lg border-border bg-card px-3.5 text-foreground shadow-none placeholder:text-muted-foreground",
+            showEmailError && passwordMismatchInputClassName,
+            isValidEmail(trimmedEmail) && passwordValidInputClassName,
+          )}
         />
       </div>
 
@@ -67,13 +76,16 @@ export function LoginForm({
         >
           Password
         </label>
-        <Input
+        <PasswordInput
           id="password"
-          type="password"
           placeholder="Enter your password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="h-11 rounded-lg border-border bg-card px-3.5 text-foreground shadow-none placeholder:text-muted-foreground"
+          autoComplete="current-password"
+          className={cn(
+            "h-11 rounded-lg border-border bg-card px-3.5 text-foreground shadow-none placeholder:text-muted-foreground",
+            password !== "" && passwordValidInputClassName,
+          )}
         />
       </div>
 

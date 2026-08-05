@@ -75,17 +75,29 @@ export function AssignmentReviewApproveStep({
     if (!onDraftChange) return;
     const watchedPoints = watchedValues.pointsPossible;
     onDraftChange({
-      name: String(watchedValues.name ?? ""),
-      description: String(watchedValues.description ?? ""),
-      dueDate: String(watchedValues.dueDate ?? ""),
+      name: String(watchedValues.name ?? draft.name),
+      description: String(watchedValues.description ?? draft.description),
+      dueDate: String(watchedValues.dueDate ?? draft.dueDate),
+      // Mirror string-field fallbacks for unsettled bare useWatch (#1504 nit):
+      // undefined means the watch hasn't settled yet — keep draft points.
+      // null / NaN / <=0 from the form still means ungraded (Ticket 21).
       pointsPossible:
         typeof watchedPoints === "number" &&
         Number.isFinite(watchedPoints) &&
         watchedPoints > 0
           ? watchedPoints
-          : null,
+          : watchedPoints === undefined
+            ? (draft.pointsPossible ?? null)
+            : null,
     });
-  }, [onDraftChange, watchedValues, draft.pointsPossible]);
+  }, [
+    onDraftChange,
+    watchedValues,
+    draft.name,
+    draft.description,
+    draft.dueDate,
+    draft.pointsPossible,
+  ]);
 
   return (
     <Card className="shadow-sm ring-1 ring-border/60">

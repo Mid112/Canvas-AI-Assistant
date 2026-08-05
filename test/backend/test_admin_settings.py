@@ -58,7 +58,7 @@ def _register(client, email: str | None = None):
         json={
             "name": "Self Registered",
             "email": email or f"selfreg_{uuid.uuid4()}@example.com",
-            "password": "secret123",
+            "password": "Secret123!",
         },
     )
 
