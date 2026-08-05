@@ -19,7 +19,7 @@ def auth(token: str) -> dict[str, str]:
 
 def register_instructor(client: TestClient, *, prefix: str = "inst") -> dict:
     email = f"{prefix}_{uuid.uuid4()}@example.com"
-    password = "secret123"
+    password = "Secret123!"
     resp = client.post(
         "/api/v1/auth/register",
         json={"name": "Integration Instructor", "email": email, "password": password},

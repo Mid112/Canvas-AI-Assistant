@@ -29,7 +29,7 @@ def client():
         yield c
 
 
-def _register(client, password: str = "secret123") -> tuple[str, dict]:
+def _register(client, password: str = "Secret123!") -> tuple[str, dict]:
     email = f"cov_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
@@ -76,7 +76,7 @@ def _sync_course(client, headers) -> int:
 
 
 def test_change_password_success_and_rejects_wrong_current(client):
-    email, headers = _register(client, password="oldpass123")
+    email, headers = _register(client, password="Oldpass123!")
 
     wrong = client.post(
         "/api/v1/auth/me/change-password",
@@ -88,7 +88,7 @@ def test_change_password_success_and_rejects_wrong_current(client):
 
     ok = client.post(
         "/api/v1/auth/me/change-password",
-        json={"current_password": "oldpass123", "new_password": "Newpass123!"},
+        json={"current_password": "Oldpass123!", "new_password": "Newpass123!"},
         headers=headers,
     )
     assert ok.status_code == 204
@@ -96,7 +96,7 @@ def test_change_password_success_and_rejects_wrong_current(client):
     assert (
         client.post(
             "/api/v1/auth/login",
-            json={"email": email, "password": "oldpass123"},
+            json={"email": email, "password": "Oldpass123!"},
         ).status_code
         == 401
     )
@@ -111,13 +111,13 @@ def test_change_password_success_and_rejects_wrong_current(client):
 def test_change_password_requires_auth(client):
     resp = client.post(
         "/api/v1/auth/me/change-password",
-        json={"current_password": "oldpass123", "new_password": "Newpass123!"},
+        json={"current_password": "Oldpass123!", "new_password": "Newpass123!"},
     )
     assert resp.status_code == 401
 
 
 def test_list_and_revoke_sessions(client):
-    email, headers_a = _register(client, password="secret123")
+    email, headers_a = _register(client, password="Secret123!")
 
     listed = client.get("/api/v1/auth/me/sessions", headers=headers_a)
     assert listed.status_code == 200
@@ -178,7 +178,7 @@ def test_password_reset_confirm_success_and_invalid_token(client, monkeypatch):
     from app.config import settings
 
     monkeypatch.setattr(settings, "DEBUG", True)
-    email, headers = _register(client, password="oldpass123")
+    email, headers = _register(client, password="Oldpass123!")
     known_token = f"reset-token-{uuid.uuid4()}"
 
     with patch("app.services.auth.generate_reset_token", return_value=known_token):
@@ -205,7 +205,7 @@ def test_password_reset_confirm_success_and_invalid_token(client, monkeypatch):
     assert (
         client.post(
             "/api/v1/auth/login",
-            json={"email": email, "password": "oldpass123"},
+            json={"email": email, "password": "Oldpass123!"},
         ).status_code
         == 401
     )
