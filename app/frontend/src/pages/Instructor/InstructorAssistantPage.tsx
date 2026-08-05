@@ -40,6 +40,7 @@ import {
   listAssistantConversations,
   listDeferredAssistantRequests,
   resumeDeferredAssistantRequest,
+  syncAssistantCourseContext,
   type ConversationResponse,
   type ConversationSummary,
   type DeferredAssistantRequest,
@@ -242,6 +243,32 @@ export function InstructorAssistantPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- async deferred load on mount/auth changes
     void loadDeferredRequests();
   }, [loadDeferredRequests]);
+
+  // Ticket 46 / #1507: as soon as the instructor picks a course here, write
+  // the indexed course_context envelope so follow-ups use that selection
+  // without waiting for the next typed message.
+  useEffect(() => {
+    if (!accessToken || !activeCourse?.localId) {
+      return;
+    }
+    let cancelled = false;
+    void syncAssistantCourseContext(accessToken, {
+      localCourseId: activeCourse.localId,
+      conversationId: pendingConversationId,
+    })
+      .then((result) => {
+        if (cancelled) return;
+        if (pendingConversationId === undefined) {
+          setPendingConversationId(result.conversationId);
+        }
+      })
+      .catch(() => {
+        // Soft failure — the next chat turn still seeds the envelope.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessToken, activeCourse?.localId, pendingConversationId]);
 
   useEffect(() => {
     if (!accessToken || !user) return;

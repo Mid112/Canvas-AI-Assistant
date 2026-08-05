@@ -66,6 +66,60 @@ _RECENT_LIST_CAP = 5
 _GROUNDED_FACTS_KEY = "grounded_facts"
 _GROUNDED_FACTS_CAP = 64
 
+# Compact course-selection envelope (#1507 / Ticket 46). Indexed + timestamped
+# so follow-ups can prefer the latest selection without dumping the full
+# course list into every turn. Not in _FIELD_MEMORY_KEYS — it is structured
+# metadata, formatted explicitly in format_field_memory_for_prompt.
+_COURSE_CONTEXT_KEY = "course_context"
+
+
+def record_course_context(
+    conversation: Conversation,
+    *,
+    local_course_id: int,
+    course_name: str | None = None,
+    course_code: str | None = None,
+) -> dict[str, Any]:
+    """Upsert the indexed, timestamped course-selection envelope (#1507).
+
+    Bumps ``index`` when the selected course changes (or on first write) so
+    recency/order is obvious in the prompt JSON. Re-recording the same
+    course is a no-op so ordinary chat turns do not inflate the counter.
+    """
+    from datetime import UTC, datetime
+
+    memory = dict(conversation.field_memory or {})
+    previous = memory.get(_COURSE_CONTEXT_KEY)
+    previous_dict = previous if isinstance(previous, dict) else None
+    previous_id = _coerce_int((previous_dict or {}).get("local_course_id"))
+
+    if previous_dict is not None and previous_id == local_course_id:
+        # Same selection — keep the existing envelope, still ensure the
+        # scalar course id matches for older readers of field memory.
+        memory["local_course_id"] = local_course_id
+        conversation.field_memory = memory
+        return previous_dict
+
+    try:
+        previous_index = int((previous_dict or {}).get("index") or 0)
+    except (TypeError, ValueError):
+        previous_index = 0
+
+    envelope: dict[str, Any] = {
+        "index": previous_index + 1,
+        "selected_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "local_course_id": local_course_id,
+    }
+    if course_name:
+        envelope["course_name"] = course_name
+    if course_code:
+        envelope["course_code"] = course_code
+
+    memory[_COURSE_CONTEXT_KEY] = envelope
+    memory["local_course_id"] = local_course_id
+    conversation.field_memory = memory
+    return envelope
+
 
 def merge_field_memory(
     conversation: Conversation,
@@ -327,6 +381,11 @@ def format_field_memory_for_prompt(memory: dict[str, Any] | None) -> str:
         compact[_RECENT_ASSIGNMENTS_KEY] = recent_assignments
     if recent_students:
         compact[_RECENT_STUDENTS_KEY] = recent_students
+    course_context = memory.get(_COURSE_CONTEXT_KEY)
+    if isinstance(course_context, dict) and course_context:
+        # Ticket 46 / #1507: compact JSON the model can trust for the
+        # active selection without re-pasting the full course catalog.
+        compact[_COURSE_CONTEXT_KEY] = course_context
     if not compact:
         return ""
     return (

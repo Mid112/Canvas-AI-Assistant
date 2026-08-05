@@ -24,7 +24,7 @@ const actionIcons = {
   "create-quiz": HelpCircle,
   "create-feedback": MessageSquare,
   "draft-announcement": Megaphone,
-  "grade-analysis": Bot,
+  "analyse-missing-submissions": Bot,
 } as const;
 
 // Prompts that take the instructor straight into a real assistant turn for
@@ -37,7 +37,7 @@ const quickActionPrompts: Record<string, string> = {
   // Names the backing read action's job directly. The old wording ("grade
   // and submission performance analysis") had no tool behind it, so the
   // model answered from nothing and invented submission rates (#12).
-  "grade-analysis":
+  "analyse-missing-submissions":
     "Analyse missing submissions for my active course. Show the overview and list the students who haven't submitted.",
 };
 

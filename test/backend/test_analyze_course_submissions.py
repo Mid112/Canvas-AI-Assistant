@@ -469,3 +469,62 @@ def test_analyze_history_keeps_the_zero_result_caveat():
 
     compacted = json.loads(_summarize_assistant_history_content("assistant", stored))
     assert compacted["summary"] == summary
+
+
+# Verifies (#1507): selecting a course writes the indexed course_context
+# envelope immediately, so follow-ups can use that selection without
+# pasting the full course list into every turn.
+def test_course_context_endpoint_writes_indexed_envelope(client):
+    import asyncio
+
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from app.config import settings
+    from app.models.conversation import Conversation
+
+    headers, local_course_id = _register_with_canvas(client)
+
+    response = client.post(
+        "/api/v1/chat/course-context",
+        json={"local_course_id": local_course_id},
+        headers=headers,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["conversation_id"]
+    context = body["course_context"]
+    assert context["index"] == 1
+    assert context["local_course_id"] == local_course_id
+    assert context["course_name"] == "CPSC 310"
+    assert context.get("course_code") == "CPSC310"
+    assert "selected_at" in context
+
+    # Same course again — index stays put.
+    again = client.post(
+        "/api/v1/chat/course-context",
+        json={
+            "local_course_id": local_course_id,
+            "conversation_id": body["conversation_id"],
+        },
+        headers=headers,
+    )
+    assert again.status_code == 200
+    assert again.json()["course_context"]["index"] == 1
+
+    async def _load_memory():
+        engine = create_async_engine(settings.DATABASE_URL)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+                memory = await db.scalar(
+                    select(Conversation.field_memory).where(
+                        Conversation.id == body["conversation_id"]
+                    )
+                )
+                return dict(memory or {})
+        finally:
+            await engine.dispose()
+
+    memory = asyncio.run(_load_memory())
+    assert memory.get("course_context", {}).get("index") == 1
+    assert memory.get("local_course_id") == local_course_id

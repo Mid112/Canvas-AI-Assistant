@@ -67,6 +67,7 @@ from app.services.field_memory import (
     merge_field_memory,
     merge_grounded_facts_into_memory,
     merge_read_result_into_field_memory,
+    record_course_context,
     trim_tool_dump_for_history,
 )
 from app.services.llm.base import LLMAdapter
@@ -284,6 +285,30 @@ async def record_write_audit(
         )
     )
 
+async def _sync_course_context_envelope(
+    db: AsyncSession,
+    conversation: Conversation,
+    local_course_id: int | None,
+) -> None:
+    """Persist the compact course_context JSON for #1507 / Ticket 46.
+
+    Call whenever a conversation's course is seeded or switched so follow-up
+    turns see an indexed, timestamped selection without re-pasting the full
+    course catalog into the prompt.
+    """
+    if local_course_id is None:
+        return
+    course = await db.scalar(select(Course).where(Course.id == local_course_id))
+    if course is None:
+        return
+    record_course_context(
+        conversation,
+        local_course_id=course.id,
+        course_name=course.name,
+        course_code=course.course_code,
+    )
+
+
 async def get_or_create_conversation(
     db: AsyncSession,
     user: User,
@@ -330,6 +355,7 @@ async def get_or_create_conversation(
                     if course is not None:
                         conversation.course_id = course.id
                         conversation.course_name = await _stable_course_name(db, course.id, course.name)
+                        await _sync_course_context_envelope(db, conversation, course.id)
                 return conversation
             if (
                 local_course_id is not None
@@ -340,8 +366,13 @@ async def get_or_create_conversation(
                     select(Course).where(Course.id == local_course_id, Course.instructor_id == user.id)
                 )
                 if course is not None:
-                    return await _find_or_fork_conversation_for_course(db, user, course.id, course.name)
+                    forked = await _find_or_fork_conversation_for_course(db, user, course.id, course.name)
+                    await _sync_course_context_envelope(db, forked, course.id)
+                    return forked
                 return conversation
+            # Same course (or no switch) — ensure the envelope exists for
+            # follow-ups that already have a resolved conversation course.
+            await _sync_course_context_envelope(db, conversation, conversation.course_id)
             return conversation
 
     seed_course_id = local_course_id
@@ -361,6 +392,7 @@ async def get_or_create_conversation(
     conversation = Conversation(user_id=user.id, course_id=seed_course_id, course_name=course_name)
     db.add(conversation)
     await db.flush()
+    await _sync_course_context_envelope(db, conversation, seed_course_id)
     return conversation
 
 
@@ -3436,6 +3468,9 @@ async def handle_chat_message(
                 )
                 user_msg.conversation_id = target.id
                 conversation = target
+            await _sync_course_context_envelope(
+                db, conversation, selected_course.local_course_id
+            )
             history = await _get_recent_messages(db, conversation.id)
             await log_message(
                 db,
@@ -3708,6 +3743,9 @@ async def handle_chat_message(
                     conversation.course_id = matched_local_course_id
                     conversation.course_name = _course_display_name(matched)
                     resolved_local_course_id = matched_local_course_id
+                    await _sync_course_context_envelope(
+                        db, conversation, matched_local_course_id
+                    )
                 elif (
                     pending_message_id is None
                     and local_course_id is None
@@ -3740,6 +3778,9 @@ async def handle_chat_message(
                     conversation = target
                     history = await _get_recent_messages(db, conversation.id)
                     resolved_local_course_id = matched_local_course_id
+                    await _sync_course_context_envelope(
+                        db, conversation, matched_local_course_id
+                    )
                 # else: either the model just confirmed the conversation's
                 # own course (nothing to do), or one of the guards above
                 # blocked a would-be switch — resolved_local_course_id

@@ -249,6 +249,32 @@ export function mapConversationToChatMessages(
   });
 }
 
+/** Ticket 46 / #1507 — write the indexed course_context envelope as soon as
+ * the instructor picks a course in the Assistant, without waiting for a chat
+ * turn. Failures are soft: the next chat turn still seeds the envelope. */
+export async function syncAssistantCourseContext(
+  accessToken: string,
+  options: {
+    localCourseId: number;
+    conversationId?: number;
+  },
+): Promise<{ conversationId: number; courseContext: Record<string, unknown> }> {
+  const response = await apiRequest<{
+    conversation_id: number;
+    course_context: Record<string, unknown>;
+  }>("/chat/course-context", accessToken, {
+    method: "POST",
+    body: JSON.stringify({
+      local_course_id: options.localCourseId,
+      conversation_id: options.conversationId,
+    }),
+  });
+  return {
+    conversationId: response.conversation_id,
+    courseContext: response.course_context ?? {},
+  };
+}
+
 export async function sendAssistantMessage(
   accessToken: string,
   message: string,
