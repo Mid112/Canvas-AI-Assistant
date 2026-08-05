@@ -18,6 +18,7 @@ export function ResetPasswordConfirmForm({
   const [confirmPassword, setConfirmPassword] = useState("");
 
   const passwordsMatch = password === confirmPassword;
+  const showPasswordLengthError = password !== "" && password.length < 8;
   const showMismatch =
     confirmPassword !== "" && password !== "" && !passwordsMatch;
   const isFormComplete =
@@ -47,9 +48,22 @@ export function ResetPasswordConfirmForm({
           placeholder="At least 8 characters"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          aria-invalid={showPasswordLengthError}
+          aria-describedby={
+            showPasswordLengthError ? "reset-password-length" : undefined
+          }
           disabled={isSubmitting}
           className="h-11 rounded-lg border-border bg-card px-3.5 text-foreground shadow-none placeholder:text-muted-foreground"
         />
+        {showPasswordLengthError ? (
+          <p
+            id="reset-password-length"
+            className="text-sm text-destructive"
+            role="alert"
+          >
+            Password must be at least 8 characters.
+          </p>
+        ) : null}
       </div>
 
       <div className="space-y-2">
@@ -66,22 +80,23 @@ export function ResetPasswordConfirmForm({
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
           aria-invalid={showMismatch}
+          aria-describedby={
+            showMismatch ? "reset-confirm-password-mismatch" : undefined
+          }
           disabled={isSubmitting}
           className="h-11 rounded-lg border-border bg-card px-3.5 text-foreground shadow-none placeholder:text-muted-foreground"
         />
+        {/* Ticket 27 / #1451: mismatch feedback stays under Confirm Password. */}
+        {showMismatch ? (
+          <p
+            id="reset-confirm-password-mismatch"
+            className="text-sm text-destructive"
+            role="alert"
+          >
+            Confirm password must match the password above
+          </p>
+        ) : null}
       </div>
-
-      {password !== "" && password.length < 8 ? (
-        <p className="text-sm text-destructive" role="alert">
-          Password must be at least 8 characters.
-        </p>
-      ) : null}
-
-      {showMismatch ? (
-        <p className="text-sm text-destructive" role="alert">
-          Passwords do not match.
-        </p>
-      ) : null}
 
       {error ? (
         <p className="text-sm text-destructive" role="alert">

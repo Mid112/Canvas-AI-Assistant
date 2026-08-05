@@ -145,8 +145,23 @@ export function RegisterForm({
           placeholder="Re-enter your password"
           value={confirmPassword}
           onChange={(e) => setConfirmPassword(e.target.value)}
+          aria-invalid={showPasswordMismatchError}
+          aria-describedby={
+            showPasswordMismatchError ? "confirm-password-mismatch" : undefined
+          }
           className={inputClassName}
         />
+        {/* Ticket 27 / #1451: keep mismatch feedback next to the confirm field
+            so users can tell which value to correct before submit. */}
+        {showPasswordMismatchError ? (
+          <p
+            id="confirm-password-mismatch"
+            className="text-sm text-destructive"
+            role="alert"
+          >
+            Confirm password must match the password above
+          </p>
+        ) : null}
       </div>
 
       <label className="flex cursor-pointer items-start gap-2">
@@ -177,12 +192,6 @@ export function RegisterForm({
           </Link>
         </span>
       </label>
-
-      {showPasswordMismatchError && (
-        <p className="text-sm text-destructive" role="alert">
-          Passwords must match
-        </p>
-      )}
 
       {showTermsReminder && (
         <p className="text-sm text-muted-foreground" role="status">

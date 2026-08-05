@@ -100,7 +100,7 @@ describe("RegisterForm", () => {
     expect(submitButton).toBeEnabled();
   });
 
-  // Verifies: Shows a password mismatch error when passwords do not match.
+  // Verifies (#1451): Mismatch error appears beside Confirm Password before submit.
   it("shows a password mismatch error when passwords do not match", async () => {
     const user = userEvent.setup();
 
@@ -109,7 +109,18 @@ describe("RegisterForm", () => {
     await user.type(screen.getByLabelText("Password"), "secret123");
     await user.type(screen.getByLabelText("Confirm Password"), "different");
 
-    expect(screen.getByRole("alert")).toHaveTextContent("Passwords must match");
+    const confirmPasswordInput = screen.getByLabelText("Confirm Password");
+    const mismatchAlert = screen.getByRole("alert");
+
+    expect(mismatchAlert).toHaveTextContent(
+      "Confirm password must match the password above",
+    );
+    expect(confirmPasswordInput).toHaveAttribute("aria-invalid", "true");
+    expect(confirmPasswordInput).toHaveAttribute(
+      "aria-describedby",
+      "confirm-password-mismatch",
+    );
+    expect(confirmPasswordInput.parentElement).toContainElement(mismatchAlert);
     expect(
       screen.getByRole("button", { name: "Create Account" }),
     ).toBeDisabled();
@@ -141,6 +152,7 @@ describe("RegisterForm", () => {
     await user.clear(confirmPasswordInput);
     await user.type(confirmPasswordInput, "secret123");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(confirmPasswordInput).not.toHaveAttribute("aria-invalid", "true");
   });
 
   // Verifies: Calls onSubmit with credentials when the form is submitted.
