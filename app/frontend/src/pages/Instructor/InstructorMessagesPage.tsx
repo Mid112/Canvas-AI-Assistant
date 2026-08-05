@@ -59,7 +59,9 @@ export function InstructorMessagesPage() {
         : null,
     [availableCourses, composeCourseId],
   );
-  const composeCourseLabel = composeCourse?.name ?? activeCourse?.displayName;
+  const composeCourseLabel =
+    composeCourse?.name ??
+    (aiDraft?.courseId === undefined ? activeCourse?.displayName : undefined);
 
   const basePrompt = useMemo(
     () =>

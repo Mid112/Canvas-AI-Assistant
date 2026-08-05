@@ -260,6 +260,69 @@ describe("InstructorMessagesPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Regression test for PR #1539 review feedback: when the draft's course
+  // hasn't shown up in availableCourses yet, composeCourseLabel must not
+  // fall back to the active course's name — that would silently mislabel
+  // the compose header with the wrong course.
+  it("does not label compose with the active course when the draft course is not yet available", () => {
+    mockUseAuth.mockReturnValue({
+      accessToken: "token",
+      user: {
+        id: 1,
+        name: "Dr. Jane Doe",
+        role: "instructor",
+        has_canvas_token: true,
+      },
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    });
+    // Active course is Math 101 (id 20); the draft names course 10, which
+    // has not (yet) loaded into availableCourses.
+    mockUseActiveCourse.mockReturnValue({
+      activeCourse: {
+        localId: 20,
+        canvasCourseId: 43,
+        displayName: "Math 101",
+      },
+      availableCourses: [
+        { id: 20, name: "Calculus", code: "Math 101", studentCount: 5 },
+      ],
+      isLoading: false,
+      isSaving: false,
+      selectActiveCourse: vi.fn(),
+    });
+
+    renderWithRouter(<InstructorMessagesPage />, {
+      routerProps: {
+        initialEntries: [
+          {
+            pathname: "/",
+            state: {
+              aiMessageDraft: {
+                courseId: 10,
+                subject: "Reminder",
+                body: "Please submit soon.",
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    expect(
+      screen.queryByText(/compose a new message for Math 101\./),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "View conversations across all courses. Select an active course to compose a new message.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   // Verifies: Roster failure still shows the draft with an error banner.
   it("shows a roster load error and still renders the draft composer", async () => {
     mockUseAuth.mockReturnValue({
