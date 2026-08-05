@@ -192,6 +192,74 @@ describe("InstructorMessagesPage", () => {
     );
   });
 
+  // Regression test for #1509/#1515: an AI message draft resolved to its own
+  // course (COSC 499) must not be silently retargeted at whatever course
+  // happens to be active (Math 101) when the handoff lands here — the other
+  // create pages (assignment/quiz/feedback) got this fix in #1515, but the
+  // message compose path read only activeCourse and ignored aiDraft.courseId
+  // entirely.
+  it("composes against the draft's own course, not the active one", async () => {
+    mockUseAuth.mockReturnValue({
+      accessToken: "token",
+      user: {
+        id: 1,
+        name: "Dr. Jane Doe",
+        role: "instructor",
+        has_canvas_token: true,
+      },
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    });
+    // Active course is Math 101 (id 20); the draft names COSC 499 (id 10).
+    mockUseActiveCourse.mockReturnValue({
+      activeCourse: {
+        localId: 20,
+        canvasCourseId: 43,
+        displayName: "Math 101",
+      },
+      availableCourses: [
+        { id: 10, name: "Capstone", code: "COSC 499", studentCount: 1 },
+        { id: 20, name: "Calculus", code: "Math 101", studentCount: 5 },
+      ],
+      isLoading: false,
+      isSaving: false,
+      selectActiveCourse: vi.fn(),
+    });
+
+    renderWithRouter(<InstructorMessagesPage />, {
+      routerProps: {
+        initialEntries: [
+          {
+            pathname: "/",
+            state: {
+              aiMessageDraft: {
+                courseId: 10,
+                subject: "Reminder",
+                body: "Please submit soon.",
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    await waitFor(() => {
+      expect(mockedFetchStudents).toHaveBeenCalledWith(
+        10,
+        "token",
+        "https://canvas.example.edu",
+        1,
+      );
+    });
+    expect(
+      screen.getByText(/compose a new message for Capstone\./),
+    ).toBeInTheDocument();
+  });
+
   // Verifies: Roster failure still shows the draft with an error banner.
   it("shows a roster load error and still renders the draft composer", async () => {
     mockUseAuth.mockReturnValue({
