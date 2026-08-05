@@ -31,8 +31,9 @@ export function mapWorkflowStatus(
       return "superseded";
     case "paused":
       return "paused";
-    case "pending":
     case "executing":
+      return "executing";
+    case "pending":
     default:
       // No workflow row found yet, or a genuinely open/mid-confirm
       // preview — same fallback the previous FIFO-based reconstruction

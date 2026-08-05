@@ -42,6 +42,21 @@ vi.mock("@/contexts/ActiveCourseProvider", () => ({
   ),
 }));
 
+// The mocked provider above is a passthrough with no real context value, so
+// the sidebar's ActiveCourseSidebarBadge (which calls useActiveCourse())
+// needs its own mock too.
+vi.mock("@/contexts/useActiveCourse", () => ({
+  useActiveCourse: () => ({
+    activeCourse: null,
+    availableCourses: [],
+    isLoading: false,
+    isSaving: false,
+    error: null,
+    selectActiveCourse: vi.fn(),
+    refreshActiveCourse: vi.fn(),
+  }),
+}));
+
 function renderDashboard(path: string) {
   return renderWithRouter(
     <Routes>

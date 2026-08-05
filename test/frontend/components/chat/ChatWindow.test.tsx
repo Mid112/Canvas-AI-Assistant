@@ -849,6 +849,50 @@ describe("ChatWindow", () => {
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
   });
 
+  // Verifies: a workflow still mid-execution shows the "currently running"
+  // state on reload, not the pending Confirm/Cancel controls — regression
+  // for mapWorkflowStatus (types/chat.ts) previously falling "executing"
+  // through to "pending" on this restore path.
+  it("shows a still-executing preview as running on reload, not pending", async () => {
+    mockedFetchConversation.mockResolvedValueOnce({
+      id: 7,
+      course_id: 3,
+      created_at: "2026-06-24T10:00:00.000Z",
+      messages: [
+        {
+          id: 42,
+          role: "assistant",
+          content: JSON.stringify({
+            intent_preview: true,
+            summary: "I prepared a midterm exam for review.",
+            proposed_action: { action: "create_assignment" },
+            preview_metadata: {
+              course_name: "CPSC 310",
+              audience: { label: "Entire class" },
+            },
+          }),
+          created_at: "2026-06-24T10:02:00.000Z",
+        },
+      ],
+      workflow_statuses: {
+        42: {
+          workflow_id: 1,
+          status: "executing",
+          action_name: "create_assignment",
+          result_message_id: null,
+        },
+      },
+    });
+
+    renderWithInstitution(<ChatWindow initialConversationId={7} />);
+
+    expect(
+      await screen.findByText("This action is currently running."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Confirm" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+  });
+
   // Verifies: Direct reversal from a confirmed chat card calls the backend
   // reversal endpoint and appends the persisted reversal transcript message.
   it("shows a persisted reversal message after direct reversal", async () => {

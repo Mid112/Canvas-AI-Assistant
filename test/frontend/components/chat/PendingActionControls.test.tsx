@@ -137,6 +137,57 @@ describe("PendingActionControls", () => {
     expect(screen.getByText("This action was cancelled.")).toBeInTheDocument();
   });
 
+  // Verifies: Executing actions get a status (not alert) role and don't
+  // read as an error next to the AI's response.
+  it("shows a status role for an executing action", () => {
+    render(
+      <PendingActionControls
+        status="executing"
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "This action is currently running.",
+    );
+  });
+
+  // Verifies: Failed actions get a stable alert role so they don't blend
+  // in with resolved/faded terminal states.
+  it("shows an alert role for a failed action", () => {
+    render(
+      <PendingActionControls
+        status="failed"
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "This action failed to complete — nothing was changed.",
+    );
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  // Verifies: Resolved/faded terminal states (confirmed, superseded,
+  // cancelled) use a status role rather than alert, unlike failed.
+  it.each(["confirmed", "superseded", "cancelled"] as const)(
+    "shows a status role (not alert) for %s",
+    (status) => {
+      render(
+        <PendingActionControls
+          status={status}
+          onConfirm={vi.fn()}
+          onCancel={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByRole("status")).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    },
+  );
+
   it("shows pause and rename for pending proposals", async () => {
     const user = userEvent.setup();
     const onPause = vi.fn();

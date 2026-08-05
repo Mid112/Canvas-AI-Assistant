@@ -1,8 +1,65 @@
 import { useState } from "react";
+import { Ban, CheckCircle2, Loader2, RefreshCw, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import type { PendingActionStatus, RiskMetadata } from "@/types/chat";
+
+/** Visual treatment for each settled (non-pending, non-paused) status —
+ * "executing" still reads as active/in-progress, "confirmed" fades into a
+ * resolved state instead of keeping the same weight as an open action, and
+ * "failed" gets a stable, distinct error state so it doesn't blend in with
+ * (or keep competing for attention with) the AI's final response above it. */
+const TERMINAL_STATUS_CONFIG: Record<
+  Exclude<PendingActionStatus, "pending" | "paused">,
+  {
+    icon: typeof CheckCircle2;
+    text: string;
+    role: "status" | "alert";
+    className: string;
+    iconClassName: string;
+  }
+> = {
+  executing: {
+    icon: Loader2,
+    text: "This action is currently running.",
+    role: "status",
+    // Blue, not primary/destructive — this app's --primary token is the same
+    // brand red as --destructive (see TroubleshootingPage.tsx), which would
+    // make an in-progress action look like an error at a glance.
+    className: "border-blue-500/40 bg-blue-500/5 text-foreground",
+    iconClassName: "animate-spin text-blue-600",
+  },
+  confirmed: {
+    icon: CheckCircle2,
+    text: "This action was confirmed.",
+    role: "status",
+    className: "border-transparent bg-transparent text-muted-foreground",
+    iconClassName: "text-emerald-600",
+  },
+  superseded: {
+    icon: RefreshCw,
+    text: "This proposal was replaced by a newer request.",
+    role: "status",
+    className: "border-transparent bg-transparent text-muted-foreground",
+    iconClassName: "text-muted-foreground",
+  },
+  failed: {
+    icon: XCircle,
+    text: "This action failed to complete — nothing was changed.",
+    role: "alert",
+    className: "border-destructive/30 bg-destructive/5 text-destructive",
+    iconClassName: "text-destructive",
+  },
+  cancelled: {
+    icon: Ban,
+    text: "This action was cancelled.",
+    role: "status",
+    className: "border-transparent bg-transparent text-muted-foreground",
+    iconClassName: "text-muted-foreground",
+  },
+};
 
 interface PendingActionControlsProps {
   status?: PendingActionStatus;
@@ -84,18 +141,20 @@ export function PendingActionControls({
   }
 
   if (status !== "pending") {
+    const { icon: Icon, text, role, className, iconClassName } =
+      TERMINAL_STATUS_CONFIG[status];
+
     return (
-      <p className="text-sm text-muted-foreground">
-        {status === "confirmed"
-          ? "This action was confirmed."
-          : status === "executing"
-            ? "This action is currently running."
-          : status === "superseded"
-            ? "This proposal was replaced by a newer request."
-            : status === "failed"
-              ? "This action failed to complete — nothing was changed."
-              : "This action was cancelled."}
-      </p>
+      <div
+        role={role}
+        className={cn(
+          "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm",
+          className,
+        )}
+      >
+        <Icon className={cn("size-4 shrink-0", iconClassName)} aria-hidden="true" />
+        <span>{text}</span>
+      </div>
     );
   }
 

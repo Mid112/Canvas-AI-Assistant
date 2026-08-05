@@ -2,6 +2,7 @@ import { Link, NavLink } from "react-router-dom";
 import { GraduationCap, PanelLeftClose } from "lucide-react";
 
 import { AccountMenu } from "@/components/layouts/AccountMenu";
+import { ActiveCourseSidebarBadge } from "@/components/courses/ActiveCourseSidebarBadge";
 import { Button } from "@/components/ui/button";
 import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
@@ -66,6 +67,11 @@ export function Sidebar({
           </Button>
         ) : null}
       </div>
+      {role === "instructor" ? (
+        <div className="pt-3">
+          <ActiveCourseSidebarBadge />
+        </div>
+      ) : null}
       <nav className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-3">
         {navItems.map((item) => (
           <NavLink

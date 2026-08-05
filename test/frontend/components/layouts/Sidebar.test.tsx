@@ -55,6 +55,21 @@ vi.mock("@/contexts/useInstitution", () => ({
   }),
 }));
 
+// Sidebar mounts ActiveCourseSidebarBadge for the instructor role, which
+// reads from ActiveCourseProvider — mock it the same way as the other
+// contexts above rather than wrapping every render in the real provider.
+vi.mock("@/contexts/useActiveCourse", () => ({
+  useActiveCourse: () => ({
+    activeCourse: { localId: 1, displayName: "CPSC 101: Intro to Programming" },
+    availableCourses: [],
+    isLoading: false,
+    isSaving: false,
+    error: null,
+    selectActiveCourse: vi.fn(),
+    refreshActiveCourse: vi.fn(),
+  }),
+}));
+
 function renderSidebar(props: ComponentProps<typeof Sidebar>) {
   return render(
     <MemoryRouter>
@@ -78,6 +93,32 @@ describe("Sidebar", () => {
     expect(screen.getByRole("button", { name: "Account menu" })).toBeInTheDocument();
     expect(screen.getByText("Dr. Jane Doe")).toBeInTheDocument();
     expect(screen.getByText("Instructor")).toBeInTheDocument();
+  });
+
+  // Verifies: Shows the persistent active-course badge for the instructor role.
+  it("shows the active course badge for the instructor role", () => {
+    renderSidebar({
+      navItems: instructorNavItems,
+      role: "instructor",
+      roleLabel: "Instructor",
+    });
+
+    expect(screen.getByText("Active course")).toBeInTheDocument();
+    expect(
+      screen.getByText("CPSC 101: Intro to Programming"),
+    ).toBeInTheDocument();
+  });
+
+  // Verifies: Hides the active-course badge for the admin role, which isn't
+  // wrapped in ActiveCourseProvider.
+  it("does not show the active course badge for the admin role", () => {
+    renderSidebar({
+      navItems: instructorNavItems,
+      role: "admin",
+      roleLabel: "Admin",
+    });
+
+    expect(screen.queryByText("Active course")).not.toBeInTheDocument();
   });
 
   // Verifies: Keeps the instructor role on the profile trigger.
