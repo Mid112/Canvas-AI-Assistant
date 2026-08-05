@@ -78,23 +78,48 @@ export async function generateQuizDraft(
 
   const data = (await response.json()) as QuizDraftApiResponse;
 
+  const questions = (data.questions ?? []).map((question) => ({
+    questionText: question.question_text,
+    questionType: question.question_type,
+    // Preserve multi-point values from the draft API (Ticket 14).
+    pointsPossible:
+      typeof question.points_possible === "number" &&
+      Number.isFinite(question.points_possible) &&
+      question.points_possible > 0
+        ? question.points_possible
+        : 1,
+    answers: (question.answers ?? []).map((answer) => ({
+      text: String(answer.text ?? ""),
+      weight: Number(answer.weight ?? 0),
+    })),
+  }));
+  const questionPointsSum = questions.reduce(
+    (sum, question) => sum + question.pointsPossible,
+    0,
+  );
+  const quizPoints =
+    typeof data.points_possible === "number" &&
+    Number.isFinite(data.points_possible) &&
+    data.points_possible > 0
+      ? data.points_possible
+      : null;
+  // Keep quiz total aligned with per-question points so the review form
+  // stays valid when the model returns multi-point questions.
+  const pointsPossible =
+    questions.length > 0 &&
+    (quizPoints == null || Math.abs(quizPoints - questionPointsSum) > 0.01)
+      ? questionPointsSum
+      : (quizPoints ?? 100);
+
   return {
     name: data.title,
     description: data.description,
     dueDate: data.due_at ? formatDueDateForInput(data.due_at) : defaultDueDate(),
-    pointsPossible: data.points_possible ?? 100,
+    pointsPossible,
     allowedAttempts: data.allowed_attempts,
     timeLimit: data.time_limit,
     quizEngine: "classic",
-    questions: (data.questions ?? []).map((question) => ({
-      questionText: question.question_text,
-      questionType: question.question_type,
-      pointsPossible: question.points_possible ?? 1,
-      answers: (question.answers ?? []).map((answer) => ({
-        text: String(answer.text ?? ""),
-        weight: Number(answer.weight ?? 0),
-      })),
-    })),
+    questions,
     questionBankGroups: [],
   };
 }

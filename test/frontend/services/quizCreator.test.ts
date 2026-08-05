@@ -64,6 +64,48 @@ describe("quizCreator", () => {
 
     expect(result.name).toBe("Recursion Quiz");
     expect(result.questions[0].questionText).toBe("What is a base case?");
+    expect(result.questions[0].pointsPossible).toBe(5);
+    // Quiz total is realigned to the scored question sum (Ticket 14).
+    expect(result.pointsPossible).toBe(5);
+  });
+
+  it("preserves multi-point questions from the draft API", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          title: "Weighted Quiz",
+          description: "Uses multi-point questions.",
+          due_at: "2030-12-15T23:59:00Z",
+          points_possible: 100,
+          allowed_attempts: 1,
+          time_limit: null,
+          questions: [
+            {
+              question_text: "Essay",
+              question_type: "essay_question",
+              points_possible: 5,
+              answers: [],
+            },
+            {
+              question_text: "Short",
+              question_type: "short_answer_question",
+              points_possible: 2,
+              answers: [],
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const result = await generateQuizDraft(3, "Create a weighted quiz", {
+      accessToken: "token",
+    });
+
+    expect(result.questions.map((question) => question.pointsPossible)).toEqual([
+      5, 2,
+    ]);
+    expect(result.pointsPossible).toBe(7);
   });
 
   it("previews the exact body that will later be created", async () => {

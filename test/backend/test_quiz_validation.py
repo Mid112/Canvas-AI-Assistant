@@ -57,6 +57,49 @@ def test_quiz_points_must_be_positive():
     assert exc.value.status_code == 422
 
 
+# Verifies: Ticket 14 — per-question points may be greater than 1.
+def test_quiz_question_points_allow_values_greater_than_one():
+    _check_questions(
+        [
+            {
+                "question_text": "Explain recursion with an example.",
+                "question_type": "essay_question",
+                "points_possible": 5,
+            },
+            {
+                "question_text": "What is a base case?",
+                "question_type": "essay_question",
+                "points_possible": 2.5,
+            },
+            {
+                "question_text": "Which call stack grows?",
+                "question_type": "multiple_choice_question",
+                "points_possible": 10,
+                "answers": [
+                    {"text": "Recursive without base case", "weight": 100},
+                    {"text": "Iterative loop", "weight": 0},
+                ],
+            },
+        ]
+    )
+
+
+# Verifies: Ticket 14 — zero/negative question points are still rejected.
+def test_quiz_question_points_reject_non_positive():
+    with pytest.raises(HTTPException) as exc:
+        _check_questions(
+            [
+                {
+                    "question_text": "What is recursion?",
+                    "question_type": "essay_question",
+                    "points_possible": 0,
+                }
+            ]
+        )
+    assert exc.value.status_code == 422
+    assert "greater than zero" in exc.value.detail
+
+
 def test_quiz_allowed_attempts_minimum():
     with pytest.raises(HTTPException) as exc:
         _check_allowed_attempts(0)

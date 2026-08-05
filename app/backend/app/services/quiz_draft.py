@@ -36,10 +36,6 @@ def _plain_text(value: str) -> str:
 # total: services/quiz_validation.py's _check_points_consistency and the
 # client's quizCreateSchema superRefine, both at a 0.01 tolerance.
 _POINTS_TOLERANCE = 0.01
-# Below this, an even split would round some question to zero, which
-# _check_questions rejects outright ("points_possible must be greater than
-# zero"). Let the questions define the total instead of forcing the split.
-_MIN_QUESTION_POINTS = 0.01
 
 
 def _reconcile_points(
@@ -49,55 +45,32 @@ def _reconcile_points(
     """Make the draft's total and its per-question points agree before anyone
     sees it.
 
-    The generator used to return both numbers exactly as the model emitted
-    them, with nothing tying them together. Regenerating a quiz — e.g. after
-    editing one word of the description — produced a fresh, independent guess
-    at per-question points, so a "50 points total" quiz could come back as five
-    5-point questions summing to 25. Both validators then rejected it and the
-    Review step disabled its own submit button, leaving the instructor stuck on
-    a draft they could not approve and had not authored.
+    Policy (Ticket 14): preserve per-question point values — including
+    multi-point weights — and realign quiz ``points_possible`` to their sum
+    when the model returns a missing, non-positive, or inconsistent total.
+    Scaling questions up/down to a mismatched quiz total would erase the
+    multi-point values instructors asked for.
 
-    Reconciling here rather than in the client keeps one answer for every entry
-    point (form, assistant handoff, regeneration). The instructor is still free
-    to redistribute afterwards; this only guarantees the *starting* draft is
+    Reconciling here rather than only in the client keeps one answer for every
+    entry point (form, assistant handoff, regeneration). The instructor can
+    still redistribute afterwards; this only guarantees the *starting* draft is
     internally consistent.
     """
     if not questions:
         return points_possible, questions
 
-    scored = sum(question.points_possible for question in questions)
+    scored = round(sum(question.points_possible for question in questions), 2)
 
-    # No usable total: the questions define it.
-    if points_possible is None or points_possible <= 0:
-        return round(scored, 2), questions
+    # No usable total, or total does not match the scored questions: questions
+    # define the quiz total. Do not rewrite question points.
+    if (
+        points_possible is None
+        or points_possible <= 0
+        or abs(scored - points_possible) > _POINTS_TOLERANCE
+    ):
+        return scored, questions
 
-    if abs(scored - points_possible) <= _POINTS_TOLERANCE:
-        return points_possible, questions
-
-    # Scale rather than split evenly, so a deliberately weighted quiz (one
-    # 20-point essay among 5-point recall questions) keeps its shape.
-    if scored > 0:
-        factor = points_possible / scored
-        scaled = [
-            round(question.points_possible * factor, 2) for question in questions
-        ]
-    else:
-        even = round(points_possible / len(questions), 2)
-        scaled = [even] * len(questions)
-
-    # Absorb the rounding drift in the last question so the sum is exact:
-    # 50 over 3 becomes 16.67 / 16.67 / 16.66, not 16.67 * 3 = 50.01.
-    scaled[-1] = round(points_possible - sum(scaled[:-1]), 2)
-
-    if any(value < _MIN_QUESTION_POINTS for value in scaled):
-        # The total cannot be represented across this many questions without
-        # zeroing one out. The questions win; the instructor can still edit.
-        return round(scored, 2), questions
-
-    return points_possible, [
-        question.model_copy(update={"points_possible": value})
-        for question, value in zip(questions, scaled, strict=True)
-    ]
+    return points_possible, questions
 
 
 async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
@@ -112,6 +85,8 @@ async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
         '"points_possible": number, "answers": [{"text": "...", "weight": 100 or 0}]}]}. '
         "Honour the number of questions the prompt asks for; when it does not "
         "say, include 3-5 questions if it implies a quiz with questions. "
+        "Per-question points_possible may be greater than 1 (for example 2, 5, or 10) "
+        "when the prompt implies multi-point items — never force every question to 1. "
         "The per-question points_possible values MUST add up exactly to the "
         "quiz's points_possible. If the prompt names a total, divide it across "
         "the questions rather than inventing a different total. "
@@ -191,6 +166,10 @@ async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
                 points_value = float(points) if points is not None else 1.0
             except (TypeError, ValueError):
                 points_value = 1.0
+            # Preserve multi-point values from the model; only fall back when
+            # missing/invalid. Never clamp down to 1 (Ticket 14).
+            if points_value <= 0:
+                points_value = 1.0
             questions.append(
                 QuizQuestionDraft(
                     question_text=text,
@@ -218,6 +197,8 @@ async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
         requested_total = float(raw_points) if raw_points is not None else None
     except (TypeError, ValueError):
         requested_total = None
+    # Reconcile so multi-point questions stay consistent with the quiz total
+    # (Ticket 14) without inventing a mismatched total the review form rejects.
     total_points, questions = _reconcile_points(requested_total, questions)
 
     return QuizDraftResponse(
