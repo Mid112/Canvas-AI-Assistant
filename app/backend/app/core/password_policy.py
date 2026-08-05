@@ -14,7 +14,7 @@ PASSWORD_REQUIREMENTS_MESSAGE = (
 _UPPER = re.compile(r"[A-Z]")
 _LOWER = re.compile(r"[a-z]")
 _DIGIT = re.compile(r"\d")
-_SYMBOL = re.compile(r"[^A-Za-z0-9]")
+_SYMBOL = re.compile(r"[^A-Za-z0-9\s]")  # punctuation/symbol; whitespace does not count
 
 
 def is_strong_password(password: str) -> bool:

@@ -45,7 +45,7 @@ export function getPasswordRequirements(password: string): PasswordRequirement[]
     {
       id: "symbol",
       label: "1 symbol",
-      met: /[^A-Za-z0-9]/.test(password),
+      met: /[^A-Za-z0-9\s]/.test(password),
     },
   ];
 }

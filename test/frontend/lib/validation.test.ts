@@ -46,6 +46,7 @@ describe("isValidPassword", () => {
     expect(isValidPassword("SECRET123!")).toBe(false); // no lowercase
     expect(isValidPassword("Secret!!!")).toBe(false); // no number
     expect(isValidPassword("Secret123")).toBe(false); // no symbol
+    expect(isValidPassword("Password1 ")).toBe(false); // whitespace is not a symbol
   });
 });
 

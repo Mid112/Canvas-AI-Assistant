@@ -22,6 +22,7 @@ def test_is_strong_password_requires_all_rules():
     assert is_strong_password("Secret!!!!") is False
     assert is_strong_password("Secret123") is False
     assert is_strong_password("Sec1!") is False
+    assert is_strong_password("Password1 ") is False  # space is not a symbol
 
 
 def test_validate_password_strength_raises_clear_message():

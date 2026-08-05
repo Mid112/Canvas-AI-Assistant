@@ -90,10 +90,7 @@ export function RegisterForm({
             placeholder="Jane"
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
-            className={cn(
-              inputClassName,
-              firstNameIsValid && passwordValidInputClassName,
-            )}
+            className={inputClassName}
           />
         </div>
 
@@ -107,10 +104,7 @@ export function RegisterForm({
             placeholder="Smith"
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
-            className={cn(
-              inputClassName,
-              lastNameIsValid && passwordValidInputClassName,
-            )}
+            className={inputClassName}
           />
         </div>
       </div>
