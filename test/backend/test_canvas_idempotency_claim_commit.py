@@ -38,7 +38,7 @@ async def instructor_id(db_engine):
         user = User(
             name="Idempotency Claim Instructor",
             email=email,
-            hashed_password=hash_password("secret123"),
+            hashed_password=hash_password("Secret123!"),
             role="instructor",
         )
         db.add(user)
