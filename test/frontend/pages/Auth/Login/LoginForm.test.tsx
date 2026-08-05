@@ -186,4 +186,18 @@ describe("LoginForm", () => {
     expect(emailInput).toHaveAttribute("aria-invalid", "false");
   });
 
+
+  // Verifies (#1451): Non-empty login password uses the success border (not strength red).
+  it("applies the success border class once the password field has a value", async () => {
+    const user = userEvent.setup();
+
+    renderWithRouter(<LoginForm onSubmit={vi.fn()} />);
+
+    const passwordInput = screen.getByLabelText("Password");
+    expect(passwordInput.className).not.toMatch(/border-emerald/);
+
+    await user.type(passwordInput, "any-password");
+    expect(passwordInput.className).toMatch(/border-emerald/);
+  });
+
 });

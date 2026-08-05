@@ -82,7 +82,10 @@ export function LoginForm({
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="current-password"
-          className="h-11 rounded-lg border-border bg-card px-3.5 text-foreground shadow-none placeholder:text-muted-foreground"
+          className={cn(
+            "h-11 rounded-lg border-border bg-card px-3.5 text-foreground shadow-none placeholder:text-muted-foreground",
+            password !== "" && passwordValidInputClassName,
+          )}
         />
       </div>
 
