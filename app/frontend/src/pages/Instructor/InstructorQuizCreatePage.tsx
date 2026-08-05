@@ -78,10 +78,7 @@ export function InstructorQuizCreatePage() {
   const seededAllowedAttempts = readQuizLimit(seededDraft?.allowedAttempts);
   const seededTimeLimit = readQuizLimit(seededDraft?.timeLimit);
   const seededPriorQuestionPoints = Array.isArray(seededDraft?.priorQuestionPoints)
-    ? seededDraft.priorQuestionPoints.filter(
-        (points): points is number =>
-          typeof points === "number" && Number.isFinite(points) && points > 0,
-      )
+    ? seededDraft.priorQuestionPoints
     : undefined;
   const { accessToken, user } = useAuth();
   const [step, setStep] = useState<QuizCreateStep>(

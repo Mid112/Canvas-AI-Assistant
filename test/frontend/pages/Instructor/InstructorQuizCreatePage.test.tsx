@@ -423,6 +423,73 @@ describe("InstructorQuizCreatePage typed drafts", () => {
     expect(screen.getByLabelText("Points possible")).toHaveValue(20);
   });
 
+  // Regression for #1538 review: an invalid entry (0) in priorQuestionPoints
+  // must not be compacted out before applyPriorQuestionPoints runs, or the
+  // remaining valid entries shift and land on the wrong questions.
+  it("restores neighboring questionPoints by index when a middle entry is invalid", async () => {
+    const user = userEvent.setup();
+    mockedGenerate.mockResolvedValue({
+      name: "Cell Biology",
+      description: "organism quiz",
+      dueDate: "2026-12-15T23:59",
+      pointsPossible: 15,
+      allowedAttempts: 1,
+      timeLimit: 30,
+      quizEngine: "classic",
+      questions: [
+        {
+          questionText: "Q1",
+          questionType: "multiple_choice_question",
+          pointsPossible: 5,
+          answers: [
+            { text: "A", weight: 100 },
+            { text: "B", weight: 0 },
+          ],
+        },
+        {
+          questionText: "Q2",
+          questionType: "multiple_choice_question",
+          pointsPossible: 5,
+          answers: [
+            { text: "C", weight: 100 },
+            { text: "D", weight: 0 },
+          ],
+        },
+        {
+          questionText: "Q3",
+          questionType: "multiple_choice_question",
+          pointsPossible: 5,
+          answers: [
+            { text: "E", weight: 100 },
+            { text: "F", weight: 0 },
+          ],
+        },
+      ],
+      questionBankGroups: [],
+    });
+
+    renderPage({
+      aiQuizDraft: {
+        courseId: 42,
+        name: "Cell Biology",
+        description: "",
+        prompt: "Create a quiz about organisms",
+        priorQuestionPoints: [10, 0, 10],
+        pointsPossible: 20,
+      },
+    });
+
+    const generate = await screen.findByRole("button", {
+      name: "Generate Quiz Draft",
+    });
+    await waitFor(() => expect(generate).toBeEnabled());
+    await user.click(generate);
+
+    expect(await screen.findByLabelText("Points for question 1")).toHaveValue(10);
+    expect(screen.getByLabelText("Points for question 2")).toHaveValue(5);
+    expect(screen.getByLabelText("Points for question 3")).toHaveValue(10);
+  });
+
   it("saves edited review fields and discards the typed draft after Canvas confirm", async () => {
     const user = userEvent.setup();
     const existing = saveTypedDraft(1, {
