@@ -127,6 +127,7 @@ jobs:
     - self-hosted
     - macOS
     - ARM64
+    timeout-minutes: 40
     needs: changes
     if: needs.changes.outputs.backend == 'true'
     steps:
