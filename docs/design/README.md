@@ -404,7 +404,7 @@ The original ER diagram captured the first version of the application schema, fo
 
 The current database design has expanded to support multi-Canvas connections, cached course and student data, workflow lifecycle tracking, idempotent Canvas writes, LLM configuration, health monitoring, failed-operation troubleshooting, support tickets, and richer audit/history records.
 
-<!-- TODO: Add the updated ER diagram image here. -->
+<img src="./DB_diagram.svg" alt="Updated ER Diagram" width="100%" />
 
 
 ### Entity Descriptions and Relationships
