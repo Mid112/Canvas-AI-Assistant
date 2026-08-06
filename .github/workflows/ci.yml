@@ -197,8 +197,20 @@ jobs:
         # Run pytest inside Linux Docker with Postgres on the same network.
         # Coverage config (including fail_under) lives in app/backend/pyproject.toml,
         # so we run from that directory so pytest-cov picks it up.
+        #
+        # Cap container CPU/RAM so Docker Desktop cannot starve the self-hosted
+        # Mac runner of heartbeat (OOM → "lost communication" failures).
+        # Quieter pytest + lighter cov report also cut memory/log pressure.
         run: |
+          # Drop orphaned pytest containers from cancelled runs.
+          orphans=$(docker ps -q --filter ancestor="${{ steps.backend_image.outputs.image }}" 2>/dev/null || true)
+          if [ -n "$orphans" ]; then
+            # shellcheck disable=SC2086
+            docker rm -f $orphans >/dev/null 2>&1 || true
+          fi
           docker run --rm \
+            --memory=3g \
+            --cpus=2 \
             --network "ci-net-${{ github.run_id }}" \
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace/app/backend \
@@ -209,8 +221,9 @@ jobs:
             -e HF_TOKEN=ci-test-hf-token \
             -e DEFAULT_LLM_PROVIDER=huggingface \
             -e PYTHONPATH=/workspace/app/backend \
+            -e PYTHONUNBUFFERED=1 \
             "${{ steps.backend_image.outputs.image }}" \
-            pytest ../../test/backend/ -v -m "not fuzz" --cov --cov-report=term-missing
+            pytest ../../test/backend/ -q -m "not fuzz" --tb=line --cov --cov-report=term
       - name: Stop PostgreSQL
         if: always()
         run: |
