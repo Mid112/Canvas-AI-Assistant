@@ -18,6 +18,8 @@ import type { MessageThread } from "@/types/messageThread";
 
 interface MessageInboxPanelProps {
   courseId?: number;
+  /** Concrete course name/code for the course-scoped inbox toggle. */
+  courseLabel?: string;
 }
 
 type InboxScope = "course" | "all";
@@ -27,7 +29,10 @@ type InboxScope = "course" | "all";
 // so short-interval polling is the pragmatic option.
 const POLL_INTERVAL_MS = 15_000;
 
-export function MessageInboxPanel({ courseId }: MessageInboxPanelProps) {
+export function MessageInboxPanel({
+  courseId,
+  courseLabel,
+}: MessageInboxPanelProps) {
   const { accessToken } = useAuth();
   const canvasUrl = useCanvasConnectionUrl();
   const [scope, setScope] = useState<InboxScope>(
@@ -253,14 +258,15 @@ export function MessageInboxPanel({ courseId }: MessageInboxPanelProps) {
           type="button"
           onClick={() => setScope("course")}
           aria-pressed={scope === "course"}
+          title={courseLabel || undefined}
           className={cn(
-            "rounded-md px-3 py-1 font-medium transition-colors",
+            "max-w-[14rem] truncate rounded-md px-3 py-1 font-medium transition-colors",
             scope === "course"
               ? "bg-background text-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground",
           )}
         >
-          This course
+          {courseLabel?.trim() || "This course"}
         </button>
         <button
           type="button"
