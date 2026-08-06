@@ -1,4 +1,5 @@
 import { instructorMessagesPath, paths } from "@/routes/paths";
+import type { QuizEngine, QuizQuestionDraft } from "@/types/quizCreate";
 
 const TYPED_DRAFT_PREFIX = "assistant-typed-drafts:";
 
@@ -13,21 +14,40 @@ export type TypedDraftKind =
 export interface TypedDraftContent {
   title?: string;
   body?: string;
+  /** Quiz drafts only, prompt-only path — free-text questions typed before
+   * generation. Left as a plain string because there is no structured draft
+   * yet to preserve; see quizQuestions for a resumable generated quiz. */
   questions?: string;
   feedback?: string;
   grade?: string;
   studentName?: string;
   assignmentName?: string;
-  /** Assignment drafts only — an ISO 8601 string, same shape as
-   * GeneratedAssignmentDraft.dueDate. Not a Canvas identifier, so it's
-   * safe to persist alongside title/description. */
+  /** Assignment and quiz drafts — an ISO 8601 string, same shape as
+   * GeneratedAssignmentDraft.dueDate / GeneratedQuizDraft.dueDate. Not a
+   * Canvas identifier, so it's safe to persist alongside title/description. */
   dueDate?: string;
-  /** Mirrors GeneratedAssignmentDraft.pointsPossible, including its null:
-   * null means an ungraded assignment (Ticket 21), a value the instructor
-   * chose rather than "no points on this draft". Narrowing it to number
-   * made saving an ungraded assignment draft a type error, since that is
-   * exactly what the create page hands over. */
+  /** Mirrors GeneratedAssignmentDraft.pointsPossible / GeneratedQuizDraft.
+   * pointsPossible, including the assignment side's null: null means an
+   * ungraded assignment (Ticket 21), a value the instructor chose rather
+   * than "no points on this draft". Narrowing it to number made saving an
+   * ungraded assignment draft a type error, since that is exactly what the
+   * create page hands over. */
   pointsPossible?: number | null;
+  /** Quiz drafts only — the generated question set, preserved as structured
+   * data instead of being flattened to text (#1505). A resumed draft that
+   * carries real questions here is what lets the create page recognise it
+   * as already-generated and land back on review instead of describe. */
+  quizQuestions?: QuizQuestionDraft[];
+  /** Quiz drafts only, alongside quizQuestions — the remaining
+   * GeneratedQuizDraft fields the review step needs to reconstruct the
+   * draft exactly rather than falling back to defaults. */
+  quizEngine?: QuizEngine;
+  /** Content-only bank picks — bankName + counts/points, never Canvas bankId (#1239 / #1505). */
+  quizQuestionBankGroups?: Array<{
+    bankName: string;
+    pickCount: number;
+    questionPoints: number;
+  }>;
   /** Quiz drafts only. Both mirror GeneratedQuizDraft, including the null:
    * null is a real instructor choice (unlimited attempts / no time limit),
    * distinct from the field being absent because the draft never set it.
@@ -101,6 +121,9 @@ function stripCanvasIdentifiers(
     assignmentName,
     dueDate,
     pointsPossible,
+    quizQuestions,
+    quizEngine,
+    quizQuestionBankGroups,
     allowedAttempts,
     timeLimit,
     courseCode,
@@ -116,6 +139,18 @@ function stripCanvasIdentifiers(
     ...(assignmentName !== undefined ? { assignmentName } : {}),
     ...(dueDate !== undefined ? { dueDate } : {}),
     ...(pointsPossible !== undefined ? { pointsPossible } : {}),
+    ...(quizQuestions !== undefined ? { quizQuestions } : {}),
+    ...(quizEngine !== undefined ? { quizEngine } : {}),
+    // Persist bank picks by name only — never Canvas bankId (#1239 / #1505).
+    ...(quizQuestionBankGroups !== undefined
+      ? {
+          quizQuestionBankGroups: quizQuestionBankGroups.map((group) => ({
+            bankName: group.bankName,
+            pickCount: group.pickCount,
+            questionPoints: group.questionPoints,
+          })),
+        }
+      : {}),
     // Tested against undefined, not truthiness: 0 attempts and a null
     // "no time limit" are both values the instructor chose and must survive.
     ...(allowedAttempts !== undefined ? { allowedAttempts } : {}),
@@ -245,8 +280,58 @@ export function buildTypedDraftResumeTarget(
 
   switch (draft.kind) {
     case "quiz": {
-      // Typed drafts store free-text questions only — land on describe so the
-      // create page can regenerate structured questions (pages ignore questionsText).
+      const hasStructuredQuestions =
+        Array.isArray(draft.content.quizQuestions) &&
+        draft.content.quizQuestions.length > 0;
+      if (hasStructuredQuestions) {
+        // A draft saved after generation carries its own structured
+        // questions — land straight on review with them instead of
+        // re-describing a quiz that was already built (#1505).
+        return {
+          path: paths.instructor.quizCreate,
+          state: {
+            typedDraftId,
+            aiQuizDraft: {
+              ...(courseId !== undefined ? { courseId } : {}),
+              name: draft.content.title ?? "",
+              description: draft.content.body ?? "",
+              questions: draft.content.quizQuestions,
+              ...(draft.content.dueDate !== undefined
+                ? { dueDate: draft.content.dueDate }
+                : {}),
+              ...(draft.content.pointsPossible !== undefined
+                ? { pointsPossible: draft.content.pointsPossible }
+                : {}),
+              ...(draft.content.allowedAttempts !== undefined
+                ? { allowedAttempts: draft.content.allowedAttempts }
+                : {}),
+              ...(draft.content.timeLimit !== undefined
+                ? { timeLimit: draft.content.timeLimit }
+                : {}),
+              ...(draft.content.quizEngine !== undefined
+                ? { quizEngine: draft.content.quizEngine }
+                : {}),
+              ...(draft.content.quizQuestionBankGroups !== undefined
+                ? {
+                    // bankId is resolved on the create page after banks load
+                    // (content-only drafts store bankName, never Canvas ids).
+                    questionBankGroups: draft.content.quizQuestionBankGroups.map(
+                      (group) => ({
+                        bankId: 0,
+                        bankName: group.bankName,
+                        pickCount: group.pickCount,
+                        questionPoints: group.questionPoints,
+                      }),
+                    ),
+                  }
+                : {}),
+            },
+          },
+        };
+      }
+      // Typed drafts without structured questions only have free-text —
+      // land on describe so the create page can generate structured
+      // questions (pages ignore questionsText).
       const prompt = joinDescribePrompt([
         draft.content.title
           ? `Create a quiz titled "${draft.content.title}"`

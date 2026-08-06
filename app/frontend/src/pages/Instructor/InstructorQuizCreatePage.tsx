@@ -15,6 +15,7 @@ import { pageShellNarrow } from "@/lib/page-shell";
 import {
   discardTypedDraft,
   saveTypedDraft,
+  type TypedDraftContent,
 } from "@/lib/typed-draft-storage";
 import {
   instructorCourseQuizzesPath,
@@ -36,6 +37,7 @@ import type {
   QuizDescribeValues,
   QuizPreviewSummary,
   QuizQuestionBank,
+  QuizQuestionBankGroup,
 } from "@/types/quizCreate";
 import type { QuizEngine } from "@/types/quiz";
 
@@ -143,6 +145,43 @@ export function InstructorQuizCreatePage() {
     typedDraftId,
   );
 
+  // Typed drafts store bank picks by name only, never the raw Canvas bankId
+  // (#1239). Once Classic banks load, rematch unresolved groups (bankId 0)
+  // by name so approve can send real ids. A name that matches more than one
+  // bank can't be told apart, and one that matches none means the bank was
+  // renamed or deleted — either way, leave it unresolved rather than guess
+  // (same fallback resolveTypedDraftCourseId uses for an unresolvable
+  // course); the instructor can remove that group or re-add the bank by
+  // name. The array is never filtered here — QuizReviewApproveStep's own
+  // bank-group fields are matched back to this list by index, so dropping
+  // an entry here would desync the two instead of just leaving it at 0.
+  useEffect(() => {
+    if (questionBanks.length === 0) {
+      return;
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- rematch resumed bank groups once Canvas banks load
+    setDraft((current) => {
+      if (!current?.questionBankGroups?.some((group) => group.bankId <= 0)) {
+        return current;
+      }
+      const nextGroups: QuizQuestionBankGroup[] = current.questionBankGroups.map(
+        (group) => {
+          if (group.bankId > 0) {
+            return group;
+          }
+          const target = group.bankName.trim().toLowerCase();
+          const matches = questionBanks.filter(
+            (bank) => bank.title.trim().toLowerCase() === target,
+          );
+          return matches.length === 1
+            ? { ...group, bankId: matches[0].id }
+            : group;
+        },
+      );
+      return { ...current, questionBankGroups: nextGroups };
+    });
+  }, [questionBanks]);
+
   const canvasUrl = useCanvasConnectionUrl();
   const {
     activeCourse,
@@ -224,27 +263,37 @@ export function InstructorQuizCreatePage() {
 
   const handleSaveTypedDraft = () => {
     if (!user?.id) return;
-    const content = draft
+    // A generated draft keeps its questions structured (#1505) — the
+    // description stays whatever the instructor/generator wrote, never the
+    // question text flattened into it. Resuming reads quizQuestions to
+    // decide whether to land back on review instead of describe.
+    const content: TypedDraftContent | null = draft
       ? {
           title: draft.name,
           body: draft.description,
-          questions: draft.questions.map((question) => question.questionText).join("\n"),
-          // Saved alongside the text because they are the instructor's own
-          // settings, not generator output. Resuming used to hand the quiz
-          // back with whatever the generator defaulted to, silently
+          quizQuestions: draft.questions,
+          dueDate: draft.dueDate,
+          pointsPossible: draft.pointsPossible,
+          // Saved alongside the questions because they are the instructor's
+          // own settings, not generator output. Resuming used to hand the
+          // quiz back with whatever the generator defaulted to, silently
           // discarding an attempt limit or timer they had set.
           allowedAttempts: draft.allowedAttempts,
           timeLimit: draft.timeLimit,
+          ...(draft.quizEngine ? { quizEngine: draft.quizEngine } : {}),
+          ...(draft.questionBankGroups?.length
+            ? { quizQuestionBankGroups: draft.questionBankGroups }
+            : {}),
         }
       : describeValues.prompt.trim()
         ? { questions: describeValues.prompt.trim() }
         : null;
-    if (
-      !content ||
-      (!content.title?.trim() &&
-        !content.body?.trim() &&
-        !content.questions?.trim())
-    ) {
+    const hasContent =
+      Boolean(content?.title?.trim()) ||
+      Boolean(content?.body?.trim()) ||
+      Boolean(content?.quizQuestions?.length) ||
+      Boolean(content?.questions?.trim());
+    if (!content || !hasContent) {
       setDraftSaveStatus("Add quiz details before saving a draft.");
       return;
     }
