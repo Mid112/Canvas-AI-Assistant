@@ -1,23 +1,42 @@
-# Project-Starter
+# Canvas Helper AI Assistant — Team 16
 
-Please use the provided folder structure for your docs (project plan, design documenation, communications log, weekly logs and final documentation), source code, tesing, etc.    You are free to organize any additional internal folder structure as required by the project.  The team **MUST** use a branching workflow and once an item is ready, do remember to issue a PR, review and merge in into the master brach.
-```
-.
-├── docs                    # Documentation files (alternatively `doc`)
-│   ├── TOC.md              # Table of contents
-|   ├── charter/charter.md  # Team Charter
-│   ├── plan                # Project Scope and Project Charter
-│   ├── design              # Getting started guide
-│   ├── final               # Getting started guide
-│   ├── logs                # Team Logs
-│   └── ...
-├── build                   # Compiled files (alternatively `dist`))    
-├── app                     # Source files (alternatively `lib` or `src`)
-├── test                    # Automated tests (alternatively `spec` or `tests`)
-├── tools                   # Tools and utilities
-├── LICENSE                 # The license for this project 
-└── README.md
-```
-You can find additional information on folder structure convetions [here](https://github.com/kriasoft/Folder-Structure-Conventions). 
+UBCO COSC 499 capstone project: an AI-assisted Canvas LMS workflow tool for instructors, with administrator oversight and **confirm-before-write** safety for all Canvas mutations.
 
-Also, update your README.md file with the team and client/project information.  You can find details on writing GitHub Markdown [here](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax) as well as a [handy cheatsheet](https://enterprise.github.com/downloads/en/markdown-cheatsheet.pdf).   
+## Quick start
+
+```bash
+make install
+cp .env.example .env   # generate a unique CANVAS_TOKEN_ENCRYPTION_KEY
+cp app/backend/.env.example app/backend/.env
+make e2e-up            # Postgres + Canvas sandbox; API :8000; UI :5173
+# or full stack:
+make build && make up  # app on :8888 via nginx
+```
+
+## Documentation
+
+**Start here:** [`docs/final/README.md`](docs/final/README.md) · [`docs/TOC.md`](docs/TOC.md)
+
+| Audience | Link |
+|----------|------|
+| Instructors / admins | [`docs/final/user-guides/`](docs/final/user-guides/) |
+| Developers | [`docs/final/developer/`](docs/final/developer/) |
+| Deploy / install | [`docs/final/deployment/`](docs/final/deployment/) |
+| Architecture / API | [`docs/final/architecture.md`](docs/final/architecture.md), [`docs/final/api-reference.md`](docs/final/api-reference.md) |
+| Design (LLM) | [`docs/design/llm-providers.md`](docs/design/llm-providers.md) |
+
+## Testing
+
+```bash
+make test        # pytest + vitest coverage
+make test-e2e    # Playwright
+make test-fuzz   # Hypothesis (opt-in)
+```
+
+## Team
+
+UBCO COSC 499 — Capstone Team 16 (Canvas Helper AI Assistant).
+
+## License
+
+See [`LICENSE`](LICENSE).
