@@ -1,5 +1,3 @@
-// Instructor page note: coordinates instructor dashboard page UI state with Canvas-backed services and active-course context.
-
 import { Loader2 } from "lucide-react";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";

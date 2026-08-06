@@ -1,5 +1,3 @@
-// Messages UI note: supports the instructor message-drafting flow for message draft schema without bypassing preview/confirmation.
-
 import { z } from "zod";
 
 export const messageDraftSchema = z.object({

@@ -1,5 +1,3 @@
-"""Service note: owns backend audit business logic behind routers, tests, and assistant tool execution."""
-
 import logging
 from datetime import datetime
 

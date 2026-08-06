@@ -1,5 +1,3 @@
-// Type note: documents the dashboard data contract shared by services, components, and tests.
-
 export interface DashboardMetrics {
   activeCourses: number;
   activeCoursesTrend: number;

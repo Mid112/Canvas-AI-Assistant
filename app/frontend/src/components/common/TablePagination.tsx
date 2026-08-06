@@ -1,5 +1,3 @@
-// Component note: renders reusable table pagination UI for the instructor/admin experience.
-
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";

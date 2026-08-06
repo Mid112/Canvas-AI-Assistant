@@ -1,4 +1,4 @@
-// Chat UI note: renders the assistant explanation card surface while preserving instructor review and cancellation flows.
+// Chat UI note: displays model rationale as supporting context; approvals still depend on the separate action/risk panels.
 
 import { Lightbulb } from "lucide-react";
 

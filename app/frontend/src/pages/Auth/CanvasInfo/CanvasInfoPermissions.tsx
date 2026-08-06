@@ -1,5 +1,3 @@
-// Auth page note: handles canvas info permissions onboarding/authentication UI while keeping Canvas connection steps explicit.
-
 import { Check, Eye } from "lucide-react";
 
 const PERMISSIONS = [

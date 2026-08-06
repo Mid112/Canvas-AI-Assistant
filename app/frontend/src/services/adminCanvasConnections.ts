@@ -1,5 +1,3 @@
-// Frontend service note: wraps admin canvas connections API calls and normalizes payloads for route/components.
-
 import { apiRequest } from "@/lib/api-request";
 
 const INSTRUCTORS_PATH = "/admin/instructors";

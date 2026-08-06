@@ -1,5 +1,3 @@
-"""Test note: covers the test action reversal metadata behavior so future changes can preserve the expected Canvas workflow contract."""
-
 from datetime import UTC, datetime
 
 from app.models.user import User

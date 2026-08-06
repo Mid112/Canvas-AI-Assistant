@@ -1,5 +1,3 @@
-// Auth page note: handles canvas info page onboarding/authentication UI while keeping Canvas connection steps explicit.
-
 import { useNavigate } from "react-router-dom";
 
 import { OnboardingPageShell } from "@/components/layouts/OnboardingPageShell";

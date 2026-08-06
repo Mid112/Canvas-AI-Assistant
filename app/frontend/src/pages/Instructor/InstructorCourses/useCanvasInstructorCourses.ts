@@ -1,5 +1,3 @@
-// Instructor page note: coordinates use canvas instructor courses UI state with Canvas-backed services and active-course context.
-
 import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";

@@ -1,5 +1,3 @@
--- Migration note: applies the schema change described by 024_grade_history.sql; keep it idempotent-friendly for existing developer databases.
-
 CREATE TABLE IF NOT EXISTS grade_history (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE RESTRICT,

@@ -1,5 +1,3 @@
-// Component note: renders reusable workflow status summary UI for the instructor/admin experience.
-
 import { CheckCircle2, Clock, PauseCircle, XCircle } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";

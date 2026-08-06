@@ -1,5 +1,3 @@
-// Instructor page note: coordinates instructor assistant header UI state with Canvas-backed services and active-course context.
-
 import {
   BarChart3,
   FilePlus2,

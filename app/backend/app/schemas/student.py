@@ -1,5 +1,3 @@
-"""Schema note: defines API-facing student request/response shapes; changes here affect frontend service contracts."""
-
 from pydantic import BaseModel, ConfigDict
 
 

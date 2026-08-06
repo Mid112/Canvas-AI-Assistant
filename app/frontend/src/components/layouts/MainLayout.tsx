@@ -1,5 +1,3 @@
-// Component note: renders reusable main layout UI for the instructor/admin experience.
-
 import { Link, Outlet } from "react-router-dom";
 
 import { BrandLogo } from "@/components/brand/BrandLogo";

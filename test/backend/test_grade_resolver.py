@@ -1,5 +1,3 @@
-"""Test note: covers the test grade resolver behavior so future changes can preserve the expected Canvas workflow contract."""
-
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 

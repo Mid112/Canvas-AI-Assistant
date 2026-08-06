@@ -1,5 +1,3 @@
-// Test note: covers the vitest.config behavior so future changes can preserve the expected Canvas workflow contract.
-
 import path from "path";
 import { defineConfig } from "vitest/config";
 

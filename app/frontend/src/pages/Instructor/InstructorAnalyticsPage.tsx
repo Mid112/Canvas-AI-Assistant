@@ -1,5 +1,3 @@
-// Instructor page note: coordinates instructor analytics page UI state with Canvas-backed services and active-course context.
-
 import { Loader2 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";

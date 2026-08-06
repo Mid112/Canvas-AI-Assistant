@@ -1,4 +1,4 @@
-// Chat UI note: renders the assistant user message surface while preserving instructor review and cancellation flows.
+// Chat UI note: preserves the instructor's submitted wording exactly, including line breaks, for later chat-history replay.
 
 import type { ChatMessage } from "@/types/chat";
 

@@ -1,5 +1,3 @@
-// Lint config note: keeps frontend TypeScript/React lint rules aligned with the Vite app structure.
-
 import js from '@eslint/js'
 import globals from 'globals'
 import reactHooks from 'eslint-plugin-react-hooks'

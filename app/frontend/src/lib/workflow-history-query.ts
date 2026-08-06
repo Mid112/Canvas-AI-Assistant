@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes workflow history query behavior so components and tests share one implementation.
-
 import type {
   WorkflowHistoryEntry,
   WorkflowHistoryFilters,

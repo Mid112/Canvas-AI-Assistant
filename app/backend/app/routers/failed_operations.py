@@ -1,5 +1,3 @@
-"""Router note: exposes HTTP endpoints for failed operations workflows while delegating business rules to services."""
-
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 

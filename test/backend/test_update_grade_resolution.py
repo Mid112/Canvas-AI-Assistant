@@ -1,5 +1,3 @@
-"""Test note: covers the test update grade resolution behavior so future changes can preserve the expected Canvas workflow contract."""
-
 import json
 
 from app.mcp_tools.schemas import UpdateGradeAction

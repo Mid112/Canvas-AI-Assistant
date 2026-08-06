@@ -1,5 +1,3 @@
-// Context note: shares auth context state across route trees without prop-drilling.
-
 import {
   createContext,
   useCallback,

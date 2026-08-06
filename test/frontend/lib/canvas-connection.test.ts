@@ -1,5 +1,3 @@
-// Test note: covers the canvas connection.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { describe, expect, it } from "vitest";
 
 import { isCanvasConnectionRequiredError } from "@/lib/canvas-connection";

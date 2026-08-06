@@ -1,5 +1,3 @@
-// Test note: covers the account menu.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";

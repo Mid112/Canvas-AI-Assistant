@@ -1,5 +1,3 @@
--- Migration note: applies the schema change described by 040_grade_history_local_relationships.sql; keep it idempotent-friendly for existing developer databases.
-
 ALTER TABLE grade_history ADD COLUMN IF NOT EXISTS local_assignment_id INTEGER;
 ALTER TABLE grade_history ADD COLUMN IF NOT EXISTS student_id INTEGER;
 

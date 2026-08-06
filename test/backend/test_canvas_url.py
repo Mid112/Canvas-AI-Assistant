@@ -1,5 +1,3 @@
-"""Test note: covers the test canvas url behavior so future changes can preserve the expected Canvas workflow contract."""
-
 from app.core.canvas_url import canvas_urls_equivalent, normalize_canvas_url, resolve_server_canvas_url
 
 

@@ -1,5 +1,3 @@
-// Component note: renders reusable preview banner UI for the instructor/admin experience.
-
 import { Eye } from "lucide-react";
 
 import { cn } from "@/lib/utils";

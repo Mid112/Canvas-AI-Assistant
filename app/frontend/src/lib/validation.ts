@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes validation behavior so components and tests share one implementation.
-
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export const MIN_PASSWORD_LENGTH = 8;

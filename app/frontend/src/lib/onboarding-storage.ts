@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes onboarding storage behavior so components and tests share one implementation.
-
 const ONBOARDING_COMPLETE_KEY = "onboarding_complete_user_ids";
 
 function readCompletedUserIds(): Set<string> {

@@ -1,5 +1,3 @@
-// Component note: renders reusable onboarding page shell UI for the instructor/admin experience.
-
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";

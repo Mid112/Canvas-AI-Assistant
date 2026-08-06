@@ -1,5 +1,3 @@
-// Auth page note: handles register footer onboarding/authentication UI while keeping Canvas connection steps explicit.
-
 import { Link } from "react-router-dom";
 
 import { paths } from "@/routes/paths";

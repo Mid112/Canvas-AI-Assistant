@@ -1,5 +1,3 @@
-// Test note: covers the render with providers behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { render, type RenderOptions } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { MemoryRouter, type MemoryRouterProps } from "react-router-dom";

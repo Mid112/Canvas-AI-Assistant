@@ -1,5 +1,3 @@
-// Auth page note: handles register welcome onboarding/authentication UI while keeping Canvas connection steps explicit.
-
 export function RegisterWelcome() {
   return (
     <div className="mb-8 text-center">

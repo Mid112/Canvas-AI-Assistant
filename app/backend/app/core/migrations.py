@@ -1,5 +1,3 @@
-"""Core note: centralizes migrations infrastructure used across the backend."""
-
 import logging
 from pathlib import Path
 

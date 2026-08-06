@@ -1,5 +1,3 @@
-// File note: supports the index area of the Canvas workflow assistant.
-
 import { createBrowserRouter } from "react-router-dom";
 
 import { AuthLayout } from "@/components/layouts/AuthLayout";

@@ -1,5 +1,3 @@
-"""Service note: owns backend response cache business logic behind routers, tests, and assistant tool execution."""
-
 from __future__ import annotations
 
 import hashlib

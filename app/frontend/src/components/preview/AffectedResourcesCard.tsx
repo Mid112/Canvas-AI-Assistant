@@ -1,5 +1,3 @@
-// Preview UI note: presents affected resources card review details before any Canvas write is confirmed.
-
 import { Users } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

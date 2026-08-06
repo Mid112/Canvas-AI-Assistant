@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes use canvas token validation behavior so components and tests share one implementation.
-
 import { useEffect, useRef, useState } from "react";
 
 import { normalizeCanvasUrl, validateCanvasUrl } from "@/lib/canvas-url";

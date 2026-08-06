@@ -1,5 +1,3 @@
-// Instructor page note: coordinates canvas connection tab UI state with Canvas-backed services and active-course context.
-
 import {
   Check,
   CheckCircle2,

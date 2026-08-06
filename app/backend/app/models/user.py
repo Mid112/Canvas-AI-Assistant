@@ -1,5 +1,3 @@
-"""Model note: defines persisted user data and relationships shared by services, routers, migrations, and tests."""
-
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 

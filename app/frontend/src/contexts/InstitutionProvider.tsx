@@ -1,5 +1,3 @@
-// Context note: shares institution provider state across route trees without prop-drilling.
-
 import {
   useCallback,
   useEffect,

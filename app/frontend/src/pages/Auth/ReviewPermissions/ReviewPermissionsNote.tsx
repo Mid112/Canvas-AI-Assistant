@@ -1,5 +1,3 @@
-// Auth page note: handles review permissions note onboarding/authentication UI while keeping Canvas connection steps explicit.
-
 export function ReviewPermissionsNote() {
   return (
     <section

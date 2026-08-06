@@ -1,5 +1,3 @@
-// UI primitive note: wraps shared button styling/behavior so feature components stay visually consistent.
-
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
 

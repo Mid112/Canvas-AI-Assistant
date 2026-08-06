@@ -1,5 +1,3 @@
-// Instructor page note: coordinates instructor course grades page UI state with Canvas-backed services and active-course context.
-
 import { AlertTriangle, CheckCircle2, History, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";

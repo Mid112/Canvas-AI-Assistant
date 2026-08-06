@@ -1,4 +1,4 @@
-"""Adapter note: translates local LLM prompts/settings into Anthropic-compatible request and response shapes."""
+# app/backend/app/services/llm/anthropic_adapter.py
 import httpx
 
 from app.services.llm.base import LLMAdapter

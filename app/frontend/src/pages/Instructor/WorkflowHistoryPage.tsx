@@ -1,5 +1,3 @@
-// Instructor page note: coordinates workflow history page UI state with Canvas-backed services and active-course context.
-
 import { AlertCircle, Download, Loader2, Search, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 

@@ -1,5 +1,3 @@
-// Landing page note: presents the landing page marketing/onboarding surface before authenticated workflows.
-
 import { LandingFeatures } from "@/pages/Landing/LandingFeatures";
 import { LandingHeader } from "@/pages/Landing/LandingHeader";
 import { LandingHero } from "@/pages/Landing/LandingHero";

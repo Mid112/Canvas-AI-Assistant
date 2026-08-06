@@ -1,5 +1,3 @@
-// Auth page note: handles connect canvas token status onboarding/authentication UI while keeping Canvas connection steps explicit.
-
 import { AlertCircle, CheckCircle2, LoaderCircle } from "lucide-react";
 
 import type { CanvasTokenValidationStatus } from "@/types/canvas";

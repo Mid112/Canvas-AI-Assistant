@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes course code validation behavior so components and tests share one implementation.
-
 const COURSE_CODE_PATTERN = /^[A-Za-z]{1,12}(?:\s?\d{2,4}[A-Za-z]?)?$/;
 
 export const COURSE_CODE_HELP_TEXT =

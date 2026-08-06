@@ -1,5 +1,3 @@
-// Auth page note: handles canvas info actions onboarding/authentication UI while keeping Canvas connection steps explicit.
-
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";

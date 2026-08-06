@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes audit log users behavior so components and tests share one implementation.
-
 import type { AuditLogEntry } from "@/types/auditLog";
 
 /** Unique user emails from loaded audit logs, sorted alphabetically. */

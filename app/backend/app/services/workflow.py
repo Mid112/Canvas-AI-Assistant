@@ -1,5 +1,3 @@
-"""Service note: owns backend workflow business logic behind routers, tests, and assistant tool execution."""
-
 import json
 from datetime import UTC, datetime
 from typing import cast

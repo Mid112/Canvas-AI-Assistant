@@ -1,5 +1,3 @@
-// Test note: covers the submission export.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { institutionSubmissionsData } from "@/data/institutionSubmissionsData";

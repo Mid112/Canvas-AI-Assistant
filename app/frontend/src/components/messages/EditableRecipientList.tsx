@@ -1,5 +1,3 @@
-// Messages UI note: supports the instructor message-drafting flow for editable recipient list without bypassing preview/confirmation.
-
 import { X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";

@@ -1,5 +1,3 @@
-"""Schema note: defines API-facing support ticket request/response shapes; changes here affect frontend service contracts."""
-
 from datetime import datetime
 from typing import Literal
 

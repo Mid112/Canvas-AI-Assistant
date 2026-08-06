@@ -1,5 +1,3 @@
-// Landing page note: presents the landing hero marketing/onboarding surface before authenticated workflows.
-
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";

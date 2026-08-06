@@ -1,4 +1,8 @@
-"""Service note: owns backend feedback validation business logic behind routers, tests, and assistant tool execution."""
+"""Service note: validates feedback drafts before they can become Canvas messages.
+
+Keeps recipient, course, and content checks close to the write path instead of
+trusting model output or frontend form state.
+"""
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession

@@ -1,5 +1,3 @@
-// Component note: renders reusable placeholder page UI for the instructor/admin experience.
-
 import {
   Card,
   CardContent,

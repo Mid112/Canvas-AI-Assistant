@@ -1,5 +1,3 @@
-// Instructor page note: coordinates instructor courses search UI state with Canvas-backed services and active-course context.
-
 import { Filter, Search } from "lucide-react";
 
 import { Input } from "@/components/ui/input";

@@ -1,5 +1,3 @@
-// UI primitive note: wraps shared sheet styling/behavior so feature components stay visually consistent.
-
 import * as React from "react"
 import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
 

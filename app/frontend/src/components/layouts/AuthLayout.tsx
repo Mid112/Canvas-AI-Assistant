@@ -1,5 +1,3 @@
-// Component note: renders reusable auth layout UI for the instructor/admin experience.
-
 import { Outlet } from "react-router-dom";
 
 import { pageSurfaceClassName } from "@/lib/surface-styles";

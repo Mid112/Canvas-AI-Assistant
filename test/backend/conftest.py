@@ -1,5 +1,3 @@
-"""Test note: covers the conftest behavior so future changes can preserve the expected Canvas workflow contract."""
-
 import asyncio
 import os
 import sys

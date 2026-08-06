@@ -1,4 +1,4 @@
-"""LLM note: defines provider-neutral request/response contracts used by OpenAI-compatible and Anthropic adapters."""
+# app/backend/app/services/llm/base.py
 from abc import ABC, abstractmethod
 
 

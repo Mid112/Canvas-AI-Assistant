@@ -1,5 +1,3 @@
-// Type note: documents the instructor data contract shared by services, components, and tests.
-
 export type InstructorStatus = "active" | "disabled";
 
 export interface Instructor {

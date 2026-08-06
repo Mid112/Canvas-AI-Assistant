@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes canvas url behavior so components and tests share one implementation.
-
 const LOCAL_HTTP_HOSTS = new Set(["localhost", "127.0.0.1", "canvas_lms"]);
 
 /** Docker-internal hostnames that browsers cannot resolve. */

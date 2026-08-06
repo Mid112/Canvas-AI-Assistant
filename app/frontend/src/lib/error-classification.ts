@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes error classification behavior so components and tests share one implementation.
-
 export type ErrorCategory =
   | "canvas-auth"
   | "canvas-outage"

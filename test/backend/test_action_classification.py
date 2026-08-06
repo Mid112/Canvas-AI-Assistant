@@ -1,5 +1,3 @@
-"""Test note: covers the test action classification behavior so future changes can preserve the expected Canvas workflow contract."""
-
 from app.mcp_tools.schemas import ACTION_CLASSIFICATION, ACTION_SCHEMAS, is_reversible
 
 CONVERSATIONAL_ACTIONS = {"out_of_scope", "clarify", "intent_preview", "respond"}

@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes profile storage behavior so components and tests share one implementation.
-
 export interface ProfileDraft {
   name: string;
   department: string;

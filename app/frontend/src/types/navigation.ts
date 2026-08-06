@@ -1,5 +1,3 @@
-// Type note: documents the navigation data contract shared by services, components, and tests.
-
 import type { LucideIcon } from "lucide-react";
 
 export interface NavItem {

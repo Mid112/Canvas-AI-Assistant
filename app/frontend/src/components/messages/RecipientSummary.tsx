@@ -1,5 +1,3 @@
-// Messages UI note: supports the instructor message-drafting flow for recipient summary without bypassing preview/confirmation.
-
 import { EditableRecipientList } from "@/components/messages/EditableRecipientList";
 import { cn } from "@/lib/utils";
 import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";

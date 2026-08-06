@@ -1,5 +1,3 @@
-// Messages UI note: supports the instructor message-drafting flow for confirmation dialog without bypassing preview/confirmation.
-
 import { Loader2 } from "lucide-react";
 
 import { EditableRecipientList } from "@/components/messages/EditableRecipientList";

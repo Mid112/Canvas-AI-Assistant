@@ -1,5 +1,3 @@
-// Mock data note: supplies mock dry run preview fixtures for UI development and frontend tests.
-
 import type { DryRunPreviewData } from "@/types/dryRunPreview";
 
 const twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();

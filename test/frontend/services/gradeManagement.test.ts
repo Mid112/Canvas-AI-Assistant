@@ -1,5 +1,3 @@
-// Test note: covers the grade management.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {

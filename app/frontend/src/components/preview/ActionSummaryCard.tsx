@@ -1,5 +1,3 @@
-// Preview UI note: presents action summary card review details before any Canvas write is confirmed.
-
 import { FileText, GitCompare, Sparkles } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

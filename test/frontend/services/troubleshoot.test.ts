@@ -1,5 +1,3 @@
-// Test note: covers the troubleshoot.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DIAGNOSTICS_PATH, fetchDiagnostics } from "@/services/troubleshoot";

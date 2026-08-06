@@ -1,5 +1,3 @@
-// Test note: covers the canvas connection entry.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { useState, type ComponentProps } from "react";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

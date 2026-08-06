@@ -1,5 +1,3 @@
-"""Service note: owns backend course overview business logic behind routers, tests, and assistant tool execution."""
-
 from __future__ import annotations
 
 import asyncio

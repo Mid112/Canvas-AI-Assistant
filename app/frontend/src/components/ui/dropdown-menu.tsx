@@ -1,5 +1,3 @@
-// UI primitive note: wraps shared dropdown menu styling/behavior so feature components stay visually consistent.
-
 import * as React from "react"
 import { Menu as MenuPrimitive } from "@base-ui/react/menu"
 

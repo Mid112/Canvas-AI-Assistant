@@ -1,5 +1,3 @@
-// Test note: covers the instructor course submissions page.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Route, Routes } from "react-router-dom";

@@ -1,5 +1,3 @@
-// Messages UI note: supports the instructor message-drafting flow for message inbox list without bypassing preview/confirmation.
-
 import { formatAuditTimestamp } from "@/lib/format-audit-timestamp";
 import { cn } from "@/lib/utils";
 import type { MessageThread } from "@/types/messageThread";

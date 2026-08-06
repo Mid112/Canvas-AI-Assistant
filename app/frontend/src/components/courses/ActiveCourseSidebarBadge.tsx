@@ -1,5 +1,3 @@
-// Component note: renders reusable active course sidebar badge UI for the instructor/admin experience.
-
 import { BookOpen } from "lucide-react";
 
 import { useActiveCourse } from "@/contexts/useActiveCourse";

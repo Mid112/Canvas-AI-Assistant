@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes sidebar storage behavior so components and tests share one implementation.
-
 const SIDEBAR_STORAGE_KEY = "canvas-workflow-sidebar-open";
 
 export function getStoredSidebarOpen(): boolean {

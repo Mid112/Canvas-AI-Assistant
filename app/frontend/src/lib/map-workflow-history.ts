@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes map workflow history behavior so components and tests share one implementation.
-
 import type {
   WorkflowHistoryApiItem,
   WorkflowHistoryEntry,

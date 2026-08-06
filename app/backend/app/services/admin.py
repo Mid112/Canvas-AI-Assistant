@@ -1,5 +1,3 @@
-"""Service note: owns backend admin business logic behind routers, tests, and assistant tool execution."""
-
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 

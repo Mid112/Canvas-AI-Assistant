@@ -1,5 +1,3 @@
-// Instructor page note: coordinates assignment preview dialog UI state with Canvas-backed services and active-course context.
-
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useState } from "react";
 

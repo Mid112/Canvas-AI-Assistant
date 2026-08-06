@@ -1,5 +1,3 @@
-// Test note: covers the error classification.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { describe, expect, it } from "vitest";
 
 import { classifyErrorMessage } from "@/lib/error-classification";

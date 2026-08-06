@@ -1,5 +1,3 @@
-// Test note: covers the assignment describe step.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";

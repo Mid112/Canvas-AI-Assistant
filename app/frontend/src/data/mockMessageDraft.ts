@@ -1,5 +1,3 @@
-// Mock data note: supplies mock message draft fixtures for UI development and frontend tests.
-
 import type { MessageTemplate } from "@/types/messageDraft";
 
 export const mockMessageRecipients = [

@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes assignment utils behavior so components and tests share one implementation.
-
 import type {
   Assignment,
   AssignmentFieldChange,

@@ -1,5 +1,3 @@
-// UI primitive note: wraps shared tabs styling/behavior so feature components stay visually consistent.
-
 "use client"
 
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs"

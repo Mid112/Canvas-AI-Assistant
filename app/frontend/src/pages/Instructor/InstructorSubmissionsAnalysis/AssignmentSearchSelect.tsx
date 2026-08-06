@@ -1,5 +1,3 @@
-// Instructor page note: coordinates assignment search select UI state with Canvas-backed services and active-course context.
-
 import { Search } from "lucide-react";
 import {
   useEffect,

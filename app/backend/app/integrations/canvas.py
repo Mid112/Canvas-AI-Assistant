@@ -1,5 +1,3 @@
-"""Integration note: adapts external canvas calls behind a local interface so services stay testable."""
-
 import asyncio
 import logging
 import re

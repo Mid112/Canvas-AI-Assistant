@@ -1,5 +1,3 @@
-// Type note: documents the assignment create data contract shared by services, components, and tests.
-
 export interface AssignmentCreateCourseOption {
   id: string;
   label: string;

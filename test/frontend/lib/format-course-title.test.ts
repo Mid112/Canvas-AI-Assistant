@@ -1,5 +1,3 @@
-// Test note: covers the format course title.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { describe, expect, it } from "vitest";
 
 import { formatInstructorCourseTitle } from "@/lib/format-course-title";

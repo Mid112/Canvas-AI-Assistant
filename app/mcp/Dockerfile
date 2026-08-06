@@ -1,5 +1,3 @@
-# MCP server note: exposes Canvas-facing tool behavior for dockerfile in the standalone MCP service.
-
 FROM python:3.12-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

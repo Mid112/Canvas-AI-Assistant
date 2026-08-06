@@ -1,5 +1,3 @@
-// Test note: covers the canvas.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import {

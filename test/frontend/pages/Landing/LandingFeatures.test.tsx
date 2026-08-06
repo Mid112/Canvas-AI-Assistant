@@ -1,5 +1,3 @@
-// Test note: covers the landing features.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { LandingFeatures } from '@/pages/Landing/LandingFeatures';

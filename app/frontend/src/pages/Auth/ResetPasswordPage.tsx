@@ -1,5 +1,3 @@
-// Auth page note: handles reset password page onboarding/authentication UI while keeping Canvas connection steps explicit.
-
 import { useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 

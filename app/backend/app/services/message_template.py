@@ -1,5 +1,3 @@
-"""Service note: owns backend message template business logic behind routers, tests, and assistant tool execution."""
-
 from fastapi import HTTPException, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession

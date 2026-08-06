@@ -1,5 +1,3 @@
-// Test note: covers the missing submissions section.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

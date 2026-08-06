@@ -1,5 +1,3 @@
-// Admin UI note: presents instructor form controls for institution/admin workflows with service-backed state.
-
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 

@@ -1,5 +1,3 @@
-// Component note: renders reusable canvas connection entry utils UI for the instructor/admin experience.
-
 import type { TokenValidationState } from "@/pages/Auth/ConnectCanvas/ConnectCanvasTokenStatus";
 
 export interface CanvasConnectionEntryState {

@@ -1,5 +1,3 @@
-// Test note: covers the assistant message.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";

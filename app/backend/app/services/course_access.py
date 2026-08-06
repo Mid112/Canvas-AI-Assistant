@@ -1,4 +1,4 @@
-"""Service note: centralizes course visibility and active-course checks used by instructor workflows."""
+# app/backend/app/services/course_access.py
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession

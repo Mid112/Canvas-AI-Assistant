@@ -1,5 +1,3 @@
-"""File note: supports the dependencies area of the Canvas workflow assistant."""
-
 from datetime import UTC, datetime
 
 from fastapi import Depends, HTTPException, status

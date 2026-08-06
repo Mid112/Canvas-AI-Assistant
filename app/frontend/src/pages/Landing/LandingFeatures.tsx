@@ -1,5 +1,3 @@
-// Landing page note: presents the landing features marketing/onboarding surface before authenticated workflows.
-
 import { ClipboardList, Eye, MessageSquare, Shield } from "lucide-react";
 
 const features = [

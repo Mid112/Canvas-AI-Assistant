@@ -1,5 +1,3 @@
-// Test note: covers the sidebar.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import type { ComponentProps } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

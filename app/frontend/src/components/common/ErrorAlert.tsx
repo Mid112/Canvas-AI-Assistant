@@ -1,5 +1,3 @@
-// Component note: renders reusable error alert UI for the instructor/admin experience.
-
 import { AlertTriangle, CloudOff, ShieldAlert } from "lucide-react";
 import { Link } from "react-router-dom";
 

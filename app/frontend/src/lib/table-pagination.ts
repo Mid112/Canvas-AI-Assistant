@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes table pagination behavior so components and tests share one implementation.
-
 export const DEFAULT_PAGE_SIZE = 10;
 
 export interface PaginatedResult<T> {

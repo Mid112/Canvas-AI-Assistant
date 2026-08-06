@@ -1,5 +1,3 @@
-// Auth page note: handles login form onboarding/authentication UI while keeping Canvas connection steps explicit.
-
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 

@@ -1,5 +1,3 @@
-"""Service note: owns backend risk business logic behind routers, tests, and assistant tool execution."""
-
 from typing import Literal
 
 from app.mcp_tools.schemas import ACTION_CLASSIFICATION, is_reversible, is_undoable

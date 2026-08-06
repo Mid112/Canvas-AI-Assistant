@@ -1,5 +1,3 @@
-// Auth page note: handles password input onboarding/authentication UI while keeping Canvas connection steps explicit.
-
 import { Eye, EyeOff } from "lucide-react";
 import { useState, type ComponentProps } from "react";
 

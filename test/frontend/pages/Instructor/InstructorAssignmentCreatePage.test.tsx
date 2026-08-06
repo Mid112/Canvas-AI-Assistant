@@ -1,5 +1,3 @@
-// Test note: covers the instructor assignment create page.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";

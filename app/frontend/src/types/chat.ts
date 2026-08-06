@@ -1,5 +1,3 @@
-// Type note: documents the chat data contract shared by services, components, and tests.
-
 export type ChatMessageRole = "user" | "assistant";
 
 export type PendingActionStatus =

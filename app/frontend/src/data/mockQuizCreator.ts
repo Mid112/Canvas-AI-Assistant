@@ -1,5 +1,3 @@
-// Mock data note: supplies mock quiz creator fixtures for UI development and frontend tests.
-
 export const quizCreateSuggestedPrompts = [
   {
     id: "python-quiz",

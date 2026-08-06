@@ -1,5 +1,3 @@
-// Preview UI note: presents action type badge review details before any Canvas write is confirmed.
-
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { DryRunActionType, DryRunHttpMethod } from "@/types/dryRunPreview";

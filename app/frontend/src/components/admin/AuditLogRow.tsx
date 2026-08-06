@@ -1,5 +1,3 @@
-// Admin UI note: presents audit log row controls for institution/admin workflows with service-backed state.
-
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 

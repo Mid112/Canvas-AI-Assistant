@@ -1,5 +1,3 @@
-// Auth page note: handles connect canvas header onboarding/authentication UI while keeping Canvas connection steps explicit.
-
 import { KeyRound } from "lucide-react";
 
 export function ConnectCanvasHeader() {

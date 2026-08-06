@@ -1,5 +1,3 @@
-// Type note: documents the user data contract shared by services, components, and tests.
-
 import type { CanvasConnectionResponse } from "@/types/auth";
 
 export type UserRole = "instructor" | "admin";

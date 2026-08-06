@@ -1,5 +1,3 @@
-// Frontend service note: wraps admin users API calls and normalizes payloads for route/components.
-
 import { apiRequest } from "@/lib/api-request";
 
 const ADMIN_USERS_PATH = "/admin/users";

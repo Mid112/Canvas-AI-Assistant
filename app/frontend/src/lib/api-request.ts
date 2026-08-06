@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes api request behavior so components and tests share one implementation.
-
 import { API_BASE_URL } from "@/config/api";
 
 export class ApiRequestError extends Error {

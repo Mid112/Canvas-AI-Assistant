@@ -1,5 +1,3 @@
-// Instructor page note: coordinates course publish badge UI state with Canvas-backed services and active-course context.
-
 import { cn } from "@/lib/utils";
 import type { InstructorCourse } from "@/types/course";
 

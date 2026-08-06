@@ -1,5 +1,3 @@
-// Test note: covers the audit log query.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { describe, expect, it } from "vitest";
 
 import { mockAuditLogs } from "@/data/mockAuditLogs";

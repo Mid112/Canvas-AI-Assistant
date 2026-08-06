@@ -1,5 +1,3 @@
-"""Test note: covers the test quiz integration behavior so future changes can preserve the expected Canvas workflow contract."""
-
 from unittest.mock import AsyncMock, patch
 
 import pytest

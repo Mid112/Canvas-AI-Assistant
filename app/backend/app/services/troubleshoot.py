@@ -1,5 +1,3 @@
-"""Service note: owns backend troubleshoot business logic behind routers, tests, and assistant tool execution."""
-
 import time
 
 from sqlalchemy import func, select

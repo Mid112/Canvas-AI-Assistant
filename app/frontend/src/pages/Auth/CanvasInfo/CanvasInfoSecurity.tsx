@@ -1,5 +1,3 @@
-// Auth page note: handles canvas info security onboarding/authentication UI while keeping Canvas connection steps explicit.
-
 import { Lock, Shield } from "lucide-react";
 
 const SECURITY_FEATURES = [

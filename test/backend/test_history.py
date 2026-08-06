@@ -1,5 +1,3 @@
-"""Test note: covers the test history behavior so future changes can preserve the expected Canvas workflow contract."""
-
 import asyncio
 import uuid
 

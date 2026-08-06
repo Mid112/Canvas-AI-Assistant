@@ -1,5 +1,3 @@
-# Dockerfile note: builds the service image used by compose and deployment workflows.
-
 FROM python:3.12-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

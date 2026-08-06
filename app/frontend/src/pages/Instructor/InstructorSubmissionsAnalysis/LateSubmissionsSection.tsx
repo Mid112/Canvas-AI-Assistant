@@ -1,5 +1,3 @@
-// Instructor page note: coordinates late submissions section UI state with Canvas-backed services and active-course context.
-
 import { Clock } from "lucide-react";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";

@@ -1,5 +1,3 @@
-// Test note: covers the dashboard layout.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";

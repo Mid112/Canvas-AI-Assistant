@@ -1,5 +1,3 @@
-// Instructor page note: coordinates student activity card UI state with Canvas-backed services and active-course context.
-
 import { Link } from "react-router-dom";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

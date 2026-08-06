@@ -1,5 +1,3 @@
-// Instructor page note: coordinates submission student cell UI state with Canvas-backed services and active-course context.
-
 import { getInitials } from "@/lib/user-display";
 import { cn } from "@/lib/utils";
 import type { SubmissionStudent } from "@/types/submission";

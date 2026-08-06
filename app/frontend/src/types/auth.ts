@@ -1,5 +1,3 @@
-// Type note: documents the auth data contract shared by services, components, and tests.
-
 export interface TokenResponse {
   access_token: string;
   token_type: string;

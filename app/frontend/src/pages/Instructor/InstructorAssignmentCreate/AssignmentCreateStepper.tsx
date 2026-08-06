@@ -1,5 +1,3 @@
-// Instructor page note: coordinates assignment create stepper UI state with Canvas-backed services and active-course context.
-
 import { cn } from "@/lib/utils";
 import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
 import type { AssignmentCreateStep } from "@/types/assignmentCreate";

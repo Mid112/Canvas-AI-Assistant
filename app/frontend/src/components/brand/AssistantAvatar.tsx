@@ -1,5 +1,3 @@
-// Component note: renders reusable assistant avatar UI for the instructor/admin experience.
-
 import { Bot } from "lucide-react";
 
 import { cn } from "@/lib/utils";

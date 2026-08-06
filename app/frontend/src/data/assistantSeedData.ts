@@ -1,5 +1,3 @@
-// Mock data note: supplies assistant seed data fixtures for UI development and frontend tests.
-
 import type { ChatMessage, SuggestedAction } from "@/types/chat";
 
 export const seedChatMessages: ChatMessage[] = [

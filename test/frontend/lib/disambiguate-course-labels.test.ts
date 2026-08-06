@@ -1,5 +1,3 @@
-// Test note: covers the disambiguate course labels.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { describe, expect, it } from "vitest";
 
 import { disambiguateCourseLabels } from "@/lib/disambiguate-course-labels";

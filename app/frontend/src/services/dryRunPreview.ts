@@ -1,5 +1,3 @@
-// Frontend service note: wraps dry run preview API calls and normalizes payloads for route/components.
-
 import {
   defaultDryRunPreviewId,
   mockDryRunPreviews,

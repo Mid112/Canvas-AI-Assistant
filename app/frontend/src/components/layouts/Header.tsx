@@ -1,5 +1,3 @@
-// Component note: renders reusable header UI for the instructor/admin experience.
-
 import { useState, type ReactNode } from "react";
 import { Menu, PanelLeft } from "lucide-react";
 

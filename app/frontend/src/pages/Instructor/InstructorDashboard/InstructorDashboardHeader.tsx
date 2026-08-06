@@ -1,5 +1,3 @@
-// Instructor page note: coordinates instructor dashboard header UI state with Canvas-backed services and active-course context.
-
 interface InstructorDashboardHeaderProps {
   userName: string;
   institutionShortName: string;

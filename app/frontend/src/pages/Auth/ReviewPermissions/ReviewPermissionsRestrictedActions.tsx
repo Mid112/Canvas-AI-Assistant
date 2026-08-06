@@ -1,5 +1,3 @@
-// Auth page note: handles review permissions restricted actions onboarding/authentication UI while keeping Canvas connection steps explicit.
-
 import {
   BarChart3,
   CircleX,

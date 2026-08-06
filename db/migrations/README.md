@@ -1,5 +1,3 @@
-<!-- Migration note: applies the schema change described by README.md; keep it idempotent-friendly for existing developer databases. -->
-
 # Database migrations
 
 `db/init/01_schema.sql` is applied automatically on **fresh** database containers. It reflects the current schema only.

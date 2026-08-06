@@ -1,5 +1,3 @@
-// Frontend service note: wraps workflow history API calls and normalizes payloads for route/components.
-
 import { apiRequest, ApiRequestError } from "@/lib/api-request";
 import { formatAuditTimestamp } from "@/lib/format-audit-timestamp";
 import { mapWorkflowHistoryApiToEntry } from "@/lib/map-workflow-history";

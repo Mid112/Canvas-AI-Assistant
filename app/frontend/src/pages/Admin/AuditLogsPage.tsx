@@ -1,5 +1,3 @@
-// Admin page note: coordinates audit logs page admin workflows and service data.
-
 import { Download } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 

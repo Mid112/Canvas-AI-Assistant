@@ -1,5 +1,3 @@
-// Frontend service note: wraps quizzes API calls and normalizes payloads for route/components.
-
 import { API_BASE_URL } from "@/config/api";
 import type { Quiz, QuizEngine } from "@/types/quiz";
 

@@ -1,5 +1,3 @@
-// Instructor page note: coordinates instructor course overview page UI state with Canvas-backed services and active-course context.
-
 import { AlertCircle, Loader2 } from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";

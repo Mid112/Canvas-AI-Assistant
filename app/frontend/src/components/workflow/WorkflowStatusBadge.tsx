@@ -1,5 +1,3 @@
-// Component note: renders reusable workflow status badge UI for the instructor/admin experience.
-
 import { cn } from "@/lib/utils";
 import type { WorkflowStatus } from "@/types/workflowHistory";
 

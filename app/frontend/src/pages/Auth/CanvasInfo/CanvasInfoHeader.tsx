@@ -1,5 +1,3 @@
-// Auth page note: handles canvas info header onboarding/authentication UI while keeping Canvas connection steps explicit.
-
 import { GraduationCap } from "lucide-react";
 
 export function CanvasInfoHeader() {

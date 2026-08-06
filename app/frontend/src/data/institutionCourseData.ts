@@ -1,5 +1,3 @@
-// Mock data note: supplies institution course data fixtures for UI development and frontend tests.
-
 import type { InstitutionCourseData } from "@/types/course";
 import type { Institution } from "@/types/institution";
 

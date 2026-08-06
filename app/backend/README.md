@@ -1,5 +1,3 @@
-<!-- File note: supports the r e a d m e area of the Canvas workflow assistant. -->
-
 # Backend - FastAPI
 
 FastAPI backend for the Canvas Helper AI Assistant. Provides authentication (register, login, JWT) and a PostgreSQL database layer. Future milestones will add Canvas API integration and AI features.

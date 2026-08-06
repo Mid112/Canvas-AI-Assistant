@@ -1,5 +1,3 @@
-"""Test note: covers the test canvas behavior so future changes can preserve the expected Canvas workflow contract."""
-
 import uuid
 import asyncio
 from pathlib import Path

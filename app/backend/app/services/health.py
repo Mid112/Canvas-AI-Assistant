@@ -1,5 +1,3 @@
-"""Service note: owns backend health business logic behind routers, tests, and assistant tool execution."""
-
 import asyncio
 import logging
 import time

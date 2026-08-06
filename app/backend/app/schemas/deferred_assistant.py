@@ -1,4 +1,4 @@
-"""Schema note: shapes saved assistant requests that wait for a Canvas connection or course context before they can be resumed."""
+# app/backend/app/schemas/deferred_assistant.py
 from datetime import datetime
 
 from pydantic import BaseModel

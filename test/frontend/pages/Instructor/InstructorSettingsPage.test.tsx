@@ -1,5 +1,3 @@
-// Test note: covers the instructor settings page.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Route, Routes } from "react-router-dom";

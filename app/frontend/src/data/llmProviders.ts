@@ -1,5 +1,3 @@
-// Mock data note: supplies llm providers fixtures for UI development and frontend tests.
-
 import type {
   LlmProviderId,
   LlmProviderOption,

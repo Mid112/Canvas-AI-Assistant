@@ -1,5 +1,3 @@
-"""Core note: centralizes limiter infrastructure used across the backend."""
-
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 

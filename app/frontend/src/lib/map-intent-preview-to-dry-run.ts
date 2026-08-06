@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes map intent preview to dry run behavior so components and tests share one implementation.
-
 import type { ConversationMessage } from "@/services/assistant";
 import type {
   DryRunActionType,

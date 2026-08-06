@@ -1,5 +1,3 @@
-// Admin page note: coordinates failed operations page admin workflows and service data.
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, Loader2, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";

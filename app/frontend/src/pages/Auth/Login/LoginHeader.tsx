@@ -1,5 +1,3 @@
-// Auth page note: handles login header onboarding/authentication UI while keeping Canvas connection steps explicit.
-
 import { BrandLogo } from "@/components/brand/BrandLogo";
 
 export function LoginHeader() {

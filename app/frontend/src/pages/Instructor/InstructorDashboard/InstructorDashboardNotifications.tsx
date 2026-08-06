@@ -1,5 +1,3 @@
-// Instructor page note: coordinates instructor dashboard notifications UI state with Canvas-backed services and active-course context.
-
 import { Bell } from "lucide-react";
 import { Link } from "react-router-dom";
 

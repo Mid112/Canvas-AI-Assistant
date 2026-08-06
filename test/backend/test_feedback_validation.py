@@ -1,5 +1,3 @@
-"""Test note: covers the test feedback validation behavior so future changes can preserve the expected Canvas workflow contract."""
-
 import pytest
 from fastapi import HTTPException
 from unittest.mock import AsyncMock, MagicMock, patch

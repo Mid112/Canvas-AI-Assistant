@@ -1,5 +1,3 @@
-"""Test note: covers the test instructor dashboard behavior so future changes can preserve the expected Canvas workflow contract."""
-
 import asyncio
 import uuid
 from unittest.mock import AsyncMock, patch

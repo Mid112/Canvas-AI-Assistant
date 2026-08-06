@@ -1,5 +1,3 @@
-<!-- Docs note: records project context for the llm providers area; keep this aligned with implementation changes. -->
-
 # LLM providers and response caching
 
 Instructors connect and choose their own AI providers in **Instructor

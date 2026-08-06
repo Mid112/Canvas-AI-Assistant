@@ -1,4 +1,4 @@
-// Chat UI note: renders the assistant action card surface while preserving instructor review and cancellation flows.
+// Chat UI note: shows the backend's interpreted action, risk label, and handoff links without implying the action has already run.
 
 import { ArrowRight, ChevronDown, Zap } from "lucide-react";
 import { useState } from "react";

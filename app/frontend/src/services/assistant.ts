@@ -1,5 +1,3 @@
-// Frontend service note: wraps assistant API calls and normalizes payloads for route/components.
-
 import { apiRequest, ApiRequestError, isAbortError } from "@/lib/api-request";
 import { mapChatReplyToAssistantResponse } from "@/lib/map-chat-reply";
 import type {

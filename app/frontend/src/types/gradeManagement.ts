@@ -1,5 +1,3 @@
-// Type note: documents the grade management data contract shared by services, components, and tests.
-
 import type { ApiSubmission } from "@/types/submission";
 
 export interface GradeUpdatePayload {

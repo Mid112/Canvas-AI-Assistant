@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes canvas timezone behavior so components and tests share one implementation.
-
 import type { User } from "@/types/user";
 
 /** IANA timezone from the instructor's Canvas account, if stored. */

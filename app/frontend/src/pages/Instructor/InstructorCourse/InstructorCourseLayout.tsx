@@ -1,5 +1,3 @@
-// Instructor page note: coordinates instructor course layout UI state with Canvas-backed services and active-course context.
-
 import { useMemo } from "react";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { Link, Outlet, useParams } from "react-router-dom";

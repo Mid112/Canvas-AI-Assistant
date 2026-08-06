@@ -1,5 +1,3 @@
-// Preview UI note: presents action type section review details before any Canvas write is confirmed.
-
 import { ChevronDown, Code2 } from "lucide-react";
 import { useState } from "react";
 

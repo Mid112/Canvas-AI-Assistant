@@ -1,4 +1,8 @@
-"""Service note: owns backend feedback draft business logic behind routers, tests, and assistant tool execution."""
+"""Service note: drafts feedback text before any Canvas-visible message is sent.
+
+Generation stays separate from preview/approval so instructors can review tone,
+recipients, and course context before a write path uses the content.
+"""
 
 import json
 

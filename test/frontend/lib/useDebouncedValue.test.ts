@@ -1,5 +1,3 @@
-// Test note: covers the use debounced value.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 

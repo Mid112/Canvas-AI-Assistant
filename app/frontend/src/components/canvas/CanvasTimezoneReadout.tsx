@@ -1,5 +1,3 @@
-// Component note: renders reusable canvas timezone readout UI for the instructor/admin experience.
-
 interface CanvasTimezoneReadoutProps {
   timeZone?: string | null;
   className?: string;

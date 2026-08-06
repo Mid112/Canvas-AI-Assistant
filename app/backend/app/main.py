@@ -1,5 +1,3 @@
-"""File note: supports the main area of the Canvas workflow assistant."""
-
 import asyncio
 import contextlib
 import logging

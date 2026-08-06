@@ -1,5 +1,3 @@
-// Admin UI note: presents admin toast controls for institution/admin workflows with service-backed state.
-
 import { useEffect, useRef } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
 

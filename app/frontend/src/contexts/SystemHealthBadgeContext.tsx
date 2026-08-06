@@ -1,5 +1,3 @@
-// Context note: shares system health badge context state across route trees without prop-drilling.
-
 import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 
 import type { HealthStatus } from "@/services/systemHealth";

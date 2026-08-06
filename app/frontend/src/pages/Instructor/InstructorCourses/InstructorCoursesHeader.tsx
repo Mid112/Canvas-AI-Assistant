@@ -1,5 +1,3 @@
-// Instructor page note: coordinates instructor courses header UI state with Canvas-backed services and active-course context.
-
 import { Plus, RefreshCw } from "lucide-react";
 import { useState } from "react";
 

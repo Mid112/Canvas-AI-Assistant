@@ -1,5 +1,3 @@
-// Type note: documents the quiz create data contract shared by services, components, and tests.
-
 export interface QuizCreateCourseOption {
   id: string;
   label: string;

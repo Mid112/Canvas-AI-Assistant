@@ -1,4 +1,4 @@
-"""Service note: summarizes Canvas connectivity state so routers and UI can explain limited-mode behavior consistently."""
+# app/backend/app/services/canvas_status.py
 from dataclasses import dataclass
 from typing import Any
 

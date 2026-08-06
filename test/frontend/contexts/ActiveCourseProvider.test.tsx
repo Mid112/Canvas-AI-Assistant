@@ -1,5 +1,3 @@
-// Test note: covers the active course provider.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

@@ -1,5 +1,3 @@
-// Admin UI note: presents instructor search controls for institution/admin workflows with service-backed state.
-
 import { Search } from "lucide-react";
 
 import { Input } from "@/components/ui/input";

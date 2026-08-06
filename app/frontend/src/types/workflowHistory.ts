@@ -1,5 +1,3 @@
-// Type note: documents the workflow history data contract shared by services, components, and tests.
-
 export type WorkflowStatus = "approved" | "rejected" | "pending" | "paused";
 
 export interface WorkflowHistoryEntry {

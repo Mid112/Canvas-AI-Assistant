@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes use instructor canvas timezone behavior so components and tests share one implementation.
-
 import { useMemo } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";

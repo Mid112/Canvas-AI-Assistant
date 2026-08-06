@@ -1,5 +1,3 @@
-// Page note: coordinates the canvas auth error page screen from smaller components and route-level data.
-
 import { useNavigate } from "react-router-dom";
 
 import { AuthPageShell } from "@/components/layouts/AuthPageShell";

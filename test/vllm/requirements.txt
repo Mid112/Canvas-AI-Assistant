@@ -1,5 +1,3 @@
-# Requirements note: pins dependencies for optional vLLM integration checks.
-
 anyio==4.13.0
 certifi==2026.5.20
 h11==0.16.0

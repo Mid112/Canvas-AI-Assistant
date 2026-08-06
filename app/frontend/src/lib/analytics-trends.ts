@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes analytics trends behavior so components and tests share one implementation.
-
 export type AnalyticsTrendDirection = "positive" | "negative" | "neutral";
 
 export function formatAnalyticsTrend(value: number): string {

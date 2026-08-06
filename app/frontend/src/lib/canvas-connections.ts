@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes canvas connections behavior so components and tests share one implementation.
-
 import { getInstitutionCanvasUrl } from "@/lib/institution-canvas";
 import { canvasUrlsEquivalent } from "@/lib/canvas-url";
 import type { Institution } from "@/types/institution";

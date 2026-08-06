@@ -1,5 +1,3 @@
-// UI primitive note: wraps shared label styling/behavior so feature components stay visually consistent.
-
 import * as React from "react";
 
 import { cn } from "@/lib/utils";

@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes llm provider storage behavior so components and tests share one implementation.
-
 import {
   createDefaultLlmProviderSettings,
   getLlmProviderOption,

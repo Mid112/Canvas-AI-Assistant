@@ -1,5 +1,3 @@
-// Test note: covers the dry run preview.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
 import {

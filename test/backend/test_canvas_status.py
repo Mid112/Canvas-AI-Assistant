@@ -1,5 +1,3 @@
-"""Test note: covers the test canvas status behavior so future changes can preserve the expected Canvas workflow contract."""
-
 from app.services.canvas_status import CanvasWriteResult
 
 

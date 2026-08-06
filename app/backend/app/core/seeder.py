@@ -1,5 +1,3 @@
-"""Core note: centralizes seeder infrastructure used across the backend."""
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 

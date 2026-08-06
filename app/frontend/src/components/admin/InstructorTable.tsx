@@ -1,5 +1,3 @@
-// Admin UI note: presents instructor table controls for institution/admin workflows with service-backed state.
-
 import { AlertCircle, Loader2 } from "lucide-react";
 
 import { InstructorRow } from "@/components/admin/InstructorRow";

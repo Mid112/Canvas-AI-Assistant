@@ -1,5 +1,3 @@
-// Component note: renders reusable active course selector UI for the instructor/admin experience.
-
 import { useMemo, type ChangeEvent } from "react";
 import { BookOpen, Loader2 } from "lucide-react";
 

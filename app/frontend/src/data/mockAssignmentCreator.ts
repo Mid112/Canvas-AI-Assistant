@@ -1,5 +1,3 @@
-// Mock data note: supplies mock assignment creator fixtures for UI development and frontend tests.
-
 import type {
   AssignmentCreateCourseOption,
 } from "@/types/assignmentCreate";

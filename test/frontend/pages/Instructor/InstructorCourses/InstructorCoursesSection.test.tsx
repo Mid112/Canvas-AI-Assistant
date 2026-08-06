@@ -1,5 +1,3 @@
-// Test note: covers the instructor courses section.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { MemoryRouter } from "react-router-dom";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

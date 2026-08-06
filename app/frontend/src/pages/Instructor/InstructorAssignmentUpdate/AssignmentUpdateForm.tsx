@@ -1,5 +1,3 @@
-// Instructor page note: coordinates assignment update form UI state with Canvas-backed services and active-course context.
-
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 

@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes format course title behavior so components and tests share one implementation.
-
 function normalizeCourseLabel(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }

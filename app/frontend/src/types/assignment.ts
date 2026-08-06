@@ -1,5 +1,3 @@
-// Type note: documents the assignment data contract shared by services, components, and tests.
-
 export interface Assignment {
   id: number;
   name: string;

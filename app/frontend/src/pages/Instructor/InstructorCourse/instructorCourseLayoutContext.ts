@@ -1,5 +1,3 @@
-// Instructor page note: coordinates instructor course layout context UI state with Canvas-backed services and active-course context.
-
 import type { InstructorCourse } from "@/types/course";
 
 export interface InstructorCourseLayoutContextValue {

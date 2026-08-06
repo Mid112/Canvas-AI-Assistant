@@ -1,5 +1,3 @@
-// Mock data note: supplies mock feedback creator fixtures for UI development and frontend tests.
-
 export const feedbackCreateSuggestedPrompts = [
   {
     id: "strengths",

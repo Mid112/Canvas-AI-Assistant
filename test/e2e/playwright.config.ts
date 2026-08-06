@@ -1,5 +1,3 @@
-// Test note: covers the playwright.config behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { defineConfig, devices } from "@playwright/test";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

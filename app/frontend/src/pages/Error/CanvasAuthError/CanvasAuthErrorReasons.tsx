@@ -1,5 +1,3 @@
-// Page note: coordinates the canvas auth error reasons screen from smaller components and route-level data.
-
 const FAILURE_REASONS = [
   "Invalid Canvas credentials or API token",
   "Canvas server is temporarily unavailable",

@@ -1,5 +1,3 @@
-// Admin page note: coordinates admin llm provider settings admin workflows and service data.
-
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 

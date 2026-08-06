@@ -1,4 +1,4 @@
-// Chat UI note: renders the assistant assistant limited mode banner surface while preserving instructor review and cancellation flows.
+// Chat UI note: explains Canvas-limited mode and resumes saved requests only after credentials are connected.
 
 import { Link } from "react-router-dom";
 
@@ -57,4 +57,3 @@ export function AssistantLimitedModeBanner({
     </div>
   );
 }
-

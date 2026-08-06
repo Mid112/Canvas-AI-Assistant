@@ -1,5 +1,3 @@
-// Type note: documents the course overview data contract shared by services, components, and tests.
-
 export type CourseAssignmentStatus = "active" | "upcoming" | "completed";
 
 export interface RecentAssignmentSummary {

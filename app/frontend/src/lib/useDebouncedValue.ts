@@ -1,5 +1,3 @@
-// Frontend helper note: centralizes use debounced value behavior so components and tests share one implementation.
-
 import { useEffect, useState } from "react";
 
 export function useDebouncedValue<T>(value: T, delayMs: number): T {

@@ -1,5 +1,3 @@
-// Frontend service note: wraps support tickets API calls and normalizes payloads for route/components.
-
 import { apiRequest } from "@/lib/api-request";
 
 export const SUPPORT_TICKETS_PATH = "/admin/support-tickets";

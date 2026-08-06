@@ -1,5 +1,3 @@
-// Instructor page note: coordinates instructor dashboard overview UI state with Canvas-backed services and active-course context.
-
 import {
   BookOpen,
   CheckSquare,

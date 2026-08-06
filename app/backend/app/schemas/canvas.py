@@ -1,5 +1,3 @@
-"""Schema note: defines API-facing canvas request/response shapes; changes here affect frontend service contracts."""
-
 import re
 from datetime import datetime
 from enum import StrEnum

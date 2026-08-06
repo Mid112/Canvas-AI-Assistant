@@ -1,5 +1,3 @@
-// Type note: documents the course data contract shared by services, components, and tests.
-
 import type { InstructorDashboardData } from "@/types/dashboard";
 
 export interface InstructorCourse {

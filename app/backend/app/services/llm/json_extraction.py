@@ -1,5 +1,3 @@
-"""Service note: owns backend json extraction business logic behind routers, tests, and assistant tool execution."""
-
 import json
 import re
 

@@ -1,4 +1,4 @@
-// Chat UI note: renders the assistant loading indicator surface while preserving instructor review and cancellation flows.
+// Chat UI note: gives long-running assistant turns progressive status copy without adding another persisted chat message.
 
 import { AssistantAvatar } from "@/components/brand/AssistantAvatar";
 

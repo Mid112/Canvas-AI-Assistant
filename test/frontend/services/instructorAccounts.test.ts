@@ -1,5 +1,3 @@
-// Test note: covers the instructor accounts.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {

@@ -1,5 +1,3 @@
-// Admin UI note: presents action menu controls for institution/admin workflows with service-backed state.
-
 import { Ban, MoreHorizontal, Pencil, Trash2, UserCheck, Wifi } from "lucide-react";
 
 import { Button } from "@/components/ui/button";

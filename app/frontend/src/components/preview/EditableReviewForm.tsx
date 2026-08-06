@@ -1,5 +1,3 @@
-// Preview UI note: presents editable review form review details before any Canvas write is confirmed.
-
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";

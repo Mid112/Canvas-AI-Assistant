@@ -1,6 +1,5 @@
-# Pyproject note: configures backend tooling such as pytest, coverage, ruff, and mypy for CI parity.
-
 # ─────────────────────────────────────────────
+# app/backend/pyproject.toml
 # Ruff (linter) and Mypy (type checker) configuration.
 # Without this file, ruff/mypy use generic defaults that may
 # not match your project structure — e.g. mypy won't know

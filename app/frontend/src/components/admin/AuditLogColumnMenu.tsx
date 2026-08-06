@@ -1,5 +1,3 @@
-// Admin UI note: presents audit log column menu controls for institution/admin workflows with service-backed state.
-
 import { ListFilter } from "lucide-react";
 import {
   DropdownMenu,

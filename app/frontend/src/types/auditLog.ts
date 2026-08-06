@@ -1,5 +1,3 @@
-// Type note: documents the audit log data contract shared by services, components, and tests.
-
 import type { UserRole } from "@/types/user";
 
 /**

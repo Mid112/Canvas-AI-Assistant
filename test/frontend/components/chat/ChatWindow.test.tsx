@@ -1,5 +1,3 @@
-// Test note: covers the chat window.test behavior so future changes can preserve the expected Canvas workflow contract.
-
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
