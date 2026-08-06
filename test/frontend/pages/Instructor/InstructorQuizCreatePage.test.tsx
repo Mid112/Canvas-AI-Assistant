@@ -44,16 +44,18 @@ vi.mock("@/hooks/useCanvasConnectionUrl", () => ({
   useCanvasConnectionUrl: () => "https://canvas.university.edu",
 }));
 
-vi.mock("@/services/quizCreator", () => ({
-  QuizCreatorApiError: class QuizCreatorApiError extends Error {
-    name = "QuizCreatorApiError";
-  },
-  generateQuizDraft: vi.fn(),
-  previewQuizDraft: vi.fn(),
-  approveQuizDraft: vi.fn(),
-  fetchQuizCapabilities: vi.fn(),
-  fetchQuestionBanks: vi.fn(),
-}));
+vi.mock("@/services/quizCreator", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/services/quizCreator")>();
+  return {
+    ...actual,
+    generateQuizDraft: vi.fn(),
+    previewQuizDraft: vi.fn(),
+    approveQuizDraft: vi.fn(),
+    fetchQuizCapabilities: vi.fn(),
+    fetchQuestionBanks: vi.fn(),
+  };
+});
 
 const course: InstructorCourse = {
   id: 42,
@@ -227,6 +229,9 @@ describe("InstructorQuizCreatePage typed drafts", () => {
     const saved = listTypedDrafts(1);
     expect(saved[0]?.content.allowedAttempts).toBe(3);
     expect(saved[0]?.content.timeLimit).toBe(45);
+    // Ticket 45 / #1506: scored points must travel with the draft.
+    expect(saved[0]?.content.questionPoints).toEqual([10]);
+    expect(saved[0]?.content.pointsPossible).toBe(10);
   });
 
   // Verifies: a resumed quiz draft lands on describe and regenerates, so the
@@ -266,6 +271,226 @@ describe("InstructorQuizCreatePage typed drafts", () => {
 
     expect(await screen.findByLabelText("Allowed attempts")).toHaveValue(3);
     expect(screen.getByLabelText("Time limit (minutes)")).toHaveValue(45);
+  });
+
+  // Regression for #1506: minor describe edit + Generate must keep prior
+  // per-question points when the question count is unchanged (10 → not 5).
+  it("preserves per-question points across back-to-describe regenerations", async () => {
+    const user = userEvent.setup();
+    mockedGenerate
+      .mockResolvedValueOnce({
+        name: "Cell Biology",
+        description: "organelle quiz",
+        dueDate: "2026-12-15T23:59",
+        pointsPossible: 20,
+        allowedAttempts: 1,
+        timeLimit: 30,
+        quizEngine: "classic",
+        questions: [
+          {
+            questionText: "Q1",
+            questionType: "multiple_choice_question",
+            pointsPossible: 10,
+            answers: [
+              { text: "A", weight: 100 },
+              { text: "B", weight: 0 },
+            ],
+          },
+          {
+            questionText: "Q2",
+            questionType: "multiple_choice_question",
+            pointsPossible: 10,
+            answers: [
+              { text: "C", weight: 100 },
+              { text: "D", weight: 0 },
+            ],
+          },
+        ],
+        questionBankGroups: [],
+      })
+      .mockResolvedValueOnce({
+        name: "Cell Biology",
+        description: "organism quiz",
+        dueDate: "2026-12-15T23:59",
+        // Model reallocates to 5 each (the bug) — page must restore 10.
+        pointsPossible: 10,
+        allowedAttempts: 1,
+        timeLimit: 30,
+        quizEngine: "classic",
+        questions: [
+          {
+            questionText: "Q1 rewritten",
+            questionType: "multiple_choice_question",
+            pointsPossible: 5,
+            answers: [
+              { text: "A", weight: 100 },
+              { text: "B", weight: 0 },
+            ],
+          },
+          {
+            questionText: "Q2 rewritten",
+            questionType: "multiple_choice_question",
+            pointsPossible: 5,
+            answers: [
+              { text: "C", weight: 100 },
+              { text: "D", weight: 0 },
+            ],
+          },
+        ],
+        questionBankGroups: [],
+      });
+
+    renderPage({
+      aiQuizDraft: {
+        courseId: 42,
+        prompt: "5 MCQs about organelles, 50 points total",
+      },
+    });
+
+    const generate = await screen.findByRole("button", {
+      name: "Generate Quiz Draft",
+    });
+    await waitFor(() => expect(generate).toBeEnabled());
+    await user.click(generate);
+
+    expect(await screen.findByLabelText("Points for question 1")).toHaveValue(10);
+    expect(screen.getByLabelText("Points for question 2")).toHaveValue(10);
+    expect(screen.getAllByText("Correct").length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: /Back to Describe/i }));
+    const prompt = await screen.findByLabelText("Quiz description");
+    await user.clear(prompt);
+    await user.type(prompt, "5 MCQs about organisms, 50 points total");
+    await user.click(
+      screen.getByRole("button", { name: "Generate Quiz Draft" }),
+    );
+
+    expect(await screen.findByLabelText("Points for question 1")).toHaveValue(10);
+    expect(screen.getByLabelText("Points for question 2")).toHaveValue(10);
+    expect(screen.getByLabelText("Points possible")).toHaveValue(20);
+  });
+
+  // Regression for #1506: save → resume → Generate restores questionPoints.
+  it("restores saved questionPoints after resume and regenerate", async () => {
+    const user = userEvent.setup();
+    mockedGenerate.mockResolvedValue({
+      name: "Cell Biology",
+      description: "organism quiz",
+      dueDate: "2026-12-15T23:59",
+      pointsPossible: 10,
+      allowedAttempts: 1,
+      timeLimit: 30,
+      quizEngine: "classic",
+      questions: [
+        {
+          questionText: "Q1",
+          questionType: "multiple_choice_question",
+          pointsPossible: 5,
+          answers: [
+            { text: "A", weight: 100 },
+            { text: "B", weight: 0 },
+          ],
+        },
+        {
+          questionText: "Q2",
+          questionType: "multiple_choice_question",
+          pointsPossible: 5,
+          answers: [
+            { text: "C", weight: 100 },
+            { text: "D", weight: 0 },
+          ],
+        },
+      ],
+      questionBankGroups: [],
+    });
+
+    renderPage({
+      aiQuizDraft: {
+        courseId: 42,
+        name: "Cell Biology",
+        description: "",
+        prompt: "Create a quiz about organisms",
+        priorQuestionPoints: [10, 10],
+        pointsPossible: 20,
+      },
+    });
+
+    const generate = await screen.findByRole("button", {
+      name: "Generate Quiz Draft",
+    });
+    await waitFor(() => expect(generate).toBeEnabled());
+    await user.click(generate);
+
+    expect(await screen.findByLabelText("Points for question 1")).toHaveValue(10);
+    expect(screen.getByLabelText("Points for question 2")).toHaveValue(10);
+    expect(screen.getByLabelText("Points possible")).toHaveValue(20);
+  });
+
+  // Regression for #1538 review: an invalid entry (0) in priorQuestionPoints
+  // must not be compacted out before applyPriorQuestionPoints runs, or the
+  // remaining valid entries shift and land on the wrong questions.
+  it("restores neighboring questionPoints by index when a middle entry is invalid", async () => {
+    const user = userEvent.setup();
+    mockedGenerate.mockResolvedValue({
+      name: "Cell Biology",
+      description: "organism quiz",
+      dueDate: "2026-12-15T23:59",
+      pointsPossible: 15,
+      allowedAttempts: 1,
+      timeLimit: 30,
+      quizEngine: "classic",
+      questions: [
+        {
+          questionText: "Q1",
+          questionType: "multiple_choice_question",
+          pointsPossible: 5,
+          answers: [
+            { text: "A", weight: 100 },
+            { text: "B", weight: 0 },
+          ],
+        },
+        {
+          questionText: "Q2",
+          questionType: "multiple_choice_question",
+          pointsPossible: 5,
+          answers: [
+            { text: "C", weight: 100 },
+            { text: "D", weight: 0 },
+          ],
+        },
+        {
+          questionText: "Q3",
+          questionType: "multiple_choice_question",
+          pointsPossible: 5,
+          answers: [
+            { text: "E", weight: 100 },
+            { text: "F", weight: 0 },
+          ],
+        },
+      ],
+      questionBankGroups: [],
+    });
+
+    renderPage({
+      aiQuizDraft: {
+        courseId: 42,
+        name: "Cell Biology",
+        description: "",
+        prompt: "Create a quiz about organisms",
+        priorQuestionPoints: [10, 0, 10],
+        pointsPossible: 20,
+      },
+    });
+
+    const generate = await screen.findByRole("button", {
+      name: "Generate Quiz Draft",
+    });
+    await waitFor(() => expect(generate).toBeEnabled());
+    await user.click(generate);
+
+    expect(await screen.findByLabelText("Points for question 1")).toHaveValue(10);
+    expect(screen.getByLabelText("Points for question 2")).toHaveValue(5);
+    expect(screen.getByLabelText("Points for question 3")).toHaveValue(10);
   });
 
   it("saves edited review fields and discards the typed draft after Canvas confirm", async () => {

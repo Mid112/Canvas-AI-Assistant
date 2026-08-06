@@ -318,6 +318,9 @@ describe("QuizReviewApproveStep", () => {
       expect(
         screen.getByLabelText("Mark answer 2 of question 1 as correct"),
       ).not.toBeChecked();
+      // Ticket 45 / #1506: correct option is labeled in the UI, not only via radio.
+      expect(screen.getByText("Correct")).toBeInTheDocument();
+      expect(screen.getByText("Points")).toBeInTheDocument();
     });
 
     // Canvas requires exactly one answer at weight 100; picking a new correct
