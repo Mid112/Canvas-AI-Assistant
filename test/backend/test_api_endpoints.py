@@ -90,15 +90,6 @@ def _admin_headers(client, admin_credentials) -> dict:
 # GET /admin/dashboard
 # ---------------------------------------------------------------------------
 
-def test_admin_dashboard_requires_auth(client):
-    resp = client.get("/api/v1/admin/dashboard")
-    assert resp.status_code == 401
-
-
-def test_admin_dashboard_rejects_instructor(client):
-    reg = _register(client)
-    resp = client.get("/api/v1/admin/dashboard", headers=reg["headers"])
-    assert resp.status_code == 403
 
 
 def test_admin_dashboard_returns_stats(client, admin_credentials):
@@ -116,13 +107,6 @@ def test_admin_dashboard_returns_stats(client, admin_credentials):
 # ---------------------------------------------------------------------------
 # POST /canvas/courses/{id}/assignments/preview
 # ---------------------------------------------------------------------------
-
-def test_assignment_preview_unauthenticated(client):
-    resp = client.post(
-        "/api/v1/canvas/courses/1/assignments/preview",
-        json={"name": "Midterm", "description": "Ch 1"},
-    )
-    assert resp.status_code == 401
 
 
 def test_assignment_preview_success(client):

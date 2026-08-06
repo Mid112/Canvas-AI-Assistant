@@ -58,13 +58,32 @@ export function InstructorMessagesPage() {
   );
   const aiComposeSeededRef = useRef(false);
 
+  // The draft's own resolved course (set by the assistant handoff or a typed
+  // draft resume — see resolveTypedDraftCourseId) wins over whatever happens
+  // to be active right now. Composing used to always target activeCourse,
+  // so switching the active course between drafting and resuming silently
+  // retargeted the message at the new one, same failure as #1509/#1515 but
+  // for the message compose path, which never picked up that fix. The
+  // active course remains the only fallback for a fresh compose with no
+  // draft, or a legacy draft that never carried a course.
+  const composeCourseId = aiDraft?.courseId ?? activeCourse?.localId;
+  const composeCourse = useMemo(
+    () =>
+      composeCourseId !== undefined
+        ? availableCourses.find((course) => course.id === composeCourseId) ?? null
+        : null,
+    [availableCourses, composeCourseId],
+  );
+  const composeCourseLabel =
+    composeCourse?.name ??
+    (aiDraft?.courseId === undefined ? activeCourse?.displayName : undefined);
   const courseLabel = activeCourse?.displayName;
   const basePrompt = useMemo(
     () =>
-      activeCourse ?
-        `Draft a message for students in ${activeCourse.displayName}.`
+      composeCourseLabel ?
+        `Draft a message for students in ${composeCourseLabel}.`
       : "Draft a message for students in the active course.",
-    [activeCourse],
+    [composeCourseLabel],
   );
   const announcementPrompt = useMemo(
     () =>
@@ -74,21 +93,14 @@ export function InstructorMessagesPage() {
     [activeCourse],
   );
   const activeFetchOptions =
-    activeCourse && fetchOptions?.courseId === activeCourse.localId ?
+    composeCourseId !== undefined && fetchOptions?.courseId === composeCourseId ?
       fetchOptions
     : null;
-  const activeCourseDetails = useMemo(
-    () =>
-      activeCourse ?
-        availableCourses.find((course) => course.id === activeCourse.localId)
-      : null,
-    [activeCourse, availableCourses],
-  );
   const fallbackFetchOptions = useMemo<FetchMessageDraftOptions | null>(
     () =>
-      activeCourse ?
+      composeCourseId !== undefined ?
         {
-          courseId: activeCourse.localId,
+          courseId: composeCourseId,
           prompt: aiDraft?.prompt ?? basePrompt,
           subject: aiDraft?.subject,
           body: aiDraft?.body,
@@ -97,7 +109,7 @@ export function InstructorMessagesPage() {
           canvasUrl,
         }
       : null,
-    [activeCourse, aiDraft, basePrompt, canvasUrl],
+    [aiDraft, basePrompt, canvasUrl, composeCourseId],
   );
   const announcementFetchOptions = useMemo<FetchMessageDraftOptions | null>(
     () =>
@@ -159,7 +171,7 @@ export function InstructorMessagesPage() {
   }, [aiDraft, searchParams, setSearchParams]);
 
   useEffect(() => {
-    if (!activeCourse) {
+    if (composeCourseId === undefined) {
       return;
     }
 
@@ -168,10 +180,10 @@ export function InstructorMessagesPage() {
     }
 
     const token = accessToken;
-    const localCourseId = activeCourse.localId;
-    const activeLocalCourseId = activeCourse.localId;
+    const localCourseId = composeCourseId;
+    const activeLocalCourseId = composeCourseId;
     const selectedCanvasUrl = canvasUrl;
-    const expectedStudentCount = activeCourseDetails?.studentCount ?? 0;
+    const expectedStudentCount = composeCourse?.studentCount ?? 0;
     let cancelled = false;
 
     async function loadRecipients() {
@@ -251,11 +263,11 @@ export function InstructorMessagesPage() {
     };
   }, [
     accessToken,
-    activeCourse,
-    activeCourseDetails?.studentCount,
     aiDraft,
     basePrompt,
     canvasUrl,
+    composeCourse?.studentCount,
+    composeCourseId,
   ]);
 
   if (!user?.has_canvas_token) {
@@ -266,7 +278,7 @@ export function InstructorMessagesPage() {
     );
   }
 
-  if (isLoadingCourses && !activeCourse) {
+  if (isLoadingCourses && composeCourseId === undefined) {
     return (
       <div className="flex flex-1 flex-col gap-6 p-4 md:p-6 lg:p-8">
         <Card className="shadow-sm ring-1 ring-border/60">
@@ -283,7 +295,7 @@ export function InstructorMessagesPage() {
   }
 
   const composeContent =
-    !activeCourse ? (
+    composeCourseId === undefined ? (
       <Card className="shadow-sm ring-1 ring-border/60">
         <CardContent className="p-6 text-sm text-muted-foreground">
           Select an active course to compose a new message.
@@ -309,8 +321,8 @@ export function InstructorMessagesPage() {
           Messages
         </h1>
         <p className="text-sm text-muted-foreground">
-          {activeCourse
-            ? `View conversations and student replies, or compose a new message for ${activeCourse.displayName}.`
+          {composeCourseLabel
+            ? `View conversations and student replies, or compose a new message for ${composeCourseLabel}.`
             : "View conversations across all courses. Select an active course to compose a new message."}
         </p>
       </header>

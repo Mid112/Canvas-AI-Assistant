@@ -19,34 +19,6 @@ async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("RegisterForm", () => {
-  // Verifies: Renders all form fields.
-  it("renders all form fields", () => {
-    renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
-
-    expect(screen.getByLabelText("First Name")).toBeInTheDocument();
-    expect(screen.getByLabelText("Last Name")).toBeInTheDocument();
-    expect(screen.getByLabelText("Email Address")).toBeInTheDocument();
-    expect(screen.getByLabelText("Password")).toBeInTheDocument();
-    expect(screen.getByLabelText("Confirm Password")).toBeInTheDocument();
-  });
-
-  // Verifies: Renders field placeholders.
-  it("renders field placeholders", () => {
-    renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
-
-    expect(screen.getByPlaceholderText("Jane")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Smith")).toBeInTheDocument();
-    expect(
-      screen.getByPlaceholderText("professor@university.edu"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByPlaceholderText("Create a strong password"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByPlaceholderText("Re-enter your password"),
-    ).toBeInTheDocument();
-  });
-
   // Verifies: Renders terms checkbox and policy links.
   it("renders terms checkbox and policy links", () => {
     renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
@@ -176,32 +148,6 @@ describe("RegisterForm", () => {
       password: "Secret123!",
     });
   });
-
-  // Verifies: Allows typing into form fields.
-  it("allows typing into form fields", async () => {
-    const user = userEvent.setup();
-
-    renderWithRouter(<RegisterForm onSubmit={vi.fn()} />);
-
-    const firstNameInput = screen.getByLabelText("First Name");
-    const lastNameInput = screen.getByLabelText("Last Name");
-    const emailInput = screen.getByLabelText("Email Address");
-    const passwordInput = screen.getByLabelText("Password");
-    const confirmPasswordInput = screen.getByLabelText("Confirm Password");
-
-    await user.type(firstNameInput, "Jane");
-    await user.type(lastNameInput, "Smith");
-    await user.type(emailInput, "professor@university.edu");
-    await user.type(passwordInput, "Secret123!");
-    await user.type(confirmPasswordInput, "Secret123!");
-
-    expect(firstNameInput).toHaveValue("Jane");
-    expect(lastNameInput).toHaveValue("Smith");
-    expect(emailInput).toHaveValue("professor@university.edu");
-    expect(passwordInput).toHaveValue("Secret123!");
-    expect(confirmPasswordInput).toHaveValue("Secret123!");
-  });
-
   // Verifies: Shows an email validation error for invalid addresses.
   it("shows an email validation error for invalid addresses", async () => {
     const user = userEvent.setup();

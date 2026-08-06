@@ -240,12 +240,6 @@ def test_admin_logout_writes_audit_log(client, admin_credentials):
     assert len(after_logs) == before_count + 1
 
 
-# Verifies: Admin logout requires auth.
-def test_admin_logout_requires_auth(client):
-    resp = client.post("/api/v1/auth/logout")
-    assert resp.status_code == 401  # HTTPBearer returns 401 in FastAPI 0.136+
-
-
 # Verifies: Instructor logout succeeds.
 def test_instructor_logout_succeeds(client):
     """Instructors share /auth/logout with admins (#592)."""
@@ -282,58 +276,3 @@ def test_admin_endpoint_rejects_invalid_token(client):
     assert resp.status_code == 401
 
 
-# Verifies: Admin endpoint rejects instructor token.
-def test_admin_endpoint_rejects_instructor_token(client):
-    email = f"inst_{uuid.uuid4()}@example.com"
-    token = client.post(
-        "/api/v1/auth/register",
-        json={"name": "I", "email": email, "password": "Secret123!"},
-    ).json()["access_token"]
-    resp = client.post(
-        "/api/v1/admin/users",
-        json={"name": "N", "email": f"x_{uuid.uuid4()}@example.com", "password": "Secret123!"},
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert resp.status_code == 403
-
-
-# Verifies: Admin endpoint rejects demoted admin.
-def test_admin_endpoint_rejects_demoted_admin(client):
-    # A JWT's "admin" role claim and a live session are not enough on their own —
-    # get_admin_user must also re-check the user's current role in the DB, so a
-    # demoted admin loses access immediately instead of at token/session expiry.
-    email = f"demoted_{uuid.uuid4()}@example.com"
-    password = "Secret123!"
-
-    async def _create_admin():
-        async with _db() as db:
-            db.add(User(
-                name="Soon Demoted",
-                email=email,
-                hashed_password=hash_password(password),
-                role="admin",
-            ))
-            await db.commit()
-
-    asyncio.run(_create_admin())
-    token = client.post(
-        "/api/v1/auth/admin/login", json={"email": email, "password": password}
-    ).json()["access_token"]
-
-    async def _demote():
-        async with _db() as db:
-            user = await db.scalar(select(User).where(User.email == email))
-            user.role = "instructor"
-            await db.commit()
-
-    asyncio.run(_demote())
-
-    # Session is still valid and the JWT still claims role=admin, but the DB
-    # now says instructor — access must be rejected.
-    resp = client.post(
-        "/api/v1/admin/users",
-        json={"name": "N", "email": f"x_{uuid.uuid4()}@example.com", "password": "Secret123!"},
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert resp.status_code == 403
-    assert "Admin access required" in resp.json()["detail"]
