@@ -392,7 +392,19 @@ courses even if credentials were somehow confused.
   
 ## Database Design 
 
-<img width="2048" height="860" alt="image" src="https://github.com/user-attachments/assets/b768a866-8bef-45b9-958d-a23f559a870c" />
+### Previous ER Diagram
+
+The original ER diagram captured the first version of the application schema, focused on users, sessions, courses, assignments, submissions, conversations, messages, workflows, audit logs, and message templates.
+
+<img width="2048" height="860" alt="Original ER diagram" src="https://github.com/user-attachments/assets/b768a866-8bef-45b9-958d-a23f559a870c" />
+
+---
+
+### Updated ER Diagram
+
+The current database design has expanded to support multi-Canvas connections, cached course and student data, workflow lifecycle tracking, idempotent Canvas writes, LLM configuration, health monitoring, failed-operation troubleshooting, support tickets, and richer audit/history records.
+
+<!-- TODO: Add the updated ER diagram image here. -->
 
 
 ### Entity Descriptions and Relationships
@@ -401,10 +413,19 @@ courses even if credentials were somehow confused.
 
 #### **users**
 - `id`: Primary Key
-- `canvas_user_id`: Unique identifier linked to Canvas LMS
-- `name`, `email`, `role`, `created_at`
+- `canvas_user_id`: Unique Canvas identifier, nullable for admins
+- `name`, `email`, `hashed_password`, `role`, `is_active`, `created_at`
 
-Represents all system users (instructors, TAs, and admins). Each user is assigned a single role that determines their access level and permissions within the system.
+Represents application users. Current roles are `instructor` and `admin`; Teaching Assistant support was removed from the active schema. Each user can have sessions, Canvas connections, courses, conversations, workflows, templates, drafts, preferences, and audit records.
+
+---
+
+#### **canvas_connections**
+- `id`: Primary Key
+- `user_id`: Foreign Key → `users`
+- `canvas_url`, `encrypted_token`, `courses_synced_at`, `last_sync_error`, `time_zone`, `created_at`
+
+Stores encrypted Canvas API connections per user and Canvas instance. The unique pair of `user_id` and `canvas_url` allows one instructor to connect to multiple Canvas hosts while keeping tokens scoped to the correct institution.
 
 ---
 
@@ -419,30 +440,51 @@ Tracks active login sessions for authenticated users. When a user logs in, a ses
 
 #### **courses**
 - `id`: Primary Key
-- `canvas_course_id`: Unique identifier linked to Canvas LMS
-- `name`, `term`, `instructor_id`, `created_at`
+- `canvas_course_id`: Canvas course identifier
+- `canvas_url`: Canvas instance where the course lives
+- `name`, `term`, `workflow_state`, `synced_at`, `course_code`, `total_students`, `instructor_id`, `created_at`
 
-Stores courses imported from Canvas. Each course is owned by an instructor (via `instructor_id`) and carries a term to support multi-semester use.
+Stores courses imported from Canvas. Courses are unique per `canvas_course_id`, `instructor_id`, and `canvas_url`, which supports co-instructors and multiple Canvas instances with overlapping numeric IDs.
+
+---
+
+#### **canvas_course_names**
+- `id`: Primary Key
+- `canvas_connection_id`: Foreign Key → `canvas_connections`
+- `local_course_id`: Foreign Key → `courses` (optional)
+- `canvas_course_id`, `name`, `workflow_state`, `last_seen_at`, `created_at`
+
+Stores observed course-name aliases for chat and LLM course resolution. This helps the assistant resolve courses even after Canvas renames or when the same Canvas course ID exists on different Canvas hosts.
 
 ---
 
 #### **assignments**
 - `id`: Primary Key
-- `canvas_assignment_id`: Unique identifier linked to Canvas LMS
+- `canvas_assignment_id`: Canvas assignment identifier
 - `course_id`: Foreign Key → `courses`
-- `title`, `due_date`, `points_possible`, `created_at`
+- `title`, `description`, `due_date`, `points_possible`, `is_active`, `published`, `created_at`
 
-Stores assignments within a course, synced from Canvas. Each assignment belongs to exactly one course and carries metadata such as due date and point value.
+Stores assignments within a course, synced from Canvas or created through approved workflows. Canvas assignment IDs are unique only within a course, so the database enforces uniqueness on `canvas_assignment_id` and `course_id` together.
 
 ---
 
 #### **submissions**
 - `id`: Primary Key
-- `canvas_submission_id`: Unique identifier linked to Canvas LMS
+- `canvas_submission_id`: Canvas submission identifier
 - `assignment_id`: Foreign Key → `assignments`
-- `student_canvas_id`, `student_name`, `status`, `score`, `submitted_at`
+- `student_canvas_id`, `student_name`, `status`, `score`, `grade`, `graded_at`, `submitted_at`
 
-Tracks individual student submissions per assignment. Students are not stored in the `users` table since the system is built for instructors, not students — they are referenced here only by their Canvas ID. Status can be `missing`, `late`, or `submitted`.
+Tracks individual student submissions per assignment. Status supports `missing`, `late`, `submitted`, `graded`, `unsubmitted`, and `excused`. Submission identity is scoped to the assignment because Canvas submission IDs are not globally unique in all environments.
+
+---
+
+#### **students**
+- `id`: Primary Key
+- `canvas_user_id`: Canvas student identifier
+- `course_id`: Foreign Key → `courses`
+- `name`, `sortable_name`, `login_id`, `enrollment_state`, `updated_at`
+
+Stores enrolled students per course as cached Canvas data. Students remain separate from `users` because the application is instructor/admin-facing.
 
 ---
 
@@ -450,9 +492,9 @@ Tracks individual student submissions per assignment. Students are not stored in
 - `id`: Primary Key
 - `user_id`: Foreign Key → `users`
 - `course_id`: Foreign Key → `courses` (optional)
-- `created_at`
+- `course_name`, `field_memory`, `created_at`
 
-Represents a chat session between a user and the AI assistant. A conversation can optionally be scoped to a specific course, providing the assistant with relevant context for its responses.
+Represents a chat session between a user and the AI assistant. Conversations can be course-scoped and retain field memory so follow-up prompts can reuse confirmed context across turns.
 
 ---
 
@@ -467,21 +509,55 @@ Stores the individual messages within a conversation. Each message is attributed
 
 #### **workflows**
 - `id`: Primary Key
+- `conversation_id`: Foreign Key → `conversations` (optional)
+- `user_id`: Foreign Key → `users`
+- `course_id`: Foreign Key → `courses` (optional)
+- `source_user_message_id`, `preview_message_id`, `result_message_id`
+- `action_name`, `display_name`, `user_prompt`, `proposed_action`, `affected_resources`, `status`, `error_detail`, `executed_at`, `undone_at`, `created_at`
+
+The core of the system's human-in-the-loop safety model. Workflows track proposed Canvas write actions from preview through execution, failure, cancellation, pause/resume, supersession, and undo.
+
+---
+
+#### **tool_call_logs**
+- `id`: Primary Key
 - `conversation_id`: Foreign Key → `conversations`
 - `user_id`: Foreign Key → `users`
-- `intent`, `generated_query`, `preview_data`, `status`, `created_at`
+- `course_id`: Foreign Key → `courses` (optional)
+- `triggering_message_id`: Foreign Key → `messages`
+- `action_name`, `parameters`, `status`, `error_detail`, `completed_at`, `created_at`
 
-The core of the system's "human-in-the-loop" safety model. When the AI generates an actionable operation (such as a bulk grade update or a student message), it is stored here as a workflow with a `pending` status. The instructor must explicitly approve or reject it before anything is executed. Status can be `pending`, `approved`, or `rejected`.
+Tracks Canvas-reading assistant tool calls separately from workflows. Read actions execute immediately, while write actions require workflow preview and confirmation.
+
+---
+
+#### **resolved_sets**
+- `handle`: Primary Key
+- `conversation_id`: Foreign Key → `conversations`
+- `kind`, `query`, `snapshot_recipients`, `created_at`, `expires_at`
+
+Stores server-computed recipient sets for actions like messaging students with missing work. The LLM receives only a compact handle, and the backend later resolves that handle into real recipients.
 
 ---
 
 #### **audit_logs**
 - `id`: Primary Key
 - `user_id`: Foreign Key → `users`
+- `workflow_id`: Foreign Key → `workflows`
+- `course_id`: Foreign Key → `courses` (optional)
+- `action`, `resource_type`, `resource_id`, `operation`, `status`, `before_data`, `after_data`, `request_payload`, `timestamp`
+
+Records successful Canvas data mutations performed by confirmed workflows. This is the primary accountability layer for executed create, update, and delete operations.
+
+---
+
+#### **audit_logs_session**
+- `id`: Primary Key
+- `user_id`: Foreign Key → `users` (optional)
 - `workflow_id`: Foreign Key → `workflows` (optional)
 - `action`, `details`, `timestamp`
 
-A complete record of all actions taken in the system, particularly approved workflows. This is the accountability layer — every operation can be traced back to a specific user and timestamp.
+Stores session-style audit events that are not necessarily tied to a successful Canvas mutation.
 
 ---
 
@@ -495,23 +571,185 @@ Stores reusable message templates that instructors can create for common student
 
 ---
 
+#### **user_preferences**
+- `user_id`: Primary Key and Foreign Key → `users`
+- `active_course_id`: Foreign Key → `courses` (optional)
+- `notification_settings`, `updated_at`
+
+Stores per-user preferences, including the active course selection used by instructor workflows.
+
+---
+
+#### **password_reset_tokens**
+- `id`: Primary Key
+- `user_id`: Foreign Key → `users`
+- `token_hash`, `expires_at`, `used_at`, `created_at`
+
+Stores hashed password reset tokens for account recovery without persisting raw reset tokens.
+
+---
+
+#### **message_drafts**
+- `id`: Primary Key
+- `user_id`: Foreign Key → `users`
+- `course_id`: Foreign Key → `courses` (optional)
+- `subject`, `body`, `template_id`, `template_name`, `recipients`, `status`, `sent_at`, `created_at`, `updated_at`
+
+Stores instructor message drafts and sent-message records, including selected recipients and template metadata.
+
+---
+
+#### **grade_history**
+- `id`: Primary Key
+- `user_id`: Foreign Key → `users`
+- `course_id`: Foreign Key → `courses`
+- `local_assignment_id`: Foreign Key → `assignments` (optional)
+- `student_id`: Foreign Key → `students` (optional)
+- `assignment_id`, `student_canvas_id`, `previous_grade`, `new_grade`, `previous_score`, `reason`, `risk_level`, `rollback_available`, `canvas_response`, `created_at`
+
+Stores grade-change history with both Canvas identifiers and optional local relationships for audit and rollback views.
+
+---
+
+#### **system_settings**
+- `key`: Primary Key
+- `value`, `updated_at`
+
+Stores admin-managed system configuration as JSON values.
+
+---
+
+#### **llm_response_cache**
+- `id`: Primary Key
+- `user_id`: Foreign Key → `users`
+- `cache_key`, `provider`, `model`, `response`, `created_at`, `expires_at`
+
+Caches safe assistant responses using a hashed cache key. Raw prompts are intentionally not stored.
+
+---
+
+#### **instructor_llm_connections**
+- Composite Primary Key: `user_id`, `provider_id`
+- `user_id`: Foreign Key → `users`
+- `provider_id`, `model`, `base_url`, `encrypted_api_key`, `updated_at`
+
+Stores instructor-specific LLM provider settings and encrypted API keys.
+
+---
+
+#### **deferred_assistant_requests**
+- `id`: Primary Key
+- `user_id`: Foreign Key → `users`
+- `conversation_id`: Foreign Key → `conversations` (optional)
+- `message`, `proposed_action`, `status`, `created_at`, `resumed_at`
+
+Stores assistant requests that cannot run yet, usually because Canvas connection or course context is missing.
+
+---
+
+#### **health_checks**
+- `id`: Primary Key
+- `service`, `status`, `latency_ms`, `error_detail`, `checked_at`
+
+Stores health-check results for backend, database, Canvas, and AI services.
+
+---
+
+#### **ai_call_health**
+- `user_id`: Primary Key and Foreign Key → `users`
+- `provider`, `status`, `error_detail`, `last_called_at`
+
+Stores the latest observed AI-call outcome per user for admin health monitoring.
+
+---
+
+#### **canvas_idempotency_keys**
+- `idempotency_key`: Primary Key
+- `user_id`: Foreign Key → `users`
+- `operation`, `response_json`, `status`, `created_at`
+
+Prevents duplicate Canvas writes by storing idempotency keys and their associated responses.
+
+---
+
+#### **failed_operations**
+- `id`: Primary Key
+- `user_id`: Foreign Key → `users` (optional)
+- `course_id`: Foreign Key → `courses` (optional)
+- `conversation_id`: Foreign Key → `conversations` (optional)
+- `workflow_id`: Foreign Key → `workflows` (optional)
+- `tool_call_id`: Foreign Key → `tool_call_logs` (optional)
+- `source`, `operation`, `provider`, `error_detail`, `context_json`, `human_summary`, `created_at`
+
+Append-only log of Canvas and AI failures used by the admin Failed Operations dashboard.
+
+---
+
+#### **support_tickets**
+- `id`: Primary Key
+- `failed_operation_id`: Foreign Key → `failed_operations`
+- `user_id`: Foreign Key → `users` (optional)
+- `created_by`: Foreign Key → `users`
+- `resolved_by`: Foreign Key → `users` (optional)
+- `assigned_to`: Foreign Key → `users` (optional)
+- `status`, `admin_notes`, `created_at`, `resolved_at`
+
+Tracks admin-side support tickets created from failed operations.
+
+---
+
+#### **schema_migrations**
+- `filename`: Primary Key
+- `applied_at`
+
+Tracks which SQL migration files have already been applied to a database.
+
+---
+
 ### Cardinality Summary
 
-| Relationship                            | Type     |
-|-----------------------------------------|----------|
-| User → Sessions                         | 1 : 0..* |
-| User → Courses (as instructor)          | 1 : 0..* |
-| Course → Assignments                    | 1 : 0..* |
-| Assignment → Submissions                | 1 : 0..* |
-| User → Conversations                    | 1 : 0..* |
-| Course → Conversations                  | 1 : 0..* |
-| Conversation → Messages                 | 1 : 0..* |
-| Conversation → Workflows                | 1 : 0..* |
-| User → Workflows                        | 1 : 0..* |
-| User → Audit Logs                       | 1 : 0..* |
-| Workflow → Audit Logs                   | 1 : 0..* |
-| User → Message Templates               | 1 : 0..* |
-| Course → Message Templates             | 1 : 0..* |
+| Relationship                                      | Type     |
+|---------------------------------------------------|----------|
+| User → Canvas Connections                         | 1 : 0..* |
+| User → Sessions                                   | 1 : 0..* |
+| User → Courses (as instructor)                    | 1 : 0..* |
+| Canvas Connection → Canvas Course Names           | 1 : 0..* |
+| Course → Canvas Course Names                      | 1 : 0..* |
+| Course → Assignments                              | 1 : 0..* |
+| Course → Students                                 | 1 : 0..* |
+| Assignment → Submissions                          | 1 : 0..* |
+| User → Conversations                              | 1 : 0..* |
+| Course → Conversations                            | 1 : 0..* |
+| Conversation → Messages                           | 1 : 0..* |
+| Conversation → Workflows                          | 1 : 0..* |
+| User → Workflows                                  | 1 : 0..* |
+| Course → Workflows                                | 1 : 0..* |
+| Conversation → Tool Call Logs                     | 1 : 0..* |
+| Message → Tool Call Logs                          | 1 : 0..* |
+| Conversation → Resolved Sets                      | 1 : 0..* |
+| User → Audit Logs                                 | 1 : 0..* |
+| Workflow → Audit Logs                             | 1 : 0..* |
+| User → Message Templates                          | 1 : 0..* |
+| Course → Message Templates                        | 1 : 0..* |
+| User → User Preferences                           | 1 : 0..1 |
+| Course → User Preferences (active course)         | 1 : 0..* |
+| User → Password Reset Tokens                      | 1 : 0..* |
+| User → Message Drafts                             | 1 : 0..* |
+| Course → Message Drafts                           | 1 : 0..* |
+| User → Grade History                              | 1 : 0..* |
+| Course → Grade History                            | 1 : 0..* |
+| Assignment → Grade History                        | 1 : 0..* |
+| Student → Grade History                           | 1 : 0..* |
+| User → LLM Response Cache                         | 1 : 0..* |
+| User → Instructor LLM Connections                 | 1 : 0..* |
+| User → Deferred Assistant Requests                | 1 : 0..* |
+| Conversation → Deferred Assistant Requests        | 1 : 0..* |
+| User → AI Call Health                             | 1 : 0..1 |
+| User → Canvas Idempotency Keys                    | 1 : 0..* |
+| User/Course/Conversation/Workflow → Failed Ops    | 1 : 0..* |
+| Tool Call Log → Failed Operations                 | 1 : 0..* |
+| Failed Operation → Support Ticket                 | 1 : 0..1 |
+| User → Support Tickets                            | 1 : 0..* |
 
 ---
 
@@ -519,13 +757,17 @@ Stores reusable message templates that instructors can create for common student
 
 This model reflects the core design goal of a safe, auditable AI assistant for Canvas instructors:
 
-- A unified `users` table simplifies account management across all roles
+- A unified `users` table simplifies account management for instructors and administrators
+- `canvas_connections` separates Canvas credentials by user and Canvas instance, supporting multi-institution use
 - Separating `conversations` from `messages` allows sessions to be tracked, resumed, and scoped to a course without duplicating data
-- The `workflows` table enforces the human-in-the-loop requirement — no AI-generated action can execute without explicit instructor approval
-- The `audit_logs` table ensures full traceability of every approved or rejected action, supporting compliance and accountability
-- Students are deliberately excluded from the `users` table and referenced only by Canvas ID in `submissions`, keeping the system focused on instructor-facing workflows
-- Canvas IDs are stored on all synced entities (`users`, `courses`, `assignments`, `submissions`) to support reliable integration with the Canvas LMS API
-- `message_templates` are decoupled from conversations, allowing instructors to build a reusable library of communications independent of any specific AI session
+- The `workflows` table enforces the human-in-the-loop requirement and tracks the full lifecycle of proposed Canvas writes
+- `tool_call_logs` records read-only assistant tool calls separately from confirmed write workflows
+- `audit_logs`, `grade_history`, `failed_operations`, and `support_tickets` provide traceability, rollback context, and admin troubleshooting support
+- Students are deliberately stored in a separate `students` cache rather than the `users` table, keeping the system instructor/admin-facing
+- Canvas IDs and Canvas URLs are stored on synced entities to support reliable integration across multiple Canvas LMS instances
+- `resolved_sets` and `field_memory` support safer LLM workflows by keeping raw recipient data and grounded context server-side
+- `llm_response_cache`, `instructor_llm_connections`, and `ai_call_health` support configurable AI providers without exposing raw prompts or API keys
+- `canvas_idempotency_keys` prevents duplicate Canvas writes when requests are retried
 
 ## Data Flow Diagrams
 
