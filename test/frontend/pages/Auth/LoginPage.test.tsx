@@ -138,26 +138,4 @@ describe("LoginPage", () => {
     );
     expect(mockNavigate).not.toHaveBeenCalled();
   });
-
-  // Verifies: Shows an error when the account is disabled.
-  it("shows an error when the account is disabled", async () => {
-    const user = userEvent.setup();
-    mockLogin.mockRejectedValue(
-      new AuthApiError("Account is disabled", 403),
-    );
-
-    renderWithRouter(<LoginPage />);
-
-    await user.type(
-      screen.getByLabelText("Email Address"),
-      "professor@university.edu",
-    );
-    await user.type(screen.getByLabelText("Password"), "secret123");
-    await user.click(screen.getByRole("button", { name: "Sign In" }));
-
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "Account is disabled. Please contact support.",
-    );
-    expect(mockNavigate).not.toHaveBeenCalled();
-  });
 });

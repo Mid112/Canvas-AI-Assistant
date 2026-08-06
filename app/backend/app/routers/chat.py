@@ -12,6 +12,8 @@ from app.schemas.chat import (
     ConversationListResponse,
     ConversationResponse,
     ConversationSummary,
+    CourseContextRequest,
+    CourseContextResponse,
     MessageResponse,
     ModifyActionRequest,
     WorkflowRenameRequest,
@@ -24,6 +26,7 @@ from app.schemas.deferred_assistant import (
 )
 from app.services.chat import (
     get_conversation_with_messages,
+    get_or_create_conversation,
     handle_cancelled_action,
     handle_chat_message,
     handle_confirmed_action,
@@ -166,6 +169,32 @@ async def chat(
         body.deferred_request_id,
     )
     return ChatResponse(conversation_id=conversation.id, reply=reply, is_error=is_error)
+
+
+@router.post("/course-context", response_model=CourseContextResponse)
+async def sync_course_context(
+    body: CourseContextRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Write the indexed course_context envelope as soon as the instructor
+    picks a course in the Assistant (#1507), without waiting for a chat turn.
+    """
+    conversation = await get_or_create_conversation(
+        db,
+        current_user,
+        body.conversation_id,
+        body.local_course_id,
+    )
+    await db.commit()
+    memory = conversation.field_memory or {}
+    course_context = memory.get("course_context")
+    if not isinstance(course_context, dict):
+        course_context = {}
+    return CourseContextResponse(
+        conversation_id=conversation.id,
+        course_context=course_context,
+    )
 
 
 @router.get("/deferred", response_model=DeferredAssistantRequestListResponse)

@@ -47,7 +47,12 @@ SubmissionStatusFilter = Literal["missing", "late"]
 # due date.
 #
 # Excused students are never counted in either category.
-_STATUS_FILTERS: dict[SubmissionStatusFilter, frozenset[SubmissionStatus]] = {
+#
+# Public (not underscore-prefixed) so other course-wide aggregations — e.g.
+# course_overview.get_course_overview — can reuse the exact same categories
+# instead of re-deriving a slightly different (and driftable) definition of
+# "missing" (#1508).
+STATUS_FILTERS: dict[SubmissionStatusFilter, frozenset[SubmissionStatus]] = {
     "missing": frozenset({SubmissionStatus.missing, SubmissionStatus.unsubmitted}),
     "late": frozenset({SubmissionStatus.late}),
 }
@@ -81,7 +86,7 @@ async def compute_submissions_by_status(
     active_names: dict[int, str] | None = None,
 ) -> list[dict]:
     """Students matching a submission-status category on this assignment
-    — see _STATUS_FILTERS for exactly what "missing" and "late" each
+    — see STATUS_FILTERS for exactly what "missing" and "late" each
     mean. Cross-referenced against the active roster the same way
     broadcast_to_all_students already does (chat.py), so a
     withdrawn/inactive enrollment's stale submission record never
@@ -94,7 +99,7 @@ async def compute_submissions_by_status(
 
     Returns [{"user_id": int, "name": str}, ...], deduped by construction
     (one submission row per student per assignment)."""
-    matching_statuses = _STATUS_FILTERS[status]
+    matching_statuses = STATUS_FILTERS[status]
     submissions = await get_submissions(course.id, assignment_id, user, course.canvas_url, db)
     if active_names is None:
         active_names = await active_roster_names(course, user, db)

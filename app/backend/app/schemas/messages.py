@@ -37,6 +37,8 @@ class MessageDraftResponse(BaseModel):
     sent_at: datetime | None
     created_at: datetime
     updated_at: datetime
+    # Inferred for sent drafts (empty recipients → announcement); not a DB column.
+    delivery_mode: str | None = None
 
     model_config = {"from_attributes": True}
 

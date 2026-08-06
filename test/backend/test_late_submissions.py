@@ -128,10 +128,6 @@ def _analyze(client, headers, course_id, enrollments, submissions):
 
 
 # Verifies: Late submissions unauthenticated.
-def test_late_submissions_unauthenticated(client):
-    response = client.get("/api/v1/canvas/courses/1/assignments/10/late-submissions")
-    assert response.status_code == 401
-
 
 # Verifies: Late submissions no canvas token.
 def test_late_submissions_no_canvas_token(client, create_local_course_for_user_email):

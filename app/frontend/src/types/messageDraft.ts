@@ -22,6 +22,20 @@ export interface MessageDraft {
   templateId?: string;
 }
 
+/** Outbound sent draft row for the Messages Sent tab. */
+export interface SentMessageDraft {
+  id: string;
+  courseId: number | null;
+  subject: string;
+  body: string;
+  recipients: MessageRecipient[];
+  status: string;
+  sentAt: string | null;
+  deliveryMode: "announcement" | "conversation" | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface FetchMessageDraftOptions {
   draftId?: number;
   courseId?: number;

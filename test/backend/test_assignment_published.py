@@ -166,8 +166,9 @@ def test_course_overview_excludes_unpublished_from_analysis_but_shows_it(client)
 
     # A missing submission on the published assignment; the draft has none (Canvas
     # would never return submissions for a draft).
-    _sync_submission(client, headers, local_course_id, published_id, {
-        "id": uuid.uuid4().int % 10_000_000,
+    submission_id = uuid.uuid4().int % 10_000_000
+    submission = {
+        "id": submission_id,
         "assignment_id": published_id,
         "user_id": 9_000_000,
         "score": None,
@@ -175,11 +176,13 @@ def test_course_overview_excludes_unpublished_from_analysis_but_shows_it(client)
         "submitted_at": None,
         "workflow_state": "unsubmitted",
         "missing": True,
-    })
+    }
+    _sync_submission(client, headers, local_course_id, published_id, submission)
 
     with (
         patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock_assignments,
         patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock_enrollments,
+        patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock_submissions,
     ):
         mock_assignments.return_value = [
             _assignment(published_id, name="Published HW", published=True),
@@ -188,10 +191,18 @@ def test_course_overview_excludes_unpublished_from_analysis_but_shows_it(client)
         mock_enrollments.return_value = [
             {"user_id": 9_000_000, "enrollment_state": "active", "user": {"name": "Student 0"}},
         ]
+        # Overview's own live refresh re-fetches this same Canvas submission id —
+        # matching the id (rather than a fresh one) exercises the upsert path
+        # instead of accidentally creating a second local row for it.
+        mock_submissions.return_value = [submission]
         response = client.get(
             f"/api/v1/canvas/courses/{local_course_id}/overview?canvas_url={CANVAS_URL}",
             headers=headers,
         )
+        # The draft assignment must never be refreshed live — Canvas would never
+        # return submissions for it, and doing so would be a wasted round-trip.
+        for call in mock_submissions.await_args_list:
+            assert call.args[1] == published_id
 
     assert response.status_code == 200
     payload = response.json()
@@ -253,7 +264,7 @@ def test_course_overview_grade_on_unpublished_assignment_excluded_from_average(c
 
     _sync_students(client, headers, local_course_id, 1)
 
-    _sync_submission(client, headers, local_course_id, published_id, {
+    published_submission = {
         "id": uuid.uuid4().int % 10_000_000,
         "assignment_id": published_id,
         "user_id": 9_000_000,
@@ -261,7 +272,8 @@ def test_course_overview_grade_on_unpublished_assignment_excluded_from_average(c
         "grade": "B",
         "submitted_at": "2026-01-01T00:00:00Z",
         "workflow_state": "graded",
-    })
+    }
+    _sync_submission(client, headers, local_course_id, published_id, published_submission)
     # A leftover graded submission on the now-draft assignment (edge case: it was
     # published, graded, then unpublished again) — should not affect the average.
     _sync_submission(client, headers, local_course_id, draft_id, {
@@ -277,6 +289,7 @@ def test_course_overview_grade_on_unpublished_assignment_excluded_from_average(c
     with (
         patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as mock_assignments,
         patch("app.services.student.fetch_enrollments", new_callable=AsyncMock) as mock_enrollments,
+        patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock_submissions,
     ):
         mock_assignments.return_value = [
             _assignment(published_id, published=True, points_possible=100.0),
@@ -285,6 +298,12 @@ def test_course_overview_grade_on_unpublished_assignment_excluded_from_average(c
         mock_enrollments.return_value = [
             {"user_id": 9_000_000, "enrollment_state": "active", "user": {"name": "Student 0"}},
         ]
+        # Overview's own live refresh re-fetches this same Canvas submission id —
+        # matching the id (rather than a fresh one) exercises the upsert path
+        # instead of accidentally creating a second local row for it. The
+        # draft's leftover submission is never re-fetched (unpublished
+        # assignments are skipped by the refresh loop), so it stays as-is.
+        mock_submissions.return_value = [published_submission]
         response = client.get(
             f"/api/v1/canvas/courses/{local_course_id}/overview?canvas_url={CANVAS_URL}",
             headers=headers,

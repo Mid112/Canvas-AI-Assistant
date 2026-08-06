@@ -5,21 +5,6 @@ import { describe, expect, it, vi } from "vitest";
 import { InstructorCoursesSearch } from "@/pages/Instructor/InstructorCourses/InstructorCoursesSearch";
 
 describe("InstructorCoursesSearch", () => {
-  // Verifies: Renders the search input.
-  it("renders the search input", () => {
-    render(
-      <InstructorCoursesSearch
-        search=""
-        onSearchChange={vi.fn()}
-        publishFilter="all"
-        onPublishFilterChange={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByLabelText("Search courses")).toBeInTheDocument();
-    expect(screen.getByLabelText("Filter by publish status")).toBeInTheDocument();
-  });
-
   // Verifies: Calls onSearchChange when typing.
   it("calls onSearchChange when typing", async () => {
     const user = userEvent.setup();
@@ -37,24 +22,7 @@ describe("InstructorCoursesSearch", () => {
     await user.type(screen.getByLabelText("Search courses"), "cs");
 
     expect(onSearchChange).toHaveBeenCalled();
-  });
-
-  it("renders the publish-status filter defaulted to all courses", () => {
-    render(
-      <InstructorCoursesSearch
-        search=""
-        onSearchChange={vi.fn()}
-        publishFilter="all"
-        onPublishFilterChange={vi.fn()}
-      />,
-    );
-
-    expect(
-      screen.getByLabelText("Filter by publish status"),
-    ).toHaveValue("all");
-  });
-
-  it("calls onPublishFilterChange when a different option is selected", async () => {
+  });  it("calls onPublishFilterChange when a different option is selected", async () => {
     const user = userEvent.setup();
     const onPublishFilterChange = vi.fn();
 

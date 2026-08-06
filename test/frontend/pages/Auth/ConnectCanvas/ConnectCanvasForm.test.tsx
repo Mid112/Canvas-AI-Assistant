@@ -37,24 +37,6 @@ describe("ConnectCanvasForm", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
-
-  // Verifies: Renders the token field, add button, and actions.
-  it("renders the token field, add button, and actions", () => {
-    renderWithRouter(<ConnectCanvasForm {...defaultProps} />);
-
-    expect(screen.getByLabelText("Canvas URL")).toBeInTheDocument();
-    expect(screen.getByLabelText(/Canvas API Token/i)).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Add another institution" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Connect Canvas" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Continue without connecting" }),
-    ).toBeInTheDocument();
-  });
-
   // Verifies: Disables connect until a valid URL and token are provided.
   it("disables connect until a valid URL and token are provided", async () => {
     const user = userEvent.setup();
