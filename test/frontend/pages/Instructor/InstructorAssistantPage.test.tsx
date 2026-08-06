@@ -38,6 +38,10 @@ vi.mock("@/services/assistant", async () => {
     listDeferredAssistantRequests: mockListDeferred,
     resumeDeferredAssistantRequest: mockResumeDeferred,
     sendAssistantMessage: vi.fn(),
+    syncAssistantCourseContext: vi.fn().mockResolvedValue({
+      conversationId: 1,
+      courseContext: { index: 1, local_course_id: 1 },
+    }),
   };
 });
 
