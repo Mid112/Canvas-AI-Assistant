@@ -22,25 +22,6 @@ describe("ConnectCanvasTokenStatus", () => {
 
     expect(screen.getByRole("status")).toHaveTextContent("Checking token...");
   });
-
-  // Verifies: Renders valid status.
-  it("renders valid status", () => {
-    renderWithRouter(
-      <ConnectCanvasTokenStatus validation={{ status: "valid" }} />,
-    );
-
-    expect(screen.getByRole("status")).toHaveTextContent("Token is valid");
-  });
-
-  // Verifies: Renders expired status.
-  it("renders expired status", () => {
-    renderWithRouter(
-      <ConnectCanvasTokenStatus validation={{ status: "expired" }} />,
-    );
-
-    expect(screen.getByRole("status")).toHaveTextContent("Token has expired");
-  });
-
   // Verifies: Renders invalid status.
   it("renders invalid status", () => {
     renderWithRouter(

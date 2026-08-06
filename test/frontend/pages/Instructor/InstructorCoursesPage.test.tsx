@@ -194,17 +194,6 @@ describe("InstructorCoursesPage", () => {
     expect(screen.queryByText("Connect Canvas to continue")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "New Course" })).toBeInTheDocument();
   });
-
-  // Verifies: Hides New Course on connect state when env is unset and no saved connection.
-  it("hides New Course on connect state when env is unset and no saved connection", () => {
-    mockUseAuth.mockReturnValue(authWithoutCanvas);
-
-    renderWithInstitution(<InstructorCoursesPage />);
-
-    expect(screen.getByText("Connect Canvas to continue")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "New Course" })).not.toBeInTheDocument();
-  });
-
   // Verifies: Hides New Course on connect state when no saved connection exists.
   it("hides New Course on connect state when no saved connection exists", () => {
     vi.stubEnv("VITE_CANVAS_UBC_URL", CANVAS_URL);

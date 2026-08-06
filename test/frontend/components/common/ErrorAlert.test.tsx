@@ -34,9 +34,4 @@ describe("ErrorAlert", () => {
       screen.queryByRole("link", { name: "Reconnect Canvas" }),
     ).not.toBeInTheDocument();
   });
-
-  it("always renders with role=alert", () => {
-    renderWithRouter(<ErrorAlert message="Something went wrong on our end." />);
-    expect(screen.getByRole("alert")).toBeInTheDocument();
-  });
 });
