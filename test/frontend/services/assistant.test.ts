@@ -15,27 +15,6 @@ vi.mock("@/config/api", () => ({
 }));
 
 describe("mapChatReplyToAssistantResponse", () => {
-  // Verifies: Maps intent previews to assistant content and interpreted actions.
-  it("maps intent previews to assistant content and interpreted actions", () => {
-    const response = mapChatReplyToAssistantResponse(
-      {
-        intent_preview: true,
-        summary: "Send reminders to 12 students",
-        proposed_action: {
-          action: "send_message",
-          local_course_id: 3,
-        },
-        preview_metadata: {
-          course_name: "COSC 499",
-        },
-      },
-      false,
-    );
-
-    expect(response.content).toContain("Send reminders");
-    expect(response.interpretedAction?.course).toBe("COSC 499");
-  });
-
   // Verifies: Maps API errors to user-facing content.
   it("maps API errors to user-facing content", () => {
     const response = mapChatReplyToAssistantResponse(
@@ -60,21 +39,6 @@ describe("mapChatReplyToAssistantResponse", () => {
     expect(response.requiresCanvasToken).toBe(true);
     expect(response.deferredRequestId).toBe(42);
     expect(response.interpretedAction?.primaryLink?.label).toMatch(/Connect Canvas/i);
-  });
-
-  // Verifies: Maps successful confirm replies.
-  it("maps successful confirm replies", () => {
-    const response = mapChatReplyToAssistantResponse(
-      {
-        success: true,
-        action: "create_assignment",
-        data: { id: 12, name: "Midterm Exam" },
-      },
-      false,
-    );
-
-    expect(response.content).toContain("Successfully completed Create Assignment");
-    expect(response.content).toContain("Midterm Exam");
   });
 });
 

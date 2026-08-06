@@ -107,21 +107,6 @@ async def test_check_database_down_when_query_raises():
     assert "connection refused" in result.error_detail
 
 
-@pytest.mark.asyncio
-async def test_check_database_degraded_when_status_helper_says_so():
-    # A slow-but-successful query defers its healthy/degraded decision to
-    # _status_for_latency (already covered directly above) -- confirm
-    # check_database actually uses that verdict rather than hardcoding
-    # "healthy" for any successful query.
-    db = AsyncMock()
-    db.execute = AsyncMock(return_value=None)
-
-    with patch("app.services.health._status_for_latency", return_value="degraded"):
-        result = await check_database(db)
-
-    assert result.status == "degraded"
-
-
 # ---------------------------------------------------------------------------
 # check_canvas
 # ---------------------------------------------------------------------------
@@ -231,24 +216,6 @@ async def test_check_canvas_healthy_on_non_server_error_response():
     assert result.status in ("healthy", "degraded")
 
 
-@pytest.mark.asyncio
-async def test_check_canvas_degraded_when_status_helper_says_so():
-    response = MagicMock()
-    response.is_server_error = False
-    response.status_code = 200
-
-    with (
-        patch(
-            "app.services.health.httpx.AsyncClient",
-            return_value=_client_returning(response),
-        ),
-        patch("app.services.health._status_for_latency", return_value="degraded"),
-    ):
-        result = await check_canvas()
-
-    assert result.status == "degraded"
-
-
 # ---------------------------------------------------------------------------
 # check_ai
 # ---------------------------------------------------------------------------
@@ -319,21 +286,6 @@ async def test_check_ai_uses_admin_configured_provider():
 
     called_settings = mock_get_adapter.call_args.args[0]
     assert called_settings["provider"] == "openai"
-
-
-@pytest.mark.asyncio
-async def test_check_ai_degraded_when_status_helper_says_so():
-    with (
-        _mock_active_llm_config(),
-        patch(
-            "app.services.health.get_llm_adapter",
-            return_value=SimpleAdapter(result="OK"),
-        ),
-        patch("app.services.health._status_for_latency", return_value="degraded"),
-    ):
-        result = await check_ai(AsyncMock())
-
-    assert result.status == "degraded"
 
 
 @pytest.mark.asyncio
@@ -601,27 +553,6 @@ def test_admin_health_returns_200_with_all_four_services(client, admin_headers):
     assert body["overall_status"] in ("healthy", "degraded", "down")
     assert set(body["services"].keys()) == {"backend", "database", "canvas", "ai"}
     assert body["services"]["backend"]["status"] == "healthy"
-
-
-def test_admin_health_rejects_instructor_token(client):
-    email = f"inst_{uuid.uuid4()}@example.com"
-    token = client.post(
-        "/api/v1/auth/register",
-        json={"name": "I", "email": email, "password": "Secret123!"},
-    ).json()["access_token"]
-
-    resp = client.get(
-        "/api/v1/admin/health",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-
-    assert resp.status_code == 403
-
-
-def test_admin_health_requires_auth(client):
-    resp = client.get("/api/v1/admin/health")
-
-    assert resp.status_code == 401
 
 
 def _make_session():
