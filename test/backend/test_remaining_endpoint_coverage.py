@@ -75,15 +75,12 @@ def _sync_course(client, headers) -> int:
 # ---------------------------------------------------------------------------
 
 
-
 def test_change_password_requires_auth(client):
     resp = client.post(
         "/api/v1/auth/me/change-password",
         json={"current_password": "Oldpass123!", "new_password": "Newpass123!"},
     )
     assert resp.status_code == 401
-
-
 
 
 def test_revoke_session_cannot_target_another_users_session(client):
@@ -97,7 +94,6 @@ def test_revoke_session_cannot_target_another_users_session(client):
     assert resp.status_code == 404
     # Owner's session remains usable.
     assert client.get("/api/v1/auth/me", headers=headers_b).status_code == 200
-
 
 
 def test_get_notification_settings_defaults_and_round_trip(client):
@@ -126,7 +122,6 @@ def test_get_notification_settings_defaults_and_round_trip(client):
 # ---------------------------------------------------------------------------
 
 
-
 def test_assignment_preview_rejects_blank_description(client):
     """Ticket 22: blank description rejected on preview with actionable message."""
     headers = _register_with_canvas(client)
@@ -146,7 +141,6 @@ def test_assignment_preview_rejects_blank_description(client):
     assert "description" in str(response.json()["detail"]).lower()
 
 
-
 def test_assignment_preview_unknown_course_404s(client):
     headers = _register_with_canvas(client)
     response = client.post(
@@ -162,13 +156,9 @@ def test_assignment_preview_unknown_course_404s(client):
 # ---------------------------------------------------------------------------
 
 
-
-
-
 # ---------------------------------------------------------------------------
 # Message draft PATCH (#698)
 # ---------------------------------------------------------------------------
-
 
 
 def test_message_draft_patch_unknown_draft_404s(client):

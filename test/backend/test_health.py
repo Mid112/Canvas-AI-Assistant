@@ -107,7 +107,6 @@ async def test_check_database_down_when_query_raises():
     assert "connection refused" in result.error_detail
 
 
-
 # ---------------------------------------------------------------------------
 # check_canvas
 # ---------------------------------------------------------------------------
@@ -217,7 +216,6 @@ async def test_check_canvas_healthy_on_non_server_error_response():
     assert result.status in ("healthy", "degraded")
 
 
-
 # ---------------------------------------------------------------------------
 # check_ai
 # ---------------------------------------------------------------------------
@@ -288,7 +286,6 @@ async def test_check_ai_uses_admin_configured_provider():
 
     called_settings = mock_get_adapter.call_args.args[0]
     assert called_settings["provider"] == "openai"
-
 
 
 @pytest.mark.asyncio
@@ -556,8 +553,6 @@ def test_admin_health_returns_200_with_all_four_services(client, admin_headers):
     assert body["overall_status"] in ("healthy", "degraded", "down")
     assert set(body["services"].keys()) == {"backend", "database", "canvas", "ai"}
     assert body["services"]["backend"]["status"] == "healthy"
-
-
 
 
 def _make_session():

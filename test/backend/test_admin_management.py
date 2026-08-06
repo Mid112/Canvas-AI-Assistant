@@ -175,10 +175,6 @@ def test_create_admin_new_account_can_login(client, admin_headers):
 # POST /admin/users — failure cases
 # ---------------------------------------------------------------------------
 
-# Verifies: Create admin requires auth.
-
-# Verifies: Create admin rejects instructor token.
-
 # Verifies: Create admin duplicate email returns 400.
 def test_create_admin_duplicate_email_returns_400(client, admin_headers):
     email = f"dup_{uuid.uuid4()}@example.com"

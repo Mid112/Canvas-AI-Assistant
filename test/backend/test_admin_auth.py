@@ -240,8 +240,6 @@ def test_admin_logout_writes_audit_log(client, admin_credentials):
     assert len(after_logs) == before_count + 1
 
 
-# Verifies: Admin logout requires auth.
-
 # Verifies: Instructor logout succeeds.
 def test_instructor_logout_succeeds(client):
     """Instructors share /auth/logout with admins (#592)."""
@@ -278,6 +276,3 @@ def test_admin_endpoint_rejects_invalid_token(client):
     assert resp.status_code == 401
 
 
-# Verifies: Admin endpoint rejects instructor token.
-
-# Verifies: Admin endpoint rejects demoted admin.
