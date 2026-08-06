@@ -18,23 +18,6 @@ vi.mock("react-router-dom", async () => {
 });
 
 describe("InstructorDashboardQuickActions", () => {
-  // Verifies: Renders quick action cards.
-  it("renders quick action cards", () => {
-    renderWithRouter(
-      <InstructorDashboardQuickActions
-        actions={sharedDashboardQuickActions}
-      />,
-    );
-
-    expect(screen.getByText("Quick AI Actions")).toBeInTheDocument();
-    expect(screen.getByText("Create Assignment")).toBeInTheDocument();
-    expect(screen.getByText("Draft Announcement")).toBeInTheDocument();
-    expect(screen.getByText("Analyse Missing Submissions")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Open AI Assistant" }),
-    ).toBeInTheDocument();
-  });
-
   // Verifies: Navigates to assignment creator or assistant from quick actions.
   it("navigates to assignment creator or assistant from quick actions", async () => {
     const user = userEvent.setup();

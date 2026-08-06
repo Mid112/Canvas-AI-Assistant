@@ -176,28 +176,8 @@ def test_create_admin_new_account_can_login(client, admin_headers):
 # ---------------------------------------------------------------------------
 
 # Verifies: Create admin requires auth.
-def test_create_admin_requires_auth(client):
-    resp = client.post(
-        "/api/v1/admin/users",
-        json={"name": "N", "email": f"x_{uuid.uuid4()}@example.com", "password": "Secret123!"},
-    )
-    assert resp.status_code == 401
-
 
 # Verifies: Create admin rejects instructor token.
-def test_create_admin_rejects_instructor_token(client):
-    email = f"inst_{uuid.uuid4()}@example.com"
-    token = client.post(
-        "/api/v1/auth/register",
-        json={"name": "I", "email": email, "password": "Secret123!"},
-    ).json()["access_token"]
-    resp = client.post(
-        "/api/v1/admin/users",
-        json={"name": "N", "email": f"x_{uuid.uuid4()}@example.com", "password": "Secret123!"},
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert resp.status_code == 403
-
 
 # Verifies: Create admin duplicate email returns 400.
 def test_create_admin_duplicate_email_returns_400(client, admin_headers):

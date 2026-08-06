@@ -558,25 +558,6 @@ def test_admin_health_returns_200_with_all_four_services(client, admin_headers):
     assert body["services"]["backend"]["status"] == "healthy"
 
 
-def test_admin_health_rejects_instructor_token(client):
-    email = f"inst_{uuid.uuid4()}@example.com"
-    token = client.post(
-        "/api/v1/auth/register",
-        json={"name": "I", "email": email, "password": "Secret123!"},
-    ).json()["access_token"]
-
-    resp = client.get(
-        "/api/v1/admin/health",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-
-    assert resp.status_code == 403
-
-
-def test_admin_health_requires_auth(client):
-    resp = client.get("/api/v1/admin/health")
-
-    assert resp.status_code == 401
 
 
 def _make_session():

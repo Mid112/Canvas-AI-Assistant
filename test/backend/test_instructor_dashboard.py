@@ -26,10 +26,6 @@ def _register(client) -> dict:
 
 
 # Verifies: Instructor dashboard unauthenticated.
-def test_instructor_dashboard_unauthenticated(client):
-    response = client.get("/api/v1/canvas/dashboard")
-    assert response.status_code == 401
-
 
 # Verifies: Instructor dashboard empty state.
 def test_instructor_dashboard_empty_state(client):

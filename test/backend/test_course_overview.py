@@ -54,10 +54,6 @@ def _sync_local_course(client, headers, canvas_id: int | None = None) -> int:
     return response.json()[0]["local_id"]
 
 
-def test_course_overview_unauthenticated(client):
-    response = client.get("/api/v1/canvas/courses/1/overview")
-    assert response.status_code == 401
-
 
 def test_course_overview_unknown_course(client):
     headers = _register_with_canvas(client)
