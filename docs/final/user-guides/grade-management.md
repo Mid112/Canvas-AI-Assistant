@@ -22,6 +22,7 @@ Issue: **#1335** · Parent: #1315
 
 - No grade writes on a normal chat turn.
 - Backend validates ownership / course scope before Canvas calls.
+- Assistant replies may show **unverified grade/score warnings** (Feature 13) when a claim is not grounded in tool data — review those before confirming.
 - Failures should leave Canvas unchanged; check Failed Operations (admin) or retry via UI after fixing the cause.
 
 ## History

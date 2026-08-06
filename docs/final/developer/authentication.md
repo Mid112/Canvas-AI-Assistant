@@ -17,6 +17,15 @@ Issue: **#1341** · Parent: #1316
 
 Password reset: request + confirm endpoints under `/auth` (wired to email/token table `password_reset_tokens`).
 
+### Password policy
+
+Shared rules in `app/core/password_policy.py` for register / reset / change:
+
+- Minimum **8** characters
+- At least one uppercase, one lowercase, one digit, and one symbol (non-alphanumeric)
+
+Frontend surfaces a live requirements checklist. Changing password may **revoke other sessions**.
+
 ## Admin auth
 
 - `POST /api/v1/auth/admin/login`

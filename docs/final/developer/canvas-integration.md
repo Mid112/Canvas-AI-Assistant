@@ -20,6 +20,10 @@ Issue: **#1342** · Parent: #1316
 
 Preview services (`write_preview`, assignment/quiz/feedback/grade/message validation) → confirm → Canvas API. Idempotency keys (`canvas_idempotency_keys`) reduce duplicate executes.
 
+Due dates are normalized with `services/due_date.py` / `_normalize_due_date_for_user` (instructor Canvas timezone → UTC ISO) before preview and write so confirm matches Canvas.
+
+Ungraded assignments send `points_possible=null` with Canvas `grading_type=not_graded` (Ticket 21).
+
 ## Failure recording
 
 Failed Canvas/AI operations may land in `failed_operations` for admin visibility; support tickets escalate without auto-retry.

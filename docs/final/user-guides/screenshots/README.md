@@ -14,12 +14,15 @@ Add PNG/WebP files here using these exact names, then update the matching guides
 | `canvas-connect.png` | Canvas connection | Connect / token screen |
 | `canvas-permissions.png` | Canvas connection | Review permissions |
 | `assistant-chat.png` | AI assistant | Chat with proposal card |
+| `assistant-history-collapsed.png` | AI assistant | Collapsed Conversation History |
+| `assistant-limited-mode.png` | AI assistant / Canvas | Limited-mode banner + deferred |
 | `assistant-confirm-cancel.png` | AI assistant | Confirm / Cancel controls |
 | `assistant-executing.png` | AI assistant | Running / terminal status |
-| `assignment-create-describe.png` | Assignment workflow | Describe step |
+| `assignment-create-describe.png` | Assignment workflow | Describe step (incl. ungraded points) |
 | `assignment-create-review.png` | Assignment workflow | Review / approve step |
 | `quiz-create-review.png` | Quiz workflow | Quiz review with questions |
 | `feedback-create-review.png` | Feedback workflow | Feedback review |
+| `messages-tabs.png` | Messaging | Inbox / Announcements / Sent / Compose |
 | `messages-compose.png` | Messaging | Compose / draft |
 | `messages-templates.png` | Messaging | Templates (if shown) |
 | `grades-preview.png` | Grade management | Preview before submit |

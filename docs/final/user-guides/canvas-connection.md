@@ -40,7 +40,11 @@ API surface (for developers): `PATCH /api/v1/auth/me/canvas-token` (and related 
 | Auth / Canvas error page | Bad URL or token | Re-enter token; check host |
 | Empty courses | Wrong account / scopes | New token with course access |
 | Admin shows failing connection | Token revoked or Canvas down | Instructor reconnect; admin troubleshooting |
-| “Limited mode” behaviour | No usable credentials | Complete connection |
+| “Limited mode” behaviour | No usable credentials | Complete connection; after reconnect, **resume deferred** assistant requests from the AI Assistant banner / draft panel |
+
+### Limited mode details
+
+Without a usable Canvas token the AI Assistant still opens, but Canvas-backed tools are blocked. Requests that need Canvas can be **queued as deferred** and replayed once credentials exist — see [AI Assistant usage](./ai-assistant-usage.md).
 
 ## Admin revoke
 

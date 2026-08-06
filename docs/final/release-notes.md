@@ -11,10 +11,16 @@ Issues: **#1417** Create release notes · **#1416** Tag final release
 ## Highlights
 
 - Instructor AI assistant with confirm-before-write Canvas workflows (assignments, quizzes, feedback, messaging, grades).
-- Active course scoping and Canvas token encryption.
+- Active course preference plus **explicit / draft / conversation course priority** so ambient active course is not silently attached on every chat turn.
+- **Ungraded assignments** (`points_possible` null → Canvas `not_graded`; no invented default points).
+- Due dates normalized to **UTC** using instructor Canvas timezone before preview and write (including MCP create assignment).
+- Messages page: **Inbox / Announcements / Sent / Compose**; compose honors draft course over active course.
+- AI Assistant: starter prompts, **collapsed conversation history**, limited mode + **deferred request** save/resume, Feature 13 grounding (ID scrub + grade warnings).
+- Quiz creator: structured draft resume, preserve points across regen, full-prompt handoff from assistant.
+- Course overview submission counts aligned to Submissions source of truth; analyse-missing uses indexed `course_context`.
+- Password strength policy (8+ with upper/lower/digit/symbol), reset flow, session revoke on password change / logout.
 - Admin audit, system health, troubleshooting, and failed-operations escalation.
-- Multi-provider LLM support with optional Ollama/vLLM.
-- Optional MCP Canvas tool sidecar with host allowlisting.
+- Multi-provider LLM support with optional Ollama/vLLM; optional MCP Canvas sidecar with host allowlisting.
 - Docker Compose deployment behind nginx.
 
 ## Testing
@@ -28,7 +34,10 @@ See [deployment/installation-guide.md](./deployment/installation-guide.md).
 
 ## Known limitations
 
-- *[Add before tag: e.g. no admin Canvas write retry, sandbox vs production Canvas differences, provider rate limits]*
+- Teaching Assistant portal / TA role are **not** in the active schema (instructors and admins only).
+- MCP is optional (`MCP_ENABLED`); Canvas tokens live encrypted on the API host — MCP is not the sole credential store.
+- Screenshot assets in `user-guides/screenshots/` may still be placeholders until capture pass (#1336/#1337).
+- *[Add before tag: sandbox vs production Canvas differences, provider rate limits]*
 
 ## Tagging procedure (#1416)
 
