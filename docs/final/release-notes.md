@@ -34,7 +34,6 @@ See [deployment/installation-guide.md](./deployment/installation-guide.md).
 
 ## Known limitations
 
-- Teaching Assistant portal / TA role are **not** in the active schema (instructors and admins only).
 - MCP is optional (`MCP_ENABLED`); Canvas tokens live encrypted on the API host — MCP is not the sole credential store.
 - Screenshot assets in `user-guides/screenshots/` may still be placeholders until capture pass (#1336/#1337).
 - *[Add before tag: sandbox vs production Canvas differences, provider rate limits]*

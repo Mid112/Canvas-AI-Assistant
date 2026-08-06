@@ -6,7 +6,7 @@ Issue: **#1327** · Parent: #1315
 
 The Canvas Helper AI Assistant helps instructors manage selected Canvas LMS workflows with AI assistance while keeping **human approval** before any Canvas write.
 
-**Roles:** Instructor accounts register/login separately from administrators. Teaching Assistant accounts are **not** part of the active product schema.
+**Roles:** Instructor accounts register/login separately from administrators.
 
 ## 2. Getting started
 

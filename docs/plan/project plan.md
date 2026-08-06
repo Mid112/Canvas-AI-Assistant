@@ -15,7 +15,7 @@
 ## Project Title
 **Safe AI-Powered Canvas Workflow Assistant**
 # 3. PROJECT PURPOSE / JUSTIFICATION (UVP)
-Modern Learning Management Systems such as Canvas provide extensive functionality for assignments, grading, communication, analytics, and student management. However, instructors and teaching assistants frequently spend excessive time navigating through complex interfaces to complete repetitive administrative workflows.
+Modern Learning Management Systems such as Canvas provide extensive functionality for assignments, grading, communication, analytics, and student management. However, instructors frequently spend excessive time navigating through complex interfaces to complete repetitive administrative workflows.
 
 Common tasks such as:
 - identifying missing submissions,
@@ -265,19 +265,7 @@ A university instructor managing multiple large courses and hundreds of students
 * Transparent previews
 * Human oversight
 
-## 2. Teaching Assistants
-
-### Proto-Persona: TA Alex
-
-Handles missing assignments, communication, and course administration.
-
-### Goals
-
-* Identify late/missing work quickly
-* Draft reminders efficiently
-* Track previous actions
-
-## 3. System Administrators
+## 2. System Administrators
 
 ### Proto-Persona: Marcus
 

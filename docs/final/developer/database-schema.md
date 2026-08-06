@@ -32,7 +32,7 @@ Source of truth: `db/init/01_schema.sql` plus numbered files in `db/migrations/`
 
 Notes:
 
-- `users.role` is instructor/admin — **no TA** role in the active schema.
+- `users.role` is `instructor` or `admin`.
 - `canvas_connections` may store instructor Canvas `time_zone` used when normalizing due dates to UTC.
 
 ## Applying migrations

@@ -6,7 +6,7 @@ This document presents the system design for the Canvas Workflow Assistant, a se
 
 The primary goal of the system is to reduce the administrative workload associated with course management while maintaining transparency, security, and human oversight. By integrating with Canvas and leveraging locally hosted large language models (LLMs), the platform enables users to perform tasks such as analyzing missing submissions, generating student communications, creating assignments, and reviewing course analytics through a conversational interface.
 
-The system supports two primary user roles in the **active product schema**: Instructors and System Administrators. Teaching Assistant support was explored in early UI mockups but was **removed** from the shipped roles model (`users.role` is `instructor` | `admin` only). To ensure accountability and user control, all AI-generated actions are presented through a workflow preview and approval process before execution.
+The system supports two primary user roles: Instructors and System Administrators (`users.role` is `instructor` | `admin`). Each role is provided with a dedicated interface and permissions appropriate to their responsibilities. To ensure accountability and user control, all AI-generated actions are presented through a workflow preview and approval process before execution.
 
 This document describes the overall architecture, use case models, database design, data flow diagrams, and user interface design of the system. Together, these components provide a comprehensive overview of how the Canvas Workflow Assistant is structured and how users interact with the platform.
 
@@ -430,7 +430,7 @@ The current database design has expanded to support multi-Canvas connections, ca
 - `canvas_user_id`: Unique Canvas identifier, nullable for admins
 - `name`, `email`, `hashed_password`, `role`, `is_active`, `created_at`
 
-Represents application users. Current roles are `instructor` and `admin`; Teaching Assistant support was removed from the active schema. Each user can have sessions, Canvas connections, courses, conversations, workflows, templates, drafts, preferences, and audit records.
+Represents application users. Current roles are `instructor` and `admin`. Each user can have sessions, Canvas connections, courses, conversations, workflows, templates, drafts, preferences, and audit records.
 
 ---
 
@@ -954,15 +954,6 @@ Each entry includes the action performed, approval status, timestamps, and affec
 The settings page allows instructors to manage profile information, notification preferences, security settings, and account access. Instructors can update personal information, configure workflow notifications, enable two-factor authentication, and review active sessions associated with their account.
 
 <img width="312" height="665" alt="Screenshot 2026-06-02 at 4 55 51 PM" src="https://github.com/user-attachments/assets/edf3f2ba-a60e-4bec-b798-e38fe6bc5b6b" />
-
-## Teaching Assistant Portal (out of scope)
-
-Early design mockups included a Teaching Assistant portal (dashboard, assigned
-courses, message drafts requiring instructor approval, missing/late work, and
-student monitoring). **That role and portal are not part of the active schema
-or shipped product** — only Instructor and Administrator experiences are
-implemented. Historical TA screenshots below (if retained in older assets)
-should not be treated as current requirements.
 
 # Administrator Portal
 
