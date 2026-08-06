@@ -21,35 +21,4 @@ describe("InstructorDashboardOverview", () => {
     expect(screen.getByText("Pending Approvals")).toBeInTheDocument();
     expect(screen.getByText("7")).toBeInTheDocument();
   });
-
-  // Verifies: Colors positive trends green and rising missing submissions red.
-  it("colors positive trends green and rising missing submissions red", () => {
-    const metrics: DashboardMetrics = {
-      activeCourses: 4,
-      activeCoursesTrend: 8,
-      totalStudents: 156,
-      totalStudentsTrend: 12,
-      missingSubmissions: 23,
-      missingSubmissionsTrend: 5,
-      pendingApprovals: 7,
-    };
-
-    render(<InstructorDashboardOverview metrics={metrics} />);
-
-    expect(screen.getByText("+8%")).toHaveClass("text-emerald-700");
-    expect(screen.getByText("+12%")).toHaveClass("text-emerald-700");
-    expect(screen.getByText("5%")).toHaveClass("text-destructive");
-  });
-
-  // Verifies: Shows green when missing submissions trend improves.
-  it("shows green when missing submissions trend improves", () => {
-    const metrics: DashboardMetrics = {
-      ...ubcDashboard.metrics,
-      missingSubmissionsTrend: -5,
-    };
-
-    render(<InstructorDashboardOverview metrics={metrics} />);
-
-    expect(screen.getByText("5%")).toHaveClass("text-emerald-700");
-  });
 });

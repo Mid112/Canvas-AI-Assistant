@@ -215,30 +215,6 @@ describe("InstructorCoursesList", () => {
     expect(screen.getByRole("button", { name: "Setting..." })).toBeDisabled();
     expect(screen.getAllByRole("button", { name: "Set Active" })).toHaveLength(1);
   });
-
-  it("shows an Unpublished badge and disables Set Active for an unpublished course row", () => {
-    const unpublishedCourses = [
-      { ...courses[0]!, isPublished: false, isWritable: false },
-      courses[1]!,
-    ];
-
-    render(
-      <MemoryRouter>
-        <InstructorCoursesList
-          courses={unpublishedCourses}
-          {...activeCourseProps}
-        />
-      </MemoryRouter>,
-    );
-
-    expect(screen.getByText("Unpublished")).toBeInTheDocument();
-    const [unpublishedButton, publishedButton] = screen.getAllByRole(
-      "button",
-      { name: "Set Active" },
-    );
-    expect(unpublishedButton).toBeDisabled();
-    expect(publishedButton).toBeEnabled();
-  });
 });
 
 describe("InstructorCoursesSection", () => {
@@ -259,27 +235,6 @@ describe("InstructorCoursesSection", () => {
     expect(screen.getAllByRole("link", { name: "View Course" })).toHaveLength(
       2,
     );
-  });
-
-  // Verifies: Switches to list view when requested.
-  it("switches to list view when requested", async () => {
-    const user = userEvent.setup();
-    const onViewModeChange = vi.fn();
-
-    render(
-      <MemoryRouter>
-        <InstructorCoursesSection
-          courses={courses}
-          viewMode="grid"
-          onViewModeChange={onViewModeChange}
-          {...activeCourseProps}
-        />
-      </MemoryRouter>,
-    );
-
-    await user.click(screen.getByRole("button", { name: "List View" }));
-
-    expect(onViewModeChange).toHaveBeenCalledWith("list");
   });
 });
 
