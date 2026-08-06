@@ -31,7 +31,9 @@ from app.services.inbox_reply_draft import (
 from app.services.messages import (
     create_message_draft,
     get_message_draft,
+    list_message_drafts,
     send_message_draft,
+    to_message_draft_response,
     update_message_draft,
 )
 
@@ -45,7 +47,24 @@ async def create_draft(
     db: AsyncSession = Depends(get_db),
 ):
     draft = await create_message_draft(db, current_user, body)
-    return MessageDraftResponse.model_validate(draft)
+    return to_message_draft_response(draft)
+
+
+@router.get("/drafts", response_model=list[MessageDraftResponse])
+async def list_drafts(
+    current_user: User = Depends(get_current_user),
+    status_filter: str | None = Query(default=None, alias="status"),
+    course_id: int | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """List the instructor's message drafts (use status=sent for Sent tab)."""
+    drafts = await list_message_drafts(
+        db,
+        current_user,
+        status_filter=status_filter,
+        course_id=course_id,
+    )
+    return [to_message_draft_response(draft) for draft in drafts]
 
 
 @router.get("/drafts/{draft_id}", response_model=MessageDraftResponse)
@@ -55,7 +74,7 @@ async def get_draft(
     db: AsyncSession = Depends(get_db),
 ):
     draft = await get_message_draft(db, current_user, draft_id)
-    return MessageDraftResponse.model_validate(draft)
+    return to_message_draft_response(draft)
 
 
 @router.patch("/drafts/{draft_id}", response_model=MessageDraftResponse)
@@ -66,7 +85,7 @@ async def update_draft(
     db: AsyncSession = Depends(get_db),
 ):
     draft = await update_message_draft(db, current_user, draft_id, body)
-    return MessageDraftResponse.model_validate(draft)
+    return to_message_draft_response(draft)
 
 
 @router.post("/drafts/{draft_id}/send", response_model=MessageSendResponse)

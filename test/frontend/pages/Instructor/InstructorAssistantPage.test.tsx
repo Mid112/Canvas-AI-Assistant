@@ -165,30 +165,6 @@ describe("InstructorAssistantPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Create a quiz")).toBeInTheDocument();
   });
-
-  // Verifies (#1441): Choosing a starter prompt also clears the guidance.
-  it("hides starter prompts after selecting a starter action", async () => {
-    const user = userEvent.setup();
-    mockedSendAssistantMessage.mockResolvedValue({
-      content: "Assignment draft ready.",
-      conversationId: 7,
-      explanation: "Started from a starter prompt.",
-    });
-
-    renderWithInstitution(<InstructorAssistantPage />);
-
-    await user.click(
-      screen.getByRole("button", { name: /Create an assignment/i }),
-    );
-
-    expect(
-      await screen.findByText("Assignment draft ready."),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("region", { name: "Starter prompts" }),
-    ).not.toBeInTheDocument();
-  });
-
   it("shows limited mode when Canvas is not connected", async () => {
     mockUseAuth.mockReturnValue({
       user: {

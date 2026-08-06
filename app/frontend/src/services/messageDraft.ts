@@ -4,6 +4,7 @@ import type {
   MessageDraft,
   MessageRecipient,
   SendMessageDraftPayload,
+  SentMessageDraft,
 } from "@/types/messageDraft";
 
 export const isMessageDraftSendMocked = false;
@@ -27,6 +28,7 @@ interface MessageDraftApiResponse {
   sent_at: string | null;
   created_at: string;
   updated_at: string;
+  delivery_mode?: string | null;
 }
 
 function mapDraftResponse(
@@ -46,6 +48,29 @@ function mapDraftResponse(
     body: response.body,
     templateName: response.template_name ?? undefined,
     templateId: response.template_id ?? undefined,
+  };
+}
+
+function mapSentDraftResponse(response: MessageDraftApiResponse): SentMessageDraft {
+  const deliveryMode =
+    response.delivery_mode === "announcement" ||
+    response.delivery_mode === "conversation"
+      ? response.delivery_mode
+      : response.recipients.length === 0
+        ? "announcement"
+        : "conversation";
+
+  return {
+    id: String(response.id),
+    courseId: response.course_id,
+    subject: response.subject,
+    body: response.body,
+    recipients: response.recipients,
+    status: response.status,
+    sentAt: response.sent_at,
+    deliveryMode,
+    createdAt: response.created_at,
+    updatedAt: response.updated_at,
   };
 }
 
@@ -110,6 +135,29 @@ export async function fetchMessageDraft(
         ? error.message
         : "Unable to load message draft. Please try again.";
 
+    throw new MessageDraftApiError(message);
+  }
+}
+
+export async function fetchSentMessageDrafts(
+  accessToken: string,
+  options: { courseId?: number } = {},
+): Promise<SentMessageDraft[]> {
+  try {
+    const params = new URLSearchParams({ status: "sent" });
+    if (options.courseId != null) {
+      params.set("course_id", String(options.courseId));
+    }
+    const response = await apiRequest<MessageDraftApiResponse[]>(
+      `/messages/drafts?${params.toString()}`,
+      accessToken,
+    );
+    return response.map(mapSentDraftResponse);
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unable to load sent messages.";
     throw new MessageDraftApiError(message);
   }
 }
