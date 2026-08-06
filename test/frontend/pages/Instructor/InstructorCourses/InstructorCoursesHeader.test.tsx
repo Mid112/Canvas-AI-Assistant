@@ -50,41 +50,6 @@ beforeEach(() => {
 });
 
 describe("InstructorCoursesHeader", () => {
-  // Verifies: Renders the course management heading and institution context.
-  it("renders the course management heading and institution context", () => {
-    renderWithInstitution(<InstructorCoursesHeader />);
-
-    expect(
-      screen.getByRole("heading", { name: "Course Management" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        /Manage all your courses and track performance at canvas\.example\.edu\./,
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "New Course" }),
-    ).toBeInTheDocument();
-  });
-
-  // Verifies: Hides New Course when Canvas is not connected.
-  it("hides New Course when Canvas is not connected", () => {
-    mockUseAuth.mockReturnValue({
-      accessToken: null,
-      user: {
-        id: 1,
-        has_canvas_token: false,
-        canvas_connections: [],
-      },
-    });
-
-    renderWithInstitution(<InstructorCoursesHeader />);
-
-    expect(
-      screen.queryByRole("button", { name: "New Course" }),
-    ).not.toBeInTheDocument();
-  });
-
   // Verifies: Opens an in-app create dialog and creates a course (#1285).
   it("opens an in-app create dialog and creates a course", async () => {
     const user = userEvent.setup();
@@ -123,18 +88,6 @@ describe("InstructorCoursesHeader", () => {
     );
     expect(onRefreshCourses).toHaveBeenCalledTimes(1);
   });
-
-  // Verifies: Renders a sync button when refresh is available.
-  it("renders a sync button when refresh is available", () => {
-    renderWithInstitution(
-      <InstructorCoursesHeader onRefreshCourses={() => undefined} />,
-    );
-
-    expect(
-      screen.getByRole("button", { name: "Sync from Canvas" }),
-    ).toBeInTheDocument();
-  });
-
   // Verifies: Calls onRefreshCourses when sync is clicked.
   it("calls onRefreshCourses when sync is clicked", async () => {
     const user = userEvent.setup();

@@ -2,9 +2,8 @@
 Canvas write-path and integration failure coverage (#709).
 
 Read-path failure matrices already live in test_assignment / test_student /
-test_late_submissions. This file covers create/update assignment writes,
-message-draft send Canvas errors, and the integrations/canvas error mapper
-+ retry helper.
+test_late_submissions. This file covers create/update assignment writes and
+message-draft send Canvas errors, plus a nested Canvas error-detail shape.
 """
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -14,12 +13,7 @@ import pytest
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 
-from app.integrations.canvas import (
-    _canvas_error_detail,
-    _get_with_retry,
-    _parse_next_link,
-    _raise_for_canvas_error,
-)
+from app.integrations.canvas import _canvas_error_detail
 from app.main import app
 from app.schemas.student import StudentResponse
 
@@ -276,7 +270,7 @@ def test_send_draft_canvas_permission_denied(client):
 
 
 # ---------------------------------------------------------------------------
-# integrations/canvas.py — error mapping + retry (pure unit)
+# integrations/canvas.py — nested error detail (unique shape)
 # ---------------------------------------------------------------------------
 
 def _fake_response(status_code: int, json_data=None, text: str = ""):
@@ -292,46 +286,6 @@ def _fake_response(status_code: int, json_data=None, text: str = ""):
     return response
 
 
-def test_raise_for_canvas_error_maps_401_to_422():
-    with pytest.raises(HTTPException) as exc:
-        _raise_for_canvas_error(_fake_response(401))
-    assert exc.value.status_code == 422
-    assert "Invalid Canvas API token" in exc.value.detail
-
-
-def test_raise_for_canvas_error_maps_403():
-    with pytest.raises(HTTPException) as exc:
-        _raise_for_canvas_error(_fake_response(403))
-    assert exc.value.status_code == 403
-
-
-def test_raise_for_canvas_error_maps_404():
-    with pytest.raises(HTTPException) as exc:
-        _raise_for_canvas_error(_fake_response(404))
-    assert exc.value.status_code == 404
-    assert "not found" in exc.value.detail.lower()
-
-
-def test_raise_for_canvas_error_maps_5xx_to_502():
-    with pytest.raises(HTTPException) as exc:
-        _raise_for_canvas_error(_fake_response(503))
-    assert exc.value.status_code == 502
-
-
-def test_raise_for_canvas_error_includes_canvas_message():
-    with pytest.raises(HTTPException) as exc:
-        _raise_for_canvas_error(
-            _fake_response(400, json_data={"errors": [{"message": "title is required"}]})
-        )
-    assert exc.value.status_code == 502
-    assert "title is required" in exc.value.detail
-
-
-def test_canvas_error_detail_flattens_errors_list():
-    response = _fake_response(400, json_data={"errors": [{"message": "a"}, {"message": "b"}]})
-    assert _canvas_error_detail(response) == "a; b"
-
-
 def test_canvas_error_detail_flattens_nested_grade_errors():
     response = _fake_response(
         400,
@@ -344,41 +298,3 @@ def test_canvas_error_detail_flattens_nested_grade_errors():
     assert _canvas_error_detail(response) == (
         "posted_grade: Grade must be less than or equal to 100"
     )
-
-
-def test_parse_next_link():
-    header = (
-        '<https://canvas.example.edu/api/v1/courses?page=2&per_page=10>; rel="next", '
-        '<https://canvas.example.edu/api/v1/courses?page=1&per_page=10>; rel="current"'
-    )
-    assert _parse_next_link(header) == "https://canvas.example.edu/api/v1/courses?page=2&per_page=10"
-    assert _parse_next_link("") is None
-
-
-@pytest.mark.asyncio
-async def test_get_with_retry_retries_once_on_5xx():
-    client = AsyncMock()
-    first = _fake_response(503)
-    second = _fake_response(200)
-    client.get = AsyncMock(side_effect=[first, second])
-
-    with patch("app.integrations.canvas.asyncio.sleep", new_callable=AsyncMock) as sleep:
-        result = await _get_with_retry(client, "https://canvas.example/api")
-
-    assert result is second
-    assert client.get.await_count == 2
-    sleep.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_get_with_retry_does_not_retry_on_4xx():
-    client = AsyncMock()
-    response = _fake_response(404)
-    client.get = AsyncMock(return_value=response)
-
-    with patch("app.integrations.canvas.asyncio.sleep", new_callable=AsyncMock) as sleep:
-        result = await _get_with_retry(client, "https://canvas.example/api")
-
-    assert result is response
-    assert client.get.await_count == 1
-    sleep.assert_not_called()

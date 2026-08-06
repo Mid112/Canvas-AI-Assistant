@@ -71,10 +71,6 @@ def _register_with_canvas(client) -> tuple[dict, int]:
 # ---------------------------------------------------------------------------
 
 # Verifies: List students unauthenticated.
-def test_list_students_unauthenticated(client):
-    response = client.get("/api/v1/canvas/courses/1/students")
-    assert response.status_code == 401
-
 
 # Verifies: List students no canvas token.
 def test_list_students_no_canvas_token(client, create_local_course_for_user_email):

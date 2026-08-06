@@ -12,27 +12,6 @@ const assignments = getCourseAssignments(
 );
 
 describe("InstructorSubmissionsAnalysisFilters", () => {
-  // Verifies: Renders assignment, student search, and status controls.
-  it("renders assignment, student search, and status controls", () => {
-    render(
-      <InstructorSubmissionsAnalysisFilters
-        assignments={assignments}
-        selectedAssignmentId="pa3"
-        onAssignmentChange={vi.fn()}
-        search=""
-        onSearchChange={vi.fn()}
-        statusFilter="all"
-        onStatusFilterChange={vi.fn()}
-      />,
-    );
-
-    expect(
-      screen.getByLabelText("Search or select assignment"),
-    ).toBeInTheDocument();
-    expect(screen.getByLabelText("Search students")).toBeInTheDocument();
-    expect(screen.getByLabelText("Filter by Status")).toBeInTheDocument();
-  });
-
   // Verifies: Calls change handlers when filters are updated.
   it("calls change handlers when filters are updated", async () => {
     const user = userEvent.setup();

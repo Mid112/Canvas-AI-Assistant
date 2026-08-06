@@ -7,6 +7,7 @@ from app.services.field_memory import (
     merge_field_memory,
     merge_grounded_facts_into_memory,
     merge_read_result_into_field_memory,
+    record_course_context,
     trim_tool_dump_for_history,
 )
 
@@ -43,6 +44,46 @@ def test_format_field_memory_for_prompt():
     assert '"assignment_id": 42' in prompt
     assert '"student_reference": "Alex"' in prompt
     assert "recent_assignments" in prompt
+
+
+def test_record_course_context_indexes_and_timestamps_selection():
+    """Ticket 46 / #1507: course selection writes compact JSON for follow-ups."""
+    conversation = Conversation(field_memory={})
+    first = record_course_context(
+        conversation,
+        local_course_id=10,
+        course_name="CPSC 310",
+        course_code="CPSC310",
+    )
+    assert first["index"] == 1
+    assert first["local_course_id"] == 10
+    assert first["course_name"] == "CPSC 310"
+    assert first["course_code"] == "CPSC310"
+    assert "selected_at" in first
+    assert conversation.field_memory["local_course_id"] == 10
+
+    # Same course again — do not bump the index on ordinary chat turns.
+    again = record_course_context(
+        conversation,
+        local_course_id=10,
+        course_name="CPSC 310",
+        course_code="CPSC310",
+    )
+    assert again["index"] == 1
+
+    switched = record_course_context(
+        conversation,
+        local_course_id=20,
+        course_name="MATH 101",
+        course_code="MATH101",
+    )
+    assert switched["index"] == 2
+    assert switched["local_course_id"] == 20
+
+    prompt = format_field_memory_for_prompt(conversation.field_memory)
+    assert "course_context" in prompt
+    assert '"index": 2' in prompt
+    assert "MATH 101" in prompt
 
 
 def test_extract_and_merge_read_refs_into_field_memory():

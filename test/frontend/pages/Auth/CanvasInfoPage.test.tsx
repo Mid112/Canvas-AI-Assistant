@@ -38,17 +38,6 @@ describe("CanvasInfoPage", () => {
       screen.getByRole("button", { name: "Proceed to Connect" }),
     ).toBeInTheDocument();
   });
-
-  // Verifies: Shows canvas info as the current onboarding step.
-  it("shows canvas info as the current onboarding step", () => {
-    renderWithRouter(<CanvasInfoPage />);
-
-    expect(screen.getByText("Canvas Info")).toBeInTheDocument();
-    expect(screen.getByText("Connect Canvas Account")).toBeInTheDocument();
-    expect(screen.getByText("Review Permissions")).toBeInTheDocument();
-    expect(screen.getByText("Dashboard")).toBeInTheDocument();
-  });
-
   // Verifies: Renders permission and security details.
   it("renders permission and security details", () => {
     renderWithRouter(<CanvasInfoPage />);

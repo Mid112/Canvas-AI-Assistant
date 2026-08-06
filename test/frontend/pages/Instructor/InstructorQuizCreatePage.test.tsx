@@ -4,12 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Route, Routes } from "react-router-dom";
 
 import {
+  buildTypedDraftResumeTarget,
   listTypedDrafts,
   saveTypedDraft,
 } from "@/lib/typed-draft-storage";
 import { InstructorQuizCreatePage } from "@/pages/Instructor/InstructorQuizCreatePage";
 import {
   approveQuizDraft,
+  fetchQuestionBanks,
   fetchQuizCapabilities,
   generateQuizDraft,
   previewQuizDraft,
@@ -85,6 +87,7 @@ const mockedGenerate = vi.mocked(generateQuizDraft);
 const mockedPreview = vi.mocked(previewQuizDraft);
 const mockedApprove = vi.mocked(approveQuizDraft);
 const mockedCapabilities = vi.mocked(fetchQuizCapabilities);
+const mockedFetchQuestionBanks = vi.mocked(fetchQuestionBanks);
 
 function renderPage(state?: Record<string, unknown>) {
   return renderWithRouter(
@@ -527,5 +530,110 @@ describe("InstructorQuizCreatePage typed drafts", () => {
       expect(mockedApprove).toHaveBeenCalled();
     });
     expect(listTypedDrafts(1)).toHaveLength(0);
+  });
+
+  // Regression for #1505: saving a draft AFTER questions were generated,
+  // then resuming it, must land back on review with those questions intact
+  // instead of re-describing with the question text dumped into the prompt.
+  it("saves a generated quiz draft and resumes straight to review (#1505)", async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.type(
+      screen.getByLabelText("Quiz description"),
+      "Create a quiz on Python functions with 1 multiple-choice question",
+    );
+    const generate = await screen.findByRole("button", {
+      name: "Generate Quiz Draft",
+    });
+    await waitFor(() => expect(generate).toBeEnabled());
+    await user.click(generate);
+
+    await screen.findByLabelText("Quiz title");
+    await user.click(screen.getByRole("button", { name: "Save draft" }));
+    await screen.findByText(/Draft saved/i);
+
+    const saved = listTypedDrafts(1);
+    expect(saved).toHaveLength(1);
+    expect(saved[0]?.content.quizQuestions).toEqual(reviewSeed.questions);
+    // The description must stay the generator's own text, never a dump of
+    // the question texts (#1505's reported symptom).
+    expect(saved[0]?.content.body).toBe("Generated instructions");
+    expect(saved[0]?.content.body).not.toContain("What is 2+2?");
+
+    const target = buildTypedDraftResumeTarget(saved[0]!, { courseId: 42 });
+
+    cleanup();
+    renderPage(target.state as Record<string, unknown>);
+
+    expect(await screen.findByLabelText("Quiz title")).toHaveValue(
+      "Generated Quiz",
+    );
+    expect(screen.queryByText("Describe Your Quiz")).not.toBeInTheDocument();
+    const instructions = screen.getByLabelText(
+      "Quiz instructions",
+    ) as HTMLTextAreaElement;
+    expect(instructions.value).toBe("Generated instructions");
+    expect(instructions.value).not.toContain("What is 2+2?");
+  });
+
+  // Regression for the #1239 review on #1505: a saved draft's question bank
+  // group must never carry the raw Canvas bankId into localStorage, and
+  // resuming it must still be able to create the quiz — by rematching the
+  // stored bankName against the course's live Canvas banks once they load.
+  it("saves a bank group without bankId and resolves it by name on resume", async () => {
+    const user = userEvent.setup();
+    const draft = saveTypedDraft(1, {
+      kind: "quiz",
+      content: {
+        title: "Midterm",
+        body: reviewSeed.description,
+        quizQuestions: reviewSeed.questions,
+        quizQuestionBankGroups: [
+          { bankName: "Chapter 1 Bank", pickCount: 2, questionPoints: 5 },
+        ],
+        dueDate: reviewSeed.dueDate,
+        pointsPossible: 20,
+        allowedAttempts: null,
+        timeLimit: null,
+      },
+    });
+
+    // The blocking fix: no bankId anywhere in what actually lands in storage.
+    expect(draft.content.quizQuestionBankGroups).toEqual([
+      { bankName: "Chapter 1 Bank", pickCount: 2, questionPoints: 5 },
+    ]);
+    expect(
+      JSON.stringify(listTypedDrafts(1)[0]?.content.quizQuestionBankGroups),
+    ).not.toContain("bankId");
+
+    mockedFetchQuestionBanks.mockResolvedValue([
+      { id: 77, title: "Chapter 1 Bank", questionCount: 10 },
+    ]);
+
+    const target = buildTypedDraftResumeTarget(draft, { courseId: 42 });
+    renderPage(target.state as Record<string, unknown>);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Load question banks" }),
+    );
+    await waitFor(() => expect(mockedFetchQuestionBanks).toHaveBeenCalled());
+    await screen.findByRole("button", { name: /Use Chapter 1 Bank/ });
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Preview & Approve Quiz" }),
+      ).toBeEnabled(),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Preview & Approve Quiz" }),
+    );
+    await user.click(await screen.findByRole("button", { name: "Confirm & Create" }));
+
+    await waitFor(() => expect(mockedApprove).toHaveBeenCalled());
+    const [payload] = mockedApprove.mock.calls[0]!;
+    expect(payload.questionBankGroups).toEqual([
+      { bankId: 77, bankName: "Chapter 1 Bank", pickCount: 2, questionPoints: 5 },
+    ]);
   });
 });

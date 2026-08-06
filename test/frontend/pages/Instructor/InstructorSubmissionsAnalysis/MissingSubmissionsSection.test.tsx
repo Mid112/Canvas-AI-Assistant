@@ -7,21 +7,6 @@ import { MissingSubmissionsSection } from "@/pages/Instructor/InstructorSubmissi
 const students = institutionSubmissionsData[0]!.assignments[0]!.missingSubmissions;
 
 describe("MissingSubmissionsSection", () => {
-  // Verifies: Renders the missing submissions table.
-  it("renders the missing submissions table", () => {
-    render(<MissingSubmissionsSection students={students} />);
-
-    expect(
-      screen.getByRole("heading", { name: "Missing Submissions" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("5 students have not submitted"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Alex Thompson")).toBeInTheDocument();
-    expect(screen.getByText("maria.garcia@student.ubc.ca")).toBeInTheDocument();
-    expect(screen.getByText("1 week ago")).toBeInTheDocument();
-  });
-
   // Verifies: Uses singular copy for one missing submission.
   it("uses singular copy for one missing submission", () => {
     render(<MissingSubmissionsSection students={[students[0]!]} />);

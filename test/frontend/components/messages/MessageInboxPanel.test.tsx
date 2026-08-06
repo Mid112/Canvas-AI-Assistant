@@ -172,12 +172,13 @@ describe("MessageInboxPanel", () => {
     const user = userEvent.setup();
     render(
       <MemoryRouter>
-        <MessageInboxPanel courseId={1} />
+        <MessageInboxPanel courseId={1} courseLabel="COSC 499" />
       </MemoryRouter>,
     );
 
     await screen.findByText("Reminder: Programming Assignment 3 Due Friday");
 
+    expect(screen.getByRole("button", { name: "COSC 499" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "All courses" }));
 
     expect(messageThreads.fetchMessageThreads).toHaveBeenLastCalledWith(
@@ -185,5 +186,21 @@ describe("MessageInboxPanel", () => {
       undefined,
       "http://localhost:3000",
     );
+  });
+
+  it("shows the concrete course label instead of This course", async () => {
+    render(
+      <MemoryRouter>
+        <MessageInboxPanel courseId={1} courseLabel="Baking 101" />
+      </MemoryRouter>,
+    );
+
+    await screen.findByText("Reminder: Programming Assignment 3 Due Friday");
+    expect(
+      screen.getByRole("button", { name: "Baking 101" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "This course" }),
+    ).not.toBeInTheDocument();
   });
 });

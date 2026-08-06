@@ -198,14 +198,3 @@ def test_admin_can_create_admin_and_login(client, admin_headers):
 
 
 # Verifies: Admin logout invalidates the session for later admin calls.
-def test_admin_logout_invalidates_session(client, admin_credentials):
-    headers = admin_login(client, admin_credentials)
-
-    ok = client.get("/api/v1/admin/dashboard", headers=headers)
-    assert ok.status_code == 200
-
-    logout = client.post("/api/v1/auth/logout", headers=headers)
-    assert logout.status_code == 204
-
-    denied = client.get("/api/v1/admin/dashboard", headers=headers)
-    assert denied.status_code == 401

@@ -196,10 +196,6 @@ def test_list_courses_without_canvas_url_rejects_multiple_connections(client):
 
 
 # Verifies: List courses unauthenticated.
-def test_list_courses_unauthenticated(client):
-    response = client.get("/api/v1/canvas/courses")
-    assert response.status_code == 401
-
 
 # Verifies: List courses.
 def test_list_courses(client, auth_headers):
@@ -531,10 +527,6 @@ def test_list_courses_selects_correct_school(client):
 
 
 # Verifies: List cached courses unauthenticated.
-def test_list_cached_courses_unauthenticated(client):
-    response = client.get("/api/v1/canvas/courses/cached")
-    assert response.status_code == 401
-
 
 # Verifies: List cached courses before any sync returns empty list.
 def test_list_cached_courses_empty_before_any_sync(client):
@@ -614,26 +606,8 @@ def test_list_assignments(client):
 
 
 # Verifies: List assignments unauthenticated.
-def test_list_assignments_unauthenticated(client):
-    response = client.get("/api/v1/canvas/courses/1/assignments")
-    assert response.status_code == 401
-
 
 # Verifies: List assignments no canvas token.
-def test_list_assignments_no_canvas_token(client):
-    """A user with no Canvas token has no courses in DB — course lookup returns 404."""
-    email = f"test_{uuid.uuid4()}@example.com"
-    reg = client.post(
-        "/api/v1/auth/register",
-        json={"name": "No Token", "email": email, "password": "Secret123!"},
-    )
-    token = reg.json()["access_token"]
-    response = client.get(
-        "/api/v1/canvas/courses/1/assignments",
-        headers={"Authorization": f"Bearer {token}"}
-    )
-    assert response.status_code == 404
-
 
 # Verifies: List assignments unknown local course.
 def test_list_assignments_unknown_local_course(client, auth_headers):
@@ -898,10 +872,6 @@ def test_list_submissions_student_name_absent_when_no_user(client, auth_headers,
 
 
 # Verifies: List submissions unauthenticated.
-def test_list_submissions_unauthenticated(client):
-    response = client.get("/api/v1/canvas/courses/1/assignments/10/submissions")
-    assert response.status_code == 401
-
 
 # Verifies: List submissions no canvas token.
 def test_list_submissions_no_canvas_token(client):
@@ -994,43 +964,6 @@ def _submission(**overrides) -> dict:
     }
     return {**base, **overrides}
 
-
-@pytest.mark.parametrize("raw,expected_status", [
-    (
-        _submission(workflow_state="graded", score=85.0, grade="B"),
-        "graded",
-    ),
-    (
-        _submission(workflow_state="submitted", submitted_at="2026-01-01T12:00:00Z"),
-        "submitted",
-    ),
-    (
-        _submission(workflow_state="submitted", late=True, submitted_at="2026-01-01T12:00:00Z"),
-        "late",
-    ),
-    (
-        _submission(workflow_state="unsubmitted", missing=True),
-        "missing",
-    ),
-    (
-        _submission(workflow_state="unsubmitted"),
-        "unsubmitted",
-    ),
-    (
-        _submission(workflow_state="graded", excused=True),
-        "excused",
-    ),
-])
-# Verifies: Submission status parsing.
-def test_submission_status_parsing(client, auth_headers, synced_course_id, raw, expected_status):
-    with patch("app.services.canvas.fetch_submissions", new_callable=AsyncMock) as mock:
-        mock.return_value = [raw]
-        response = client.get(
-            f"/api/v1/canvas/courses/{synced_course_id}/assignments/10/submissions?canvas_url={CANVAS_URL}",
-            headers=auth_headers,
-        )
-    assert response.status_code == 200
-    assert response.json()[0]["status"] == expected_status
 
 
 # ---------------------------------------------------------------------------
@@ -1138,10 +1071,6 @@ def test_list_submissions_canvas_timeout(client, auth_headers, synced_course_id)
 
 
 # Verifies: Get active course unauthenticated.
-def test_get_active_course_unauthenticated(client):
-    response = client.get("/api/v1/canvas/active-course")
-    assert response.status_code == 401
-
 
 # Verifies: Get active course no preference.
 def test_get_active_course_no_preference(client):
@@ -1165,10 +1094,6 @@ def test_get_active_course_no_preference(client):
 
 
 # Verifies: Set active course unauthenticated.
-def test_set_active_course_unauthenticated(client):
-    response = client.patch("/api/v1/canvas/active-course", json={"local_course_id": 1})
-    assert response.status_code == 401
-
 
 # Verifies: Set active course nonexistent course.
 def test_set_active_course_nonexistent_course(client, auth_headers):

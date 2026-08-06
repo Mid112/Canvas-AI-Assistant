@@ -144,7 +144,7 @@ export function instructorDryRunPreviewPath(previewId: string) {
 }
 
 export function instructorMessagesPath(options?: {
-  tab?: "inbox" | "compose";
+  tab?: "inbox" | "compose" | "announcements" | "sent";
 }) {
   if (!options?.tab) {
     return paths.instructor.messages;

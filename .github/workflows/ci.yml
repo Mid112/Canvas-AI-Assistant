@@ -53,13 +53,21 @@ jobs:
             backend:
               - 'app/backend/**'
               - 'test/backend/**'
+              - '.github/workflows/ci.yml'
+              - '.github/docker/**'
+              - '.github/scripts/**'
             frontend:
               - 'app/frontend/**'
               - 'test/frontend/**'
+              - '.github/workflows/ci.yml'
             e2e:
               - 'app/backend/**'
               - 'app/frontend/**'
               - 'test/e2e/**'
+              - '.github/workflows/ci.yml'
+              - '.github/docker/**'
+              - '.github/scripts/**'
+              - 'docker-compose.dev.yml'
 
   # ── 1. Backend lint + type check ──────────
   backend-lint:
@@ -112,12 +120,16 @@ jobs:
 
   # ── 2. Backend tests ──────────────────────
   # Postgres is started via docker run — not services: (Linux runners only).
+  # Runs in parallel with backend-lint (same changes gate) so lint no longer
+  # serializes the suite on the single self-hosted Mac.
   backend-test:
     runs-on:
     - self-hosted
     - macOS
     - ARM64
-    needs: backend-lint
+    timeout-minutes: 40
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
     steps:
       - uses: actions/checkout@v4
       - name: Ensure Docker daemon
@@ -129,8 +141,16 @@ jobs:
           NETWORK="ci-net-${{ github.run_id }}"
           CONTAINER="ci-postgres-${{ github.run_id }}"
           docker rm -f "$CONTAINER" 2>/dev/null || true
-          docker network rm "$NETWORK" 2>/dev/null || true
-          docker network create "$NETWORK"
+          # Drop anything still attached (cancelled runs leave orphans), then
+          # recreate the network. Reuse if rm fails mid-race.
+          if docker network inspect "$NETWORK" >/dev/null 2>&1; then
+            attached=$(docker network inspect "$NETWORK" -f '{{range $k,$v := .Containers}}{{$k}} {{end}}' 2>/dev/null || true)
+            for id in $attached; do
+              docker rm -f "$id" 2>/dev/null || true
+            done
+            docker network rm "$NETWORK" 2>/dev/null || true
+          fi
+          docker network create "$NETWORK" 2>/dev/null || docker network inspect "$NETWORK" >/dev/null
           docker run -d \
             --name "$CONTAINER" \
             --network "$NETWORK" \
@@ -149,16 +169,51 @@ jobs:
           echo "PostgreSQL failed to start"
           docker logs "$CONTAINER"
           exit 1
+      - name: Build or reuse backend test image
+        # Skip cold `pip install` on every run. Rebuild only when
+        # requirements.txt changes (tag includes content hash).
+        id: backend_image
+        run: |
+          REQ_HASH=$(shasum -a 256 app/backend/requirements.txt | cut -c1-16)
+          IMAGE="ci-backend-test:${REQ_HASH}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          if docker image inspect "$IMAGE" >/dev/null 2>&1; then
+            echo "Reusing cached image ${IMAGE}"
+          else
+            echo "Building ${IMAGE} (requirements changed or first run)"
+            docker build \
+              -t "$IMAGE" \
+              -f .github/docker/Dockerfile.backend-test \
+              app/backend
+          fi
+          # Drop older requirement-tagged images so the runner disk stays lean.
+          docker images ci-backend-test --format '{{.Repository}}:{{.Tag}}' | while read -r old; do
+            if [ "$old" != "$IMAGE" ]; then
+              docker rmi "$old" 2>/dev/null || true
+            fi
+          done
       - name: Run tests with coverage
         # x64 Rosetta on Apple Silicon breaks native wheels like cryptography.
         # Run pytest inside Linux Docker with Postgres on the same network.
         # Coverage config (including fail_under) lives in app/backend/pyproject.toml,
         # so we run from that directory so pytest-cov picks it up.
+        #
+        # Cap container CPU/RAM so Docker Desktop cannot starve the self-hosted
+        # Mac runner of heartbeat (OOM → "lost communication" failures).
+        # Quieter pytest + lighter cov report also cut memory/log pressure.
         run: |
+          # Drop orphaned pytest containers from cancelled runs.
+          orphans=$(docker ps -q --filter ancestor="${{ steps.backend_image.outputs.image }}" 2>/dev/null || true)
+          if [ -n "$orphans" ]; then
+            # shellcheck disable=SC2086
+            docker rm -f $orphans >/dev/null 2>&1 || true
+          fi
           docker run --rm \
+            --memory=3g \
+            --cpus=2 \
             --network "ci-net-${{ github.run_id }}" \
             -v "${{ github.workspace }}:/workspace" \
-            -w /workspace \
+            -w /workspace/app/backend \
             -e DATABASE_URL=postgresql+asyncpg://testuser:testpass@ci-postgres-${{ github.run_id }}:5432/testdb \
             -e ENVIRONMENT=test \
             -e SECRET_KEY=ci-test-secret \
@@ -166,8 +221,9 @@ jobs:
             -e HF_TOKEN=ci-test-hf-token \
             -e DEFAULT_LLM_PROVIDER=huggingface \
             -e PYTHONPATH=/workspace/app/backend \
-            python:3.12-slim-bookworm \
-            bash -c "pip install --quiet -r app/backend/requirements.txt && cd app/backend && pytest ../../test/backend/ -v -m \"not fuzz\" --cov --cov-report=term-missing"
+            -e PYTHONUNBUFFERED=1 \
+            "${{ steps.backend_image.outputs.image }}" \
+            pytest ../../test/backend/ -q -m "not fuzz" --tb=line --cov --cov-report=term
       - name: Stop PostgreSQL
         if: always()
         run: |
@@ -267,6 +323,13 @@ jobs:
           docker ps -a --filter "name=$CONTAINER"
           docker logs "$CONTAINER" || true
           exit 1
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ runner.arch }}-py3.12-e2e-${{ hashFiles('app/backend/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-${{ runner.arch }}-py3.12-e2e-
+            pip-${{ runner.os }}-${{ runner.arch }}-py3.12-
       - name: Set up Python venv + backend deps
         run: |
           python3.12 -m venv app/backend/.venv
@@ -286,7 +349,16 @@ jobs:
         working-directory: ./test/e2e
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          # On the self-hosted Mac, browsers persist under the Playwright cache.
+          # `install` is a no-op when chromium is already present (skips the
+          # multi-minute download). Keep --with-deps only on first install.
+          if compgen -G "${HOME}/Library/Caches/ms-playwright/chromium-*" > /dev/null \
+            || compgen -G "${HOME}/.cache/ms-playwright/chromium-*" > /dev/null; then
+            echo "Playwright chromium cache found; ensuring install is complete"
+            npx playwright install chromium
+          else
+            npx playwright install --with-deps chromium
+          fi
       - name: Ensure Canvas sandbox
         run: |
           # Instructor e2e onboarding requires a live Canvas API token against
@@ -377,7 +449,7 @@ jobs:
     - macOS
     - ARM64
     timeout-minutes: 30
-    needs: [backend-test, frontend-test, e2e-test]
+    needs: [backend-lint, backend-test, frontend-test, e2e-test]
     if: always() && !failure() && !cancelled()
     steps:
       - uses: actions/checkout@v4
@@ -392,6 +464,8 @@ jobs:
           context: ./app/backend
           push: false
           tags: app-backend:test
+          cache-from: type=local,src=/tmp/.buildx-cache-backend
+          cache-to: type=local,dest=/tmp/.buildx-cache-backend-new,mode=max
       - name: Build frontend image
         timeout-minutes: 15
         uses: docker/build-push-action@v6
@@ -399,6 +473,8 @@ jobs:
           context: ./app/frontend
           push: false
           tags: app-frontend:test
+          cache-from: type=local,src=/tmp/.buildx-cache-frontend
+          cache-to: type=local,dest=/tmp/.buildx-cache-frontend-new,mode=max
       # Feature 13 (#862): verify the Dockerized MCP image still builds in CI.
       - name: Build MCP image
         timeout-minutes: 10
@@ -407,3 +483,14 @@ jobs:
           context: ./app/mcp
           push: false
           tags: app-mcp:test
+          cache-from: type=local,src=/tmp/.buildx-cache-mcp
+          cache-to: type=local,dest=/tmp/.buildx-cache-mcp-new,mode=max
+      - name: Rotate Buildx caches
+        if: always()
+        run: |
+          for name in backend frontend mcp; do
+            rm -rf "/tmp/.buildx-cache-${name}"
+            if [ -d "/tmp/.buildx-cache-${name}-new" ]; then
+              mv "/tmp/.buildx-cache-${name}-new" "/tmp/.buildx-cache-${name}"
+            fi
+          done

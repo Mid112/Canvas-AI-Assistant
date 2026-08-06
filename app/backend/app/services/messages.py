@@ -12,11 +12,52 @@ from app.models.course import Course
 from app.models.message_draft import MessageDraft
 from app.models.user import User
 from app.models.workflow import Workflow
-from app.schemas.messages import MessageDraftCreate, MessageDraftUpdate
+from app.schemas.messages import (
+    MessageDraftCreate,
+    MessageDraftResponse,
+    MessageDraftUpdate,
+)
 from app.services.ai_health import record_ai_call_outcome
 from app.services.llm.llm_setting import get_llm_adapter
 from app.services.llm.provider_registry import get_active_llm_config
 from app.services.message_validation import validate_message_for_send
+
+
+def infer_delivery_mode(draft: MessageDraft) -> str | None:
+    """Match send_course_message: no recipients → course announcement."""
+    ephemeral = getattr(draft, "delivery_mode", None)
+    if ephemeral:
+        return ephemeral
+    if draft.status != "sent":
+        return None
+    recipients = draft.recipients or []
+    return "announcement" if len(recipients) == 0 else "conversation"
+
+
+def to_message_draft_response(draft: MessageDraft) -> MessageDraftResponse:
+    response = MessageDraftResponse.model_validate(draft)
+    return response.model_copy(update={"delivery_mode": infer_delivery_mode(draft)})
+
+
+async def list_message_drafts(
+    db: AsyncSession,
+    user: User,
+    *,
+    status_filter: str | None = None,
+    course_id: int | None = None,
+) -> list[MessageDraft]:
+    stmt = select(MessageDraft).where(MessageDraft.user_id == user.id)
+    if status_filter:
+        stmt = stmt.where(MessageDraft.status == status_filter)
+    if course_id is not None:
+        stmt = stmt.where(MessageDraft.course_id == course_id)
+    # Sent first by sent_at; drafts without sent_at fall back to updated_at.
+    stmt = stmt.order_by(
+        MessageDraft.sent_at.desc().nulls_last(),
+        MessageDraft.updated_at.desc(),
+    )
+    result = await db.scalars(stmt)
+    return list(result.all())
 
 
 async def _generate_draft_content(
