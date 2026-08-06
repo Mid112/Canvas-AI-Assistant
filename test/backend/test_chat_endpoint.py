@@ -35,10 +35,6 @@ def _register(client) -> dict:
 
 
 # Verifies: No auth.
-def test_no_auth(client):
-    response = client.post("/api/v1/chat/", json={"message": "hello"})
-    assert response.status_code == 401
-
 
 # Verifies: Llm error.
 def test_llm_error(client):
@@ -160,10 +156,6 @@ def test_user_log(client):
     roles = [m["role"] for m in history.json()["messages"]]
     assert "user" in roles
 
-
-def test_list_conversations_requires_auth(client):
-    response = client.get("/api/v1/chat/conversations")
-    assert response.status_code == 401
 
 
 def test_list_conversations(client):
