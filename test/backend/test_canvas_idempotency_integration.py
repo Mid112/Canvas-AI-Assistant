@@ -180,6 +180,10 @@ async def test_concurrent_create_course_assignment_writes_canvas_once(
     # for later TestClient suites (course overview then 403s on example.edu).
     with (
         patch(
+            "app.services.assignment_validation.validate_assignment_for_create",
+            new=AsyncMock(return_value=course),
+        ),
+        patch(
             "app.services.canvas.get_owned_course",
             new=AsyncMock(return_value=course),
         ),
@@ -194,7 +198,7 @@ async def test_concurrent_create_course_assignment_writes_canvas_once(
         ),
     ):
         first_task = asyncio.create_task(_one_call())
-        await started.wait()
+        await asyncio.wait_for(started.wait(), timeout=5.0)
         # Second caller starts while the first still holds the pending claim.
         second_task = asyncio.create_task(_one_call())
         await asyncio.sleep(0.05)

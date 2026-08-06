@@ -174,6 +174,10 @@ async def test_generate_assignment_draft_records_success_without_changing_output
             "app.services.assignment_draft.get_active_llm_config",
             new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
         ),
+        patch(
+            "app.services.assignment_draft.get_instructor_canvas_timezone_for_user",
+            new=AsyncMock(return_value=None),
+        ),
         patch("app.services.assignment_draft.record_ai_call_outcome", new=AsyncMock()) as mock_record,
     ):
         result = await generate_assignment_draft(body, db, user_id=42)
@@ -200,6 +204,10 @@ async def test_generate_assignment_draft_records_failure_when_response_is_unpars
         patch(
             "app.services.assignment_draft.get_active_llm_config",
             new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
+        ),
+        patch(
+            "app.services.assignment_draft.get_instructor_canvas_timezone_for_user",
+            new=AsyncMock(return_value=None),
         ),
         patch("app.services.assignment_draft.record_ai_call_outcome", new=AsyncMock()) as mock_record,
     ):
@@ -234,6 +242,10 @@ async def test_generate_assignment_draft_records_failure_and_still_raises_http_e
         patch(
             "app.services.assignment_draft.get_active_llm_config",
             new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
+        ),
+        patch(
+            "app.services.assignment_draft.get_instructor_canvas_timezone_for_user",
+            new=AsyncMock(return_value=None),
         ),
         patch("app.services.assignment_draft.record_ai_call_outcome", new=AsyncMock()) as mock_record,
     ):

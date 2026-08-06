@@ -197,6 +197,10 @@ describe("InstructorAssistantPage course sync fork adoption", () => {
     const user = userEvent.setup();
     render(<CourseSwitchHarness />);
 
+    // History is collapsed by default (#1454 / Ticket 30).
+    await user.click(
+      await screen.findByRole("button", { name: /Conversation History/ }),
+    );
     await user.click(
       await screen.findByRole("button", { name: /Previous conversation/ }),
     );
@@ -258,6 +262,9 @@ describe("InstructorAssistantPage course sync fork adoption", () => {
     });
     expect(mockSyncCourseContext).not.toHaveBeenCalled();
 
+    await user.click(
+      await screen.findByRole("button", { name: /Conversation History/ }),
+    );
     await user.click(
       await screen.findByRole("button", { name: /Previous conversation/ }),
     );
