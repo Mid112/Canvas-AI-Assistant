@@ -1,3 +1,5 @@
+// Chat UI note: explains Canvas-limited mode and resumes saved requests only after credentials are connected.
+
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
@@ -55,4 +57,3 @@ export function AssistantLimitedModeBanner({
     </div>
   );
 }
-
