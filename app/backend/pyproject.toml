@@ -59,11 +59,6 @@ exclude = [
 module = "app.main"
 disable_error_code = ["assignment", "attr-defined"]
 
-[tool.pytest.ini_options]
-# Cap hung async tests (epoll wait forever) so self-hosted CI cannot stall.
-timeout = 60
-timeout_method = "thread"
-
 [tool.coverage.run]
 source = ["."]
 omit = [

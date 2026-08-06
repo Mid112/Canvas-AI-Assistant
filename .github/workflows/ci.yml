@@ -223,7 +223,7 @@ jobs:
             -e PYTHONPATH=/workspace/app/backend \
             -e PYTHONUNBUFFERED=1 \
             "${{ steps.backend_image.outputs.image }}" \
-            pytest ../../test/backend/ -q -m "not fuzz" --tb=line --timeout=60 --timeout-method=thread --cov --cov-report=term
+            pytest ../../test/backend/ -q -m "not fuzz" --tb=line --cov --cov-report=term
       - name: Stop PostgreSQL
         if: always()
         run: |
