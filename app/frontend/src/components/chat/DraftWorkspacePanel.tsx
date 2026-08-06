@@ -84,11 +84,6 @@ export function DraftWorkspacePanel({
 
       {isExpanded ? (
         <div id="draft-workspace-content">
-          <p className="mt-1 text-sm text-muted-foreground">
-            Content-only drafts and chat requests saved before Canvas was ready.
-            After connecting, select a course, then resume to validate, preview,
-            and confirm before any Canvas write.
-          </p>
           {/* Worded for a mixed list: drafts that name their own course stay
               resumable alongside ones that don't, so this can't claim every
               draft needs a selection. */}
@@ -103,7 +98,7 @@ export function DraftWorkspacePanel({
               (#10) grows with every saved draft/deferred request, eating into
               the chat window's shared vertical budget until the message input
               gets clipped off entirely. */}
-          <ul className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
+          <ul className="mt-2 max-h-64 space-y-2 overflow-y-auto pr-1">
             {typedDrafts.map((draft) => {
               const isDiscarding = discardingTypedId === draft.id;
               const isBlocked = blockedIds.has(draft.id);
