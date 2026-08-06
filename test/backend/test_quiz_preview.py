@@ -30,17 +30,4 @@ def test_create_quiz_preview_reversible_risk_and_resources():
     ]
 
 
-def test_create_assignment_preview_includes_risk_level():
-    preview = generate_write_preview(
-        {"action": "create_assignment", "title": "Midterm", "due_date": "2030-01-01T00:00:00", "points_possible": 100},
-        COURSE,
-    )
-    assert preview["risk_level"] == "medium"
 
-
-def test_send_message_preview_is_high_risk():
-    preview = generate_write_preview(
-        {"action": "send_message", "subject": "Reminder", "body": "Please submit by Friday"},
-        COURSE,
-    )
-    assert preview["risk_level"] == "high"

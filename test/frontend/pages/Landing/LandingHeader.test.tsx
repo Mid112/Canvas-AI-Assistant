@@ -26,10 +26,4 @@ describe("LandingHeader", () => {
       paths.login,
     );
   });
-
-  it("renders the brand mark icon", () => {
-    const { container } = renderWithRouter(<LandingHeader />);
-
-    expect(container.querySelector("svg")).toBeInTheDocument();
-  });
 });

@@ -280,8 +280,6 @@ export async function sendAssistantMessage(
   message: string,
   options: SendAssistantMessageOptions = {},
 ): Promise<AssistantMessageResult> {
-  const context = options.context ?? {};
-  const localCourseId = options.localCourseId ?? context.activeCourseId;
   const modelSettings = options.modelSettings;
 
   try {
@@ -290,7 +288,18 @@ export async function sendAssistantMessage(
       body: JSON.stringify({
         message,
         conversation_id: options.conversationId,
-        local_course_id: localCourseId,
+        // Only an explicit course switch (e.g. a future "set active course"
+        // button wired to options.localCourseId) belongs here — see
+        // ChatRequest.local_course_id. The ambient active course must never
+        // be sent as a stand-in for that on every turn: local_course_id beats
+        // both an utterance naming a different course and an
+        // already-resolved conversation course (get_or_create_conversation,
+        // handle_chat_message), so defaulting it to context.activeCourseId
+        // silently overrode "show assignments for COSC 499" with whatever
+        // course happened to be active (#1509). A course-less conversation
+        // still gets seeded from the user's persisted active-course
+        // preference server-side, so nothing is lost by leaving this unset.
+        local_course_id: options.localCourseId,
         pending_message_id: options.pendingMessageId,
         deferred_request_id: options.deferredRequestId,
         model_settings: modelSettings

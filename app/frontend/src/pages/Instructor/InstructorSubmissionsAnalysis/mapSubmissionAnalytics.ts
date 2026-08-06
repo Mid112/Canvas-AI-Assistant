@@ -5,6 +5,7 @@ import type {
   AssignmentSubmissionAnalysis,
   SubmissionStudent,
 } from "@/types/submission";
+import { formatDueDateForDisplay } from "@/lib/assignment-utils";
 
 const AVATAR_COLORS = [
   "bg-sky-500",
@@ -18,12 +19,17 @@ const AVATAR_COLORS = [
 function mapSubmissionStudent(
   submission: ApiSubmission,
   index: number,
+  options?: { includeSubmittedAt?: boolean },
 ): SubmissionStudent {
   return {
     id: String(submission.user_id),
     name: submission.student_name ?? `Student ${submission.user_id}`,
-    email: "",
+    email: submission.student_email ?? "",
     avatarColor: AVATAR_COLORS[index % AVATAR_COLORS.length]!,
+    lateBy:
+      options?.includeSubmittedAt && submission.submitted_at
+        ? formatDueDateForDisplay(submission.submitted_at)
+        : undefined,
   };
 }
 
@@ -37,11 +43,13 @@ export function mapApiSubmissionsToAnalysis(
       (submission) =>
         submission.status === "missing" || submission.status === "unsubmitted",
     )
-    .map(mapSubmissionStudent);
+    .map((submission, index) => mapSubmissionStudent(submission, index));
 
   const lateSubmissions = submissions
     .filter((submission) => submission.status === "late")
-    .map(mapSubmissionStudent);
+    .map((submission, index) =>
+      mapSubmissionStudent(submission, index, { includeSubmittedAt: true }),
+    );
 
   const submittedCount = submissions.filter(
     (submission) =>

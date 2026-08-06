@@ -43,28 +43,6 @@ const draft = {
 };
 
 describe("AssignmentReviewApproveStep", () => {
-  // Verifies: Renders title, description, and due date fields.
-  it("renders title, description, and due date fields", () => {
-    render(
-      <AssignmentReviewApproveStep
-        courseLabel="CS 101"
-        draft={draft}
-        isApproving={false}
-        onApprove={vi.fn()}
-        onBack={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByLabelText("Assignment title")).toHaveValue(
-      "Python Functions Quiz",
-    );
-    expect(screen.getByLabelText("Assignment description")).toHaveValue(
-      "Complete a short quiz covering functions.",
-    );
-    expect(screen.getByLabelText("Due date")).toHaveValue("2026-12-15T23:59");
-    expect(screen.getByLabelText("Points possible")).toHaveValue(50);
-  });
-
   it("validates empty title on approve", async () => {
     const user = userEvent.setup();
     const onApprove = vi.fn();

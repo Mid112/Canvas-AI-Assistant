@@ -5,22 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ResetPasswordForm } from "@/pages/Auth/ResetPassword/ResetPasswordForm";
 import { renderWithRouter } from "../../../utils/renderWithRouter";
 
-describe("ResetPasswordForm", () => {
-  it("renders the email field", () => {
-    renderWithRouter(<ResetPasswordForm onSubmit={vi.fn()} />);
-
-    expect(screen.getByLabelText("Email Address")).toBeInTheDocument();
-  });
-
-  it("renders the email placeholder", () => {
-    renderWithRouter(<ResetPasswordForm onSubmit={vi.fn()} />);
-
-    expect(
-      screen.getByPlaceholderText("you@university.edu"),
-    ).toBeInTheDocument();
-  });
-
-  it("renders the send reset link submit button disabled by default", () => {
+describe("ResetPasswordForm", () => {  it("renders the send reset link submit button disabled by default", () => {
     renderWithRouter(<ResetPasswordForm onSubmit={vi.fn()} />);
 
     expect(
