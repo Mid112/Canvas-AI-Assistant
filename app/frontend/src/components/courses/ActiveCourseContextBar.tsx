@@ -12,45 +12,33 @@ export function ActiveCourseContextBar({
 }: ActiveCourseContextBarProps) {
   const { activeCourse, error, isLoading } = useActiveCourse();
 
-  // The selector's own <select> already displays the active course's name
-  // as its selected option (and "Loading courses..." while isLoading) — a
-  // second, static copy of the same name here was pure duplication. The one
-  // thing the selector's placeholder doesn't convey on its own is *why*
-  // nothing is selected, so that explanation is kept here for the
-  // genuinely-empty case only.
+  // Compact single row: the selector already shows the course name. Keep a
+  // short empty-state hint only when nothing is selected (#1454).
   return (
     <section
       aria-label="Active course context"
-      className="shrink-0 rounded-lg border border-border/80 bg-card px-3 py-2.5 shadow-sm"
+      className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5"
     >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-start gap-2">
-          <span
-            className="mt-0.5 h-5 w-1 shrink-0 rounded-full bg-primary"
-            aria-hidden="true"
-          />
-          <div className="min-w-0 space-y-1">
-            <p className="text-sm font-semibold text-foreground">
-              Active course context
-            </p>
-          {!isLoading && !activeCourse ? (
-            <p className="text-sm text-muted-foreground">
-              No active course selected. Choose a course to scope assistant and
-              workflow actions in this session.
-            </p>
-          ) : null}
-          </div>
-        </div>
-        <ActiveCourseSelector
-          className="rounded-lg bg-muted/50 px-2 py-1"
-          hasPendingAssistantWork={hasPendingAssistantWork}
-        />
-      </div>
+      <label
+        htmlFor="active-course-selector"
+        className="text-sm font-medium text-foreground"
+      >
+        Course
+      </label>
+      <ActiveCourseSelector
+        className="min-w-[12rem] flex-1 sm:flex-none"
+        hasPendingAssistantWork={hasPendingAssistantWork}
+      />
+      {!isLoading && !activeCourse ? (
+        <p className="basis-full text-xs text-muted-foreground sm:basis-auto">
+          Select a course to scope assistant actions.
+        </p>
+      ) : null}
 
       {error ? (
         <div
           role="alert"
-          className="mt-3 flex items-start gap-2 text-sm text-destructive"
+          className="flex basis-full items-start gap-2 text-sm text-destructive"
         >
           <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
           <span>{error}</span>

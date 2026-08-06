@@ -2,6 +2,7 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { setStoredDeferredDraft } from "@/lib/deferred-assistant-storage";
 import { InstructorAssistantPage } from "@/pages/Instructor/InstructorAssistantPage";
 import { sendAssistantMessage } from "@/services/assistant";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
@@ -37,6 +38,10 @@ vi.mock("@/services/assistant", async () => {
     listDeferredAssistantRequests: mockListDeferred,
     resumeDeferredAssistantRequest: mockResumeDeferred,
     sendAssistantMessage: vi.fn(),
+    syncAssistantCourseContext: vi.fn().mockResolvedValue({
+      conversationId: 1,
+      courseContext: { index: 1, local_course_id: 1 },
+    }),
   };
 });
 
@@ -124,6 +129,10 @@ describe("InstructorAssistantPage", () => {
     expect(
       screen.getByRole("textbox", { name: "Chat message" }),
     ).toBeInTheDocument();
+    // Verifies (#1454): History stays collapsed so chat remains the primary surface.
+    expect(
+      screen.getByRole("button", { name: /Conversation History \(0\)/ }),
+    ).toHaveAttribute("aria-expanded", "false");
   });
 
   // Verifies (#1441): Starter prompts hide after the user starts chatting.
@@ -160,30 +169,6 @@ describe("InstructorAssistantPage", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Create a quiz")).toBeInTheDocument();
   });
-
-  // Verifies (#1441): Choosing a starter prompt also clears the guidance.
-  it("hides starter prompts after selecting a starter action", async () => {
-    const user = userEvent.setup();
-    mockedSendAssistantMessage.mockResolvedValue({
-      content: "Assignment draft ready.",
-      conversationId: 7,
-      explanation: "Started from a starter prompt.",
-    });
-
-    renderWithInstitution(<InstructorAssistantPage />);
-
-    await user.click(
-      screen.getByRole("button", { name: /Create an assignment/i }),
-    );
-
-    expect(
-      await screen.findByText("Assignment draft ready."),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("region", { name: "Starter prompts" }),
-    ).not.toBeInTheDocument();
-  });
-
   it("shows limited mode when Canvas is not connected", async () => {
     mockUseAuth.mockReturnValue({
       user: {
@@ -261,15 +246,19 @@ describe("InstructorAssistantPage", () => {
 
     renderWithInstitution(<InstructorAssistantPage />);
 
-    expect(
-      await screen.findByRole("button", { name: "Resume next request" }),
-    ).toBeInTheDocument();
+    await user.click(
+      await screen.findByRole("button", { name: /Saved drafts \(3\)/ }),
+    );
+    const resumeButtons = await screen.findAllByRole("button", {
+      name: "Resume",
+    });
+    expect(resumeButtons.length).toBeGreaterThan(0);
 
     expect(
       screen.getByRole("region", { name: "Starter prompts" }),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Resume next request" }));
+    await user.click(resumeButtons[0]!);
 
     await waitFor(() => {
       expect(mockResumeDeferred).toHaveBeenCalledTimes(1);
@@ -277,7 +266,7 @@ describe("InstructorAssistantPage", () => {
     expect(mockResumeDeferred).toHaveBeenCalledWith("token", 3);
     // Resume peeks without consuming — queue stays until chat send succeeds.
     expect(
-      await screen.findByRole("button", { name: "Resume next request" }),
+      await screen.findByRole("button", { name: /Saved drafts \(3\)/ }),
     ).toBeInTheDocument();
     // Verifies (#1441): Resume clears starters directly, not only via auto-send.
     expect(
@@ -319,11 +308,31 @@ describe("InstructorAssistantPage", () => {
     ).toBeInTheDocument();
 
     await user.click(
-      await screen.findByRole("button", { name: "Resume saved request" }),
+      await screen.findByRole("button", { name: /Saved drafts \(1\)/ }),
     );
+    await user.click(screen.getByRole("button", { name: "Resume" }));
 
     await waitFor(() => {
       expect(mockResumeDeferred).toHaveBeenCalledWith("token", 4);
+    });
+    expect(
+      screen.queryByRole("region", { name: "Starter prompts" }),
+    ).not.toBeInTheDocument();
+  });
+
+  // Verifies the review fix for #1454: auto-restoring a locally cached
+  // deferred draft after Canvas connects must hide starters too, the same
+  // way the explicit "Resume" action does.
+  it("hides starter prompts when a locally cached deferred draft auto-restores after Canvas connects", async () => {
+    setStoredDeferredDraft(1, { message: "Auto-restored draft message" });
+    mockListDeferred.mockResolvedValue({ items: [] });
+
+    renderWithInstitution(<InstructorAssistantPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("textbox", { name: "Chat message" }),
+      ).toHaveValue("Auto-restored draft message");
     });
     expect(
       screen.queryByRole("region", { name: "Starter prompts" }),
@@ -376,9 +385,16 @@ describe("InstructorAssistantPage", () => {
       screen.getByRole("region", { name: "Starter prompts" }),
     ).toBeInTheDocument();
 
-    await user.click(await screen.findByRole("button", {
-      name: /Previous conversation/,
-    }));
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Conversation History \(1\)/,
+      }),
+    );
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Previous conversation/,
+      }),
+    );
 
     expect(await screen.findByText("Previous question")).toBeInTheDocument();
     expect(

@@ -144,7 +144,7 @@ export function instructorDryRunPreviewPath(previewId: string) {
 }
 
 export function instructorMessagesPath(options?: {
-  tab?: "inbox" | "compose";
+  tab?: "inbox" | "compose" | "announcements" | "sent";
 }) {
   if (!options?.tab) {
     return paths.instructor.messages;
@@ -200,6 +200,9 @@ export interface AiActionDraftLocationState {
     conversationId?: number;
     /** Describe-step seed when structured questions are missing. */
     prompt?: string;
+    /** Ticket 45 / #1506 — prior per-question points from a saved draft,
+     * reapplied after Generate when the new question count matches. */
+    priorQuestionPoints?: number[];
     questionBankGroups?: Array<{
       bankId: number;
       bankName: string;

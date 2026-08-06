@@ -18,6 +18,48 @@ export class QuizCreatorApiError extends Error {
   }
 }
 
+/**
+ * Ticket 45 / #1506: when regenerating with the same question count (e.g. a
+ * minor description edit), keep the instructor's prior per-question points
+ * instead of accepting whatever the model freshly allocates (10 → 5, etc.).
+ * Count mismatches fall through unchanged so a deliberate size change can
+ * still take the new allocation.
+ */
+export function preserveQuestionPoints<T extends { pointsPossible: number }>(
+  previous: readonly T[] | null | undefined,
+  next: T[],
+): T[] {
+  if (!previous || previous.length === 0 || previous.length !== next.length) {
+    return next;
+  }
+  return next.map((question, index) => ({
+    ...question,
+    pointsPossible: previous[index].pointsPossible,
+  }));
+}
+
+export function sumQuestionPoints(
+  questions: readonly { pointsPossible: number }[],
+): number {
+  return questions.reduce((sum, question) => sum + question.pointsPossible, 0);
+}
+
+/** Apply a parallel points array (from a resumed typed draft) onto generated questions. */
+export function applyPriorQuestionPoints<T extends { pointsPossible: number }>(
+  priorPoints: readonly number[] | null | undefined,
+  next: T[],
+): T[] {
+  if (!priorPoints || priorPoints.length !== next.length) {
+    return next;
+  }
+  return next.map((question, index) => {
+    const points = priorPoints[index];
+    return typeof points === "number" && Number.isFinite(points) && points > 0
+      ? { ...question, pointsPossible: points }
+      : question;
+  });
+}
+
 function appendCanvasUrl(url: string, canvasUrl?: string): string {
   if (!canvasUrl) {
     return url;

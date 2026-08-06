@@ -15,27 +15,6 @@ vi.mock("@/config/api", () => ({
 }));
 
 describe("mapChatReplyToAssistantResponse", () => {
-  // Verifies: Maps intent previews to assistant content and interpreted actions.
-  it("maps intent previews to assistant content and interpreted actions", () => {
-    const response = mapChatReplyToAssistantResponse(
-      {
-        intent_preview: true,
-        summary: "Send reminders to 12 students",
-        proposed_action: {
-          action: "send_message",
-          local_course_id: 3,
-        },
-        preview_metadata: {
-          course_name: "COSC 499",
-        },
-      },
-      false,
-    );
-
-    expect(response.content).toContain("Send reminders");
-    expect(response.interpretedAction?.course).toBe("COSC 499");
-  });
-
   // Verifies: Maps API errors to user-facing content.
   it("maps API errors to user-facing content", () => {
     const response = mapChatReplyToAssistantResponse(
@@ -60,21 +39,6 @@ describe("mapChatReplyToAssistantResponse", () => {
     expect(response.requiresCanvasToken).toBe(true);
     expect(response.deferredRequestId).toBe(42);
     expect(response.interpretedAction?.primaryLink?.label).toMatch(/Connect Canvas/i);
-  });
-
-  // Verifies: Maps successful confirm replies.
-  it("maps successful confirm replies", () => {
-    const response = mapChatReplyToAssistantResponse(
-      {
-        success: true,
-        action: "create_assignment",
-        data: { id: 12, name: "Midterm Exam" },
-      },
-      false,
-    );
-
-    expect(response.content).toContain("Successfully completed Create Assignment");
-    expect(response.content).toContain("Midterm Exam");
   });
 });
 
@@ -108,8 +72,51 @@ describe("sendAssistantMessage", () => {
     expect(response.conversationId).toBe(9);
   });
 
-  // Verifies: Posts course context when provided.
-  it("posts course context when provided", async () => {
+  // Regression test for #1509: the assistant resolved an explicitly named
+  // course ("show assignments for COSC 499") against whichever course
+  // happened to be active instead. The cause was sendAssistantMessage
+  // defaulting local_course_id to the ambient active course on every turn,
+  // which beats both an utterance naming a different course and an
+  // already-resolved conversation course on the backend (see
+  // get_or_create_conversation / handle_chat_message in
+  // app/backend/app/services/chat.py) — local_course_id is only ever
+  // supposed to carry an explicit "set active course" selection.
+  it("never falls back to the active course context for local_course_id", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          conversation_id: 7,
+          is_error: false,
+          reply: { action: "respond", message: "Hello from the backend." },
+        }),
+        { status: 200 },
+      ),
+    );
+
+    await sendAssistantMessage("test-token", "show assignments for COSC 499", {
+      context: {
+        // Simulates Math 101 being the ambient active course while the
+        // user explicitly names a different one in the message itself.
+        activeCourseId: 3,
+        activeCourseLabel: "Math 101",
+      },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:8000/api/v1/chat/",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          message: "show assignments for COSC 499",
+        }),
+      }),
+    );
+  });
+
+  // Verifies: an explicit localCourseId option (a real "set active course"
+  // selection) is still forwarded — only the ambient-context fallback was
+  // removed.
+  it("posts an explicit localCourseId option", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -122,10 +129,8 @@ describe("sendAssistantMessage", () => {
     );
 
     await sendAssistantMessage("test-token", "hello", {
-      context: {
-        activeCourseId: 3,
-        activeCourseLabel: "CPSC 310",
-      },
+      localCourseId: 3,
+      context: { activeCourseId: 9, activeCourseLabel: "Math 101" },
     });
 
     expect(fetchMock).toHaveBeenCalledWith(

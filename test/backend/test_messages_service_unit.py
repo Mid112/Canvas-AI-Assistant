@@ -10,6 +10,8 @@ from app.services.messages import (
     _generate_draft_content,
     create_message_draft,
     get_message_draft,
+    infer_delivery_mode,
+    list_message_drafts,
     send_message_draft,
     update_message_draft,
 )
@@ -278,3 +280,53 @@ async def test_send_message_draft_success_marks_sent_and_records_delivery():
     assert db.add.call_count >= 2
     db.flush.assert_awaited()
     db.commit.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
+# infer_delivery_mode / list_message_drafts (#1510)
+# ---------------------------------------------------------------------------
+
+def test_infer_delivery_mode_announcement_when_sent_without_recipients():
+    draft = SimpleNamespace(status="sent", recipients=[], delivery_mode=None)
+    assert infer_delivery_mode(draft) == "announcement"
+
+
+def test_infer_delivery_mode_conversation_when_sent_with_recipients():
+    draft = SimpleNamespace(
+        status="sent",
+        recipients=[{"id": "1", "name": "Ada"}],
+        delivery_mode=None,
+    )
+    assert infer_delivery_mode(draft) == "conversation"
+
+
+def test_infer_delivery_mode_prefers_ephemeral_attr():
+    draft = SimpleNamespace(
+        status="sent",
+        recipients=[],
+        delivery_mode="conversation",
+    )
+    assert infer_delivery_mode(draft) == "conversation"
+
+
+def test_infer_delivery_mode_none_for_unsent_draft():
+    draft = SimpleNamespace(status="draft", recipients=[], delivery_mode=None)
+    assert infer_delivery_mode(draft) is None
+
+
+@pytest.mark.asyncio
+async def test_list_message_drafts_filters_status_and_course():
+    db = AsyncMock()
+    user = SimpleNamespace(id=9)
+    expected = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
+    result = Mock()
+    result.all = Mock(return_value=expected)
+    db.scalars = AsyncMock(return_value=result)
+
+    drafts = await list_message_drafts(
+        db, user, status_filter="sent", course_id=10
+    )
+
+    assert drafts == expected
+    db.scalars.assert_awaited_once()
+

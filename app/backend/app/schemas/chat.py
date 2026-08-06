@@ -190,6 +190,18 @@ class ChatRequest(BaseModel):
     deferred_request_id: int | None = None
 
 
+class CourseContextRequest(BaseModel):
+    """Immediate course-selection envelope write (#1507) without a chat turn."""
+
+    local_course_id: int
+    conversation_id: int | None = None
+
+
+class CourseContextResponse(BaseModel):
+    conversation_id: int
+    course_context: dict
+
+
 class ChatResponse(BaseModel):
     conversation_id: int
     reply: dict

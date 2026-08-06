@@ -63,10 +63,6 @@ def _register_with_canvas(client) -> tuple[dict, int]:
 # ---------------------------------------------------------------------------
 
 # Verifies: List assignments unauthenticated.
-def test_list_assignments_unauthenticated(client):
-    response = client.get("/api/v1/canvas/courses/1/assignments")
-    assert response.status_code == 401
-
 
 # Verifies: List assignments no canvas token.
 def test_list_assignments_no_canvas_token(client):

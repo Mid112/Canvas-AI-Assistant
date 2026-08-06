@@ -75,7 +75,7 @@ export const sharedDashboardQuickActions: DashboardQuickAction[] = [
     description: "Generate course announcement",
   },
   {
-    id: "grade-analysis",
+    id: "analyse-missing-submissions",
     title: "Analyse Missing Submissions",
     description: "See who hasn't submitted",
   },

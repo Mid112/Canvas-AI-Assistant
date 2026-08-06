@@ -122,7 +122,7 @@ export function ChatInput({
       ) : null}
 
       <p className="text-center text-xs text-muted-foreground">
-        AI Assistant can make mistakes. Please verify important information before approving Canvas changes.
+        Verify important details before approving Canvas changes.
       </p>
     </div>
   );

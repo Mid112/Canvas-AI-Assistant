@@ -25,9 +25,10 @@ describe("ActiveCourseContextBar", () => {
     render(<ActiveCourseContextBar />);
 
     expect(
-      screen.getByText(/No active course selected/),
+      screen.getByText(/Select a course to scope assistant actions/),
     ).toBeInTheDocument();
     expect(screen.getByText("Active course selector")).toBeInTheDocument();
+    expect(screen.getByText("Course")).toBeInTheDocument();
   });
 
   // Verifies: Does not duplicate the active course name — the selector's
@@ -49,7 +50,7 @@ describe("ActiveCourseContextBar", () => {
     ).not.toBeInTheDocument();
     expect(screen.getByText("Active course selector")).toBeInTheDocument();
     expect(
-      screen.queryByText(/No active course selected/),
+      screen.queryByText(/Select a course to scope assistant actions/),
     ).not.toBeInTheDocument();
   });
 
@@ -64,7 +65,7 @@ describe("ActiveCourseContextBar", () => {
     render(<ActiveCourseContextBar />);
 
     expect(
-      screen.queryByText(/No active course selected/),
+      screen.queryByText(/Select a course to scope assistant actions/),
     ).not.toBeInTheDocument();
   });
 

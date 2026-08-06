@@ -159,6 +159,29 @@ export function QuizReviewApproveStep({
     remove: removeBankGroup,
   } = useFieldArray({ control, name: "questionBankGroups" });
 
+  // Typed drafts store bank picks by name only (#1239) — a resumed group's
+  // bankId arrives as the 0 placeholder until InstructorQuizCreatePage
+  // rematches it against the course's live Canvas banks. defaultValues only
+  // seeds the form once, so that later resolution has to be pushed in here
+  // explicitly or the hidden bankId input — and the approve payload — would
+  // stay stuck at 0.
+  const resolvedBankGroupBankIds = useRef<Array<number | undefined>>([]);
+  useEffect(() => {
+    const groups = draft.questionBankGroups ?? [];
+    groups.forEach((group, index) => {
+      if (
+        group.bankId > 0 &&
+        resolvedBankGroupBankIds.current[index] !== group.bankId &&
+        getValues(`questionBankGroups.${index}.bankId`) !== group.bankId
+      ) {
+        setValue(`questionBankGroups.${index}.bankId`, group.bankId, {
+          shouldValidate: true,
+        });
+      }
+    });
+    resolvedBankGroupBankIds.current = groups.map((group) => group.bankId);
+  }, [draft.questionBankGroups, getValues, setValue]);
+
   const watchedValues = useWatch({ control });
   const dueDateValue = useWatch({
     control,
