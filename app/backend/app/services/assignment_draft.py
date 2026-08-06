@@ -1,3 +1,8 @@
+"""Module note: creates assignment draft payloads before Canvas writes.
+
+Keeps generation separate from instructor approval and execution.
+"""
+
 import html
 import json
 import re

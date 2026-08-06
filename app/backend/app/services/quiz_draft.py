@@ -1,3 +1,9 @@
+"""Service note: generates quiz drafts as reviewable JSON, not Canvas writes.
+
+The draft path normalizes model output and leaves approval/execution to the
+preview workflow so malformed questions cannot bypass instructor review.
+"""
+
 import html
 import json
 import re

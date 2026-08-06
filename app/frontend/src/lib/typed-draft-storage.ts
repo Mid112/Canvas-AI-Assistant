@@ -1,3 +1,5 @@
+// File note: persists content-only assistant drafts; Canvas/local identifiers stay out of localStorage and course IDs are re-resolved from labels at resume time.
+
 import { instructorMessagesPath, paths } from "@/routes/paths";
 import type { QuizEngine, QuizQuestionDraft } from "@/types/quizCreate";
 

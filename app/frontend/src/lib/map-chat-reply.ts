@@ -1,3 +1,5 @@
+// File note: normalizes backend assistant replies for rendering, including unverified claim warnings that should stay presentation-agnostic.
+
 import {
   formatDueDateForDisplay,
   formatDueDateForInput,

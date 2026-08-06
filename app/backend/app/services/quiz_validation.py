@@ -1,4 +1,4 @@
-# app/backend/app/services/quiz_validation.py
+"""Service note: validates quiz drafts before preview and Canvas write paths can accept them."""
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
