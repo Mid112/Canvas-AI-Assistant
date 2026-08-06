@@ -277,6 +277,37 @@ def test_merge_field_memory_keeps_all_supplied_create_assignment_fields():
     assert conversation.field_memory["points_possible"] == 25
 
 
+def test_merge_field_memory_persists_explicit_null_points_possible():
+    """Ticket 21: explicit ungraded (points_possible=null) must survive merge
+    and prompt formatting so a later turn does not re-ask for points."""
+    conversation = Conversation(field_memory={"title": "Reading Check-in"})
+    merge_field_memory(
+        conversation,
+        {
+            "title": "Reading Check-in",
+            "description": "ungraded participation",
+            "due_date": "2030-01-01T00:00:00",
+            "points_possible": None,
+            "assignment_id": None,  # still skipped — null is not meaningful here
+        },
+        allowed_keys=_PARTIAL_PLAN_SAFE_KEYS,
+    )
+    assert conversation.field_memory["points_possible"] is None
+    assert "assignment_id" not in conversation.field_memory
+
+    # A later merge that omits points_possible must not wipe the null.
+    merge_field_memory(
+        conversation,
+        {"description": "updated body"},
+        allowed_keys=_PARTIAL_PLAN_SAFE_KEYS,
+    )
+    assert conversation.field_memory["points_possible"] is None
+    assert conversation.field_memory["description"] == "updated body"
+
+    prompt = format_field_memory_for_prompt(conversation.field_memory)
+    assert '"points_possible": null' in prompt
+
+
 def test_clear_course_scoped_field_memory_removes_entity_refs():
     """Switching courses must clear assignment/student-scoped fields so
     they don't leak into the new course's context (#1306)."""
