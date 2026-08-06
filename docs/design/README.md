@@ -6,7 +6,7 @@ This document presents the system design for the Canvas Workflow Assistant, a se
 
 The primary goal of the system is to reduce the administrative workload associated with course management while maintaining transparency, security, and human oversight. By integrating with Canvas and leveraging locally hosted large language models (LLMs), the platform enables users to perform tasks such as analyzing missing submissions, generating student communications, creating assignments, and reviewing course analytics through a conversational interface.
 
-The system supports three primary user roles: Instructors, Teaching Assistants, and System Administrators. Each role is provided with a dedicated interface and permissions appropriate to their responsibilities. To ensure accountability and user control, all AI-generated actions are presented through a workflow preview and approval process before execution.
+The system supports two primary user roles in the **active product schema**: Instructors and System Administrators. Teaching Assistant support was explored in early UI mockups but was **removed** from the shipped roles model (`users.role` is `instructor` | `admin` only). To ensure accountability and user control, all AI-generated actions are presented through a workflow preview and approval process before execution.
 
 This document describes the overall architecture, use case models, database design, data flow diagrams, and user interface design of the system. Together, these components provide a comprehensive overview of how the Canvas Workflow Assistant is structured and how users interact with the platform.
 
@@ -39,17 +39,19 @@ and FastAPI never influences Ollama. This satisfies the core non-functional
 requirements around LLM isolation and credential security at the
 infrastructure and for the purposes of this project.
 
-The microservices pattern applies within the backend: FastAPI, MCP Server,
-Ollama, and PostgreSQL are independently deployable subsystems, each with
-a single responsibility. This allows the team to develop, test, and replace
-each subsystem without coupling.
+The microservices pattern applies within the backend: FastAPI, optional MCP
+Server, LLM providers (e.g. Ollama), and PostgreSQL are independently
+deployable subsystems, each with a single responsibility. This allows the
+team to develop, test, and replace each subsystem without coupling.
 
 Two explicit design decisions drove the architecture:
 
-1. **MCP server as the single credential boundary.** The Canvas API token
-   is stored and used exclusively inside the MCP server. FastAPI never
-   holds it, and the LLM never sees it. A bug or injection in FastAPI
-   cannot retrieve or access the token because it never crosses into that layer.
+1. **Canvas credentials stay off the LLM path.** Instructor Canvas tokens
+   are stored **encrypted** on the FastAPI host (`canvas_connections`) and are
+   never sent to the LLM. An optional **MCP sidecar** (`MCP_ENABLED`, default
+   `false`) can act as an additional Canvas tool gateway with host allowlisting;
+   it is not the sole credential store. Direct Canvas HTTP from FastAPI remains
+   the default path for many workflows.
 
 2. **Pydantic as both the PII sanitiser and output validator.** Rather than
    a separate processing module, Pydantic field validators handle personal identifiable information field
@@ -75,33 +77,32 @@ without a heavy runtime.
 FastAPI is the API gateway and orchestration layer. It contains three
 modules:
 
-- **Chat exporter** — receives the raw prompt from the frontend and
-  forwards it to MCP. It does not interpret or transform the prompt.
-- **Authentication module** — verifies JWT tokens and enforces RBAC.
-  Professors, TAs, and admins have different privileges enforced here
-  before any downstream call is made.
-- **Preview builder** — receives the validated diff payload from MCP and
-  formats it for the frontend dry-run view.
+- **Chat / orchestration** — receives prompts from the frontend, runs the
+  assistant loop (LLM + tool dispatch), and returns confirmable previews.
+- **Authentication module** — verifies JWT tokens and enforces RBAC for
+  instructors and administrators before any downstream call is made.
+- **Preview / write services** — build dry-run previews and execute confirmed
+  Canvas writes (direct Canvas HTTP, or via MCP when enabled).
 
-FastAPI is designed such that it doesn't hold Canvas credentials and has no access to
-the LLM network. It is in between the browser and the
-trusted server.
+FastAPI holds **encrypted** Canvas connection records and orchestrates LLM
+calls through provider adapters. The LLM never receives raw Canvas tokens.
+FastAPI sits between the browser and the trusted server-side subsystems.
 
-### MCP Server Subsystem
+### MCP Server Subsystem (optional)
 
-MCP is the to connect LLM to external tools or filesystem. It is the only subsystem that holds
-the Canvas API token and the only subsystem that communicates with Ollama.
-It contains four modules in execution order:
+MCP is an optional sidecar that can expose Canvas tools behind a shared
+secret and hostname allowlist (`MCP_ALLOWED_CANVAS_HOSTS`). When
+`MCP_ENABLED` is false (the default), FastAPI talks to Canvas directly.
 
-- **Pydantic validation + PII hider** — parses the incoming Canvas JSON
-  response, replaces student names and IDs with synthetic tokens, and
-  validates types and structure before anything is sent to the LLM.
-- **Calling Ollama** — sends the sanitised prompt to Ollama via
-  `HTTP POST /api/generate` and waits for the raw text response.
-- **Canvas API call** — attaches the Bearer token and executes the
-  validated action against the Canvas REST API after instructor confirms.
-- **Audit writer** — inserts a timestamped record into the audit log on
-  every MCP action, before and after Canvas execution.
+When enabled, MCP may:
+
+- Receive authenticated tool calls from the backend
+- Attach the instructor Canvas token for allowed hosts
+- Execute selected Canvas operations after the instructor has confirmed
+  the write in the product UI
+
+LLM provider calls (Ollama / OpenAI-compatible / Anthropic) are orchestrated
+from FastAPI / provider adapters — MCP is not required for chat.
 
 
 
@@ -121,7 +122,7 @@ PostgreSQL is the persistence layer containing four logical tables:
 - **users / sessions** — stores credentials and active session tokens.
   Passwords are stored as bcrypt hashes, never plaintext.
 - **course cache** — stores timestamped Canvas API responses to avoid
-  redundant API calls against Canvas's rate limits. MCP checks this before
+  redundant API calls against Canvas's rate limits. The backend checks this before
   hitting Canvas.
 - **Canvas API call log** — records the JSON schema and auth token shape
   of every outbound Canvas call for audit purposes.
@@ -135,11 +136,12 @@ and preventing raw SQL construction that could introduce injection risks.
 
 ### Canvas LMS REST API — External
 
-Canvas is the only external subsystem. It is accessed exclusively by the
-MCP server using a Bearer token that never leaves that container. The API
-is instructor-scoped which means that each token only has access to the courses belonging
-to that instructor, preventing one instructor from modifying another's
-courses even if credentials were somehow confused.
+Canvas is the primary external LMS subsystem. It is accessed with the
+instructor's encrypted Bearer token from FastAPI (and optionally via the MCP
+sidecar when enabled). Tokens are instructor-scoped to the courses that
+instructor can access, preventing one instructor from modifying another's
+courses even if credentials were somehow confused. Tokens are never sent to
+the LLM.
 
 ## Use Case Models
 ### Use Case Diagram
@@ -148,7 +150,7 @@ courses even if credentials were somehow confused.
 ---
 
 ### Use Case 1: Authenticate User (Login)
-* **Primary actor:** Instructor, Teaching Assistant, System Administrator 
+* **Primary actor:** Instructor, System Administrator 
 * **Description:** User logs into the application securely to receive an active session token. 
 * **Precondition:** User account exists in the PostgreSQL database. 
 * **Postcondition:** User is granted an active JWT and redirected to their respective dashboard. 
@@ -168,7 +170,7 @@ courses even if credentials were somehow confused.
 ---
 
 ### Use Case 2: Terminate Session (Logout)
-* **Primary actor:** Instructor, Teaching Assistant, System Administrator 
+* **Primary actor:** Instructor, System Administrator 
 * **Description:** User securely exits the application, invalidating their active session. 
 * **Precondition:** User is currently authenticated. 
 * **Postcondition:** Session is terminated and user is returned to the login screen. 
@@ -189,7 +191,7 @@ courses even if credentials were somehow confused.
 
 **Main scenario:**
 1. Admin clicks "Add New User."
-2. Admin enters the new user's email, assigns a temporary password, and selects a role (Instructor or TA).
+2. Admin enters the new user's email, assigns a temporary password, and selects a role (Instructor or Admin, per product rules).
 3. Admin clicks "Save."
 4. System hashes the temporary password and creates the user record in the database.
 
@@ -201,7 +203,7 @@ courses even if credentials were somehow confused.
 ---
 
 ### Use Case 4: Connect Canvas Account
-* **Primary actor:** Instructor, Teaching Assistant 
+* **Primary actor:** Instructor 
 * **Description:** User inputs their Canvas API token so the application can communicate with the Canvas LMS. 
 * **Precondition:** User is authenticated. 
 * **Postcondition:** The API token is securely encrypted and stored in the database. 
@@ -223,7 +225,7 @@ courses even if credentials were somehow confused.
 ---
 
 ### Use Case 5: View Course & Submission Dashboard
-* **Primary actor:** Instructor, Teaching Assistant 
+* **Primary actor:** Instructor 
 * **Description:** User views a color-coded grid of student submission statuses. 
 * **Precondition:** User has a valid API token stored. 
 * **Postcondition:** The dashboard renders the current submission data. 
@@ -245,7 +247,7 @@ courses even if credentials were somehow confused.
 ---
 
 ### Use Case 6: Filter & Search Dashboard Data
-* **Primary actor:** Instructor, Teaching Assistant 
+* **Primary actor:** Instructor 
 * **Description:** User dynamically filters the dashboard to locate specific students or assignment statuses. 
 * **Precondition:** The Course Dashboard is populated with data. 
 * **Postcondition:** The UI updates to show only requested data without querying the backend. 
@@ -258,7 +260,7 @@ courses even if credentials were somehow confused.
 ---
 
 ### Use Case 7: Draft & Send AI Reminder Messages
-* **Primary actor:** Instructor, Teaching Assistant 
+* **Primary actor:** Instructor 
 * **Description:** User prompts the AI to draft messages, reviews them, and executes the send action. 
 * **Precondition:** User is viewing a specific Course Dashboard. 
 * **Postcondition:** Messages are dispatched via Canvas API and logged in the database. 
@@ -305,7 +307,7 @@ courses even if credentials were somehow confused.
 ---
 
 ### Use Case 9: View Personal Action History Log
-* **Primary actor:** Instructor, Teaching Assistant 
+* **Primary actor:** Instructor 
 * **Description:** User reviews their own past automated actions to ensure accountability. 
 * **Precondition:** User has previously executed an AI action. 
 * **Postcondition:** User successfully views their localized history. 
@@ -343,7 +345,7 @@ courses even if credentials were somehow confused.
 
 **Main scenario:**
 1. Admin selects a user from the account list.
-2. Admin changes the role drop-down from "TA" to "Instructor" and clicks Save.
+2. Admin changes the role drop-down (for example from Instructor to Admin where allowed) and clicks Save.
 3. System updates the role column in the PostgreSQL database.
 
 **Extensions:**
@@ -385,7 +387,7 @@ courses even if credentials were somehow confused.
 ---
 
 ### Use Case 14: Reset User Password
-* **Primary actor:** Instructor, Teaching Assistant, System Administrator 
+* **Primary actor:** Instructor, System Administrator 
 * **Description:** User recovers access to their account. 
 * **Precondition:** User is on the login screen. 
 * **Postcondition:** User sets a new password and gains entry. 
@@ -953,48 +955,14 @@ The settings page allows instructors to manage profile information, notification
 
 <img width="312" height="665" alt="Screenshot 2026-06-02 at 4 55 51 PM" src="https://github.com/user-attachments/assets/edf3f2ba-a60e-4bec-b798-e38fe6bc5b6b" />
 
-## Teaching Assistant Portal
+## Teaching Assistant Portal (out of scope)
 
-Selecting **Dashboard** from the navigation menu will take Teaching Assistants to their main dashboard.
-
-The dashboard provides a summary of assigned courses, missing and late submissions and pending message drafts. Quick action buttons allow TAs to efficiently monitor course progress and assist instructors with course management activities.
-
-The dashboard also clearly displays which actions Teaching Assistants are permitted to perform and which actions require instructor approval.
-
-<img width="470" height="815" alt="Screenshot 2026-06-02 at 5 16 52 PM" src="https://github.com/user-attachments/assets/8c9d3e5a-6d87-42f1-beb4-32c973d52f86" />
-
-After logging into the system, Teaching Assistants can access the Assigned Courses page. This page displays all courses assigned to the TA along with information such as the course instructor, student count, assignment count, and the number of missing submissions.
-
-Teaching Assistants can quickly navigate to student information, assignment details, and course analytics directly from this page.
-
-<img width="547" height="812" alt="Screenshot 2026-06-02 at 5 18 07 PM" src="https://github.com/user-attachments/assets/2ea24401-bee3-470b-ba16-32ce224322d9" />
-
-Selecting **Message Drafts** from the navigation menu will take Teaching Assistants to the message creation and management page.
-
-This page allows TAs to draft communications related to missing assignments, late submissions, office hours, and other course-related topics. Teaching Assistants can manually create drafts or use AI assistance to generate message content.
-
-Since TAs do not have permission to directly send messages, all drafts must be submitted to the instructor for review and approval before being distributed to students.
-
-<img width="1045" height="736" alt="Screenshot 2026-06-02 at 5 14 25 PM" src="https://github.com/user-attachments/assets/eb3b057c-c8f3-456a-98cc-1c9c1873562f" />
-
-
-Selecting **Missing & Late Work** from the navigation menu will take Teaching Assistants to a centralized view of overdue and incomplete assignments.
-
-This page displays students who have outstanding work, assignment details, submission status, and the number of days overdue. Filters and search functionality allow TAs to quickly locate specific students or assignments.
-
-The page helps Teaching Assistants identify students who may require reminders or additional academic support.
-
-<img width="1037" height="732" alt="Screenshot 2026-06-02 at 5 13 28 PM" src="https://github.com/user-attachments/assets/6c7c16d6-79dc-4602-8b54-3c1c96189e8a" />
-
-Selecting **Student Monitoring** from the navigation menu will take Teaching Assistants to the student performance monitoring page.
-
-This page provides an overview of student progress including course completion rates, grades, missing assignments, and risk indicators. AI-generated summaries identify students who may be struggling academically and recommend potential interventions.
-
-Teaching Assistants can use this information to monitor student engagement and provide assistance before performance issues become more significant.
-
-<img width="1037" height="734" alt="Screenshot 2026-06-02 at 5 12 33 PM" src="https://github.com/user-attachments/assets/26899af7-850c-4b10-8022-f1f6a2e16ab8" />
-
-The settings page allows Teaching Assistants to manage profile information, notification preferences, security settings, and active sessions. Users can update personal information, change passwords, configure notifications, and enable two-factor authentication to improve account security.
+Early design mockups included a Teaching Assistant portal (dashboard, assigned
+courses, message drafts requiring instructor approval, missing/late work, and
+student monitoring). **That role and portal are not part of the active schema
+or shipped product** — only Instructor and Administrator experiences are
+implemented. Historical TA screenshots below (if retained in older assets)
+should not be treated as current requirements.
 
 # Administrator Portal
 
@@ -1006,7 +974,7 @@ The dashboard also displays the status of major services such as the frontend, b
 
 Selecting **User Management** from the navigation menu will take administrators to the user administration page.
 
-This page displays all registered users within the platform, including instructors, teaching assistants, and administrators. Administrators can search for users, review account information, manage account status, and assign roles.
+This page displays all registered users within the platform, including instructors and administrators. Administrators can search for users, review account information, manage account status, and assign roles.
 
 The page provides a centralized location for maintaining user accounts and ensuring appropriate access permissions throughout the system.
 
@@ -1038,7 +1006,7 @@ The page assists administrators in identifying potential security threats and ma
 
 Selecting **Roles & Permissions** will take administrators to the role management interface.
 
-This page allows administrators to configure role-based access control throughout the platform. Administrators can review existing roles, create custom roles, and manage permissions assigned to instructors, teaching assistants, and administrators.
+This page allows administrators to configure role-based access control throughout the platform. Administrators can review existing roles, create custom roles, and manage permissions assigned to instructors and administrators.
 
 Permissions such as viewing courses, generating AI message drafts, managing users, approving workflows, and accessing audit logs can be assigned or revoked as needed.
 
