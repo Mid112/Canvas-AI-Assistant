@@ -4,6 +4,7 @@ Unit tests for chat helper / safety primitives in app.services.chat (#708, #710)
 from app.services.chat import (
     HISTORY_MESSAGE_MAX_CHARS,
     NORMAL_TURN_ALLOWED_ACTIONS,
+    _attach_quiz_generation_prompt,
     _summarize_assistant_history_content,
     _truncate_history_content,
     build_system_prompt,
@@ -91,3 +92,67 @@ def test_truncate_long_content():
     truncated = _truncate_history_content(long)
     assert truncated.endswith(" …[truncated]")
     assert len(truncated) == HISTORY_MESSAGE_MAX_CHARS + len(" …[truncated]")
+
+
+# Verifies: create_quiz intent_preview gets the raw utterance as generation_prompt (#1512).
+def test_attach_quiz_generation_prompt_stamps_create_quiz():
+    utterance = (
+        "Create a quiz called 'recursion principles' with 5 multiple-choice "
+        "questions about cell biology. Each question should have 4 options. "
+        "Set it to 50 points total, with a 30-minute time limit."
+    )
+    result = {
+        "intent_preview": True,
+        "summary": "Create recursion principles",
+        "proposed_action": {
+            "action": "create_quiz",
+            "title": "recursion principles",
+            "description": "",
+            "local_course_id": 1,
+        },
+    }
+
+    stamped = _attach_quiz_generation_prompt(result, utterance)
+
+    assert stamped["proposed_action"]["generation_prompt"] == utterance
+    assert stamped["proposed_action"]["title"] == "recursion principles"
+    # Original dict is not mutated.
+    assert "generation_prompt" not in result["proposed_action"]
+
+
+# Verifies: refine follow-ups must not overwrite the first full utterance (#1512).
+def test_attach_quiz_generation_prompt_keeps_existing_prompt():
+    original = (
+        "Create a quiz called 'recursion principles' with 5 multiple-choice "
+        "questions about cell biology. 50 points, 30-minute time limit."
+    )
+    result = {
+        "intent_preview": True,
+        "proposed_action": {
+            "action": "create_quiz",
+            "title": "recursion principles",
+            "generation_prompt": original,
+        },
+    }
+
+    stamped = _attach_quiz_generation_prompt(result, "make it harder")
+
+    assert stamped is result
+    assert stamped["proposed_action"]["generation_prompt"] == original
+
+
+def test_attach_quiz_generation_prompt_skips_non_quiz_and_blank():
+    assignment = {
+        "intent_preview": True,
+        "proposed_action": {"action": "create_assignment", "title": "HW"},
+    }
+    assert _attach_quiz_generation_prompt(assignment, "make homework") is assignment
+
+    quiz = {
+        "intent_preview": True,
+        "proposed_action": {"action": "create_quiz", "title": "Q"},
+    }
+    assert _attach_quiz_generation_prompt(quiz, "   ") is quiz
+    assert _attach_quiz_generation_prompt({"action": "respond"}, "hi") == {
+        "action": "respond"
+    }

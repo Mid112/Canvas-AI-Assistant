@@ -27,6 +27,7 @@ import {
 } from "@/lib/table-pagination";
 import {
   instructorAssignmentUpdatePath,
+  instructorCourseQuizzesPath,
   instructorCourseStudentsPath,
   instructorCourseSubmissionsPath,
   paths,
@@ -497,6 +498,12 @@ function PageHeader({
       </div>
       <div className="flex flex-wrap gap-2">
         {createAssignmentButton}
+        <Button
+          variant="outline"
+          render={<Link to={instructorCourseQuizzesPath(localCourseId)} />}
+        >
+          Quizzes
+        </Button>
         <Button
           variant="outline"
           render={<Link to={instructorCourseStudentsPath(localCourseId)} />}

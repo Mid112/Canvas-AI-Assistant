@@ -39,6 +39,14 @@ describe("InstructorCoursesCard", () => {
     expect(
       screen.getByRole("link", { name: "View Course" }),
     ).toHaveAttribute("href", instructorCoursePath(1));
+    expect(screen.getByRole("link", { name: /Assignments/i })).toHaveAttribute(
+      "href",
+      "/instructor/courses/1/assignments",
+    );
+    expect(screen.getByRole("link", { name: /Quizzes/i })).toHaveAttribute(
+      "href",
+      "/instructor/courses/1/quizzes",
+    );
     expect(
       screen.getByRole("button", { name: "Set Active" }),
     ).toBeInTheDocument();
