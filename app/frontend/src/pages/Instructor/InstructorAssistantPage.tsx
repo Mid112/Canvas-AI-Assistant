@@ -154,7 +154,9 @@ export function InstructorAssistantPage() {
   // loading a transcript does not POST /chat/course-context and fork away
   // from the conversation the instructor just opened (#1507 re-review).
   const pendingConversationIdRef = useRef(pendingConversationId);
-  pendingConversationIdRef.current = pendingConversationId;
+  useEffect(() => {
+    pendingConversationIdRef.current = pendingConversationId;
+  }, [pendingConversationId]);
   const lastSyncedCourseIdRef = useRef<number | null>(null);
 
   const [typedDraftRevision, setTypedDraftRevision] = useState(0);
