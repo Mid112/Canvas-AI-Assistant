@@ -713,7 +713,10 @@ async def execute_tool(
                     mcp_arguments: dict[str, Any] = {
                         "course_id": int(course.canvas_course_id),
                         "name": action.title,
-                        "due_at": action.due_date,
+                        # Use the same UTC-normalized due_date as validation /
+                        # AssignmentCreate — raw action.due_date can diverge from
+                        # the preview/confirm value (#1550 review).
+                        "due_at": due_date,
                         "description": action.description,
                     }
                     if action.points_possible is None:

@@ -259,6 +259,79 @@ async def test_create_ungraded_assignment_mcp_args_send_not_graded():
 
 
 @pytest.mark.asyncio
+async def test_create_assignment_mcp_args_use_normalized_due_at():
+    """MCP create must send the UTC-normalized due_at, not raw action.due_date."""
+    from app.mcp_tools.schemas import CreateAssignmentAction
+
+    course = SimpleNamespace(
+        id=1,
+        canvas_url="https://canvas.example.edu",
+        name="COSC 111",
+        canvas_course_id="42",
+    )
+    db = AsyncMock()
+    db.scalar = AsyncMock(return_value=course)
+    user = SimpleNamespace(id=7)
+    raw_due = "2030-01-01T17:00:00-07:00"
+    normalized_due = "2030-01-02T00:00:00+00:00"
+    action = CreateAssignmentAction(
+        local_course_id=1,
+        title="HW1",
+        description="desc",
+        due_date=raw_due,
+        points_possible=10,
+    )
+
+    async def _run_write(*_args, **kwargs):
+        return await kwargs["write"]()
+
+    with (
+        patch("app.mcp_tools.dispatcher.settings.MCP_ENABLED", True),
+        patch(
+            "app.mcp_tools.dispatcher._normalize_due_date_for_user",
+            return_value=normalized_due,
+        ),
+        patch("app.mcp_tools.dispatcher.validate_assignment_for_create", new=AsyncMock()),
+        patch(
+            "app.mcp_tools.dispatcher._assert_no_executing_write",
+            new=AsyncMock(),
+        ),
+        patch(
+            "app.mcp_tools.dispatcher.run_idempotent_canvas_write",
+            new=AsyncMock(side_effect=_run_write),
+        ),
+        patch(
+            "app.mcp_tools.dispatcher._call_mcp_tool",
+            new=AsyncMock(
+                return_value={
+                    "success": True,
+                    "assignment": {
+                        "id": 91,
+                        "name": "HW1",
+                        "due_at": normalized_due,
+                        "points_possible": 10,
+                        "published": False,
+                    },
+                }
+            ),
+        ) as call_mcp,
+        patch(
+            "app.mcp_tools.dispatcher.create_course_assignment",
+            new=AsyncMock(),
+        ) as create_direct,
+    ):
+        result = await execute_tool(db, user, action)
+
+    create_direct.assert_not_awaited()
+    call_mcp.assert_awaited_once()
+    mcp_arguments = call_mcp.await_args.args[3]
+    assert mcp_arguments["due_at"] == normalized_due
+    assert mcp_arguments["due_at"] != raw_due
+    assert result["via_mcp"] is True
+    assert result["data"]["id"] == 91
+
+
+@pytest.mark.asyncio
 async def test_create_quiz_stays_on_direct_canvas_when_mcp_enabled():
     from app.mcp_tools.schemas import CreateQuizAction
 
