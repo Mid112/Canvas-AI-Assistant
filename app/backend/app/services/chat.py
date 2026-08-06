@@ -58,7 +58,9 @@ from app.services.canvas_assistant_gate import (
     classify_action_for_limited_mode,
     user_has_canvas_credentials,
 )
+from app.services.canvas_timezone import get_instructor_canvas_timezone
 from app.services.deferred_assistant import defer_assistant_request, mark_deferred_request_resumed
+from app.services.due_date import normalize_due_date_to_utc_iso
 from app.services.failed_operations import record_failed_operation
 from app.services.field_memory import (
     _PARTIAL_PLAN_SAFE_KEYS,
@@ -1566,9 +1568,14 @@ async def _run_update_assignment_chain(
     }
     if assignment_name:
         proposed_action["assignment_name"] = assignment_name
+    instructor_timezone = get_instructor_canvas_timezone(user, course.canvas_url)
     for field_name in _UPDATE_ASSIGNMENT_FIELDS:
         value = getattr(action, field_name)
         if value is not None:
+            # Match execute_tool / intent_preview: store a UTC ISO due_date so
+            # the confirm card and Canvas write agree (#1435).
+            if field_name == "due_date" and isinstance(value, str):
+                value = normalize_due_date_to_utc_iso(value, instructor_timezone)
             proposed_action[field_name] = value
 
     preview_metadata = generate_write_preview(proposed_action, course)

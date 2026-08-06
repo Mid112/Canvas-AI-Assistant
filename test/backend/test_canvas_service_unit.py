@@ -43,7 +43,11 @@ def _db_assigning_ids() -> AsyncMock:
 
 
 def _connection(url: str, encrypted_token: str = "enc") -> SimpleNamespace:
-    return SimpleNamespace(canvas_url=url, encrypted_token=encrypted_token)
+    return SimpleNamespace(
+        canvas_url=url,
+        encrypted_token=encrypted_token,
+        time_zone=None,
+    )
 
 
 # ---------------------------------------------------------------------------
