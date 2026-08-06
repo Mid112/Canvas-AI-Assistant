@@ -1,3 +1,5 @@
+// Instructor page note: coordinates feedback create stepper UI state with Canvas-backed services and active-course context.
+
 import type { FeedbackCreateStep } from "@/types/feedbackCreate";
 
 interface FeedbackCreateStepperProps {

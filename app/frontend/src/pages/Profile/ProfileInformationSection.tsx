@@ -1,3 +1,5 @@
+// Page note: coordinates the profile information section screen from smaller components and route-level data.
+
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";

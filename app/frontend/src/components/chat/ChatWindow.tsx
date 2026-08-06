@@ -1,3 +1,5 @@
+// Chat UI note: renders the assistant chat window surface while preserving instructor review and cancellation flows.
+
 import { Plus } from "lucide-react";
 import {
   forwardRef,

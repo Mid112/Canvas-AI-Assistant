@@ -1,3 +1,5 @@
+// Frontend service note: wraps message threads API calls and normalizes payloads for route/components.
+
 import { apiRequest, ApiRequestError } from "@/lib/api-request";
 import type {
   MessageThread,

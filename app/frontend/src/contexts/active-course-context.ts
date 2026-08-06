@@ -1,3 +1,5 @@
+// Context note: shares active course context state across route trees without prop-drilling.
+
 import { createContext } from "react";
 
 import type { ActiveCourseSelection, InstructorCourse } from "@/types/course";

@@ -1,3 +1,5 @@
+# Requirements note: pins backend runtime, test, lint, and type-check dependencies for local development.
+
 fastapi==0.136.3
 uvicorn[standard]==0.34.0
 pydantic==2.13.4

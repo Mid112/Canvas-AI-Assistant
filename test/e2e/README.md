@@ -1,3 +1,5 @@
+<!-- Test note: covers the r e a d m e behavior so future changes can preserve the expected Canvas workflow contract. -->
+
 # Browser end-to-end tests (Playwright)
 
 Covers full-app UI flows for Integration Testing (#687):

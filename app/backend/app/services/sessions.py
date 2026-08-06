@@ -1,3 +1,5 @@
+"""Service note: owns backend sessions business logic behind routers, tests, and assistant tool execution."""
+
 from datetime import UTC, datetime
 from typing import cast
 

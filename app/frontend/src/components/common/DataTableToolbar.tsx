@@ -1,3 +1,5 @@
+// Component note: renders reusable data table toolbar UI for the instructor/admin experience.
+
 import { Search } from "lucide-react";
 
 import { Input } from "@/components/ui/input";

@@ -1,3 +1,5 @@
+// Instructor page note: coordinates map canvas course UI state with Canvas-backed services and active-course context.
+
 import type { InstructorCourse } from "@/types/course";
 import type { CanvasCourse } from "@/types/canvas";
 

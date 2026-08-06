@@ -1,3 +1,5 @@
+# Makefile note: documents and automates the project’s local install, test, database, and development workflows.
+
 .PHONY: install install-vllm install-ollama lint lint-fix test test-fuzz test-windows test-llm test-llm-windows test-ollama test-ollama-windows test-vague-llm test-vague-llm-windows test-e2e test-fresh build up down logs restart clean migrate migrate-new db-shell db-reset db-ensure seed-canvas-students run-vllm run-ollama dev e2e-up reload
 
 # ── Install ──────────────────────────────────

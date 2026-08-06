@@ -1,3 +1,5 @@
+// Instructor page note: coordinates security settings tab UI state with Canvas-backed services and active-course context.
+
 import { useEffect, useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/button";

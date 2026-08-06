@@ -1,3 +1,5 @@
+// Test note: covers the dashboard.test behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {

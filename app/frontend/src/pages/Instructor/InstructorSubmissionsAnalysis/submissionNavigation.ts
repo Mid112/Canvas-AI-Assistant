@@ -1,3 +1,5 @@
+// Instructor page note: coordinates submission navigation UI state with Canvas-backed services and active-course context.
+
 import type {
   AssignmentSubmissionAnalysis,
   SubmissionStatusFilter,

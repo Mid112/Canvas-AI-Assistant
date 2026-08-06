@@ -1,3 +1,5 @@
+// Type note: documents the feedback create data contract shared by services, components, and tests.
+
 export interface FeedbackCreateCourseOption {
   id: string;
   label: string;

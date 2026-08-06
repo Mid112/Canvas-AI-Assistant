@@ -1,3 +1,5 @@
+// Admin page note: coordinates system health page admin workflows and service data.
+
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, RefreshCw } from "lucide-react";
 

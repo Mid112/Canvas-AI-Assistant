@@ -1,3 +1,5 @@
+// Auth page note: handles review permissions allowed actions onboarding/authentication UI while keeping Canvas connection steps explicit.
+
 import {
   Check,
   CheckCircle2,

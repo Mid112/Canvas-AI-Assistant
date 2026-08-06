@@ -1,3 +1,5 @@
+// Test note: covers the auth.test behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {

@@ -1,3 +1,5 @@
+// Instructor page note: coordinates instructor notifications page UI state with Canvas-backed services and active-course context.
+
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 

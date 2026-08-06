@@ -1,3 +1,5 @@
+// Mock data note: supplies mock instructors fixtures for UI development and frontend tests.
+
 import type { Instructor } from "@/types/instructor";
 import { getInstructorFullName } from "@/types/instructor";
 

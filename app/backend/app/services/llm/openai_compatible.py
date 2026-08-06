@@ -1,3 +1,5 @@
+"""Service note: owns backend openai compatible business logic behind routers, tests, and assistant tool execution."""
+
 import httpx
 
 from app.services.llm.base import LLMAdapter

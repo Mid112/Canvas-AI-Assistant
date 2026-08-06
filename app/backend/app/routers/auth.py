@@ -1,3 +1,5 @@
+"""Router note: exposes HTTP endpoints for auth workflows while delegating business rules to services."""
+
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Request, status

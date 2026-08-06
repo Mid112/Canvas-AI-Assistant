@@ -1,3 +1,5 @@
+// Preview UI note: presents preview panel review details before any Canvas write is confirmed.
+
 import { Eye } from "lucide-react";
 
 import { PreviewBanner } from "@/components/brand/PreviewBanner";

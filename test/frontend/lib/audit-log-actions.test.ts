@@ -1,3 +1,5 @@
+// Test note: covers the audit log actions.test behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { describe, expect, it } from "vitest";
 
 import { getUniqueAuditLogActions } from "@/lib/audit-log-actions";

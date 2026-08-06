@@ -1,3 +1,5 @@
+// Chat UI note: renders the assistant pending action controls surface while preserving instructor review and cancellation flows.
+
 import { useState } from "react";
 import { Ban, CheckCircle2, Loader2, RefreshCw, XCircle } from "lucide-react";
 

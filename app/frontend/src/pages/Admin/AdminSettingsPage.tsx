@@ -1,3 +1,5 @@
+// Admin page note: coordinates admin settings page admin workflows and service data.
+
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";

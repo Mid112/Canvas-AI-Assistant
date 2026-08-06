@@ -1,3 +1,5 @@
+// Messages UI note: supports the instructor message-drafting flow for message preview without bypassing preview/confirmation.
+
 import type { MessageRecipient } from "@/types/messageDraft";
 
 interface MessageContentPreviewProps {

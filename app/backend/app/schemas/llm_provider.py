@@ -1,3 +1,5 @@
+"""Schema note: defines API-facing llm provider request/response shapes; changes here affect frontend service contracts."""
+
 from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator

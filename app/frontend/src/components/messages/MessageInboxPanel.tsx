@@ -1,3 +1,5 @@
+// Messages UI note: supports the instructor message-drafting flow for message inbox panel without bypassing preview/confirmation.
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, Loader2, Search } from "lucide-react";
 

@@ -1,3 +1,5 @@
+"""Service note: owns backend inbox reply draft business logic behind routers, tests, and assistant tool execution."""
+
 import json
 
 import httpx

@@ -1,3 +1,5 @@
+// Component note: renders reusable account menu UI for the instructor/admin experience.
+
 import { useNavigate } from "react-router-dom";
 import {
   Building2,

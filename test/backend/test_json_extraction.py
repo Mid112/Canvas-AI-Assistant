@@ -1,3 +1,5 @@
+"""Test note: covers the test json extraction behavior so future changes can preserve the expected Canvas workflow contract."""
+
 from app.services.llm.json_extraction import extract_json_object
 
 

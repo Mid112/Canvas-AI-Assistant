@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes map audit log behavior so components and tests share one implementation.
+
 import type {
   AuditLogApiRecord,
   AuditLogEntry,

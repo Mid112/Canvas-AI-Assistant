@@ -1,3 +1,5 @@
+// Instructor page note: coordinates ai models settings tab UI state with Canvas-backed services and active-course context.
+
 import {
   AlertTriangle,
   CheckCircle2,

@@ -1,3 +1,5 @@
+// Auth page note: handles login welcome onboarding/authentication UI while keeping Canvas connection steps explicit.
+
 export function LoginWelcome() {
   return (
     <div className="mb-8 text-center">

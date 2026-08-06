@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes user display behavior so components and tests share one implementation.
+
 const HONORIFICS = new Set([
   "dr",
   "dr.",

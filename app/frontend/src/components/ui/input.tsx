@@ -1,3 +1,5 @@
+// UI primitive note: wraps shared input styling/behavior so feature components stay visually consistent.
+
 import * as React from "react"
 import { Input as InputPrimitive } from "@base-ui/react/input"
 

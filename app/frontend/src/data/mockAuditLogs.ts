@@ -1,3 +1,5 @@
+// Mock data note: supplies mock audit logs fixtures for UI development and frontend tests.
+
 import type { AuditLogEntry } from "@/types/auditLog";
 import type { AuditLogApiRecord } from "@/types/auditLog";
 

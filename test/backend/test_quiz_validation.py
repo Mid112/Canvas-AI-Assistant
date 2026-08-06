@@ -1,3 +1,5 @@
+"""Test note: covers the test quiz validation behavior so future changes can preserve the expected Canvas workflow contract."""
+
 from datetime import UTC, datetime, timedelta
 
 import pytest

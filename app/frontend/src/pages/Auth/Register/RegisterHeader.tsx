@@ -1,3 +1,5 @@
+// Auth page note: handles register header onboarding/authentication UI while keeping Canvas connection steps explicit.
+
 import { BrandLogo } from "@/components/brand/BrandLogo";
 
 export function RegisterHeader() {

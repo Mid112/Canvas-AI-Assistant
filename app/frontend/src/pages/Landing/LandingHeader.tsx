@@ -1,3 +1,5 @@
+// Landing page note: presents the landing header marketing/onboarding surface before authenticated workflows.
+
 import { Link } from "react-router-dom";
 
 import { BrandLogo } from "@/components/brand/BrandLogo";

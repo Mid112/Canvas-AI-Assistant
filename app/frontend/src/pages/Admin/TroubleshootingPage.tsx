@@ -1,3 +1,5 @@
+// Admin page note: coordinates troubleshooting page admin workflows and service data.
+
 import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, Loader2, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";

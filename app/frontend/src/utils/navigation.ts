@@ -1,3 +1,5 @@
+// File note: supports the navigation area of the Canvas workflow assistant.
+
 import {
   Activity,
   BookOpen,

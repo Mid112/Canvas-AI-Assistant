@@ -1,3 +1,5 @@
+// Component note: renders reusable canvas connection entry UI for the instructor/admin experience.
+
 import { X } from "lucide-react";
 import { useLayoutEffect, useRef } from "react";
 

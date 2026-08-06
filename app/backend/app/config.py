@@ -1,3 +1,5 @@
+"""File note: supports the config area of the Canvas workflow assistant."""
+
 from functools import lru_cache
 from typing import Annotated
 

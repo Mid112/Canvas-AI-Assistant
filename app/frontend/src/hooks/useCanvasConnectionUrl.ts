@@ -1,3 +1,5 @@
+// Hook note: packages use canvas connection url state/effects for route components that need the same behavior.
+
 import { useAuth } from "@/contexts/AuthContext";
 import { useInstitution } from "@/contexts/useInstitution";
 import { resolveCanvasApiUrl } from "@/lib/canvas-connections";

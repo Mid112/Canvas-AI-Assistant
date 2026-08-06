@@ -1,3 +1,5 @@
+# Requirements note: pins production backend dependencies separately from local test/lint tooling.
+
 fastapi==0.136.3
 uvicorn[standard]==0.34.0
 pydantic==2.13.4

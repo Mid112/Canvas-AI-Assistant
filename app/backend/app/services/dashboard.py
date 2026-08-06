@@ -1,3 +1,5 @@
+"""Service note: owns backend dashboard business logic behind routers, tests, and assistant tool execution."""
+
 import asyncio
 import logging
 

@@ -1,3 +1,5 @@
+// File note: supports the protected route area of the Canvas workflow assistant.
+
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 
 import { useAuth } from "@/contexts/AuthContext";

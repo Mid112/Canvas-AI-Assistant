@@ -1,3 +1,5 @@
+// Test note: covers the admin dashboard page.test behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 

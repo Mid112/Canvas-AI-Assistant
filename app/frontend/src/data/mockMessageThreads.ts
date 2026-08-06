@@ -1,3 +1,5 @@
+// Mock data note: supplies mock message threads fixtures for UI development and frontend tests.
+
 import type { MessageThread } from "@/types/messageThread";
 
 /** Fixture threads for inbox component tests. */

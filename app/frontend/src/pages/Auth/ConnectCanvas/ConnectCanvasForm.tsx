@@ -1,3 +1,5 @@
+// Auth page note: handles connect canvas form onboarding/authentication UI while keeping Canvas connection steps explicit.
+
 import { Plus } from "lucide-react";
 import { useCallback, useState, type FormEvent } from "react";
 

@@ -1,3 +1,5 @@
+// Instructor page note: coordinates course utils UI state with Canvas-backed services and active-course context.
+
 import type { CoursePublishFilter, InstructorCourse } from "@/types/course";
 
 export function filterInstructorCourses(

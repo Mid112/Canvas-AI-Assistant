@@ -1,3 +1,5 @@
+// Admin UI note: presents instructor status badge controls for institution/admin workflows with service-backed state.
+
 import { CheckCircle2, XCircle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";

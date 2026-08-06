@@ -1,3 +1,5 @@
+// Context note: shares use active course state across route trees without prop-drilling.
+
 import { useContext } from "react";
 
 import { ActiveCourseContext } from "@/contexts/active-course-context";

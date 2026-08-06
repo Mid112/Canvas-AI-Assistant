@@ -1,3 +1,5 @@
+"""Service note: owns backend canvas business logic behind routers, tests, and assistant tool execution."""
+
 import logging
 from datetime import UTC, datetime
 from html import escape

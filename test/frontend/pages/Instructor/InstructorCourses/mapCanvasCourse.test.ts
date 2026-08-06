@@ -1,3 +1,5 @@
+// Test note: covers the map canvas course.test behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { describe, expect, it } from "vitest";
 
 import { mapCanvasCourseToInstructorCourse } from "@/pages/Instructor/InstructorCourses/mapCanvasCourse";

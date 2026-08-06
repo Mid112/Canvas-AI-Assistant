@@ -1,3 +1,5 @@
+// Component note: renders reusable sidebar UI for the instructor/admin experience.
+
 import { Link, NavLink } from "react-router-dom";
 import { GraduationCap, PanelLeftClose } from "lucide-react";
 

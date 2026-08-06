@@ -1,3 +1,5 @@
+// UI primitive note: wraps shared dialog styling/behavior so feature components stay visually consistent.
+
 "use client"
 
 import * as React from "react"

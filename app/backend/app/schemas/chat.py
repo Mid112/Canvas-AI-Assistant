@@ -1,4 +1,4 @@
-# app/backend/app/schemas/chat.py
+"""Schema note: defines assistant chat payloads, pending actions, and warning fields shared with the frontend."""
 import json
 from datetime import datetime
 

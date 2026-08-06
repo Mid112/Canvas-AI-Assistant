@@ -1,4 +1,4 @@
-# app/backend/app/services/chat.py
+"""Service note: orchestrates assistant turns, course-aware resolution, previews, grounding, and Canvas-safe execution."""
 import asyncio
 import json
 import logging
@@ -4044,9 +4044,9 @@ async def handle_chat_message(
             result = _step_budget_exhausted_response(loop_steps)
             break
 
-    # Feature 13 (#855 / #856) + #1303: strip Canvas ID / grade / title claims
-    # that were never present in this-turn tool payloads or prior tool-derived
-    # grounded_facts accumulated on the conversation.
+    # Feature 13 (#855 / #856) + #1303: redact only ungrounded Canvas ID
+    # claims, and surface still-visible grade/score concerns as warnings using
+    # this-turn tool payloads plus prior tool-derived grounded_facts.
     tool_payloads = [step["result"] for step in loop_steps]
     if result.get("action") not in {
         "respond",

@@ -1,3 +1,5 @@
+// Test note: covers the instructor course students page.test behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { Outlet, Route, Routes } from "react-router-dom";

@@ -1,3 +1,5 @@
+"""Model note: defines persisted system setting data and relationships shared by services, routers, migrations, and tests."""
+
 from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, String

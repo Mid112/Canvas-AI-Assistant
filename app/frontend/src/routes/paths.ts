@@ -1,3 +1,5 @@
+// File note: supports the paths area of the Canvas workflow assistant.
+
 export const paths = {
   home: "/",
   login: "/login",

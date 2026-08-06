@@ -1,3 +1,5 @@
+// Auth page note: handles canvas info why section onboarding/authentication UI while keeping Canvas connection steps explicit.
+
 import { Check } from "lucide-react";
 
 const BENEFITS = [

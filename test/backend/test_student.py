@@ -1,3 +1,5 @@
+"""Test note: covers the test student behavior so future changes can preserve the expected Canvas workflow contract."""
+
 import uuid
 import pytest
 from unittest.mock import AsyncMock, patch

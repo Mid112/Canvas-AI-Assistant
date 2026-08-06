@@ -1,3 +1,5 @@
+// Instructor page note: coordinates instructor courses page UI state with Canvas-backed services and active-course context.
+
 import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
 

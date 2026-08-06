@@ -1,3 +1,5 @@
+// Type note: documents the dry run preview data contract shared by services, components, and tests.
+
 export type DryRunActionType =
   | "Read Only"
   | "Create"

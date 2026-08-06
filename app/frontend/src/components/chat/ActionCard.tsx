@@ -1,3 +1,5 @@
+// Chat UI note: renders the assistant action card surface while preserving instructor review and cancellation flows.
+
 import { ArrowRight, ChevronDown, Zap } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";

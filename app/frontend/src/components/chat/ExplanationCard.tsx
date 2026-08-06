@@ -1,3 +1,5 @@
+// Chat UI note: renders the assistant explanation card surface while preserving instructor review and cancellation flows.
+
 import { Lightbulb } from "lucide-react";
 
 interface ExplanationCardProps {

@@ -1,3 +1,5 @@
+// Admin UI note: presents instructor canvas connections dialog controls for institution/admin workflows with service-backed state.
+
 import { Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 

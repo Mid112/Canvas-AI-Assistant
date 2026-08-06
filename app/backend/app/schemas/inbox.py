@@ -1,3 +1,5 @@
+"""Schema note: defines API-facing inbox request/response shapes; changes here affect frontend service contracts."""
+
 from datetime import datetime
 
 from pydantic import BaseModel, Field

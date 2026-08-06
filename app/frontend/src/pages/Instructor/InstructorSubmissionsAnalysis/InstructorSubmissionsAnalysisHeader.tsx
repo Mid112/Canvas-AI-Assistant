@@ -1,3 +1,5 @@
+// Instructor page note: coordinates instructor submissions analysis header UI state with Canvas-backed services and active-course context.
+
 import { ArrowLeft, Bell, Download } from "lucide-react";
 import { Link } from "react-router-dom";
 

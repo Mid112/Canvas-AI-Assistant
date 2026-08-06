@@ -1,3 +1,5 @@
+// Admin UI note: presents instructor credentials dialog controls for institution/admin workflows with service-backed state.
+
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
 

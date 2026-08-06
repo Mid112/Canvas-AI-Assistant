@@ -1,3 +1,5 @@
+// Messages UI note: supports the instructor message-drafting flow for message reply preview dialog without bypassing preview/confirmation.
+
 import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";

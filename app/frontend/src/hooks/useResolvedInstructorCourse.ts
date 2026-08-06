@@ -1,3 +1,5 @@
+// Hook note: packages use resolved instructor course state/effects for route components that need the same behavior.
+
 import { useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActiveCourse } from "@/contexts/useActiveCourse";

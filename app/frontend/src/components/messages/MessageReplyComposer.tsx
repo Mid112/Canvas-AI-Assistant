@@ -1,3 +1,5 @@
+// Messages UI note: supports the instructor message-drafting flow for message reply composer without bypassing preview/confirmation.
+
 import { Loader2, Sparkles } from "lucide-react";
 import { useState, type FormEvent } from "react";
 

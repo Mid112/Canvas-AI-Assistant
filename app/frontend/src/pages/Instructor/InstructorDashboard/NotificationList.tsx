@@ -1,3 +1,5 @@
+// Instructor page note: coordinates notification list UI state with Canvas-backed services and active-course context.
+
 import { Bell, Bot, FileWarning, UserPlus } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 

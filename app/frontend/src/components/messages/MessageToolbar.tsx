@@ -1,3 +1,5 @@
+// Messages UI note: supports the instructor message-drafting flow for message toolbar without bypassing preview/confirmation.
+
 import { Loader2, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";

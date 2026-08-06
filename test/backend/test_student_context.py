@@ -1,3 +1,5 @@
+"""Test note: covers the test student context behavior so future changes can preserve the expected Canvas workflow contract."""
+
 from app.schemas.canvas import SubmissionResponse, SubmissionStatus
 from app.schemas.student import StudentResponse
 from app.services.llm.student_context import (

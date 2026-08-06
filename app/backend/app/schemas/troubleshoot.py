@@ -1,3 +1,5 @@
+"""Schema note: defines API-facing troubleshoot request/response shapes; changes here affect frontend service contracts."""
+
 from pydantic import BaseModel
 
 from app.schemas.health import LatestHealthResponse

@@ -1,3 +1,5 @@
+// Admin UI note: presents audit log filters controls for institution/admin workflows with service-backed state.
+
 import { Filter, Search, User, X } from "lucide-react";
 
 import { SearchCombobox } from "@/components/admin/SearchCombobox";

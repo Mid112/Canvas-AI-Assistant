@@ -1,3 +1,5 @@
+"""Test note: covers the test chat endpoint behavior so future changes can preserve the expected Canvas workflow contract."""
+
 import asyncio
 import uuid
 from datetime import UTC, datetime, timedelta

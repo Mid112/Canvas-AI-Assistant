@@ -1,3 +1,5 @@
+// Auth page note: handles reset password header onboarding/authentication UI while keeping Canvas connection steps explicit.
+
 import { GraduationCap } from "lucide-react";
 
 export function ResetPasswordHeader() {

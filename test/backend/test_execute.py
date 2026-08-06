@@ -1,3 +1,5 @@
+"""Test note: covers the test execute behavior so future changes can preserve the expected Canvas workflow contract."""
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 

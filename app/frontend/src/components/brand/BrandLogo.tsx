@@ -1,3 +1,5 @@
+// Component note: renders reusable brand logo UI for the instructor/admin experience.
+
 import { GraduationCap } from "lucide-react";
 import { Link } from "react-router-dom";
 

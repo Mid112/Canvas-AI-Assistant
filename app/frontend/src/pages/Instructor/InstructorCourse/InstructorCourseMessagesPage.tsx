@@ -1,3 +1,5 @@
+// Instructor page note: coordinates instructor course messages page UI state with Canvas-backed services and active-course context.
+
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 

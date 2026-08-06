@@ -1,3 +1,5 @@
+// Instructor page note: coordinates instructor dashboard quick actions UI state with Canvas-backed services and active-course context.
+
 import { Bot, ClipboardList, HelpCircle, Megaphone, MessageSquare, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 

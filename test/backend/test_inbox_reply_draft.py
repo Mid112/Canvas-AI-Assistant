@@ -1,3 +1,5 @@
+"""Test note: covers the test inbox reply draft behavior so future changes can preserve the expected Canvas workflow contract."""
+
 import asyncio
 from unittest.mock import AsyncMock, patch
 

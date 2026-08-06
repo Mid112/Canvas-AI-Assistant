@@ -1,3 +1,5 @@
+"""Service note: owns backend auth business logic behind routers, tests, and assistant tool execution."""
+
 from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status

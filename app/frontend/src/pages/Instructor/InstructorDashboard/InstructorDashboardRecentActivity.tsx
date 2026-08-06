@@ -1,3 +1,5 @@
+// Instructor page note: coordinates instructor dashboard recent activity UI state with Canvas-backed services and active-course context.
+
 import {
   ClipboardPlus,
   Megaphone,

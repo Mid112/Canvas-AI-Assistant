@@ -1,3 +1,5 @@
+"""Test note: covers the test message templates behavior so future changes can preserve the expected Canvas workflow contract."""
+
 import uuid
 from unittest.mock import AsyncMock, patch
 

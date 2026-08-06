@@ -1,3 +1,5 @@
+// Chat UI note: renders the assistant assistant limited mode banner surface while preserving instructor review and cancellation flows.
+
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";

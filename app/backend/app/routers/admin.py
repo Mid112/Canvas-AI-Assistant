@@ -1,3 +1,5 @@
+"""Router note: exposes HTTP endpoints for admin workflows while delegating business rules to services."""
+
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request, status

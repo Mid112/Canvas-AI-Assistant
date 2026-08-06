@@ -1,3 +1,5 @@
+// Chat UI note: renders the assistant loading indicator surface while preserving instructor review and cancellation flows.
+
 import { AssistantAvatar } from "@/components/brand/AssistantAvatar";
 
 interface LoadingIndicatorProps {

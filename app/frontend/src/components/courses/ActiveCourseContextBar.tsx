@@ -1,3 +1,5 @@
+// Component note: renders reusable active course context bar UI for the instructor/admin experience.
+
 import { AlertCircle } from "lucide-react";
 
 import { ActiveCourseSelector } from "@/components/courses/ActiveCourseSelector";

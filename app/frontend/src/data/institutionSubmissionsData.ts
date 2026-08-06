@@ -1,3 +1,5 @@
+// Mock data note: supplies institution submissions data fixtures for UI development and frontend tests.
+
 import type { InstitutionSubmissionsData } from "@/types/submission";
 
 export const institutionSubmissionsData: InstitutionSubmissionsData[] = [

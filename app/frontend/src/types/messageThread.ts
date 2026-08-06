@@ -1,3 +1,5 @@
+// Type note: documents the message thread data contract shared by services, components, and tests.
+
 export type MessageParticipantRole = "instructor" | "student";
 
 export interface MessageThreadParticipant {

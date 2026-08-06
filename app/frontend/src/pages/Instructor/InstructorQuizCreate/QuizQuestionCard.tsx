@@ -1,3 +1,5 @@
+// Instructor page note: coordinates quiz question card UI state with Canvas-backed services and active-course context.
+
 import { useWatch, type Control, type UseFormRegister, type UseFormSetValue } from "react-hook-form";
 
 import { Input } from "@/components/ui/input";

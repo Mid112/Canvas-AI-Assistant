@@ -1,3 +1,5 @@
+// Auth page note: handles reset password confirm form onboarding/authentication UI while keeping Canvas connection steps explicit.
+
 import { useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";

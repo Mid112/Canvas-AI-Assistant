@@ -1,3 +1,5 @@
+// Test note: covers the admin toast.test behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

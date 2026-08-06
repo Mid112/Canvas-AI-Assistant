@@ -1,3 +1,5 @@
+// Test note: covers the chat model switcher.test behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";

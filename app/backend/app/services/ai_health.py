@@ -1,3 +1,5 @@
+"""Service note: owns backend ai health business logic behind routers, tests, and assistant tool execution."""
+
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession

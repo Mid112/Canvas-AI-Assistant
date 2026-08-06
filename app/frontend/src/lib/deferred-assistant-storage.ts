@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes deferred assistant storage behavior so components and tests share one implementation.
+
 const DRAFT_PREFIX = "assistant-deferred-draft:";
 
 export interface StoredDeferredDraft {

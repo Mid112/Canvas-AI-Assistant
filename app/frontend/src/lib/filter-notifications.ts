@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes filter notifications behavior so components and tests share one implementation.
+
 import { buildDefaultNotificationSettings } from "@/lib/notification-preferences";
 import type { NotificationSettings } from "@/types/auth";
 import type { DashboardNotification } from "@/types/dashboard";

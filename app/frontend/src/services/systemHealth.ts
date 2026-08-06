@@ -1,3 +1,5 @@
+// Frontend service note: wraps system health API calls and normalizes payloads for route/components.
+
 import { apiRequest } from "@/lib/api-request";
 
 export const SYSTEM_HEALTH_PATH = "/admin/health";

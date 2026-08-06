@@ -1,3 +1,5 @@
+// Admin UI note: presents audit log pagination controls for institution/admin workflows with service-backed state.
+
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";

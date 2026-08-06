@@ -1,3 +1,5 @@
+// UI primitive note: wraps shared badge styling/behavior so feature components stay visually consistent.
+
 import { mergeProps } from "@base-ui/react/merge-props"
 import { useRender } from "@base-ui/react/use-render"
 import { cva, type VariantProps } from "class-variance-authority"

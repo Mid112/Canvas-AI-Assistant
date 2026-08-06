@@ -1,3 +1,5 @@
+// Type note: documents the quiz data contract shared by services, components, and tests.
+
 export type QuizEngine = "classic" | "new_quizzes";
 
 export interface Quiz {

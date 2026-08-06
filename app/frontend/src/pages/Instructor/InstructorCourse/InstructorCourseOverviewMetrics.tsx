@@ -1,3 +1,5 @@
+// Instructor page note: coordinates instructor course overview metrics UI state with Canvas-backed services and active-course context.
+
 import {
   CheckCircle2,
   ClipboardList,

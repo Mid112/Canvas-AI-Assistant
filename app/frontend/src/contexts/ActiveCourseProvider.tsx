@@ -1,3 +1,5 @@
+// Context note: shares active course provider state across route trees without prop-drilling.
+
 import {
   useCallback,
   useEffect,

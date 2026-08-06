@@ -1,3 +1,5 @@
+// Instructor page note: coordinates instructor courses overview UI state with Canvas-backed services and active-course context.
+
 import {
   BookOpen,
   ClipboardList,

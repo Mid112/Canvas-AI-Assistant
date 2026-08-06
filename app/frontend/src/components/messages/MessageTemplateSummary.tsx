@@ -1,3 +1,5 @@
+// Messages UI note: supports the instructor message-drafting flow for message template summary without bypassing preview/confirmation.
+
 import { cn } from "@/lib/utils";
 import type { MessageTemplate } from "@/types/messageDraft";
 

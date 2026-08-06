@@ -1,3 +1,5 @@
+// Admin UI note: presents confirmation dialog controls for institution/admin workflows with service-backed state.
+
 import { Button } from "@/components/ui/button";
 import {
   Dialog,

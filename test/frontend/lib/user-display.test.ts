@@ -1,3 +1,5 @@
+// Test note: covers the user display.test behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { describe, expect, it } from "vitest";
 
 import { getInitials } from "@/lib/user-display";

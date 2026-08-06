@@ -1,3 +1,5 @@
+"""Core note: centralizes security infrastructure used across the backend."""
+
 import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta

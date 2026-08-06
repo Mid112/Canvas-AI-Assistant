@@ -1,3 +1,5 @@
+"""Service note: owns backend messages business logic behind routers, tests, and assistant tool execution."""
+
 import json
 from datetime import UTC, datetime
 

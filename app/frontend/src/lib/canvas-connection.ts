@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes canvas connection behavior so components and tests share one implementation.
+
 import { AssignmentApiError } from "@/services/assignments";
 import { CanvasApiError } from "@/services/canvas";
 import { StudentApiError } from "@/services/students";

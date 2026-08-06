@@ -1,3 +1,5 @@
+// Chat UI note: renders the assistant user message surface while preserving instructor review and cancellation flows.
+
 import type { ChatMessage } from "@/types/chat";
 
 interface UserMessageProps {

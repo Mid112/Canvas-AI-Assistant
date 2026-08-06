@@ -1,3 +1,5 @@
+// Test note: covers the instructor assignment update page.test behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";

@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes map course overview behavior so components and tests share one implementation.
+
 import type { CourseOverviewData } from "@/types/courseOverview";
 
 export interface CourseOverviewApiResponse {

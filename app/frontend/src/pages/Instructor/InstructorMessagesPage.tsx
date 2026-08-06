@@ -1,3 +1,5 @@
+// Instructor page note: coordinates instructor messages page UI state with Canvas-backed services and active-course context.
+
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
 import { MessageInboxPanel } from "@/components/messages/MessageInboxPanel";
 import {

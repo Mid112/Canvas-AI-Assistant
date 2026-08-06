@@ -1,3 +1,5 @@
+// Instructor page note: coordinates dry run preview page UI state with Canvas-backed services and active-course context.
+
 import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";

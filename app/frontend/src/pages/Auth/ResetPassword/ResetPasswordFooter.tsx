@@ -1,3 +1,5 @@
+// Auth page note: handles reset password footer onboarding/authentication UI while keeping Canvas connection steps explicit.
+
 import { ArrowLeft } from "lucide-react";
 import { Link } from "react-router-dom";
 

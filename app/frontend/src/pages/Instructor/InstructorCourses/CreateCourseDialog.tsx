@@ -1,3 +1,5 @@
+// Instructor page note: coordinates create course dialog UI state with Canvas-backed services and active-course context.
+
 import { useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 

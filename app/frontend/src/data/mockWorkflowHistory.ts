@@ -1,3 +1,5 @@
+// Mock data note: supplies mock workflow history fixtures for UI development and frontend tests.
+
 import type {
   WorkflowHistoryEntry,
   WorkflowStatusCounts,

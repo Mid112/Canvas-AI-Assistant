@@ -1,3 +1,5 @@
+// Page note: coordinates the student message draft page screen from smaller components and route-level data.
+
 import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 

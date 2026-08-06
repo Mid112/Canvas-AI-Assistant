@@ -1,3 +1,5 @@
+// Admin UI note: presents instructor row controls for institution/admin workflows with service-backed state.
+
 import { ActionMenu } from "@/components/admin/ActionMenu";
 import { InstructorStatusBadge } from "@/components/admin/InstructorStatusBadge";
 import { TableCell, TableRow } from "@/components/ui/table";

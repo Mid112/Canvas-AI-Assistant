@@ -1,3 +1,5 @@
+// Frontend service note: wraps quiz creator API calls and normalizes payloads for route/components.
+
 import { API_BASE_URL } from "@/config/api";
 import { parseApiError } from "@/lib/api-request";
 import { formatDueDateForApi, formatDueDateForInput } from "@/lib/assignment-utils";

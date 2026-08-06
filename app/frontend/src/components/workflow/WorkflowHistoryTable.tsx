@@ -1,3 +1,5 @@
+// Component note: renders reusable workflow history table UI for the instructor/admin experience.
+
 import { Calendar, Info, Undo2 } from "lucide-react";
 import { useState } from "react";
 

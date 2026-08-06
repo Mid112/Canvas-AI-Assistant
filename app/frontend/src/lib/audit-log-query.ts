@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes audit log query behavior so components and tests share one implementation.
+
 import type { FetchAuditLogsParams } from "@/services/auditLogs";
 import type { AuditLogEntry, AuditLogFilters, AuditLogSort } from "@/types/auditLog";
 

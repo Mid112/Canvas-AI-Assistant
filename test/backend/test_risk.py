@@ -1,3 +1,5 @@
+"""Test note: covers the test risk behavior so future changes can preserve the expected Canvas workflow contract."""
+
 from app.services.risk import classify_action_risk
 
 

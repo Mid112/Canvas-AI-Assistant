@@ -1,3 +1,5 @@
+// Instructor page note: coordinates quiz create schema UI state with Canvas-backed services and active-course context.
+
 import { z } from "zod";
 
 export const quizDescribeSchema = z.object({

@@ -1,3 +1,5 @@
+// Test note: covers the auth behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { expect, type Page } from "@playwright/test";
 
 export const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "admin@example.com";

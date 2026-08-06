@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes auth storage behavior so components and tests share one implementation.
+
 import { AUTH_TOKEN_KEY } from "@/config/api";
 
 export function getStoredToken(): string | null {

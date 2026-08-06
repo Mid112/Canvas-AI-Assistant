@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes institution storage behavior so components and tests share one implementation.
+
 const INSTITUTION_STORAGE_PREFIX = "canvas-workflow-institution";
 
 export function getInstitutionStorageKey(userId: number): string {

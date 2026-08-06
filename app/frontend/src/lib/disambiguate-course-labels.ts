@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes disambiguate course labels behavior so components and tests share one implementation.
+
 import { formatInstructorCourseTitle } from "@/lib/format-course-title";
 
 type DisambiguableCourse = {

@@ -1,3 +1,5 @@
+// Instructor page note: coordinates instructor course header UI state with Canvas-backed services and active-course context.
+
 import { ArrowLeft, BookOpen } from "lucide-react";
 import { Link } from "react-router-dom";
 

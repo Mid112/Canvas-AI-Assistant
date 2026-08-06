@@ -1,3 +1,5 @@
+// Landing page note: presents the landing workflow marketing/onboarding surface before authenticated workflows.
+
 import {
   CheckCircle2,
   Eye,

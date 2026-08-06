@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes student analytics behavior so components and tests share one implementation.
+
 import type { CourseStudent } from "@/types/student";
 
 /**

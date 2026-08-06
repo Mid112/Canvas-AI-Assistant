@@ -1,3 +1,5 @@
+// File note: supports the onboarding area of the Canvas workflow assistant.
+
 import { hasCompletedOnboarding } from "@/lib/onboarding-storage";
 import { paths } from "@/routes/paths";
 import type { User, UserRole } from "@/types/user";

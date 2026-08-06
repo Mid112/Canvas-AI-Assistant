@@ -1,3 +1,5 @@
+// Instructor page note: coordinates instructor settings page UI state with Canvas-backed services and active-course context.
+
 import { useSearchParams } from "react-router-dom";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";

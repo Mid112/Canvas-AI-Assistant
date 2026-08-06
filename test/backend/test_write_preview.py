@@ -1,3 +1,5 @@
+"""Test note: covers the test write preview behavior so future changes can preserve the expected Canvas workflow contract."""
+
 from app.models.course import Course
 from app.services.write_preview import generate_write_preview
 

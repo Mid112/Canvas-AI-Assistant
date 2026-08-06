@@ -1,3 +1,8 @@
+"""Model note: defines persisted canvas idempotency key data.
+
+Shared by services, routers, migrations, and tests.
+"""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

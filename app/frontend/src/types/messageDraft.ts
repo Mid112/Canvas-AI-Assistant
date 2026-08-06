@@ -1,3 +1,5 @@
+// Type note: documents the message draft data contract shared by services, components, and tests.
+
 export interface MessageRecipient {
   id: string;
   name: string;

@@ -1,4 +1,4 @@
-# app/backend/app/mcp_tools/schemas.py
+"""MCP note: validates assistant tool-call parameters before dispatcher code can touch Canvas-facing services."""
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator

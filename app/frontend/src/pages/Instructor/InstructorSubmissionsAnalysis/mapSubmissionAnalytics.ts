@@ -1,3 +1,5 @@
+// Instructor page note: coordinates map submission analytics UI state with Canvas-backed services and active-course context.
+
 import type { Assignment } from "@/types/assignment";
 import type { InstructorCourse } from "@/types/course";
 import type {

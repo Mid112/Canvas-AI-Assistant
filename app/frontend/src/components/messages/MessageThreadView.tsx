@@ -1,3 +1,5 @@
+// Messages UI note: supports the instructor message-drafting flow for message thread view without bypassing preview/confirmation.
+
 import { MessageReplyComposer } from "@/components/messages/MessageReplyComposer";
 import type { MessageReplyPreviewSummary } from "@/components/messages/MessageReplyComposer";
 import { formatAuditTimestamp } from "@/lib/format-audit-timestamp";

@@ -1,3 +1,5 @@
+// Page note: coordinates the profile delete section screen from smaller components and route-level data.
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 

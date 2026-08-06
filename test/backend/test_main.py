@@ -1,3 +1,5 @@
+"""Test note: covers the test main behavior so future changes can preserve the expected Canvas workflow contract."""
+
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app

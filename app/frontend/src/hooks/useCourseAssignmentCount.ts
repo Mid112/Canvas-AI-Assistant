@@ -1,3 +1,5 @@
+// Hook note: packages use course assignment count state/effects for route components that need the same behavior.
+
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/contexts/AuthContext";

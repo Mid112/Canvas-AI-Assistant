@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes notification preferences behavior so components and tests share one implementation.
+
 import type { NotificationSettings } from "@/types/auth";
 
 /** Shared in-app notification preference definitions.

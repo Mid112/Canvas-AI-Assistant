@@ -1,3 +1,5 @@
+// Frontend service note: wraps instructor accounts API calls and normalizes payloads for route/components.
+
 import { apiRequest } from "@/lib/api-request";
 import {
   buildInstructorApiName,

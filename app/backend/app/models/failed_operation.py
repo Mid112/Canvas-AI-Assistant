@@ -1,3 +1,5 @@
+"""Model note: defines persisted failed operation data and relationships shared by services, routers, migrations, and tests."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

@@ -1,3 +1,5 @@
+// Admin page note: coordinates admin dashboard page admin workflows and service data.
+
 import { useEffect, useState } from "react";
 import { Activity, FileText, Users, Wrench } from "lucide-react";
 import { Link } from "react-router-dom";

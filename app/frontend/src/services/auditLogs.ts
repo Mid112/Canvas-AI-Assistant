@@ -1,3 +1,5 @@
+// Frontend service note: wraps audit logs API calls and normalizes payloads for route/components.
+
 import { formatAuditTimestamp } from "@/lib/format-audit-timestamp";
 import { formatAuditLogUserRole, mapAuditLogApiToEntry } from "@/lib/map-audit-log";
 import { apiRequest } from "@/lib/api-request";

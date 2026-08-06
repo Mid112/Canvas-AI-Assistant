@@ -1,3 +1,5 @@
+// Page note: coordinates the canvas auth error header screen from smaller components and route-level data.
+
 import { AlertCircle, GraduationCap } from "lucide-react";
 
 export function CanvasAuthErrorHeader() {

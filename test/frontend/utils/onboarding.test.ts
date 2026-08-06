@@ -1,3 +1,5 @@
+// Test note: covers the onboarding.test behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { describe, expect, it } from "vitest";
 
 import { paths } from "@/routes/paths";

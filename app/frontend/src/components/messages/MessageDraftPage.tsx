@@ -1,3 +1,5 @@
+// Messages UI note: supports the instructor message-drafting flow for message draft page without bypassing preview/confirmation.
+
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertCircle, Bot, CheckCircle2, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";

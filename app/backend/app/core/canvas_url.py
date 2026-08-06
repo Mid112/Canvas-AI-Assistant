@@ -1,3 +1,5 @@
+"""Core note: centralizes canvas url infrastructure used across the backend."""
+
 from urllib.parse import urlparse
 
 _LOCAL_HTTP_HOSTS = frozenset({"localhost", "127.0.0.1", "canvas_lms"})

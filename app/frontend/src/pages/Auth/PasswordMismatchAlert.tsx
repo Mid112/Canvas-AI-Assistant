@@ -1,3 +1,5 @@
+// Auth page note: handles password mismatch alert onboarding/authentication UI while keeping Canvas connection steps explicit.
+
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";

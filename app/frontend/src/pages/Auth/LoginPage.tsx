@@ -1,3 +1,5 @@
+// Auth page note: handles login page onboarding/authentication UI while keeping Canvas connection steps explicit.
+
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 

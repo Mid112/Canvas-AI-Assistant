@@ -1,3 +1,5 @@
+// Test note: covers the auth storage.test behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import { AUTH_TOKEN_KEY } from "@/config/api";

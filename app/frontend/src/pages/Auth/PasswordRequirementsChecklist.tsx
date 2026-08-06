@@ -1,3 +1,5 @@
+// Auth page note: handles password requirements checklist onboarding/authentication UI while keeping Canvas connection steps explicit.
+
 import { Check } from "lucide-react";
 
 import { cn } from "@/lib/utils";

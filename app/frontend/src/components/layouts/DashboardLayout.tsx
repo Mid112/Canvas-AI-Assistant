@@ -1,3 +1,5 @@
+// Component note: renders reusable dashboard layout UI for the instructor/admin experience.
+
 import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 

@@ -1,3 +1,5 @@
+// Component note: renders reusable institution switcher UI for the instructor/admin experience.
+
 import { Building2, Check, ChevronDown, Settings2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 

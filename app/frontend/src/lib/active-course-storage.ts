@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes active course storage behavior so components and tests share one implementation.
+
 import type { ActiveCourseSelection } from "@/types/course";
 
 const STORAGE_PREFIX = "canvas-workflow-active-course";

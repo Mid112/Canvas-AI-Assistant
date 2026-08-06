@@ -1,3 +1,5 @@
+// Messages UI note: supports the instructor message-drafting flow for message editor without bypassing preview/confirmation.
+
 import type { FieldErrors, UseFormRegister } from "react-hook-form";
 import { useEffect, useRef } from "react";
 

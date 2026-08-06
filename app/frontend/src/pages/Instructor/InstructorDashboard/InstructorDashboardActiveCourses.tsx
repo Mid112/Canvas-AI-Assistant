@@ -1,3 +1,5 @@
+// Instructor page note: coordinates instructor dashboard active courses UI state with Canvas-backed services and active-course context.
+
 import { BookOpen } from "lucide-react";
 import { Link } from "react-router-dom";
 

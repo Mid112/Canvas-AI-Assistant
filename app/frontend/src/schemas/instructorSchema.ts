@@ -1,3 +1,5 @@
+// File note: supports the instructor schema area of the Canvas workflow assistant.
+
 import { z } from "zod";
 
 export const instructorFormSchema = z.object({

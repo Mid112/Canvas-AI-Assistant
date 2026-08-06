@@ -1,3 +1,5 @@
+// Auth page note: handles review permissions actions onboarding/authentication UI while keeping Canvas connection steps explicit.
+
 import { Check, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";

@@ -1,3 +1,5 @@
+"""Service note: owns backend provider registry business logic behind routers, tests, and assistant tool execution."""
+
 from __future__ import annotations
 
 import asyncio

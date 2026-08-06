@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes brand behavior so components and tests share one implementation.
+
 export const BRAND = {
   name: "Canvas Workflow Assistant",
   landingName: "Safe AI-Powered Canvas Workflow Assistant",

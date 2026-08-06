@@ -1,3 +1,5 @@
+// Frontend service note: wraps failed operations API calls and normalizes payloads for route/components.
+
 import { apiRequest } from "@/lib/api-request";
 
 export const FAILED_OPERATIONS_PATH = "/admin/failed-operations";

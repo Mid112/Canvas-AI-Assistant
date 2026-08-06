@@ -1,3 +1,5 @@
+// Preview UI note: presents preview actions review details before any Canvas write is confirmed.
+
 import { Check, Pencil, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";

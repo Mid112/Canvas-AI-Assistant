@@ -1,3 +1,5 @@
+// Test note: covers the llm provider storage.test behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { beforeEach, describe, expect, it } from "vitest";
 
 import {

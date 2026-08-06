@@ -1,3 +1,5 @@
+// Admin page note: coordinates instructor management page admin workflows and service data.
+
 import { Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";

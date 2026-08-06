@@ -1,3 +1,5 @@
+// Admin UI note: presents audit log table controls for institution/admin workflows with service-backed state.
+
 import { AlertCircle, Clock, Loader2 } from "lucide-react";
 
 import { AuditLogColumnMenu } from "@/components/admin/AuditLogColumnMenu";

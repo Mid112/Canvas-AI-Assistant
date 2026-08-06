@@ -1,3 +1,5 @@
+// Instructor page note: coordinates instructor assignment create page UI state with Canvas-backed services and active-course context.
+
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";

@@ -1,3 +1,5 @@
+// Chat UI note: renders the assistant chat model switcher surface while preserving instructor review and cancellation flows.
+
 import { Check, ChevronDown, Settings2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 

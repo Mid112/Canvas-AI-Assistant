@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes auth errors behavior so components and tests share one implementation.
+
 import {
   AuthApiError,
   DEFAULT_VALIDATION_MESSAGE,

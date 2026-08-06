@@ -1,3 +1,5 @@
+// Admin UI note: presents create instructor dialog controls for institution/admin workflows with service-backed state.
+
 import {
   Dialog,
   DialogContent,

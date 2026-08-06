@@ -1,3 +1,5 @@
+// Admin UI note: presents audit log action badge controls for institution/admin workflows with service-backed state.
+
 import { Badge } from "@/components/ui/badge";
 
 interface AuditLogActionBadgeProps {

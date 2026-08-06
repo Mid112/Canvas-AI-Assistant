@@ -1,3 +1,5 @@
+<!-- Test note: covers the r e a d m e behavior so future changes can preserve the expected Canvas workflow contract. -->
+
 # Automated tests
 
 Tests live under `test/` by category.

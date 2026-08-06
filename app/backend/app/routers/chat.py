@@ -1,4 +1,4 @@
-# app/backend/app/routers/chat.py
+"""Router note: exposes assistant chat endpoints while keeping orchestration, grounding, and Canvas write logic in services."""
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 

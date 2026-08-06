@@ -1,3 +1,5 @@
+// Instructor page note: coordinates feedback create schema UI state with Canvas-backed services and active-course context.
+
 import { z } from "zod";
 
 import {

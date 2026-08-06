@@ -1,3 +1,5 @@
+-- Migration note: applies the schema change described by 026_deferred_assistant_requests.sql; keep it idempotent-friendly for existing developer databases.
+
 CREATE TABLE IF NOT EXISTS deferred_assistant_requests (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

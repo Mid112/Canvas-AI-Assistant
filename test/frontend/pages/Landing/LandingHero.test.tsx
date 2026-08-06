@@ -1,3 +1,5 @@
+// Test note: covers the landing hero.test behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { LandingHero } from '@/pages/Landing/LandingHero';

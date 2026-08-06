@@ -1,3 +1,5 @@
+"""Service note: owns backend analysis business logic behind routers, tests, and assistant tool execution."""
+
 import asyncio
 from datetime import UTC, datetime
 

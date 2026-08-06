@@ -1,3 +1,5 @@
+// Script note: verifies frontend test dependencies are installed before Vitest runs.
+
 import { existsSync, lstatSync, readlinkSync, rmSync, symlinkSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";

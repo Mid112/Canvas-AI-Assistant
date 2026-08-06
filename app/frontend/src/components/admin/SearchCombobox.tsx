@@ -1,3 +1,5 @@
+// Admin UI note: presents search combobox controls for institution/admin workflows with service-backed state.
+
 import type { LucideIcon } from "lucide-react";
 import {
   useEffect,

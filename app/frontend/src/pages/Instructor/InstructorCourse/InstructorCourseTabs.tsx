@@ -1,3 +1,5 @@
+// Instructor page note: coordinates instructor course tabs UI state with Canvas-backed services and active-course context.
+
 import { NavLink } from "react-router-dom";
 
 import { cn } from "@/lib/utils";

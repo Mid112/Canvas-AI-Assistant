@@ -1,3 +1,5 @@
+// Instructor page note: coordinates quiz create stepper UI state with Canvas-backed services and active-course context.
+
 import { cn } from "@/lib/utils";
 import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
 import type { QuizCreateStep } from "@/types/quizCreate";

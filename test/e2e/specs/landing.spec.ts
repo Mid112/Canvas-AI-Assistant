@@ -1,3 +1,5 @@
+// Test note: covers the landing.spec behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { expect, test } from "@playwright/test";
 
 test.describe("Landing & auth smoke (#687)", () => {

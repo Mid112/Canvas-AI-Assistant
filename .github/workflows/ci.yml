@@ -1,3 +1,5 @@
+# Workflow note: keeps CI aligned with the local Makefile-backed backend and frontend validation commands.
+
 name: CI
 
 on:

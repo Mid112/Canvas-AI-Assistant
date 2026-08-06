@@ -1,3 +1,5 @@
+// Frontend service note: wraps admin dashboard API calls and normalizes payloads for route/components.
+
 import { apiRequest } from "@/lib/api-request";
 
 export const ADMIN_DASHBOARD_PATH = "/admin/dashboard";

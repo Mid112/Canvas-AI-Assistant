@@ -1,3 +1,5 @@
+// Auth page note: handles review permissions header onboarding/authentication UI while keeping Canvas connection steps explicit.
+
 import { GraduationCap } from "lucide-react";
 
 import { brandIconBadgeLgClassName } from "@/lib/surface-styles";

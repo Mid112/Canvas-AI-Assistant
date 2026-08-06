@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes format relative time behavior so components and tests share one implementation.
+
 export function formatRelativeTime(isoDate: string | null): string {
   if (isoDate === null) {
     return "Never";

@@ -1,3 +1,5 @@
+// Instructor page note: coordinates assignment update preview UI state with Canvas-backed services and active-course context.
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { buildAssignmentChanges } from "@/lib/assignment-utils";

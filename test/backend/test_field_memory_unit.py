@@ -1,3 +1,5 @@
+"""Test note: covers the test field memory unit behavior so future changes can preserve the expected Canvas workflow contract."""
+
 from app.models.conversation import Conversation
 from app.services.field_memory import (
     _PARTIAL_PLAN_SAFE_KEYS,

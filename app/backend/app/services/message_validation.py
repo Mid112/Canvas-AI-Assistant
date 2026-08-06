@@ -1,4 +1,4 @@
-# app/backend/app/services/message_validation.py
+"""Service note: validates message drafts and recipients before instructor approval or Canvas delivery."""
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 

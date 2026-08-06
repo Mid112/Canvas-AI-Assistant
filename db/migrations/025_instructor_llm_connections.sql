@@ -1,3 +1,5 @@
+-- Migration note: applies the schema change described by 025_instructor_llm_connections.sql; keep it idempotent-friendly for existing developer databases.
+
 CREATE TABLE IF NOT EXISTS instructor_llm_connections (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     provider_id VARCHAR NOT NULL,

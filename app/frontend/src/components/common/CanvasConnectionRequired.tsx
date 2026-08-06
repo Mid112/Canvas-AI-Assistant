@@ -1,3 +1,5 @@
+// Component note: renders reusable canvas connection required UI for the instructor/admin experience.
+
 import { Link } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";

@@ -1,3 +1,5 @@
+"""Service note: owns backend quiz draft business logic behind routers, tests, and assistant tool execution."""
+
 import html
 import json
 import re

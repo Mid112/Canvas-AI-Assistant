@@ -1,3 +1,5 @@
+// Instructor page note: coordinates assignment create schema UI state with Canvas-backed services and active-course context.
+
 import { z } from "zod";
 
 export const assignmentDescribeSchema = z.object({

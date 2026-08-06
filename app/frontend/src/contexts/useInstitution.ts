@@ -1,3 +1,5 @@
+// Context note: shares use institution state across route trees without prop-drilling.
+
 import { useContext } from "react";
 
 import { InstitutionContext } from "@/contexts/institution-context";

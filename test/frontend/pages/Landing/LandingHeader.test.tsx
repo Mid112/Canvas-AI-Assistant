@@ -1,3 +1,5 @@
+// Test note: covers the landing header.test behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 

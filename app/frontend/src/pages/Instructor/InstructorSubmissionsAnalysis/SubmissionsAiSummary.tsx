@@ -1,3 +1,5 @@
+// Instructor page note: coordinates submissions ai summary UI state with Canvas-backed services and active-course context.
+
 import { ClipboardList } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";

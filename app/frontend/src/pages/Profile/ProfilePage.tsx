@@ -1,3 +1,5 @@
+// Page note: coordinates the profile page screen from smaller components and route-level data.
+
 import { ProfileDeleteSection } from "@/pages/Profile/ProfileDeleteSection";
 import { ProfileInformationSection } from "@/pages/Profile/ProfileInformationSection";
 import { pageShellNarrow } from "@/lib/page-shell";

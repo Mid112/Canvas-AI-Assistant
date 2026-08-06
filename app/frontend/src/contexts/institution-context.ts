@@ -1,3 +1,5 @@
+// Context note: shares institution context state across route trees without prop-drilling.
+
 import { createContext } from "react";
 
 import type {

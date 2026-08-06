@@ -1,3 +1,5 @@
+"""Router note: exposes HTTP endpoints for audit workflows while delegating business rules to services."""
+
 from datetime import datetime
 from typing import Literal
 

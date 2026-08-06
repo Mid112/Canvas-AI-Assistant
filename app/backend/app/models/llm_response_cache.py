@@ -1,3 +1,5 @@
+"""Model note: defines persisted llm response cache data and relationships shared by services, routers, migrations, and tests."""
+
 from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text, UniqueConstraint

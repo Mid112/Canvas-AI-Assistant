@@ -1,3 +1,5 @@
+// Test note: covers the reset password form.test behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";

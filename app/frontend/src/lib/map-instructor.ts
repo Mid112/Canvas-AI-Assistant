@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes map instructor behavior so components and tests share one implementation.
+
 import type { Instructor } from "@/types/instructor";
 
 export interface InstructorApiRecord {

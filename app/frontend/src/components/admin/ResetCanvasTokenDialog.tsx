@@ -1,3 +1,5 @@
+// Admin UI note: presents reset canvas token dialog controls for institution/admin workflows with service-backed state.
+
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";

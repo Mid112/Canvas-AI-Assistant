@@ -1,3 +1,5 @@
+<!-- File note: supports the r e a d m e area of the Canvas workflow assistant. -->
+
 # Project-Starter
 
 Please use the provided folder structure for your docs (project plan, design documenation, communications log, weekly logs and final documentation), source code, tesing, etc.    You are free to organize any additional internal folder structure as required by the project.  The team **MUST** use a branching workflow and once an item is ready, do remember to issue a PR, review and merge in into the master brach.

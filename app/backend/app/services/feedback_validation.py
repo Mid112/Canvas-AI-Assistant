@@ -1,3 +1,5 @@
+"""Service note: owns backend feedback validation business logic behind routers, tests, and assistant tool execution."""
+
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 

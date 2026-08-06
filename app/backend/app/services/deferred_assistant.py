@@ -1,3 +1,5 @@
+"""Service note: owns backend deferred assistant business logic behind routers, tests, and assistant tool execution."""
+
 from __future__ import annotations
 
 from datetime import UTC, datetime

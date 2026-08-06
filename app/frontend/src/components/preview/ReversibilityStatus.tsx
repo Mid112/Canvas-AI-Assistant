@@ -1,3 +1,5 @@
+// Preview UI note: presents reversibility status review details before any Canvas write is confirmed.
+
 import { AlertTriangle, CheckCircle2, RotateCcw } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";

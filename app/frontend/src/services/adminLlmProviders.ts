@@ -1,3 +1,5 @@
+// Frontend service note: wraps admin llm providers API calls and normalizes payloads for route/components.
+
 import { apiRequest } from "@/lib/api-request";
 
 export type LlmProviderHealth =

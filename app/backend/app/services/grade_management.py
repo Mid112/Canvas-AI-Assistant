@@ -1,3 +1,5 @@
+"""Service note: owns backend grade management business logic behind routers, tests, and assistant tool execution."""
+
 import json
 import re
 from datetime import UTC, date, datetime

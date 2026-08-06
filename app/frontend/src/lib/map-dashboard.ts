@@ -1,3 +1,5 @@
+// Frontend helper note: centralizes map dashboard behavior so components and tests share one implementation.
+
 import { mapWorkflowHistoryApiToEntry } from "@/lib/map-workflow-history";
 import type {
   InstructorDashboardData,

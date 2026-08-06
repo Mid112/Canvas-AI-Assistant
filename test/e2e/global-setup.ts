@@ -1,3 +1,5 @@
+// Test note: covers the global setup behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";

@@ -1,3 +1,5 @@
+// Page note: coordinates the canvas auth error actions screen from smaller components and route-level data.
+
 import { ArrowLeft, Mail, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";

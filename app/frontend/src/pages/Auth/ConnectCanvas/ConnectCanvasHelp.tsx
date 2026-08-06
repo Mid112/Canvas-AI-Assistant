@@ -1,3 +1,5 @@
+// Auth page note: handles connect canvas help onboarding/authentication UI while keeping Canvas connection steps explicit.
+
 export function ConnectCanvasHelp() {
   return (
     <div className="rounded-lg border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">

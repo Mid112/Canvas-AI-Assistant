@@ -1,3 +1,5 @@
+// Instructor page note: coordinates feedback describe step UI state with Canvas-backed services and active-course context.
+
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";

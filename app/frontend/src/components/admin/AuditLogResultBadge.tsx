@@ -1,3 +1,5 @@
+// Admin UI note: presents audit log result badge controls for institution/admin workflows with service-backed state.
+
 import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";

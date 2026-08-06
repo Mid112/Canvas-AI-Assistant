@@ -1,3 +1,5 @@
+// Type note: documents the submission data contract shared by services, components, and tests.
+
 export interface SubmissionStudent {
   id: string;
   name: string;

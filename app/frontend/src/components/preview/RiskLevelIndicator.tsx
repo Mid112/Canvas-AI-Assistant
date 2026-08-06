@@ -1,3 +1,5 @@
+// Preview UI note: presents risk level indicator review details before any Canvas write is confirmed.
+
 import { AlertTriangle, Info, ShieldAlert } from "lucide-react";
 
 import { cn } from "@/lib/utils";

@@ -1,3 +1,5 @@
+// Test note: covers the api.test behavior so future changes can preserve the expected Canvas workflow contract.
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 describe("api config", () => {

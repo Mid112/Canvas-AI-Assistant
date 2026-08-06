@@ -1,3 +1,5 @@
+<!-- Docs note: records project context for the charter area; keep this aligned with implementation changes. -->
+
 # Capstone Team Charter Development Guide
 
 ## Purpose of the Team Charter
