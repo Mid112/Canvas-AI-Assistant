@@ -143,24 +143,18 @@ courses even if credentials were somehow confused.
 
 ## Use Case Models
 
-Actors in the current implementation are **Instructor** and **System Administrator**. Students interact with Canvas only as message/grade recipients and are not application actors. **Canvas LMS** and the **LLM Provider** are external systems used by several workflows. Numbered use cases below map 1:1 to the diagram.
+Actors in the current implementation are **Instructor** and **System Administrator**. Students interact with Canvas only as message/grade recipients and are not application actors. **Canvas LMS** and the **LLM Provider** are external systems used by instructor teaching workflows. Numbered use cases below map 1:1 to the diagram.
+
+The diagram separates **instructor-only**, **administrator-only**, and **shared** use cases so each actor links to the specific ovals they perform—not to the system as a whole.
 
 ### Use Case Diagram
 
 ```mermaid
-flowchart TB
-  Instructor((Instructor))
-  Admin((System Administrator))
-  Canvas[[Canvas LMS]]
-  LLM[[LLM Provider]]
-
-  subgraph System["Safe AI-Powered Canvas Workflow Assistant"]
+flowchart LR
+  subgraph InstructorOnly["Instructor-only use cases"]
     direction TB
-
-    UC1(["1. Authenticate User"])
-    UC2(["2. Terminate Session"])
+    Instructor((Instructor))
     UC3(["3. Register Instructor Account"])
-    UC4(["4. Reset Password"])
     UC5(["5. Connect Canvas Account"])
     UC6(["6. Manage Courses & View Dashboard"])
     UC7(["7. Analyze Submissions & Analytics"])
@@ -170,37 +164,48 @@ flowchart TB
     UC11(["11. Generate Feedback & Grades"])
     UC12(["12. Chat with AI Assistant"])
     UC13(["13. Review / Cancel / Undo Workflows"])
+
+    Instructor --> UC3
+    Instructor --> UC5
+    Instructor --> UC6
+    Instructor --> UC7
+    Instructor --> UC8
+    Instructor --> UC9
+    Instructor --> UC10
+    Instructor --> UC11
+    Instructor --> UC12
+    Instructor --> UC13
+  end
+
+  subgraph Shared["Shared use cases"]
+    direction TB
+    UC1(["1. Authenticate User"])
+    UC2(["2. Terminate Session"])
+    UC4(["4. Reset Password"])
+  end
+
+  subgraph AdminOnly["Administrator-only use cases"]
+    direction TB
+    Admin((System Administrator))
     UC14(["14. Manage User Accounts"])
     UC15(["15. View Audit Logs"])
     UC16(["16. Monitor System Health & Failures"])
+
+    Admin --> UC14
+    Admin --> UC15
+    Admin --> UC16
   end
 
-  %% Shared auth
   Instructor --> UC1
   Instructor --> UC2
-  Instructor --> UC3
   Instructor --> UC4
   Admin --> UC1
   Admin --> UC2
   Admin --> UC4
 
-  %% Instructor teaching workflows
-  Instructor --> UC5
-  Instructor --> UC6
-  Instructor --> UC7
-  Instructor --> UC8
-  Instructor --> UC9
-  Instructor --> UC10
-  Instructor --> UC11
-  Instructor --> UC12
-  Instructor --> UC13
+  Canvas[[Canvas LMS]]
+  LLM[[LLM Provider]]
 
-  %% Admin
-  Admin --> UC14
-  Admin --> UC15
-  Admin --> UC16
-
-  %% External systems
   UC5 --> Canvas
   UC6 --> Canvas
   UC7 --> Canvas
