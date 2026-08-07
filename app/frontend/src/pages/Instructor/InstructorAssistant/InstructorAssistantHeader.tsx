@@ -15,13 +15,15 @@ import type { SuggestedAction } from "@/types/chat";
 const actionIcons = {
   "create-assignment": FilePlus2,
   "create-quiz": ListChecks,
-  "course-analytics": BarChart3,
-  "draft-student-message": MessageSquare,
+  "grade-analysis": BarChart3,
+  "draft-announcement": MessageSquare,
 } as const;
 
 interface InstructorAssistantSuggestedActionsProps {
   actions: SuggestedAction[];
-  onSelect: (prompt: string) => void;
+  /** Receives the action id, not a prompt: some of these open a creator page
+   * rather than starting a chat turn, and only the page knows how to do both. */
+  onSelect: (actionId: string) => void;
   disabled?: boolean;
   /**
    * First-time empty-chat guidance only. Hidden after the user starts a
@@ -41,15 +43,18 @@ export function InstructorAssistantSuggestedActions({
   }
 
   return (
-    <section aria-label="Starter prompts" className="shrink-0 space-y-2.5">
+    <section aria-label="Quick actions" className="shrink-0 space-y-2.5">
       <div className="flex items-center gap-2 px-0.5">
         <span className="h-5 w-1 rounded-full bg-primary" aria-hidden="true" />
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-foreground">
-            Starter prompts
+            Quick actions
           </h2>
+          {/* No longer "starter prompts": two of these open a creator page
+              rather than sending a message, so the old copy described only
+              half the grid. */}
           <p className="text-xs text-muted-foreground">
-            Try a one-line request — or type your own below.
+            Jump into a creator or an analysis — or type your own request below.
           </p>
         </div>
       </div>
@@ -64,7 +69,7 @@ export function InstructorAssistantSuggestedActions({
               key={action.id}
               type="button"
               disabled={disabled}
-              onClick={() => onSelect(action.prompt)}
+              onClick={() => onSelect(action.id)}
               className={cn(
                 dashboardInteractive.actionCard,
                 disabled && "cursor-not-allowed opacity-60",

@@ -2,17 +2,28 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { resolveQuickAction } from "@/lib/quick-actions";
 import { InstructorAssistantPage } from "@/pages/Instructor/InstructorAssistantPage";
+import { paths } from "@/routes/paths";
 import { sendAssistantMessage } from "@/services/assistant";
 import { renderWithInstitution } from "@test/utils/renderWithInstitution";
 
 const mockUseAuth = vi.fn();
+const mockNavigate = vi.hoisted(() => vi.fn());
 const mockListAssistantConversations = vi.hoisted(() => vi.fn());
 const mockFetchConversation = vi.hoisted(() => vi.fn());
 const mockFetchProviders = vi.hoisted(() => vi.fn());
 const mockListDeferred = vi.hoisted(() => vi.fn());
 const mockResumeDeferred = vi.hoisted(() => vi.fn());
 const mockedSendAssistantMessage = vi.mocked(sendAssistantMessage);
+
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>(
+    "react-router-dom",
+  );
+
+  return { ...actual, useNavigate: () => mockNavigate };
+});
 
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
@@ -112,11 +123,11 @@ describe("InstructorAssistantPage", () => {
     renderWithInstitution(<InstructorAssistantPage />);
 
     expect(
-      screen.getByRole("region", { name: "Starter prompts" }),
+      screen.getByRole("region", { name: "Quick actions" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Create an assignment")).toBeInTheDocument();
     expect(screen.getByText("Create a quiz")).toBeInTheDocument();
-    expect(screen.getByText("Analyze course performance")).toBeInTheDocument();
+    expect(screen.getByText("Analyse Missing Submissions")).toBeInTheDocument();
     expect(screen.getByText("Draft a student message")).toBeInTheDocument();
     expect(
       screen.getByText(/Hello! I'm your Canvas AI Assistant/),
@@ -126,7 +137,52 @@ describe("InstructorAssistantPage", () => {
     ).toBeInTheDocument();
   });
 
-  // Verifies (#1441): Starter prompts hide after the user starts chatting.
+  // Verifies: the assistant's quick actions reach the same destinations as the
+  // dashboard's. These two used to only start a chat turn here while the
+  // dashboard button under the same label opened the creator, so an instructor
+  // got a different tool depending on which surface they clicked from.
+  it("opens the assignment and quiz creators from the quick actions", async () => {
+    const user = userEvent.setup();
+    renderWithInstitution(<InstructorAssistantPage />);
+
+    await user.click(screen.getByText("Create an assignment"));
+    expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assignmentCreate);
+
+    mockNavigate.mockClear();
+    await user.click(screen.getByText("Create a quiz"));
+    expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.quizCreate);
+
+    // Navigating away is the whole point — it must not also fire a chat turn.
+    expect(mockedSendAssistantMessage).not.toHaveBeenCalled();
+  });
+
+  // Verifies: the prompt-backed actions run the dashboard's exact prompt. The
+  // assistant used to send "Show missing submissions and course performance",
+  // which asks for an analysis no tool performs.
+  it("sends the dashboard's own prompt for the missing-submissions action", async () => {
+    const user = userEvent.setup();
+    mockedSendAssistantMessage.mockResolvedValue({
+      content: "Here is the overview.",
+      conversationId: 7,
+    });
+
+    renderWithInstitution(<InstructorAssistantPage />);
+    await user.click(screen.getByText("Analyse Missing Submissions"));
+
+    await waitFor(() => expect(mockedSendAssistantMessage).toHaveBeenCalled());
+    const [, sent] = mockedSendAssistantMessage.mock.calls[0];
+    expect(sent).toBe(
+      resolveQuickAction("grade-analysis")?.kind === "prompt"
+        ? (resolveQuickAction("grade-analysis") as { prompt: string }).prompt
+        : "",
+    );
+    expect(sent).toContain("Analyse missing submissions");
+    expect(sent).not.toContain("course performance");
+    // Stays in the chat rather than routing anywhere.
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  // Verifies (#1441): Quick actions hide after the user starts chatting.
   it("hides starter prompts after the first message and restores them on New Chat", async () => {
     const user = userEvent.setup();
     mockedSendAssistantMessage.mockResolvedValue({
@@ -150,37 +206,39 @@ describe("InstructorAssistantPage", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText("Create an assignment")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("region", { name: "Starter prompts" }),
+      screen.queryByRole("region", { name: "Quick actions" }),
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "New Chat" }));
 
     expect(
-      await screen.findByRole("region", { name: "Starter prompts" }),
+      await screen.findByRole("region", { name: "Quick actions" }),
     ).toBeInTheDocument();
     expect(screen.getByText("Create a quiz")).toBeInTheDocument();
   });
 
-  // Verifies (#1441): Choosing a starter prompt also clears the guidance.
-  it("hides starter prompts after selecting a starter action", async () => {
+  // Verifies (#1441): Choosing a prompt-backed action also clears the
+  // guidance. Uses the analysis action rather than "Create an assignment",
+  // which now leaves for the creator page instead of starting a turn here.
+  it("hides quick actions after selecting a prompt-backed action", async () => {
     const user = userEvent.setup();
     mockedSendAssistantMessage.mockResolvedValue({
-      content: "Assignment draft ready.",
+      content: "Two students haven't submitted.",
       conversationId: 7,
-      explanation: "Started from a starter prompt.",
+      explanation: "Started from a quick action.",
     });
 
     renderWithInstitution(<InstructorAssistantPage />);
 
     await user.click(
-      screen.getByRole("button", { name: /Create an assignment/i }),
+      screen.getByRole("button", { name: /Analyse Missing Submissions/i }),
     );
 
     expect(
-      await screen.findByText("Assignment draft ready."),
+      await screen.findByText("Two students haven't submitted."),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("region", { name: "Starter prompts" }),
+      screen.queryByRole("region", { name: "Quick actions" }),
     ).not.toBeInTheDocument();
   });
 
@@ -266,7 +324,7 @@ describe("InstructorAssistantPage", () => {
     ).toBeInTheDocument();
 
     expect(
-      screen.getByRole("region", { name: "Starter prompts" }),
+      screen.getByRole("region", { name: "Quick actions" }),
     ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Resume next request" }));
@@ -281,7 +339,7 @@ describe("InstructorAssistantPage", () => {
     ).toBeInTheDocument();
     // Verifies (#1441): Resume clears starters directly, not only via auto-send.
     expect(
-      screen.queryByRole("region", { name: "Starter prompts" }),
+      screen.queryByRole("region", { name: "Quick actions" }),
     ).not.toBeInTheDocument();
   });
 
@@ -315,7 +373,7 @@ describe("InstructorAssistantPage", () => {
     renderWithInstitution(<InstructorAssistantPage />);
 
     expect(
-      await screen.findByRole("region", { name: "Starter prompts" }),
+      await screen.findByRole("region", { name: "Quick actions" }),
     ).toBeInTheDocument();
 
     await user.click(
@@ -326,7 +384,7 @@ describe("InstructorAssistantPage", () => {
       expect(mockResumeDeferred).toHaveBeenCalledWith("token", 4);
     });
     expect(
-      screen.queryByRole("region", { name: "Starter prompts" }),
+      screen.queryByRole("region", { name: "Quick actions" }),
     ).not.toBeInTheDocument();
   });
 
@@ -373,7 +431,7 @@ describe("InstructorAssistantPage", () => {
     renderWithInstitution(<InstructorAssistantPage />);
 
     expect(
-      screen.getByRole("region", { name: "Starter prompts" }),
+      screen.getByRole("region", { name: "Quick actions" }),
     ).toBeInTheDocument();
 
     await user.click(await screen.findByRole("button", {
@@ -386,7 +444,7 @@ describe("InstructorAssistantPage", () => {
     ).toBeInTheDocument();
     // Verifies (#1441): Loading history also clears first-time starter guidance.
     expect(
-      screen.queryByRole("region", { name: "Starter prompts" }),
+      screen.queryByRole("region", { name: "Quick actions" }),
     ).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /New Chat/i }));
@@ -398,7 +456,7 @@ describe("InstructorAssistantPage", () => {
       screen.getByText(/Hello! I'm your Canvas AI Assistant/),
     ).toBeInTheDocument();
     expect(
-      await screen.findByRole("region", { name: "Starter prompts" }),
+      await screen.findByRole("region", { name: "Quick actions" }),
     ).toBeInTheDocument();
   });
 });
