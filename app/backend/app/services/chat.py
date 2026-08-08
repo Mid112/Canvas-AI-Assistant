@@ -31,9 +31,11 @@ from app.mcp_tools.schemas import (
     FetchStudentsAction,
     FetchSubmissionsAction,
     FindAssignmentBySubmissionRateAction,
+    FindAssignmentsBySubmissionStatusAction,
     IntentPreviewAction,
     RecipientDirective,
     ResolveMissingSubmissionsAction,
+    SemanticIntentAction,
 )
 from app.models.assignment import Assignment
 from app.models.audit_log import AuditLog
@@ -46,12 +48,14 @@ from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
 from app.models.user_preference import UserPreference
 from app.models.workflow import Workflow
+from app.schemas.canvas import SubmissionStatus
 from app.services.assignment_rate import find_assignments_by_submission_rate
 from app.services.canvas import (
     CanvasTokenRequiredError,
     _is_expected_canvas_token_sync_error,
     _is_transient_canvas_outage,
     get_active_course,
+    get_submissions,
     sync_courses_if_stale,
 )
 from app.services.canvas_assistant_gate import (
@@ -70,6 +74,7 @@ from app.services.field_memory import (
     record_course_context,
     trim_tool_dump_for_history,
 )
+from app.services.intent import normalize_semantic_intent
 from app.services.llm.base import LLMAdapter
 from app.services.llm.json_extraction import extract_json_object
 from app.services.llm.llm_connections import resolve_instructor_llm_request
@@ -348,6 +353,19 @@ async def get_or_create_conversation(
                     seed_course_id = await db.scalar(
                         select(UserPreference.active_course_id).where(UserPreference.user_id == user.id)
                     )
+                if seed_course_id is None:
+                    only_course_ids = list(
+                        await db.scalars(
+                            select(Course.id)
+                            .where(
+                                Course.instructor_id == user.id,
+                                Course.workflow_state == "available",
+                            )
+                            .limit(2)
+                        )
+                    )
+                    if len(only_course_ids) == 1:
+                        seed_course_id = only_course_ids[0]
                 if seed_course_id is not None:
                     course = await db.scalar(
                         select(Course).where(Course.id == seed_course_id, Course.instructor_id == user.id)
@@ -380,6 +398,24 @@ async def get_or_create_conversation(
         seed_course_id = await db.scalar(
             select(UserPreference.active_course_id).where(UserPreference.user_id == user.id)
         )
+    if seed_course_id is None:
+        # A user with exactly one selectable course has an unambiguous default
+        # even when the active-course preference has not reached the server
+        # yet (common immediately after opening a fresh chat). Never choose
+        # from multiple courses here; the normal course-name resolver must
+        # clarify in that case.
+        only_course_ids = list(
+            await db.scalars(
+                select(Course.id)
+                .where(
+                    Course.instructor_id == user.id,
+                    Course.workflow_state == "available",
+                )
+                .limit(2)
+            )
+        )
+        if len(only_course_ids) == 1:
+            seed_course_id = only_course_ids[0]
     course_name = None
     if seed_course_id is not None:
         course_name = await db.scalar(
@@ -854,7 +890,10 @@ due_at, there is no reliable way to tell — treat it as no confident match).
 If the reference is "earliest"/"first"/"oldest", pick the earliest due_at
 the same way. If the reference names or closely matches one assignment's
 name, pick that one. If you cannot confidently pick exactly one, respond
-with {"assignment_id": null} instead of guessing."""
+with {"assignment_id": null} instead of guessing. For singular pronouns
+such as "this assignment", "that assignment", or "it", prefer the
+conversation's previously resolved assignment when one is available; never
+choose among multiple assignments solely because a pronoun was used."""
 
 ASSIGNMENT_RESOLVER_TIMEOUT_SECONDS = 30.0
 
@@ -1008,6 +1047,27 @@ async def _resolve_course_and_assignment(
         )
         if verified is None:
             assignment_id = None
+
+    if assignment_id is None:
+        # Pronouns are intentionally resolved from trusted conversation
+        # memory before asking the assignment resolver to choose from a list.
+        # This makes "show submissions for this assignment" follow a prior
+        # assignment result, while plural/ambiguous references still go
+        # through the normal exact-one resolver and clarification path.
+        reference_key = (assignment_reference or "").strip().lower()
+        if reference_key in {"this assignment", "that assignment", "it", "this", "that"}:
+            remembered_id = _coerce_int(
+                (conversation.field_memory or {}).get("assignment_id")
+            )
+            if remembered_id is not None:
+                remembered = await db.scalar(
+                    select(Assignment.id).where(
+                        Assignment.course_id == course.id,
+                        Assignment.canvas_assignment_id == str(remembered_id),
+                    )
+                )
+                if remembered is not None:
+                    assignment_id = remembered_id
 
     if assignment_id is None:
         print(f"Gathering {course.name} data")
@@ -1387,6 +1447,137 @@ async def _run_analyze_course_submissions_chain(
         "assignments": per_assignment,
         "total": total,
         "truncated": truncated,
+        "summary": summary,
+    }
+
+
+_ACTUAL_SUBMISSION_STATUSES = frozenset(
+    {SubmissionStatus.graded, SubmissionStatus.submitted, SubmissionStatus.late}
+)
+_ASSIGNMENT_STATUS_MAX_RESULTS = 25
+
+
+async def _run_find_assignments_by_submission_status_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    action: FindAssignmentsBySubmissionStatusAction,
+) -> dict:
+    """Return published assignments matching an explicit submission state.
+
+    This is deliberately separate from the missing/late course overview:
+    ``any_submissions`` and ``no_submissions`` are assignment-level filters,
+    while the existing analyzer is a course-wide missing/late report.
+    Counts are computed from active-roster records server-side; no model
+    supplied IDs or inferred percentages participate in the decision.
+    """
+    course = await resolve_course(db, user, action.local_course_id)
+    assignments_result = await _run_tracked_read(
+        db,
+        user,
+        conversation,
+        user_msg.id,
+        "fetch_assignments",
+        {"local_course_id": course.id},
+        execute_tool(db, user, FetchAssignmentsAction(local_course_id=course.id)),
+    )
+    published = [
+        assignment
+        for assignment in assignments_result.get("assignments", [])
+        if assignment.get("published", True) and assignment.get("id") is not None
+    ]
+    active_names = await active_roster_names(course, user, db)
+    matches: list[dict[str, Any]] = []
+
+    for assignment in published:
+        assignment_id = int(assignment["id"])
+        submissions = await _run_tracked_read(
+            db,
+            user,
+            conversation,
+            user_msg.id,
+            "find_assignments_by_submission_status",
+            {
+                "local_course_id": course.id,
+                "assignment_id": assignment_id,
+                "status": action.status,
+            },
+            get_submissions(course.id, assignment_id, user, course.canvas_url, db),
+        )
+        submitted_ids = {
+            int(submission.user_id)
+            for submission in submissions
+            if submission.user_id in active_names
+            and submission.status in _ACTUAL_SUBMISSION_STATUSES
+        }
+        submitted_count = len(submitted_ids)
+
+        if action.status == "any_submissions" and submitted_count == 0:
+            continue
+        if action.status == "no_submissions" and submitted_count != 0:
+            continue
+
+        if action.status in {"missing_submissions", "late_submissions"}:
+            matching_statuses = (
+                {SubmissionStatus.missing, SubmissionStatus.unsubmitted}
+                if action.status == "missing_submissions"
+                else {SubmissionStatus.late}
+            )
+            matching_count = sum(
+                1
+                for submission in submissions
+                if submission.user_id in active_names
+                and submission.status in matching_statuses
+            )
+            if matching_count == 0:
+                continue
+            count = matching_count
+        else:
+            count = submitted_count
+
+        matches.append(
+            {
+                "assignment_id": assignment_id,
+                "assignment_name": assignment.get("name") or "Untitled assignment",
+                "due_at": assignment.get("due_at"),
+                "submitted_count": submitted_count,
+                "matching_count": count,
+            }
+        )
+
+    total_matches = len(matches)
+    visible_matches = matches[:_ASSIGNMENT_STATUS_MAX_RESULTS]
+    labels = {
+        "any_submissions": "at least one submission",
+        "no_submissions": "no submissions",
+        "missing_submissions": "missing submissions",
+        "late_submissions": "late submissions",
+    }
+    label = labels[action.status]
+    if visible_matches:
+        summary = (
+            f"{total_matches} published assignment(s) in {course.name} have {label}: "
+            + "; ".join(
+                f"{entry['assignment_name']} ({entry['submitted_count']} submitted)"
+                for entry in visible_matches
+            )
+            + "."
+        )
+        if total_matches > _ASSIGNMENT_STATUS_MAX_RESULTS:
+            summary += (
+                f" Showing the first {_ASSIGNMENT_STATUS_MAX_RESULTS}; "
+                "narrow the request for the rest."
+            )
+    else:
+        summary = f"No published assignments in {course.name} have {label}."
+
+    return {
+        "action": "find_assignments_by_submission_status",
+        "course": course.name,
+        "status": action.status,
+        "assignments": visible_matches,
+        "count": total_matches,
         "summary": summary,
     }
 def _build_resolve_missing_summary(
@@ -2042,11 +2233,45 @@ async def _resolve_recipient_directives(
         for student in roster
         for candidate in llm_student_candidates([student])
     }
-    resolved = await _resolve_students_via_llm(
-        list(known.values()), references, user_message, adapter
+    resolved: dict[str, int | None] = dict.fromkeys(references)
+    pronoun_references = {
+        reference
+        for reference in references
+        if reference.strip().lower() in {
+            "this student",
+            "that student",
+            "the student",
+            "this person",
+            "that person",
+            "them",
+        }
+    }
+    # A pronoun is safe only when prior trusted context identifies exactly one
+    # student. Never let the resolver LLM pick an arbitrary student from a
+    # multi-name roster just because the user said “this student”.
+    memory = conversation.field_memory or {}
+    remembered_id = _coerce_int(memory.get("student_id"))
+    remembered_candidates = (
+        [remembered_id]
+        if remembered_id is not None and remembered_id in known
+        else [
+            _coerce_int(item.get("id"))
+            for item in (memory.get("recent_students") or [])
+            if isinstance(item, dict) and _coerce_int(item.get("id")) in known
+        ]
     )
+    remembered_candidates = list(dict.fromkeys(i for i in remembered_candidates if i is not None))
+    if len(remembered_candidates) == 1:
+        for reference in pronoun_references:
+            resolved[reference] = remembered_candidates[0]
 
-    unresolved = [ref for ref in references if resolved.get(ref) is None]
+    named_references = [reference for reference in references if reference not in pronoun_references]
+    named_resolved = await _resolve_students_via_llm(
+        list(known.values()), named_references, user_message, adapter
+    )
+    resolved.update(named_resolved)
+
+    unresolved = [ref for ref in named_references if resolved.get(ref) is None]
     if unresolved:
         print(f"Checking {course.name} submissions for additional student records")
         fallback_students = await _run_tracked_read(
@@ -2948,11 +3173,26 @@ def _schema_for_prompt(schema_cls: type[BaseModel]) -> dict:
     return result
 
 
+_MODEL_HIDDEN_ACTIONS = frozenset(
+    {
+        # These remain valid server-side execution actions for compatibility,
+        # but the model should select their semantic intent instead of
+        # choosing between several overlapping submission tools.
+        "semantic_intent",
+        "resolve_missing_submissions",
+        "analyze_course_submissions",
+        "find_assignments_by_submission_status",
+        "find_assignment_by_submission_rate",
+    }
+)
+
+
 def build_system_prompt(has_canvas_token: bool = True) -> str:
     tool_list = "\n".join(
         f"- {name}: {_schema_for_prompt(schema)}"
         for name, schema in ACTION_SCHEMAS.items()
-        if name not in {"out_of_scope", "clarify", "intent_preview", "respond"}
+        if name not in _MODEL_HIDDEN_ACTIONS
+        and name not in {"out_of_scope", "clarify", "intent_preview", "respond"}
     )
     today = datetime.now(UTC).date()
     today_line = (
@@ -3070,24 +3310,32 @@ submitted"), ask who the recipients should be.
 
 READ ACTIONS — execute immediately, no preview:
 fetch_courses, fetch_assignments, fetch_quizzes, fetch_students, fetch_submissions,
-resolve_missing_submissions, find_assignment_by_submission_rate, and
-get_active_course never change any data, so propose them directly and
+and get_active_course never change any data, so propose them directly and
 plainly — do NOT wrap them in intent_preview:
 {"action": "fetch_assignments", "course_name": "<course>"}
 They run right away and their result is shown to the user in this same
 response, not a separate confirm step.
 
+Submission analytics are selected through SEMANTIC INTENT, not by choosing
+between overlapping internal actions. The server maps the semantic intent to
+the appropriate read-only implementation after validating its scope/status.
+
+STUDENT LISTING: fetch_students is in scope for listing the students in the
+resolved course. Present only their names in the natural-language answer; do
+not reveal email addresses, login IDs, or other contact fields. If a later
+message says “message this student” and more than one recent student could
+match, ask for the student's name and show the available names rather than
+guessing.
+
 MULTI-STEP REQUESTS: some requests need more than one step to satisfy in
-a single message — e.g. "message students missing assignment 4" needs
-resolve_missing_submissions before send_message can even be proposed;
-"push back the last assignment under 30% submissions by 3 days" needs
-find_assignment_by_submission_rate before update_assignment. Propose the
-first step you need; if it's resolve_missing_submissions or
-find_assignment_by_submission_rate, you'll be asked again, in the same
-turn, what to do next once you have its result — use that next turn to
-propose the write (or another read) the original request actually needed,
-instead of stopping at the first step's raw result. Only stop early with
-clarify/respond if something is genuinely missing or ambiguous.
+a single message — e.g. "message students missing assignment 4" needs a
+semantic find_missing_submissions intent before send_message can be proposed;
+"push back the last assignment under 30% submissions by 3 days" needs a
+semantic find_assignment_by_rate intent before update_assignment. Propose the
+first semantic step you need; the server runs its read-only implementation
+and the same turn can continue to the requested write or follow-up read.
+Only stop early with clarify/respond if something is genuinely missing or
+ambiguous.
 
 CONVERSATION HISTORY:
 Previous messages in this conversation are provided below. If this is
@@ -3134,6 +3382,35 @@ or needs a natural language reply that isn't a Canvas tool call, respond with:
 {"action": "respond", "message": "<your natural language answer here>"}
 Use this for greetings, capability questions, and clarifying what is in scope.
 
+SEMANTIC INTENT — when the user's wording is informal, abbreviated,
+misspelled, refers to earlier context ("this assignment", "those students"),
+or combines a goal with natural-language constraints, you may first express
+the meaning instead of guessing an exact internal tool name. Return ONLY:
+{"action":"semantic_intent","intent":"<intent>","course_name":"<course or null>",
+"assignment_reference":"<user's words or null>","student_reference":"<user's words or null>",
+"status":"missing|late|null","comparator":"below|above|null",
+"submission_status":"any_submissions|no_submissions|missing_submissions|late_submissions|null",
+"threshold_percent":<number|null>,"fields":{},"criteria":{},
+"message":"<optional>","question":"<optional>","partial_plan":{},"confidence":<0 to 1>}
+ Supported intents are read_courses, read_assignments, read_submissions,
+ read_students, read_quizzes, analyze_submissions, find_missing_submissions,
+ find_assignments_by_submission_status,
+find_assignment_by_rate, create_assignment, create_quiz, update_assignment,
+update_grade, send_message, respond, clarify, and unsupported. Put only the
+user's natural-language values in fields/criteria; never invent Canvas or
+local IDs. The server maps this envelope to a trusted action and preserves
+the normal ownership, read/write, preview, and confirmation safeguards.
+Use a normal action directly when it is already an exact, unambiguous match.
+
+SUBMISSION STATUS FILTERS:
+For “which assignments have submissions?”, “which have no submissions?”,
+“which have missing submissions?”, or “which have late submissions?”, use
+the semantic intent find_assignments_by_submission_status and set
+submission_status to exactly one of any_submissions, no_submissions,
+missing_submissions, or late_submissions. Do not reinterpret any_submissions
+as missing_submissions. This is an assignment-level filter and is different
+from analyze_submissions, which is a course-wide missing/late overview.
+
 CREATING AN ASSIGNMENT:
 title must be the user's own wording for the assignment name, copied
 verbatim — never substitute a different assignment name from earlier in
@@ -3178,11 +3455,10 @@ assignment, or who submitted it LATE (e.g. "who's missing assignment 4",
 "remind students who haven't submitted the project", "who turned in
 assignment 2 late"), do not propose fetch_submissions and read through
 the results yourself — for a large class that puts every student into
-your context when you only need a count. Instead propose
-resolve_missing_submissions directly (same convention as
-fetch_submissions: not intent_preview, and assignment_id/
-assignment_reference resolve the assignment the same way):
-{"action": "resolve_missing_submissions", "course_name": "<course>", "assignment_reference": "<assignment>", "status": "missing"}
+your context when you only need a count. Instead use semantic intent
+find_missing_submissions with assignment_reference and status (status is
+missing or late). The server resolves the assignment and runs the guarded
+read implementation.
 Set status to "missing" (the default — not submitted at all) or "late"
 (submitted, but after the due date) — these are separate, mutually
 exclusive groups; never guess which one the user means if it's ambiguous
@@ -3199,11 +3475,11 @@ ANALYSING A WHOLE COURSE'S SUBMISSIONS:
 When the user asks about submissions across a course rather than one
 assignment (e.g. "analyse missing submissions", "who hasn't submitted
 anything", "how are submissions looking in this course", "give me a
-submission overview"), propose analyze_course_submissions — NOT
-resolve_missing_submissions, which needs one specific assignment, and
-never a plain "respond" written from memory:
-{"action": "analyze_course_submissions", "course_name": "<course>", "status": "missing"}
-status works exactly as it does for resolve_missing_submissions.
+submission overview"), use semantic intent analyze_submissions — NOT
+find_missing_submissions, which needs one specific assignment, and never a
+plain "respond" written from memory. Set status to missing or late when the
+user explicitly requests one; otherwise use the existing course-overview
+default for compatibility.
 The result carries "total", "course", and an "assignments" list, each
 entry with assignment_name, count, and the "students" who match. Report
 those numbers and names as given — never estimate a submission rate,
@@ -3216,9 +3492,10 @@ instead of by name (e.g. "the last assignment with fewer than 30%
 submissions", "the assignment more than half the class has turned in"),
 do not propose fetch_submissions per assignment and compute this yourself
 — that dumps every student's data into your context once per assignment.
-Instead propose find_assignment_by_submission_rate directly (same
-convention as resolve_missing_submissions: not intent_preview):
-{"action": "find_assignment_by_submission_rate", "course_name": "<course>", "comparator": "below", "threshold_percent": 30}
+Instead use semantic intent find_assignment_by_rate with comparator and
+threshold_percent:
+{"action": "semantic_intent", "intent": "find_assignment_by_rate",
+ "course_name": "<course>", "comparator": "below", "threshold_percent": 30}
 comparator is "below" for "fewer than X%" or "above" for "more than X%";
 threshold_percent is a plain number like 30, never a fraction like 0.3.
 The app scans every assignment's real submission data server-side and
@@ -3864,6 +4141,18 @@ async def handle_chat_message(
                     "message": _MALFORMED_ACTION_DEGRADE_MESSAGE,
                 }
                 break
+            if isinstance(action, SemanticIntentAction):
+                # Keep semantic interpretation separate from execution. The
+                # mapper copies only an allowlisted subset into an existing
+                # action and therefore cannot grant a new Canvas capability.
+                action = parse_action(
+                    json.dumps(
+                        normalize_semantic_intent(
+                            action,
+                            local_course_id=resolved_local_course_id,
+                        )
+                    )
+                )
             needs_unwrap = False
             if action.action == "intent_preview":
                 proposed = action.proposed_action
@@ -3920,6 +4209,10 @@ async def handle_chat_message(
                 # tool for, which is why the model used to invent
                 # submission rates instead of fetching them (#12).
                 result = await _run_analyze_course_submissions_chain(
+                    db, user, conversation, user_msg, action
+                )
+            elif action.action == "find_assignments_by_submission_status":
+                result = await _run_find_assignments_by_submission_status_chain(
                     db, user, conversation, user_msg, action
                 )
             elif action.action == "find_assignment_by_submission_rate":
