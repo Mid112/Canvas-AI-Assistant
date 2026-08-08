@@ -107,6 +107,45 @@ from app.services.write_preview import generate_write_preview
 
 logger = logging.getLogger(__name__)
 
+_ANNOUNCEMENT_REQUEST_RE = re.compile(
+    r"\b(announcement|announce|course[- ]wide|post to the class|post for the class)\b",
+    re.IGNORECASE,
+)
+
+
+def _explicit_announcement_request(message: str) -> bool:
+    """Recognize explicit public-audience language as a server-side guard."""
+    return bool(_ANNOUNCEMENT_REQUEST_RE.search(message))
+
+
+def _force_announcement_delivery(action: Any) -> Any:
+    """Strip private recipient fields from an explicit announcement action."""
+    if action.action == "send_message":
+        return action.model_copy(
+            update={
+                "recipient_canvas_user_ids": None,
+                "recipient_directives": None,
+                "recipient_handle": None,
+                "broadcast_to_all_students": False,
+                "also_announce_to_class": False,
+            }
+        )
+    if action.action == "intent_preview":
+        proposed = action.proposed_action
+        if proposed.get("action") != "send_message":
+            return action
+        cleaned = dict(proposed)
+        for key in (
+            "recipient_canvas_user_ids",
+            "recipient_directives",
+            "recipient_handle",
+            "broadcast_to_all_students",
+            "also_announce_to_class",
+        ):
+            cleaned.pop(key, None)
+        return action.model_copy(update={"proposed_action": cleaned})
+    return action
+
 
 def _is_expected_canvas_reconnect_failure(exc: BaseException) -> bool:
     """Match sweep policy: missing/invalid/corrupted tokens are account state,
@@ -3388,6 +3427,7 @@ or combines a goal with natural-language constraints, you may first express
 the meaning instead of guessing an exact internal tool name. Return ONLY:
 {"action":"semantic_intent","intent":"<intent>","course_name":"<course or null>",
 "assignment_reference":"<user's words or null>","student_reference":"<user's words or null>",
+"delivery_mode":"announcement|private_message|null",
 "status":"missing|late|null","comparator":"below|above|null",
 "submission_status":"any_submissions|no_submissions|missing_submissions|late_submissions|null",
 "threshold_percent":<number|null>,"fields":{},"criteria":{},
@@ -3564,6 +3604,13 @@ message to specific students, or both in the same turn — these have very
 different audiences, so never guess which one the user means.
 Use send_message for general communication that is not tied to a specific
 assignment submission or gradebook feedback.
+
+For an explicit announcement request ("make an announcement", "post this
+to the class", "announce to everyone"), use semantic_intent with
+delivery_mode="announcement" and do not include recipients. For a private
+request, use delivery_mode="private_message" and include named recipients,
+a resolved recipient handle, or an explicit private broadcast. The server
+uses this mode to prevent an announcement from becoming a private message.
 
 If it's genuinely unclear whether the user wants a private message to
 specific people or a public announcement (e.g. "message my students" with
@@ -4153,6 +4200,8 @@ async def handle_chat_message(
                         )
                     )
                 )
+            if _explicit_announcement_request(message):
+                action = _force_announcement_delivery(action)
             needs_unwrap = False
             if action.action == "intent_preview":
                 proposed = action.proposed_action

@@ -46,6 +46,7 @@ export interface FetchMessageDraftOptions {
   subject?: string;
   body?: string;
   recipients?: MessageRecipient[];
+  deliveryMode?: "announcement" | "private_message";
   /** When set, only these IDs start checked; the full roster stays visible. */
   preSelectedIds?: string[];
   emptyRecipients?: boolean;

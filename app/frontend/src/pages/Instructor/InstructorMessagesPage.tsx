@@ -23,14 +23,18 @@ import { useLocation, useSearchParams } from "react-router-dom";
 
 const RECIPIENT_LOAD_TIMEOUT_MS = 5000;
 
-type MessagesTab = "inbox" | "announcements" | "sent" | "compose";
+type MessagesTab = "inbox" | "sent" | "compose";
 
 function parseMessagesTab(raw: string | null): MessagesTab {
   if (raw === "compose") {
     return "compose";
   }
-  if (raw === "announcements" || raw === "sent" || raw === "inbox") {
+  if (raw === "sent" || raw === "inbox") {
     return raw;
+  }
+  // Keep old bookmarks working: announcements now use the unified composer.
+  if (raw === "announcements") {
+    return "compose";
   }
   return "inbox";
 }
@@ -85,13 +89,6 @@ export function InstructorMessagesPage() {
       : "Draft a message for students in the active course.",
     [composeCourseLabel],
   );
-  const announcementPrompt = useMemo(
-    () =>
-      activeCourse ?
-        `Draft a course announcement for ${activeCourse.displayName}.`
-      : "Draft a course announcement for the active course.",
-    [activeCourse],
-  );
   const activeFetchOptions =
     composeCourseId !== undefined && fetchOptions?.courseId === composeCourseId ?
       fetchOptions
@@ -104,26 +101,13 @@ export function InstructorMessagesPage() {
           prompt: aiDraft?.prompt ?? basePrompt,
           subject: aiDraft?.subject,
           body: aiDraft?.body,
+          deliveryMode: aiDraft?.deliveryMode,
           emptyRecipients: true,
           conversationId: aiDraft?.conversationId,
           canvasUrl,
         }
       : null,
     [aiDraft, basePrompt, canvasUrl, composeCourseId],
-  );
-  const announcementFetchOptions = useMemo<FetchMessageDraftOptions | null>(
-    () =>
-      activeCourse ?
-        {
-          courseId: activeCourse.localId,
-          prompt: announcementPrompt,
-          templateId: "course-announcement",
-          templateName: "Course Announcement",
-          emptyRecipients: true,
-          canvasUrl,
-        }
-      : null,
-    [activeCourse, announcementPrompt, canvasUrl],
   );
   const courseNameById = useMemo(() => {
     const map: Record<number, string> = {};
@@ -153,6 +137,10 @@ export function InstructorMessagesPage() {
 
   useEffect(() => {
     const raw = searchParams.get("tab");
+    if (raw === "announcements") {
+      setSearchParams({ tab: "compose" }, { replace: true });
+      return;
+    }
     // One-time handoff seed: write ?tab=compose so Cancel/Inbox (which clear
     // or change the URL) are not overridden by a sticky aiDraft flag.
     if (
@@ -224,6 +212,7 @@ export function InstructorMessagesPage() {
           prompt: aiDraft?.prompt ?? basePrompt,
           subject: aiDraft?.subject,
           body: aiDraft?.body,
+          deliveryMode: aiDraft?.deliveryMode,
           recipients,
           preSelectedIds:
             preferredIds && preferredIds.length > 0 ? preferredIds : undefined,
@@ -249,6 +238,7 @@ export function InstructorMessagesPage() {
           prompt: aiDraft?.prompt ?? basePrompt,
           subject: aiDraft?.subject,
           body: aiDraft?.body,
+          deliveryMode: aiDraft?.deliveryMode,
           emptyRecipients: true,
           conversationId: aiDraft?.conversationId,
           canvasUrl: selectedCanvasUrl,
@@ -345,7 +335,6 @@ export function InstructorMessagesPage() {
       <Tabs value={tab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="inbox">Inbox & replies</TabsTrigger>
-          <TabsTrigger value="announcements">Announcements</TabsTrigger>
           <TabsTrigger value="sent">Sent</TabsTrigger>
         </TabsList>
         <TabsContent value="inbox" className="mt-4">
@@ -353,32 +342,6 @@ export function InstructorMessagesPage() {
             courseId={activeCourse?.localId}
             courseLabel={courseLabel}
           />
-        </TabsContent>
-        <TabsContent value="announcements" className="mt-4 space-y-6">
-          {!activeCourse ? (
-            <Card className="shadow-sm ring-1 ring-border/60">
-              <CardContent className="p-6 text-sm text-muted-foreground">
-                Select an active course to post a course announcement.
-              </CardContent>
-            </Card>
-          ) : (
-            <>
-              <div className="space-y-1">
-                <h2 className="text-lg font-semibold tracking-tight">
-                  Course announcement
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Post to all students in {activeCourse.displayName}. This uses
-                  Canvas announcements (not a private conversation).
-                </p>
-              </div>
-              <MessageDraftPage
-                key={`announcement-${activeCourse.localId}`}
-                fetchOptions={announcementFetchOptions ?? undefined}
-                onCancel={() => handleTabChange("inbox")}
-              />
-            </>
-          )}
         </TabsContent>
         <TabsContent value="sent" className="mt-4">
           <MessageSentPanel

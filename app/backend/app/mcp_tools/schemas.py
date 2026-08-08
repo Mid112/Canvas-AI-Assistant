@@ -349,6 +349,7 @@ class SemanticIntentAction(BaseModel):
     course_name: str | None = None
     assignment_reference: str | None = None
     student_reference: str | None = None
+    delivery_mode: Literal["announcement", "private_message"] | None = None
     status: Literal["missing", "late"] | None = None
     submission_status: Literal[
         "any_submissions",

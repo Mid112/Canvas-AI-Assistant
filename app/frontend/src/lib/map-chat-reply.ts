@@ -603,6 +603,11 @@ function buildMessageDraftState(
           ? proposed.local_course_id
           : undefined,
       recipientIds,
+      deliveryMode:
+        readString(proposed.delivery_mode) === "private_message" ||
+        (recipientIds?.length ?? 0) > 0
+          ? "private_message"
+          : "announcement",
       conversationId,
     },
   };
