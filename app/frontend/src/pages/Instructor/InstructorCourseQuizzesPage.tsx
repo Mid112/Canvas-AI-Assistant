@@ -27,7 +27,6 @@ import {
   paginateItems,
 } from "@/lib/table-pagination";
 import {
-  instructorCourseAssignmentsPath,
   paths,
   type AiActionDraftLocationState,
 } from "@/routes/paths";
@@ -490,12 +489,6 @@ function PageHeader({
       </div>
       <div className="flex flex-wrap gap-2">
         {createQuizButton}
-        <Button
-          variant="outline"
-          render={<Link to={instructorCourseAssignmentsPath(localCourseId)} />}
-        >
-          Assignments
-        </Button>
         <Button variant="outline" render={<Link to={paths.instructor.courses} />}>
           Back to courses
         </Button>

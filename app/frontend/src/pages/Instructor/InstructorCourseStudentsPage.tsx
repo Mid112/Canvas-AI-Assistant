@@ -26,7 +26,6 @@ import {
 } from "@/lib/table-pagination";
 import {
   instructorCourseAssignmentsPath,
-  instructorCourseQuizzesPath,
   paths,
 } from "@/routes/paths";
 import {
@@ -368,12 +367,6 @@ function PageHeader({
           render={<Link to={instructorCourseAssignmentsPath(localCourseId)} />}
         >
           Assignments
-        </Button>
-        <Button
-          variant="outline"
-          render={<Link to={instructorCourseQuizzesPath(localCourseId)} />}
-        >
-          Quizzes
         </Button>
         <Button variant="outline" render={<Link to={paths.instructor.courses} />}>
           Back to courses

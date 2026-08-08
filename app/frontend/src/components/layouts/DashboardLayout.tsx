@@ -69,9 +69,6 @@ function getPageTitle(pathname: string, role: UserRole): string {
   if (pathname.includes("/assignments")) {
     return "Course Assignments";
   }
-  if (pathname.includes("/quizzes")) {
-    return "Course Quizzes";
-  }
   return match?.title ?? getRoleLabel(role);
 }
 

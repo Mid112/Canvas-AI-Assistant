@@ -480,18 +480,6 @@ export function buildAssignmentGenerationPrompt(
   return title || description || undefined;
 }
 
-/** Fallback describe-step prompt for quiz handoffs that predate
- * `generation_prompt` (raw utterance). Prefer the backend-stamped full
- * utterance when present so title≠topic cases follow the body (#1512). */
-export function buildQuizGenerationPrompt(
-  proposed: Record<string, unknown>,
-): string | undefined {
-  return (
-    readString(proposed.generation_prompt)?.trim() ||
-    buildAssignmentGenerationPrompt(proposed)
-  );
-}
-
 function readRiskMetadata(value: unknown): RiskMetadata | undefined {
   if (!value || typeof value !== "object") {
     return undefined;
@@ -562,9 +550,6 @@ function buildQuizCreateDraftState(
           })
         : [],
       questions,
-      // Prefer the raw utterance stamped by chat (#1512); fall back to a
-      // title+description join for older history messages.
-      prompt: buildQuizGenerationPrompt(proposed),
       conversationId,
     },
   };

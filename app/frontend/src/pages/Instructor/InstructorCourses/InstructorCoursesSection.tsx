@@ -2,7 +2,6 @@ import {
   BookOpen,
   CheckCircle2,
   ClipboardList,
-  HelpCircle,
   LayoutGrid,
   List,
   Loader2,
@@ -13,11 +12,7 @@ import { Link } from "react-router-dom";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { CoursePublishBadge } from "@/pages/Instructor/InstructorCourses/CoursePublishBadge";
-import {
-  instructorCourseAssignmentsPath,
-  instructorCoursePath,
-  instructorCourseQuizzesPath,
-} from "@/routes/paths";
+import { instructorCoursePath } from "@/routes/paths";
 import { formatInstructorCourseTitle } from "@/lib/format-course-title";
 import { cn } from "@/lib/utils";
 import type { InstructorCourse } from "@/types/course";
@@ -107,28 +102,15 @@ export function InstructorCoursesCard({
           </span>
           <span className="font-medium tabular-nums">{course.studentCount}</span>
         </div>
-        <Link
-          to={instructorCourseAssignmentsPath(course.id)}
-          className="flex items-center justify-between rounded-md outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-        >
+        <div className="flex items-center justify-between">
           <span className="flex items-center gap-2 text-muted-foreground">
             <ClipboardList className="size-4" aria-hidden="true" />
             Assignments
           </span>
-          <span className="font-medium tabular-nums text-foreground">
+          <span className="font-medium tabular-nums">
             {course.assignmentCount}
           </span>
-        </Link>
-        <Link
-          to={instructorCourseQuizzesPath(course.id)}
-          className="flex items-center justify-between rounded-md outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <span className="flex items-center gap-2 text-muted-foreground">
-            <HelpCircle className="size-4" aria-hidden="true" />
-            Quizzes
-          </span>
-          <span className="text-sm font-medium text-primary">Open</span>
-        </Link>
+        </div>
         <p className="text-muted-foreground">
           Last activity: {course.lastActivity}
         </p>
@@ -241,18 +223,6 @@ export function InstructorCoursesList({
                 <span className="text-sm font-medium tabular-nums">
                   {course.progress}%
                 </span>
-                <Link
-                  to={instructorCourseAssignmentsPath(course.id)}
-                  className={buttonVariants({ size: "sm", variant: "outline" })}
-                >
-                  Assignments
-                </Link>
-                <Link
-                  to={instructorCourseQuizzesPath(course.id)}
-                  className={buttonVariants({ size: "sm", variant: "outline" })}
-                >
-                  Quizzes
-                </Link>
                 <Link
                   to={instructorCoursePath(course.id)}
                   className={buttonVariants({ size: "sm" })}

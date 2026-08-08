@@ -2804,41 +2804,6 @@ async def _get_recent_messages(
     ]
 
 
-def _attach_quiz_generation_prompt(
-    result: dict[str, Any],
-    user_message: str,
-) -> dict[str, Any]:
-    """Stamp create_quiz handoffs with the raw instructor utterance (#1512).
-
-    The quiz create page's describe/generation field must see the full prompt
-    (topic, question type, points, time limit), not a title-only fallback.
-    Attaching here — before the assistant message is persisted — means both
-    live navigation and history "Open quiz creation form" carry the same seed.
-
-    Keep an existing non-empty generation_prompt: refine/modify follow-ups that
-    still emit create_quiz intent_preview often send a short utterance
-    ("make it harder") that must not replace the original constraints.
-    """
-    if not result.get("intent_preview"):
-        return result
-    proposed = result.get("proposed_action")
-    if not isinstance(proposed, dict) or proposed.get("action") != "create_quiz":
-        return result
-    existing = proposed.get("generation_prompt")
-    if isinstance(existing, str) and existing.strip():
-        return result
-    prompt = user_message.strip() if isinstance(user_message, str) else ""
-    if not prompt:
-        return result
-    return {
-        **result,
-        "proposed_action": {
-            **proposed,
-            "generation_prompt": prompt,
-        },
-    }
-
-
 def _summarize_assistant_history_content(role: str, content: str) -> str:
     """Assistant turns are stored as the full JSON result (needed for the
     API response, Workflow linkage, and UI rendering), but replaying that
@@ -4088,13 +4053,6 @@ async def handle_chat_message(
             response=raw_output,
             ttl_seconds=llm_config.cache_ttl_seconds,
         )
-
-    # Preserve the instructor's full utterance on create_quiz handoffs so the
-    # quiz describe/generation field follows topic constraints (and points /
-    # time / question-type instructions), not a title-only fallback (#1512).
-    # Must run before the assistant message is persisted so history reopen
-    # ("Open quiz creation form") also carries the prompt.
-    result = _attach_quiz_generation_prompt(result, message)
 
     # Log the assistant result — if this is a modify turn superseding a
     # previous intent_preview, overwrite that message in place rather than

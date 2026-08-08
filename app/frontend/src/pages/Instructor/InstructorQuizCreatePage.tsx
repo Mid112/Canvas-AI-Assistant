@@ -11,7 +11,6 @@ import { useInstitution } from "@/contexts/useInstitution";
 import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
 import { disambiguateCourseLabels } from "@/lib/disambiguate-course-labels";
-import { buildAssignmentGenerationPrompt } from "@/lib/map-chat-reply";
 import { pageShellNarrow } from "@/lib/page-shell";
 import {
   discardTypedDraft,
@@ -92,19 +91,16 @@ export function InstructorQuizCreatePage() {
       seededDraft
         ? {
             courseId: String(seededDraft.courseId ?? ""),
-            // Prefer the chat-stamped full utterance (#1512). Never invent a
-            // `Title: …` generation string — that made the model follow the
-            // title domain when the body topic differed. Structured handoffs
-            // still keep the stamped prompt so Back to Describe does not
-            // collapse to a stub (#1512 review).
             prompt: hasStructuredQuestions
-              ? seededDraft.prompt?.trim() || "Drafted in the AI Assistant"
+              ? "Drafted in the AI Assistant"
               : seededDraft.prompt?.trim() ||
-                buildAssignmentGenerationPrompt({
-                  title: seededDraft.name,
-                  description: seededDraft.description,
-                }) ||
-                "",
+                [
+                  seededDraft.name ? `Title: ${seededDraft.name}` : "",
+                  seededDraft.description ?? "",
+                ]
+                  .map((part) => part.trim())
+                  .filter(Boolean)
+                  .join("\n\n"),
           }
         : initialDescribeValues,
     );
