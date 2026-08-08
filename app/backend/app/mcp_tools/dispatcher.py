@@ -1,4 +1,4 @@
-"""MCP note: dispatches validated assistant actions into backend service calls and normalized preview/execution results."""
+# app/backend/app/mcp_tools/dispatcher.py
 import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
@@ -713,10 +713,7 @@ async def execute_tool(
                     mcp_arguments: dict[str, Any] = {
                         "course_id": int(course.canvas_course_id),
                         "name": action.title,
-                        # Use the same UTC-normalized due_date as validation /
-                        # AssignmentCreate — raw action.due_date can diverge from
-                        # the preview/confirm value (#1550 review).
-                        "due_at": due_date,
+                        "due_at": action.due_date,
                         "description": action.description,
                     }
                     if action.points_possible is None:
@@ -1395,21 +1392,6 @@ async def execute_tool(
                     )
                 # resolve the course for preview metadata (not for writing)
                 course = await _resolve_course(db, user, local_course_id)
-                # Canonicalize due_date on the proposed payload before preview
-                # so the confirm card and Canvas write share one UTC ISO string
-                # (#1435). Schema validators only strip whitespace — full
-                # timezone normalization needs the instructor's Canvas TZ.
-                if (
-                    proposed.get("action")
-                    in {"create_assignment", "update_assignment", "create_quiz"}
-                    and isinstance(proposed.get("due_date"), str)
-                    and proposed["due_date"].strip()
-                ):
-                    normalized_due = _normalize_due_date_for_user(
-                        proposed["due_date"], user, course.canvas_url
-                    )
-                    if normalized_due is not None:
-                        proposed["due_date"] = normalized_due
                 preview_metadata = generate_write_preview(proposed, course)
             else:
                 # Read-action previews don't need the richer write-preview

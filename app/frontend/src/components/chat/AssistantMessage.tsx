@@ -1,5 +1,3 @@
-// File note: renders assistant prose plus trust/safety warnings without mutating the text the instructor needs to review.
-
 import { AlertTriangle } from "lucide-react";
 
 import { AssistantAvatar } from "@/components/brand/AssistantAvatar";

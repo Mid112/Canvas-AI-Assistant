@@ -1,4 +1,4 @@
-"""Service note: builds server-authored previews for Canvas writes so instructors approve concrete effects before execution."""
+# app/backend/app/services/write_preview.py
 from app.mcp_tools.schemas import get_risk_level, is_reversible
 from app.models.course import Course
 from app.services.risk import classify_action_risk

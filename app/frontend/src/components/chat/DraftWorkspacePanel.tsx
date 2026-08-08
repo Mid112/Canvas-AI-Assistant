@@ -1,5 +1,3 @@
-// File note: lists deferred assistant requests and content-only typed drafts in a bounded region so the chat remains the primary workspace.
-
 import { ChevronDown, Loader2, Trash2 } from "lucide-react";
 import { useState } from "react";
 

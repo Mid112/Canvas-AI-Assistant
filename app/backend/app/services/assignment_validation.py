@@ -1,4 +1,4 @@
-"""Service note: validates generated assignment fields before previews or Canvas writes can be approved."""
+# app/backend/app/services/assignment_validation.py
 from datetime import UTC, datetime
 
 from fastapi import HTTPException, status

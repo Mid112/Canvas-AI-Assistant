@@ -1,5 +1,3 @@
-// Chat UI note: coordinates chat history, pending Canvas approvals, saved limited-mode requests, and cancellation-sensitive loading state.
-
 import { Plus } from "lucide-react";
 import {
   forwardRef,

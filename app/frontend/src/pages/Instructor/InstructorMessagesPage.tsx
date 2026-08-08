@@ -144,12 +144,10 @@ export function InstructorMessagesPage() {
   const handleTabChange = (value: string) => {
     const next = parseMessagesTab(value);
     setTab(next);
-    // Preserve location.state: setSearchParams navigates without state by
-    // default and would drop aiMessageDraft (losing the draft's courseId).
     if (next === "inbox") {
-      setSearchParams({}, { replace: true, state: location.state });
+      setSearchParams({}, { replace: true });
     } else {
-      setSearchParams({ tab: next }, { replace: true, state: location.state });
+      setSearchParams({ tab: next }, { replace: true });
     }
   };
 
@@ -164,19 +162,13 @@ export function InstructorMessagesPage() {
     ) {
       aiComposeSeededRef.current = true;
       if (raw !== "compose") {
-        // Keep the handoff draft in location.state — without this, writing
-        // ?tab=compose clears aiMessageDraft and compose falls back to the
-        // active course (#1509 / Messages draft-course regressions).
-        setSearchParams(
-          { tab: "compose" },
-          { replace: true, state: location.state },
-        );
+        setSearchParams({ tab: "compose" }, { replace: true });
       }
       setTab("compose");
       return;
     }
     setTab(parseMessagesTab(raw));
-  }, [aiDraft, location.state, searchParams, setSearchParams]);
+  }, [aiDraft, searchParams, setSearchParams]);
 
   useEffect(() => {
     if (composeCourseId === undefined) {
