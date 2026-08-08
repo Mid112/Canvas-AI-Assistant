@@ -1,5 +1,3 @@
-// Chat UI note: gives long-running assistant turns progressive status copy without adding another persisted chat message.
-
 import { AssistantAvatar } from "@/components/brand/AssistantAvatar";
 
 interface LoadingIndicatorProps {

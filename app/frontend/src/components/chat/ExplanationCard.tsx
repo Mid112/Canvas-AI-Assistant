@@ -1,5 +1,3 @@
-// Chat UI note: displays model rationale as supporting context; approvals still depend on the separate action/risk panels.
-
 import { Lightbulb } from "lucide-react";
 
 interface ExplanationCardProps {

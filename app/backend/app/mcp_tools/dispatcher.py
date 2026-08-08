@@ -1,4 +1,4 @@
-"""MCP note: dispatches validated assistant actions into backend service calls and normalized preview/execution results."""
+# app/backend/app/mcp_tools/dispatcher.py
 import json
 from datetime import UTC, datetime
 from types import SimpleNamespace

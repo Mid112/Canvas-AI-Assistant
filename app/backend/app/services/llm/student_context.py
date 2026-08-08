@@ -405,14 +405,12 @@ def ground_assistant_result(
     """Prevent assistant replies from citing Canvas data that was never
     retrieved (Feature 13 #855 / #856).
 
-    Scrubs only ungrounded Canvas ID claims; grade/score claims become
-    ``unverified_claims`` warnings instead of being rewritten, and quoted
-    title scrubbing intentionally stays gone (bugs 2 and 13). Facts come from
-    this-turn tool payloads unioned with the append-only ``grounded_facts``
-    accumulator in field_memory (prior real tool fetches — #1303). Scalar
-    field_memory keys alone never authorize claims. Returns
-    ``(scrubbed_result, unioned_tool_facts)`` so the caller can persist newly
-    observed tool facts.
+    Scrubs ungrounded ID claims, grade/score claims, and quoted titles.
+    Facts come from this-turn tool payloads unioned with the append-only
+    ``grounded_facts`` accumulator in field_memory (prior real tool
+    fetches — #1303). Scalar field_memory keys alone never authorize
+    claims. Returns ``(scrubbed_result, unioned_tool_facts)`` so the
+    caller can persist newly observed tool facts.
     """
     sources: list[Any] = list(tool_results or [])
     if result.get("action") not in {"respond", "clarify", "out_of_scope", "intent_preview"}:

@@ -1,5 +1,3 @@
-// Chat UI note: changes only the next assistant turn's provider; disconnected models stay visible but disabled for settings discovery.
-
 import { Check, ChevronDown, Settings2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 

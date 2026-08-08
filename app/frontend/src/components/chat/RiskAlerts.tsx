@@ -1,5 +1,3 @@
-// Chat UI note: separates blocking errors, risk warnings, and reversal affordances so instructors can review Canvas impact before acting.
-
 import { AlertTriangle, ChevronDown, RotateCcw, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 
