@@ -1,7 +1,5 @@
 # Grade Management Guide
 
-Issue: **#1335** · Parent: #1315
-
 ## Paths
 
 - Course grades: `/instructor/courses/:localCourseId/grades`
@@ -15,7 +13,7 @@ Issue: **#1335** · Parent: #1315
 3. **Preview** the mutation (old → new, student, assignment).
 4. Confirm submit. Grades are **high-risk / irreversible** in product terms (strong `CONFIRM` when required). Auto-undo is not offered.
 
-> **Screenshot placeholder:** `grades-preview.png`  
+> **Screenshot placeholder:** `grades-preview.png`
 > *[Add screenshot here]*
 
 ## Safety

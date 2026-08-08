@@ -1,7 +1,5 @@
 # Deployment Guide
 
-Issue: **#1409** · Finalize deployment docs **#1366**
-
 ## Architecture (deployed)
 
 ```

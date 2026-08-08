@@ -1,11 +1,9 @@
 # Release Notes
 
-Issues: **#1417** Create release notes · **#1416** Tag final release
-
 ## Version
 
-**Tag:** `vX.Y.Z` *(set when tagging)*  
-**Date:** *(set when tagging)*  
+**Tag:** `vX.Y.Z` *(set when tagging)*
+**Date:** *(set when tagging)*
 **Commit:** *(set when tagging)*
 
 ## Highlights
@@ -35,10 +33,10 @@ See [deployment/installation-guide.md](./deployment/installation-guide.md).
 ## Known limitations
 
 - MCP is optional (`MCP_ENABLED`); Canvas tokens live encrypted on the API host — MCP is not the sole credential store.
-- Screenshot assets in `user-guides/screenshots/` may still be placeholders until capture pass (#1336/#1337).
+- Screenshot assets in `user-guides/screenshots/` may still be placeholders until capture pass.
 - *[Add before tag: sandbox vs production Canvas differences, provider rate limits]*
 
-## Tagging procedure (#1416)
+## Tagging procedure
 
 ```bash
 git checkout <release-commit>

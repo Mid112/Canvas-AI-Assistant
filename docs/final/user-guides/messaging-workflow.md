@@ -1,7 +1,5 @@
 # Messaging Workflow Guide
 
-Issue: **#1332** · Parent: #1315
-
 ## Paths
 
 - `/instructor/messages`
@@ -14,13 +12,13 @@ Issue: **#1332** · Parent: #1315
 The Messages page uses four tabs:
 
 | Tab | Purpose |
-|-----|---------|
+| --- | --- |
 | **Inbox & replies** | Canvas conversations / student replies (all courses or filtered) |
 | **Announcements** | Course announcements for the **active** course |
 | **Sent** | Sent messages for the active course |
 | **Compose** | Draft and send a course message (opened from FAB, AI handoff, or `?tab=compose`) |
 
-> **Screenshot placeholder:** `messages-tabs.png`  
+> **Screenshot placeholder:** `messages-tabs.png`
 > *[Add screenshot here]*
 
 ## Compose & send
@@ -32,10 +30,10 @@ The Messages page uses four tabs:
 5. Preview recipients and content.
 6. **Confirm send** — messaging is **irreversible** (strong confirmation / type `CONFIRM` when required).
 
-> **Screenshot placeholder:** `messages-compose.png`  
+> **Screenshot placeholder:** `messages-compose.png`
 > *[Add screenshot here]*
 
-> **Screenshot placeholder:** `messages-templates.png`  
+> **Screenshot placeholder:** `messages-templates.png`
 > *[Add screenshot here]*
 
 ## Templates

@@ -1,7 +1,5 @@
 # Repository Structure
 
-Issue: **#1414**
-
 ```
 capstone-team-16/
 ├── app/

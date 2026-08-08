@@ -1,13 +1,11 @@
 # Screenshot inventory
 
-Issues: **#1336** Capture final UI screenshots · **#1337** Update navigation screenshots · **#1350** Verify screenshots
-
 Add PNG/WebP files here using these exact names, then update the matching guides to use `![caption](./screenshots/<file>)`.
 
 ## Instructor
 
 | Filename | Where used | Notes |
-|----------|------------|-------|
+| --- | --- | --- |
 | `instructor-dashboard.png` | Instructor guide | Dashboard home |
 | `instructor-sidebar-active-course.png` | Instructor guide / nav | Active course badge in sidebar |
 | `instructor-courses.png` | Instructor guide | Courses list |
@@ -31,7 +29,7 @@ Add PNG/WebP files here using these exact names, then update the matching guides
 ## Administrator
 
 | Filename | Where used | Notes |
-|----------|------------|-------|
+| --- | --- | --- |
 | `admin-dashboard.png` | Admin guide | Admin home |
 | `admin-users.png` | Admin guide | Instructor management |
 | `admin-audit.png` | Admin guide | Audit logs |
@@ -43,5 +41,5 @@ Add PNG/WebP files here using these exact names, then update the matching guides
 
 Until images are added, guides keep:
 
-> **Screenshot placeholder:** `filename.png`  
+> **Screenshot placeholder:** `filename.png`
 > *[Add screenshot here]*

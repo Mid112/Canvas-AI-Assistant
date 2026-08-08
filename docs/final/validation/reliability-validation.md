@@ -1,13 +1,11 @@
 # Reliability Validation
 
-Parent: **#1321**
-
-| Issue | Check | Expected |
-|-------|-------|----------|
-| #1379 | Complete workflow reliability | Preview → confirm → Canvas reflects change; history shows terminal state |
-| #1380 | Error recovery | After failure, user can fix and retry without corrupt workflow state |
-| #1381 | Rollback behaviour | Undo available for undoable creates; irreversible actions do not claim undo |
-| #1382 | Deployment reliability | See [../deployment/validation-checklist.md](../deployment/validation-checklist.md) |
+| Check | Expected |
+| --- | --- |
+| Complete workflow reliability | Preview → confirm → Canvas reflects change; history shows terminal state |
+| Error recovery | After failure, user can fix and retry without corrupt workflow state |
+| Rollback behaviour | Undo available for undoable creates; irreversible actions do not claim undo |
+| Deployment reliability | See [../deployment/validation-checklist.md](../deployment/validation-checklist.md) |
 
 ## End-to-end smoke script
 

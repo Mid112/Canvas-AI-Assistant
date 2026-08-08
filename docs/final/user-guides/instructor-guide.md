@@ -1,7 +1,5 @@
 # Instructor User Guide
 
-Issue: **#1327** · Parent: #1315
-
 ## 1. Overview
 
 The Canvas Helper AI Assistant helps instructors manage selected Canvas LMS workflows with AI assistance while keeping **human approval** before any Canvas write.
@@ -12,15 +10,15 @@ The Canvas Helper AI Assistant helps instructors manage selected Canvas LMS work
 
 1. Open the app (local: `http://localhost:5173` with `make e2e-up`, or production URL via nginx on port `8888`).
 2. Register or log in as an instructor.
-   - Passwords must be at least **8 characters** and include uppercase, lowercase, a number, and a symbol. The UI shows live requirement feedback.
-   - Password reset is available from the login / forgot-password flow.
+ - Passwords must be at least **8 characters** and include uppercase, lowercase, a number, and a symbol. The UI shows live requirement feedback.
+ - Password reset is available from the login / forgot-password flow.
 3. Complete Canvas onboarding (`/canvas-info` → `/connect-canvas` → `/review-permissions`).
 4. Open **Courses** and set an **active course** (or use the assistant course selector).
 
-> **Screenshot placeholder:** `instructor-dashboard.png`  
+> **Screenshot placeholder:** `instructor-dashboard.png`
 > *[Add screenshot here]*
 
-> **Screenshot placeholder:** `instructor-sidebar-active-course.png`  
+> **Screenshot placeholder:** `instructor-sidebar-active-course.png`
 > *[Add screenshot here]*
 
 See also: [Canvas Connection Guide](./canvas-connection.md).
@@ -28,7 +26,7 @@ See also: [Canvas Connection Guide](./canvas-connection.md).
 ## 3. Navigation
 
 | Area | Path | Purpose |
-|------|------|---------|
+| --- | --- | --- |
 | Dashboard | `/instructor/dashboard` | Course overview metrics |
 | Courses | `/instructor/courses` | Course list / active course |
 | Course detail | `/instructor/courses/:id/...` | Assignments, quizzes, students, grades, messages, analytics |
@@ -38,7 +36,7 @@ See also: [Canvas Connection Guide](./canvas-connection.md).
 | Settings | `/instructor/settings` | Canvas connection, AI providers, security |
 | Profile | `/instructor/profile` | Account |
 
-> **Screenshot placeholder:** `instructor-courses.png`  
+> **Screenshot placeholder:** `instructor-courses.png`
 > *[Add screenshot here]*
 
 ## 4. Active course vs draft / chat course
@@ -77,11 +75,11 @@ It is **not** always the write target:
 ## 8. Troubleshooting (instructor)
 
 | Symptom | What to try |
-|---------|-------------|
+| --- | --- |
 | Limited / no Canvas data | Re-check token & permissions; resume deferred assistant requests after reconnect |
 | Assistant asks clarifying questions | Answer missing fields (due date, graded vs ungraded, etc.) |
 | Action stuck “running” | Wait or refresh; check History; contact admin if failed ops appear |
 | Wrong course context | Name the course in chat, use the assistant course selector, or resume the draft’s own course — not only the sidebar active course |
 
-> **Screenshot placeholder:** `workflow-history.png`  
+> **Screenshot placeholder:** `workflow-history.png`
 > *[Add screenshot here]*

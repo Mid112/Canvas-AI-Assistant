@@ -1,7 +1,5 @@
 # MCP Architecture
 
-Issue: **#1344** · Parent: #1316
-
 ## Role
 
 The MCP server is an optional **credential boundary** for Canvas tools: shared secret on tool call routes, SSRF host allowlist, deployable separately from FastAPI.
@@ -9,7 +7,7 @@ The MCP server is an optional **credential boundary** for Canvas tools: shared s
 ## Config
 
 | Variable | Purpose |
-|----------|---------|
+| --- | --- |
 | `MCP_ENABLED` | Default `false` |
 | `MCP_SERVER_URL` | Backend → MCP |
 | `MCP_SHARED_SECRET` | Authenticate tool calls |

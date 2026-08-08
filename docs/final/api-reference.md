@@ -1,7 +1,5 @@
 # API Reference (Final)
 
-Issue: **#1408** · Living detail: [developer/api-endpoints.md](./developer/api-endpoints.md)
-
 ## Base URL
 
 - Local native: `http://localhost:8000`
@@ -15,7 +13,7 @@ Run the backend and open `/docs` or `/redoc` for generated schemas. This Markdow
 ## Endpoint groups
 
 | Group | Prefix | Auth |
-|-------|--------|------|
+| --- | --- | --- |
 | Auth & sessions | `/api/v1/auth` | Mixed (login public; me protected) |
 | Canvas data & previews | `/api/v1/canvas` | Instructor |
 | Chat / workflows | `/api/v1/chat` | Instructor |

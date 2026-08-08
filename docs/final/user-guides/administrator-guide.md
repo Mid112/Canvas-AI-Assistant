@@ -1,7 +1,5 @@
 # Administrator User Guide
 
-Issue: **#1328** · Parent: #1315
-
 ## 1. Overview
 
 Administrators manage institutions, instructor accounts, Canvas connection health, auditability, and system diagnostics. Admins do **not** perform day-to-day Canvas teaching workflows.
@@ -11,7 +9,7 @@ Login uses the admin login path (`/login` with admin credentials / `POST /api/v1
 ## 2. Navigation
 
 | Area | Path | Purpose |
-|------|------|---------|
+| --- | --- | --- |
 | Dashboard | `/admin/dashboard` | High-level status |
 | Users | `/admin/users` | Instructor management |
 | Audit | `/admin/audit` | Audit log browser |
@@ -21,7 +19,7 @@ Login uses the admin login path (`/login` with admin credentials / `POST /api/v1
 | Settings | `/admin/settings` | Institution defaults (e.g. LLM) |
 | Profile | `/admin/profile` | Account |
 
-> **Screenshot placeholder:** `admin-dashboard.png`  
+> **Screenshot placeholder:** `admin-dashboard.png`
 > *[Add screenshot here]*
 
 ## 3. Instructor management
@@ -31,21 +29,21 @@ Login uses the admin login path (`/login` with admin credentials / `POST /api/v1
 - View Canvas connections; **revoke** Canvas access when needed.
 - Reset Canvas connection state (per product UI) when an instructor is stuck.
 
-> **Screenshot placeholder:** `admin-users.png`  
+> **Screenshot placeholder:** `admin-users.png`
 > *[Add screenshot here]*
 
 ## 4. Audit logs
 
 Browse session and workflow-related audit events across users. Use filters to investigate who confirmed what and when.
 
-> **Screenshot placeholder:** `admin-audit.png`  
+> **Screenshot placeholder:** `admin-audit.png`
 > *[Add screenshot here]*
 
 ## 5. System health
 
 Run or view health checks for database, Canvas reachability, and AI/provider status. Historical check entries may be available depending on deployment.
 
-> **Screenshot placeholder:** `admin-system-health.png`  
+> **Screenshot placeholder:** `admin-system-health.png`
 > *[Add screenshot here]*
 
 ## 6. Troubleshooting & failed operations
@@ -53,10 +51,10 @@ Run or view health checks for database, Canvas reachability, and AI/provider sta
 - **Troubleshooting:** diagnose failing Canvas connections; deep-link into user lists filtered by connection status.
 - **Failed operations:** inspect failures; escalate via **support tickets**. Retry of Canvas writes from this screen is intentionally **not** offered — instructors re-run through normal confirm flows.
 
-> **Screenshot placeholder:** `admin-troubleshooting.png`  
+> **Screenshot placeholder:** `admin-troubleshooting.png`
 > *[Add screenshot here]*
 
-> **Screenshot placeholder:** `admin-failed-operations.png`  
+> **Screenshot placeholder:** `admin-failed-operations.png`
 > *[Add screenshot here]*
 
 ## 7. Institution LLM defaults

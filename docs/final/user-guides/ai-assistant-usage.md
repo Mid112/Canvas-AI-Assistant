@@ -1,7 +1,5 @@
 # AI Assistant Usage Guide
 
-Issue: **#1329** · Parent: #1315
-
 ## Purpose
 
 Use natural language to analyze courses and **propose** Canvas actions. Writes only run after you confirm.
@@ -12,10 +10,10 @@ Go to **AI Assistant** (`/instructor/assistant`). Use the course selector when y
 
 **Conversation history** is collapsed by default so the chat stays primary — expand **Conversation History** to load a prior thread.
 
-> **Screenshot placeholder:** `assistant-chat.png`  
+> **Screenshot placeholder:** `assistant-chat.png`
 > *[Add screenshot here]*
 
-> **Screenshot placeholder:** `assistant-history-collapsed.png`  
+> **Screenshot placeholder:** `assistant-history-collapsed.png`
 > *[Add screenshot here]*
 
 ## Course context (important)
@@ -35,7 +33,7 @@ Without usable Canvas credentials the assistant runs in **limited mode**:
 - A banner explains the restriction and links to Connect Canvas.
 - Canvas-dependent asks can be **saved as deferred requests** and **resumed** after you reconnect (queued resumes run one at a time until send succeeds).
 
-> **Screenshot placeholder:** `assistant-limited-mode.png`  
+> **Screenshot placeholder:** `assistant-limited-mode.png`
 > *[Add screenshot here]*
 
 ## What you can ask
@@ -54,7 +52,7 @@ Without usable Canvas credentials the assistant runs in **limited mode**:
 ## Proposal card lifecycle
 
 | Status | Meaning | UI |
-|--------|---------|-----|
+| --- | --- | --- |
 | Pending | Waiting for you | Confirm / Cancel (and pause/rename when offered) |
 | Paused | Parked for later | Resume to continue |
 | Executing | Running against Canvas | In-progress indicator |
@@ -62,10 +60,10 @@ Without usable Canvas credentials the assistant runs in **limited mode**:
 | Failed | Nothing changed (or partial per message) | Error / alert treatment |
 | Cancelled / superseded | Discarded or replaced | Muted |
 
-> **Screenshot placeholder:** `assistant-confirm-cancel.png`  
+> **Screenshot placeholder:** `assistant-confirm-cancel.png`
 > *[Add screenshot here]*
 
-> **Screenshot placeholder:** `assistant-executing.png`  
+> **Screenshot placeholder:** `assistant-executing.png`
 > *[Add screenshot here]*
 
 ## Confirm, cancel, pause

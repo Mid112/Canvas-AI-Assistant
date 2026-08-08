@@ -1,6 +1,5 @@
 # API Endpoints
 
-Issue: **#1340** · Parent: #1316  
 Packaged reference: [`../api-reference.md`](../api-reference.md)
 
 Base prefix: **`/api/v1`** (plus `/` and `/health` on the app root).
@@ -10,7 +9,7 @@ Interactive docs (when running the API): `http://localhost:8000/docs` (OpenAPI).
 ## Router map
 
 | Prefix | Module | Responsibility |
-|--------|--------|----------------|
+| --- | --- | --- |
 | `/auth` | `routers/auth.py` | Register, login, admin login, logout, me, password reset, sessions, canvas token |
 | `/canvas` | `routers/canvas.py` | Dashboard, courses, assignments/quizzes/feedback/grades preview+create, students, active course |
 | `/chat` | `routers/chat.py` | Messages, confirm/cancel/pause/resume/rename, conversations, deferred |
@@ -33,6 +32,6 @@ Most routes require `Authorization: Bearer <JWT>`. Role is enforced from the **d
 
 Typical write sequence:
 
-1. `POST /chat/...` (message) → assistant returns `intent_preview` + workflow pending  
-2. Optional dry-run UI  
+1. `POST /chat/...` (message) → assistant returns `intent_preview` + workflow pending
+2. Optional dry-run UI
 3. `POST /chat/confirm` (or cancel/pause/resume)

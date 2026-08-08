@@ -1,7 +1,5 @@
 # Canvas Integration
 
-Issue: **#1342** · Parent: #1316
-
 ## Modes
 
 1. **Direct Canvas HTTP** from FastAPI (`integrations/canvas.py`) — common for day-to-day local/dev.
@@ -22,7 +20,7 @@ Preview services (`write_preview`, assignment/quiz/feedback/grade/message valida
 
 Due dates are normalized with `services/due_date.py` / `_normalize_due_date_for_user` (instructor Canvas timezone → UTC ISO) before preview and write so confirm matches Canvas.
 
-Ungraded assignments send `points_possible=null` with Canvas `grading_type=not_graded` (Ticket 21).
+Ungraded assignments send `points_possible=null` with Canvas `grading_type=not_graded`.
 
 ## Failure recording
 

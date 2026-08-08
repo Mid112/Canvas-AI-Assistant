@@ -1,7 +1,5 @@
 # LLM Provider Architecture
 
-Issue: **#1343** · Parent: #1316
-
 Authoritative deep-dive: [`../../design/llm-providers.md`](../../design/llm-providers.md)
 
 ## Summary

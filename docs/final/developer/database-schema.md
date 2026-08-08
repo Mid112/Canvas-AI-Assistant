@@ -1,13 +1,11 @@
 # Database Schema
 
-Issue: **#1345** · Parent: #1316
-
 Source of truth: `db/init/01_schema.sql` plus numbered files in `db/migrations/`.
 
 ## Core tables (summary)
 
 | Table | Purpose |
-|-------|---------|
+| --- | --- |
 | `users` | Instructors & admins |
 | `sessions` | Auth sessions |
 | `canvas_connections` | Encrypted tokens / connection metadata |

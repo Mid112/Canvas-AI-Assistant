@@ -1,7 +1,5 @@
 # Feedback Workflow Guide
 
-Issue: **#1334** · Parent: #1315
-
 ## Paths
 
 - `/instructor/feedback/create`
@@ -15,7 +13,7 @@ Issue: **#1334** · Parent: #1315
 3. Generate a draft; edit tone and accuracy.
 4. **Review / approve** before any Canvas write (comments / feedback posting per implemented action).
 
-> **Screenshot placeholder:** `feedback-create-review.png`  
+> **Screenshot placeholder:** `feedback-create-review.png`
 > *[Add screenshot here]*
 
 ## Tips

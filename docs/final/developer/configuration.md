@@ -1,7 +1,5 @@
 # Configuration Process
 
-Issue: **#1348** · Parent: #1316
-
 ## First-time local
 
 1. `make install`
@@ -23,7 +21,7 @@ Issue: **#1348** · Parent: #1316
 3. Set `MCP_ALLOWED_CANVAS_HOSTS` to real Canvas hostnames only.
 4. Confirm `MCP_SERVER_URL` routing inside compose.
 
-## Configuration verification (#1362)
+## Configuration verification
 
 - [ ] Backend starts without Settings validation errors
 - [ ] CORS allows the frontend origin

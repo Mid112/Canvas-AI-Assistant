@@ -1,7 +1,5 @@
 # Architecture (Final)
 
-Issue: **#1407** · Developer detail: [developer/backend-architecture.md](./developer/backend-architecture.md) · Design: [../design/README.md](../design/README.md)
-
 ## System purpose
 
 Canvas Helper AI Assistant reduces instructor busywork for selected Canvas workflows using LLM assistance with **mandatory human confirmation** before Canvas writes.

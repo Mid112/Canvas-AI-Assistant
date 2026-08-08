@@ -1,7 +1,5 @@
 # Authentication Flow
 
-Issue: **#1341** · Parent: #1316
-
 ## Roles
 
 - **Instructor** — teaching workflows; must complete Canvas onboarding for full Canvas features.

@@ -1,13 +1,10 @@
 # Deployment Package
 
-Parents: **#1318** Deployment Package · **#1319** Deployment Validation  
-Finalize: **#1366**, **#1409**, **#1410**
-
 | Doc | Purpose |
-|-----|---------|
+| --- | --- |
 | [installation-guide.md](./installation-guide.md) | Clean install from clone |
 | [deployment-guide.md](./deployment-guide.md) | Compose / nginx production-style deploy |
-| [validation-checklist.md](./validation-checklist.md) | #1353–#1357, #1358–#1365 verification |
+| [validation-checklist.md](./validation-checklist.md) | Deployment validation checklist |
 
 ## Package contents (what reviewers need)
 

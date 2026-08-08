@@ -4,7 +4,7 @@
 
 Start here: **[final/README.md](./final/README.md)**
 
-### User guides (#1315)
+### User guides
 - [Instructor guide](./final/user-guides/instructor-guide.md)
 - [Administrator guide](./final/user-guides/administrator-guide.md)
 - [AI Assistant](./final/user-guides/ai-assistant-usage.md)
@@ -13,25 +13,25 @@ Start here: **[final/README.md](./final/README.md)**
 - [Messaging](./final/user-guides/messaging-workflow.md) · [Grades](./final/user-guides/grade-management.md)
 - [Screenshot inventory](./final/user-guides/screenshots/README.md)
 
-### Developer docs (#1316)
+### Developer docs
 - [Developer index](./final/developer/README.md)
 
-### Deployment (#1318–#1319)
+### Deployment
 - [Deployment package](./final/deployment/README.md)
 - [Installation](./final/deployment/installation-guide.md)
 - [Deployment guide](./final/deployment/deployment-guide.md)
 - [Validation checklist](./final/deployment/validation-checklist.md)
 
-### Validation (#1320–#1323)
+### Validation
 - [Reliability & error handling](./final/validation/reliability-error-handling.md)
 - [Reliability validation](./final/validation/reliability-validation.md)
 - [Scope constraints](./final/validation/scope-constraints.md)
 - [Scope review](./final/validation/scope-validation-review.md)
 
-### Review (#1317)
+### Review
 - [Documentation review checklist](./final/review/documentation-review-checklist.md)
 
-### Final package extras (#1326)
+### Final package extras
 - [Architecture](./final/architecture.md) · [API reference](./final/api-reference.md)
 - [Testing report](./final/testing-report.md) · [Traceability matrix](./final/requirements-traceability.md)
 - [Presentation](./final/presentation.md) · [Release notes](./final/release-notes.md)

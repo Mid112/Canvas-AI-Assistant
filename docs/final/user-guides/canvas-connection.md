@@ -1,7 +1,5 @@
 # Canvas Connection Guide
 
-Issue: **#1330** · Parent: #1315
-
 ## Why connect Canvas
 
 The assistant and course UIs read (and, after confirm, write) Canvas data using **your** instructor token. Tokens are stored **encrypted** (Fernet) and are not sent to the LLM.
@@ -13,10 +11,10 @@ The assistant and course UIs read (and, after confirm, write) Canvas data using 
 3. Paste a Canvas access token with the permissions your institution requires for the supported workflows.
 4. **Review permissions** (`/review-permissions`) and continue.
 
-> **Screenshot placeholder:** `canvas-connect.png`  
+> **Screenshot placeholder:** `canvas-connect.png`
 > *[Add screenshot here]*
 
-> **Screenshot placeholder:** `canvas-permissions.png`  
+> **Screenshot placeholder:** `canvas-permissions.png`
 > *[Add screenshot here]*
 
 ## Managing the connection later
@@ -36,7 +34,7 @@ API surface (for developers): `PATCH /api/v1/auth/me/canvas-token` (and related 
 ## Failure modes
 
 | Symptom | Likely cause | Recovery |
-|---------|--------------|----------|
+| --- | --- | --- |
 | Auth / Canvas error page | Bad URL or token | Re-enter token; check host |
 | Empty courses | Wrong account / scopes | New token with course access |
 | Admin shows failing connection | Token revoked or Canvas down | Instructor reconnect; admin troubleshooting |

@@ -1,6 +1,5 @@
 # Backend Architecture
 
-Issue: **#1339** · Parent: #1316  
 Final summary: also [`../architecture.md`](../architecture.md)
 
 ## Layers
@@ -18,7 +17,7 @@ React (Vite)  →  FastAPI (/api/v1)  →  Services  →  Integrations
 ## Components
 
 | Component | Path | Role |
-|-----------|------|------|
+| --- | --- | --- |
 | FastAPI app | `app/backend/app/main.py` | Routers, lifespan (migrations, admin seed, background jobs) |
 | Routers | `app/backend/app/routers/` | HTTP adapters |
 | Services | `app/backend/app/services/` | Business rules, workflows, risk, drafts |

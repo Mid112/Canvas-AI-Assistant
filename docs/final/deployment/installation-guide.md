@@ -1,7 +1,5 @@
 # Installation Guide
 
-Issue: **#1410** · related #1353
-
 ## Prerequisites
 
 - Docker + Docker Compose
@@ -10,7 +8,7 @@ Issue: **#1410** · related #1353
 - Make
 - Optional: Ollama or vLLM for local models
 
-## Clean install (#1353)
+## Clean install
 
 ```bash
 git clone <repo-url>
@@ -39,7 +37,7 @@ make build && make up
 # App http://localhost:8888
 ```
 
-## Startup procedure (#1354)
+## Startup procedure
 
 1. Start dependencies (`e2e-up` or `up`).
 2. Wait for Postgres healthy / migrations.
@@ -47,7 +45,7 @@ make build && make up
 4. Open UI; admin login; create instructor; connect Canvas.
 5. Smoke: list courses, open assistant, run a **read** prompt.
 
-## Verify web deployment (#1357)
+## Verify web deployment
 
 - [ ] UI loads over HTTP(S)
 - [ ] Login works

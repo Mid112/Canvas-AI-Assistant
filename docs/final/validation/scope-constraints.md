@@ -1,16 +1,14 @@
 # Scope Constraint Validation
 
-Parent: **#1322**
-
 These constraints are product/security requirements. Validate in UI **and** by attempting API misuse where possible.
 
-| Issue | Constraint | How to verify |
-|-------|------------|---------------|
-| #1383 | No autonomous Canvas actions | Normal chat turn never mutates Canvas without confirm |
-| #1384 | Backend validation enforcement | Bypass UI; invalid/missing payloads rejected by API |
-| #1385 | No unrestricted deletion | No instructor “delete any assignment/quiz” general tool; deletes limited to undo paths |
-| #1386 | No arbitrary Canvas API execution | LLM/tools limited to allowlisted actions; no free-form Canvas proxy |
-| #1387 | No institution-wide Canvas administration | No site-admin Canvas APIs; scoped to instructor token + course |
+| Constraint | How to verify |
+| --- | --- |
+| No autonomous Canvas actions | Normal chat turn never mutates Canvas without confirm |
+| Backend validation enforcement | Bypass UI; invalid/missing payloads rejected by API |
+| No unrestricted deletion | No instructor “delete any assignment/quiz” general tool; deletes limited to undo paths |
+| No arbitrary Canvas API execution | LLM/tools limited to allowlisted actions; no free-form Canvas proxy |
+| No institution-wide Canvas administration | No site-admin Canvas APIs; scoped to instructor token + course |
 
 ## Evidence tips
 

@@ -1,23 +1,21 @@
 # Developer Documentation
 
-Parent: **#1316**
-
-| Topic | File | Issue |
-|-------|------|-------|
-| Backend architecture | [backend-architecture.md](./backend-architecture.md) | #1339 |
-| API endpoints | [api-endpoints.md](./api-endpoints.md) | #1340 |
-| Authentication | [authentication.md](./authentication.md) | #1341 |
-| Canvas integration | [canvas-integration.md](./canvas-integration.md) | #1342 |
-| LLM providers | [llm-providers.md](./llm-providers.md) | #1343 |
-| MCP architecture | [mcp-architecture.md](./mcp-architecture.md) | #1344 |
-| Database schema | [database-schema.md](./database-schema.md) | #1345 |
-| Environment variables | [environment-variables.md](./environment-variables.md) | #1346 |
-| Docker deployment | [docker-deployment.md](./docker-deployment.md) | #1347 |
-| Configuration | [configuration.md](./configuration.md) | #1348 |
+| Topic | File |
+| --- | --- |
+| Backend architecture | [backend-architecture.md](./backend-architecture.md) |
+| API endpoints | [api-endpoints.md](./api-endpoints.md) |
+| Authentication | [authentication.md](./authentication.md) |
+| Canvas integration | [canvas-integration.md](./canvas-integration.md) |
+| LLM providers | [llm-providers.md](./llm-providers.md) |
+| MCP architecture | [mcp-architecture.md](./mcp-architecture.md) |
+| Database schema | [database-schema.md](./database-schema.md) |
+| Environment variables | [environment-variables.md](./environment-variables.md) |
+| Docker deployment | [docker-deployment.md](./docker-deployment.md) |
+| Configuration | [configuration.md](./configuration.md) |
 
 Final packaged copies also live at:
-- [`../architecture.md`](../architecture.md) (#1407)
-- [`../api-reference.md`](../api-reference.md) (#1408)
+- [`../architecture.md`](../architecture.md)
+- [`../api-reference.md`](../api-reference.md)
 
 ## Quick start (developers)
 

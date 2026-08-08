@@ -1,7 +1,5 @@
 # Assignment Workflow Guide
 
-Issue: **#1331** · Parent: #1315
-
 ## Paths
 
 - Form: `/instructor/assignments/create`
@@ -16,7 +14,7 @@ Issue: **#1331** · Parent: #1315
 4. **Review / approve** — verify every field.
 5. Submit create (preview → confirm pattern). Nothing is written to Canvas until this step succeeds.
 
-### Points vs ungraded (Ticket 21)
+### Points vs ungraded
 
 - Enter a **positive** point value for graded work.
 - Leave points **blank / null** for an **ungraded** assignment — the app sends Canvas `grading_type=not_graded` and does **not** invent a default (for example `10`).
@@ -26,10 +24,10 @@ Issue: **#1331** · Parent: #1315
 
 Due dates are normalized to **UTC ISO** using the instructor’s Canvas timezone before preview and Canvas write, so the confirmed value matches what Canvas receives.
 
-> **Screenshot placeholder:** `assignment-create-describe.png`  
+> **Screenshot placeholder:** `assignment-create-describe.png`
 > *[Add screenshot here]*
 
-> **Screenshot placeholder:** `assignment-create-review.png`  
+> **Screenshot placeholder:** `assignment-create-review.png`
 > *[Add screenshot here]*
 
 ## Create / update via assistant
