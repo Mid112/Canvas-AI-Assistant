@@ -55,13 +55,12 @@ def get_instructor_canvas_timezone(
     if canvas_url:
         for connection in connections:
             if canvas_urls_equivalent(connection.canvas_url, canvas_url):
-                return getattr(connection, "time_zone", None)
+                return connection.time_zone
         return None
     for connection in connections:
-        time_zone = getattr(connection, "time_zone", None)
-        if time_zone:
-            return time_zone
-    return getattr(connections[0], "time_zone", None) if connections else None
+        if connection.time_zone:
+            return connection.time_zone
+    return connections[0].time_zone if connections else None
 
 
 async def get_instructor_canvas_timezone_for_user(

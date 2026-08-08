@@ -121,12 +121,6 @@ def record_course_context(
     return envelope
 
 
-# Subset of _FIELD_MEMORY_KEYS where JSON null is a confirmed value, not
-# "unset". Ticket 21: points_possible=null means ungraded and must survive
-# merge + prompt formatting so later turns do not re-ask for points.
-_NULLABLE_FIELD_MEMORY_KEYS = frozenset({"points_possible"})
-
-
 def merge_field_memory(
     conversation: Conversation,
     source: dict[str, Any] | None,
@@ -138,21 +132,13 @@ def merge_field_memory(
     When ``allowed_keys`` is given (e.g. ``_PARTIAL_PLAN_SAFE_KEYS``), only
     those keys are persisted — used for clarify ``partial_plan`` merges where
     raw Canvas IDs from the LLM must not be trusted (see #1305).
-
-    ``None`` is skipped for most keys (means "not provided"). Explicit
-    ``points_possible: null`` is kept — Ticket 21 ungraded choice.
     """
     if not source:
         return
     keys = allowed_keys if allowed_keys is not None else _FIELD_MEMORY_KEYS
     memory = dict(conversation.field_memory or {})
     for key, value in source.items():
-        if key not in keys:
-            continue
-        if value is None:
-            if key not in _NULLABLE_FIELD_MEMORY_KEYS:
-                continue
-            memory[key] = None
+        if key not in keys or value is None:
             continue
         if isinstance(value, str) and not value.strip():
             continue
@@ -388,14 +374,7 @@ def merge_read_result_into_field_memory(
 def format_field_memory_for_prompt(memory: dict[str, Any] | None) -> str:
     if not memory:
         return ""
-    compact: dict[str, Any] = {}
-    for key, value in memory.items():
-        if key not in _FIELD_MEMORY_KEYS:
-            continue
-        # Keep Ticket 21 null points_possible so the model does not re-ask.
-        if value is None and key not in _NULLABLE_FIELD_MEMORY_KEYS:
-            continue
-        compact[key] = value
+    compact = {k: v for k, v in memory.items() if k in _FIELD_MEMORY_KEYS and v is not None}
     recent_assignments = memory.get(_RECENT_ASSIGNMENTS_KEY) or []
     recent_students = memory.get(_RECENT_STUDENTS_KEY) or []
     if recent_assignments:
