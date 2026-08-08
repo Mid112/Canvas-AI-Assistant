@@ -137,6 +137,26 @@ def test_semantic_send_message_reference_becomes_server_resolved_directive():
     ]
 
 
+def test_semantic_announcement_removes_private_recipient_fields():
+    intent = SemanticIntentAction(
+        intent="send_message",
+        delivery_mode="announcement",
+        student_reference="Jordan",
+        fields={
+            "body": "Class update",
+            "broadcast_to_all_students": True,
+        },
+    )
+
+    normalized = normalize_semantic_intent(intent, local_course_id=31)
+
+    proposed = normalized["proposed_action"]
+    assert normalized["action"] == "intent_preview"
+    assert proposed["action"] == "send_message"
+    assert "recipient_directives" not in proposed
+    assert "broadcast_to_all_students" not in proposed
+
+
 def test_semantic_course_required_intent_without_resolved_course_clarifies():
     intent = SemanticIntentAction(intent="read_assignments")
 

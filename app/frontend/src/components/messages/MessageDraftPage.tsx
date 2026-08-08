@@ -1,5 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircle, Bot, CheckCircle2, Loader2 } from "lucide-react";
+import {
+  AlertCircle,
+  Bot,
+  CheckCircle2,
+  Loader2,
+  Megaphone,
+  MessageCircle,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { useLocation } from "react-router-dom";
@@ -125,6 +132,9 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<Set<string>>(
     new Set(),
   );
+  const [deliveryMode, setDeliveryMode] = useState<
+    "announcement" | "private_message"
+  >(fetchOptions?.deliveryMode ?? "announcement");
 
   const {
     register,
@@ -169,10 +179,13 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
               .filter((id) => preferred.includes(id)),
           )
           : new Set<string>();
+      const initialDeliveryMode =
+        fetchOptions?.deliveryMode ??
+        (initialSelectedRecipientIds.size > 0
+          ? "private_message"
+          : "announcement");
       const initialTemplateId: MessageTemplateId =
-        // Delivery scope is encoded by recipient selection: no selected
-        // students means the backend will post a course announcement.
-        initialSelectedRecipientIds.size === 0
+        initialDeliveryMode === "announcement"
           ? "course-announcement"
           : isMessageTemplateId(loadedDraft.templateId)
             ? loadedDraft.templateId
@@ -183,6 +196,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
       setSelectedTemplateId(initialTemplateId);
       setSelectedTemplateName(initialPreset.name);
       setSelectedRecipientIds(initialSelectedRecipientIds);
+      setDeliveryMode(initialDeliveryMode);
       reset({
         subject:
           canUseTemplateDefault || canReplaceSubject(loadedDraft.subject)
@@ -279,6 +293,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
       next.add(recipientId);
     }
     setSelectedRecipientIds(next);
+    setDeliveryMode(next.size === 0 ? "announcement" : "private_message");
     syncTemplateForRecipientSelection(next);
   };
 
@@ -287,6 +302,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     const next = new Set(selectedRecipientIds);
     next.delete(recipientId);
     setSelectedRecipientIds(next);
+    setDeliveryMode(next.size === 0 ? "announcement" : "private_message");
     syncTemplateForRecipientSelection(next);
   };
 
@@ -296,6 +312,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
         ? new Set<string>()
         : new Set(recipients.map((recipient) => recipient.id));
     setSelectedRecipientIds(next);
+    setDeliveryMode(next.size === 0 ? "announcement" : "private_message");
     syncTemplateForRecipientSelection(next);
   };
 
@@ -449,6 +466,14 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
       return;
     }
 
+    if (deliveryMode === "private_message" && selectedRecipients.length === 0) {
+      setIsConfirmOpen(false);
+      setSendError(
+        "Select at least one student for a private message, or switch to a course announcement.",
+      );
+      return;
+    }
+
     setPageState("sending");
     setSendError(null);
 
@@ -590,6 +615,36 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
           <p className="text-sm text-destructive">{sendError}</p>
         </div>
       ) : null}
+
+      <div
+        role="status"
+        className={cn(
+          "flex items-start gap-3 rounded-xl border px-4 py-4 shadow-sm",
+          deliveryMode === "announcement"
+            ? "border-amber-300 bg-amber-50 text-amber-950"
+            : "border-sky-300 bg-sky-50 text-sky-950",
+        )}
+      >
+        {deliveryMode === "announcement" ? (
+          <Megaphone className="mt-0.5 size-6 shrink-0" aria-hidden="true" />
+        ) : (
+          <MessageCircle className="mt-0.5 size-6 shrink-0" aria-hidden="true" />
+        )}
+        <div className="space-y-1">
+          <p className="font-semibold">
+            {deliveryMode === "announcement"
+              ? "PUBLIC COURSE ANNOUNCEMENT"
+              : "PRIVATE MESSAGE"}
+          </p>
+          <p className="text-sm">
+            {deliveryMode === "announcement"
+              ? "No students are selected. This will be visible to everyone in the course. Select students to send private messages instead."
+              : selectedRecipients.length > 0
+                ? `This will be sent privately to ${selectedRecipients.length} selected student${selectedRecipients.length === 1 ? "" : "s"}.`
+                : "Select students to send privately, or leave everyone unselected for a course announcement."}
+          </p>
+        </div>
+      </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
         <aside className="space-y-4">

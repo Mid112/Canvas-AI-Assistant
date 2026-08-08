@@ -209,12 +209,33 @@ def normalize_semantic_intent(
             "local_course_id": local_course_id,
             **_clean_fields(intent, action_name),
         }
+        if action_name == "send_message" and intent.delivery_mode == "announcement":
+            # An announcement is represented by an empty recipient set in the
+            # existing message handoff. Remove any incidental recipient data
+            # so an informal announcement request cannot become private.
+            for key in (
+                "recipient_directives",
+                "recipient_handle",
+                "recipient_canvas_user_ids",
+                "broadcast_to_all_students",
+                "also_announce_to_class",
+            ):
+                proposed.pop(key, None)
+        elif action_name == "send_message" and intent.delivery_mode == "private_message":
+            proposed["delivery_mode"] = "private_message"
         if intent.assignment_reference and action_name in {
             "update_assignment",
             "update_grade",
         }:
             proposed["assignment_reference"] = intent.assignment_reference
-        if intent.student_reference and action_name in {"update_grade", "send_message"}:
+        if (
+            intent.student_reference
+            and action_name in {"update_grade", "send_message"}
+            and not (
+                action_name == "send_message"
+                and intent.delivery_mode == "announcement"
+            )
+        ):
             if action_name == "update_grade":
                 proposed["student_reference"] = intent.student_reference
             elif not proposed.get("recipient_directives"):

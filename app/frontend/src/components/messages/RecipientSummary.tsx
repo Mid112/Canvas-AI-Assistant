@@ -52,10 +52,10 @@ export function RecipientSummary({
       <div className="border-t border-border/60 px-4 py-3">
         <p className="text-xs text-muted-foreground">
           {selectedCount === 0
-            ? "Course announcement selected"
+            ? "No students selected — this will be a public course announcement."
             : selectedCount === 1
-              ? "1 student selected"
-              : `${selectedCount} students selected`}
+              ? "1 student selected — private message"
+              : `${selectedCount} students selected — private message`}
         </p>
       </div>
     </div>
