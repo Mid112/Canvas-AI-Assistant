@@ -1,5 +1,3 @@
-// Chat UI note: preserves the instructor's submitted wording exactly, including line breaks, for later chat-history replay.
-
 import type { ChatMessage } from "@/types/chat";
 
 interface UserMessageProps {

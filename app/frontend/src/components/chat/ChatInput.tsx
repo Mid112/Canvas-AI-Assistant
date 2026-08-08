@@ -1,5 +1,3 @@
-// File note: keeps the composer as a non-shrinking child of the assistant layout so saved-draft panels cannot push the input off screen.
-
 import { Send, Square } from "lucide-react";
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 

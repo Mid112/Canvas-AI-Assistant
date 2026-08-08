@@ -1,5 +1,3 @@
-// Chat UI note: keeps confirm/cancel/modify controls tied to one pending Workflow so stale proposals cannot be approved accidentally.
-
 import { useState } from "react";
 import { Ban, CheckCircle2, Loader2, RefreshCw, XCircle } from "lucide-react";
 

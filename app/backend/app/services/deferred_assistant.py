@@ -1,9 +1,3 @@
-"""Service note: stores Canvas-blocked assistant requests until credentials exist.
-
-Rows stay resumable until a replay succeeds, so a failed reconnect or aborted
-resume does not lose the instructor's original request.
-"""
-
 from __future__ import annotations
 
 from datetime import UTC, datetime

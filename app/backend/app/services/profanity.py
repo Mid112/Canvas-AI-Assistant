@@ -1,9 +1,7 @@
+# app/backend/app/services/profanity.py
 """Shared content-safety helpers for student-facing Canvas text.
 
 Intentionally small — not a moderation product.
-
-Service note: flags unsafe instructor-authored or generated text before it
-reaches approval/write workflows.
 
 - ``check_message_profanity``: strict keyword filter for direct instructor→student
   communication (messages, feedback, inbox replies).

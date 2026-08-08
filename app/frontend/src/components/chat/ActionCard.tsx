@@ -1,5 +1,3 @@
-// Chat UI note: shows the backend's interpreted action, risk label, and handoff links without implying the action has already run.
-
 import { ArrowRight, ChevronDown, Zap } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
