@@ -88,6 +88,15 @@ function withWelcomeMessage(restoredMessages: ChatMessage[]): ChatMessage[] {
   ];
 }
 
+function isExplicitPreviewModification(message: string): boolean {
+  // Free-typed questions should not accidentally revise a pending Canvas
+  // write. Keep modification mode opt-in while allowing natural draft edits
+  // and explicit confirmation/cancellation language.
+  return /\b(change|revise|edit|update|modify|replace|add|remove|set|make|use|instead|actually|cancel|discard|approve|confirm)\b/i.test(
+    message,
+  );
+}
+
 interface InitialChatState {
   messages: ChatMessage[];
   conversationId?: number;
@@ -526,7 +535,9 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       // auto-advancing queue (only ever surfacing one preview at a time)
       // removes this limitation.
       const pendingMessageIdToSend =
-        activePendingMessageIds.length === 1 ? activePendingMessageIds[0] : undefined;
+        activePendingMessageIds.length === 1 && isExplicitPreviewModification(userText)
+          ? activePendingMessageIds[0]
+          : undefined;
 
       // Client-side abort only: cancels the browser fetch so the UI can show
       // "Stopped." There is no server-side cancel endpoint — the backend
@@ -539,6 +550,10 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
         const response = await sendAssistantMessage(accessToken, userText, {
           context: assistantContext,
           conversationId,
+          // Seed only a brand-new conversation from the visible course
+          // selector. Existing conversations remain bound to their own
+          // server-validated course and cannot be overridden implicitly.
+          localCourseId: conversationId === undefined ? activeCourse?.localId : undefined,
           pendingMessageId: pendingMessageIdToSend,
           deferredRequestId: deferredRequestIdRef.current ?? undefined,
           modelSettings: modelSettings ?? undefined,
@@ -607,6 +622,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
     },
     [
       accessToken,
+      activeCourse?.localId,
       activePendingMessageIds,
       appendAssistantMessage,
       assistantContext,

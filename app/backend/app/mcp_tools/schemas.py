@@ -1,5 +1,5 @@
 # app/backend/app/mcp_tools/schemas.py
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -76,6 +76,21 @@ class AnalyzeCourseSubmissionsAction(BaseModel):
     # see compute_submissions_by_status in services/resolved_set.py for
     # exactly what each one means.
     status: Literal["missing", "late"] = "missing"
+
+
+class FindAssignmentsBySubmissionStatusAction(BaseModel):
+    """Find published assignments matching an explicit submission state."""
+
+    action: Literal["find_assignments_by_submission_status"] = (
+        "find_assignments_by_submission_status"
+    )
+    local_course_id: int
+    status: Literal[
+        "any_submissions",
+        "no_submissions",
+        "missing_submissions",
+        "late_submissions",
+    ]
 
 
 class FindAssignmentBySubmissionRateAction(BaseModel):
@@ -297,6 +312,62 @@ class RespondAction(BaseModel):
     message: str
 
 
+class SemanticIntentAction(BaseModel):
+    """A language-facing intent envelope, kept separate from executable tools.
+
+    The model may understand a request in this loose shape when the user's
+    wording does not map cleanly to one of the strict Canvas actions. The
+    chat service normalizes this envelope into an existing action before any
+    dispatcher code runs. It deliberately has no Canvas/local IDs: those are
+    resolved and injected by the server after course ownership checks.
+
+    ``fields`` and ``criteria`` are untrusted language output. The semantic
+    mapper only copies an explicit allowlist into a strict action, so this
+    envelope cannot become an arbitrary tool call.
+    """
+
+    action: Literal["semantic_intent"] = "semantic_intent"
+    intent: Literal[
+        "read_courses",
+        "read_assignments",
+        "read_submissions",
+        "read_students",
+        "read_quizzes",
+        "analyze_submissions",
+        "find_missing_submissions",
+        "find_assignments_by_submission_status",
+        "find_assignment_by_rate",
+        "create_assignment",
+        "create_quiz",
+        "update_assignment",
+        "update_grade",
+        "send_message",
+        "respond",
+        "clarify",
+        "unsupported",
+    ]
+    course_name: str | None = None
+    assignment_reference: str | None = None
+    student_reference: str | None = None
+    status: Literal["missing", "late"] | None = None
+    submission_status: Literal[
+        "any_submissions",
+        "no_submissions",
+        "missing_submissions",
+        "late_submissions",
+    ] | None = None
+    comparator: Literal["below", "above"] | None = None
+    threshold_percent: float | None = None
+    # Natural-language extraction only. Values are copied selectively by the
+    # mapper; raw IDs and unknown keys are never trusted downstream.
+    fields: dict[str, Any] = Field(default_factory=dict)
+    criteria: dict[str, Any] = Field(default_factory=dict)
+    message: str | None = None
+    question: str | None = None
+    partial_plan: dict[str, Any] = Field(default_factory=dict)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
+
+
 # Every action the LLM is allowed to request. Adding a new tool means
 # adding one class above and one entry here — nothing else in the
 # dispatcher or schema-generation step needs to change.
@@ -308,6 +379,7 @@ ACTION_SCHEMAS: dict[str, type[BaseModel]] = {
     "fetch_quizzes": FetchQuizzesAction,
     "resolve_missing_submissions": ResolveMissingSubmissionsAction,
     "analyze_course_submissions": AnalyzeCourseSubmissionsAction,
+    "find_assignments_by_submission_status": FindAssignmentsBySubmissionStatusAction,
     "find_assignment_by_submission_rate": FindAssignmentBySubmissionRateAction,
     "set_active_course": SetActiveCourseAction,
     "get_active_course": GetActiveCourseAction,
@@ -320,6 +392,7 @@ ACTION_SCHEMAS: dict[str, type[BaseModel]] = {
     "clarify": ClarifyAction,
     "intent_preview": IntentPreviewAction,
     "respond": RespondAction,
+    "semantic_intent": SemanticIntentAction,
 }
 
 
@@ -341,6 +414,7 @@ ACTION_CLASSIFICATION: dict[str, ActionClassification] = {
     "fetch_quizzes": "read_only",
     "resolve_missing_submissions": "read_only",
     "analyze_course_submissions": "read_only",
+    "find_assignments_by_submission_status": "read_only",
     "find_assignment_by_submission_rate": "read_only",
     "get_active_course": "read_only",
     # Writes a local UserPreference row only — no Canvas footprint, and not
