@@ -4,7 +4,11 @@ from app.models.course import Course
 from app.services.risk import classify_action_risk
 
 
-def generate_write_preview(proposed_action: dict, course: Course) -> dict:
+def generate_write_preview(
+    proposed_action: dict,
+    course: Course,
+    instructor_timezone: str | None = None,
+) -> dict:
     """Single preview generator for all write actions. Dispatches on the
     'action' field inside proposed_action to produce the right metadata
     shape for each write type. Adding a new write action means adding
@@ -20,11 +24,11 @@ def generate_write_preview(proposed_action: dict, course: Course) -> dict:
 
     match action_type:
         case "create_assignment":
-            return _preview_create_assignment(course, proposed_action)
+            return _preview_create_assignment(course, proposed_action, instructor_timezone)
         case "create_quiz":
-            return _preview_create_quiz(course, proposed_action)
+            return _preview_create_quiz(course, proposed_action, instructor_timezone)
         case "update_assignment":
-            return _preview_update_assignment(course, proposed_action)
+            return _preview_update_assignment(course, proposed_action, instructor_timezone)
         case "send_message":
             return _preview_send_message(course, proposed_action)
         case "update_grade":
@@ -53,13 +57,15 @@ def _reversibility_fields(action_type: str) -> dict:
     return fields
 
 
-def _preview_create_assignment(course: Course, params: dict) -> dict:
+def _preview_create_assignment(
+    course: Course, params: dict, instructor_timezone: str | None = None
+) -> dict:
     title = params.get("title", "Untitled")
     description = params.get("description", "")
     due_date = params.get("due_date")
     points_possible = params.get("points_possible")
 
-    due_display = _format_due_date(due_date)
+    due_display = _format_due_date(due_date, instructor_timezone)
     points_display = f"{points_possible} points" if points_possible else "Ungraded"
     desc_preview = description[:200] + ("..." if len(description) > 200 else "")
 
@@ -84,7 +90,9 @@ def _preview_create_assignment(course: Course, params: dict) -> dict:
     }
 
 
-def _preview_create_quiz(course: Course, params: dict) -> dict:
+def _preview_create_quiz(
+    course: Course, params: dict, instructor_timezone: str | None = None
+) -> dict:
     title = params.get("title", "Untitled Quiz")
     description = params.get("description", "")
     due_date = params.get("due_date")
@@ -95,7 +103,7 @@ def _preview_create_quiz(course: Course, params: dict) -> dict:
     allowed_attempts = params.get("allowed_attempts")
     time_limit = params.get("time_limit")
 
-    due_display = _format_due_date(due_date)
+    due_display = _format_due_date(due_date, instructor_timezone)
     points_display = f"{points_possible} points" if points_possible else "Ungraded"
     desc_preview = description[:200] + ("..." if len(description) > 200 else "")
     question_count = len(questions) if isinstance(questions, list) else 0
@@ -140,7 +148,9 @@ def _preview_create_quiz(course: Course, params: dict) -> dict:
     }
 
 
-def _preview_update_assignment(course: Course, params: dict) -> dict:
+def _preview_update_assignment(
+    course: Course, params: dict, instructor_timezone: str | None = None
+) -> dict:
     assignment_id = params.get("assignment_id", "?")
     assignment_name = params.get("assignment_name")
     title = params.get("title")
@@ -154,7 +164,7 @@ def _preview_update_assignment(course: Course, params: dict) -> dict:
     if description is not None:
         changes["description"] = description[:200] + ("..." if len(description) > 200 else "")
     if due_date is not None:
-        changes["due_date"] = _format_due_date(due_date)
+        changes["due_date"] = _format_due_date(due_date, instructor_timezone)
     if points_possible is not None:
         changes["points_possible"] = f"{points_possible} points"
 
@@ -311,11 +321,16 @@ def _preview_generic(course: Course, params: dict) -> dict:
     }
 
 
-def _format_due_date(due_date: str | None) -> str:
-    # Same UTC-normalized instant the update payload sends to Canvas (#1435).
+def _format_due_date(
+    due_date: str | None, instructor_timezone: str | None = None
+) -> str:
+    # Same instant the payload sends to Canvas, rendered in the
+    # instructor's own Canvas timezone. Without the zone the card showed
+    # the correct instant labelled UTC, so a 23:59 Vancouver due date read
+    # back as 06:59 the next morning on the confirm screen.
     from app.services.due_date import format_due_date_for_preview
 
-    return format_due_date_for_preview(due_date)
+    return format_due_date_for_preview(due_date, instructor_timezone)
 
 
 def _preview_safety_fields(action_type: str, params: dict) -> dict:

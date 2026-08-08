@@ -5,9 +5,11 @@ from typing import Literal, cast
 
 import httpx
 from fastapi import HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.schemas.preview import QuizDraftRequest, QuizDraftResponse, QuizQuestionDraft
+from app.services.canvas_timezone import get_instructor_canvas_timezone_for_user
 from app.services.due_date import normalize_due_date_to_utc_iso, parse_due_date
 from app.services.llm.json_extraction import loads_llm_json
 from app.services.llm.llm_setting import get_llm_adapter
@@ -73,7 +75,9 @@ def _reconcile_points(
     return points_possible, questions
 
 
-async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
+async def generate_quiz_draft(
+    body: QuizDraftRequest, db: AsyncSession, user_id: int
+) -> QuizDraftResponse:
     system = (
         "You help instructors draft Canvas quizzes. "
         "Respond with JSON only: "
@@ -122,11 +126,17 @@ async def generate_quiz_draft(body: QuizDraftRequest) -> QuizDraftResponse:
             detail="Could not generate quiz draft",
         ) from e
 
+    # Same instructor timezone the assignment draft uses. Without it a
+    # generated quiz due date was read as UTC wall clock, so it disagreed with
+    # an assignment generated from the identical instruction.
+    instructor_timezone = await get_instructor_canvas_timezone_for_user(db, user_id)
     due_at = None
     if data.get("due_at"):
-        normalized = normalize_due_date_to_utc_iso(str(data["due_at"]))
+        normalized = normalize_due_date_to_utc_iso(
+            str(data["due_at"]), instructor_timezone
+        )
         try:
-            due_at = parse_due_date(normalized)
+            due_at = parse_due_date(normalized, instructor_timezone)
         except (ValueError, TypeError, OverflowError):
             due_at = None
 

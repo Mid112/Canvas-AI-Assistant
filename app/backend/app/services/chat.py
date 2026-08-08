@@ -58,7 +58,9 @@ from app.services.canvas_assistant_gate import (
     classify_action_for_limited_mode,
     user_has_canvas_credentials,
 )
+from app.services.canvas_timezone import get_instructor_canvas_timezone
 from app.services.deferred_assistant import defer_assistant_request, mark_deferred_request_resumed
+from app.services.due_date_resolver import resolve_due_date
 from app.services.failed_operations import record_failed_operation
 from app.services.field_memory import (
     _PARTIAL_PLAN_SAFE_KEYS,
@@ -1534,12 +1536,19 @@ async def _run_update_assignment_chain(
     }
     if assignment_name:
         proposed_action["assignment_name"] = assignment_name
+    instructor_timezone = get_instructor_canvas_timezone(user, course.canvas_url)
     for field_name in _UPDATE_ASSIGNMENT_FIELDS:
         value = getattr(action, field_name)
         if value is not None:
+            # Resolve here too, so the confirm card and the Canvas write quote
+            # one instant rather than the raw string the model produced.
+            if field_name == "due_date" and isinstance(value, str):
+                value = resolve_due_date(value, user, course.canvas_url)
             proposed_action[field_name] = value
 
-    preview_metadata = generate_write_preview(proposed_action, course)
+    preview_metadata = generate_write_preview(
+        proposed_action, course, instructor_timezone
+    )
     return {
         "action": "intent_preview",
         "intent_preview": True,
@@ -4317,7 +4326,9 @@ async def handle_modified_action(
             question_bank_groups=proposed.get("question_bank_groups"),
         )
 
-    preview_metadata = generate_write_preview(proposed, course)
+    preview_metadata = generate_write_preview(
+        proposed, course, get_instructor_canvas_timezone(user, course.canvas_url)
+    )
     result = {
         "action": "intent_preview",
         "intent_preview": True,
