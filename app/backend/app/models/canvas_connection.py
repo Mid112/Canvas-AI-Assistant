@@ -19,6 +19,8 @@ class CanvasConnection(Base):
     canvas_url: Mapped[str] = mapped_column(String, nullable=False)
     # never store the raw token — always Fernet-encrypted before insert
     encrypted_token: Mapped[str] = mapped_column(Text, nullable=False)
+    # Stable keyed fingerprint used only to prevent token reuse across users.
+    token_fingerprint: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     # Last time services/canvas.py's sync_courses_if_stale actually hit
     # Canvas for this connection's course list (not just checked the
@@ -35,6 +37,9 @@ class CanvasConnection(Base):
     time_zone: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # one token per user per school — prevents duplicate rows for the same Canvas URL
-    __table_args__ = (UniqueConstraint("user_id", "canvas_url", name="uq_user_canvas_url"),)
+    __table_args__ = (
+        UniqueConstraint("user_id", "canvas_url", name="uq_user_canvas_url"),
+        UniqueConstraint("token_fingerprint", name="uq_canvas_token_fingerprint"),
+    )
 
     user: Mapped["User"] = relationship("User", back_populates="canvas_connections")

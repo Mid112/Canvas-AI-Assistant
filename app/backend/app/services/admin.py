@@ -373,12 +373,16 @@ async def reset_instructor_canvas_token(
     ~60s sync sweep."""
     await _get_instructor(db, instructor_id)  # validates existence
 
-    from app.core.security import encrypt_canvas_token
+    from sqlalchemy.exc import IntegrityError
+
+    from app.core.security import encrypt_canvas_token, fingerprint_canvas_token
     from app.integrations.canvas import validate_token
     from app.services.canvas_timezone import fetch_canvas_time_zone
+    from app.services.canvas_token_registry import token_is_already_used
 
     await validate_token(canvas_token, canvas_url)
     encrypted = encrypt_canvas_token(canvas_token)
+    token_fingerprint = fingerprint_canvas_token(canvas_token)
     canvas_time_zone = await fetch_canvas_time_zone(canvas_token, canvas_url)
 
     existing = await db.scalar(
@@ -387,8 +391,20 @@ async def reset_instructor_canvas_token(
             CanvasConnection.canvas_url == canvas_url,
         )
     )
+    if await token_is_already_used(
+        db,
+        canvas_token,
+        exclude_connection_id=getattr(existing, "id", None),
+    ):
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This Canvas token is already in use.",
+        )
+
     if existing:
         existing.encrypted_token = encrypted
+        existing.token_fingerprint = token_fingerprint
         existing.last_sync_error = None
         existing.time_zone = canvas_time_zone
     else:
@@ -397,6 +413,7 @@ async def reset_instructor_canvas_token(
                 user_id=instructor_id,
                 canvas_url=canvas_url,
                 encrypted_token=encrypted,
+                token_fingerprint=token_fingerprint,
                 time_zone=canvas_time_zone,
             )
         )
@@ -406,7 +423,16 @@ async def reset_instructor_canvas_token(
         action="instructor_canvas_token_reset",
         details={"instructor_id": instructor_id, "canvas_url": canvas_url},
     ))
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        if "uq_canvas_token_fingerprint" in str(exc.orig):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This Canvas token is already in use.",
+            ) from exc
+        raise
 
     return await list_instructor_canvas_connections(db, instructor_id)
 
