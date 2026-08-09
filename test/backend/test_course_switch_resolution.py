@@ -35,7 +35,10 @@ def _register_with_two_courses(client) -> tuple[dict, dict]:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+            # Unique per registration: Canvas tokens are globally unique now,
+            # so a shared literal makes every test after the first get a 409
+            # and never get a connection at all.
+            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": CANVAS_URL},
             headers=headers,
         )
 

@@ -1059,9 +1059,14 @@ function mapReplyBody(
             })
         : [];
     const acknowledgedText = joinAcknowledgements(acknowledgedEntries);
+    // Look through a trailing quote before deciding the sentence needs a
+    // period. Acknowledgements now quote their values, so a reason that ends
+    // in its own full stop arrives here as `the reason "...explanation."` --
+    // matching only /[.!?]$/ would see the quote, miss the stop, and produce
+    // `explanation.".`
     const acknowledgement =
       acknowledgedFields.length > 0
-        ? `I have ${acknowledgedText}${/[.!?]$/.test(acknowledgedText) ? " " : ". "}`
+        ? `I have ${acknowledgedText}${/[.!?]["']?$/.test(acknowledgedText) ? " " : ". "}`
         : "";
     const question = formatClarificationQuestion(
       readString(reply.question) ??

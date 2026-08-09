@@ -12,16 +12,37 @@ async def token_is_already_used(
     *,
     exclude_connection_id: int | None = None,
 ) -> bool:
-    """Check token ownership and lazily fingerprint legacy connections.
+    """Check whether another connection already holds this Canvas token.
 
-    Older databases have encrypted tokens but no fingerprint. They are
-    decrypted only during a token-connect operation so they are still covered
-    by the duplicate policy without a secret-bearing SQL backfill migration.
+    Rows written since the fingerprint column landed are matched by an indexed
+    equality check on that column -- the reason it exists. Only rows predating
+    it (fingerprint NULL) still need decrypt-and-compare, which keeps the
+    duplicate policy covering them without a migration that would have to
+    handle the decrypted Canvas token in SQL.
+
+    The fingerprints are deliberately not backfilled here. Any database that
+    already contains two connections sharing a token would violate
+    uq_canvas_token_fingerprint the moment both rows were written, so a
+    backfill has to be a deliberate, conflict-resolving migration rather than
+    a side effect of someone connecting a token.
     """
     target_fingerprint = fingerprint_canvas_token(plain_token)
-    connections = (await db.scalars(select(CanvasConnection))).all()
 
-    for connection in connections:
+    indexed_match = select(CanvasConnection.id).where(
+        CanvasConnection.token_fingerprint == target_fingerprint
+    )
+    if exclude_connection_id is not None:
+        indexed_match = indexed_match.where(CanvasConnection.id != exclude_connection_id)
+    if await db.scalar(indexed_match.limit(1)) is not None:
+        return True
+
+    legacy_connections = (
+        await db.scalars(
+            select(CanvasConnection).where(CanvasConnection.token_fingerprint.is_(None))
+        )
+    ).all()
+
+    for connection in legacy_connections:
         if connection.id == exclude_connection_id:
             continue
         try:
