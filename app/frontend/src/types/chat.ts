@@ -132,6 +132,17 @@ export interface AssistantResponse {
   deferredRequestId?: number;
   /** See ChatMessage.unverifiedClaims. */
   unverifiedClaims?: string[];
+  /** The course this turn actually resolved to, when the backend named one.
+   *
+   * Not always the active course: the assistant re-resolves the course from
+   * the message itself, so "create an assignment ... for Capstone Project"
+   * lands on Capstone Project even while another course is selected. The
+   * assistant page reads this to move the chat tab to that course, so the
+   * preview on screen and the tab it sits in cannot disagree. */
+  resolvedCourse?: {
+    localCourseId: number;
+    courseName?: string;
+  };
   /** When set, navigate to this route instead of showing a preview
    * card. The chat message content is still displayed. */
   navigateTo?: {

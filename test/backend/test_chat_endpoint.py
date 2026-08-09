@@ -501,12 +501,12 @@ def test_chat_followup_stays_on_conversation_course_despite_conflicting_active_c
 
     mock_adapter = AsyncMock()
     mock_adapter.generate.side_effect = [
-        # Turn 1: the model resolves the message to COSC 499, not the
-        # active course — this is what "named explicitly in turn 1" means
-        # now that course resolution is the model's job, not a deterministic
-        # text match. Turn 1 has no prior history yet, so
-        # _resolve_course_switch is skipped (see handle_chat_message) —
-        # only one call for this turn.
+        # Turn 1 names COSC 499 while COSC 310 is active, so the pre-resolver
+        # runs even without history (_message_may_name_another_course spots the
+        # name locally). It used to be skipped here, leaving the main call
+        # framed on the active course and relying on that call to overrule its
+        # own framing — which is exactly what it failed to do in practice.
+        '{"switched_to": "COSC 499"}',
         '{"action": "respond", "course_name": "COSC 499", "message": "OK."}',
         # Turn 2 now has turn 1's history, so _resolve_course_switch runs
         # first — "all assignments" names no course, so it reports no switch.
@@ -528,7 +528,7 @@ def test_chat_followup_stays_on_conversation_course_despite_conflicting_active_c
             headers=headers,
         )
 
-    followup_user_message = mock_adapter.generate.call_args_list[2].args[1]
+    followup_user_message = mock_adapter.generate.call_args_list[3].args[1]
     assert "CURRENT COURSE FOR THIS CONVERSATION: COSC 499" in followup_user_message
 
 
@@ -673,8 +673,13 @@ def test_ambient_local_course_id_forks_away_from_an_already_resolved_conversatio
 
     mock_adapter = AsyncMock()
     mock_adapter.generate.side_effect = [
-        # Turn 1: no history yet, so no pre-resolver call — one call only.
+        # Turn 1 names COSC 499 while Math 101 is active, so the pre-resolver
+        # runs on it even with no history — see
+        # _message_may_name_another_course.
+        '{"switched_to": "COSC 499"}',
         '{"action": "respond", "course_name": "COSC 499", "message": "OK."}',
+        # Turn 2 carries an explicit local_course_id, which skips the
+        # pre-resolver outright (a deliberate selection outranks the message).
         '{"action": "respond", "message": "OK."}',
     ]
 

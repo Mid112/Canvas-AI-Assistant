@@ -526,6 +526,44 @@ describe("mapChatReply", () => {
       });
   });
 
+  // The assistant re-resolves the course from the message, so a preview can be
+  // for a course other than the selected one — "create an assignment ... for
+  // Capstone Project" while COSTCO is active. Surfacing the resolved id is
+  // what lets the assistant page move the chat tab to match, instead of
+  // leaving a Capstone Project preview sitting in the COSTCO tab.
+  it("reports the course a preview actually resolved to", () => {
+    const result = mapChatReply(
+      {
+        intent_preview: true,
+        summary: "Create 'Final project delivery' in Capstone Project.",
+        proposed_action: {
+          action: "create_assignment",
+          local_course_id: 12,
+          title: "Final project delivery",
+        },
+        preview_metadata: { course_name: "Capstone Project" },
+        pending_message_id: 5,
+      },
+      false,
+      3,
+    );
+
+    expect(result.resolvedCourse).toEqual({
+      localCourseId: 12,
+      courseName: "Capstone Project",
+    });
+  });
+
+  it("reports no course when the reply names none", () => {
+    const result = mapChatReply(
+      { action: "respond", message: "Hello." },
+      false,
+      3,
+    );
+
+    expect(result.resolvedCourse).toBeUndefined();
+  });
+
   it("auto-redirects update_grade to the feedback form", () => {
     const result = mapChatReply(
       {

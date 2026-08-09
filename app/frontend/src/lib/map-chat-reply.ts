@@ -759,7 +759,37 @@ export function mapChatReplyToAssistantResponse(
 ): AssistantResponse {
   const mapped = mapReplyBody(reply, isError, conversationId, timeZone);
   const unverifiedClaims = readUnverifiedClaims(reply);
-  return unverifiedClaims ? { ...mapped, unverifiedClaims } : mapped;
+  const resolvedCourse = readResolvedCourse(reply);
+  return {
+    ...mapped,
+    ...(unverifiedClaims ? { unverifiedClaims } : {}),
+    ...(resolvedCourse ? { resolvedCourse } : {}),
+  };
+}
+
+/** The course the backend settled on for this turn.
+ *
+ * chat.py injects local_course_id into the proposed action itself
+ * (_inject_course_into_envelope) after resolving it from the message, so this
+ * is the resolved course rather than whatever the client had selected — the
+ * two differ exactly when the instructor named a course in the message. */
+function readResolvedCourse(
+  reply: Record<string, unknown>,
+): AssistantResponse["resolvedCourse"] {
+  const proposed = reply.proposed_action as Record<string, unknown> | undefined;
+  const localCourseId = proposed?.local_course_id;
+  if (typeof localCourseId !== "number") {
+    return undefined;
+  }
+
+  const previewMetadata = reply.preview_metadata as
+    | Record<string, unknown>
+    | undefined;
+  const courseName =
+    readString(previewMetadata?.course_name) ??
+    readString(previewMetadata?.course);
+
+  return { localCourseId, ...(courseName ? { courseName } : {}) };
 }
 
 function mapReplyBody(

@@ -136,6 +136,14 @@ interface ChatWindowProps {
   onInitialPromptConsumed?: () => void;
   onModifyContextConsumed?: () => void;
   onConversationChange?: (conversationId: number) => void;
+  /** The course this turn resolved to, when the backend named one. Differs
+   * from the selected course exactly when the instructor named a course in
+   * the message; the assistant page moves the chat tab to match. */
+  onResolvedCourse?: (course: {
+    localCourseId: number;
+    courseName?: string;
+    conversationId?: number;
+  }) => void;
   onDeferredRequest?: () => void;
   onDeferredResumeComplete?: () => void;
   onLoadingChange?: (isLoading: boolean) => void;
@@ -163,6 +171,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   onInitialPromptConsumed,
   onModifyContextConsumed,
   onConversationChange,
+  onResolvedCourse,
   onDeferredRequest,
   onDeferredResumeComplete,
   onLoadingChange,
@@ -577,6 +586,12 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
 
         setConversationId(response.conversationId);
         onConversationChange?.(response.conversationId);
+        if (response.resolvedCourse) {
+          onResolvedCourse?.({
+            ...response.resolvedCourse,
+            conversationId: response.conversationId,
+          });
+        }
         if (response.requiresCanvasToken && user?.id) {
           setStoredDeferredDraft(user.id, {
             message: userText,
@@ -630,6 +645,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       conversationId,
       modelSettings,
       onConversationChange,
+      onResolvedCourse,
       onDeferredRequest,
       onDeferredResumeComplete,
       startLoadingFeedback,

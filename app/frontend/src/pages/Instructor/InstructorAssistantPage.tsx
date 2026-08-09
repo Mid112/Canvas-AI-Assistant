@@ -642,6 +642,46 @@ export function InstructorAssistantPage() {
   // Backs both "+" and the chat's own New Chat button. The spec has New Chat
   // retiring the oldest tab at the cap, which is exactly what opening a tab
   // does — so they are one action, not two that drift apart.
+  /** Moves the chat tab to the course a turn actually resolved to.
+   *
+   * The assistant re-resolves the course from the message, so asking for an
+   * assignment "for Capstone Project" while COSC 676 is selected produces a
+   * Capstone Project preview. Leaving that preview sitting in the COSC 676
+   * tab shows two different courses on one screen and invites confirming a
+   * write against the wrong one.
+   *
+   * Foreground, unlike a dropdown switch made mid-preview: the instructor
+   * asked for this course in this breath, so the preview they are about to
+   * review is the thing they want to be looking at. */
+  const handleResolvedCourse = useCallback(
+    (course: {
+      localCourseId: number;
+      courseName?: string;
+      conversationId?: number;
+    }) => {
+      lastRoutedCourseIdRef.current = course.localCourseId;
+      updateTabs((current) => {
+        const next = switchChatTabCourse(current, {
+          courseId: course.localCourseId,
+          courseName: course.courseName ?? null,
+          focus: true,
+        });
+        // The backend forks the conversation on a course change, so the tab
+        // records the id this turn ended up on rather than the one it started
+        // from — otherwise returning to it reopens the pre-fork thread.
+        return course.conversationId === undefined
+          ? next
+          : setChatTabConversation(
+              next,
+              activeChatTab(next).id,
+              course.conversationId,
+            );
+      });
+      selectCourseIfAvailable(course.localCourseId);
+    },
+    [selectCourseIfAvailable, updateTabs],
+  );
+
   const handleNewTab = () => {
     // Same course, new thread: a new tab is for a second conversation about
     // what you are already working on. Switching course is what opens a tab
@@ -854,6 +894,7 @@ export function InstructorAssistantPage() {
               setPendingMessageId(undefined);
             }}
             onConversationChange={handleConversationChange}
+            onResolvedCourse={handleResolvedCourse}
             onDeferredRequest={() => void loadDeferredRequests()}
             onDeferredResumeComplete={() => {
               setPendingDeferredRequestId(null);

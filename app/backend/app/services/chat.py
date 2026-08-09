@@ -711,6 +711,46 @@ respond with {"switched_to": null} instead of guessing."""
 COURSE_SWITCH_RESOLVER_TIMEOUT_SECONDS = 30.0
 
 
+def _message_may_name_another_course(
+    course_names: list[CanvasCourseName],
+    current_course_name: str | None,
+    message: str,
+) -> bool:
+    """Cheap local check for whether a turn is worth a pre-resolver call.
+
+    Decides only "does this message contain the name or code of one of this
+    instructor's other courses" — no LLM, no network. Used to let the
+    pre-resolver run on a conversation's first turn, where there is no history
+    to justify it but the message can still plainly name a different course.
+
+    Substring, not exact: _normalize_course_text strips everything but
+    alphanumerics, so "... for capstone project" contains "capstoneproject".
+    That also makes it case- and punctuation-blind, which is the difference
+    between "Capstone Project" and "capstone project" working equally well.
+
+    A false positive costs one small call that answers null. A false negative
+    just leaves the old behaviour, so this can only improve on it.
+    """
+    normalized_message = _normalize_course_text(message)
+    if not normalized_message:
+        return False
+    current = _normalize_course_text(current_course_name or "")
+
+    for course_name in course_names:
+        for value in _course_exact_match_texts(course_name):
+            normalized = _normalize_course_text(value)
+            # Short codes ("CS") turn up inside ordinary words, and the current
+            # course is not a switch however often it is named.
+            if (
+                len(normalized) < _COURSE_NAME_FUZZY_MATCH_MIN_LENGTH
+                or normalized == current
+            ):
+                continue
+            if normalized in normalized_message:
+                return True
+    return False
+
+
 async def _resolve_course_switch(
     course_names: list[CanvasCourseName],
     current_course_name: str | None,
@@ -3860,25 +3900,41 @@ async def handle_chat_message(
     # Pre-resolve a course switch from the raw message alone, before the
     # main prompt is built for this turn — see _resolve_course_switch's
     # docstring for why this has to happen here, not after the main LLM
-    # call. Gated on actually having prior history, not just
-    # conversation.course_id being set: a conversation's first-ever turn
-    # can already have course_id set (seeded from the "set active course"
-    # button or the persisted UserPreference fallback — see
-    # get_or_create_conversation) with nothing yet said in it, so there is
-    # no stale framing/history to leak and nothing worth paying an extra
-    # call for. Also skipped for a modify turn (pending_message_id set —
-    # that's revising an existing proposed action tied to this
-    # conversation, not a fresh request). Also skipped when local_course_id
-    # is explicitly given (the "set active course" button, sent alongside
-    # this same message) — that explicit selection is a stronger,
-    # deliberate signal than a course name the message happens to mention,
-    # and wins outright for this turn rather than being silently
-    # overridden by this resolver.
+    # call.
+    #
+    # This used to require prior history outright, on the reasoning that a
+    # first-ever turn has no stale framing to leak and so is not worth an
+    # extra call. That covered only half of what this resolver does. Leaking
+    # old history is one failure; the other is the main call being told
+    # "CURRENT COURSE: <active course>" while the message plainly names a
+    # different one — which happens just as much on turn one, and is where a
+    # write lands in the wrong Canvas course. Observed exactly that: the first
+    # "create an assignment ... for capstone project" built it against the
+    # active course, and only a retry (by then with history, so the resolver
+    # ran) got it right.
+    #
+    # A first turn now qualifies when the message actually names one of the
+    # instructor's other courses — a local substring check, no call. The
+    # original cost argument still holds for every turn that names nothing:
+    # those are the common case, and they stay at one call.
+    #
+    # Still skipped for a modify turn (pending_message_id set — that's
+    # revising an existing proposed action tied to this conversation, not a
+    # fresh request). Still skipped when local_course_id is explicitly given
+    # (the "set active course" button, sent alongside this same message) —
+    # that explicit selection is a stronger, deliberate signal than a course
+    # name the message happens to mention, and wins outright for this turn
+    # rather than being silently overridden by this resolver.
     if (
         pending_message_id is None
         and local_course_id is None
         and conversation.course_id is not None
-        and history
+        and (
+            history
+            or _message_may_name_another_course(
+                course_names, conversation.course_name, message
+            )
+        )
     ):
         switched = await _resolve_course_switch(course_names, conversation.course_name, message, adapter)
         if (
