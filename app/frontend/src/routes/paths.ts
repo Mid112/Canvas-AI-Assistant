@@ -166,6 +166,7 @@ export interface AiMessageDraftLocationState {
     recipientIds?: string[];
     deliveryMode?: "announcement" | "private_message";
     conversationId?: number;
+    deliveryMode?: "announcement" | "private_message";
   };
 }
 

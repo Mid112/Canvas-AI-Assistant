@@ -136,6 +136,8 @@ export interface AssistantResponse {
     path: string;
     state: Record<string, unknown>;
   };
+  /** Explicitly keep a handoff in chat when the user must open it manually. */
+  autoNavigate?: boolean;
   /** A single send_message turn can resolve to more than one distinct
    * message (different text per recipient, or an announcement plus
    * targeted messages) — the primary preview is this response itself;

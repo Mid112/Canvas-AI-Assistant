@@ -1259,6 +1259,7 @@ async def _resolve_course_and_assignment(
                 "clarify": True,
                 "question": f"Which assignment in {course.name} did you mean? Options: {names}.",
                 "partial_plan": {"local_course_id": course.id},
+                "unresolved_fields": ["assignment_reference"],
             }
 
     return course, assignment_id
@@ -1294,7 +1295,18 @@ def _preserve_grade_clarification_context(
         if isinstance(value, str) and not value.strip():
             continue
         partial_plan[field_name] = value
-    return {**result, "partial_plan": partial_plan}
+    preserved = {
+        field: partial_plan[field]
+        for field in ("new_grade", "feedback", "reason")
+        if field in partial_plan
+    }
+    return {
+        **result,
+        "partial_plan": partial_plan,
+        # Consumed before the response is serialized. This keeps validated
+        # resolver context separate from arbitrary LLM clarify payloads.
+        "_server_preserved_grade_context": preserved,
+    }
 
 
 async def _run_fetch_submissions_chain(
@@ -2190,6 +2202,7 @@ async def _resolve_grade_target(
             "clarify": True,
             "question": f"Which student in {course.name} did you mean? Options: {names}.",
             "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
+                "unresolved_fields": ["student_reference"],
         }
 
     selected = next(s for s in submissions if _coerce_int(s.get("user_id")) == student_id)
@@ -2321,7 +2334,7 @@ def _grade_partial_plan(action: Any, local_course_id: int, assignment_id: int | 
         "student_reference": getattr(action, "student_reference", None),
         "new_grade": getattr(action, "new_grade", None),
         "feedback": getattr(action, "feedback", None),
-        "reason": getattr(action, "reason", None) or getattr(action, "feedback", None),
+        "reason": getattr(action, "reason", None),
     }
     return {key: value for key, value in plan.items() if value is not None}
 
@@ -2468,6 +2481,7 @@ async def _run_update_grade_chain(
                 "clarify": True,
                 "question": "Which student should receive this grade?",
                 "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
+                "unresolved_fields": ["student_reference"],
             }
         fetch_action = FetchStudentsAction(local_course_id=course.id)
         roster_result = await _run_tracked_read(
@@ -2495,6 +2509,7 @@ async def _run_update_grade_chain(
                     "to one student in this course. What is their full name or email?"
                 ),
                 "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
+                "unresolved_fields": ["student_reference"],
             }
 
     proposed_action = {
@@ -4724,6 +4739,15 @@ async def handle_chat_message(
             result = _step_budget_exhausted_response(loop_steps)
             break
 
+    # Grade resolver clarifications are the only path allowed to retain grade
+    # values across turns. Generic LLM clarify payloads stay memory-safe.
+    if (
+        isinstance(result, dict)
+        and result.get("clarify")
+        and getattr(action, "action", None) == "update_grade"
+    ):
+        result = _preserve_grade_clarification_context(result, action)
+
     # Feature 13 (#855 / #856) + #1303: strip Canvas ID / grade / title claims
     # that were never present in this-turn tool payloads or prior tool-derived
     # grounded_facts accumulated on the conversation.
@@ -4775,6 +4799,10 @@ async def handle_chat_message(
     # Must run before the assistant message is persisted so history reopen
     # ("Open quiz creation form") also carries the prompt.
     result = _attach_quiz_generation_prompt(result, message)
+
+    server_preserved_grade_context = result.pop(
+        "_server_preserved_grade_context", None
+    )
 
     # Log the assistant result — if this is a modify turn superseding a
     # previous intent_preview, overwrite that message in place rather than
@@ -4830,6 +4858,12 @@ async def handle_chat_message(
                 result.get("partial_plan"),
                 allowed_keys=_PARTIAL_PLAN_SAFE_KEYS,
             )
+            if isinstance(server_preserved_grade_context, dict):
+                merge_field_memory(
+                    conversation,
+                    server_preserved_grade_context,
+                    allowed_keys=frozenset({"new_grade", "feedback", "reason"}),
+                )
         await _supersede_pending_workflow(
             db,
             conversation.id,

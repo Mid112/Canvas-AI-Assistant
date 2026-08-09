@@ -128,6 +128,7 @@ export function InstructorMessagesPage() {
     aiDraft?.subject ?? "",
     aiDraft?.body ?? "",
     aiDraft?.prompt ?? "",
+    aiDraft?.deliveryMode ?? "",
     aiDraft?.conversationId ?? "",
     (aiDraft?.recipientIds ?? []).join(","),
   ].join("|");

@@ -469,13 +469,9 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
 
   const appendAssistantMessage = useCallback(
     (response: AssistantMessageResult) => {
-      // Quiz creation stays in chat so the instructor can review the draft
-      // and explicitly open the dedicated form. Other form handoffs retain
-      // their existing automatic navigation behavior.
-      if (
-        response.navigateTo &&
-        response.interpretedAction?.action !== "Create Quiz"
-      ) {
+      // Handoffs opt out explicitly when the instructor must review the chat
+      // response before opening a dedicated form (for example, quiz drafts).
+      if (response.navigateTo && response.autoNavigate !== false) {
         const briefMsg: ChatMessage = {
           id: createMessageId(),
           role: "assistant",

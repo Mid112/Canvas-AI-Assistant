@@ -42,17 +42,20 @@ _FIELD_MEMORY_KEYS = frozenset(
 #   - assignment_reference: the user's own words for which assignment
 #   - title, description, due_date, points_possible: assignment draft params
 #     the user explicitly provided
-#   - new_grade, feedback, reason: grade/feedback values explicitly provided
-#     by the instructor, even when assignment/student resolution is pending
+#   - grade/feedback values are persisted only through the server-side grade
+#     resolver path; generic LLM clarification plans must not retain them.
 #
 # Exclude ALL student-related fields (student_id, student_reference) and
-# assignment_id (raw Canvas IDs, which may be hallucinated). User-provided
-# grade/feedback text is safe to carry forward; only the unresolved target
-# identifiers/references remain excluded.
+# assignment_id (raw Canvas IDs, which may be hallucinated), and grade fields
+# from generic LLM plans. Resolver-produced grade context is merged through a
+# separate allowlist after the server has validated the action.
 _PARTIAL_PLAN_SAFE_KEYS = _FIELD_MEMORY_KEYS - {
     "assignment_id",
     "student_id",
     "student_reference",
+    "new_grade",
+    "feedback",
+    "reason",
 }
 
 # Capped MRU lists persisted alongside scalar keys (#1302). Not free-form

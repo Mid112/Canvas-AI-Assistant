@@ -75,7 +75,7 @@ describe("mapChatReply", () => {
     ).toEqual({
       content:
         'I have the title "Midterm". Which assignment should I update?',
-      acknowledgedFields: [{ label: "Assignment title", value: "Midterm" }],
+      acknowledgedFields: [{ label: "Title", value: "Midterm" }],
     });
   });
 
@@ -99,7 +99,7 @@ describe("mapChatReply", () => {
         'I have the Capstone Project course, the title "Research Proposal", the due date April 15, and 50 possible points. What description should I use?',
       acknowledgedFields: [
         { label: "Course", value: "Capstone Project" },
-        { label: "Assignment title", value: "Research Proposal" },
+        { label: "Title", value: "Research Proposal" },
         { label: "Due date", value: "April 15" },
         { label: "Possible points", value: "50" },
       ],
@@ -117,7 +117,7 @@ describe("mapChatReply", () => {
     );
 
     expect(result.content).toBe(
-      "I still need the assignment title, description, and due date.",
+      "I still need the title, description, and due date.",
     );
   });
 
@@ -136,7 +136,7 @@ describe("mapChatReply", () => {
     );
   });
 
-  it("removes internal field names embedded in clarification questions", () => {
+  it("replaces schema tokens without rewriting natural prose", () => {
     const result = mapChatReply(
       {
         action: "clarify",
@@ -148,8 +148,39 @@ describe("mapChatReply", () => {
     );
 
     expect(result.content).toBe(
-      "I have the Capstone Project course. Which assignment would you like to update, and what changes would you like to make (assignment title, description, due date, possible points)?",
+      "I have the Capstone Project course. Which assignment would you like to update, and what changes would you like to make (title, description, due date, possible points)?",
     );
+  });
+
+  it("does not rewrite ordinary words that match field names", () => {
+    const result = mapChatReply(
+      {
+        action: "clarify",
+        question: "Please provide a title for the quiz.",
+        partial_plan: {},
+      },
+      false,
+    );
+
+    expect(result.content).toBe("Please provide a title for the quiz.");
+  });
+
+  it("does not acknowledge failed resolver references or duplicate feedback", () => {
+    const result = mapChatReply(
+      {
+        action: "clarify",
+        question: "Which student did you mean?",
+        unresolved_fields: ["student_reference"],
+        partial_plan: {
+          student_reference: "coin",
+          feedback: "Good work",
+          reason: "Good work",
+        },
+      },
+      false,
+    );
+
+    expect(result.content).toBe("I have the feedback provided. Which student did you mean?");
   });
 
   it("maps grade clarify partial plans to the Grades tab when grade scoped", () => {
@@ -472,7 +503,7 @@ describe("mapChatReply", () => {
     expect(JSON.stringify(result)).not.toContain("secret_internal_value");
   });
 
-  it("auto-redirects create_quiz and keeps a form button for chat history", () => {
+  it("keeps create_quiz in chat and provides an explicit form handoff", () => {
     const result = mapChatReply(
       {
         intent_preview: true,
@@ -498,6 +529,7 @@ describe("mapChatReply", () => {
     );
 
     expect(result.pendingMessageId).toBeUndefined();
+    expect(result.autoNavigate).toBe(false);
     expect(result.navigateTo?.path).toBe("/instructor/quizzes/create");
     expect(result.navigateTo?.state).toMatchObject({
       returnTo: "/instructor/assistant",

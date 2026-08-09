@@ -238,7 +238,6 @@ describe("InstructorMessagesPage", () => {
     renderWithRouter(<InstructorMessagesPage />, {
       routerProps: { initialEntries: ["/?tab=announcements"] },
     });
-
     expect(screen.queryByRole("tab", { name: "Announcements" })).not.toBeInTheDocument();
     expect(
       await screen.findByText("PUBLIC COURSE ANNOUNCEMENT"),

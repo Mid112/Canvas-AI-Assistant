@@ -20,6 +20,14 @@ import { renderWithInstitution } from "../../utils/renderWithInstitution";
 
 const mockUseAuth = vi.fn();
 const mockUseActiveCourse = vi.hoisted(() => vi.fn());
+const mockNavigate = vi.hoisted(() => vi.fn());
+
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>(
+    "react-router-dom",
+  );
+  return { ...actual, useNavigate: () => mockNavigate };
+});
 
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
@@ -73,6 +81,7 @@ const mockedReverseWorkflow = vi.mocked(reverseWorkflow);
 describe("ChatWindow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockNavigate.mockReset();
     mockUseAuth.mockReturnValue({
       accessToken: "test-token",
       user: null,
@@ -177,6 +186,7 @@ describe("ChatWindow", () => {
     mockedSendAssistantMessage.mockResolvedValueOnce({
       content: "I prepared the quiz form.",
       conversationId: 1,
+      autoNavigate: false,
       navigateTo: {
         path: "/instructor/quizzes/create",
         state: { aiQuizDraft: { title: "Midterm" } },
@@ -203,6 +213,7 @@ describe("ChatWindow", () => {
     expect(
       screen.getByRole("link", { name: /Open quiz creation form/i }),
     ).toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   // Verifies: Keeps chat usable while active course context is loading.

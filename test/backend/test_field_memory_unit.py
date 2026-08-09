@@ -221,9 +221,9 @@ def test_partial_plan_safe_keys_exclude_raw_ids():
     assert "assignment_id" not in _PARTIAL_PLAN_SAFE_KEYS
     assert "student_id" not in _PARTIAL_PLAN_SAFE_KEYS
     assert "student_reference" not in _PARTIAL_PLAN_SAFE_KEYS
-    assert "new_grade" in _PARTIAL_PLAN_SAFE_KEYS
-    assert "feedback" in _PARTIAL_PLAN_SAFE_KEYS
-    assert "reason" in _PARTIAL_PLAN_SAFE_KEYS
+    assert "new_grade" not in _PARTIAL_PLAN_SAFE_KEYS
+    assert "feedback" not in _PARTIAL_PLAN_SAFE_KEYS
+    assert "reason" not in _PARTIAL_PLAN_SAFE_KEYS
     assert "assignment_reference" in _PARTIAL_PLAN_SAFE_KEYS
     assert "title" in _PARTIAL_PLAN_SAFE_KEYS
     assert "due_date" in _PARTIAL_PLAN_SAFE_KEYS
@@ -241,8 +241,8 @@ def test_merge_field_memory_with_partial_plan_safe_keys_strips_ids():
             "assignment_reference": "the latest quiz",
             "student_id": 77777,  # hallucinated
             "student_reference": "999999",  # failed to resolve
-            "new_grade": "85",  # user-provided, target still unresolved
-            "feedback": "good work",  # user-provided, target still unresolved
+            "new_grade": "85",  # must not persist from generic LLM clarify
+            "feedback": "good work",  # must not persist from generic clarify
             "title": "Quiz 1",  # user-provided draft param
             "due_date": "2026-08-04T23:59:00",  # user-provided draft param
         },
@@ -251,8 +251,8 @@ def test_merge_field_memory_with_partial_plan_safe_keys_strips_ids():
     assert "assignment_id" not in conversation.field_memory
     assert "student_id" not in conversation.field_memory
     assert "student_reference" not in conversation.field_memory
-    assert conversation.field_memory["new_grade"] == "85"
-    assert conversation.field_memory["feedback"] == "good work"
+    assert "new_grade" not in conversation.field_memory
+    assert "feedback" not in conversation.field_memory
     assert conversation.field_memory["assignment_reference"] == "the latest quiz"
     assert conversation.field_memory["title"] == "Quiz 1"
     assert conversation.field_memory["due_date"] == "2026-08-04T23:59:00"

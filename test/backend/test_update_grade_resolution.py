@@ -42,7 +42,7 @@ def test_grade_partial_plan_preserves_feedback_as_reason():
     partial_plan = _grade_partial_plan(action, local_course_id=7, assignment_id=10)
 
     assert partial_plan["feedback"] == "Strong explanation of the solution."
-    assert partial_plan["reason"] == "Strong explanation of the solution."
+    assert "reason" not in partial_plan
 
 
 def test_grade_resolver_clarification_preserves_all_user_grade_context():
@@ -71,6 +71,11 @@ def test_grade_resolver_clarification_preserves_all_user_grade_context():
         "local_course_id": 7,
         "assignment_reference": "ggg",
         "student_reference": "coin",
+        "new_grade": "100",
+        "feedback": "Strong explanation of the solution.",
+        "reason": "Instructor rationale",
+    }
+    assert result["_server_preserved_grade_context"] == {
         "new_grade": "100",
         "feedback": "Strong explanation of the solution.",
         "reason": "Instructor rationale",
