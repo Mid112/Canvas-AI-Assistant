@@ -72,8 +72,11 @@ vi.mock("@/components/messages/MessageSentPanel", () => ({
 const mockedFetchStudents = vi.mocked(fetchCourseStudentsWithSubmissionFallback);
 const mockedFetchDraft = vi.mocked(fetchMessageDraft);
 
-function renderMessagesPage(options?: { compose?: boolean }) {
-  const initialEntry = options?.compose ? "/?tab=compose" : "/";
+function renderMessagesPage(options?: { compose?: boolean; tab?: string }) {
+  const initialEntry =
+    options?.tab ? `/?tab=${options.tab}`
+    : options?.compose ? "/?tab=compose"
+    : "/";
   return renderWithRouter(<InstructorMessagesPage />, {
     routerProps: { initialEntries: [initialEntry] },
   });
@@ -179,10 +182,12 @@ describe("InstructorMessagesPage", () => {
     expect(
       screen.getByRole("tab", { name: "Inbox & replies" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("tab", { name: "Announcements" }),
-    ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Sent" })).toBeInTheDocument();
+    // Announcements is no longer its own tab: the unified composer decides
+    // announcement vs private message from the recipient selection.
+    expect(
+      screen.queryByRole("tab", { name: "Announcements" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Compose message" }),
     ).toBeInTheDocument();
@@ -314,9 +319,10 @@ describe("InstructorMessagesPage", () => {
     expect(await screen.findByLabelText("Subject")).toBeInTheDocument();
   });
 
-  // Verifies: Announcements tab seeds empty-recipients announcement compose.
-  it("opens the announcements tab with course announcement compose", async () => {
-    const user = userEvent.setup();
+  // Verifies the bookmark path for the removed Announcements tab: ?tab=announcements
+  // has to land on the unified composer in announcement mode, not 404 into the
+  // inbox. The tab is gone, but the URL is still out there in browser history.
+  it("redirects the old announcements tab to the compose announcement view", async () => {
     mockUseAuth.mockReturnValue({
       accessToken: "token",
       user: {
@@ -333,13 +339,14 @@ describe("InstructorMessagesPage", () => {
       refreshUser: vi.fn(),
     });
 
-    renderMessagesPage();
+    renderMessagesPage({ tab: "announcements" });
 
-    await user.click(screen.getByRole("tab", { name: "Announcements" }));
-    expect(
-      await screen.findByRole("heading", { name: "Course announcement" }),
-    ).toBeInTheDocument();
     expect(await screen.findByLabelText("Subject")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "No students selected — this will be a public course announcement.",
+      ),
+    ).toBeInTheDocument();
   });
 
   // Verifies: Sent tab mounts the sent panel for the active course.
