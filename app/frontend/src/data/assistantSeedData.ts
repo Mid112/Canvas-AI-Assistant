@@ -11,43 +11,39 @@ export const seedChatMessages: ChatMessage[] = [
 ];
 
 /**
- * First-time starter prompts for the empty chat state (#1441 / Ticket 17).
+ * First-time quick actions for the empty chat state (#1441 / Ticket 17).
  *
- * Built from the instructor's real active course instead of hardcoded
- * fabricated names. courseLabel is omitted (generic prompt) when there's no
- * active course yet so the assistant can clarify rather than guess.
+ * Ids are the dashboard's, so each button reaches the same destination as its
+ * Quick AI Actions twin — resolveQuickAction owns that mapping. This list only
+ * decides which four of the five appear here, and how they are labelled.
  *
- * Keep exactly four actions so the 2×2 starter grid stays balanced and covers
- * assignments, quizzes, analytics, and messages.
+ * Keep exactly four so the 2×2 grid stays balanced, covering assignments,
+ * quizzes, missing submissions, and messages.
  */
-export function buildSuggestedActions(courseLabel?: string): SuggestedAction[] {
-  const forCourse = courseLabel ? ` for ${courseLabel}` : "";
-  const inCourse = courseLabel ? ` in ${courseLabel}` : "";
-
+export function buildSuggestedActions(): SuggestedAction[] {
   return [
     {
       id: "create-assignment",
       title: "Create an assignment",
       description: "Draft a new assignment with AI",
-      prompt: `Help me create an assignment${inCourse}. Ask for any missing details, then propose a create_assignment preview I can review.`,
     },
     {
       id: "create-quiz",
       title: "Create a quiz",
       description: "Start a quiz from a short description",
-      prompt: `Help me create a quiz${inCourse}. Propose a create_quiz preview I can review in the quiz creator.`,
     },
     {
-      id: "course-analytics",
-      title: "Analyze course performance",
-      description: "See submissions and analytics",
-      prompt: `Show missing submissions and course performance${forCourse}`,
+      // Titled exactly as the dashboard does. The old label ("Analyze course
+      // performance") promised a broader analysis than the action behind it
+      // performs, which is specifically the missing-submissions read (#12).
+      id: "analyse-missing-submissions",
+      title: "Analyse Missing Submissions",
+      description: "See who hasn't submitted",
     },
     {
-      id: "draft-student-message",
+      id: "draft-announcement",
       title: "Draft a student message",
       description: "Write a message or announcement with AI",
-      prompt: `Draft a message to students${inCourse} about an upcoming deadline. Propose a send_message action I can review and edit before sending.`,
     },
   ];
 }

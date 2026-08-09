@@ -1,3 +1,5 @@
+import type { QuickActionId } from "@/lib/quick-actions";
+
 export type ChatMessageRole = "user" | "assistant";
 
 export type PendingActionStatus =
@@ -145,9 +147,12 @@ export interface AssistantResponse {
   additionalPreviews?: AssistantResponse[];
 }
 
+/** A starter action on the assistant's empty chat. Carries no prompt of its
+ * own: what the id does — open a creator page, or send a prompt — is resolved
+ * through resolveQuickAction so this surface and the dashboard's Quick AI
+ * Actions cannot drift apart under the same label. */
 export interface SuggestedAction {
-  id: string;
+  id: QuickActionId;
   title: string;
   description: string;
-  prompt: string;
 }

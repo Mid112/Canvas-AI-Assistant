@@ -50,7 +50,8 @@ from app.services.canvas_idempotency import (
 from app.services.canvas_status import CanvasWriteResult
 from app.services.canvas_timezone import get_instructor_canvas_timezone
 from app.services.course_access import get_owned_course_or_404
-from app.services.due_date import normalize_due_date_to_utc_iso, parse_due_date
+from app.services.due_date import parse_due_date
+from app.services.due_date_resolver import due_date_is_in_the_past, resolve_due_date
 from app.services.grade_management import submit_grade_update
 from app.services.llm.json_extraction import extract_json_object as _extract_json
 from app.services.message_validation import check_message_profanity, validate_message_for_send
@@ -401,10 +402,10 @@ def _normalize_due_date_for_user(
     user: User,
     canvas_url: str | None = None,
 ) -> str | None:
-    if due_date is None:
-        return None
-    instructor_timezone = get_instructor_canvas_timezone(user, canvas_url)
-    return normalize_due_date_to_utc_iso(due_date, instructor_timezone)
+    """Thin alias kept for the call sites in this module; the resolution
+    itself lives in due_date_resolver so quizzes, assignments, validators and
+    previews all share one answer."""
+    return resolve_due_date(due_date, user, canvas_url)
 
 
 def _create_assignment_due_date_in_past(
@@ -414,20 +415,12 @@ def _create_assignment_due_date_in_past(
 ) -> bool:
     """True if due_date parses to a date that has already passed.
 
-    Mirrors assignment_validation._check_due_date's future-date rule,
-    checked here too so a stale year is caught before a doomed preview is
-    shown, not just at confirm time (the TODAY'S DATE line in the system
-    prompt tells the model what today is, but it doesn't reliably do the
-    "nearest future occurrence" arithmetic itself — observed defaulting
-    to the current year even when that puts the date in the past)."""
-    normalized = _normalize_due_date_for_user(due_date, user, canvas_url)
-    if normalized is None:
-        return False
-    try:
-        due_dt = parse_due_date(normalized, get_instructor_canvas_timezone(user, canvas_url))
-    except (ValueError, TypeError, OverflowError):
-        return False
-    return due_dt <= datetime.now(UTC)
+    Checked here so a stale year is caught before a doomed preview is shown,
+    not just at confirm time (the TODAY'S DATE line in the system prompt tells
+    the model what today is, but it doesn't reliably do the "nearest future
+    occurrence" arithmetic itself — observed defaulting to the current year
+    even when that puts the date in the past)."""
+    return due_date_is_in_the_past(due_date, user, canvas_url)
 
 
 async def _resolve_course(
@@ -797,6 +790,13 @@ async def execute_tool(
             # on create_course_quiz (direct Canvas) with the same in-flight +
             # idempotency guards — see MCP_REQUIRED_ACTIONS in mcp_client.py.
             course = await _resolve_course(db, user, action.local_course_id)
+            # Resolve before validating and writing, exactly as
+            # create_assignment does. The raw action.due_date used to go
+            # straight into QuizCreate, so a quiz landed on a different
+            # instant than an assignment given the same instruction.
+            quiz_due_date = _normalize_due_date_for_user(
+                action.due_date, user, course.canvas_url
+            )
             questions = [
                 q.model_dump() if hasattr(q, "model_dump") else q
                 for q in (action.questions or [])
@@ -810,7 +810,7 @@ async def execute_tool(
                 user,
                 action.title,
                 action.description,
-                action.due_date,
+                quiz_due_date,
                 action.points_possible,
                 db,
                 allowed_attempts=action.allowed_attempts,
@@ -822,7 +822,7 @@ async def execute_tool(
             quiz_payload = QuizCreate(
                 title=action.title,
                 description=action.description,
-                due_at=action.due_date,
+                due_at=quiz_due_date,
                 points_possible=action.points_possible,
                 allowed_attempts=action.allowed_attempts,
                 time_limit=action.time_limit,
@@ -1407,7 +1407,27 @@ async def execute_tool(
                     )
                 # resolve the course for preview metadata (not for writing)
                 course = await _resolve_course(db, user, local_course_id)
-                preview_metadata = generate_write_preview(proposed, course)
+                # Resolve due_date on the proposed payload before previewing so
+                # the confirm card, the "Edit assignment details" seed and the
+                # eventual Canvas write all quote one instant. Schema
+                # validators only strip whitespace; the timezone lookup is what
+                # turns the instructor's wall clock into that instant.
+                if (
+                    proposed.get("action")
+                    in {"create_assignment", "update_assignment", "create_quiz"}
+                    and isinstance(proposed.get("due_date"), str)
+                    and proposed["due_date"].strip()
+                ):
+                    resolved_due = resolve_due_date(
+                        proposed["due_date"], user, course.canvas_url
+                    )
+                    if resolved_due is not None:
+                        proposed["due_date"] = resolved_due
+                preview_metadata = generate_write_preview(
+                    proposed,
+                    course,
+                    get_instructor_canvas_timezone(user, course.canvas_url),
+                )
             else:
                 # Read-action previews don't need the richer write-preview
                 # metadata, but still resolve a real course name when the

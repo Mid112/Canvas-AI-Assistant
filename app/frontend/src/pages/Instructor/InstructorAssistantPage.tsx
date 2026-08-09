@@ -21,6 +21,7 @@ import {
   getStoredLlmProviderSettings,
   setStoredLlmProviderSettings,
 } from "@/lib/llm-provider-storage";
+import { resolveQuickAction } from "@/lib/quick-actions";
 import {
   buildTypedDraftResumeTarget,
   discardTypedDraft,
@@ -96,10 +97,9 @@ export function InstructorAssistantPage() {
   const navigate = useNavigate();
   const { accessToken, user } = useAuth();
   const { activeCourse, availableCourses } = useActiveCourse();
-  const suggestedActions = useMemo(
-    () => buildSuggestedActions(activeCourse?.displayName),
-    [activeCourse?.displayName],
-  );
+  // Labels only — the active course now reaches the prompt through
+  // resolveQuickAction at click time, so this list no longer depends on it.
+  const suggestedActions = useMemo(() => buildSuggestedActions(), []);
   const [locationState] = useState(() =>
     getLocationState(
       location.state as InstructorAssistantLocationState | null,
@@ -409,10 +409,23 @@ export function InstructorAssistantPage() {
     [llmProviders, user],
   );
 
-  const handleSuggestedAction = (prompt: string) => {
+  const handleSuggestedAction = (actionId: string) => {
+    const behaviour = resolveQuickAction(actionId, activeCourse?.displayName);
+    if (!behaviour) {
+      return;
+    }
+
+    // Same destinations as the dashboard's Quick AI Actions: the creators are
+    // purpose-built forms, so these buttons open them instead of talking the
+    // instructor through the same task in chat.
+    if (behaviour.kind === "navigate") {
+      navigate(behaviour.path);
+      return;
+    }
+
     setSelectedConversation(null);
     setShowStarterGuidance(false);
-    chatWindowRef.current?.sendPrompt(prompt);
+    chatWindowRef.current?.sendPrompt(behaviour.prompt);
   };
 
   const handleStartNewChat = () => {

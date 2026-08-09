@@ -3,39 +3,35 @@ import { describe, expect, it } from "vitest";
 import { buildSuggestedActions } from "@/data/assistantSeedData";
 
 describe("buildSuggestedActions", () => {
-  it("covers assignment, quiz, analytics, and message starter prompts", () => {
-    const actions = buildSuggestedActions("COSC 501");
+  it("covers assignment, quiz, missing submissions, and message actions", () => {
+    const actions = buildSuggestedActions();
 
     expect(actions).toHaveLength(4);
+    // Dashboard ids, not this surface's own: the assistant used to call these
+    // "course-analytics" and "draft-student-message", which is what let the two
+    // surfaces route the same button to different places.
     expect(actions.map((action) => action.id)).toEqual([
       "create-assignment",
       "create-quiz",
-      "course-analytics",
-      "draft-student-message",
-    ]);
-    expect(actions.map((action) => action.prompt)).toEqual([
-      "Help me create an assignment in COSC 501. Ask for any missing details, then propose a create_assignment preview I can review.",
-      "Help me create a quiz in COSC 501. Propose a create_quiz preview I can review in the quiz creator.",
-      "Show missing submissions and course performance for COSC 501",
-      "Draft a message to students in COSC 501 about an upcoming deadline. Propose a send_message action I can review and edit before sending.",
+      "analyse-missing-submissions",
+      "draft-announcement",
     ]);
   });
 
-  it("falls back to a generic prompt with no fabricated course or assignment when there's no active course", () => {
-    const actions = buildSuggestedActions(undefined);
+  it("titles the analysis action for the read that actually backs it", () => {
+    const analysis = buildSuggestedActions().find(
+      (action) => action.id === "analyse-missing-submissions",
+    );
 
-    for (const action of actions) {
-      // Regression check: these prompts previously had "Assignment 3",
-      // "Quiz 2", and "COSC 499" hardcoded in, none of which correspond
-      // to anything in a real instructor's account.
-      expect(action.prompt).not.toMatch(/Assignment 3|Quiz 2|COSC 499/);
+    // "Analyze course performance" promised a broader analysis than the
+    // missing-submissions read behind it delivers (#12).
+    expect(analysis?.title).toBe("Analyse Missing Submissions");
+    expect(analysis?.description).toBe("See who hasn't submitted");
+  });
+
+  it("carries no prompt of its own, so routing stays in one place", () => {
+    for (const action of buildSuggestedActions()) {
+      expect(action).not.toHaveProperty("prompt");
     }
-
-    expect(actions.map((action) => action.prompt)).toEqual([
-      "Help me create an assignment. Ask for any missing details, then propose a create_assignment preview I can review.",
-      "Help me create a quiz. Propose a create_quiz preview I can review in the quiz creator.",
-      "Show missing submissions and course performance",
-      "Draft a message to students about an upcoming deadline. Propose a send_message action I can review and edit before sending.",
-    ]);
   });
 });

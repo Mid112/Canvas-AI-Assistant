@@ -9,6 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { resolveQuickAction } from "@/lib/quick-actions";
 import { cn } from "@/lib/utils";
 import { paths } from "@/routes/paths";
 import type { DashboardQuickAction } from "@/types/dashboard";
@@ -27,20 +28,6 @@ const actionIcons = {
   "analyse-missing-submissions": Bot,
 } as const;
 
-// Prompts that take the instructor straight into a real assistant turn for
-// that specific task, rather than dropping them on the same blank chat as
-// the generic "Open AI Assistant" button — see the AI assistant persona
-// review: these two actions used to be indistinguishable from that button.
-const quickActionPrompts: Record<string, string> = {
-  "draft-announcement":
-    "Draft a student message or course announcement for my active course. Propose a send_message action I can review and edit before sending.",
-  // Names the backing read action's job directly. The old wording ("grade
-  // and submission performance analysis") had no tool behind it, so the
-  // model answered from nothing and invented submission rates (#12).
-  "analyse-missing-submissions":
-    "Analyse missing submissions for my active course. Show the overview and list the students who haven't submitted.",
-};
-
 export function InstructorDashboardQuickActions({
   actions,
 }: InstructorDashboardQuickActionsProps) {
@@ -51,24 +38,19 @@ export function InstructorDashboardQuickActions({
   };
 
   const openQuickAction = (actionId: string) => {
-    if (actionId === "create-assignment") {
-      navigate(paths.instructor.assignmentCreate);
+    const behaviour = resolveQuickAction(actionId);
+
+    if (behaviour?.kind === "navigate") {
+      navigate(behaviour.path);
       return;
     }
 
-    if (actionId === "create-quiz") {
-      navigate(paths.instructor.quizCreate);
-      return;
-    }
-
-    if (actionId === "create-feedback") {
-      navigate(paths.instructor.feedbackCreate);
-      return;
-    }
-
-    const initialPrompt = quickActionPrompts[actionId];
-    if (initialPrompt) {
-      navigate(paths.instructor.assistant, { state: { initialPrompt } });
+    // Prompt-backed actions run in the assistant, which this surface has to
+    // navigate to — carrying the prompt so it opens mid-task rather than blank.
+    if (behaviour?.kind === "prompt") {
+      navigate(paths.instructor.assistant, {
+        state: { initialPrompt: behaviour.prompt },
+      });
       return;
     }
 

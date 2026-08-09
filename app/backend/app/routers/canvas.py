@@ -206,7 +206,13 @@ async def preview_assignment_endpoint(
         "due_date": body.due_at.isoformat() if body.due_at else None,
         "points_possible": body.points_possible,
     }
-    preview = generate_write_preview(proposed, course)
+    from app.services.canvas_timezone import get_instructor_canvas_timezone
+
+    preview = generate_write_preview(
+        proposed,
+        course,
+        get_instructor_canvas_timezone(current_user, course.canvas_url),
+    )
     # Keep the exact payload that would be POSTed so the UI preview mirrors
     # Canvas submission fields (name/due_at/points), not only display labels.
     metadata = {
@@ -562,7 +568,7 @@ async def generate_quiz_draft_endpoint(
     from app.services.course_access import get_owned_course_or_404
 
     await get_owned_course_or_404(course_id, current_user, db)
-    return await generate_quiz_draft(body)
+    return await generate_quiz_draft(body, db, current_user.id)
 
 
 @router.post("/courses/{course_id}/quizzes/preview", response_model=ActionPreviewResponse)

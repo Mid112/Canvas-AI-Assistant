@@ -24,11 +24,6 @@ interface HeaderProps {
   navItems: NavItem[];
   sidebarOpen?: boolean;
   onToggleSidebar?: () => void;
-  /** Drops the title block and tightens the bar to give the page its vertical
-   * space back. The nav controls stay: this header owns the sidebar toggle and
-   * the mobile navigation sheet, so hiding it outright would leave small
-   * screens with no way to navigate. */
-  compact?: boolean;
 }
 
 export function Header({
@@ -40,16 +35,12 @@ export function Header({
   navItems,
   sidebarOpen = true,
   onToggleSidebar,
-  compact = false,
 }: HeaderProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <header
-      className={cn(
-        "sticky top-0 z-30 flex shrink-0 items-center justify-between gap-4 border-b border-border bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-6",
-        compact ? "min-h-0 py-1.5" : "min-h-16 py-3",
-      )}
+      className="sticky top-0 z-30 flex min-h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80 md:px-6"
     >
       <div className="flex min-w-0 items-center gap-3">
         {onToggleSidebar ? (
@@ -90,21 +81,15 @@ export function Header({
             />
           </SheetContent>
         </Sheet>
-        {compact ? null : (
-          <>
-            {leading ? <div className="shrink-0">{leading}</div> : null}
-            <div className="min-w-0">
-              <h1 className="truncate text-lg font-semibold tracking-tight md:text-xl">
-                {title}
-              </h1>
-              {subtitle ? (
-                <p className="truncate text-sm text-muted-foreground">
-                  {subtitle}
-                </p>
-              ) : null}
-            </div>
-          </>
-        )}
+        {leading ? <div className="shrink-0">{leading}</div> : null}
+        <div className="min-w-0">
+          <h1 className="truncate text-lg font-semibold tracking-tight md:text-xl">
+            {title}
+          </h1>
+          {subtitle ? (
+            <p className="truncate text-sm text-muted-foreground">{subtitle}</p>
+          ) : null}
+        </div>
       </div>
       {onToggleSidebar ? (
         <div className={cn("shrink-0", sidebarOpen && "lg:hidden")}>

@@ -15,13 +15,15 @@ import type { SuggestedAction } from "@/types/chat";
 const actionIcons = {
   "create-assignment": FilePlus2,
   "create-quiz": ListChecks,
-  "course-analytics": BarChart3,
-  "draft-student-message": MessageSquare,
+  "analyse-missing-submissions": BarChart3,
+  "draft-announcement": MessageSquare,
 } as const;
 
 interface InstructorAssistantSuggestedActionsProps {
   actions: SuggestedAction[];
-  onSelect: (prompt: string) => void;
+  /** Receives the action id, not a prompt: some of these open a creator page
+   * rather than starting a chat turn, and only the page knows how to do both. */
+  onSelect: (actionId: string) => void;
   disabled?: boolean;
   /**
    * First-time empty-chat guidance only. Hidden after the user starts a
@@ -41,11 +43,14 @@ export function InstructorAssistantSuggestedActions({
   }
 
   // Titles + icons only — drop the section helper and per-card descriptions so
-  // generation actions stay visible without eating chat space (#1454).
+  // generation actions stay visible without eating chat space (#1454). Only
+  // the wording changed when these became quick actions: two of them now open
+  // a creator page rather than sending a prompt, so "Starter prompts"
+  // described half the grid.
   return (
-    <section aria-label="Starter prompts" className="shrink-0 space-y-2">
+    <section aria-label="Quick actions" className="shrink-0 space-y-2">
       <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Starter prompts
+        Quick actions
       </h2>
 
       <div className="grid gap-2 sm:grid-cols-2">
@@ -58,7 +63,7 @@ export function InstructorAssistantSuggestedActions({
               key={action.id}
               type="button"
               disabled={disabled}
-              onClick={() => onSelect(action.prompt)}
+              onClick={() => onSelect(action.id)}
               className={cn(
                 dashboardInteractive.actionCard,
                 "items-center py-2.5",

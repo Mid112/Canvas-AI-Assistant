@@ -52,15 +52,20 @@ def get_instructor_canvas_timezone(
 ) -> str | None:
     """Return the stored Canvas IANA timezone for the instructor, if known."""
     connections = getattr(user, "canvas_connections", None) or []
+    # time_zone is read through getattr because callers pass anything
+    # connection-shaped -- including rows loaded before the column existed and
+    # lightweight stand-ins in tests. A missing attribute means "unknown zone",
+    # which is already a supported answer, not an AttributeError.
     if canvas_url:
         for connection in connections:
             if canvas_urls_equivalent(connection.canvas_url, canvas_url):
-                return connection.time_zone
+                return getattr(connection, "time_zone", None)
         return None
     for connection in connections:
-        if connection.time_zone:
-            return connection.time_zone
-    return connections[0].time_zone if connections else None
+        time_zone = getattr(connection, "time_zone", None)
+        if time_zone:
+            return time_zone
+    return getattr(connections[0], "time_zone", None) if connections else None
 
 
 async def get_instructor_canvas_timezone_for_user(
