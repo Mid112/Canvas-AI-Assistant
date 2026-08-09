@@ -1,5 +1,6 @@
 export type ErrorCategory =
   | "canvas-auth"
+  | "canvas-token-conflict"
   | "canvas-outage"
   | "duplicate-in-flight"
   | "validation"
@@ -12,6 +13,10 @@ export type ErrorCategory =
  * actually raise (see e.g. "Invalid Canvas API token", "... reconnect Canvas."). */
 export function classifyErrorMessage(message: string): ErrorCategory {
   const normalized = message.toLowerCase();
+
+  if (normalized.includes("this canvas token is already in use")) {
+    return "canvas-token-conflict";
+  }
 
   if (
     normalized.includes("reconnect canvas") ||
@@ -57,6 +62,8 @@ export function classifyErrorMessage(message: string): ErrorCategory {
 
 export function recoverySuggestionForCategory(category: ErrorCategory): string | null {
   switch (category) {
+    case "canvas-token-conflict":
+      return "Use a different Canvas token, or contact an administrator if you believe this is an error.";
     case "canvas-auth":
       return "Reconnect Canvas in Settings, then retry this action.";
     case "canvas-outage":

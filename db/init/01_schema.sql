@@ -44,8 +44,8 @@ CREATE TABLE canvas_connections (
 );
 
 CREATE INDEX idx_canvas_connections_user_id ON canvas_connections(user_id);
-CREATE UNIQUE INDEX uq_canvas_token_fingerprint
-    ON canvas_connections(token_fingerprint)
+CREATE UNIQUE INDEX uq_canvas_url_token_fingerprint
+    ON canvas_connections(canvas_url, token_fingerprint)
     WHERE token_fingerprint IS NOT NULL;
 
 -- ─────────────────────────────────────────────
@@ -684,4 +684,6 @@ INSERT INTO schema_migrations (filename) VALUES
     ('041_canvas_course_names_aliases.sql'),
     ('042_course_unique_per_instructor_url.sql'),
     ('043_repair_canvas_course_names.sql'),
-    ('044_canvas_connection_time_zone.sql');
+    ('044_canvas_connection_time_zone.sql'),
+    ('045_unique_canvas_token_fingerprint.sql'),
+    ('046_scope_canvas_token_fingerprint_to_institution.sql');

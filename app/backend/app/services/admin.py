@@ -394,6 +394,7 @@ async def reset_instructor_canvas_token(
     if await token_is_already_used(
         db,
         canvas_token,
+        canvas_url,
         exclude_connection_id=getattr(existing, "id", None),
     ):
         await db.rollback()
@@ -427,7 +428,7 @@ async def reset_instructor_canvas_token(
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
-        if "uq_canvas_token_fingerprint" in str(exc.orig):
+        if "uq_canvas_url_token_fingerprint" in str(exc.orig):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="This Canvas token is already in use.",

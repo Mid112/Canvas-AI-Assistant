@@ -228,8 +228,8 @@ def test_set_canvas_token(client):
     assert client.get("/api/v1/auth/me", headers=headers).json()["has_canvas_token"] is True
 
 
-# Verifies: The same Canvas token cannot be connected to another instructor,
-# even when the second instructor uses a different Canvas URL.
+# Verifies: The same Canvas token cannot be connected to another instructor
+# within the same Canvas institution.
 def test_set_canvas_token_rejects_token_already_used_by_another_instructor(client):
     first_email = f"test_{uuid.uuid4()}@example.com"
     second_email = f"test_{uuid.uuid4()}@example.com"
@@ -255,7 +255,7 @@ def test_set_canvas_token_rejects_token_already_used_by_another_instructor(clien
             "/api/v1/auth/me/canvas-token",
             json={
                 "canvas_token": shared_token,
-                "canvas_url": "https://canvas.other.example.edu",
+                "canvas_url": CANVAS_URL,
             },
             headers=second_headers,
         )
@@ -263,6 +263,41 @@ def test_set_canvas_token_rejects_token_already_used_by_another_instructor(clien
     assert first_response.status_code == 200
     assert second_response.status_code == 409
     assert second_response.json()["detail"] == "This Canvas token is already in use."
+
+
+# Verifies: Canvas token uniqueness is scoped to the Canvas institution.
+def test_set_canvas_token_allows_same_token_on_different_canvas_institutions(client):
+    first_email = f"test_{uuid.uuid4()}@example.com"
+    second_email = f"test_{uuid.uuid4()}@example.com"
+    first = client.post(
+        "/api/v1/auth/register",
+        json={"email": first_email, "password": "Secret123!", "name": "First User"},
+    )
+    second = client.post(
+        "/api/v1/auth/register",
+        json={"email": second_email, "password": "Secret123!", "name": "Second User"},
+    )
+    first_headers = {"Authorization": f"Bearer {first.json()['access_token']}"}
+    second_headers = {"Authorization": f"Bearer {second.json()['access_token']}"}
+    shared_token = f"cross-institution-token-{uuid.uuid4()}"
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        first_response = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": shared_token, "canvas_url": CANVAS_URL},
+            headers=first_headers,
+        )
+        second_response = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={
+                "canvas_token": shared_token,
+                "canvas_url": "https://canvas.other.example.edu",
+            },
+            headers=second_headers,
+        )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
 
 
 # Verifies: Validate canvas token.
