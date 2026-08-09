@@ -164,6 +164,10 @@ export interface AiMessageDraftLocationState {
     prompt?: string;
     courseId?: number;
     recipientIds?: string[];
+    /** Tick the whole roster once it loads, for entry points that mean "message
+     * my students" and cannot know the ids before the course is fetched.
+     * recipientIds wins when both are set — it names specific people. */
+    selectAllRecipients?: boolean;
     deliveryMode?: "announcement" | "private_message";
     conversationId?: number;
   };

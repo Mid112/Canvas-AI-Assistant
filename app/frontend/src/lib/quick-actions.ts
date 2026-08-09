@@ -16,6 +16,7 @@ export type QuickActionId =
   | "create-quiz"
   | "create-feedback"
   | "draft-announcement"
+  | "draft-student-message"
   | "analyse-missing-submissions";
 
 /**
@@ -26,22 +27,40 @@ export type QuickActionId =
  * state, while the assistant is already on the page and just sends.
  */
 export type QuickActionBehaviour =
-  | { kind: "navigate"; path: string }
+  | { kind: "navigate"; path: string; state?: Record<string, unknown> }
   | { kind: "prompt"; prompt: string };
 
 /** Actions with a purpose-built page go straight there — the dedicated form
- * is a better tool for the job than a chat turn. */
-const DESTINATION_PATHS: Partial<Record<QuickActionId, string>> = {
-  "create-assignment": paths.instructor.assignmentCreate,
-  "create-quiz": paths.instructor.quizCreate,
-  "create-feedback": paths.instructor.feedbackCreate,
-  // Compose opens with no recipients ticked, which MessageDraftPage reads as
-  // announcement mode — so this lands on exactly the course-wide announcement
-  // the button's label promises. It used to ask the assistant to "draft a
-  // student message or course announcement", which is neither: it opened a
-  // chat turn that then had to hand back to this same page, and the model had
-  // to guess which of the two the instructor meant.
-  "draft-announcement": instructorMessagesPath({ tab: "compose" }),
+ * is a better tool for the job than a chat turn.
+ *
+ * Announcements and student messages are separate entries on purpose. They
+ * were briefly one, and the surfaces disagreed about what it meant: the
+ * dashboard labelled it "Draft Announcement" and the assistant "Draft a
+ * student message", so making it open an announcement quietly broke the
+ * assistant's button. One id must mean one thing on every surface. */
+const DESTINATIONS: Partial<
+  Record<QuickActionId, { path: string; state?: Record<string, unknown> }>
+> = {
+  "create-assignment": { path: paths.instructor.assignmentCreate },
+  "create-quiz": { path: paths.instructor.quizCreate },
+  "create-feedback": { path: paths.instructor.feedbackCreate },
+  // No recipients ticked, which MessageDraftPage reads as announcement mode.
+  // Replaces a chat turn that had to guess between a message and an
+  // announcement and then hand back to this same page anyway.
+  "draft-announcement": { path: instructorMessagesPath({ tab: "compose" }) },
+  // The whole roster ticked: a student message needs recipients, and an empty
+  // list is the one thing this button must never open on. Deselecting back to
+  // nobody turns it into an announcement, which is the same control the
+  // instructor would use anyway.
+  "draft-student-message": {
+    path: instructorMessagesPath({ tab: "compose" }),
+    state: {
+      aiMessageDraft: {
+        deliveryMode: "private_message",
+        selectAllRecipients: true,
+      },
+    },
+  },
 };
 
 /** Named so the instructor lands in a real turn for that specific task,
@@ -75,9 +94,13 @@ export function resolveQuickAction(
   actionId: string,
   courseLabel?: string,
 ): QuickActionBehaviour | null {
-  const path = DESTINATION_PATHS[actionId as QuickActionId];
-  if (path) {
-    return { kind: "navigate", path };
+  const destination = DESTINATIONS[actionId as QuickActionId];
+  if (destination) {
+    return {
+      kind: "navigate",
+      path: destination.path,
+      ...(destination.state ? { state: destination.state } : {}),
+    };
   }
 
   const buildPrompt = PROMPT_BUILDERS[actionId as QuickActionId];

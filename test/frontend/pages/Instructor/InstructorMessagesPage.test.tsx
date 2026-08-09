@@ -228,6 +228,66 @@ describe("InstructorMessagesPage", () => {
     }
   });
 
+  // The other half of the Draft-a-student-message button. That action cannot
+  // know recipient ids before the course roster is fetched, so it asks for the
+  // whole roster and this resolves it once the students land. Reported as "the
+  // student recipient list is empty": the button shared an id with Draft
+  // Announcement, so it opened in announcement mode with nobody selected.
+  it("ticks the whole roster when the draft asks for all recipients", async () => {
+    mockUseAuth.mockReturnValue({
+      accessToken: "token",
+      user: {
+        id: 1,
+        name: "Dr. Jane Doe",
+        role: "instructor",
+        has_canvas_token: true,
+      },
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    });
+    // The real fetchMessageDraft echoes back the recipients it was handed
+    // (mapDraftResponse), and the selection is intersected against them — so a
+    // mock returning a fixed roster would drop every pre-selected id on the
+    // floor and this would pass whatever the page did.
+    mockedFetchDraft.mockImplementation(async (_token, options) => ({
+      ...mockMessageDraft,
+      recipients: options?.recipients ?? mockMessageDraft.recipients,
+    }));
+
+    renderWithRouter(<InstructorMessagesPage />, {
+      routerProps: {
+        initialEntries: [
+          {
+            pathname: "/",
+            search: "?tab=compose",
+            state: {
+              aiMessageDraft: {
+                deliveryMode: "private_message",
+                selectAllRecipients: true,
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    await waitFor(() =>
+      expect(mockedFetchDraft).toHaveBeenCalledWith(
+        "token",
+        expect.objectContaining({ preSelectedIds: ["101"] }),
+      ),
+    );
+    expect(
+      screen.queryByText(
+        "No students selected — this will be a public course announcement.",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
   // Verifies: Course label is passed through to inbox; FAB opens compose.
   it("passes the course label to inbox and opens compose from the FAB", async () => {
     const user = userEvent.setup();

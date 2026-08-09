@@ -7,14 +7,19 @@ describe("buildSuggestedActions", () => {
     const actions = buildSuggestedActions();
 
     expect(actions).toHaveLength(4);
-    // Dashboard ids, not this surface's own: the assistant used to call these
-    // "course-analytics" and "draft-student-message", which is what let the two
-    // surfaces route the same button to different places.
+    // Shared ids wherever the two surfaces mean the same thing — the assistant
+    // used to call the analytics action "course-analytics", which is what let
+    // the same button route to different places.
+    //
+    // draft-student-message is the exception, and deliberately so: this
+    // surface offers a student message where the dashboard offers an
+    // announcement. They had shared draft-announcement, and the shared
+    // behaviour then had to be wrong for one of them.
     expect(actions.map((action) => action.id)).toEqual([
       "create-assignment",
       "create-quiz",
       "analyse-missing-submissions",
-      "draft-announcement",
+      "draft-student-message",
     ]);
   });
 

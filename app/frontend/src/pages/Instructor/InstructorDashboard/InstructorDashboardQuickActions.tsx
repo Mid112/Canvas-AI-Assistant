@@ -41,7 +41,11 @@ export function InstructorDashboardQuickActions({
     const behaviour = resolveQuickAction(actionId);
 
     if (behaviour?.kind === "navigate") {
-      navigate(behaviour.path);
+      if (behaviour.state) {
+        navigate(behaviour.path, { state: behaviour.state });
+      } else {
+        navigate(behaviour.path);
+      }
       return;
     }
 

@@ -41,9 +41,12 @@ export function buildSuggestedActions(): SuggestedAction[] {
       description: "See who hasn't submitted",
     },
     {
-      id: "draft-announcement",
+      // Its own id, not the dashboard's "draft-announcement": the two labels
+      // promise different sends, so sharing an id meant one of them was always
+      // lying about what the button does.
+      id: "draft-student-message",
       title: "Draft a student message",
-      description: "Write a message or announcement with AI",
+      description: "Message students in your active course",
     },
   ];
 }

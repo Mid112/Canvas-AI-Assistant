@@ -82,14 +82,38 @@ describe("resolveQuickAction", () => {
 // on each surface ("course-analytics" vs "analyse-missing-submissions"). Both surfaces now
 // resolve through the same module, so parity is checked by construction.
 describe("dashboard / assistant quick action parity", () => {
-  const dashboardIds = new Set(
-    sharedDashboardQuickActions.map((action) => action.id),
-  );
-
-  it("gives every assistant action an id the dashboard also offers", () => {
+  // The invariant is not "both surfaces offer the same buttons" — the
+  // assistant offers a student message the dashboard does not. It is that an
+  // id means one thing everywhere: every action resolves, and any id the two
+  // do share is labelled identically. Sharing draft-announcement between a
+  // button reading "Draft Announcement" and one reading "Draft a student
+  // message" is exactly how a shared id started lying.
+  it("resolves every assistant action to a defined behaviour", () => {
     for (const action of buildSuggestedActions()) {
-      expect(dashboardIds).toContain(action.id);
+      expect(resolveQuickAction(action.id)).not.toBeNull();
     }
+  });
+
+  it("keeps announcements and student messages apart", () => {
+    const announcement = resolveQuickAction("draft-announcement");
+    const studentMessage = resolveQuickAction("draft-student-message");
+
+    // Same page, different intent: one opens with nobody selected (an
+    // announcement), the other with the roster ticked (a message).
+    expect(announcement).toEqual({
+      kind: "navigate",
+      path: instructorMessagesPath({ tab: "compose" }),
+    });
+    expect(studentMessage).toEqual({
+      kind: "navigate",
+      path: instructorMessagesPath({ tab: "compose" }),
+      state: {
+        aiMessageDraft: {
+          deliveryMode: "private_message",
+          selectAllRecipients: true,
+        },
+      },
+    });
   });
 
   it("resolves every dashboard action to a defined behaviour", () => {

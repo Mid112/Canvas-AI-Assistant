@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -487,7 +487,9 @@ describe("InstructorAssistantPage", () => {
       screen.queryByRole("region", { name: "Quick actions" }),
     ).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /New Chat/i }));
+    // Exact name: the tab strip's "+" is labelled "New chat tab", which a
+    // case-insensitive /New Chat/ also matches.
+    await user.click(screen.getByRole("button", { name: "New Chat" }));
 
     await waitFor(() => {
       expect(screen.queryByText("Previous question")).not.toBeInTheDocument();
@@ -498,5 +500,107 @@ describe("InstructorAssistantPage", () => {
     expect(
       await screen.findByRole("region", { name: "Quick actions" }),
     ).toBeInTheDocument();
+  });
+});
+
+// The rules themselves are covered in lib/chat-tabs.test.ts. These check the
+// wiring: that the strip is mounted, its controls reach the reducers, and the
+// hook's persistence survives leaving the page.
+describe("InstructorAssistantPage chat tabs", () => {
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it("opens on a single tab with no close control", () => {
+    renderWithInstitution(<InstructorAssistantPage />);
+
+    expect(screen.getAllByRole("tab")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /^Close / })).toBeNull();
+  });
+
+  it("adds a tab from + without discarding the current one", async () => {
+    const user = userEvent.setup();
+    renderWithInstitution(<InstructorAssistantPage />);
+
+    await user.click(screen.getByRole("button", { name: "New chat tab" }));
+
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent(
+      "New chat (2)",
+    );
+    // A second tab means closing is now possible on both.
+    expect(screen.getAllByRole("button", { name: /^Close / })).toHaveLength(2);
+  });
+
+  // The chat's own New Chat button and the strip's + are the same action, so
+  // New Chat opens a tab rather than silently reusing the current one.
+  it("treats the chat's New Chat button as opening a tab", async () => {
+    const user = userEvent.setup();
+    renderWithInstitution(<InstructorAssistantPage />);
+
+    await user.click(screen.getByRole("button", { name: "New Chat" }));
+
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+  });
+
+  it("brings the strip back after leaving and returning to the page", async () => {
+    const user = userEvent.setup();
+    renderWithInstitution(<InstructorAssistantPage />);
+    await user.click(screen.getByRole("button", { name: "New chat tab" }));
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+
+    cleanup();
+    renderWithInstitution(<InstructorAssistantPage />);
+
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+  });
+
+  // History moved from a full-width band above the chat to a column beside it,
+  // so it costs horizontal space only while open instead of vertical space
+  // always. Collapsed it is a rail, not nothing -- a panel with no handle is a
+  // panel nobody finds again.
+  it("collapses conversation history to a rail and expands it back", async () => {
+    const user = userEvent.setup();
+    renderWithInstitution(<InstructorAssistantPage />);
+
+    const rail = await screen.findByRole("button", {
+      name: /Conversation History \(0\)/,
+    });
+    expect(rail).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(rail);
+
+    expect(
+      await screen.findByRole("heading", {
+        name: /Conversation History \(0\)/,
+      }),
+    ).toBeInTheDocument();
+    // Refresh only exists while the panel is open, so it doubles as proof the
+    // expanded body rendered rather than just the heading.
+    expect(
+      screen.getByRole("button", { name: "Refresh conversation history" }),
+    ).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Collapse conversation history" }),
+    );
+
+    expect(
+      await screen.findByRole("button", {
+        name: /Conversation History \(0\)/,
+      }),
+    ).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("closes a tab from its x", async () => {
+    const user = userEvent.setup();
+    renderWithInstitution(<InstructorAssistantPage />);
+    await user.click(screen.getByRole("button", { name: "New chat tab" }));
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+
+    await user.click(screen.getByRole("button", { name: "Close New chat" }));
+
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(1));
+    expect(screen.queryByRole("button", { name: /^Close / })).toBeNull();
   });
 });
