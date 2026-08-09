@@ -14,8 +14,6 @@
 
 ## Automated testing results (final)
 
-Source: last clean GitHub Actions CI on `develop` (6 August 2026) for Pytest / Vitest / Playwright; local `make test-fuzz` on 8 August 2026 for Hypothesis.
-
 | Test Suite | Tests Run | Passed | Failed | Coverage |
 | --- | ---: | ---: | ---: | ---: |
 | Backend – Pytest | 1,298 | 1,297 | 0 | 78.58% |
