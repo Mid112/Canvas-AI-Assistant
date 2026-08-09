@@ -68,24 +68,24 @@ export function InstructorFeedbackCreatePage() {
           studentId: hasValidFeedbackIds ? String(seededDraft.studentId) : "",
           assignmentName: seededDraft.assignmentName ?? "",
           studentName: seededDraft.studentName ?? "",
+          // Only what the instructor wrote. This used to prepend
+          // "Assignment: ...", "Student: ..." and "Grade: ..." whenever the
+          // seed arrived without a prompt, which is exactly how a resumed
+          // draft arrives — so the describe box opened with three lines of
+          // machine text above the prose. Those three are seeded as fields
+          // instead: the selects below, and resumedGrade further down.
           prompt: hasValidFeedbackIds
             ? "Drafted in the AI Assistant"
-            : seededDraft.prompt?.trim() ||
-              [
-                seededDraft.assignmentName
-                  ? `Assignment: ${seededDraft.assignmentName}`
-                  : "",
-                seededDraft.studentName
-                  ? `Student: ${seededDraft.studentName}`
-                  : "",
-                seededDraft.newGrade ? `Grade: ${seededDraft.newGrade}` : "",
-                seededDraft.feedback ?? "",
-              ]
-                .map((part) => part.trim())
-                .filter(Boolean)
-                .join("\n\n"),
+            : seededDraft.prompt?.trim() || seededDraft.feedback?.trim() || "",
         }
       : initialDescribeValues,
+  );
+  // The draft's grade, held until the next generation. The describe step has
+  // no grade field, and the generator returns a grade of its own, so without
+  // this a resume replaces the instructor's number with the model's. Mirrors
+  // the quiz path's priorQuestionPoints carry-forward.
+  const [resumedGrade, setResumedGrade] = useState<string>(
+    hasValidFeedbackIds ? "" : (seededDraft?.newGrade ?? ""),
   );
   const [draft, setDraft] = useState<GeneratedFeedbackDraft | null>(
     hasValidFeedbackIds && seededDraft
@@ -242,7 +242,10 @@ export function InstructorFeedbackCreatePage() {
           studentName: values.studentName,
         },
       );
-      setDraft(generated);
+      // Applied once: a later Generate is the instructor asking for a fresh
+      // take, and should not keep resurrecting the grade they resumed with.
+      setDraft(resumedGrade ? { ...generated, newGrade: resumedGrade } : generated);
+      setResumedGrade("");
       setStep("review");
     } catch (error) {
       setGenerateError(
@@ -369,6 +372,7 @@ export function InstructorFeedbackCreatePage() {
     setIsPreviewOpen(false);
     setDraftSaveStatus(null);
     setSavedTypedDraftId(undefined);
+    setResumedGrade("");
   };
 
   if (approvedValues && draft) {

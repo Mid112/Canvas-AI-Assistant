@@ -5,6 +5,7 @@ import {
   discardTypedDraft,
   listTypedDrafts,
   resolveTypedDraftCourseId,
+  resolveTypedDraftOptionId,
   saveTypedDraft,
   type TypedDraftContent,
 } from "@/lib/typed-draft-storage";
@@ -385,13 +386,40 @@ describe("typed-draft-storage", () => {
         studentName: "Alex",
         newGrade: "85",
         feedback: "Nice work",
-        prompt:
-          "Assignment: Essay 1\n\nStudent: Alex\n\nGrade: 85\n\nNice work",
+        prompt: "Nice work",
       },
     });
     const feedbackDraft = target.state.aiFeedbackDraft as Record<string, unknown>;
     expect(feedbackDraft).not.toHaveProperty("assignmentId");
     expect(feedbackDraft).not.toHaveProperty("studentId");
+  });
+
+  // Verifies: the resumed prompt is the instructor's text and nothing else.
+  // It used to open as "Assignment: Essay 1\n\nStudent: Alex\n\nGrade: 85"
+  // stacked on top of the prose, because that was the only way the three
+  // fields survived a resume. They ride as fields now, so the prompt is clean.
+  it("keeps the feedback resume prompt free of assignment, student and grade labels", () => {
+    const draft = saveTypedDraft(7, {
+      kind: "feedback",
+      content: {
+        assignmentName: "Essay 1",
+        studentName: "Alex",
+        grade: "85",
+        feedback: "Praise the thesis, push on the citations.",
+      },
+    });
+
+    const seeded = (
+      buildTypedDraftResumeTarget(draft, { courseId: 42 }).state as {
+        aiFeedbackDraft: Record<string, unknown>;
+      }
+    ).aiFeedbackDraft;
+
+    expect(seeded.prompt).toBe("Praise the thesis, push on the citations.");
+    // The labels are still carried — just not inside the prompt.
+    expect(seeded.assignmentName).toBe("Essay 1");
+    expect(seeded.studentName).toBe("Alex");
+    expect(seeded.newGrade).toBe("85");
   });
 
   it("builds message resume targets with typedDraftId", () => {
@@ -544,6 +572,45 @@ describe("typed-draft-storage", () => {
           { id: 9, code: "COSC 499", name: "Capstone Project (2nd section)" },
         ]),
       ).toBeUndefined();
+    });
+  });
+
+  // Assignments and students are bound the same way courses are, and for the
+  // same reason: the draft holds a name, the <select> needs an id.
+  describe("assignment and student binding", () => {
+    const assignments = [
+      { id: 11, name: "Essay 1" },
+      { id: 12, name: "Essay 2" },
+    ];
+
+    it("resolves a stored name back to its id", () => {
+      expect(resolveTypedDraftOptionId("Essay 2", assignments)).toBe(12);
+    });
+
+    it("ignores case and spacing differences in the stored name", () => {
+      expect(resolveTypedDraftOptionId("  essay   1 ", assignments)).toBe(11);
+    });
+
+    // A deleted assignment or an unenrolled student: the select stays on its
+    // placeholder rather than silently pointing at a different submission.
+    it("returns undefined when the name is gone", () => {
+      expect(resolveTypedDraftOptionId("Essay 3", assignments)).toBeUndefined();
+    });
+
+    // Two students really can share a name, and grading the wrong one is not
+    // recoverable — so an ambiguous match resolves to nothing.
+    it("returns undefined when two entries share the name", () => {
+      expect(
+        resolveTypedDraftOptionId("Alex Chen", [
+          { id: 21, name: "Alex Chen" },
+          { id: 22, name: "Alex Chen" },
+        ]),
+      ).toBeUndefined();
+    });
+
+    it("returns undefined for a draft that stored no name", () => {
+      expect(resolveTypedDraftOptionId(undefined, assignments)).toBeUndefined();
+      expect(resolveTypedDraftOptionId("   ", assignments)).toBeUndefined();
     });
   });
 });

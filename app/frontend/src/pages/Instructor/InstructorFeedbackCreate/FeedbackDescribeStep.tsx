@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
 import { ActionStatusBadges } from "@/components/status/ActionStatusBadges";
@@ -9,6 +9,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { feedbackCreateSuggestedPrompts } from "@/data/mockFeedbackCreator";
+import { resolveTypedDraftOptionId } from "@/lib/typed-draft-storage";
 import { cn } from "@/lib/utils";
 import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
 import { fetchCourseAssignments } from "@/services/assignments";
@@ -72,6 +73,7 @@ export function FeedbackDescribeStep({
     register,
     handleSubmit,
     setValue,
+    getValues,
     control,
     formState: { errors, isValid },
   } = useForm<FeedbackDescribeFormSchema>({
@@ -79,6 +81,16 @@ export function FeedbackDescribeStep({
     defaultValues,
     mode: "onChange",
   });
+
+  // The assignment and student a resumed draft arrived with, captured once.
+  // defaultValues is the parent's live describe state and is echoed back as
+  // the form changes, so reading it later would re-seed the selects from the
+  // instructor's own most recent pick instead of from the draft.
+  const [resumedLabels] = useState(() => ({
+    assignmentName: defaultValues.assignmentName,
+    studentName: defaultValues.studentName,
+  }));
+  const seededCourseIdsRef = useRef(new Set<number>());
 
   const watchedValues = useWatch({ control });
   const courseId = useWatch({ control, name: "courseId", defaultValue: defaultValues.courseId });
@@ -174,6 +186,39 @@ export function FeedbackDescribeStep({
       cancelled = true;
     };
   }, [accessToken, canvasUrl, courseId]);
+
+  // Restore the two selects a resumed draft could not carry itself. Drafts
+  // store the assignment and student as names, never Canvas ids (#1239), so
+  // the ids do not exist until this course's lists have been fetched above.
+  //
+  // Guarded twice so it seeds rather than steers: once per course id, and only
+  // into a select that is still empty. Together those mean it cannot overwrite
+  // a pick the instructor made, and cannot spring back after they clear one.
+  useEffect(() => {
+    if (numericCourseId == null || loadedContext?.courseId !== numericCourseId) {
+      return;
+    }
+    if (seededCourseIdsRef.current.has(numericCourseId)) {
+      return;
+    }
+    seededCourseIdsRef.current.add(numericCourseId);
+
+    const assignmentId = resolveTypedDraftOptionId(
+      resumedLabels.assignmentName,
+      loadedContext.assignments,
+    );
+    if (assignmentId !== undefined && !getValues("assignmentId")) {
+      setValue("assignmentId", String(assignmentId), { shouldValidate: true });
+    }
+
+    const studentId = resolveTypedDraftOptionId(
+      resumedLabels.studentName,
+      loadedContext.students,
+    );
+    if (studentId !== undefined && !getValues("studentId")) {
+      setValue("studentId", String(studentId), { shouldValidate: true });
+    }
+  }, [getValues, loadedContext, numericCourseId, resumedLabels, setValue]);
 
   const applySuggestedPrompt = (text: string) => {
     setValue("prompt", text, { shouldValidate: true, shouldDirty: true });
