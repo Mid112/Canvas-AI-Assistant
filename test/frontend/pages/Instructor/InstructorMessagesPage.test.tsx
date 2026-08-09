@@ -193,6 +193,41 @@ describe("InstructorMessagesPage", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies the destination half of the Dashboard's Draft Announcement
+  // button: ?tab=compose with no handoff state must land on an announcement
+  // with nobody ticked. The button navigates here and passes no recipients, so
+  // "unselect all students" is really "MessageDraftPage defaults to an empty
+  // selection when preSelectedIds is absent" -- an invariant that lives in
+  // another file and would otherwise fail silently, from this page's side.
+  it("opens compose as a course announcement with no students selected", async () => {
+    mockUseAuth.mockReturnValue({
+      accessToken: "token",
+      user: {
+        id: 1,
+        name: "Dr. Jane Doe",
+        role: "instructor",
+        has_canvas_token: true,
+      },
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    });
+
+    renderMessagesPage({ compose: true });
+
+    expect(
+      await screen.findByText(
+        "No students selected — this will be a public course announcement.",
+      ),
+    ).toBeInTheDocument();
+    for (const checkbox of screen.getAllByRole("checkbox")) {
+      expect(checkbox).not.toBeChecked();
+    }
+  });
+
   // Verifies: Course label is passed through to inbox; FAB opens compose.
   it("passes the course label to inbox and opens compose from the FAB", async () => {
     const user = userEvent.setup();

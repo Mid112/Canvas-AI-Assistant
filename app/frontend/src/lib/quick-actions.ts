@@ -1,4 +1,4 @@
-import { paths } from "@/routes/paths";
+import { instructorMessagesPath, paths } from "@/routes/paths";
 
 /**
  * The quick actions the dashboard and the AI Assistant both offer.
@@ -29,12 +29,19 @@ export type QuickActionBehaviour =
   | { kind: "navigate"; path: string }
   | { kind: "prompt"; prompt: string };
 
-/** Actions with a purpose-built creator page go straight there — the
- * multi-step form is a better tool for the job than a chat turn. */
-const CREATOR_PATHS: Partial<Record<QuickActionId, string>> = {
+/** Actions with a purpose-built page go straight there — the dedicated form
+ * is a better tool for the job than a chat turn. */
+const DESTINATION_PATHS: Partial<Record<QuickActionId, string>> = {
   "create-assignment": paths.instructor.assignmentCreate,
   "create-quiz": paths.instructor.quizCreate,
   "create-feedback": paths.instructor.feedbackCreate,
+  // Compose opens with no recipients ticked, which MessageDraftPage reads as
+  // announcement mode — so this lands on exactly the course-wide announcement
+  // the button's label promises. It used to ask the assistant to "draft a
+  // student message or course announcement", which is neither: it opened a
+  // chat turn that then had to hand back to this same page, and the model had
+  // to guess which of the two the instructor meant.
+  "draft-announcement": instructorMessagesPath({ tab: "compose" }),
 };
 
 /** Named so the instructor lands in a real turn for that specific task,
@@ -43,9 +50,6 @@ const CREATOR_PATHS: Partial<Record<QuickActionId, string>> = {
 const PROMPT_BUILDERS: Partial<
   Record<QuickActionId, (course: string) => string>
 > = {
-  "draft-announcement": (course) =>
-    `Draft a student message or course announcement for ${course}. ` +
-    "Propose a send_message action I can review and edit before sending.",
   // Names the backing read action's job directly. The old wording ("grade
   // and submission performance analysis") had no tool behind it, so the
   // model answered from nothing and invented submission rates (#12).
@@ -71,7 +75,7 @@ export function resolveQuickAction(
   actionId: string,
   courseLabel?: string,
 ): QuickActionBehaviour | null {
-  const path = CREATOR_PATHS[actionId as QuickActionId];
+  const path = DESTINATION_PATHS[actionId as QuickActionId];
   if (path) {
     return { kind: "navigate", path };
   }

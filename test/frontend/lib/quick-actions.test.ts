@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { resolveQuickAction } from "@/lib/quick-actions";
 import { buildSuggestedActions } from "@/data/assistantSeedData";
-import { paths } from "@/routes/paths";
+import { instructorMessagesPath, paths } from "@/routes/paths";
 import { sharedDashboardQuickActions } from "@/types/dashboard";
 
 describe("resolveQuickAction", () => {
@@ -21,6 +21,28 @@ describe("resolveQuickAction", () => {
     });
   });
 
+  // Verifies: Draft Announcement opens the compose tab directly. It used to
+  // start a chat turn asking for "a student message or course announcement",
+  // which is two different sends, and the turn's only useful outcome was a
+  // handoff back to this very page. The label says announcement, so the button
+  // goes where announcements are written -- and compose with nothing ticked is
+  // announcement mode (MessageDraftPage.loadDraft).
+  it("opens the Messages compose tab for Draft Announcement", () => {
+    expect(resolveQuickAction("draft-announcement")).toEqual({
+      kind: "navigate",
+      path: instructorMessagesPath({ tab: "compose" }),
+    });
+  });
+
+  // The destination cannot depend on the active course: the dashboard resolves
+  // this before a course is picked, and a course label must not turn a
+  // navigate back into a chat turn.
+  it("opens the same compose tab whether or not a course is known", () => {
+    expect(resolveQuickAction("draft-announcement", "COSC 501")).toEqual(
+      resolveQuickAction("draft-announcement"),
+    );
+  });
+
   it("names the active course in prompt-backed actions when it is known", () => {
     expect(resolveQuickAction("analyse-missing-submissions", "COSC 501")).toEqual({
       kind: "prompt",
@@ -28,25 +50,17 @@ describe("resolveQuickAction", () => {
         "Analyse missing submissions for COSC 501. Show the overview and " +
         "list the students who haven't submitted.",
     });
-    expect(resolveQuickAction("draft-announcement", "COSC 501")).toEqual({
-      kind: "prompt",
-      prompt:
-        "Draft a student message or course announcement for COSC 501. " +
-        "Propose a send_message action I can review and edit before sending.",
-    });
   });
 
-  // Regression check (#1441): these prompts once had "Assignment 3", "Quiz 2"
+  // Regression check (#1441): this prompt once had "Assignment 3", "Quiz 2"
   // and "COSC 499" hardcoded, none of which exist in a real account. With no
   // active course the prompt must defer to the assistant, not invent a name.
   it("defers to the assistant rather than naming a course it does not have", () => {
-    for (const id of ["analyse-missing-submissions", "draft-announcement"]) {
-      const behaviour = resolveQuickAction(id);
-      expect(behaviour?.kind).toBe("prompt");
-      const prompt = (behaviour as { prompt: string }).prompt;
-      expect(prompt).toContain("my active course");
-      expect(prompt).not.toMatch(/Assignment 3|Quiz 2|COSC \d/);
-    }
+    const behaviour = resolveQuickAction("analyse-missing-submissions");
+    expect(behaviour?.kind).toBe("prompt");
+    const prompt = (behaviour as { prompt: string }).prompt;
+    expect(prompt).toContain("my active course");
+    expect(prompt).not.toMatch(/Assignment 3|Quiz 2|COSC \d/);
   });
 
   // A whitespace-only label is as good as no label; falling through to the
