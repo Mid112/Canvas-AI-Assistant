@@ -965,6 +965,9 @@ D5 Conversations, and D6 Workflows.
 
 <img width="1752" height="1168" alt="Screenshot 2026-06-02 210907" src="https://github.com/user-attachments/assets/2d01fa06-3774-45b1-a74e-736262b4b58a" />
 
+Update final DFD level 1:
+
+<img width="1893" height="1273" alt="DFD level 0-Page-4" src="https://github.com/user-attachments/assets/c9edd65f-dcec-4a27-8da5-70652c5c2d64" />
 
 
 ## User Interface (UI) Design
