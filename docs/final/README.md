@@ -1,8 +1,8 @@
 # Final Documentation Package
 
-This folder is the **final submission documentation** for the Canvas Helper AI Assistant (Team 16).
+Submission documentation for the **Canvas Helper AI Assistant** (UBCO COSC 499 · Team 16).
 
-It covers user guides, developer docs, deployment/installation, architecture/API references, and the testing report.
+Use this folder as the entry point for user guides, developer docs, deployment guidance, architecture/API summaries, and final verification artifacts.
 
 ## Contents
 
@@ -10,25 +10,32 @@ It covers user guides, developer docs, deployment/installation, architecture/API
 | --- | --- |
 | Instructor & admin user guides | [user-guides/](./user-guides/) |
 | Developer documentation | [developer/](./developer/) |
-| Deployment package | [deployment/](./deployment/) |
-| Architecture (final) | [architecture.md](./architecture.md) |
-| API reference (final) | [api-reference.md](./api-reference.md) |
+| Deployment & installation | [deployment/](./deployment/) |
+| Architecture | [architecture.md](./architecture.md) |
+| API reference | [api-reference.md](./api-reference.md) |
+| Repository structure | [repository-structure.md](./repository-structure.md) |
 | Final testing report | [`../testing report/Final_Testing_Report_Detailed.pdf`](../testing%20report/Final_Testing_Report_Detailed.pdf) |
 | Requirements traceability matrix | [Requirements_Traceability_Matrix.pdf](./Requirements_Traceability_Matrix.pdf) |
-| Repository structure | [repository-structure.md](./repository-structure.md) |
 
-## Screenshot placeholders
+## How to run the product
 
-Throughout the user guides you will see blocks like:
+Authoritative local run instructions live in the repo root:
 
-> **Screenshot placeholder:** `filename.png`
-> *[Add screenshot here]*
+- Root [`README.md`](../../README.md)
+- [`deployment/installation-guide.md`](./deployment/installation-guide.md)
+- [`deployment/deployment-guide.md`](./deployment/deployment-guide.md)
+- Root `Makefile`, `docker-compose.yml`, `docker-compose.dev.yml`, `.env.example`
 
-Drop images into [`user-guides/screenshots/`](./user-guides/screenshots/) using the listed filenames, then replace the placeholder lines with Markdown images.
+## Screenshots
 
-## Related existing docs (do not duplicate)
+User guides include screenshot placeholders. Add images under [`user-guides/screenshots/`](./user-guides/screenshots/) using the filenames in that folder’s README, then replace placeholder blocks with Markdown images:
 
-- Design overview: [`../design/README.md`](../design/README.md)
-- TE1 / TE2 PDFs: [`../testing report/`](../testing%20report/), [`../testing event outcomes/`](../testing%20event%20outcomes/)
-- Weekly logs: [`../weekly logs/`](../weekly%20logs/)
-- Local run authority: root `Makefile`, `docker-compose.yml`, `docker-compose.dev.yml`, `.env.example`
+```markdown
+![Dashboard](./screenshots/instructor-dashboard.png)
+```
+
+## Related project docs
+
+- Design: [`../design/README.md`](../design/README.md)
+- Testing Event reports: [`../testing report/`](../testing%20report/), [`../testing event outcomes/`](../testing%20event%20outcomes/)
+- Full documentation index: [`../TOC.md`](../TOC.md)
