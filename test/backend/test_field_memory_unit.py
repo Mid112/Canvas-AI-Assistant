@@ -221,8 +221,9 @@ def test_partial_plan_safe_keys_exclude_raw_ids():
     assert "assignment_id" not in _PARTIAL_PLAN_SAFE_KEYS
     assert "student_id" not in _PARTIAL_PLAN_SAFE_KEYS
     assert "student_reference" not in _PARTIAL_PLAN_SAFE_KEYS
-    assert "new_grade" not in _PARTIAL_PLAN_SAFE_KEYS
-    assert "feedback" not in _PARTIAL_PLAN_SAFE_KEYS
+    assert "new_grade" in _PARTIAL_PLAN_SAFE_KEYS
+    assert "feedback" in _PARTIAL_PLAN_SAFE_KEYS
+    assert "reason" in _PARTIAL_PLAN_SAFE_KEYS
     assert "assignment_reference" in _PARTIAL_PLAN_SAFE_KEYS
     assert "title" in _PARTIAL_PLAN_SAFE_KEYS
     assert "due_date" in _PARTIAL_PLAN_SAFE_KEYS
@@ -240,8 +241,8 @@ def test_merge_field_memory_with_partial_plan_safe_keys_strips_ids():
             "assignment_reference": "the latest quiz",
             "student_id": 77777,  # hallucinated
             "student_reference": "999999",  # failed to resolve
-            "new_grade": "85",  # not confirmed
-            "feedback": "good work",  # not confirmed
+            "new_grade": "85",  # user-provided, target still unresolved
+            "feedback": "good work",  # user-provided, target still unresolved
             "title": "Quiz 1",  # user-provided draft param
             "due_date": "2026-08-04T23:59:00",  # user-provided draft param
         },
@@ -250,8 +251,8 @@ def test_merge_field_memory_with_partial_plan_safe_keys_strips_ids():
     assert "assignment_id" not in conversation.field_memory
     assert "student_id" not in conversation.field_memory
     assert "student_reference" not in conversation.field_memory
-    assert "new_grade" not in conversation.field_memory
-    assert "feedback" not in conversation.field_memory
+    assert conversation.field_memory["new_grade"] == "85"
+    assert conversation.field_memory["feedback"] == "good work"
     assert conversation.field_memory["assignment_reference"] == "the latest quiz"
     assert conversation.field_memory["title"] == "Quiz 1"
     assert conversation.field_memory["due_date"] == "2026-08-04T23:59:00"
@@ -287,6 +288,9 @@ def test_clear_course_scoped_field_memory_removes_entity_refs():
             "assignment_reference": "HW1",
             "student_id": 77,
             "student_reference": "Alex",
+            "new_grade": "85",
+            "feedback": "Good work",
+            "reason": "Reviewed rubric",
             "recent_assignments": [{"id": 42, "name": "HW1"}],
             "recent_students": [{"id": 77, "name": "Alex"}],
             "grounded_facts": {"ids": [42, 77], "names": ["hw1"], "grades": [], "dates": []},
@@ -299,6 +303,9 @@ def test_clear_course_scoped_field_memory_removes_entity_refs():
     assert "assignment_reference" not in memory
     assert "student_id" not in memory
     assert "student_reference" not in memory
+    assert "new_grade" not in memory
+    assert "feedback" not in memory
+    assert "reason" not in memory
     assert "recent_assignments" not in memory
     assert "recent_students" not in memory
     assert "grounded_facts" not in memory

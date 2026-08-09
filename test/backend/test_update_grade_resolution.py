@@ -6,6 +6,7 @@ from app.services.chat import (
     _build_grade_handoff_result,
     _build_grouped_grade_update_result,
     _grade_partial_plan,
+    _preserve_grade_clarification_context,
     _is_bulk_student_reference,
 )
 
@@ -40,7 +41,40 @@ def test_grade_partial_plan_preserves_feedback_as_reason():
 
     partial_plan = _grade_partial_plan(action, local_course_id=7, assignment_id=10)
 
+    assert partial_plan["feedback"] == "Strong explanation of the solution."
     assert partial_plan["reason"] == "Strong explanation of the solution."
+
+
+def test_grade_resolver_clarification_preserves_all_user_grade_context():
+    action = UpdateGradeAction.model_validate(
+        {
+            "action": "update_grade",
+            "local_course_id": 7,
+            "assignment_reference": "ggg",
+            "student_reference": "coin",
+            "new_grade": "100",
+            "feedback": "Strong explanation of the solution.",
+            "reason": "Instructor rationale",
+        }
+    )
+
+    result = _preserve_grade_clarification_context(
+        {
+            "action": "clarify",
+            "question": "Which assignment?",
+            "partial_plan": {"local_course_id": 7},
+        },
+        action,
+    )
+
+    assert result["partial_plan"] == {
+        "local_course_id": 7,
+        "assignment_reference": "ggg",
+        "student_reference": "coin",
+        "new_grade": "100",
+        "feedback": "Strong explanation of the solution.",
+        "reason": "Instructor rationale",
+    }
 
 
 def test_bulk_grade_update_builds_grades_tab_handoff():

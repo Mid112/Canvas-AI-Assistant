@@ -25,6 +25,7 @@ _FIELD_MEMORY_KEYS = frozenset(
         "body",
         "new_grade",
         "feedback",
+        "reason",
         "action",
     }
 )
@@ -41,18 +42,17 @@ _FIELD_MEMORY_KEYS = frozenset(
 #   - assignment_reference: the user's own words for which assignment
 #   - title, description, due_date, points_possible: assignment draft params
 #     the user explicitly provided
+#   - new_grade, feedback, reason: grade/feedback values explicitly provided
+#     by the instructor, even when assignment/student resolution is pending
 #
 # Exclude ALL student-related fields (student_id, student_reference) and
-# grade-related fields (new_grade, feedback, reason) because a clarify
-# means those values were NOT confirmed — they either failed resolution
-# or were never provided. Also exclude assignment_id (raw Canvas ID,
-# may be hallucinated).
+# assignment_id (raw Canvas IDs, which may be hallucinated). User-provided
+# grade/feedback text is safe to carry forward; only the unresolved target
+# identifiers/references remain excluded.
 _PARTIAL_PLAN_SAFE_KEYS = _FIELD_MEMORY_KEYS - {
     "assignment_id",
     "student_id",
     "student_reference",
-    "new_grade",
-    "feedback",
 }
 
 # Capped MRU lists persisted alongside scalar keys (#1302). Not free-form
@@ -163,6 +163,9 @@ def clear_course_scoped_field_memory(conversation: Conversation) -> None:
         "assignment_reference",
         "student_id",
         "student_reference",
+        "new_grade",
+        "feedback",
+        "reason",
         _RECENT_ASSIGNMENTS_KEY,
         _RECENT_STUDENTS_KEY,
         _GROUNDED_FACTS_KEY,

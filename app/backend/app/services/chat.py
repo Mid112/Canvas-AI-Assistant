@@ -1264,6 +1264,39 @@ async def _resolve_course_and_assignment(
     return course, assignment_id
 
 
+_GRADE_CLARIFICATION_FIELDS = (
+    "assignment_reference",
+    "student_reference",
+    "new_grade",
+    "feedback",
+    "reason",
+)
+
+
+def _preserve_grade_clarification_context(
+    result: dict,
+    action: Any,
+) -> dict:
+    """Carry user-provided grade context through resolver clarifications.
+
+    Assignment/student IDs are deliberately not copied here: they must be
+    resolved and verified server-side. Natural-language targets and the
+    instructor's grade/feedback values are safe to retain while a later
+    clarification resolves those targets.
+    """
+    if result.get("action") != "clarify":
+        return result
+    partial_plan = dict(result.get("partial_plan") or {})
+    for field in _GRADE_CLARIFICATION_FIELDS:
+        value = getattr(action, field, None)
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        partial_plan[field] = value
+    return {**result, "partial_plan": partial_plan}
+
+
 async def _run_fetch_submissions_chain(
     db: AsyncSession,
     user: User,
@@ -2081,7 +2114,7 @@ async def _resolve_grade_target(
         user_message, adapter,
     )
     if isinstance(resolved, dict):
-        return resolved
+        return _preserve_grade_clarification_context(resolved, action)
     course, assignment_id = resolved
 
     print(f"Collecting {course.name} submissions for grade target resolution")
@@ -2287,6 +2320,7 @@ def _grade_partial_plan(action: Any, local_course_id: int, assignment_id: int | 
         "student_id": getattr(action, "student_id", None),
         "student_reference": getattr(action, "student_reference", None),
         "new_grade": getattr(action, "new_grade", None),
+        "feedback": getattr(action, "feedback", None),
         "reason": getattr(action, "reason", None) or getattr(action, "feedback", None),
     }
     return {key: value for key, value in plan.items() if value is not None}
@@ -2423,7 +2457,7 @@ async def _run_update_grade_chain(
         adapter,
     )
     if isinstance(resolved_assignment, dict):
-        return resolved_assignment
+        return _preserve_grade_clarification_context(resolved_assignment, action)
     course, assignment_id = resolved_assignment
 
     student_id = action.student_id
@@ -2433,11 +2467,7 @@ async def _run_update_grade_chain(
                 "action": "clarify",
                 "clarify": True,
                 "question": "Which student should receive this grade?",
-                "partial_plan": {
-                    "assignment_reference": action.assignment_reference,
-                    "new_grade": action.new_grade,
-                    "feedback": action.feedback,
-                },
+                "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
             }
         fetch_action = FetchStudentsAction(local_course_id=course.id)
         roster_result = await _run_tracked_read(
@@ -2464,12 +2494,7 @@ async def _run_update_grade_chain(
                     f'I could not confidently match "{action.student_reference}" '
                     "to one student in this course. What is their full name or email?"
                 ),
-                "partial_plan": {
-                    "assignment_reference": action.assignment_reference,
-                    "student_reference": action.student_reference,
-                    "new_grade": action.new_grade,
-                    "feedback": action.feedback,
-                },
+                "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
             }
 
     proposed_action = {
@@ -2480,7 +2505,10 @@ async def _run_update_grade_chain(
         "student_id": student_id,
         "student_reference": action.student_reference,
         "new_grade": action.new_grade,
-        "feedback": action.feedback,
+        # Preserve both names used by the grade-history and Grades-tab paths
+        # so feedback is not lost in this resolver branch.
+        "feedback": action.feedback or action.reason,
+        "reason": action.reason or action.feedback,
     }
     proposed_action = {
         key: value for key, value in proposed_action.items() if value is not None

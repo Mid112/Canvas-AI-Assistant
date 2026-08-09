@@ -665,13 +665,11 @@ function buildQuizCreateDraftState(
 }
 
 function buildQuizCreateNavigateTo(
-  proposed: Record<string, unknown>,
-  conversationId?: number,
-  timeZone?: string,
+  draftState: Record<string, unknown>,
 ): NonNullable<AssistantResponse["navigateTo"]> {
   return {
     path: paths.instructor.quizCreate,
-    state: buildQuizCreateDraftState(proposed, conversationId, timeZone),
+    state: draftState,
   };
 }
 
@@ -788,15 +786,12 @@ function buildFeedbackDraftNavigateTo(
 function buildQuizCreateFormAction(
   proposed: Record<string, unknown>,
   previewMetadata: Record<string, unknown> | undefined,
-  conversationId?: number,
-  timeZone?: string,
+  draftState: Record<string, unknown>,
 ): NonNullable<AssistantResponse["interpretedAction"]> {
   const courseLabel =
     readString(previewMetadata?.course_name) ??
     readString(previewMetadata?.course) ??
     "Active course";
-  const draftState = buildQuizCreateDraftState(proposed, conversationId, timeZone);
-
   return {
     action: "Create Quiz",
     course: courseLabel,
@@ -908,18 +903,22 @@ function mapReplyBody(
     // keeps an "Open quiz creation form" button so reopening chat history
     // can return to the seeded form without a confirmable preview panel.
     if (proposed?.action === "create_quiz") {
+      const quizDraftState = buildQuizCreateDraftState(
+        proposed,
+        conversationId,
+        timeZone,
+      );
       return {
         content:
           readString(reply.summary) ??
           "Opening the quiz creation form with your draft…",
         explanation:
           "Quiz creation happens in the dedicated form so the write is reviewed once and recorded in workflow history.",
-        navigateTo: buildQuizCreateNavigateTo(proposed, conversationId, timeZone),
+        navigateTo: buildQuizCreateNavigateTo(quizDraftState),
         interpretedAction: buildQuizCreateFormAction(
           proposed,
           previewMetadata,
-          conversationId,
-          timeZone,
+          quizDraftState,
         ),
       };
     }
@@ -1003,7 +1002,7 @@ function mapReplyBody(
     const acknowledgedText = joinAcknowledgements(acknowledgedEntries);
     const acknowledgement =
       acknowledgedFields.length > 0
-        ? `I have ${acknowledgedText}${/[.!?]$/.test(acknowledgedText) ? " " : ". "}`
+        ? `I have ${acknowledgedText}${/[.!?]["']?$/.test(acknowledgedText) ? " " : ". "}`
         : "";
     const question = formatClarificationQuestion(
       readString(reply.question) ??
