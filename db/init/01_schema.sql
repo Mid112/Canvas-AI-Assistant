@@ -26,6 +26,7 @@ CREATE TABLE canvas_connections (
     user_id             INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     canvas_url          VARCHAR NOT NULL,
     encrypted_token     TEXT NOT NULL,
+    token_fingerprint   VARCHAR,
     created_at          TIMESTAMPTZ DEFAULT NOW(),
     -- Last time services/canvas.py's sync_courses_if_stale actually hit
     -- Canvas for this connection's course list, not just checked the
@@ -43,6 +44,9 @@ CREATE TABLE canvas_connections (
 );
 
 CREATE INDEX idx_canvas_connections_user_id ON canvas_connections(user_id);
+CREATE UNIQUE INDEX uq_canvas_token_fingerprint
+    ON canvas_connections(token_fingerprint)
+    WHERE token_fingerprint IS NOT NULL;
 
 -- ─────────────────────────────────────────────
 -- Sessions

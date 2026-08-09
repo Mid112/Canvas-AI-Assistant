@@ -667,6 +667,7 @@ async def test_update_canvas_token_creates_new_connection():
     with (
         patch("app.services.auth.validate_token", new=AsyncMock()),
         patch("app.services.auth.encrypt_canvas_token", return_value="encrypted-token"),
+        patch("app.services.auth.token_is_already_used", new=AsyncMock(return_value=False)),
     ):
         result = await update_canvas_token(db, user, "raw-token", "https://canvas.example.edu")
 
@@ -689,6 +690,7 @@ async def test_update_canvas_token_replaces_existing_connection_token():
     with (
         patch("app.services.auth.validate_token", new=AsyncMock()),
         patch("app.services.auth.encrypt_canvas_token", return_value="new-encrypted"),
+        patch("app.services.auth.token_is_already_used", new=AsyncMock(return_value=False)),
     ):
         await update_canvas_token(db, user, "raw-token", "https://canvas.example.edu")
 

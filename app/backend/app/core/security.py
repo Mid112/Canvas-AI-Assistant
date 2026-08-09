@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import secrets
 from datetime import UTC, datetime, timedelta
 
@@ -59,6 +60,20 @@ def encrypt_canvas_token(plain_token: str) -> str:
 
 def decrypt_canvas_token(encrypted_token: str) -> str:
     return _fernet().decrypt(encrypted_token.encode()).decode()
+
+
+def fingerprint_canvas_token(plain_token: str) -> str:
+    """Return a stable, non-reversible identifier for duplicate detection.
+
+    Fernet ciphertext is intentionally different on every encryption, so it
+    cannot be used for equality checks. A keyed HMAC lets the database enforce
+    uniqueness without storing or logging the raw Canvas token.
+    """
+    return hmac.new(
+        settings.CANVAS_TOKEN_ENCRYPTION_KEY.encode(),
+        plain_token.encode(),
+        hashlib.sha256,
+    ).hexdigest()
 
 
 def encrypt_llm_api_key(plain_api_key: str) -> str:
