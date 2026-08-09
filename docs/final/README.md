@@ -16,7 +16,6 @@ It covers user guides, developer docs, deployment/installation, architecture/API
 | Final testing report | [`../testing report/Final_Testing_Report_Detailed.pdf`](../testing%20report/Final_Testing_Report_Detailed.pdf) |
 | Requirements traceability matrix | [Requirements_Traceability_Matrix.pdf](./Requirements_Traceability_Matrix.pdf) |
 | Repository structure | [repository-structure.md](./repository-structure.md) |
-| Release notes | [release-notes.md](./release-notes.md) |
 
 ## Screenshot placeholders
 
