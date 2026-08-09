@@ -1287,13 +1287,13 @@ def _preserve_grade_clarification_context(
     if result.get("action") != "clarify":
         return result
     partial_plan = dict(result.get("partial_plan") or {})
-    for field in _GRADE_CLARIFICATION_FIELDS:
-        value = getattr(action, field, None)
+    for field_name in _GRADE_CLARIFICATION_FIELDS:
+        value = getattr(action, field_name, None)
         if value is None:
             continue
         if isinstance(value, str) and not value.strip():
             continue
-        partial_plan[field] = value
+        partial_plan[field_name] = value
     return {**result, "partial_plan": partial_plan}
 
 
