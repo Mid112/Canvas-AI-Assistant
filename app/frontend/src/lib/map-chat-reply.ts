@@ -810,6 +810,22 @@ function mapReplyBody(
         ? reply.pending_message_id
         : undefined;
 
+    // A grouped send_message turn can resolve to more than one distinct
+    // message (see additional_previews in chat.py's
+    // _persist_additional_message_previews) — each entry is shaped
+    // identically to this same reply, so it maps the same way.
+    //
+    // Read before the per-action branches because send_message is the only
+    // action that produces these, and its branch returns early: computing
+    // them further down meant they were parsed for every action that never
+    // has any, and dropped for the one that does.
+    const additionalPreviewsRaw = Array.isArray(reply.additional_previews)
+      ? (reply.additional_previews as Record<string, unknown>[])
+      : undefined;
+    const additionalPreviews = additionalPreviewsRaw?.map((entry) =>
+      mapChatReplyToAssistantResponse(entry, false, conversationId),
+    );
+
     // Quiz creation redirects to the dedicated form on live turns, and also
     // keeps an "Open quiz creation form" button so reopening chat history
     // can return to the seeded form without a confirmable preview panel.
@@ -830,15 +846,38 @@ function mapReplyBody(
       };
     }
 
-    // send_message is a form handoff, but the instructor should choose when
-    // to leave chat by clicking "Open message draft".
+    // send_message hands off to the Messages compose form, so a single
+    // message goes straight there. It used to stop at an "Open message draft"
+    // button, which left the write reviewable in two places at once: chat
+    // offered its own "Approve this proposed action?" confirm for a draft the
+    // Messages tab was about to confirm again. Both toAssistantMessageResult
+    // and mapConversationToChatMessages decide "this is a form handoff" by
+    // looking for navigateTo, and both already named send_message as one —
+    // this branch was the only thing not saying so.
+    //
+    // A grouped turn stays in chat: navigating could only open one of the
+    // drafts, and the others would disappear with nothing left pointing at
+    // them. Each row keeps its own "Open message draft" instead.
     if (proposed?.action === "send_message") {
+      const isGrouped = (additionalPreviews?.length ?? 0) > 0;
       return {
         content:
           readString(reply.summary) ??
           "I prepared a message draft with your details.",
         explanation:
           "Messages are drafted and sent in the Messages tab so the write is reviewed once and recorded in workflow history.",
+        ...(isGrouped
+          ? { additionalPreviews }
+          : {
+              navigateTo: {
+                path: instructorMessagesPath({ tab: "compose" }),
+                state: buildMessageDraftState(
+                  proposed,
+                  previewMetadata,
+                  conversationId,
+                ),
+              },
+            }),
         interpretedAction: buildMessageDraftFormAction(
           proposed,
           previewMetadata,
@@ -858,17 +897,6 @@ function mapReplyBody(
         navigateTo: buildFeedbackDraftNavigateTo(proposed, conversationId),
       };
     }
-
-    // A grouped send_message turn can resolve to more than one distinct
-    // message (see additional_previews in chat.py's
-    // _persist_additional_message_previews) — each entry is shaped
-    // identically to this same reply, so it maps the same way.
-    const additionalPreviewsRaw = Array.isArray(reply.additional_previews)
-      ? (reply.additional_previews as Record<string, unknown>[])
-      : undefined;
-    const additionalPreviews = additionalPreviewsRaw?.map((entry) =>
-      mapChatReplyToAssistantResponse(entry, false, conversationId),
-    );
 
     return {
       content:

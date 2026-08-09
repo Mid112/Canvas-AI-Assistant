@@ -426,7 +426,7 @@ describe("mapChatReply", () => {
     });
   });
 
-  it("offers send_message draft handoff without auto-redirecting", () => {
+  it("auto-redirects a single send_message to the Messages compose tab", () => {
     const result = mapChatReply(
       {
         intent_preview: true,
@@ -451,7 +451,23 @@ describe("mapChatReply", () => {
     );
 
     expect(result.pendingMessageId).toBeUndefined();
-    expect(result.navigateTo).toBeUndefined();
+    // The redirect is what makes this a form handoff: assistant.ts reads
+    // navigateTo to suppress chat's own "Approve this proposed action?"
+    // confirm, so without it the same send is reviewable in two places.
+    expect(result.navigateTo?.path).toBe("/instructor/messages?tab=compose");
+    expect(result.navigateTo?.state).toMatchObject({
+      returnTo: "/instructor/assistant",
+      aiMessageDraft: {
+        subject: "Deadline Reminder",
+        body: "Please submit by Friday.",
+        courseId: 5,
+        recipientIds: ["11", "22"],
+        deliveryMode: "private_message",
+        conversationId: 3,
+      },
+    });
+    // Kept for replayed history, where nothing navigates: the button is then
+    // the only route back to the draft.
     expect(result.interpretedAction?.primaryLink?.label).toBe(
       "Open message draft",
     );
@@ -469,6 +485,45 @@ describe("mapChatReply", () => {
       },
     });
     expect(result.interpretedAction?.secondaryLink).toBeUndefined();
+  });
+
+  // Verifies: a turn that resolved to several distinct messages stays in chat.
+  // Navigating could only ever open one of the drafts, and the others would be
+  // left with nothing pointing at them -- so grouped turns keep every row and
+  // its own "Open message draft" button instead.
+  //
+  // The extras were being dropped outright before this: additional_previews
+  // was read below the send_message branch, and that branch returns early, so
+  // the only action that produces them never reached the code that read them.
+  it("keeps every draft in chat when send_message resolved to several messages", () => {
+    const group = (subject: string, recipientId: number) => ({
+      intent_preview: true,
+      summary: `Send ${subject}.`,
+      proposed_action: {
+        action: "send_message",
+        local_course_id: 5,
+        subject,
+        body: "Please submit by Friday.",
+        recipient_canvas_user_ids: [recipientId],
+      },
+      preview_metadata: { course: "CPSC 310" },
+    });
+
+    const result = mapChatReply(
+      {
+        ...group("Deadline Reminder", 11),
+        additional_previews: [group("Late Penalty Notice", 22)],
+      },
+      false,
+      3,
+    );
+
+    expect(result.navigateTo).toBeUndefined();
+    expect(result.additionalPreviews).toHaveLength(1);
+    expect(result.additionalPreviews?.[0]?.interpretedAction?.primaryLink?.state)
+      .toMatchObject({
+        aiMessageDraft: { subject: "Late Penalty Notice", recipientIds: ["22"] },
+      });
   });
 
   it("auto-redirects update_grade to the feedback form", () => {

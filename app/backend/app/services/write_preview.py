@@ -222,7 +222,7 @@ def _preview_update_assignment(
 
 
 def _preview_send_message(course: Course, params: dict) -> dict:
-    subject = params.get("subject", "")
+    subject = params.get("subject", "").strip()
     body = params.get("body", "")
     body_preview = body[:200] + ("..." if len(body) > 200 else "")
     recipient_ids = params.get("recipient_canvas_user_ids") or []
@@ -235,25 +235,35 @@ def _preview_send_message(course: Course, params: dict) -> dict:
     if recipient_ids:
         recipient_count = len(recipient_ids)
         who = ", ".join(recipient_names) if recipient_names else f"{recipient_count} selected student(s)"
+        # An empty subject is legitimate here, not a failure: schemas.py leaves
+        # subject/body optional so the LLM can hand a bare recipient set to the
+        # Messages compose form (#1310). Quoting it anyway rendered the summary
+        # as literal Send "" ..., which reads like the instructor's own words
+        # were lost. Say what will happen instead of quoting nothing.
         summary = (
-            f"Send \"{subject.strip()}\" as a private Canvas message to "
-            f"{who} in {course.name}."
+            f"Send \"{subject}\" as a private Canvas message to {who} in {course.name}."
+            if subject
+            else f"Draft a private Canvas message to {who} in {course.name}."
         )
         audience = {"scope": "selected_students", "size": recipient_count}
         resource_type = "conversation"
+        resource_name = subject or "Untitled message"
     else:
         summary = (
-            f"Post \"{subject.strip()}\" as a public announcement visible to "
+            f"Post \"{subject}\" as a public announcement visible to "
             f"the entire class in {course.name}."
+            if subject
+            else f"Draft an announcement for the entire class in {course.name}."
         )
         audience = {"scope": "entire_class", "size": None}
         resource_type = "announcement"
+        resource_name = subject or "Untitled announcement"
 
     result = {
         "action": "send_message",
         "course": course.name,
         "metadata": {
-            "subject": subject.strip(),
+            "subject": subject,
             "body_preview": body_preview,
             "recipient_canvas_user_ids": recipient_ids,
             "recipient_names": recipient_names,
@@ -261,7 +271,7 @@ def _preview_send_message(course: Course, params: dict) -> dict:
         "summary": summary,
         "affected_resources": [
             {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
-            {"type": resource_type, "id": None, "name": subject.strip(), "status": "created"},
+            {"type": resource_type, "id": None, "name": resource_name, "status": "created"},
         ],
         "audience": audience,
         **_preview_safety_fields("send_message", params),
