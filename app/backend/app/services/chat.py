@@ -2428,16 +2428,17 @@ async def _resolve_recipient_directives(
     # multi-name roster just because the user said “this student”.
     memory = conversation.field_memory or {}
     remembered_id = _coerce_int(memory.get("student_id"))
-    remembered_candidates = (
-        [remembered_id]
-        if remembered_id is not None and remembered_id in known
-        else [
-            _coerce_int(item.get("id"))
-            for item in (memory.get("recent_students") or [])
-            if isinstance(item, dict) and _coerce_int(item.get("id")) in known
-        ]
-    )
-    remembered_candidates = list(dict.fromkeys(i for i in remembered_candidates if i is not None))
+    if remembered_id is not None and remembered_id in known:
+        remembered_candidates: list[int] = [remembered_id]
+    else:
+        remembered_candidates = []
+        for item in memory.get("recent_students") or []:
+            if not isinstance(item, dict):
+                continue
+            candidate_id = _coerce_int(item.get("id"))
+            if candidate_id is not None and candidate_id in known:
+                remembered_candidates.append(candidate_id)
+        remembered_candidates = list(dict.fromkeys(remembered_candidates))
     if len(remembered_candidates) == 1:
         for reference in pronoun_references:
             resolved[reference] = remembered_candidates[0]

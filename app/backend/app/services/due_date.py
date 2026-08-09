@@ -11,7 +11,7 @@ interpreted in that zone (not UTC or browser local time).
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime, time
+from datetime import UTC, datetime, time, tzinfo
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from dateutil import parser as date_parser
@@ -22,7 +22,7 @@ _AMBIGUOUS_NUMERIC_DATE = re.compile(r"^\d{1,2}[/-]\d{1,2}[/-]\d{2,4}$")
 _DATE_ONLY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
-def _resolve_timezone(name: str | None) -> datetime.tzinfo:
+def _resolve_timezone(name: str | None) -> tzinfo:
     if not name:
         return UTC
     try:
