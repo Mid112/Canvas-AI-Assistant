@@ -14,7 +14,7 @@ It covers user guides, developer docs, deployment/installation, architecture/API
 | Architecture (final) | [architecture.md](./architecture.md) |
 | API reference (final) | [api-reference.md](./api-reference.md) |
 | Final testing report | [`../testing report/Final_Testing_Report_Detailed.pdf`](../testing%20report/Final_Testing_Report_Detailed.pdf) |
-| Requirements traceability matrix | [requirements-traceability.md](./requirements-traceability.md) |
+| Requirements traceability matrix | [Requirements_Traceability_Matrix.pdf](./Requirements_Traceability_Matrix.pdf) |
 | Repository structure | [repository-structure.md](./repository-structure.md) |
 | Release notes | [release-notes.md](./release-notes.md) |
 
