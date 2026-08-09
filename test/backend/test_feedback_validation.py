@@ -101,3 +101,97 @@ async def test_verify_assignment_in_course_rejects_missing_assignment():
             await verify_assignment_in_course(1, 99, user, "http://localhost", db)
     assert exc.value.status_code == 422
     assert "assignment" in exc.value.detail.lower()
+
+
+# ---------------------------------------------------------------------------
+# 404s must never reach the client raw (Draft Feedback "Something went wrong
+# on our end"). parseApiError in the frontend renders any 404 with that exact
+# copy, so an untranslated 404 here reads as a server fault rather than
+# something the instructor can act on. verify_assignment_in_course already
+# translates; this path did not.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_student_check_translates_a_canvas_404_into_actionable_422():
+    """fetch_student_enrollment surfaces Canvas's own 404 ("Canvas resource
+    not found") when the stored canvas_course_id no longer exists -- routine
+    against a rebuilt sandbox, since local Course rows outlive the container.
+    """
+    db = AsyncMock()
+    user = AsyncMock()
+    course = MagicMock(id=1, canvas_course_id="42", canvas_url="http://localhost")
+    with (
+        patch(
+            "app.services.feedback_validation.get_owned_course",
+            new=AsyncMock(return_value=course),
+        ),
+        patch(
+            "app.services.feedback_validation.require_canvas_token",
+            return_value="token",
+        ),
+        patch(
+            "app.services.feedback_validation.fetch_student_enrollment",
+            new=AsyncMock(
+                side_effect=HTTPException(
+                    status_code=404, detail="Canvas resource not found"
+                )
+            ),
+        ),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await verify_canvas_student_in_course(1, 99, user, "http://localhost", db)
+
+    assert exc.value.status_code == 422
+    assert "Something went wrong" not in str(exc.value.detail)
+    assert "course" in str(exc.value.detail).lower()
+
+
+@pytest.mark.asyncio
+async def test_student_check_translates_an_unowned_course_404_into_422():
+    db = AsyncMock()
+    user = AsyncMock()
+    with patch(
+        "app.services.feedback_validation.get_owned_course",
+        new=AsyncMock(
+            side_effect=HTTPException(
+                status_code=404, detail="Course not found or does not belong to you."
+            )
+        ),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await verify_canvas_student_in_course(1, 99, user, "http://localhost", db)
+
+    assert exc.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_student_check_leaves_non_404_failures_alone():
+    """A Canvas outage is a real 502 and must keep saying so -- translating
+    everything to 422 would blame the instructor for an upstream failure.
+    """
+    db = AsyncMock()
+    user = AsyncMock()
+    course = MagicMock(id=1, canvas_course_id="42", canvas_url="http://localhost")
+    with (
+        patch(
+            "app.services.feedback_validation.get_owned_course",
+            new=AsyncMock(return_value=course),
+        ),
+        patch(
+            "app.services.feedback_validation.require_canvas_token",
+            return_value="token",
+        ),
+        patch(
+            "app.services.feedback_validation.fetch_student_enrollment",
+            new=AsyncMock(
+                side_effect=HTTPException(
+                    status_code=502, detail="Could not reach Canvas"
+                )
+            ),
+        ),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await verify_canvas_student_in_course(1, 99, user, "http://localhost", db)
+
+    assert exc.value.status_code == 502

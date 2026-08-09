@@ -111,10 +111,13 @@ describe("ActiveCourseSelector", () => {
     );
 
     expect(mockSelectActiveCourse).toHaveBeenCalledWith(11);
-    expect(window.confirm).toHaveBeenCalled();
+    // An ordinary switch no longer interrupts. The old notice explained
+    // conversation routing the instructor never asked about, and chat tabs
+    // will show that routing instead of describing it in a modal.
+    expect(window.confirm).not.toHaveBeenCalled();
   });
 
-  it("does not switch course when the instructor cancels the warning", async () => {
+  it("does not switch course when the instructor cancels the pending-work warning", async () => {
     const user = userEvent.setup();
     vi.stubGlobal("confirm", vi.fn(() => false));
     mockUseActiveCourse.mockReturnValue({
@@ -141,7 +144,7 @@ describe("ActiveCourseSelector", () => {
       selectActiveCourse: mockSelectActiveCourse,
     });
 
-    render(<ActiveCourseSelector />);
+    render(<ActiveCourseSelector hasPendingAssistantWork={() => true} />);
 
     await user.selectOptions(
       screen.getByLabelText("Select active course"),

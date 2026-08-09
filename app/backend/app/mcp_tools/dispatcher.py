@@ -1252,6 +1252,21 @@ async def execute_tool(
                     f"{nested_action_name!r}. proposed_action: {proposed!r}",
                 )
 
+            # set_active_course is not in WRITE_ACTIONS: it writes a local
+            # UserPreference row, touches no Canvas resource, and is documented
+            # to execute immediately. The model still wraps it in an
+            # intent_preview, which built a confirm card for a preference
+            # change — a whole preview page, an Undo section and a confirm
+            # click to do something the course dropdown does in one. Unwrap it
+            # and run it, so both routes behave the same.
+            if proposed.get("action") == "set_active_course":
+                return await execute_tool(
+                    db,
+                    user,
+                    parse_action(json.dumps(proposed)),
+                    exclude_workflow_id=exclude_workflow_id,
+                )
+
             if proposed.get("action") == "create_assignment":
                 missing_fields = _create_assignment_missing_fields(proposed)
                 if missing_fields:
