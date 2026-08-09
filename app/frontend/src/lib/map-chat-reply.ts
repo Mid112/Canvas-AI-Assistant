@@ -46,10 +46,65 @@ const INTERNAL_FIELDS = new Set([
 ]);
 
 function formatFieldLabel(field: string): string {
-  return field
+  const labels: Record<string, string> = {
+    course_name: "Course",
+    assignment_reference: "Assignment",
+    student_reference: "Student",
+    new_grade: "Proposed grade",
+    points_possible: "Possible points",
+    due_date: "Due date",
+    due_at: "Due date",
+    recipient_directives: "Recipients",
+  };
+  const fallback = field
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+  return labels[field] ?? fallback;
+}
+
+function formatAcknowledgedField(field: string, value: string): string {
+  switch (field) {
+    case "course_name":
+      return `the ${value} course`;
+    case "assignment_reference":
+      return `the assignment "${value}"`;
+    case "student_reference":
+      return `the student "${value}"`;
+    case "new_grade":
+      return `a proposed grade of ${value}`;
+    case "reason":
+      return `the reason "${value}"`;
+    case "title":
+      return `the title "${value}"`;
+    case "description":
+      return "the description provided";
+    case "due_date":
+      return `the due date ${value}`;
+    case "due_at":
+      return `the due date ${value}`;
+    case "points_possible":
+      return `${value} possible points`;
+    case "subject":
+      return `the subject "${value}"`;
+    case "body":
+      return "the message body provided";
+    case "feedback":
+      return "the feedback provided";
+    default:
+      return `the ${formatFieldLabel(field).toLowerCase()} "${value}"`;
+  }
+}
+
+function joinAcknowledgements(
+  fields: Array<{ field: string; value: string }>,
+): string {
+  const phrases = fields.map(({ field, value }) =>
+    formatAcknowledgedField(field, value),
+  );
+  if (phrases.length <= 1) return phrases[0] ?? "";
+  if (phrases.length === 2) return `${phrases[0]} and ${phrases[1]}`;
+  return `${phrases.slice(0, -1).join(", ")}, and ${phrases.at(-1)}`;
 }
 
 function formatSafeValue(value: unknown): string | undefined {
@@ -897,9 +952,16 @@ function mapReplyBody(
 
   if (reply.action === "clarify" || reply.clarify) {
     const acknowledgedFields = readableFields(reply.partial_plan);
-    const acknowledgedText = acknowledgedFields
-      .map((field) => `${field.label.toLowerCase()}: ${field.value}`)
-      .join(", ");
+    const acknowledgedEntries =
+      reply.partial_plan && typeof reply.partial_plan === "object"
+        ? Object.entries(reply.partial_plan as Record<string, unknown>)
+            .filter(([field]) => !INTERNAL_FIELDS.has(field))
+            .flatMap(([field, value]) => {
+              const formatted = formatSafeValue(value);
+              return formatted ? [{ field, value: formatted }] : [];
+            })
+        : [];
+    const acknowledgedText = joinAcknowledgements(acknowledgedEntries);
     const acknowledgement =
       acknowledgedFields.length > 0
         ? `I have ${acknowledgedText}${/[.!?]$/.test(acknowledgedText) ? " " : ". "}`
