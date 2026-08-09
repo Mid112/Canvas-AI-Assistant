@@ -6,7 +6,7 @@ This document presents the system design for the Canvas Workflow Assistant, a se
 
 The primary goal of the system is to reduce the administrative workload associated with course management while maintaining transparency, security, and human oversight. By integrating with Canvas and leveraging locally hosted large language models (LLMs), the platform enables users to perform tasks such as analyzing missing submissions, generating student communications, creating assignments, and reviewing course analytics through a conversational interface.
 
-The system supports three primary user roles: Instructors, Teaching Assistants, and System Administrators. Each role is provided with a dedicated interface and permissions appropriate to their responsibilities. To ensure accountability and user control, all AI-generated actions are presented through a workflow preview and approval process before execution.
+The system supports two primary user roles: Instructors and System Administrators. Each role is provided with a dedicated interface and permissions appropriate to their responsibilities. To ensure accountability and user control, all AI-generated actions are presented through a workflow preview and approval process before execution.
 
 This document describes the overall architecture, use case models, database design, data flow diagrams, and user interface design of the system. Together, these components provide a comprehensive overview of how the Canvas Workflow Assistant is structured and how users interact with the platform.
 
@@ -142,266 +142,408 @@ to that instructor, preventing one instructor from modifying another's
 courses even if credentials were somehow confused.
 
 ## Use Case Models
+
+Actors in the current implementation are **Instructor** and **System Administrator**. Students interact with Canvas only as message/grade recipients and are not application actors. **Canvas LMS** and the **LLM Provider** are external systems used by instructor teaching workflows. Numbered use cases below map 1:1 to the diagram.
+
+The diagram separates **instructor-only**, **administrator-only**, and **shared** use cases so each actor links to the specific ovals they perform—not to the system as a whole.
+
 ### Use Case Diagram
-<img width="935" height="723" alt="use-case-diagram" src="https://github.com/user-attachments/assets/5905cfa6-e1e2-4bcb-8207-1690b33f53ad" />
+
+```mermaid
+flowchart LR
+  subgraph InstructorOnly["Instructor-only use cases"]
+    direction TB
+    Instructor((Instructor))
+    UC3(["3. Register Instructor Account"])
+    UC5(["5. Connect Canvas Account"])
+    UC6(["6. Manage Courses & View Dashboard"])
+    UC7(["7. Analyze Submissions & Analytics"])
+    UC8(["8. Draft & Send Course Messages"])
+    UC9(["9. Create Assignment via AI"])
+    UC10(["10. Create Quiz via AI"])
+    UC11(["11. Generate Feedback & Grades"])
+    UC12(["12. Chat with AI Assistant"])
+    UC13(["13. Review / Cancel / Undo Workflows"])
+
+    Instructor --> UC3
+    Instructor --> UC5
+    Instructor --> UC6
+    Instructor --> UC7
+    Instructor --> UC8
+    Instructor --> UC9
+    Instructor --> UC10
+    Instructor --> UC11
+    Instructor --> UC12
+    Instructor --> UC13
+  end
+
+  subgraph Shared["Shared use cases"]
+    direction TB
+    UC1(["1. Authenticate User"])
+    UC2(["2. Terminate Session"])
+    UC4(["4. Reset Password"])
+  end
+
+  subgraph AdminOnly["Administrator-only use cases"]
+    direction TB
+    Admin((System Administrator))
+    UC14(["14. Manage User Accounts"])
+    UC15(["15. View Audit Logs"])
+    UC16(["16. Monitor System Health & Failures"])
+
+    Admin --> UC14
+    Admin --> UC15
+    Admin --> UC16
+  end
+
+  Instructor --> UC1
+  Instructor --> UC2
+  Instructor --> UC4
+  Admin --> UC1
+  Admin --> UC2
+  Admin --> UC4
+
+  Canvas[[Canvas LMS]]
+  LLM[[LLM Provider]]
+
+  UC5 --> Canvas
+  UC6 --> Canvas
+  UC7 --> Canvas
+  UC8 --> Canvas
+  UC9 --> Canvas
+  UC10 --> Canvas
+  UC11 --> Canvas
+  UC12 --> Canvas
+  UC13 --> Canvas
+
+  UC8 --> LLM
+  UC9 --> LLM
+  UC10 --> LLM
+  UC11 --> LLM
+  UC12 --> LLM
+```
 
 ---
 
 ### Use Case 1: Authenticate User (Login)
-* **Primary actor:** Instructor, Teaching Assistant, System Administrator 
-* **Description:** User logs into the application securely to receive an active session token. 
-* **Precondition:** User account exists in the PostgreSQL database. 
-* **Postcondition:** User is granted an active JWT and redirected to their respective dashboard. 
+* **Primary actor:** Instructor, System Administrator
+* **Description:** User logs into the application securely and receives an active session.
+* **Precondition:** A user account exists and is active.
+* **Postcondition:** User receives a valid session/JWT and is redirected to their role dashboard.
 
 **Main scenario:**
-1. User navigates to the login screen at `localhost:3000`.
-2. User inputs their email and password and clicks "Login."
-3. System verifies the password hash against the database.
-4. System generates a JSON Web Token (JWT) for the session.
-5. System redirects the user to the Course Dashboard (or System Dashboard for Admins).
+1. User opens the login page.
+2. User enters email and password and submits.
+3. System verifies credentials against the stored password hash.
+4. System creates a session and issues a JWT.
+5. System redirects Instructors to the Instructor Dashboard and Administrators to the Admin Dashboard.
 
 **Extensions:**
 * **3a. Invalid credentials.**
-  * 3a1. System detects a mismatch in the email or password hash.
-  * 3a2. System denies entry and displays an error banner: "Invalid email or password."
+  * 3a1. System rejects the login and shows “Invalid email or password.”
+* **3b. Account disabled.**
+  * 3b1. System detects `is_active = false`.
+  * 3b2. System denies access and informs the user that the account is disabled.
 
 ---
 
 ### Use Case 2: Terminate Session (Logout)
-* **Primary actor:** Instructor, Teaching Assistant, System Administrator 
-* **Description:** User securely exits the application, invalidating their active session. 
-* **Precondition:** User is currently authenticated. 
-* **Postcondition:** Session is terminated and user is returned to the login screen. 
+* **Primary actor:** Instructor, System Administrator
+* **Description:** User ends their session and returns to an unauthenticated state.
+* **Precondition:** User is authenticated.
+* **Postcondition:** Session is invalidated and the user is returned to the login screen.
 
 **Main scenario:**
-1. User clicks the "Logout" button in the navigation bar.
-2. System immediately invalidates the active JWT.
-3. System clears cached user data from the local browser storage.
-4. System redirects the user to the Login screen.
+1. User selects Logout.
+2. System invalidates the active session/JWT.
+3. System clears local auth state from the browser.
+4. System redirects the user to the login page.
 
 ---
 
-### Use Case 3: Create User Account
-* **Primary actor:** System Administrator 
-* **Description:** Admin provisions a new user profile and assigns a role. 
-* **Precondition:** Admin is authenticated and viewing the User Management portal. 
-* **Postcondition:** A new user record is created in the PostgreSQL database. 
+### Use Case 3: Register Instructor Account
+* **Primary actor:** Instructor
+* **Description:** A new instructor creates an application account through self-registration.
+* **Precondition:** User is on the registration page and does not already have an account.
+* **Postcondition:** An instructor account is created and the user can authenticate.
 
 **Main scenario:**
-1. Admin clicks "Add New User."
-2. Admin enters the new user's email, assigns a temporary password, and selects a role (Instructor or TA).
-3. Admin clicks "Save."
-4. System hashes the temporary password and creates the user record in the database.
+1. User opens the Register page.
+2. User enters name, email, and password that satisfy the password policy.
+3. System creates a new `instructor` user record with a hashed password.
+4. System signs the user in (or prompts login) and continues onboarding toward Canvas connection.
 
 **Extensions:**
-* **4a. Email already exists.**
-  * 4a1. System database detects a duplicate email address.
-  * 4a2. System prevents creation and alerts the Admin: "User with this email already exists."
+* **3a. Email already registered.**
+  * 3a1. System detects a duplicate email.
+  * 3a2. System blocks creation and shows that the email is already in use.
+* **3b. Password fails policy.**
+  * 3b1. System rejects the password and displays the policy requirements.
 
 ---
 
-### Use Case 4: Connect Canvas Account
-* **Primary actor:** Instructor, Teaching Assistant 
-* **Description:** User inputs their Canvas API token so the application can communicate with the Canvas LMS. 
-* **Precondition:** User is authenticated. 
-* **Postcondition:** The API token is securely encrypted and stored in the database. 
+### Use Case 4: Reset Password
+* **Primary actor:** Instructor, System Administrator
+* **Description:** User recovers account access by setting a new password.
+* **Precondition:** User is on the reset-password flow.
+* **Postcondition:** The password hash is updated and the user can log in with the new password.
 
 **Main scenario:**
-1. User navigates to the Settings dashboard.
-2. User pastes their Canvas API token into the input field and clicks "Save."
-3. System encrypts the token via AES-256.
-4. System saves the encrypted token to the user's database row.
-5. System makes a test call to the Canvas API to verify access scopes.
-6. System confirms success with a green toast notification.
-
-**Extensions:**
-* **5a. Token is invalid or lacks scopes.**
-  * 5a1. The Canvas API returns an HTTP 401 (Unauthorized) or 403 (Forbidden) error.
-  * 5a2. System deletes the invalid token from the database.
-  * 5a3. System displays an error banner: "Authentication Failed: Ensure token is valid."
-
----
-
-### Use Case 5: View Course & Submission Dashboard
-* **Primary actor:** Instructor, Teaching Assistant 
-* **Description:** User views a color-coded grid of student submission statuses. 
-* **Precondition:** User has a valid API token stored. 
-* **Postcondition:** The dashboard renders the current submission data. 
-
-**Main scenario:**
-1. User selects a specific course from the sidebar.
-2. System queries the PostgreSQL cache for recent course assignments and submissions.
-3. System renders the submission status grid (submitted, late, missing, excused).
-
-**Extensions:**
-* **2a. Cache is expired (TTL exceeded).**
-  * 2a1. System automatically queries the Canvas API for fresh data.
-  * 2a2. System updates the PostgreSQL cache before rendering the grid.
-* **2b. Canvas API rate limit or timeout.**
-  * 2b1. The Canvas API returns an HTTP 429 error or times out during the fetch.
-  * 2b2. System initiates an exponential backoff retry.
-  * 2b3. If retries fail, system displays a warning and shows the last known cached data.
-
----
-
-### Use Case 6: Filter & Search Dashboard Data
-* **Primary actor:** Instructor, Teaching Assistant 
-* **Description:** User dynamically filters the dashboard to locate specific students or assignment statuses. 
-* **Precondition:** The Course Dashboard is populated with data. 
-* **Postcondition:** The UI updates to show only requested data without querying the backend. 
-
-**Main scenario:**
-1. User clicks the "Status" filter toggle and selects "Missing."
-2. The frontend system isolates records matching the criteria.
-3. System dynamically updates the grid to display only students with missing assignments.
-
----
-
-### Use Case 7: Draft & Send AI Reminder Messages
-* **Primary actor:** Instructor, Teaching Assistant 
-* **Description:** User prompts the AI to draft messages, reviews them, and executes the send action. 
-* **Precondition:** User is viewing a specific Course Dashboard. 
-* **Postcondition:** Messages are dispatched via Canvas API and logged in the database. 
-
-**Main scenario:**
-1. User enters a command (e.g., "Draft a reminder to everyone missing Assignment 3").
-2. System parses the command via the local LLM.
-3. System identifies targeted students and generates a visual Dry-Run Preview of the drafted text.
-4. User reviews the draft and clicks "Approve & Execute."
-5. System decrypts the user's Canvas token and dispatches the messages via the Canvas API.
-6. System logs the executed action in the database.
-
-**Extensions:**
-* **2a. LLM fails to parse prompt.**
-  * 2a1. Pydantic validation rejects the LLM output. System prompts user to rephrase.
-* **4a. User alters the draft.**
-  * 4a1. User types in the preview text box to change the message tone before confirming.
-* **4b. User aborts the action.**
-  * 4b1. User clicks "Cancel"; draft is discarded, no API call is made.
-
----
-
-### Use Case 8: Create Canvas Assignment via AI
-* **Primary actor:** Instructor 
-* **Description:** Instructor prompts the AI to create a new assignment in Canvas. 
-* **Precondition:** Instructor has "Write" permissions on their Canvas token. 
-* **Postcondition:** A new assignment is instantiated in Canvas and logged. 
-
-**Main scenario:**
-1. Instructor types a creation command (e.g., "Create a Week 6 Check-in quiz").
-2. System parses the command and resolves dates via the LLM.
-3. System checks Canvas for duplicate assignment names.
-4. System generates a staging card showing proposed assignment fields.
-5. Instructor reviews and clicks "Approve & Execute."
-6. System creates the assignment via the Canvas API.
-7. System logs the creation event in the database.
-
-**Extensions:**
-* **3a. Duplicate assignment name detected.**
-  * 3a1. System flags the duplicate in the Dry-Run Preview, requiring the instructor to rename it.
-* **5a. Instructor tweaks assignment parameters.**
-  * 5a1. Instructor modifies fields (e.g., Points Possible) before executing.
-
----
-
-### Use Case 9: View Personal Action History Log
-* **Primary actor:** Instructor, Teaching Assistant 
-* **Description:** User reviews their own past automated actions to ensure accountability. 
-* **Precondition:** User has previously executed an AI action. 
-* **Postcondition:** User successfully views their localized history. 
-
-**Main scenario:**
-1. User clicks on the "History" tab in the dashboard.
-2. System queries the PostgreSQL database for audit logs strictly matching the current user's ID.
-3. System displays a table with timestamps, action types, and affected entities.
-
----
-
-### Use Case 10: View System Health Dashboard
-* **Primary actor:** System Administrator 
-* **Description:** Admin views high-level application metrics. 
-* **Precondition:** Admin is authenticated. 
-* **Postcondition:** Admin views real-time status of the local deployment. 
-
-**Main scenario:**
-1. Admin navigates to the System Dashboard.
-2. System aggregates data from the database and Docker environment.
-3. System displays active sessions, API error rates, and container health.
-
-**Extensions:**
-* **2a. Container health metrics unreachable.**
-  * 2a1. System fails to read Docker stats.
-  * 2a2. System displays standard database metrics but grays out container statistics with a "Data Unavailable" badge.
-
----
-
-### Use Case 11: Modify User Roles & Permissions
-* **Primary actor:** System Administrator 
-* **Description:** Admin changes the access level of an existing user. 
-* **Precondition:** Admin is viewing the User Management portal. 
-* **Postcondition:** The target user's role is permanently updated. 
-
-**Main scenario:**
-1. Admin selects a user from the account list.
-2. Admin changes the role drop-down from "TA" to "Instructor" and clicks Save.
-3. System updates the role column in the PostgreSQL database.
-
-**Extensions:**
-* **3a. Admin attempts to demote the final Admin account.**
-  * 3a1. System detects the action would leave the system without an administrator.
-  * 3a2. System blocks the action and displays an error warning.
-
----
-
-### Use Case 12: Deactivate User Account
-* **Primary actor:** System Administrator 
-* **Description:** Admin revokes application access for a user. 
-* **Precondition:** Target user exists in the database. 
-* **Postcondition:** User can no longer log in or execute actions. 
-
-**Main scenario:**
-1. Admin clicks "Deactivate" next to a user's profile.
-2. System flags the account as `is_active: false` in the database.
-3. System immediately invalidates any active JWTs for that user.
-
----
-
-### Use Case 13: View System-Wide Master Audit Log
-* **Primary actor:** System Administrator 
-* **Description:** Admin reviews the master ledger of all user actions for compliance. 
-* **Precondition:** Admin is authenticated. 
-* **Postcondition:** Admin views actions taken across all accounts. 
-
-**Main scenario:**
-1. Admin navigates to the Master Audit tab.
-2. System queries PostgreSQL for all logged AI events across all users.
-3. System displays the ledger sequentially.
-
-**Extensions:**
-* **2a. Large dataset retrieval.**
-  * 2a1. System detects more than 100 rows of audit logs.
-  * 2a2. System implements pagination, loading the first 50 results to maintain UI performance.
-
----
-
-### Use Case 14: Reset User Password
-* **Primary actor:** Instructor, Teaching Assistant, System Administrator 
-* **Description:** User recovers access to their account. 
-* **Precondition:** User is on the login screen. 
-* **Postcondition:** User sets a new password and gains entry. 
-
-**Main scenario:**
-1. User clicks "Forgot Password" and enters their email.
-2. System validates the email against the database.
-3. System prompts the user to enter and confirm a new password.
-4. System generates a new password hash and overwrites the old hash in the database.
+1. User opens Reset Password and enters their email.
+2. System validates the request according to the reset flow.
+3. User enters and confirms a new password.
+4. System stores the new password hash.
 
 **Extensions:**
 * **2a. Email not found.**
-  * 2a1. System does not find the email in the database.
-  * 2a2. To prevent account enumeration attacks, system displays a generic "If this email exists, a reset process has started" message, taking no database action.
- 
-  
+  * 2a1. System returns a generic confirmation message to avoid account enumeration.
+
+---
+
+### Use Case 5: Connect Canvas Account
+* **Primary actor:** Instructor
+* **Description:** Instructor links one or more Canvas instances so the app can read/write course data on their behalf.
+* **Precondition:** Instructor is authenticated.
+* **Postcondition:** An encrypted Canvas connection is stored and validated.
+
+**Main scenario:**
+1. Instructor opens Connect Canvas / Settings.
+2. Instructor provides Canvas URL and API token (and reviews required permissions).
+3. System encrypts and stores the connection.
+4. System validates the token against Canvas.
+5. System confirms success and allows course sync/use.
+
+**Extensions:**
+* **4a. Invalid token or insufficient scopes.**
+  * 4a1. Canvas returns 401/403 (or equivalent validation failure).
+  * 4a2. System rejects or clears the invalid connection and shows an auth/permissions error.
+
+---
+
+### Use Case 6: Manage Courses & View Dashboard
+* **Primary actor:** Instructor
+* **Description:** Instructor browses synced courses, opens a course workspace, and views overview information (students, assignments, quizzes, grades, messages).
+* **Precondition:** Instructor is authenticated and has a valid Canvas connection.
+* **Postcondition:** Course list/dashboard reflects current Canvas-backed course data.
+
+**Main scenario:**
+1. Instructor opens Courses or the Instructor Dashboard.
+2. System loads synced/cached courses for the instructor’s Canvas connection(s).
+3. Instructor selects a course.
+4. System shows course overview and navigation to assignments, quizzes, students, grades, analytics, and messages.
+5. Instructor may create a course or publish/unpublish a course when supported by Canvas permissions.
+
+**Extensions:**
+* **2a. Stale or missing cache.**
+  * 2a1. System fetches fresh course data from Canvas and updates local cache before rendering.
+* **2b. No Canvas connection.**
+  * 2b1. System redirects the instructor to Connect Canvas.
+
+---
+
+### Use Case 7: Analyze Submissions & Analytics
+* **Primary actor:** Instructor
+* **Description:** Instructor reviews submission status (missing/late/submitted) and course analytics to identify at-risk students and follow-up actions.
+* **Precondition:** Instructor has selected a course with synced assignment/submission data.
+* **Postcondition:** Instructor sees filtered analysis results and may export them.
+
+**Main scenario:**
+1. Instructor opens Submissions Analysis or course Analytics.
+2. System retrieves assignment/submission data from cache/Canvas.
+3. Instructor filters by status (e.g., missing, late) or searches students.
+4. System displays matching students/submissions and summary insights.
+5. Instructor optionally exports the analysis.
+
+**Extensions:**
+* **2a. Canvas fetch fails.**
+  * 2a1. System shows an error/warning and, when available, last cached data.
+
+---
+
+### Use Case 8: Draft & Send Course Messages
+* **Primary actor:** Instructor
+* **Description:** Instructor creates reminder or inbox messages (optionally AI-drafted), previews them, and sends through Canvas after approval.
+* **Precondition:** Instructor is authenticated, Canvas-connected, and working in a course/messaging context.
+* **Postcondition:** Approved messages are sent via Canvas and recorded in workflow/audit history.
+
+**Main scenario:**
+1. Instructor opens Messages (course or global) or asks the assistant to draft a reminder.
+2. System generates or loads a draft (manual edit, template, or AI draft).
+3. System shows a preview of recipients and message content.
+4. Instructor reviews/edits the draft and approves send.
+5. System sends the message through the Canvas API.
+6. System logs the action for history/audit.
+
+**Extensions:**
+* **4a. Instructor cancels.**
+  * 4a1. No Canvas send occurs; draft may remain saved or be discarded.
+* **5a. Canvas send fails.**
+  * 5a1. System records the failed operation and surfaces an error to the instructor.
+
+---
+
+### Use Case 9: Create Assignment via AI
+* **Primary actor:** Instructor
+* **Description:** Instructor creates a Canvas assignment using AI-assisted drafting, then previews and approves before publish/create.
+* **Precondition:** Instructor has write-capable Canvas access for the target course.
+* **Postcondition:** Assignment is created in Canvas (and optionally published) and logged as a workflow.
+
+**Main scenario:**
+1. Instructor opens Create Assignment or requests creation via the AI Assistant.
+2. Instructor provides prompt/details (title, points, due date, description, etc.).
+3. System generates an assignment draft via the LLM.
+4. System shows a dry-run/review preview.
+5. Instructor approves (after optional edits).
+6. System creates the assignment in Canvas and writes workflow/audit records.
+
+**Extensions:**
+* **5a. Instructor rejects or cancels.**
+  * 5a1. No Canvas write occurs.
+* **6a. Canvas create fails.**
+  * 6a1. System reports failure and records it for history/troubleshooting.
+
+---
+
+### Use Case 10: Create Quiz via AI
+* **Primary actor:** Instructor
+* **Description:** Instructor creates a Canvas quiz (classic/new quiz capabilities as supported) with AI drafting, preview, and approval.
+* **Precondition:** Instructor has write-capable Canvas access for the target course.
+* **Postcondition:** Quiz is created in Canvas and logged.
+
+**Main scenario:**
+1. Instructor opens Create Quiz or requests a quiz through the AI Assistant.
+2. Instructor supplies quiz goals, question needs, points, and publish preference.
+3. System generates a quiz draft (and may use question banks when available).
+4. System presents a review/approve step.
+5. Instructor confirms.
+6. System creates the quiz in Canvas and logs the workflow.
+
+**Extensions:**
+* **5a. Instructor cancels or revises prompt.**
+  * 5a1. System returns to drafting/review without writing to Canvas.
+
+---
+
+### Use Case 11: Generate Feedback & Grades
+* **Primary actor:** Instructor
+* **Description:** Instructor generates AI-assisted feedback and grade updates, previews them, and posts approved results to Canvas.
+* **Precondition:** Instructor has selected a course/assignment with submissions to grade or comment on.
+* **Postcondition:** Approved grades/feedback are posted to Canvas and audited.
+
+**Main scenario:**
+1. Instructor opens Feedback/Grades workflow for an assignment.
+2. System loads relevant submissions.
+3. System generates feedback/grade suggestions via the LLM (or prepares instructor-entered updates).
+4. System shows preview for approval.
+5. Instructor approves the update set.
+6. System posts grades/feedback to Canvas and logs the action.
+
+**Extensions:**
+* **5a. Partial approval / edit.**
+  * 5a1. Instructor edits individual feedback/scores before posting.
+* **6a. Posting fails for one or more students.**
+  * 6a1. System reports failures and records failed operations.
+
+---
+
+### Use Case 12: Chat with AI Assistant
+* **Primary actor:** Instructor
+* **Description:** Instructor uses the conversational assistant to plan Canvas workflows in natural language; write actions require preview and confirmation.
+* **Precondition:** Instructor is authenticated and (for course-scoped actions) has course context available.
+* **Postcondition:** Conversation/tool results are shown; approved write actions execute as workflows.
+
+**Main scenario:**
+1. Instructor opens the AI Assistant and selects/implies a course when needed.
+2. Instructor enters a natural-language request (analyze, create, message, grade, etc.).
+3. System uses the LLM plus Canvas tools to gather context and propose an action.
+4. For write actions, system shows a workflow preview (dry-run).
+5. Instructor confirms, modifies, pauses/resumes, or cancels the proposed action.
+6. On confirm, system executes the Canvas action and returns the result in chat.
+7. System stores conversation messages and workflow state.
+
+**Extensions:**
+* **3a. Missing course context.**
+  * 3a1. System asks the instructor to clarify/select the course before continuing.
+* **5a. Deferred / paused request.**
+  * 5a1. Instructor can resume or cancel later from assistant/history flows.
+
+---
+
+### Use Case 13: Review / Cancel / Undo Workflows
+* **Primary actor:** Instructor
+* **Description:** Instructor reviews personal workflow history, cancels in-progress actions when allowed, and undoes/reverses supported completed actions.
+* **Precondition:** Instructor is authenticated and has prior or active workflows.
+* **Postcondition:** Instructor sees updated workflow statuses; cancel/undo effects are applied where supported and logged.
+
+**Main scenario:**
+1. Instructor opens History.
+2. System loads the instructor’s workflows with status summaries.
+3. Instructor filters/searches and inspects an entry.
+4. Instructor cancels an eligible workflow or requests undo/reverse for a supported completed action.
+5. System performs the cancel/undo against workflow state and Canvas when applicable.
+6. Instructor may export history.
+
+**Extensions:**
+* **4a. Action not undoable.**
+  * 4a1. System disables undo and explains that the workflow type/state cannot be reversed.
+
+---
+
+### Use Case 14: Manage User Accounts
+* **Primary actor:** System Administrator
+* **Description:** Administrator creates instructor/admin accounts and enables, disables, or adjusts instructor access (including Canvas connection inspection/reset where supported).
+* **Precondition:** Administrator is authenticated and viewing User Management.
+* **Postcondition:** Target account state is updated in the database and access changes take effect.
+
+**Main scenario:**
+1. Admin opens Users.
+2. Admin creates an instructor (or admin) account, or selects an existing instructor.
+3. Admin enables/disables the account or revokes/resets Canvas access as needed.
+4. System persists the change and invalidates access when an account is disabled.
+
+**Extensions:**
+* **4a. Duplicate email on create.**
+  * 4a1. System blocks creation and reports the conflict.
+
+---
+
+### Use Case 15: View Audit Logs
+* **Primary actor:** System Administrator
+* **Description:** Administrator reviews system-wide audit events for compliance and troubleshooting, with filter/export support.
+* **Precondition:** Administrator is authenticated.
+* **Postcondition:** Administrator views (and optionally exports) the filtered audit ledger.
+
+**Main scenario:**
+1. Admin opens Audit.
+2. System loads audit log entries across users/actions.
+3. Admin filters by user, action, or time range and pages through results.
+4. Admin optionally exports logs (e.g., CSV).
+
+**Extensions:**
+* **2a. Large result set.**
+  * 2a1. System paginates results for performance.
+
+---
+
+### Use Case 16: Monitor System Health & Failures
+* **Primary actor:** System Administrator
+* **Description:** Administrator monitors deployment/application health and investigates failed operations (including support-ticket follow-up).
+* **Precondition:** Administrator is authenticated.
+* **Postcondition:** Admin can see health status/history and triage failed operations.
+
+**Main scenario:**
+1. Admin opens System Health and/or Failed Operations / Troubleshooting.
+2. System aggregates health checks and failed-operation summaries.
+3. Admin inspects failing Canvas connections, diagnostics, or a specific failed operation.
+4. Admin optionally creates/manages a support ticket linked to the failure.
+5. Admin may also adjust institution settings / default LLM policy from Admin Settings when configuring operational defaults.
+
+**Extensions:**
+* **2a. Health probe unavailable.**
+  * 2a1. System marks the affected check as unavailable and continues showing remaining metrics.
+
+---
+
 ## Database Design 
 
 ### Previous ER Diagram
