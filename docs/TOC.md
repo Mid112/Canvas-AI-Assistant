@@ -29,7 +29,7 @@ Start here: **[final/README.md](./final/README.md)**
 
 ### Final package extras
 - [Architecture](./final/architecture.md) · [API reference](./final/api-reference.md)
-- [Testing report (PDF)](./testing%20report/Final_Testing_Report.pdf) · [Traceability matrix](./final/requirements-traceability.md)
+- [Testing report (PDF)](./testing%20report/Final_Testing_Report_Detailed.pdf) · [Traceability matrix](./final/requirements-traceability.md)
 - [Release notes](./final/release-notes.md)
 
 ## Other docs
