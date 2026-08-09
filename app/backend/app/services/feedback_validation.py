@@ -20,15 +20,36 @@ async def verify_canvas_student_in_course(
     Queries Canvas for this one user's enrollment instead of paging the full
     course roster (which can be hundreds of students).
     """
-    course = await get_owned_course(local_course_id, user, canvas_url, db)
-    resolved_canvas_url = course.canvas_url
-    token = require_canvas_token(user, resolved_canvas_url)
-    enrollments = await fetch_student_enrollment(
-        int(course.canvas_course_id),
-        canvas_student_id,
-        token,
-        resolved_canvas_url,
-    )
+    # A 404 from either call used to travel all the way to the browser, where
+    # parseApiError renders every 404 as "Something went wrong on our end" --
+    # so a stale course or a student Canvas cannot see read as a server fault
+    # the instructor can do nothing about. Canvas returns 404 here routinely:
+    # local Course rows outlive the Canvas container, so a rebuilt sandbox
+    # leaves canvas_course_id pointing at a course that no longer exists.
+    # verify_assignment_in_course below already does this translation.
+    try:
+        course = await get_owned_course(local_course_id, user, canvas_url, db)
+        resolved_canvas_url = course.canvas_url
+        token = require_canvas_token(user, resolved_canvas_url)
+        enrollments = await fetch_student_enrollment(
+            int(course.canvas_course_id),
+            canvas_student_id,
+            token,
+            resolved_canvas_url,
+        )
+    except HTTPException as error:
+        if error.status_code == 404:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "This course is no longer available in Canvas. Re-sync your "
+                    "courses, then pick the course again."
+                ),
+            ) from error
+        # Timeouts and outages are genuinely upstream — keep saying so rather
+        # than blaming the instructor's selection.
+        raise
+
     if not enrollments:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
