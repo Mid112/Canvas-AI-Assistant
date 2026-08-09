@@ -5,7 +5,7 @@
 | Complete workflow reliability | Preview → confirm → Canvas reflects change; history shows terminal state |
 | Error recovery | After failure, user can fix and retry without corrupt workflow state |
 | Rollback behaviour | Undo available for undoable creates; irreversible actions do not claim undo |
-| Deployment reliability | See [../deployment/validation-checklist.md](../deployment/validation-checklist.md) |
+| Deployment reliability | See [../deployment/deployment-guide.md](../deployment/deployment-guide.md) and installation smoke checks |
 
 ## End-to-end smoke script
 

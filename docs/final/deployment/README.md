@@ -4,7 +4,6 @@
 | --- | --- |
 | [installation-guide.md](./installation-guide.md) | Clean install from clone |
 | [deployment-guide.md](./deployment-guide.md) | Compose / nginx production-style deploy |
-| [validation-checklist.md](./validation-checklist.md) | Deployment validation checklist |
 
 ## Package contents (what reviewers need)
 

@@ -16,7 +16,6 @@ Guides for instructors and administrators. Screenshot placeholders are intention
 | Feedback workflow | [feedback-workflow.md](./feedback-workflow.md) |
 | Grade management | [grade-management.md](./grade-management.md) |
 | Screenshot inventory | [screenshots/README.md](./screenshots/README.md) |
-| Accuracy verification checklist | [../review/documentation-review-checklist.md](../review/documentation-review-checklist.md) |
 
 ## Safety model (all workflows)
 

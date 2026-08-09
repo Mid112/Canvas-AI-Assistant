@@ -2,7 +2,7 @@
 
 This folder is the **final submission documentation** for the Canvas Helper AI Assistant (Team 16).
 
-It covers user guides, developer docs, deployment/installation, reliability & scope validation checklists, architecture/API references, and the submission package checklist.
+It covers user guides, developer docs, deployment/installation, reliability & scope validation, architecture/API references, and the testing report.
 
 ## Contents
 
@@ -10,17 +10,13 @@ It covers user guides, developer docs, deployment/installation, reliability & sc
 | --- | --- |
 | Instructor & admin user guides | [user-guides/](./user-guides/) |
 | Developer documentation | [developer/](./developer/) |
-| Documentation review checklists | [review/](./review/) |
-| Deployment package & validation | [deployment/](./deployment/) |
+| Deployment package | [deployment/](./deployment/) |
 | Reliability & scope validation | [validation/](./validation/) |
 | Architecture (final) | [architecture.md](./architecture.md) |
 | API reference (final) | [api-reference.md](./api-reference.md) |
-| Deployment / installation guides | [deployment/](./deployment/) |
 | Testing report summary | [testing-report.md](./testing-report.md) |
 | Requirements traceability matrix | [requirements-traceability.md](./requirements-traceability.md) |
-| Presentation placeholder | [presentation.md](./presentation.md) |
 | Repository structure | [repository-structure.md](./repository-structure.md) |
-| Submission checklist | [submission-checklist.md](./submission-checklist.md) |
 | Release notes | [release-notes.md](./release-notes.md) |
 
 ## Screenshot placeholders
