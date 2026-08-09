@@ -1,6 +1,7 @@
 import { Loader2 } from "lucide-react";
 
 import { EditableRecipientList } from "@/components/messages/EditableRecipientList";
+import { ActionStatusBadges } from "@/components/status/ActionStatusBadges";
 import { MessageContentPreview } from "@/components/messages/MessagePreview";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +15,18 @@ import {
 import { cn } from "@/lib/utils";
 import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
 import type { MessageRecipient } from "@/types/messageDraft";
+
+/** The word that tells the instructor which of two very different sends this
+ * is: a course-wide announcement or a private message. It was previously the
+ * same weight as the surrounding sentence, so the distinction was easy to skim
+ * past on a dialog whose action cannot be undone. */
+function DeliveryMode({ children }: { children: string }) {
+  return (
+    <strong className="text-base font-bold uppercase tracking-wide">
+      {children}
+    </strong>
+  );
+}
 
 interface ConfirmationDialogProps {
   open: boolean;
@@ -45,18 +58,35 @@ export function ConfirmationDialog({
   ).length;
   const recipientText =
     selectedCount === 1 ? "1 student" : `${selectedCount} students`;
-  const deliveryText =
-    selectedCount === 0 ? "the whole course as an announcement" : recipientText;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg" showCloseButton={!isSending}>
         <DialogHeader>
-          <DialogTitle>Send Message?</DialogTitle>
+          {/* pr-8 clears the dialog's absolutely positioned close button. */}
+          <div className="flex items-start justify-between gap-3 pr-8">
+            <DialogTitle>Send Message?</DialogTitle>
+            {/* send_message is classified irreversible in the backend -- a sent
+                Canvas announcement or message cannot be un-sent. */}
+            <ActionStatusBadges
+              level="high"
+              reversible={false}
+              className="shrink-0"
+            />
+          </div>
           <DialogDescription>
-            Review exactly what will be sent to {deliveryText} before confirming.
-            Uncheck or remove anyone who shouldn&apos;t receive a private message.
-            This action cannot be undone.
+            Review exactly what will be sent to{" "}
+            {selectedCount === 0 ? (
+              <>
+                the whole course as an <DeliveryMode>announcement</DeliveryMode>
+              </>
+            ) : (
+              <>
+                {recipientText} as a <DeliveryMode>private message</DeliveryMode>
+              </>
+            )}{" "}
+            before confirming. Uncheck or remove anyone who shouldn&apos;t
+            receive it. This action cannot be undone.
           </DialogDescription>
         </DialogHeader>
 

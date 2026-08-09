@@ -333,9 +333,12 @@ describe("InstructorCourseGradesPage", () => {
 
     expect(await screen.findByText(/Grade updated. History record #12./)).toBeInTheDocument();
     expect(screen.getByLabelText("Feedback")).toHaveValue("");
-    expect(screen.getByText("High Risk")).toBeInTheDocument();
-    expect(screen.queryByText("Low Risk")).not.toBeInTheDocument();
-    expect(screen.queryByText("Medium Risk")).not.toBeInTheDocument();
+    // Sentence case matches the shared badge used on every confirm surface;
+    // this page previously title-cased its own hand-rolled label.
+    expect(screen.getByText("High risk")).toBeInTheDocument();
+    expect(screen.getByText("Irreversible")).toBeInTheDocument();
+    expect(screen.queryByText("Low risk")).not.toBeInTheDocument();
+    expect(screen.queryByText("Medium risk")).not.toBeInTheDocument();
     const coinRow = screen.getByRole("row", { name: /Coin Unsubmitted, Graded 110 110 -/i });
     expect(coinRow).toBeInTheDocument();
   });
@@ -528,7 +531,13 @@ describe("InstructorCourseGradesPage", () => {
     await screen.findByRole("cell", { name: "Coin" });
     await user.type(screen.getByLabelText("Feedback"), "Work changes. You can do it.");
 
-    expect(screen.getByText("Medium Risk")).toBeInTheDocument();
+    // Feedback-only now carries the same status as a grade change: it writes a
+    // Canvas comment the student sees immediately and there is no undo path,
+    // so it is High risk + Irreversible rather than the old emerald
+    // "Medium Risk", which read as low risk everywhere else in the app.
+    expect(screen.getByText("High risk")).toBeInTheDocument();
+    expect(screen.getByText("Irreversible")).toBeInTheDocument();
+    expect(screen.queryByText("Medium risk")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Type UPDATE to approve")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Preview feedback" }));
 

@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 
+import { ActionStatusBadges } from "@/components/status/ActionStatusBadges";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -195,7 +196,12 @@ export function FeedbackDescribeStep({
   return (
     <Card className="shadow-sm ring-1 ring-border/60">
       <CardHeader>
-        <CardTitle>Describe the Feedback</CardTitle>
+        {/* Status is shown up front, not only at the confirm step: what the
+            instructor is starting is a write that cannot be taken back. */}
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <CardTitle>Describe the Feedback</CardTitle>
+          <ActionStatusBadges level="high" reversible={false} />
+        </div>
         <p className="text-sm text-muted-foreground">
           Choose the course, assignment, and student, then describe the feedback
           you want the AI to draft.

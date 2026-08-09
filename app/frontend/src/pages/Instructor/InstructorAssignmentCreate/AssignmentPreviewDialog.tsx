@@ -1,6 +1,7 @@
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useState } from "react";
 
+import { ReversibilityBadge } from "@/components/status/ActionStatusBadges";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -35,7 +36,16 @@ export function AssignmentPreviewDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md" showCloseButton={!isCreating}>
         <DialogHeader>
-          <DialogTitle>Create this assignment?</DialogTitle>
+          {/* pr-8 clears the dialog's absolutely positioned close button. */}
+          <div className="flex items-start justify-between gap-3 pr-8">
+            <DialogTitle>Create this assignment?</DialogTitle>
+            {preview ? (
+              <ReversibilityBadge
+                reversible={preview.reversible}
+                className="shrink-0"
+              />
+            ) : null}
+          </div>
           <DialogDescription>
             {preview?.summary ?? "Review what will be created in Canvas."}
           </DialogDescription>

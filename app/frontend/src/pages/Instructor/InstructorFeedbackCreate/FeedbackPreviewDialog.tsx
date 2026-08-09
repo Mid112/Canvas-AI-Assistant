@@ -1,6 +1,7 @@
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useState } from "react";
 
+import { ActionStatusBadges } from "@/components/status/ActionStatusBadges";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,18 +23,6 @@ interface FeedbackPreviewDialogProps {
   onConfirm: () => void;
 }
 
-const riskStyles = {
-  low: "bg-emerald-50 text-emerald-800 ring-emerald-200",
-  medium: "bg-amber-50 text-amber-900 ring-amber-200",
-  high: "bg-red-50 text-red-800 ring-red-200",
-} as const;
-
-const riskLabels = {
-  low: "Low risk",
-  medium: "Medium risk",
-  high: "High risk",
-} as const;
-
 export function FeedbackPreviewDialog({
   open,
   onOpenChange,
@@ -42,31 +31,32 @@ export function FeedbackPreviewDialog({
   onConfirm,
 }: FeedbackPreviewDialogProps) {
   const [detailsOpen, setDetailsOpen] = useState(false);
-  const riskLevel = preview?.riskLevel ?? "medium";
+  // Feedback is confirmed on the same terms as a grade change: a posted
+  // Canvas comment is visible to the student immediately and cannot be
+  // un-posted, so it carries update_grade's status rather than a softer one.
+  const riskLevel = "high" as const;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg" showCloseButton={!isPosting}>
         <DialogHeader>
-          <DialogTitle>Post this feedback?</DialogTitle>
+          {/* pr-8 clears the dialog's absolutely positioned close button. */}
+          <div className="flex items-start justify-between gap-3 pr-8">
+            <DialogTitle>Post this feedback?</DialogTitle>
+            <ActionStatusBadges
+              level={riskLevel}
+              reversible={false}
+              className="shrink-0"
+            />
+          </div>
           <DialogDescription>
             {preview?.summary ?? "Review what will be posted to Canvas."}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={cn(
-              "inline-flex rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-              riskStyles[riskLevel],
-            )}
-          >
-            {riskLabels[riskLevel]}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            Grade and feedback will be written to the student submission.
-          </span>
-        </div>
+        <p className="text-xs text-muted-foreground">
+          Grade and feedback will be written to the student submission.
+        </p>
 
         {preview && preview.affectedResources.length > 0 ? (
           <ul className="space-y-1 text-sm text-muted-foreground">

@@ -1,8 +1,9 @@
-import { AlertTriangle, CheckCircle2, History, Loader2 } from "lucide-react";
+import { CheckCircle2, History, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 
 import { CanvasConnectionRequired } from "@/components/common/CanvasConnectionRequired";
+import { ActionStatusBadges } from "@/components/status/ActionStatusBadges";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -16,7 +17,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useResolvedInstructorCourse } from "@/hooks/useResolvedInstructorCourse";
 import { pageShell } from "@/lib/page-shell";
@@ -691,18 +691,14 @@ export function InstructorCourseGradesPage() {
 
         <Card className="shadow-sm ring-1 ring-border/60">
           <CardHeader>
+            {/* Feedback-only carries the same status as a grade change: both
+                write to the student's submission and neither has an undo path
+                (update_grade is classified irreversible in the backend). The
+                old split labelled feedback "Medium Risk" in emerald, which read
+                as low risk everywhere else in the app. */}
             <CardTitle className="flex flex-wrap items-center gap-3">
               Approval
-              <Badge
-                variant={isFeedbackOnly ? "secondary" : "destructive"}
-                className={cn(
-                  "gap-1 px-3 py-1 text-sm font-semibold",
-                  isFeedbackOnly && "border-emerald-200 bg-emerald-50 text-emerald-800",
-                )}
-              >
-                <AlertTriangle className="size-4" aria-hidden="true" />
-                {isFeedbackOnly ? "Medium Risk" : "High Risk"}
-              </Badge>
+              <ActionStatusBadges level="high" reversible={false} />
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-5">
