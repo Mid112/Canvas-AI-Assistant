@@ -172,6 +172,39 @@ describe("ChatWindow", () => {
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
   });
 
+  it("keeps form handoffs in chat until the instructor clicks the action link", async () => {
+    const user = userEvent.setup();
+    mockedSendAssistantMessage.mockResolvedValueOnce({
+      content: "I prepared the quiz form.",
+      conversationId: 1,
+      navigateTo: {
+        path: "/instructor/quizzes/create",
+        state: { aiQuizDraft: { title: "Midterm" } },
+      },
+      interpretedAction: {
+        action: "Create Quiz",
+        course: "Capstone Project",
+        affectedStudents: "Course-wide",
+        primaryLink: {
+          label: "Open quiz creation form",
+          href: "/instructor/quizzes/create",
+        },
+      },
+    });
+
+    renderWithInstitution(<ChatWindow />);
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "create a quiz",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(await screen.findByText("I prepared the quiz form.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Open quiz creation form/i }),
+    ).toBeInTheDocument();
+  });
+
   // Verifies: Keeps chat usable while active course context is loading.
   it("keeps chat usable while active course context is loading", async () => {
     const user = userEvent.setup();
