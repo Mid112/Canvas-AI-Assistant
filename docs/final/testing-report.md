@@ -14,14 +14,14 @@
 
 ## Automated testing results (final)
 
-| Test Suite | Tests Run | Passed | Failed | Coverage |
-| --- | ---: | ---: | ---: | ---: |
-| Backend – Pytest | 1,298 | 1,297 | 0 | 78.58% |
-| Frontend – Vitest | 1,075 | 1,075 | 0 | 86.06% |
-| End-to-End – Playwright | 16 | 16 | 0 | N/A |
-| Fuzz – Hypothesis | 9 | 9 | 0 | N/A |
+| Test Suite | Tests Run | Passed | Skipped | Failed | Coverage |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Backend – Pytest | 1,298 | 1,297 | 1 | 0 | 78.58% |
+| Frontend – Vitest | 1,075 | 1,075 | 0 | 0 | 86.06% |
+| End-to-End – Playwright | 16 | 16 | 0 | 0 | N/A |
+| Fuzz – Hypothesis | 9 | 9 | 0 | 0 | N/A |
 
-Notes: backend reported 1,297 passed + 1 skipped (9 fuzz tests deselected from the default suite). Frontend coverage is Vitest/v8 line coverage; backend coverage is pytest-cov total line coverage (minimum gate 68%).
+The default backend test run reported 1,297 passed and 1 skipped; the 9 Hypothesis fuzz tests are excluded from the default suite and were executed separately, with all 9 passing. Frontend coverage is Vitest/v8 line coverage; backend coverage is pytest-cov total line coverage (minimum gate 68%).
 
 ## How to re-run
 
