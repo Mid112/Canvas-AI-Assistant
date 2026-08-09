@@ -111,10 +111,28 @@ _ANNOUNCEMENT_REQUEST_RE = re.compile(
     r"\b(announcement|announce|course[- ]wide|post to the class|post for the class)\b",
     re.IGNORECASE,
 )
+_NEGATED_ANNOUNCEMENT_RE = re.compile(
+    r"\b(?:don't|do not|not|never|without)\b[^,.!?]{0,80}"
+    r"\b(?:announcement|announce|course[- ]wide)\b",
+    re.IGNORECASE,
+)
+_PRIVATE_MESSAGE_REQUEST_RE = re.compile(
+    r"\b(?:private(?:ly)?|just message|send .*\bmessage|message\s+\w+)\b",
+    re.IGNORECASE,
+)
 
 
 def _explicit_announcement_request(message: str) -> bool:
     """Recognize explicit public-audience language as a server-side guard."""
+    if _NEGATED_ANNOUNCEMENT_RE.search(message):
+        return False
+    if _PRIVATE_MESSAGE_REQUEST_RE.search(message) and not re.search(
+        r"\b(?:make|post|send|publish|announce)\b[^.!?]{0,40}"
+        r"\b(?:announcement|announce|course[- ]wide)\b",
+        message,
+        re.IGNORECASE,
+    ):
+        return False
     return bool(_ANNOUNCEMENT_REQUEST_RE.search(message))
 
 
@@ -144,6 +162,33 @@ def _force_announcement_delivery(action: Any) -> Any:
         ):
             cleaned.pop(key, None)
         return action.model_copy(update={"proposed_action": cleaned})
+    return action
+
+
+def _rebase_action_to_course(action: Any, local_course_id: int) -> Any:
+    """Move a pending proposal to a verified course without carrying IDs
+    that were resolved in the old course across the boundary.
+
+    Human-readable references can be resolved again in the new course, but
+    assignment/student/recipient IDs and opaque recipient handles are
+    course-scoped and must never survive a course correction.
+    """
+    stale_course_scoped_keys = {
+        "assignment_id",
+        "student_id",
+        "recipient_canvas_user_ids",
+        "recipient_handle",
+    }
+    if action.action == "intent_preview":
+        proposed = dict(action.proposed_action)
+        proposed["local_course_id"] = local_course_id
+        for key in stale_course_scoped_keys:
+            proposed.pop(key, None)
+        return action.model_copy(update={"proposed_action": proposed})
+    if hasattr(action, "local_course_id"):
+        updates: dict[str, Any] = {"local_course_id": local_course_id}
+        updates.update({key: None for key in stale_course_scoped_keys if hasattr(action, key)})
+        return action.model_copy(update=updates)
     return action
 
 
@@ -200,11 +245,19 @@ MAX_TURN_STEPS = 15
 # decision within the SAME turn (see their own docstrings —
 # resolve_missing_submissions produces a recipient_handle for send_message;
 # find_assignment_by_submission_rate produces an assignment_id for
-# update_assignment) — these always continue the step loop, asking the
-# model what to do next, rather than terminating the turn like an ordinary
-# read. Adding a future resolver here is the only wiring a new one needs
-# to get automatic multi-step chaining — no loop/dispatch changes required.
-_CHAINABLE_READ_ACTIONS = frozenset({"resolve_missing_submissions", "find_assignment_by_submission_rate"})
+# update_assignment; find_assignments_by_submission_status can produce an
+# aggregate recipient_handle for a follow-up message. These always continue
+# the step loop, asking the model what to do next, rather than terminating
+# the turn like an ordinary read. Adding a future resolver here is the only
+# wiring a new one needs to get automatic multi-step chaining — no loop/
+# dispatch changes required.
+_CHAINABLE_READ_ACTIONS = frozenset(
+    {
+        "resolve_missing_submissions",
+        "find_assignment_by_submission_rate",
+        "find_assignments_by_submission_status",
+    }
+)
 # Failure paths (parse errors, timeouts, HTTP errors) log the full raw
 # diagnostic — for a "thinking" model that can mean the entire verbose
 # <think> block, hundreds to thousands of tokens — as the assistant message
@@ -659,6 +712,35 @@ def _resolve_course_context_statement(
         match = pattern.match(user_message)
         if match:
             return _match_course_name(course_names, match.group("name"))
+    return None
+
+
+_PENDING_COURSE_CORRECTION_PATTERNS = (
+    re.compile(
+        r"\b(?:i\s+)?(?:meant|use|switch(?:\s+to)?|change\s+(?:the\s+)?(?:course|class)\s+to|set\s+(?:the\s+)?(?:course|class)\s+to)\s+"
+        r"(?P<name>[^,.!?]+)",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bactually\s+(?P<name>[^,.!?]+)", re.IGNORECASE),
+)
+
+
+def _resolve_pending_course_correction(
+    course_names: list[CanvasCourseName], user_message: str
+) -> CanvasCourseName | None:
+    """Resolve only explicit course-correction wording on a pending edit.
+
+    Matching the entire message would incorrectly switch courses when a
+    course code happens to appear in an assignment title or message body.
+    Restricting this fast path to correction phrases keeps the pending
+    workflow safe without adding another LLM call.
+    """
+    for pattern in _PENDING_COURSE_CORRECTION_PATTERNS:
+        match = pattern.search(user_message)
+        if match:
+            resolved = _match_course_name(course_names, match.group("name"))
+            if resolved is not None:
+                return resolved
     return None
 
 
@@ -1496,6 +1578,16 @@ _ACTUAL_SUBMISSION_STATUSES = frozenset(
 _ASSIGNMENT_STATUS_MAX_RESULTS = 25
 
 
+def _format_assignment_status_match(entry: dict[str, Any]) -> str:
+    """Format the count that matched the requested filter.
+
+    ``submitted_count`` is useful diagnostic data, but it is not the answer
+    for missing/late queries. Keeping this formatting in one helper prevents
+    future response changes from accidentally selecting the broader count.
+    """
+    return f"{entry['assignment_name']} ({entry['matching_count']} matching)"
+
+
 async def _run_find_assignments_by_submission_status_chain(
     db: AsyncSession,
     user: User,
@@ -1528,6 +1620,7 @@ async def _run_find_assignments_by_submission_status_chain(
     ]
     active_names = await active_roster_names(course, user, db)
     matches: list[dict[str, Any]] = []
+    aggregate_recipients: dict[int, dict[str, Any]] = {}
 
     for assignment in published:
         assignment_id = int(assignment["id"])
@@ -1552,28 +1645,56 @@ async def _run_find_assignments_by_submission_status_chain(
         }
         submitted_count = len(submitted_ids)
 
+        if action.status == "any_submissions":
+            matching_recipients = {
+                int(submission.user_id): {
+                    "user_id": int(submission.user_id),
+                    "name": active_names[int(submission.user_id)],
+                }
+                for submission in submissions
+                if submission.user_id in active_names
+                and submission.status in _ACTUAL_SUBMISSION_STATUSES
+            }
+        elif action.status == "no_submissions":
+            matching_recipients = {
+                student_id: {"user_id": student_id, "name": name}
+                for student_id, name in active_names.items()
+                if student_id not in submitted_ids
+            }
+        else:
+            matching_statuses = (
+                {SubmissionStatus.missing, SubmissionStatus.unsubmitted}
+                if action.status == "missing_submissions"
+                else {SubmissionStatus.late}
+            )
+            matching_recipients = {
+                int(submission.user_id): {
+                    "user_id": int(submission.user_id),
+                    "name": active_names[int(submission.user_id)],
+                }
+                for submission in submissions
+                if submission.user_id in active_names
+                and submission.status in matching_statuses
+            }
+
         if action.status == "any_submissions" and submitted_count == 0:
             continue
         if action.status == "no_submissions" and submitted_count != 0:
             continue
 
         if action.status in {"missing_submissions", "late_submissions"}:
-            matching_statuses = (
-                {SubmissionStatus.missing, SubmissionStatus.unsubmitted}
-                if action.status == "missing_submissions"
-                else {SubmissionStatus.late}
-            )
-            matching_count = sum(
-                1
-                for submission in submissions
-                if submission.user_id in active_names
-                and submission.status in matching_statuses
-            )
+            matching_count = len(matching_recipients)
             if matching_count == 0:
                 continue
             count = matching_count
         else:
-            count = submitted_count
+            # For any/no-submission filters, report the number of students
+            # matching the requested assignment-level condition as well. In
+            # particular, a no-submissions assignment can have zero
+            # submitted students but many matching recipients.
+            count = len(matching_recipients)
+
+        aggregate_recipients.update(matching_recipients)
 
         matches.append(
             {
@@ -1594,15 +1715,31 @@ async def _run_find_assignments_by_submission_status_chain(
         "late_submissions": "late submissions",
     }
     label = labels[action.status]
+    recipient_handle = None
+    if aggregate_recipients:
+        resolved_set = await create_resolved_set(
+            db,
+            conversation,
+            kind=f"assignment_status_{action.status}",
+            query={
+                "local_course_id": course.id,
+                "status": action.status,
+                "assignment_ids": [entry["assignment_id"] for entry in matches],
+            },
+            recipients=list(aggregate_recipients.values()),
+        )
+        recipient_handle = resolved_set.handle
     if visible_matches:
         summary = (
             f"{total_matches} published assignment(s) in {course.name} have {label}: "
             + "; ".join(
-                f"{entry['assignment_name']} ({entry['submitted_count']} submitted)"
+                _format_assignment_status_match(entry)
                 for entry in visible_matches
             )
             + "."
         )
+        if recipient_handle:
+            summary += " I can message these matching students if you want."
         if total_matches > _ASSIGNMENT_STATUS_MAX_RESULTS:
             summary += (
                 f" Showing the first {_ASSIGNMENT_STATUS_MAX_RESULTS}; "
@@ -1617,6 +1754,7 @@ async def _run_find_assignments_by_submission_status_chain(
         "status": action.status,
         "assignments": visible_matches,
         "count": total_matches,
+        "recipient_handle": recipient_handle,
         "summary": summary,
     }
 def _build_resolve_missing_summary(
@@ -2963,14 +3101,24 @@ async def _sync_workflow_for_preview(
     action_name = str(proposed_action.get("action") or "")
     resources = affected_resources or []
 
-    if conversation.course_id is None:
-        local_course_id = proposed_action.get("local_course_id")
-        if local_course_id is not None:
-            owned_course = await db.scalar(
-                select(Course.id).where(Course.id == local_course_id, Course.instructor_id == user.id)
+    # The validated proposal is the execution source of truth. Resolve its
+    # course against the instructor's owned rows and use that same value for
+    # the workflow, rather than copying a possibly stale conversation scope.
+    # This keeps confirmation/audit routing aligned with the preview summary
+    # after an explicit course correction.
+    workflow_course_id = conversation.course_id
+    proposed_local_course_id = proposed_action.get("local_course_id")
+    if proposed_local_course_id is not None:
+        owned_course = await db.scalar(
+            select(Course.id).where(
+                Course.id == proposed_local_course_id,
+                Course.instructor_id == user.id,
             )
-            if owned_course is not None:
-                conversation.course_id = local_course_id
+        )
+        if owned_course is not None:
+            workflow_course_id = owned_course
+            if conversation.course_id is None:
+                conversation.course_id = owned_course
 
     existing = None
     if pending_message_id:
@@ -2992,7 +3140,7 @@ async def _sync_workflow_for_preview(
         existing.user_prompt = user_prompt
         existing.proposed_action = proposed_action
         existing.affected_resources = resources
-        existing.course_id = conversation.course_id
+        existing.course_id = workflow_course_id
         existing.status = "pending"
         existing.error_detail = None
         existing.executed_at = None
@@ -3003,7 +3151,7 @@ async def _sync_workflow_for_preview(
         Workflow(
             conversation_id=conversation.id,
             user_id=user.id,
-            course_id=conversation.course_id,
+            course_id=workflow_course_id,
             source_user_message_id=source_user_message_id,
             preview_message_id=preview_message_id,
             action_name=action_name,
@@ -3650,6 +3798,15 @@ propose send_message with recipient_handle set to that handle. Never
 guess how many people are in the set or build recipient_directives from
 its "sample" names.
 
+MESSAGING STUDENTS ACROSS ASSIGNMENTS: if the user asks to message students
+matching an assignment-level filter (for example, "message the students on
+assignments with no submissions"), use the result's recipient_handle from
+find_assignments_by_submission_status when one is returned. That handle is a
+server-owned aggregate set across the matching assignments; copy it exactly
+into send_message and never reconstruct recipients from assignment IDs or
+sample names. The normal send_message preview and confirmation are still
+required.
+
 BROADCASTING PRIVATELY TO THE WHOLE CLASS: if the user wants a private
 message sent to every student — not a public announcement — set
 broadcast_to_all_students: true and leave recipient_canvas_user_ids /
@@ -3884,6 +4041,33 @@ async def handle_chat_message(
             conversation = target
             history = await _get_recent_messages(db, conversation.id)
 
+    # A preview modification stays in the same conversation so the pending
+    # workflow/message IDs remain valid. That does not mean its course is
+    # immutable: an explicit course name in the correction must move the
+    # conversation and the pending proposal together. Resolve the name from
+    # the owned course index (never from a model/client-supplied ID), clear
+    # course-scoped memory, and refresh the compact course context envelope.
+    # Otherwise the summary can mention course B while execution still uses
+    # course A's local_course_id.
+    pending_course_switch = None
+    if (
+        pending_message_id is not None
+        and local_course_id is None
+    ):
+        candidate_course = _resolve_pending_course_correction(course_names, message)
+        if (
+            candidate_course is not None
+            and candidate_course.local_course_id is not None
+            and candidate_course.local_course_id != conversation.course_id
+        ):
+            pending_course_switch = candidate_course
+            clear_course_scoped_field_memory(conversation)
+            conversation.course_id = candidate_course.local_course_id
+            conversation.course_name = _course_display_name(candidate_course)
+            await _sync_course_context_envelope(
+                db, conversation, candidate_course.local_course_id
+            )
+
     stored_preview = None
     current_proposed_action = None
     if pending_message_id is not None:
@@ -3891,7 +4075,16 @@ async def handle_chat_message(
             db, conversation.id, pending_message_id
         )
         if stored_preview:
-            current_proposed_action = stored_preview.get("proposed_action")
+            current_proposed_action = dict(stored_preview.get("proposed_action") or {})
+            if pending_course_switch is not None and conversation.course_id is not None:
+                current_proposed_action["local_course_id"] = conversation.course_id
+                for key in (
+                    "assignment_id",
+                    "student_id",
+                    "recipient_canvas_user_ids",
+                    "recipient_handle",
+                ):
+                    current_proposed_action.pop(key, None)
 
     system_prompt = build_system_prompt(has_canvas_token=bool(user.canvas_connections))
     field_memory_block = format_field_memory_for_prompt(conversation.field_memory)
@@ -4200,6 +4393,8 @@ async def handle_chat_message(
                         )
                     )
                 )
+            if pending_course_switch is not None and conversation.course_id is not None:
+                action = _rebase_action_to_course(action, conversation.course_id)
             if _explicit_announcement_request(message):
                 action = _force_announcement_delivery(action)
             needs_unwrap = False

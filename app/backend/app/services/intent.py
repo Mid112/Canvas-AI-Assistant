@@ -186,7 +186,16 @@ def normalize_semantic_intent(
         if action_name == "find_assignments_by_submission_status":
             submission_status = intent.submission_status
             if intent.intent == "find_missing_submissions" and submission_status is None:
-                submission_status = "missing_submissions"
+                # ``status`` is the legacy semantic field used by the
+                # assignment-level missing-submissions action. Preserve it
+                # when the model omits the newer, more explicit field so a
+                # request for late work cannot silently become a missing-work
+                # query.
+                submission_status = (
+                    "late_submissions"
+                    if intent.status == "late"
+                    else "missing_submissions"
+                )
             if submission_status is None:
                 return {
                     "action": "clarify",
