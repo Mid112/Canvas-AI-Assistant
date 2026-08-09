@@ -49,11 +49,18 @@ export function InstructorMessagesPage() {
   const canvasUrl = useCanvasConnectionUrl();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
+  const initialAiDraft = (location.state as AiMessageDraftLocationState | null)
+    ?.aiMessageDraft;
+  // Search-param updates do not preserve React Router location state. Keep
+  // the handoff in local state so writing ?tab=compose cannot silently fall
+  // back to the active course; clear it explicitly when leaving Compose.
+  const [handoffDraft, setHandoffDraft] = useState<
+    AiMessageDraftLocationState["aiMessageDraft"] | null
+  >(initialAiDraft ?? null);
   const [fetchOptions, setFetchOptions] =
     useState<FetchMessageDraftOptions | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const aiDraft = (location.state as AiMessageDraftLocationState | null)
-    ?.aiMessageDraft;
+  const aiDraft = handoffDraft;
   // Seed compose from an AI handoff on first paint only. The URL-sync effect
   // below must not keep re-forcing compose while location.state.aiMessageDraft
   // remains — otherwise Cancel / Inbox / Sent snap back to compose (#1510).
@@ -127,6 +134,9 @@ export function InstructorMessagesPage() {
 
   const handleTabChange = (value: string) => {
     const next = parseMessagesTab(value);
+    if (next !== "compose") {
+      setHandoffDraft(null);
+    }
     setTab(next);
     // Preserve location.state: setSearchParams navigates without state by
     // default and would drop aiMessageDraft (losing the draft's courseId).

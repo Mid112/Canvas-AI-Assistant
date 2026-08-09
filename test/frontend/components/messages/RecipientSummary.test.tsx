@@ -22,7 +22,7 @@ describe("RecipientSummary", () => {
 
     expect(screen.getByText("Select Students")).toBeInTheDocument();
     expect(screen.getByText("John Smith")).toBeInTheDocument();
-    expect(screen.getByText("2 students selected")).toBeInTheDocument();
+    expect(screen.getByText("2 students selected — private message")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Clear all" })).toBeInTheDocument();
   });
 
@@ -37,7 +37,9 @@ describe("RecipientSummary", () => {
     );
 
     expect(screen.getByText(/No recipients selected/i)).toBeInTheDocument();
-    expect(screen.getByText("Course announcement selected")).toBeInTheDocument();
+    expect(
+      screen.getByText("No students selected — this will be a public course announcement."),
+    ).toBeInTheDocument();
   });
 
   it("unchecking a recipient calls onToggle and updates the selected count", async () => {
@@ -70,7 +72,7 @@ describe("RecipientSummary", () => {
       />,
     );
 
-    expect(screen.getByText("1 student selected")).toBeInTheDocument();
+    expect(screen.getByText("1 student selected — private message")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Select all" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Remove Sarah Lee" }));

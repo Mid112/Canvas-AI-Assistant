@@ -179,9 +179,6 @@ describe("InstructorMessagesPage", () => {
     expect(
       screen.getByRole("tab", { name: "Inbox & replies" }),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("tab", { name: "Announcements" }),
-    ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Sent" })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Compose message" }),
@@ -219,9 +216,9 @@ describe("InstructorMessagesPage", () => {
     expect(await screen.findByLabelText("Subject")).toBeInTheDocument();
   });
 
-  // Verifies: Announcements tab seeds empty-recipients announcement compose.
-  it("opens the announcements tab with course announcement compose", async () => {
-    const user = userEvent.setup();
+  // Legacy bookmarks should redirect to the unified composer, which defaults
+  // to a public announcement when no students are selected.
+  it("redirects the legacy announcements URL to public announcement compose", async () => {
     mockUseAuth.mockReturnValue({
       accessToken: "token",
       user: {
@@ -238,11 +235,13 @@ describe("InstructorMessagesPage", () => {
       refreshUser: vi.fn(),
     });
 
-    renderMessagesPage();
+    renderWithRouter(<InstructorMessagesPage />, {
+      routerProps: { initialEntries: ["/?tab=announcements"] },
+    });
 
-    await user.click(screen.getByRole("tab", { name: "Announcements" }));
+    expect(screen.queryByRole("tab", { name: "Announcements" })).not.toBeInTheDocument();
     expect(
-      await screen.findByRole("heading", { name: "Course announcement" }),
+      await screen.findByText("PUBLIC COURSE ANNOUNCEMENT"),
     ).toBeInTheDocument();
     expect(await screen.findByLabelText("Subject")).toBeInTheDocument();
   });
