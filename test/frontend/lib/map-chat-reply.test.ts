@@ -74,8 +74,35 @@ describe("mapChatReply", () => {
       ),
     ).toEqual({
       content:
-        "I have title: Midterm. Which assignment should I update?",
+        'I have the title "Midterm". Which assignment should I update?',
       acknowledgedFields: [{ label: "Title", value: "Midterm" }],
+    });
+  });
+
+  it("uses readable assignment labels in clarification acknowledgements", () => {
+    expect(
+      mapChatReply(
+        {
+          action: "clarify",
+          question: "What description should I use?",
+          partial_plan: {
+            course_name: "Capstone Project",
+            title: "Research Proposal",
+            due_date: "April 15",
+            points_possible: 50,
+          },
+        },
+        false,
+      ),
+    ).toMatchObject({
+      content:
+        'I have the Capstone Project course, the title "Research Proposal", the due date April 15, and 50 possible points. What description should I use?',
+      acknowledgedFields: [
+        { label: "Course", value: "Capstone Project" },
+        { label: "Title", value: "Research Proposal" },
+        { label: "Due date", value: "April 15" },
+        { label: "Possible points", value: "50" },
+      ],
     });
   });
 
@@ -99,13 +126,13 @@ describe("mapChatReply", () => {
       ),
     ).toEqual({
       acknowledgedFields: [
-        { label: "Course Name", value: "COSC 777" },
-        { label: "Assignment Reference", value: "leetcode" },
-        { label: "New Grade", value: "110" },
+        { label: "Course", value: "COSC 777" },
+        { label: "Assignment", value: "leetcode" },
+        { label: "Proposed grade", value: "110" },
         { label: "Reason", value: "Bonus adjustment" },
       ],
       content:
-        "I have course name: COSC 777, assignment reference: leetcode, new grade: 110, reason: Bonus adjustment. Which assignment should I update?",
+        'I have the COSC 777 course, the assignment "leetcode", a proposed grade of 110, and the reason "Bonus adjustment". Which assignment should I update?',
       interpretedAction: {
         action: "Update Grade",
         course: "COSC 777",
@@ -137,11 +164,11 @@ describe("mapChatReply", () => {
       ),
     ).toEqual({
       acknowledgedFields: [
-        { label: "Student Reference", value: "Coin" },
+        { label: "Student", value: "Coin" },
         { label: "Reason", value: "Please improve the explanation." },
       ],
       content:
-        "I have student reference: Coin, reason: Please improve the explanation. Do you want to add assignment feedback on a submission, or send a private message to the student?",
+        'I have the student "Coin" and the reason "Please improve the explanation." Do you want to add assignment feedback on a submission, or send a private message to the student?',
     });
   });
 
