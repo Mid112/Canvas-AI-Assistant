@@ -469,10 +469,13 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
 
   const appendAssistantMessage = useCallback(
     (response: AssistantMessageResult) => {
-      // Navigate to dedicated form pages instead of showing preview cards.
-      // Keep interpretedAction on the transcript so reopening chat history
-      // still offers "Open quiz creation form".
-      if (response.navigateTo) {
+      // Quiz creation stays in chat so the instructor can review the draft
+      // and explicitly open the dedicated form. Other form handoffs retain
+      // their existing automatic navigation behavior.
+      if (
+        response.navigateTo &&
+        response.interpretedAction?.action !== "Create Quiz"
+      ) {
         const briefMsg: ChatMessage = {
           id: createMessageId(),
           role: "assistant",

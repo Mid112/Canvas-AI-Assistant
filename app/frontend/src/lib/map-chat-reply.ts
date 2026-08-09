@@ -45,22 +45,30 @@ const INTERNAL_FIELDS = new Set([
   "preview_id",
 ]);
 
+const CLARIFICATION_FIELD_LABELS: Record<string, string> = {
+  course_name: "course",
+  assignment_reference: "assignment",
+  student_reference: "student",
+  new_grade: "proposed grade",
+  reason: "reason",
+  title: "assignment title",
+  description: "description",
+  due_date: "due date",
+  due_at: "due date",
+  points_possible: "possible points",
+  subject: "message subject",
+  body: "message body",
+  feedback: "feedback",
+  recipient_directives: "recipients",
+};
+
 function formatFieldLabel(field: string): string {
-  const labels: Record<string, string> = {
-    course_name: "Course",
-    assignment_reference: "Assignment",
-    student_reference: "Student",
-    new_grade: "Proposed grade",
-    points_possible: "Possible points",
-    due_date: "Due date",
-    due_at: "Due date",
-    recipient_directives: "Recipients",
-  };
   const fallback = field
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
-  return labels[field] ?? fallback;
+  const label = CLARIFICATION_FIELD_LABELS[field] ?? fallback;
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function formatAcknowledgedField(field: string, value: string): string {
@@ -105,6 +113,34 @@ function joinAcknowledgements(
   if (phrases.length <= 1) return phrases[0] ?? "";
   if (phrases.length === 2) return `${phrases[0]} and ${phrases[1]}`;
   return `${phrases.slice(0, -1).join(", ")}, and ${phrases.at(-1)}`;
+}
+
+function formatClarificationQuestion(question: string): string {
+  const internalFieldPattern = new RegExp(
+    `\\b(?:${Object.keys(CLARIFICATION_FIELD_LABELS).join("|")})\\b`,
+    "g",
+  );
+  const normalizedQuestion = question.replace(
+    internalFieldPattern,
+    (field) => CLARIFICATION_FIELD_LABELS[field] ?? field,
+  );
+  const fields = question
+    .replace(/[.!?]+$/, "")
+    .split(",")
+    .map((field) => field.trim())
+    .filter((field) => CLARIFICATION_FIELD_LABELS[field]);
+  const rawFieldCount = question.replace(/[.!?]+$/, "").split(",").length;
+  if (fields.length >= 1 && fields.length === rawFieldCount) {
+    const labels = fields.map((field) => CLARIFICATION_FIELD_LABELS[field]);
+    const requested =
+      labels.length === 1
+        ? labels[0]
+        : labels.length === 2
+          ? `${labels[0]} and ${labels[1]}`
+          : `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
+    return `I still need the ${requested}.`;
+  }
+  return normalizedQuestion;
 }
 
 function formatSafeValue(value: unknown): string | undefined {
@@ -334,6 +370,7 @@ function buildGradeHandoffAction(
   }
 
   const studentIds = readNumberArray(handoff.student_ids);
+  const feedback = readString(handoff.reason) ?? readString(handoff.feedback);
   return {
     action: "Update Grade",
     course: readString(handoff.course_name) ?? "Active course",
@@ -349,7 +386,7 @@ function buildGradeHandoffAction(
         assignmentId,
         studentIds,
         grade: readString(handoff.new_grade),
-        reason: readString(handoff.reason),
+        reason: feedback,
       }),
     },
   };
@@ -383,6 +420,8 @@ function buildGradeClarifyHandoffAction(
   const studentIds =
     readNumberArray(partialPlan.student_ids) ??
     (studentId !== undefined ? [studentId] : undefined);
+  const feedback =
+    readString(partialPlan.reason) ?? readString(partialPlan.feedback);
 
   return {
     action: "Update Grade",
@@ -396,7 +435,7 @@ function buildGradeClarifyHandoffAction(
         assignmentId: readNumber(partialPlan.assignment_id),
         studentIds,
         grade: readString(partialPlan.new_grade),
-        reason: readString(partialPlan.reason),
+        reason: feedback,
       }),
     },
   };
@@ -966,9 +1005,10 @@ function mapReplyBody(
       acknowledgedFields.length > 0
         ? `I have ${acknowledgedText}${/[.!?]$/.test(acknowledgedText) ? " " : ". "}`
         : "";
-    const question =
+    const question = formatClarificationQuestion(
       readString(reply.question) ??
-      "Could you share a bit more detail so I can help?";
+        "Could you share a bit more detail so I can help?",
+    );
     const interpretedAction = buildGradeClarifyHandoffAction(
       reply.partial_plan as Record<string, unknown> | undefined,
     );
