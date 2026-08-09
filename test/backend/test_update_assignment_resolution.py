@@ -34,7 +34,10 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+            # Unique per registration: Canvas tokens are globally unique now,
+            # so a shared literal makes every test after the first get a 409
+            # and never get a connection at all.
+            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": CANVAS_URL},
             headers=headers,
         )
 
@@ -316,3 +319,77 @@ def test_update_assignment_hour_change_normalizes_and_matches_preview(client):
     assert confirm_resp.json()["is_error"] is False
     mock_update.assert_awaited_once()
     assert mock_update.await_args.args[1] == 222  # the resolved assignment_id, not a guess
+
+
+# Verifies the reference pre-pass (_prescan_assignment_reference).
+#
+# Every other assignment resolution in chat.py runs *after* the model commits
+# to an action, so when the model hedges instead — "Which assignment do you
+# want the submissions for?" in reply to a message that already named one —
+# the resolver is never reached and the instructor is asked to repeat
+# themselves. This resolves the title from locally synced rows first and hands
+# it to the model as a confirmed fact, with no extra LLM or Canvas call.
+def test_prescan_resolves_an_assignment_named_in_the_message(client):
+    headers, local_course_id = _register_with_canvas(client)
+    _seed_local_assignment(local_course_id, 987, title="User Testing")
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "OK."}'
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        client.post(
+            "/api/v1/chat/",
+            json={
+                "message": "show me submissions for user testing",
+                "conversation_id": None,
+            },
+            headers=headers,
+        )
+
+    system_prompt = mock_adapter.generate.call_args_list[-1].args[0]
+    assert "RESOLVED REFERENCES" in system_prompt
+    assert "User Testing" in system_prompt
+    assert '"assignment_id": 987' in system_prompt
+
+
+# Verifies the pre-pass stays quiet when the message names nothing, so an
+# ordinary turn is not handed a reference the instructor never made.
+def test_prescan_is_silent_when_no_assignment_is_named(client):
+    headers, local_course_id = _register_with_canvas(client)
+    _seed_local_assignment(local_course_id, 654, title="User Testing")
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "OK."}'
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        client.post(
+            "/api/v1/chat/",
+            json={"message": "how are things going?", "conversation_id": None},
+            headers=headers,
+        )
+
+    system_prompt = mock_adapter.generate.call_args_list[-1].args[0]
+    assert "RESOLVED REFERENCES" not in system_prompt
+
+
+# Verifies two titles that both match stay ambiguous rather than the pre-pass
+# picking one — that judgement belongs to _resolve_assignment_reference, which
+# can weigh "the latest one" in a way substring matching cannot.
+def test_prescan_defers_when_two_titles_match_equally(client):
+    headers, local_course_id = _register_with_canvas(client)
+    # Equal normalized length, so neither is "more specific" than the other.
+    _seed_local_assignment(local_course_id, 111, title="Lab Report A")
+    _seed_local_assignment(local_course_id, 222, title="Lab Report B")
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "OK."}'
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        client.post(
+            "/api/v1/chat/",
+            json={
+                "message": "submissions for lab report a and lab report b",
+                "conversation_id": None,
+            },
+            headers=headers,
+        )
+
+    system_prompt = mock_adapter.generate.call_args_list[-1].args[0]
+    assert "RESOLVED REFERENCES" not in system_prompt

@@ -50,7 +50,7 @@ def connect_canvas_and_sync_course(client: TestClient, headers: dict) -> int:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         patch_resp = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": CANVAS_URL},
             headers=headers,
         )
     assert patch_resp.status_code == 200, patch_resp.json()

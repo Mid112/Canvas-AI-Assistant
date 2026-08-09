@@ -978,6 +978,78 @@ choose among multiple assignments solely because a pronoun was used."""
 
 ASSIGNMENT_RESOLVER_TIMEOUT_SECONDS = 30.0
 
+# Same rationale as _COURSE_NAME_FUZZY_MATCH_MIN_LENGTH: a title normalizing to
+# fewer characters than this ("HW", "Q1") appears inside ordinary prose too
+# easily to be treated as a deliberate reference.
+_PRESCAN_MIN_TITLE_LENGTH = 4
+
+
+async def _prescan_assignment_reference(
+    db: AsyncSession, conversation: Conversation, message: str
+) -> dict | None:
+    """Match an assignment named in the message against this course's already
+    synced titles, *before* the main model sees the turn.
+
+    Why this runs first: every other assignment resolution in this module is
+    downstream of the model committing to an action. When the model hedges
+    instead -- answering "Which assignment do you want the submissions for?" to
+    a message that already named one -- _resolve_assignment_reference is never
+    reached, and the instructor is asked to repeat themselves. Handing the
+    model the resolved title up front removes the thing it was hedging about.
+
+    Deliberately deterministic and local: it reads titles already synced into
+    the assignments table, so it costs no LLM call and no Canvas round-trip,
+    and it stays silent unless exactly one title is a confident match. Anything
+    ambiguous falls through to the existing LLM resolver, which is better at
+    "the latest one" than substring matching could be.
+    """
+    if conversation.course_id is None:
+        return None
+    normalized_message = _normalize_course_text(message)
+    if not normalized_message:
+        return None
+
+    rows = (
+        await db.execute(
+            select(Assignment.canvas_assignment_id, Assignment.title).where(
+                Assignment.course_id == conversation.course_id,
+                Assignment.is_active.is_(True),
+            )
+        )
+    ).all()
+
+    matches: list[tuple[int, str, str]] = []
+    for canvas_assignment_id, title in rows:
+        normalized_title = _normalize_course_text(title or "")
+        if len(normalized_title) < _PRESCAN_MIN_TITLE_LENGTH:
+            continue
+        if normalized_title in normalized_message:
+            matches.append((len(normalized_title), canvas_assignment_id, title))
+
+    if not matches:
+        return None
+    # Longest title wins: "user testing 2" contains "user testing", and the
+    # more specific one is what the instructor typed. A tie between two
+    # different assignments is genuine ambiguity -- stay out of it.
+    matches.sort(reverse=True)
+    if len(matches) > 1 and matches[0][0] == matches[1][0]:
+        return None
+
+    _, canvas_assignment_id, title = matches[0]
+    resolved_id = _coerce_int(canvas_assignment_id)
+    return None if resolved_id is None else {"assignment_id": resolved_id, "assignment_title": title}
+
+
+def _format_prescan_for_prompt(prescan: dict | None) -> str:
+    if not prescan:
+        return ""
+    return (
+        "RESOLVED REFERENCES (already matched server-side against this "
+        "course's real Canvas data — treat these as confirmed, use them "
+        "directly, and do NOT ask the user to name them again):\n"
+        f"{json.dumps(prescan, default=str)}"
+    )
+
 
 async def _resolve_assignment_reference(
     assignments: list[dict], reference: str | None, user_message: str, adapter: LLMAdapter,
@@ -3962,6 +4034,15 @@ async def handle_chat_message(
     field_memory_block = format_field_memory_for_prompt(conversation.field_memory)
     if field_memory_block:
         system_prompt = f"{system_prompt}\n\n{field_memory_block}"
+    # Resolve references the message already names before the model answers, so
+    # it cannot ask for something it was just told. Skipped on a modify turn,
+    # which is revising an already-resolved proposed action.
+    if pending_message_id is None:
+        prescan_block = _format_prescan_for_prompt(
+            await _prescan_assignment_reference(db, conversation, message)
+        )
+        if prescan_block:
+            system_prompt = f"{system_prompt}\n\n{prescan_block}"
     first_llm_message = _build_llm_message(
         message,
         course_names,

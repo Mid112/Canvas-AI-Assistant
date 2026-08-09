@@ -562,10 +562,17 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
         const response = await sendAssistantMessage(accessToken, userText, {
           context: assistantContext,
           conversationId,
-          // Seed only a brand-new conversation from the visible course
-          // selector. Existing conversations remain bound to their own
-          // server-validated course and cannot be overridden implicitly.
-          localCourseId: conversationId === undefined ? activeCourse?.localId : undefined,
+          // Deliberately not sending the ambient active course. local_course_id
+          // is the "explicit course switch" channel and outranks a course named
+          // in the message, so echoing the selector here re-broke #1509: the
+          // first turn of every new chat silently overrode "show submissions
+          // for baking 101" with whatever course happened to be selected, and
+          // skipped the pre-resolver that exists to arbitrate exactly that.
+          //
+          // Nothing is lost. A course-less conversation is seeded server-side
+          // from the persisted active-course preference, and picking a course
+          // in the dropdown already binds it out-of-band through
+          // syncAssistantCourseContext (/chat/course-context).
           pendingMessageId: pendingMessageIdToSend,
           deferredRequestId: deferredRequestIdRef.current ?? undefined,
           modelSettings: modelSettings ?? undefined,
@@ -640,7 +647,6 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
     },
     [
       accessToken,
-      activeCourse?.localId,
       activePendingMessageIds,
       appendAssistantMessage,
       assistantContext,

@@ -110,7 +110,7 @@ def _register_with_canvas(client) -> dict:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": CANVAS_URL},
             headers=headers,
         )
     return headers
@@ -637,7 +637,7 @@ def test_list_assignments_local_url_alias(client, monkeypatch):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": local_canvas},
+            json={"canvas_token": f"test-token-{uuid.uuid4()}", "canvas_url": local_canvas},
             headers=headers,
         )
 
