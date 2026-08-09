@@ -20,7 +20,6 @@ Start here: **[final/README.md](./final/README.md)**
 - [Deployment package](./final/deployment/README.md)
 - [Installation](./final/deployment/installation-guide.md)
 - [Deployment guide](./final/deployment/deployment-guide.md)
-- [Validation checklist](./final/deployment/validation-checklist.md)
 
 ### Validation
 - [Reliability & error handling](./final/validation/reliability-error-handling.md)
@@ -28,14 +27,10 @@ Start here: **[final/README.md](./final/README.md)**
 - [Scope constraints](./final/validation/scope-constraints.md)
 - [Scope review](./final/validation/scope-validation-review.md)
 
-### Review
-- [Documentation review checklist](./final/review/documentation-review-checklist.md)
-
 ### Final package extras
 - [Architecture](./final/architecture.md) · [API reference](./final/api-reference.md)
 - [Testing report](./final/testing-report.md) · [Traceability matrix](./final/requirements-traceability.md)
-- [Presentation](./final/presentation.md) · [Release notes](./final/release-notes.md)
-- [Submission checklist](./final/submission-checklist.md)
+- [Release notes](./final/release-notes.md)
 
 ## Other docs
 
