@@ -620,6 +620,43 @@ describe("ChatWindow", () => {
     expect(screen.getAllByRole("button", { name: "Confirm" })).toHaveLength(1);
   });
 
+  it("does not attach an unrelated question to a pending preview", async () => {
+    const user = userEvent.setup();
+    mockedSendAssistantMessage
+      .mockResolvedValueOnce({
+        content: "I can create the midterm exam after you confirm.",
+        conversationId: 7,
+        pendingMessageId: 42,
+        interpretedAction: {
+          action: "Create Assignment",
+          course: "CPSC 310",
+          affectedStudents: "Entire class",
+        },
+      })
+      .mockResolvedValueOnce({
+        content: "The syllabus should include grading, policies, and deadlines.",
+        conversationId: 7,
+      });
+
+    renderWithInstitution(<ChatWindow />);
+    const input = screen.getByRole("textbox", { name: "Chat message" });
+    await user.type(input, "Create a midterm exam");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await screen.findByRole("button", { name: "Confirm" });
+
+    await user.type(input, "What should I add to my syllabus?");
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/The syllabus should include/)).toBeInTheDocument();
+    });
+    expect(mockedSendAssistantMessage).toHaveBeenLastCalledWith(
+      "test-token",
+      "What should I add to my syllabus?",
+      expect.objectContaining({ pendingMessageId: undefined }),
+    );
+  });
+
   it("sends an initialPrompt exactly once under React StrictMode's dev-only double effect invocation", async () => {
     /* Regression test for a real incident: clicking a dashboard Quick Action
      * (which navigates to the assistant with an initialPrompt) sent the same

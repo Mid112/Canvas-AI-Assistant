@@ -92,7 +92,20 @@ function isExplicitPreviewModification(message: string): boolean {
   // Free-typed questions should not accidentally revise a pending Canvas
   // write. Keep modification mode opt-in while allowing natural draft edits
   // and explicit confirmation/cancellation language.
-  return /\b(change|revise|edit|update|modify|replace|add|remove|set|make|use|instead|actually|cancel|discard|approve|confirm)\b/i.test(
+  if (/\b(cancel|discard|approve|confirm)\b/i.test(message)) {
+    return true;
+  }
+  if (/\bmake\s+(?:it|this|that)\b/i.test(message)) {
+    return true;
+  }
+  if (
+    /\b(change|revise|edit|update|modify|replace)\b(?:\s+\w+){0,5}\s+\b(?:title|name|description|due\s+date|points?|course|assignment|message|body|subject)\b/i.test(
+      message,
+    )
+  ) {
+    return true;
+  }
+  return /\b(?:put|move|use|set)\b(?:\s+\w+){0,6}\b(?:instead|rather)\b/i.test(
     message,
   );
 }

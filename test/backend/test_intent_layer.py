@@ -8,7 +8,9 @@ from app.mcp_tools.schemas import SemanticIntentAction
 from app.services.chat import (
     _CHAINABLE_READ_ACTIONS,
     _explicit_announcement_request,
+    _explicit_dual_delivery_request,
     _format_assignment_status_match,
+    _preserve_dual_delivery,
     _rebase_action_to_course,
     _resolve_pending_course_correction,
 )
@@ -99,6 +101,18 @@ def test_unscoped_late_submissions_preserves_legacy_status_field():
     }
 
 
+def test_plural_assignment_reference_uses_course_wide_status_filter():
+    intent = SemanticIntentAction(
+        intent="find_missing_submissions",
+        assignment_reference="those assignments",
+    )
+
+    normalized = normalize_semantic_intent(intent, local_course_id=31)
+
+    assert normalized["action"] == "find_assignments_by_submission_status"
+    assert normalized["status"] == "missing_submissions"
+
+
 def test_semantic_write_intent_is_preview_gated_and_allows_partial_draft():
     intent = SemanticIntentAction(
         intent="create_assignment",
@@ -185,6 +199,34 @@ def test_negated_announcement_keeps_private_delivery_language():
     assert not _explicit_announcement_request(
         "don't make this an announcement, just message Student One privately"
     )
+    assert not _explicit_announcement_request("Don't forget to make an announcement tomorrow")
+
+
+def test_dual_delivery_request_is_distinguished_from_announcement_only():
+    message = "Make an announcement and also privately message Student One"
+    assert _explicit_dual_delivery_request(message)
+    assert _explicit_announcement_request(message)
+
+
+def test_dual_delivery_preserves_recipients_and_marks_public_broadcast():
+    action = parse_action(
+        json.dumps(
+            {
+                "action": "send_message",
+                "local_course_id": 31,
+                "subject": "Update",
+                "body": "Please read this.",
+                "recipient_directives": [
+                    {"student_reference": "Student One", "body": "Please read this."}
+                ],
+            }
+        )
+    )
+
+    preserved = _preserve_dual_delivery(action)
+
+    assert preserved.recipient_directives == action.recipient_directives
+    assert preserved.also_announce_to_class is True
 
 
 def test_submission_status_reads_are_chainable():
@@ -246,6 +288,12 @@ def test_pending_course_correction_requires_explicit_correction_language():
         ).local_course_id
         == 322
     )
+    assert _resolve_pending_course_correction(
+        [course], "put this in COSC 322 instead"
+    ).local_course_id == 322
+    assert _resolve_pending_course_correction(
+        [course], "change it to COSC 322"
+    ).local_course_id == 322
     assert _resolve_pending_course_correction(
         [course], "Change the assignment title to COSC 322 overview"
     ) is None

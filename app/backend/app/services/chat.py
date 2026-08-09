@@ -112,8 +112,13 @@ _ANNOUNCEMENT_REQUEST_RE = re.compile(
     re.IGNORECASE,
 )
 _NEGATED_ANNOUNCEMENT_RE = re.compile(
-    r"\b(?:don't|do not|not|never|without)\b[^,.!?]{0,80}"
+    r"\b(?:don't|do not|not|never|without)\b(?!\s+forget\b)[^,.!?]{0,80}"
     r"\b(?:announcement|announce|course[- ]wide)\b",
+    re.IGNORECASE,
+)
+_REMINDER_ANNOUNCEMENT_RE = re.compile(
+    r"\b(?:don't|do not|never)\s+forget\s+to\s+(?:make|post|send|publish)?\s*"
+    r"(?:an?\s+)?(?:announcement|announce|course[- ]wide)\b",
     re.IGNORECASE,
 )
 _PRIVATE_MESSAGE_REQUEST_RE = re.compile(
@@ -124,16 +129,26 @@ _PRIVATE_MESSAGE_REQUEST_RE = re.compile(
 
 def _explicit_announcement_request(message: str) -> bool:
     """Recognize explicit public-audience language as a server-side guard."""
-    if _NEGATED_ANNOUNCEMENT_RE.search(message):
+    if _NEGATED_ANNOUNCEMENT_RE.search(message) or _REMINDER_ANNOUNCEMENT_RE.search(message):
         return False
-    if _PRIVATE_MESSAGE_REQUEST_RE.search(message) and not re.search(
-        r"\b(?:make|post|send|publish|announce)\b[^.!?]{0,40}"
-        r"\b(?:announcement|announce|course[- ]wide)\b",
-        message,
-        re.IGNORECASE,
-    ):
+    if _PRIVATE_MESSAGE_REQUEST_RE.search(message) and not _explicit_dual_delivery_request(message):
         return False
     return bool(_ANNOUNCEMENT_REQUEST_RE.search(message))
+
+
+def _explicit_dual_delivery_request(message: str) -> bool:
+    """Return true when the user explicitly requests both audiences.
+
+    This is intentionally conjunction-based: merely mentioning an
+    announcement in a private-message sentence must not broaden delivery,
+    while an explicit "and also privately" request should retain recipients.
+    """
+    if _NEGATED_ANNOUNCEMENT_RE.search(message) or _REMINDER_ANNOUNCEMENT_RE.search(message):
+        return False
+    has_announcement = bool(_ANNOUNCEMENT_REQUEST_RE.search(message))
+    has_private = bool(_PRIVATE_MESSAGE_REQUEST_RE.search(message))
+    has_conjunction = bool(re.search(r"\b(?:and|also|both)\b", message, re.IGNORECASE))
+    return has_announcement and has_private and has_conjunction
 
 
 def _force_announcement_delivery(action: Any) -> Any:
@@ -162,6 +177,22 @@ def _force_announcement_delivery(action: Any) -> Any:
         ):
             cleaned.pop(key, None)
         return action.model_copy(update={"proposed_action": cleaned})
+    return action
+
+
+def _preserve_dual_delivery(action: Any) -> Any:
+    """Keep private recipients while marking an explicit public broadcast."""
+    if action.action == "send_message":
+        return action.model_copy(update={"also_announce_to_class": True})
+    if action.action == "intent_preview":
+        proposed = action.proposed_action
+        if proposed.get("action") != "send_message":
+            return action
+        proposed = {
+            **proposed,
+            "also_announce_to_class": True,
+        }
+        return action.model_copy(update={"proposed_action": proposed})
     return action
 
 
@@ -719,6 +750,18 @@ _PENDING_COURSE_CORRECTION_PATTERNS = (
     re.compile(
         r"\b(?:i\s+)?(?:meant|use|switch(?:\s+to)?|change\s+(?:the\s+)?(?:course|class)\s+to|set\s+(?:the\s+)?(?:course|class)\s+to)\s+"
         r"(?P<name>[^,.!?]+)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\b(?:put|move|change)\s+(?:this|it)\s+(?:in|to)\s+(?P<name>[^,.!?]+?)\s+instead\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bchange\s+(?:this|it)\s+to\s+(?P<name>[^,.!?]+)",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"\bno\s*,?\s*(?P<name>(?:[A-Za-z]{2,}\s*)?\d{2,4}(?:\s+[^,.!?]+)?)\s*$",
         re.IGNORECASE,
     ),
     re.compile(r"\bactually\s+(?P<name>[^,.!?]+)", re.IGNORECASE),
@@ -1576,6 +1619,78 @@ _ACTUAL_SUBMISSION_STATUSES = frozenset(
     {SubmissionStatus.graded, SubmissionStatus.submitted, SubmissionStatus.late}
 )
 _ASSIGNMENT_STATUS_MAX_RESULTS = 25
+_ASSIGNMENT_STATUS_MAX_CONCURRENT_FETCHES = 4
+
+
+async def _fetch_assignment_submissions_bounded(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    triggering_message_id: int,
+    course: Course,
+    assignments: list[dict[str, Any]],
+    status: str,
+) -> list[list[Any]]:
+    """Fetch assignment submissions with bounded Canvas concurrency.
+
+    Canvas has no course-wide submission endpoint in the current integration.
+    A small semaphore removes the serial N+1 latency without creating an
+    unbounded request burst. Tool-call rows are created before the requests
+    and finalized afterward so the existing audit trail remains intact while
+    avoiding concurrent writes through one AsyncSession.
+    """
+    semaphore = asyncio.Semaphore(_ASSIGNMENT_STATUS_MAX_CONCURRENT_FETCHES)
+    logs: list[ToolCallLog] = []
+    for assignment in assignments:
+        params = {
+            "local_course_id": course.id,
+            "assignment_id": int(assignment["id"]),
+            "status": status,
+        }
+        logs.append(
+            ToolCallLog(
+                conversation_id=conversation.id,
+                user_id=user.id,
+                course_id=course.id,
+                triggering_message_id=triggering_message_id,
+                action_name="find_assignments_by_submission_status",
+                parameters=params,
+                status="executing",
+            )
+        )
+    db.add_all(logs)
+    await db.flush()
+
+    async def fetch(assignment: dict[str, Any]) -> list[Any]:
+        async with semaphore:
+            # Each concurrent Canvas fetch gets its own short-lived session;
+            # AsyncSession is intentionally not shared across tasks.
+            async with AsyncSessionLocal() as fetch_db:
+                return await get_submissions(
+                    course.id,
+                    int(assignment["id"]),
+                    user,
+                    course.canvas_url,
+                    fetch_db,
+                )
+
+    results = await asyncio.gather(
+        *(fetch(assignment) for assignment in assignments),
+        return_exceptions=True,
+    )
+    first_error: BaseException | None = None
+    for log, result in zip(logs, results, strict=True):
+        if isinstance(result, BaseException):
+            log.status = "failed"
+            log.error_detail = safe_exception_text(result)
+            first_error = first_error or result
+            continue
+        log.status = "executed"
+        log.completed_at = datetime.now(UTC)
+    await db.flush()
+    if first_error is not None:
+        raise first_error
+    return [result for result in results if not isinstance(result, BaseException)]
 
 
 def _format_assignment_status_match(entry: dict[str, Any]) -> str:
@@ -1622,21 +1737,18 @@ async def _run_find_assignments_by_submission_status_chain(
     matches: list[dict[str, Any]] = []
     aggregate_recipients: dict[int, dict[str, Any]] = {}
 
-    for assignment in published:
+    submission_batches = await _fetch_assignment_submissions_bounded(
+        db,
+        user,
+        conversation,
+        user_msg.id,
+        course,
+        published,
+        action.status,
+    )
+
+    for assignment, submissions in zip(published, submission_batches, strict=True):
         assignment_id = int(assignment["id"])
-        submissions = await _run_tracked_read(
-            db,
-            user,
-            conversation,
-            user_msg.id,
-            "find_assignments_by_submission_status",
-            {
-                "local_course_id": course.id,
-                "assignment_id": assignment_id,
-                "status": action.status,
-            },
-            get_submissions(course.id, assignment_id, user, course.canvas_url, db),
-        )
         submitted_ids = {
             int(submission.user_id)
             for submission in submissions
@@ -4396,7 +4508,9 @@ async def handle_chat_message(
                 )
             if pending_course_switch is not None and conversation.course_id is not None:
                 action = _rebase_action_to_course(action, conversation.course_id)
-            if _explicit_announcement_request(message):
+            if _explicit_dual_delivery_request(message):
+                action = _preserve_dual_delivery(action)
+            elif _explicit_announcement_request(message):
                 action = _force_announcement_delivery(action)
             needs_unwrap = False
             if action.action == "intent_preview":
