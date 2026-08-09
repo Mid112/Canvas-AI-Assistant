@@ -21,12 +21,6 @@ Start here: **[final/README.md](./final/README.md)**
 - [Installation](./final/deployment/installation-guide.md)
 - [Deployment guide](./final/deployment/deployment-guide.md)
 
-### Validation
-- [Reliability & error handling](./final/validation/reliability-error-handling.md)
-- [Reliability validation](./final/validation/reliability-validation.md)
-- [Scope constraints](./final/validation/scope-constraints.md)
-- [Scope review](./final/validation/scope-validation-review.md)
-
 ### Final package extras
 - [Architecture](./final/architecture.md) · [API reference](./final/api-reference.md)
 - [Testing report (PDF)](./testing%20report/Final_Testing_Report_Detailed.pdf) · [Traceability matrix](./final/requirements-traceability.md)
@@ -35,8 +29,8 @@ Start here: **[final/README.md](./final/README.md)**
 ## Other docs
 
 - [Charter](./charter/charter.md)
-- [Design](./design/README.md) · [LLM providers](./design/llm-providers.md)
-- [Plan](./plan/README.md)
+- [Design](./design/README.md)
+- [Project plan](./plan/project%20plan.md)
 - [Weekly logs](./weekly%20logs/README.md)
 - [Testing report PDFs](./testing%20report/)
 - [Testing event outcomes](./testing%20event%20outcomes/)
