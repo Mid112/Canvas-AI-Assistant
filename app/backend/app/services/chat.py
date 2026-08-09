@@ -2124,7 +2124,7 @@ async def _resolve_grade_target(
             assignment_id,
             submissions,
             action.new_grade,
-            action.reason,
+            action.reason or action.feedback,
             assignment_name=assignment_name,
         )
 
@@ -2165,7 +2165,7 @@ async def _resolve_grade_target(
         assignment_id,
         [selected],
         action.new_grade,
-        action.reason,
+        action.reason or action.feedback,
         assignment_name=assignment_name,
     )
 
@@ -2287,7 +2287,7 @@ def _grade_partial_plan(action: Any, local_course_id: int, assignment_id: int | 
         "student_id": getattr(action, "student_id", None),
         "student_reference": getattr(action, "student_reference", None),
         "new_grade": getattr(action, "new_grade", None),
-        "reason": getattr(action, "reason", None),
+        "reason": getattr(action, "reason", None) or getattr(action, "feedback", None),
     }
     return {key: value for key, value in plan.items() if value is not None}
 

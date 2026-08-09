@@ -26,6 +26,23 @@ def test_update_grade_action_accepts_numeric_grade():
     assert action.new_grade == "100"
 
 
+def test_grade_partial_plan_preserves_feedback_as_reason():
+    action = UpdateGradeAction.model_validate(
+        {
+            "action": "update_grade",
+            "local_course_id": 7,
+            "assignment_reference": "ggg",
+            "student_reference": "coin",
+            "new_grade": "100",
+            "feedback": "Strong explanation of the solution.",
+        }
+    )
+
+    partial_plan = _grade_partial_plan(action, local_course_id=7, assignment_id=10)
+
+    assert partial_plan["reason"] == "Strong explanation of the solution."
+
+
 def test_bulk_grade_update_builds_grades_tab_handoff():
     """Bulk grade requests should redirect to the shared Grades tab flow.
 
