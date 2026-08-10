@@ -1425,7 +1425,10 @@ async def execute_tool(
             return {
                 "action": "intent_preview",
                 "intent_preview": True,
-                "summary": action.summary,
+                # The server-resolved preview is authoritative for writes.  The
+                # model summary may still describe the pre-correction course (or
+                # otherwise diverge from the fields used by the executor).
+                "summary": preview_metadata.get("summary") or action.summary,
                 "proposed_action": proposed,
                 "preview_metadata": preview_metadata,
             }
