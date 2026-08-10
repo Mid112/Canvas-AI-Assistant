@@ -86,7 +86,13 @@ def test_ambiguous_offer_carries_no_course_id():
 # ── answering it ─────────────────────────────────────────────────────────────
 
 
-def _conversation(payload, course_name="testing 2"):
+_COURSE_NAMES = {9: "Capstone Project", 10: "CPSC 310"}
+
+_ONE_CANDIDATE = [{"id": 9, "label": "Capstone Project"}]
+_TWO_CANDIDATES = [{"id": 9, "label": "Capstone Project"}, {"id": 10, "label": "CPSC 310"}]
+
+
+def _conversation(payload, course_name="testing 2", candidates=None):
     conversation = SimpleNamespace(
         field_memory={}, course_id=1, course_name=course_name
     )
@@ -94,7 +100,7 @@ def _conversation(payload, course_name="testing 2"):
         conversation,
         field=COURSE_SWITCH_EXPECTATION_FIELD,
         question="Should I switch?",
-        candidates=[{"id": 9, "label": "Capstone Project"}],
+        candidates=_ONE_CANDIDATE if candidates is None else candidates,
         payload=payload,
     )
     return conversation
@@ -107,7 +113,29 @@ _PAYLOAD = {
 }
 
 
-async def _answer(message, payload=None, conversation=None, owner_id=1):
+def _adapter(answer="unrelated", *, course_id=None, raises=None, raw=None):
+    """An LLM stub for the confirmation resolver.
+
+    Defaults to "unrelated" — the safe answer — so a test that does not care
+    about the resolver cannot pass because the stub happened to consent.
+    """
+    import json as _json
+
+    adapter = SimpleNamespace()
+    if raises is not None:
+        adapter.generate = AsyncMock(side_effect=raises)
+    else:
+        adapter.generate = AsyncMock(
+            return_value=raw
+            if raw is not None
+            else _json.dumps({"answer": answer, "course_id": course_id})
+        )
+    return adapter
+
+
+async def _answer(
+    message, payload=None, conversation=None, owner_id=1, adapter=None,
+):
     from app.services import chat as chat_module
 
     conversation = conversation or _conversation(
@@ -115,21 +143,35 @@ async def _answer(message, payload=None, conversation=None, owner_id=1):
     )
     db = AsyncMock()
     db.get = AsyncMock(
-        return_value=SimpleNamespace(id=9, name="Capstone Project", instructor_id=owner_id)
+        side_effect=lambda _model, course_id: SimpleNamespace(
+            id=course_id,
+            name=_COURSE_NAMES.get(course_id, "Unknown"),
+            instructor_id=owner_id,
+        )
     )
-    routed = SimpleNamespace(id=77, course_id=9, course_name="Capstone Project",
-                             field_memory={})
+    # Built from the course actually routed to, so the returned conversation
+    # is evidence of WHICH course was chosen, not just that one was.
+    forked: list[SimpleNamespace] = []
+
+    def _fork(_db, _user, course_id, course_name):
+        forked.append(
+            SimpleNamespace(id=77, course_id=course_id, course_name=course_name,
+                            field_memory={})
+        )
+        return forked[-1]
+
     with (
         patch.object(chat_module, "_stable_course_name",
                      new=AsyncMock(return_value="Capstone Project")),
         patch.object(chat_module, "_sync_course_context_envelope", new=AsyncMock()),
         patch.object(chat_module, "_find_or_fork_conversation_for_course",
-                     new=AsyncMock(return_value=routed)),
+                     new=AsyncMock(side_effect=_fork)),
     ):
         result = await chat_module._apply_pending_course_switch(
-            db, SimpleNamespace(id=1), conversation, message
+            db, SimpleNamespace(id=1), conversation, message,
+            _adapter() if adapter is None else adapter,
         )
-    return result, conversation, routed
+    return result, conversation, (forked[-1] if forked else None)
 
 
 @pytest.mark.anyio
@@ -231,3 +273,207 @@ async def test_no_pending_offer_leaves_the_turn_alone():
     result, _, _routed = await _answer("yes", conversation=conversation)
 
     assert result is None
+
+
+# ── answering it in words the list doesn't have ──────────────────────────────
+#
+# read_yes_no is a fixed vocabulary: "yeah let's do that" matches nothing in
+# it. A dedicated resolver reads those, and runs ONLY when an offer is
+# outstanding and both free checks came back with nothing.
+
+
+@pytest.mark.anyio
+async def test_an_agreement_outside_the_word_list_still_switches():
+    result, _conv, routed = await _answer(
+        "yeah let's do that", adapter=_adapter("yes", course_id=9)
+    )
+
+    assert result[0] is None
+    assert result[1] == "who submitted to testing event 2?"
+    assert routed.course_id == 9
+
+
+@pytest.mark.anyio
+async def test_a_refusal_outside_the_word_list_stays_put():
+    result, conversation, routed = await _answer(
+        "I'd rather keep looking here", adapter=_adapter("no")
+    )
+
+    assert result[0]["action"] == "respond"
+    assert "Staying in" in result[0]["message"]
+    assert routed is None
+    assert conversation.course_id == 1
+
+
+@pytest.mark.anyio
+async def test_unrelated_is_not_consent():
+    """The reason this resolver is allowed to exist: it must be able to say
+    "that wasn't an answer" as confidently as it says yes."""
+    result, conversation, routed = await _answer(
+        "which one has more students?", adapter=_adapter("unrelated")
+    )
+
+    assert result is None
+    assert routed is None
+    assert conversation.field_memory.get("pending_expectation") is None
+
+
+@pytest.mark.anyio
+async def test_a_literal_yes_never_pays_for_a_call():
+    adapter = _adapter("unrelated")
+
+    result, _conv, routed = await _answer("yes", adapter=adapter)
+
+    adapter.generate.assert_not_awaited()
+    assert result[0] is None
+    assert routed.course_id == 9
+
+
+@pytest.mark.anyio
+async def test_a_named_course_never_pays_for_a_call():
+    adapter = _adapter("unrelated")
+
+    result, _conv, routed = await _answer(
+        "capstone project",
+        conversation=_conversation(
+            {"user_message": "who submitted to quiz 1?", "local_course_id": None,
+             "course_name": None}
+        ),
+        adapter=adapter,
+    )
+
+    adapter.generate.assert_not_awaited()
+    assert result[0] is None
+    assert routed.course_id == 9
+
+
+@pytest.mark.anyio
+async def test_without_an_adapter_only_the_deterministic_reads_run():
+    """Passing None is what a caller with no working provider does, and it has
+    to degrade to the old behaviour rather than to a silent switch."""
+    from app.services import chat as chat_module
+
+    conversation = _conversation(_PAYLOAD)
+    result = await chat_module._apply_pending_course_switch(
+        AsyncMock(), SimpleNamespace(id=1), conversation, "yeah let's do that", None,
+    )
+
+    assert result is None
+    assert conversation.course_id == 1
+
+
+@pytest.mark.anyio
+async def test_the_resolver_picks_among_several_offered_courses():
+    result, _conv, routed = await _answer(
+        "the 310 one please",
+        conversation=_conversation(
+            {"user_message": "who submitted to quiz 1?", "local_course_id": None,
+             "course_name": None},
+            candidates=_TWO_CANDIDATES,
+        ),
+        adapter=_adapter("yes", course_id=10),
+    )
+
+    assert result[0] is None
+    assert routed.course_id == 10
+    assert routed.course_name == "CPSC 310"
+
+
+@pytest.mark.anyio
+async def test_an_unpinned_yes_to_several_courses_answers_nothing():
+    """Same rule the deterministic path applies to a bare "yes": agreeing to a
+    list does not say which one, and picking for them would move work into a
+    course they never named."""
+    result, _conv, routed = await _answer(
+        "sounds right",
+        conversation=_conversation(
+            {"user_message": "who submitted to quiz 1?", "local_course_id": None,
+             "course_name": None},
+            candidates=_TWO_CANDIDATES,
+        ),
+        adapter=_adapter("yes", course_id=None),
+    )
+
+    assert result is None
+    assert routed is None
+
+
+# ── the resolver on its own ──────────────────────────────────────────────────
+
+
+async def _resolve(reply, candidates=_ONE_CANDIDATE, **adapter_kwargs):
+    from app.services import chat as chat_module
+
+    return await chat_module._resolve_switch_confirmation(
+        "Should I switch?", candidates, reply, _adapter(**adapter_kwargs)
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [("yes", (True, 9)), ("no", (False, None))],
+)
+async def test_resolver_returns_the_answer(answer, expected):
+    assert await _resolve("whatever", answer=answer, course_id=9) == expected
+
+
+@pytest.mark.anyio
+async def test_resolver_cannot_invent_a_course():
+    """The id is validated against what was actually offered — a hallucinated
+    course would otherwise be switched into on the model's say-so."""
+    assert await _resolve(
+        "sure", candidates=_TWO_CANDIDATES, answer="yes", course_id=404
+    ) is None
+
+
+@pytest.mark.anyio
+async def test_resolver_falls_back_to_the_only_course_offered():
+    assert await _resolve("sure", answer="yes", course_id=None) == (True, 9)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "raw",
+    [
+        '{"answer": "maybe", "course_id": 9}',   # a label this resolver never defined
+        '{"answer": null}',
+        "not json at all",
+        '["yes"]',
+        "",
+    ],
+)
+async def test_resolver_treats_anything_it_cannot_read_as_not_an_answer(raw):
+    """Every unreadable response has to land on "no answer", never on consent:
+    a malformed reply must not be able to move a course."""
+    assert await _resolve("yeah", raw=raw) is None
+
+
+@pytest.mark.anyio
+async def test_resolver_survives_a_provider_failure():
+    """A dead provider must not 500 a turn whose entire content is "yeah"."""
+    assert await _resolve("yeah", raises=RuntimeError("provider down")) is None
+
+
+@pytest.mark.anyio
+async def test_resolver_survives_a_timeout():
+    import asyncio
+
+    assert await _resolve("yeah", raises=asyncio.TimeoutError()) is None
+
+
+@pytest.mark.anyio
+async def test_resolver_is_told_the_real_candidate_list():
+    """It can only pick from what it is shown, so the listing is the whole
+    safety boundary — an empty or wrong listing silently disables the id check."""
+    from app.services import chat as chat_module
+
+    adapter = _adapter("yes", course_id=10)
+    await chat_module._resolve_switch_confirmation(
+        "Should I switch?", _TWO_CANDIDATES, "the 310 one", adapter
+    )
+
+    prompt = adapter.generate.await_args.args[1]
+    assert "id=9" in prompt and "Capstone Project" in prompt
+    assert "id=10" in prompt and "CPSC 310" in prompt
+    assert "the 310 one" in prompt

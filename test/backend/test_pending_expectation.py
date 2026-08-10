@@ -101,6 +101,24 @@ def test_out_of_range_ordinal_does_not_resolve():
     assert resolve_against_expectation(expectation, "the fifth one") is None
 
 
+# Verifies an ordinary sentence containing "one"/"two" is not read as an
+# ordinal. Scanning for those cardinals anywhere in the reply made "which one
+# has more students?" — a question — resolve to candidate 1, and "no one
+# submitted yet" do the same. On a yes/no course-switch offer that false
+# positive doesn't just pick the wrong item, it consents: the conversation
+# moves to another Canvas course and replays the request there.
+@pytest.mark.requirement("FR3.4")
+def test_a_cardinal_inside_a_sentence_is_not_an_ordinal():
+    expectation = _expectation(["Lab Report A", "Lab Report B", "Final"])
+
+    assert resolve_against_expectation(expectation, "which one has more students?") is None
+    assert resolve_against_expectation(expectation, "no one submitted yet") is None
+    assert resolve_against_expectation(expectation, "can you show me the two students") is None
+    # Still an answer when the whole reply IS the word — that is unambiguous.
+    assert resolve_against_expectation(expectation, "two")["id"] == 101
+    assert resolve_against_expectation(expectation, "the second one")["id"] == 101
+
+
 # Verifies two equally-long labels stay ambiguous — the same rule the rest of
 # the pre-pass follows.
 @pytest.mark.requirement("FR3.4")

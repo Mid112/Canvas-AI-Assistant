@@ -217,6 +217,21 @@ _ORDINAL_WORDS = {
     "fifth": 5, "5th": 5, "five": 5,
 }
 
+# Ordinals safe to spot *inside* a longer sentence. The cardinals are not:
+# "one" and "two" are ordinary English words, so scanning for them turned
+# "which one has more students?" and "no one submitted yet" into a vote for
+# candidate 1 — a question and a statement of fact both read as a choice.
+# On a yes/no course-switch offer that false positive doesn't just pick the
+# wrong item, it moves the instructor's work into another Canvas course.
+#
+# They stay in _ORDINAL_WORDS for the whole-reply match above, where a bare
+# "two" is unambiguously an answer to "which of these?".
+_ORDINAL_SCAN_WORDS = {
+    word: index
+    for word, index in _ORDINAL_WORDS.items()
+    if word not in {"one", "two", "three", "four", "five"}
+}
+
 
 def record_pending_expectation(
     conversation: Conversation,
@@ -310,8 +325,8 @@ def resolve_against_expectation(
         index = int(stripped)
     if index is None:
         for word in stripped.replace(",", " ").split():
-            if word in _ORDINAL_WORDS:
-                index = _ORDINAL_WORDS[word]
+            if word in _ORDINAL_SCAN_WORDS:
+                index = _ORDINAL_SCAN_WORDS[word]
                 break
     if index is not None and 1 <= index <= len(candidates):
         return {"field": expectation.get("field"), **candidates[index - 1]}

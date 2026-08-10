@@ -1690,11 +1690,126 @@ def _empty_filter_switch_offer(
     }
 
 
+_SWITCH_CONFIRMATION_RESOLVER_SYSTEM_PROMPT = """You decide whether an
+instructor's reply answers a yes/no question the assistant just asked about
+switching the conversation to a different course.
+
+Respond with exactly one JSON object and nothing else:
+{"answer": "yes" | "no" | "unrelated", "course_id": <integer from COURSES> | null}
+
+"yes" — the reply agrees to the switch, in whatever words ("yeah do that",
+  "sounds right, go for it", "that's the one", "ugh fine").
+"no" — the reply declines, in whatever words ("nah I'm good", "leave it",
+  "don't bother", "I meant this course").
+"unrelated" — the reply is not an answer to that question: a brand-new
+  request ("show me the roster instead"), a question back ("which one has
+  more students?"), or anything you are not confident about.
+
+Prefer "unrelated" whenever you are unsure. A wrong "yes" moves the
+instructor's work into a different Canvas course; a wrong "unrelated" only
+means they get asked again, so guessing is never worth it.
+
+Set "course_id" only when the reply points at one specific course from
+COURSES ("yes, the capstone one"), using that course's id exactly as
+listed — never an id that is not in COURSES. Otherwise use null.
+
+Judge meaning, not the words present: a reply can agree while containing
+"no" ("no problem, go ahead") and decline while containing "yes" ("yes I
+know, but stay here")."""
+
+SWITCH_CONFIRMATION_RESOLVER_TIMEOUT_SECONDS = 15.0
+
+
+async def _resolve_switch_confirmation(
+    question: str,
+    candidates: list[dict],
+    reply: str,
+    adapter: LLMAdapter,
+) -> tuple[bool, int | None] | None:
+    """Read a free-form reply to a pending course-switch offer.
+
+    The literal check in read_yes_no covers the words people usually type,
+    but it is a closed vocabulary: "yeah let's do that" matches nothing in
+    it. This is the same paradigm as _resolve_course_switch and
+    _resolve_assignment_reference — one narrow question, a real candidate
+    list, never trusted to invent a value — and it runs only when an offer
+    is actually outstanding AND the free checks came back inconclusive, so
+    it costs nothing on ordinary turns.
+
+    Returns (answer, course_id): (False, None) for a refusal, (True, id) for
+    consent. Returns None for "not an answer" and for every failure —
+    timeout, provider error, unparseable JSON, an id that isn't on offer —
+    which lands on the caller's existing fall-through: drop the offer and
+    let the turn proceed normally.
+
+    The asymmetry is deliberate and lives here rather than in the prompt: an
+    affirmative that names no course, with several on offer, answers nothing
+    and is rejected, exactly as resolve_against_expectation rejects a bare
+    "yes" to a list.
+    """
+    valid_ids = {_coerce_int(candidate.get("id")) for candidate in candidates}
+    valid_ids.discard(None)
+    listing = (
+        "\n".join(
+            f"- id={_coerce_int(candidate.get('id'))}, "
+            f"name={str(candidate.get('label') or '')!r}"
+            for candidate in candidates
+        )
+        or "- (none)"
+    )
+    prompt = (
+        f"COURSES:\n{listing}\n\n"
+        f"Question the assistant asked: {question}\n"
+        f"Instructor's reply: {reply}"
+    )
+    try:
+        raw = await asyncio.wait_for(
+            adapter.generate(
+                _SWITCH_CONFIRMATION_RESOLVER_SYSTEM_PROMPT, prompt, history=[],
+                timeout=SWITCH_CONFIRMATION_RESOLVER_TIMEOUT_SECONDS,
+            ),
+            timeout=SWITCH_CONFIRMATION_RESOLVER_TIMEOUT_SECONDS,
+        )
+        parsed = json.loads(extract_json_object(raw))
+    except Exception:
+        # Broad on purpose, same as _resolve_course_switch: no provider or
+        # parsing failure may escape a confirmation read and 500 a turn whose
+        # only content is the word "yeah".
+        return None
+    if not isinstance(parsed, dict):
+        return None
+
+    answer = str(parsed.get("answer") or "").strip().lower()
+    if answer == "no":
+        return False, None
+    if answer != "yes":
+        # "unrelated", or a label this resolver never defined. Neither is
+        # consent, and an unrecognised value is a broken response, not a yes.
+        return None
+
+    chosen = _coerce_int(parsed.get("course_id"))
+    if chosen not in valid_ids:
+        chosen = None
+    if chosen is None:
+        if len(valid_ids) != 1:
+            return None
+        chosen = next(iter(valid_ids))
+    return True, chosen
+
+
+def _expectation_candidate_label(expectation: dict, course_id: int) -> str | None:
+    for candidate in expectation.get("candidates") or []:
+        if _coerce_int(candidate.get("id")) == course_id:
+            return str(candidate.get("label") or "").strip() or None
+    return None
+
+
 async def _apply_pending_course_switch(
     db: AsyncSession,
     user: User,
     conversation: Conversation,
     message: str,
+    adapter: LLMAdapter | None,
 ) -> tuple[dict | None, str, Conversation] | None:
     """Read a reply to a pending "switch to <course>?" offer.
 
@@ -1706,6 +1821,10 @@ async def _apply_pending_course_switch(
 
     Declining is a real answer, not just an absence of consent: it clears the
     offer so the instructor isn't asked the same question forever.
+
+    ``adapter`` is what makes a reply outside read_yes_no's word list readable
+    (see _resolve_switch_confirmation); pass None to keep this to the two
+    deterministic reads.
     """
     expectation = pending_expectation(conversation.field_memory)
     if not expectation or expectation.get("field") != COURSE_SWITCH_EXPECTATION_FIELD:
@@ -1716,19 +1835,43 @@ async def _apply_pending_course_switch(
     original_message = payload.get("user_message") or ""
     course_label = payload.get("course_name") or "that course"
 
+    # Three reads, cheapest first. The two free ones cover the common replies;
+    # only what neither recognises is worth an LLM call.
     answer = read_yes_no(message)
     if answer is None:
-        # Not an answer. A named course still resolves it — "use capstone
-        # project" is a yes with the target spelled out — but anything else is
-        # the instructor moving on, and the offer is dropped rather than
-        # allowed to swallow the next request.
+        # A named course is a yes with the target spelled out — "use capstone
+        # project" both consents and chooses.
         chosen = resolve_against_expectation(expectation, message)
-        if chosen is None or _coerce_int(chosen.get("id")) is None:
-            clear_pending_expectation(conversation)
-            return None
-        target_course_id = _coerce_int(chosen["id"])
-        course_label = chosen.get("label") or course_label
-        answer = True
+        if chosen is not None and _coerce_int(chosen.get("id")) is not None:
+            target_course_id = _coerce_int(chosen["id"])
+            course_label = chosen.get("label") or course_label
+            answer = True
+
+    if answer is None and adapter is not None:
+        # Everything else: "yeah let's do that", "nah I'm good", or a change of
+        # subject. read_yes_no is a fixed word list and cannot tell those
+        # apart, and the offer is outstanding right now, so this is the one
+        # moment where asking is both cheap and decisive.
+        resolved = await _resolve_switch_confirmation(
+            expectation.get("question") or "",
+            expectation.get("candidates") or [],
+            message,
+            adapter,
+        )
+        if resolved is not None:
+            answer, resolved_course_id = resolved
+            if resolved_course_id is not None:
+                target_course_id = resolved_course_id
+                course_label = (
+                    _expectation_candidate_label(expectation, resolved_course_id)
+                    or course_label
+                )
+
+    if answer is None:
+        # Still not an answer: the instructor moved on. Drop the offer rather
+        # than leave it to swallow whatever they say next.
+        clear_pending_expectation(conversation)
+        return None
 
     clear_pending_expectation(conversation)
 
@@ -5326,33 +5469,6 @@ async def handle_chat_message(
     await _refresh_conversation_course_snapshot(db, conversation, user)
     history = await _get_recent_messages(db, conversation.id)
 
-    # An answer to a pending "switch course?" offer is handled before anything
-    # else in the turn. It has to run here, ahead of course resolution: "yes"
-    # names no course and describes no task, so every resolver downstream
-    # would read it as a fresh request against the SAME wrong course and
-    # produce the same dead-end reply — which is exactly the loop this whole
-    # mechanism exists to end.
-    switch_reply = await _apply_pending_course_switch(
-        db, user, conversation, message
-    )
-    if switch_reply is not None:
-        decision, replay_message, switch_conversation = switch_reply
-        if decision is not None:
-            return conversation, decision, False
-        # The turn continues in the target course's own conversation, and the
-        # message the instructor just sent moves with it — otherwise "yes"
-        # stays filed under the course they were leaving.
-        user_msg.conversation_id = switch_conversation.id
-        conversation = switch_conversation
-        # Confirmed: the conversation now points at the right course, and the
-        # instructor's ORIGINAL words are replayed through the normal pipeline
-        # rather than re-dispatched by hand. Reusing the real path means the
-        # continued workflow gets the same intent detection, resolvers and
-        # write-preview gating as if they had typed it in the right course to
-        # begin with.
-        message = replay_message
-        history = await _get_recent_messages(db, conversation.id)
-
     # Instructors choose a connected provider/model. Credentials are resolved
     # server-side from stored instructor keys or deployment secrets.
     try:
@@ -5418,6 +5534,37 @@ async def handle_chat_message(
             "That AI model is not connected. Connect it in Settings and try again."
         )
         return conversation, {"error": user_facing_error}, True
+
+    # An answer to a pending "switch course?" offer is handled before anything
+    # else that reads the message. It has to run ahead of course resolution:
+    # "yes" names no course and describes no task, so every resolver
+    # downstream would read it as a fresh request against the SAME wrong
+    # course and produce the same dead-end reply — which is exactly the loop
+    # this whole mechanism exists to end.
+    #
+    # It sits just below adapter construction only because reading a reply
+    # that isn't a literal yes/no needs one (_resolve_switch_confirmation).
+    # Nothing between here and there looks at the message.
+    switch_reply = await _apply_pending_course_switch(
+        db, user, conversation, message, adapter
+    )
+    if switch_reply is not None:
+        decision, replay_message, switch_conversation = switch_reply
+        if decision is not None:
+            return conversation, decision, False
+        # The turn continues in the target course's own conversation, and the
+        # message the instructor just sent moves with it — otherwise "yes"
+        # stays filed under the course they were leaving.
+        user_msg.conversation_id = switch_conversation.id
+        conversation = switch_conversation
+        # Confirmed: the conversation now points at the right course, and the
+        # instructor's ORIGINAL words are replayed through the normal pipeline
+        # rather than re-dispatched by hand. Reusing the real path means the
+        # continued workflow gets the same intent detection, resolvers and
+        # write-preview gating as if they had typed it in the right course to
+        # begin with.
+        message = replay_message
+        history = await _get_recent_messages(db, conversation.id)
 
     # Bind a course-less conversation to the course its first message names.
     #
