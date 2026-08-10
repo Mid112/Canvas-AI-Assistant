@@ -3,9 +3,16 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.schemas.chat import ModelSettings
+
 
 class AssignmentDraftRequest(BaseModel):
     prompt: str = Field(min_length=1)
+    # The instructor's provider choice lives in their browser, not the
+    # database, so it has to travel with the request the same way it does for
+    # a chat turn. Reusing chat's model is what keeps the trust boundary
+    # identical: it rejects a client-supplied api_key outright.
+    model_settings: ModelSettings | None = None
 
 
 class AssignmentDraftResponse(BaseModel):

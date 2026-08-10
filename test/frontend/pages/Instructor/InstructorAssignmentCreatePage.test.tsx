@@ -170,7 +170,14 @@ describe("InstructorAssignmentCreatePage", () => {
       expect(mockedGenerate).toHaveBeenCalledWith(
         42,
         "Create a quiz on Python functions and parameters for beginners.",
-        { accessToken: "access-token", canvasUrl: "https://canvas.university.edu" },
+        expect.objectContaining({
+          accessToken: "access-token",
+          canvasUrl: "https://canvas.university.edu",
+          // The generator runs on the instructor's connected provider, not the
+          // deployment's. Without this the backend has nothing to resolve
+          // their stored key against and falls back to the admin's provider.
+          modelSettings: expect.objectContaining({ provider: "huggingface" }),
+        }),
       );
     });
 

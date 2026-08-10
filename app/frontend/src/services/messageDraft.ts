@@ -1,4 +1,5 @@
 import { apiRequest } from "@/lib/api-request";
+import { toModelSettingsPayload } from "@/lib/llm-provider-storage";
 import type {
   FetchMessageDraftOptions,
   MessageDraft,
@@ -94,6 +95,9 @@ function buildCreatePayload(options: FetchMessageDraftOptions) {
     subject,
     body,
     recipients,
+    // Only consulted server-side when `prompt` survives above, which is the
+    // one branch that calls a model.
+    model_settings: toModelSettingsPayload(options.modelSettings),
   };
 }
 

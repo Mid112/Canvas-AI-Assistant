@@ -12,6 +12,7 @@ import { useCanvasConnectionUrl } from "@/hooks/useCanvasConnectionUrl";
 import { formatDueDateForDisplay } from "@/lib/assignment-utils";
 import { useInstructorCanvasTimezone } from "@/lib/useInstructorCanvasTimezone";
 import { disambiguateCourseLabels } from "@/lib/disambiguate-course-labels";
+import { getStoredLlmProviderSettings } from "@/lib/llm-provider-storage";
 import { pageShellNarrow } from "@/lib/page-shell";
 import { paths, type AiActionDraftLocationState } from "@/routes/paths";
 import {
@@ -88,6 +89,15 @@ export function InstructorAssignmentCreatePage() {
   const typedDraftId = locationState?.typedDraftId;
   const hasGeneratedAssignment = Boolean(seededDraft?.name?.trim());
   const { accessToken, user } = useAuth();
+  // The generator runs on the instructor's own provider connection, same as a
+  // chat turn. The choice lives in the browser, so it has to be read here and
+  // sent with the request — the server has no record of which provider this
+  // instructor picked, only of the keys they have saved.
+  const userId = user?.id;
+  const modelSettings = useMemo(
+    () => (userId === undefined ? null : getStoredLlmProviderSettings(userId)),
+    [userId],
+  );
   // The chat extracts a one-line description ("it is about beef corndogs")
   // where the "+ Create Assignment" path runs that same text through the
   // draft generator and gets a written-out one. A chat handoff now carries
@@ -235,7 +245,7 @@ export function InstructorAssignmentCreatePage() {
         const generated = await generateAssignmentDraft(
           Number(seededDraft?.courseId),
           assistantPrompt,
-          { accessToken, canvasUrl },
+          { accessToken, canvasUrl, modelSettings },
         );
         // An empty expansion is a failed expansion, not a no-op. Silently
         // keeping the chat's one-liner cleared the spinner and left the
@@ -277,6 +287,7 @@ export function InstructorAssignmentCreatePage() {
     canvasUrl,
     assistantPrompt,
     seededDraft?.courseId,
+    modelSettings,
   ]);
 
   const handleDescribeValuesChange = useCallback((values: AssignmentDescribeValues) => {
@@ -368,6 +379,7 @@ export function InstructorAssignmentCreatePage() {
         accessToken,
         canvasUrl,
         timeZone: instructorTimeZone,
+        modelSettings,
       });
       resetPreviewState();
       setDraft(generated);

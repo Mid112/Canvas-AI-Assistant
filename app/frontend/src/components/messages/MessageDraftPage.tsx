@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { getStoredLlmProviderSettings } from "@/lib/llm-provider-storage";
 import {
   discardTypedDraft,
   saveTypedDraft,
@@ -109,6 +110,14 @@ function canReplaceBody(value: string): boolean {
 
 export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPageProps) {
   const { accessToken, user } = useAuth();
+  // Supplied here rather than by each caller: creating a draft from a prompt
+  // runs a model, and it should be the instructor's connected provider — the
+  // same one the assistant uses — not the deployment default.
+  const userId = user?.id;
+  const modelSettings = useMemo(
+    () => (userId === undefined ? null : getStoredLlmProviderSettings(userId)),
+    [userId],
+  );
   const location = useLocation();
   const typedDraftId = (location.state as AiMessageDraftLocationState | null)
     ?.typedDraftId;
@@ -167,7 +176,13 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
         throw new Error("You must be signed in to load message drafts.");
       }
 
-      const loadedDraft = await fetchMessageDraft(accessToken, fetchOptions);
+      const loadedDraft = await fetchMessageDraft(accessToken, {
+        ...fetchOptions,
+        // Only when there is something to say. A null here would add a key to
+        // every request that carries no information, including the ones that
+        // never reach a model at all.
+        ...(modelSettings ? { modelSettings } : {}),
+      });
       setDraft(loadedDraft);
       setRecipients(loadedDraft.recipients);
       const preferred = fetchOptions?.preSelectedIds;
@@ -217,7 +232,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
       );
       setPageState("editing");
     }
-  }, [accessToken, fetchOptions, reset, trigger]);
+  }, [accessToken, fetchOptions, modelSettings, reset, trigger]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- async draft load on mount

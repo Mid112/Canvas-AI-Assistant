@@ -85,6 +85,9 @@ function renderMessagesPage(options?: { compose?: boolean; tab?: string }) {
 describe("InstructorMessagesPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // The page reads the instructor's stored LLM provider, so a value left by
+    // one test would decide what the next one sends.
+    localStorage.clear();
     mockedFetchDraft.mockResolvedValue({
       ...mockMessageDraft,
       recipients: [...mockMessageDraft.recipients],
@@ -231,6 +234,41 @@ describe("InstructorMessagesPage", () => {
     for (const checkbox of screen.getAllByRole("checkbox")) {
       expect(checkbox).not.toBeChecked();
     }
+  });
+
+  // Creating a draft from a prompt runs a model server-side, and it must be
+  // the instructor's own connected provider. Their choice lives in the
+  // browser, so if the page does not send it the backend falls back to the
+  // deployment's provider and their saved key is never used.
+  it("sends the instructor's LLM provider with the draft request", async () => {
+    mockUseAuth.mockReturnValue({
+      accessToken: "token",
+      user: {
+        id: 1,
+        name: "Dr. Jane Doe",
+        role: "instructor",
+        has_canvas_token: true,
+      },
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    });
+    localStorage.setItem(
+      "canvas-workflow-llm-provider:1",
+      JSON.stringify({ provider: "openai", model: "gpt-4o-mini", baseUrl: "" }),
+    );
+
+    renderMessagesPage({ compose: true });
+
+    await waitFor(() => expect(mockedFetchDraft).toHaveBeenCalled());
+    expect(mockedFetchDraft.mock.calls[0]![1]).toEqual(
+      expect.objectContaining({
+        modelSettings: { provider: "openai", model: "gpt-4o-mini", baseUrl: "" },
+      }),
+    );
   });
 
   // The other half of the Draft-a-student-message button. That action cannot

@@ -218,3 +218,104 @@ def test_generate_draft_llm_service_error(client):
 
     assert response.status_code == 502
     assert "temporarily unavailable" in response.json()["detail"]
+
+
+# ---------------------------------------------------------------------------
+# Instructor-saved LLM credentials
+#
+# The generator used to build adapter settings straight from
+# get_active_llm_config -- the deployment's provider, with no key attached at
+# all. An instructor who had connected their own OpenAI key in Settings never
+# got it: the draft ran on whatever the admin had selected, and if that
+# provider had no server key the call simply failed.
+# ---------------------------------------------------------------------------
+
+
+def _connect_provider(client, headers, provider: str, api_key: str, model: str):
+    """Saves an instructor's own key, as the Settings > AI Models tab does."""
+    with patch(
+        "app.services.llm.llm_connections.validate_api_key",
+        new=AsyncMock(return_value=(True, None)),
+    ):
+        saved = client.put(
+            f"/api/v1/llm/connections/{provider}",
+            json={"api_key": api_key, "model": model},
+            headers=headers,
+        )
+    assert saved.status_code == 200, saved.text
+
+
+def test_generate_draft_uses_the_instructors_own_key_and_model(client):
+    headers = _register(client)
+    _connect_provider(client, headers, "openai", "sk-instructor-key", "gpt-4o-mini")
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        '{"title": "Recursion Quiz", "description": "Cover base cases.", '
+        '"due_at": null, "points_possible": 20}'
+    )
+
+    with (
+        patch(
+            "app.services.assignment_draft.get_llm_adapter", return_value=mock_adapter
+        ) as adapter_factory,
+        patch(
+            "app.services.llm.llm_connections.validate_api_key",
+            new=AsyncMock(return_value=(True, None)),
+        ),
+    ):
+        response = client.post(
+            "/api/v1/canvas/courses/1/assignments/generate-draft",
+            json={
+                "prompt": "Create a quiz on recursion",
+                "model_settings": {"provider": "openai"},
+            },
+            headers=headers,
+        )
+
+    assert response.status_code == 200, response.text
+    settings_used = adapter_factory.call_args.args[0]
+    assert settings_used["provider"] == "openai"
+    assert settings_used["api_key"] == "sk-instructor-key"
+    # Their saved model, not the deployment default -- the request named a
+    # provider without a model, so the connection is what supplies it.
+    assert settings_used["model"] == "gpt-4o-mini"
+
+
+def test_generate_draft_rejects_a_provider_the_instructor_has_not_connected(client):
+    headers = _register(client)
+
+    mock_adapter = AsyncMock()
+    with patch(
+        "app.services.assignment_draft.get_llm_adapter", return_value=mock_adapter
+    ):
+        response = client.post(
+            "/api/v1/canvas/courses/1/assignments/generate-draft",
+            json={
+                "prompt": "Create a quiz on recursion",
+                "model_settings": {"provider": "anthropic"},
+            },
+            headers=headers,
+        )
+
+    # 400, not 502: nothing is wrong with the generator. The instructor picked
+    # a provider they have no key for, and the message says so.
+    assert response.status_code == 400, response.text
+    assert "not connected" in response.json()["detail"]
+    mock_adapter.generate.assert_not_awaited()
+
+
+def test_generate_draft_never_accepts_a_client_supplied_key(client):
+    """The same boundary chat enforces: keys come from storage, not the wire."""
+    headers = _register(client)
+
+    response = client.post(
+        "/api/v1/canvas/courses/1/assignments/generate-draft",
+        json={
+            "prompt": "Create a quiz on recursion",
+            "model_settings": {"provider": "openai", "api_key": "sk-from-the-browser"},
+        },
+        headers=headers,
+    )
+
+    assert response.status_code == 422, response.text

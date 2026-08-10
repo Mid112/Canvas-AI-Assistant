@@ -14,6 +14,7 @@ from app.services.llm.anthropic_adapter import AnthropicAdapter
 from app.services.llm.base import LLMAdapter
 from app.services.llm.llm_connections import (
     build_adapter_settings,
+    resolve_instructor_llm_request,
     is_provider_connected,
     provider_accepts_user_key,
     provider_requires_user_key,
@@ -540,6 +541,67 @@ def test_build_adapter_settings_rejects_revoked_personal_key():
     ):
         with pytest.raises(ValueError, match="rejected your saved API key"):
             asyncio.run(build_adapter_settings(db, 1, "openai", "gpt-4o-mini"))
+
+
+def _connection(provider_id: str, model: str, key: str = "sk-personal"):
+    return type(
+        "Conn",
+        (),
+        {
+            "provider_id": provider_id,
+            "encrypted_api_key": encrypt_llm_api_key(key),
+            "base_url": None,
+            "model": model,
+        },
+    )()
+
+
+# A model name belongs to a provider. When the request names a provider but no
+# model, the deployment default's model must not ride along -- "gpt-oss-20b:groq"
+# sent to OpenAI is a request for a model that does not exist there.
+def test_resolve_drops_the_default_model_when_switching_provider():
+    from unittest.mock import patch
+
+    db = AsyncMock()
+    db.scalars = AsyncMock(return_value=[_connection("openai", "gpt-4o-mini")])
+
+    with patch(
+        "app.services.llm.llm_connections.validate_api_key",
+        new_callable=AsyncMock,
+        return_value=(True, None),
+    ):
+        provider, model, settings = asyncio.run(
+            resolve_instructor_llm_request(
+                db, 1, "groq", "openai/gpt-oss-20b:groq", {"provider": "openai"}
+            )
+        )
+
+    assert provider == "openai"
+    # Their saved model for the provider they actually chose.
+    assert model == "gpt-4o-mini"
+    assert settings["api_key"] == "sk-personal"
+
+
+# The default model is still the right answer when nothing overrides it --
+# dropping it unconditionally would ignore the admin's configured model.
+def test_resolve_keeps_the_default_model_for_the_default_provider():
+    from unittest.mock import patch
+
+    db = AsyncMock()
+    db.scalars = AsyncMock(return_value=[_connection("openai", "gpt-4o-mini")])
+
+    with patch(
+        "app.services.llm.llm_connections.validate_api_key",
+        new_callable=AsyncMock,
+        return_value=(True, None),
+    ):
+        _, model, _ = asyncio.run(
+            resolve_instructor_llm_request(
+                db, 1, "openai", "gpt-4o", {"provider": "openai"}
+            )
+        )
+
+    assert model == "gpt-4o"
 
 
 def test_llm_api_key_uses_same_fernet_roundtrip_as_canvas_tokens():

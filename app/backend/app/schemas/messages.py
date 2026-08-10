@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.schemas.chat import ModelSettings
+
 
 class MessageRecipient(BaseModel):
     id: str
@@ -17,6 +19,10 @@ class MessageDraftCreate(BaseModel):
     subject: str | None = None
     body: str | None = None
     recipients: list[MessageRecipient] = Field(default_factory=list)
+    # Only read when `prompt` is set and `body` is not — that is the one path
+    # here that calls a model. See AssignmentDraftRequest for why it travels
+    # with the request.
+    model_settings: ModelSettings | None = None
 
 
 class MessageDraftUpdate(BaseModel):
