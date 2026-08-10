@@ -82,6 +82,13 @@ export interface TypedDraftCourseCandidate {
   name: string;
 }
 
+/** The subset of an assignment / student option resolveTypedDraftOptionId
+ * needs — structural for the same reason as TypedDraftCourseCandidate. */
+export interface TypedDraftLabelledOption {
+  id: number;
+  name: string;
+}
+
 export interface TypedDraft {
   id: string;
   kind: TypedDraftKind;
@@ -167,24 +174,22 @@ function stripCanvasIdentifiers(
   };
 }
 
-function normalizeCourseLabel(value: string): string {
+function normalizeLabel(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function matchUniqueCourse(
-  courses: TypedDraftCourseCandidate[],
+function matchUniqueLabel<T extends { id: number }>(
+  items: T[],
   label: string | undefined,
-  pick: (course: TypedDraftCourseCandidate) => string,
+  pick: (item: T) => string,
 ): number | undefined {
-  const target = label ? normalizeCourseLabel(label) : "";
+  const target = label ? normalizeLabel(label) : "";
   if (!target) {
     return undefined;
   }
-  const matches = courses.filter(
-    (course) => normalizeCourseLabel(pick(course)) === target,
-  );
-  // Two courses sharing a code (or a name) cannot be told apart from a label
-  // alone, so an ambiguous hit resolves to nothing rather than to a guess.
+  const matches = items.filter((item) => normalizeLabel(pick(item)) === target);
+  // Two entries sharing a label cannot be told apart from that label alone, so
+  // an ambiguous hit resolves to nothing rather than to a guess.
   return matches.length === 1 ? matches[0].id : undefined;
 }
 
@@ -204,9 +209,26 @@ export function resolveTypedDraftCourseId(
   courses: TypedDraftCourseCandidate[],
 ): number | undefined {
   return (
-    matchUniqueCourse(courses, content.courseCode, (course) => course.code) ??
-    matchUniqueCourse(courses, content.courseName, (course) => course.name)
+    matchUniqueLabel(courses, content.courseCode, (course) => course.code) ??
+    matchUniqueLabel(courses, content.courseName, (course) => course.name)
   );
+}
+
+/** Resolves a saved assignment / student name back to the id its select needs.
+ *
+ * The same problem resolveTypedDraftCourseId solves, one level down. Drafts
+ * store names because #1239 keeps Canvas ids out of local storage, but a
+ * <select> is driven by id, so the id has to be recovered at resume time —
+ * and only after the course's assignments and students have been fetched.
+ *
+ * Returns undefined when the name matches zero or several entries: the
+ * assignment may have been deleted, or the student unenrolled. The select then
+ * stays on its placeholder rather than pointing at the wrong submission. */
+export function resolveTypedDraftOptionId(
+  label: string | undefined,
+  options: TypedDraftLabelledOption[],
+): number | undefined {
+  return matchUniqueLabel(options, label, (option) => option.name);
 }
 
 function writeDrafts(userId: number, drafts: TypedDraft[]): void {
@@ -418,16 +440,15 @@ export function buildTypedDraftResumeTarget(
     case "feedback": {
       // Content-only drafts have no Canvas assignment/student ids — omit them
       // so the create page resumes at describe instead of Number(undefined).
-      const prompt = joinDescribePrompt([
-        draft.content.assignmentName
-          ? `Assignment: ${draft.content.assignmentName}`
-          : undefined,
-        draft.content.studentName
-          ? `Student: ${draft.content.studentName}`
-          : undefined,
-        draft.content.grade ? `Grade: ${draft.content.grade}` : undefined,
-        draft.content.feedback,
-      ]);
+      //
+      // The prompt is only what the instructor typed. Assignment, student and
+      // grade used to be prepended to it as "Assignment: ...\n\nStudent: ..."
+      // because nothing else carried them across a resume; that put three
+      // lines of machine text on top of the instructor's own prose every time.
+      // They travel as their own fields now — the describe step restores the
+      // two selects from the names (resolveTypedDraftOptionId) and the page
+      // reapplies the grade after generation.
+      const prompt = draft.content.feedback?.trim() ?? "";
       return {
         path: paths.instructor.feedbackCreate,
         state: {

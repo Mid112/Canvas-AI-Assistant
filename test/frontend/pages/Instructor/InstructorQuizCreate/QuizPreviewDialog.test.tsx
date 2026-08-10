@@ -30,7 +30,10 @@ describe("QuizPreviewDialog", () => {
 
     expect(screen.getByText(preview.summary)).toBeInTheDocument();
     expect(screen.getByText("Medium risk")).toBeInTheDocument();
-    expect(screen.getByText(/Reversible/)).toBeInTheDocument();
+    // Exact text, not /Reversible/: that pattern also matches "Irreversible",
+    // so it would pass whichever state the badge rendered.
+    const reversible = screen.getByText("Reversible");
+    expect(reversible.className).toContain("emerald");
     expect(onConfirm).not.toHaveBeenCalled();
   });
 

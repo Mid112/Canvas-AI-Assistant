@@ -15,6 +15,7 @@ from app.services.llm.provider_registry import (
     KNOWN_PROVIDER_IDS,
     ProviderDefinition,
     check_provider_health,
+    get_active_llm_config,
     get_provider_definition,
     list_provider_definitions,
     validate_api_key,
@@ -259,9 +260,42 @@ async def resolve_instructor_llm_request(
         requested_model = str(requested.get("model") or "").strip()
         if requested_model:
             model = requested_model
+        elif provider != default_provider:
+            # A model name belongs to a provider. Carrying the deployment
+            # default's model onto a different one asks OpenAI for a Groq model
+            # id — so drop it and let build_adapter_settings fall through to
+            # the instructor's saved model for this provider, then to the
+            # provider's own default. Chat has not hit this because its client
+            # always sends a model alongside the provider.
+            model = ""
 
     adapter_settings = await build_adapter_settings(db, user_id, provider, model)
     return provider, adapter_settings["model"], adapter_settings
+
+
+async def resolve_generation_adapter_settings(
+    db: AsyncSession,
+    user_id: int,
+    requested: dict | None,
+) -> tuple[str, dict[str, str]]:
+    """Provider id + adapter settings for a one-shot generation call.
+
+    The same resolution the chat turn does, packaged for the endpoints that
+    generate a single draft. They used to build adapter settings by hand from
+    get_active_llm_config, which is the deployment's provider and carries no
+    credentials — so an instructor's own key was never attached, their chosen
+    provider was ignored, and a revoked key surfaced as a bare 502 instead of
+    "reconnect it in Settings".
+
+    Returns the provider actually resolved, not the one requested: it is what
+    the AI-health record has to be filed under, or the instructor's dashboard
+    reports failures against a provider they never used.
+    """
+    config = await get_active_llm_config(db)
+    provider, _, adapter_settings = await resolve_instructor_llm_request(
+        db, user_id, config.provider, config.model, requested
+    )
+    return provider, adapter_settings
 
 
 async def upsert_llm_connection(

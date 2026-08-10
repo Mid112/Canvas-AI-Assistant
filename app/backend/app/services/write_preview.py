@@ -4,7 +4,11 @@ from app.models.course import Course
 from app.services.risk import classify_action_risk
 
 
-def generate_write_preview(proposed_action: dict, course: Course) -> dict:
+def generate_write_preview(
+    proposed_action: dict,
+    course: Course,
+    instructor_timezone: str | None = None,
+) -> dict:
     """Single preview generator for all write actions. Dispatches on the
     'action' field inside proposed_action to produce the right metadata
     shape for each write type. Adding a new write action means adding
@@ -20,11 +24,11 @@ def generate_write_preview(proposed_action: dict, course: Course) -> dict:
 
     match action_type:
         case "create_assignment":
-            return _preview_create_assignment(course, proposed_action)
+            return _preview_create_assignment(course, proposed_action, instructor_timezone)
         case "create_quiz":
-            return _preview_create_quiz(course, proposed_action)
+            return _preview_create_quiz(course, proposed_action, instructor_timezone)
         case "update_assignment":
-            return _preview_update_assignment(course, proposed_action)
+            return _preview_update_assignment(course, proposed_action, instructor_timezone)
         case "send_message":
             return _preview_send_message(course, proposed_action)
         case "update_grade":
@@ -53,13 +57,15 @@ def _reversibility_fields(action_type: str) -> dict:
     return fields
 
 
-def _preview_create_assignment(course: Course, params: dict) -> dict:
+def _preview_create_assignment(
+    course: Course, params: dict, instructor_timezone: str | None = None
+) -> dict:
     title = params.get("title", "Untitled")
     description = params.get("description", "")
     due_date = params.get("due_date")
     points_possible = params.get("points_possible")
 
-    due_display = _format_due_date(due_date)
+    due_display = _format_due_date(due_date, instructor_timezone)
     points_display = f"{points_possible} points" if points_possible else "Ungraded"
     desc_preview = description[:200] + ("..." if len(description) > 200 else "")
 
@@ -84,7 +90,9 @@ def _preview_create_assignment(course: Course, params: dict) -> dict:
     }
 
 
-def _preview_create_quiz(course: Course, params: dict) -> dict:
+def _preview_create_quiz(
+    course: Course, params: dict, instructor_timezone: str | None = None
+) -> dict:
     title = params.get("title", "Untitled Quiz")
     description = params.get("description", "")
     due_date = params.get("due_date")
@@ -95,7 +103,7 @@ def _preview_create_quiz(course: Course, params: dict) -> dict:
     allowed_attempts = params.get("allowed_attempts")
     time_limit = params.get("time_limit")
 
-    due_display = _format_due_date(due_date)
+    due_display = _format_due_date(due_date, instructor_timezone)
     points_display = f"{points_possible} points" if points_possible else "Ungraded"
     desc_preview = description[:200] + ("..." if len(description) > 200 else "")
     question_count = len(questions) if isinstance(questions, list) else 0
@@ -140,7 +148,9 @@ def _preview_create_quiz(course: Course, params: dict) -> dict:
     }
 
 
-def _preview_update_assignment(course: Course, params: dict) -> dict:
+def _preview_update_assignment(
+    course: Course, params: dict, instructor_timezone: str | None = None
+) -> dict:
     assignment_id = params.get("assignment_id", "?")
     assignment_name = params.get("assignment_name")
     title = params.get("title")
@@ -154,7 +164,7 @@ def _preview_update_assignment(course: Course, params: dict) -> dict:
     if description is not None:
         changes["description"] = description[:200] + ("..." if len(description) > 200 else "")
     if due_date is not None:
-        changes["due_date"] = _format_due_date(due_date)
+        changes["due_date"] = _format_due_date(due_date, instructor_timezone)
     if points_possible is not None:
         changes["points_possible"] = f"{points_possible} points"
 
@@ -212,7 +222,7 @@ def _preview_update_assignment(course: Course, params: dict) -> dict:
 
 
 def _preview_send_message(course: Course, params: dict) -> dict:
-    subject = params.get("subject", "")
+    subject = params.get("subject", "").strip()
     body = params.get("body", "")
     body_preview = body[:200] + ("..." if len(body) > 200 else "")
     recipient_ids = params.get("recipient_canvas_user_ids") or []
@@ -225,25 +235,35 @@ def _preview_send_message(course: Course, params: dict) -> dict:
     if recipient_ids:
         recipient_count = len(recipient_ids)
         who = ", ".join(recipient_names) if recipient_names else f"{recipient_count} selected student(s)"
+        # An empty subject is legitimate here, not a failure: schemas.py leaves
+        # subject/body optional so the LLM can hand a bare recipient set to the
+        # Messages compose form (#1310). Quoting it anyway rendered the summary
+        # as literal Send "" ..., which reads like the instructor's own words
+        # were lost. Say what will happen instead of quoting nothing.
         summary = (
-            f"Send \"{subject.strip()}\" as a private Canvas message to "
-            f"{who} in {course.name}."
+            f"Send \"{subject}\" as a private Canvas message to {who} in {course.name}."
+            if subject
+            else f"Draft a private Canvas message to {who} in {course.name}."
         )
         audience = {"scope": "selected_students", "size": recipient_count}
         resource_type = "conversation"
+        resource_name = subject or "Untitled message"
     else:
         summary = (
-            f"Post \"{subject.strip()}\" as a public announcement visible to "
+            f"Post \"{subject}\" as a public announcement visible to "
             f"the entire class in {course.name}."
+            if subject
+            else f"Draft an announcement for the entire class in {course.name}."
         )
         audience = {"scope": "entire_class", "size": None}
         resource_type = "announcement"
+        resource_name = subject or "Untitled announcement"
 
     result = {
         "action": "send_message",
         "course": course.name,
         "metadata": {
-            "subject": subject.strip(),
+            "subject": subject,
             "body_preview": body_preview,
             "recipient_canvas_user_ids": recipient_ids,
             "recipient_names": recipient_names,
@@ -251,7 +271,7 @@ def _preview_send_message(course: Course, params: dict) -> dict:
         "summary": summary,
         "affected_resources": [
             {"type": "course", "id": course.id, "name": course.name, "status": "unchanged"},
-            {"type": resource_type, "id": None, "name": subject.strip(), "status": "created"},
+            {"type": resource_type, "id": None, "name": resource_name, "status": "created"},
         ],
         "audience": audience,
         **_preview_safety_fields("send_message", params),
@@ -311,11 +331,16 @@ def _preview_generic(course: Course, params: dict) -> dict:
     }
 
 
-def _format_due_date(due_date: str | None) -> str:
-    # Same UTC-normalized instant the update payload sends to Canvas (#1435).
+def _format_due_date(
+    due_date: str | None, instructor_timezone: str | None = None
+) -> str:
+    # Same instant the payload sends to Canvas, rendered in the
+    # instructor's own Canvas timezone. Without the zone the card showed
+    # the correct instant labelled UTC, so a 23:59 Vancouver due date read
+    # back as 06:59 the next morning on the confirm screen.
     from app.services.due_date import format_due_date_for_preview
 
-    return format_due_date_for_preview(due_date)
+    return format_due_date_for_preview(due_date, instructor_timezone)
 
 
 def _preview_safety_fields(action_type: str, params: dict) -> dict:

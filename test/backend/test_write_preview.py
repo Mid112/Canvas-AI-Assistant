@@ -87,6 +87,59 @@ def test_send_message_preview_supports_selected_recipients():
     assert "2 selected student" in preview["summary"]
 
 
+# Verifies: an omitted subject does not become a pair of empty quotes.
+# schemas.py leaves subject/body optional so a bare recipient set can be handed
+# to the Messages compose form (#1310), which made the summary read
+# Send "" as a private Canvas message to ... -- as though the instructor's own
+# words had been dropped somewhere between chat and the preview.
+def test_send_message_preview_without_subject_does_not_quote_an_empty_string():
+    preview = generate_write_preview(
+        {
+            "action": "send_message",
+            "recipient_canvas_user_ids": [101, 102],
+            "recipient_names": ["Student One", "Student Two"],
+        },
+        COURSE,
+    )
+    assert '""' not in preview["summary"]
+    assert preview["summary"] == (
+        "Draft a private Canvas message to Student One, Student Two in cosc 501."
+    )
+    resources = {r["type"]: r for r in preview["affected_resources"]}
+    assert resources["conversation"]["name"] == "Untitled message"
+
+
+# Verifies: the same for the announcement half of the branch.
+def test_announcement_preview_without_subject_does_not_quote_an_empty_string():
+    preview = generate_write_preview({"action": "send_message"}, COURSE)
+
+    assert '""' not in preview["summary"]
+    assert preview["summary"] == (
+        "Draft an announcement for the entire class in cosc 501."
+    )
+    resources = {r["type"]: r for r in preview["affected_resources"]}
+    assert resources["announcement"]["name"] == "Untitled announcement"
+
+
+# Verifies: a subject the instructor did supply is still quoted verbatim. The
+# empty-subject wording above must not swallow the normal case.
+def test_send_message_preview_still_quotes_a_supplied_subject():
+    preview = generate_write_preview(
+        {
+            "action": "send_message",
+            "subject": "  Reminder  ",
+            "body": "Please submit by Friday",
+            "recipient_canvas_user_ids": [101],
+            "recipient_names": ["Student One"],
+        },
+        COURSE,
+    )
+    assert preview["summary"] == (
+        'Send "Reminder" as a private Canvas message to Student One in cosc 501.'
+    )
+    assert preview["metadata"]["subject"] == "Reminder"
+
+
 # Verifies: Update grade preview marks submission modified.
 def test_update_grade_preview_marks_submission_modified():
     preview = generate_write_preview(

@@ -72,8 +72,11 @@ export function RiskAlerts({
                 ) : risk.can_undo ? (
                   <Button
                     type="button"
-                    size="sm"
                     variant="outline"
+                    // Sized up from the default `sm`: this is the only way back
+                    // to an executed action, and at small it read as incidental
+                    // next to the alert text it sits beside.
+                    className="text-base font-semibold"
                     render={<Link to={paths.instructor.history} />}
                   >
                     Open workflow history

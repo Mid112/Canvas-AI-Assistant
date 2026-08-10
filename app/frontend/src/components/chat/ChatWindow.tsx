@@ -149,6 +149,14 @@ interface ChatWindowProps {
   onInitialPromptConsumed?: () => void;
   onModifyContextConsumed?: () => void;
   onConversationChange?: (conversationId: number) => void;
+  /** The course this turn resolved to, when the backend named one. Differs
+   * from the selected course exactly when the instructor named a course in
+   * the message; the assistant page moves the chat tab to match. */
+  onResolvedCourse?: (course: {
+    localCourseId: number;
+    courseName?: string;
+    conversationId?: number;
+  }) => void;
   onDeferredRequest?: () => void;
   onDeferredResumeComplete?: () => void;
   onLoadingChange?: (isLoading: boolean) => void;
@@ -176,6 +184,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
   onInitialPromptConsumed,
   onModifyContextConsumed,
   onConversationChange,
+  onResolvedCourse,
   onDeferredRequest,
   onDeferredResumeComplete,
   onLoadingChange,
@@ -562,10 +571,17 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
         const response = await sendAssistantMessage(accessToken, userText, {
           context: assistantContext,
           conversationId,
-          // Seed only a brand-new conversation from the visible course
-          // selector. Existing conversations remain bound to their own
-          // server-validated course and cannot be overridden implicitly.
-          localCourseId: conversationId === undefined ? activeCourse?.localId : undefined,
+          // Deliberately not sending the ambient active course. local_course_id
+          // is the "explicit course switch" channel and outranks a course named
+          // in the message, so echoing the selector here re-broke #1509: the
+          // first turn of every new chat silently overrode "show submissions
+          // for baking 101" with whatever course happened to be selected, and
+          // skipped the pre-resolver that exists to arbitrate exactly that.
+          //
+          // Nothing is lost. A course-less conversation is seeded server-side
+          // from the persisted active-course preference, and picking a course
+          // in the dropdown already binds it out-of-band through
+          // syncAssistantCourseContext (/chat/course-context).
           pendingMessageId: pendingMessageIdToSend,
           deferredRequestId: deferredRequestIdRef.current ?? undefined,
           modelSettings: modelSettings ?? undefined,
@@ -589,6 +605,12 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
 
         setConversationId(response.conversationId);
         onConversationChange?.(response.conversationId);
+        if (response.resolvedCourse) {
+          onResolvedCourse?.({
+            ...response.resolvedCourse,
+            conversationId: response.conversationId,
+          });
+        }
         if (response.requiresCanvasToken && user?.id) {
           setStoredDeferredDraft(user.id, {
             message: userText,
@@ -642,6 +664,7 @@ export const ChatWindow = forwardRef<ChatWindowHandle, ChatWindowProps>(function
       conversationId,
       modelSettings,
       onConversationChange,
+      onResolvedCourse,
       onDeferredRequest,
       onDeferredResumeComplete,
       startLoadingFeedback,

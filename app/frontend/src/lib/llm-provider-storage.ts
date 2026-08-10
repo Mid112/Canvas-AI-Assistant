@@ -56,6 +56,33 @@ export function getStoredLlmProviderSettings(
   }
 }
 
+/** The wire shape the backend's ModelSettings expects.
+ *
+ * Never carries a key: credentials are resolved server-side from the
+ * instructor's stored connection, and the backend rejects a client-supplied
+ * api_key outright. This only names which connection to use.
+ */
+export interface ModelSettingsPayload {
+  provider: string;
+  model?: string;
+  base_url?: string;
+}
+
+/** Shared by every endpoint that runs a model on the instructor's behalf —
+ * chat, assignment drafts, message drafts. One mapping, because three copies
+ * of it is how one of them ends up omitting a field nobody notices. */
+export function toModelSettingsPayload(
+  settings: LlmProviderSettings | null | undefined,
+): ModelSettingsPayload | undefined {
+  return settings
+    ? {
+        provider: settings.provider,
+        model: settings.model || undefined,
+        base_url: settings.baseUrl || undefined,
+      }
+    : undefined;
+}
+
 export function setStoredLlmProviderSettings(
   userId: number,
   settings: LlmProviderSettings,

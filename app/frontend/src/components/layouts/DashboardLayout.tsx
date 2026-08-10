@@ -1,9 +1,10 @@
+import { PanelLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 
 import { Header } from "@/components/layouts/Header";
+import { Button } from "@/components/ui/button";
 import { Sidebar } from "@/components/layouts/Sidebar";
-import { AssistantAvatar } from "@/components/brand/AssistantAvatar";
 import { ActiveCourseProvider } from "@/contexts/ActiveCourseProvider";
 import { useAuth } from "@/contexts/AuthContext";
 import { InstitutionProvider } from "@/contexts/InstitutionProvider";
@@ -140,19 +141,36 @@ function DashboardShell({ role }: DashboardLayoutProps) {
           onToggle={toggleSidebar}
         />
       </div>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <Header
-          title={title}
-          subtitle={
-            isAssistantPage ? "Canvas Workflow Management Assistant" : undefined
-          }
-          leading={isAssistantPage ? <AssistantAvatar size="sm" /> : undefined}
-          role={role}
-          roleLabel={roleLabel}
-          navItems={navItems}
-          sidebarOpen={sidebarOpen}
-          onToggleSidebar={toggleSidebar}
-        />
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {/* The assistant page drops the header entirely so the chat, its
+            quick actions and the conversation history get the full height.
+            The title only restated the page the sidebar already highlights. */}
+        {isAssistantPage ? (
+          // Without the header there is no PanelLeft button, and a collapsed
+          // sidebar is w-0 — so this is the only way back to navigation once
+          // it is closed here.
+          !sidebarOpen ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="absolute left-3 top-3 z-40"
+              aria-label="Open sidebar"
+              onClick={toggleSidebar}
+            >
+              <PanelLeft className="size-4" />
+            </Button>
+          ) : null
+        ) : (
+          <Header
+            title={title}
+            role={role}
+            roleLabel={roleLabel}
+            navItems={navItems}
+            sidebarOpen={sidebarOpen}
+            onToggleSidebar={toggleSidebar}
+          />
+        )}
         <main className="flex min-h-0 flex-1 flex-col overflow-auto">
           <Outlet />
         </main>

@@ -13,7 +13,7 @@ const payload = {
   assignment_id: 10,
   user_id: 42,
   posted_grade: "88",
-  reason: "Adjusted after rubric review",
+  feedback: "Adjusted after rubric review",
   current_submission: {
     id: 99,
     assignment_id: 10,
@@ -33,7 +33,7 @@ describe("gradeManagement service", () => {
     vi.restoreAllMocks();
   });
 
-  it("sends preview payload with reason and current submission snapshot", async () => {
+  it("sends preview payload with feedback and current submission snapshot", async () => {
     // Covers stale-state protection inputs: preview sends the current submission
     // snapshot so the backend can compare what the instructor reviewed.
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({

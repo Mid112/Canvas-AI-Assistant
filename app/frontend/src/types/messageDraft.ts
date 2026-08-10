@@ -1,3 +1,5 @@
+import type { LlmProviderSettings } from "@/types/llmProvider";
+
 export interface MessageRecipient {
   id: string;
   name: string;
@@ -54,6 +56,10 @@ export interface FetchMessageDraftOptions {
   conversationId?: number;
   /** Canvas base URL resolved from the selected course or institution. */
   canvasUrl?: string;
+  /** The instructor's chosen LLM provider, used only when the backend has to
+   * generate subject/body from `prompt`. Supplied by MessageDraftPage rather
+   * than by each caller — it is the one place the signed-in user is known. */
+  modelSettings?: LlmProviderSettings | null;
 }
 
 export interface SendMessageDraftPayload {

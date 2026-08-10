@@ -255,6 +255,46 @@ describe("ChatWindow", () => {
     ).toBeInTheDocument();
   });
 
+  // Verifies the #1509 contract, which has already regressed once: the ambient
+  // active course must never ride along on a chat turn. local_course_id is the
+  // "explicit course switch" channel and outranks a course named in the
+  // message, so sending the selector here makes the backend skip its
+  // course pre-resolver and silently answer about the wrong course on the
+  // first turn of every new chat. The dropdown binds a course out-of-band via
+  // syncAssistantCourseContext instead.
+  it("never sends the ambient active course as an explicit course switch", async () => {
+    const user = userEvent.setup();
+    // An active course must actually be selected, or this asserts nothing --
+    // the default mock has none, so localCourseId would be undefined even
+    // with the bug reinstated.
+    mockUseActiveCourse.mockReturnValue({
+      activeCourse: { localId: 7, displayName: "COSC 499 Capstone Project" },
+      availableCourses: [],
+      isLoading: false,
+      isSaving: false,
+      error: null,
+      selectActiveCourse: vi.fn(),
+      refreshActiveCourse: vi.fn(),
+      notifyCoursesChanged: vi.fn(),
+    });
+    mockedSendAssistantMessage.mockResolvedValueOnce({
+      content: "Here are the submissions.",
+      conversationId: 1,
+    });
+
+    renderWithInstitution(<ChatWindow />);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "show me submissions for baking 101",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    await waitFor(() => expect(mockedSendAssistantMessage).toHaveBeenCalled());
+    const [, , options] = mockedSendAssistantMessage.mock.calls[0];
+    expect(options?.localCourseId).toBeUndefined();
+  });
+
   // Verifies: Stop aborts the in-flight request and shows a soft Stopped message (not an error banner).
   it("shows a soft Stopped message when the request is aborted", async () => {
     const user = userEvent.setup();

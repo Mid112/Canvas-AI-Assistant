@@ -720,3 +720,61 @@ def test_default_canvas_url_returns_first_connection():
     )
 
     assert _default_canvas_url(user) == "https://canvas.example.edu"
+
+
+# ---------------------------------------------------------------------------
+# intent_preview wrapping set_active_course
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_intent_preview_set_active_course_executes_without_a_preview():
+    """The model wraps set_active_course in an intent_preview like any other
+    action, which used to build a confirm card for it: a preview page, an Undo
+    section and a confirm click to change a local preference. It is not in
+    WRITE_ACTIONS and is documented to execute immediately, so the wrapper is
+    unwrapped and the action runs.
+    """
+    db = AsyncMock()
+    user = MagicMock(id=1)
+    action = IntentPreviewAction(
+        summary="Set the active course to COSTCO.",
+        proposed_action={"action": "set_active_course", "local_course_id": 7},
+    )
+    active = SimpleNamespace(model_dump=lambda: {"local_id": 7, "name": "COSTCO"})
+
+    with patch(
+        "app.mcp_tools.dispatcher.set_active_course",
+        new=AsyncMock(return_value=active),
+    ) as mocked_set:
+        result = await execute_tool(db, user, action)
+
+    # Executed, not previewed.
+    assert result["active_course"]["local_id"] == 7
+    mocked_set.assert_awaited_once()
+    assert "preview_metadata" not in result
+    assert result.get("action") != "intent_preview"
+
+
+@pytest.mark.asyncio
+async def test_intent_preview_still_previews_a_real_write():
+    """Guard the unwrap above: it must not leak into actions that genuinely
+    require the preview/confirm gate.
+    """
+    course = _course()
+    db = _db_with_course(course)
+    user = MagicMock(id=1)
+    action = IntentPreviewAction(
+        summary="Rename assignment 3.",
+        proposed_action={
+            "action": "update_assignment",
+            "local_course_id": 1,
+            "assignment_id": 3,
+            "title": "Renamed",
+        },
+    )
+
+    result = await execute_tool(db, user, action)
+
+    assert result["action"] == "intent_preview"
+    assert "preview_metadata" in result

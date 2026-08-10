@@ -37,6 +37,36 @@ def _unsubmitted_submission():
     return submission
 
 
+# Verifies the deprecated `reason` spelling still lands in `feedback`. A
+# frontend build cached in someone's browser keeps posting `reason`, and
+# silently dropping it would post a grade with the instructor's comment
+# missing — a data-loss bug that no status code would reveal.
+def test_grade_request_still_accepts_the_deprecated_reason_field():
+    body = GradeUpdateRequest.model_validate(
+        {"assignment_id": 10, "user_id": 42, "posted_grade": "95", "reason": "Rubric fix"}
+    )
+
+    assert body.feedback == "Rubric fix"
+    # The old name is gone from the model itself, not just unused.
+    assert not hasattr(body, "reason")
+
+
+# Verifies the new name wins when a client sends both, so a half-migrated
+# caller cannot resurrect stale text from the field it stopped maintaining.
+def test_feedback_takes_precedence_over_reason_when_both_are_sent():
+    body = GradeUpdateRequest.model_validate(
+        {
+            "assignment_id": 10,
+            "user_id": 42,
+            "posted_grade": "95",
+            "feedback": "Current text",
+            "reason": "Stale text",
+        }
+    )
+
+    assert body.feedback == "Current text"
+
+
 def test_feedback_only_preview_is_medium_risk_and_keeps_grade_unchanged():
     # Covers the feedback-only path: a Canvas submission comment should not be
     # treated like a high-risk grade mutation or change the posted grade.
@@ -46,7 +76,7 @@ def test_feedback_only_preview_is_medium_risk_and_keeps_grade_unchanged():
             assignment_id=10,
             user_id=42,
             posted_grade="",
-            reason="Work changes. You can do it.",
+            feedback="Work changes. You can do it.",
         ),
         _submission(),
     )
@@ -56,7 +86,7 @@ def test_feedback_only_preview_is_medium_risk_and_keeps_grade_unchanged():
     assert preview.rollback_available is False
     assert preview.proposed == {
         "posted_grade": "",
-        "reason": "Work changes. You can do it.",
+        "feedback": "Work changes. You can do it.",
         "warnings": [],
     }
     assert preview.affected_resources[1]["changed_fields"] == ["feedback"]
@@ -76,7 +106,7 @@ def test_preview_requires_grade_or_feedback():
     assert exc.value.detail == "Enter a new grade or feedback before previewing."
 
 
-def test_preview_rejects_profanity_in_feedback_reason():
+def test_preview_rejects_profanity_in_feedback():
     with pytest.raises(HTTPException) as exc:
         _build_grade_preview(
             SimpleNamespace(id=7, name="COSC 777"),
@@ -84,7 +114,7 @@ def test_preview_rejects_profanity_in_feedback_reason():
                 assignment_id=10,
                 user_id=42,
                 posted_grade="85",
-                reason="This is fucking inappropriate",
+                feedback="This is fucking inappropriate",
             ),
             _submission(),
         )
@@ -278,7 +308,7 @@ async def test_grade_submit_records_workflow_audit_and_history_in_one_commit():
                 assignment_id=10,
                 user_id=42,
                 posted_grade="95",
-                reason="Rubric correction",
+                feedback="Rubric correction",
             ),
             user,
             "https://canvas.example.edu",

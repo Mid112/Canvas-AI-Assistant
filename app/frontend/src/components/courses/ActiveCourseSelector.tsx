@@ -63,12 +63,22 @@ export function ActiveCourseSelector({
       activeCourse != null && activeCourse.localId !== value;
     const pendingWork = Boolean(hasPendingAssistantWork?.());
 
-    if (warnOnSwitch && switchingAway) {
-      const detail = pendingWork
-        ? "You have a pending assistant preview or an in-progress reply. Switching courses keeps the current conversation on the old course and starts (or resumes) a separate thread for the new course."
-        : "Switching the active course will keep any open conversation scoped to its original course and open a new thread when you chat about the new course.";
+    // Only the pending-work case still prompts. The plain "your conversation
+    // stays on the old course" notice fired on every switch to explain routing
+    // the instructor did not ask about, and chat tabs will show that routing
+    // directly instead of describing it in a modal.
+    //
+    // The pending-work prompt stays until those tabs land: switching course
+    // re-keys ChatWindow (see the course-context sync in
+    // InstructorAssistantPage), so an unconfirmed preview disappears from
+    // view. Tabs replace this by opening the new course in a background tab
+    // and leaving the instructor on the one holding their preview.
+    if (warnOnSwitch && switchingAway && pendingWork) {
       const confirmed = window.confirm(
-        `${detail}\n\nSwitch active course anyway?`,
+        "You have a pending assistant preview or an in-progress reply. " +
+          "Switching courses keeps the current conversation on the old course " +
+          "and starts (or resumes) a separate thread for the new course." +
+          "\n\nSwitch active course anyway?",
       );
       if (!confirmed) {
         // Controlled select already binds to activeCourse; force a reset so

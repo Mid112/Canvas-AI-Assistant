@@ -358,6 +358,14 @@ migrate-new:
 db-shell:
 	docker compose -f docker-compose.dev.yml exec postgres psql -U appuser -d appdb
 
+# Fill in canvas_connections.token_fingerprint for rows created before
+# migration 045. Not a .sql migration because a fingerprint is an HMAC of the
+# DECRYPTED token, and SQL migrations have no access to the Fernet key.
+# Prints a plan and writes nothing; add --apply once you have read it.
+backfill-token-fingerprints:
+	cd app/backend && .venv/bin/python -m app.core.token_backfill $(ARGS)
+	# usage: make backfill-token-fingerprints ARGS=--apply
+
 db-reset:
 	docker compose -f docker-compose.dev.yml down -v
 	docker compose -f docker-compose.dev.yml up -d postgres
@@ -371,3 +379,17 @@ clean:
 	docker compose down -v
 	docker compose build --no-cache
 	docker compose up -d
+
+# ── Requirement traceability ─────────────────
+# Runs only the tests tagged with @pytest.mark.requirement and renders a page
+# pairing each UR/FR with the tests that demonstrate it. Generated from the
+# tags, so it cannot drift from the suite the way a hand-written table does.
+# test_canvas_idempotency_integration.py is excluded: its concurrent write test
+# deadlocks locally (pre-existing), and a hung run would produce no report.
+requirements-report:
+	./app/backend/.venv/bin/pytest test/backend -m requirement -q -p no:randomly \
+	  --ignore=test/backend/test_fuzz_harness.py \
+	  --ignore=test/backend/test_canvas_idempotency_integration.py \
+	  --requirements-json=/tmp/requirements.json
+	./app/backend/.venv/bin/python tools/requirements_report.py \
+	  --results /tmp/requirements.json --out docs/requirements-traceability.html

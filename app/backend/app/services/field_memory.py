@@ -149,6 +149,132 @@ def merge_field_memory(
     conversation.field_memory = memory
 
 
+# The one question the assistant is currently waiting on an answer to.
+#
+# Nothing in the schema links a reply to what it replies to: messages hold
+# role + text, and the only cross-turn pointer in the system is
+# pending_message_id, which points at a preview. So "the second one" arrives
+# as three words with no record of what was on offer, and the model re-derives
+# the list from history or gives up and asks again.
+#
+# Deliberately a single record, not a graph. One question is outstanding at a
+# time by construction — the assistant asks, then waits — and a list of stale
+# expectations is a source of wrong answers, not context.
+_PENDING_EXPECTATION_KEY = "pending_expectation"
+
+# Enough to answer "which of these did you mean" without turning field memory
+# into a roster dump.
+_EXPECTATION_CANDIDATE_CAP = 12
+
+_AFFIRMATIVES = frozenset(
+    {"yes", "yep", "yeah", "yup", "sure", "ok", "okay", "correct", "right", "y"}
+)
+
+_ORDINAL_WORDS = {
+    "first": 1, "1st": 1, "one": 1,
+    "second": 2, "2nd": 2, "two": 2,
+    "third": 3, "3rd": 3, "three": 3,
+    "fourth": 4, "4th": 4, "four": 4,
+    "fifth": 5, "5th": 5, "five": 5,
+}
+
+
+def record_pending_expectation(
+    conversation: Conversation,
+    *,
+    field: str,
+    question: str,
+    candidates: list[dict[str, Any]] | None = None,
+    action: str | None = None,
+) -> None:
+    """Remember what the assistant just asked, so the next turn can read the
+    reply as an answer to it rather than as a fresh request."""
+    memory = dict(conversation.field_memory or {})
+    memory[_PENDING_EXPECTATION_KEY] = {
+        "field": field,
+        "question": question,
+        "action": action,
+        "candidates": [
+            {"id": candidate.get("id"), "label": str(candidate.get("label", ""))}
+            for candidate in (candidates or [])[:_EXPECTATION_CANDIDATE_CAP]
+        ],
+    }
+    conversation.field_memory = memory
+
+
+def pending_expectation(memory: dict[str, Any] | None) -> dict[str, Any] | None:
+    expectation = (memory or {}).get(_PENDING_EXPECTATION_KEY)
+    return expectation if isinstance(expectation, dict) else None
+
+
+def clear_pending_expectation(conversation: Conversation) -> None:
+    memory = dict(conversation.field_memory or {})
+    if memory.pop(_PENDING_EXPECTATION_KEY, None) is not None:
+        conversation.field_memory = memory
+
+
+def resolve_against_expectation(
+    expectation: dict[str, Any] | None, reply: str
+) -> dict[str, Any] | None:
+    """Read a short reply as an answer to the recorded question.
+
+    Three forms, in order of how unambiguous they are:
+
+    * a label the reply names outright ("lab report b"), longest match winning
+      so a label containing another does not lose to it;
+    * an ordinal into the list as it was offered ("the second one", "2");
+    * a bare "yes" — but only when exactly one candidate was offered, since
+      "yes" to a list of three says nothing about which.
+
+    Returns ``{"field": ..., "id": ..., "label": ...}`` or None. None means
+    the reply was not an answer to this question, which is the common case:
+    instructors change the subject mid-thread, and treating "actually show me
+    the roster" as a choice of assignment would be worse than asking again.
+    """
+    if not expectation:
+        return None
+    candidates = [
+        candidate
+        for candidate in expectation.get("candidates") or []
+        if candidate.get("label")
+    ]
+    if not candidates:
+        return None
+
+    normalized = " ".join(reply.lower().split())
+    stripped = normalized.strip(" .!?,")
+
+    matches = [
+        candidate
+        for candidate in candidates
+        if candidate["label"].lower() in normalized
+    ]
+    if matches:
+        best = max(matches, key=lambda candidate: len(candidate["label"]))
+        # A tie between two different labels of the same length is genuine
+        # ambiguity — the same rule the reference pre-pass uses.
+        if sum(1 for c in matches if len(c["label"]) == len(best["label"])) == 1:
+            return {"field": expectation.get("field"), **best}
+
+    index = _ORDINAL_WORDS.get(stripped)
+    if index is None and stripped.isdigit():
+        # A bare number is the shortest possible answer to a numbered list and
+        # the one instructors actually type.
+        index = int(stripped)
+    if index is None:
+        for word in stripped.replace(",", " ").split():
+            if word in _ORDINAL_WORDS:
+                index = _ORDINAL_WORDS[word]
+                break
+    if index is not None and 1 <= index <= len(candidates):
+        return {"field": expectation.get("field"), **candidates[index - 1]}
+
+    if stripped in _AFFIRMATIVES and len(candidates) == 1:
+        return {"field": expectation.get("field"), **candidates[0]}
+
+    return None
+
+
 def clear_course_scoped_field_memory(conversation: Conversation) -> None:
     """Clear assignment/student-scoped fields when the conversation switches
     courses (#1306). Without this, ``recent_assignments`` and
@@ -172,6 +298,10 @@ def clear_course_scoped_field_memory(conversation: Conversation) -> None:
         _RECENT_ASSIGNMENTS_KEY,
         _RECENT_STUDENTS_KEY,
         _GROUNDED_FACTS_KEY,
+        # The outstanding question was about the old course's assignments or
+        # roster; answering it against the new course would resolve an id that
+        # does not exist there.
+        _PENDING_EXPECTATION_KEY,
     ):
         memory.pop(key, None)
     conversation.field_memory = memory

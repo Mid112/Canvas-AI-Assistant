@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.secret_redaction import safe_exception_text
 from app.models.audit_log import AuditLog
 from app.models.conversation import Conversation
 from app.models.course import Course
@@ -18,8 +19,8 @@ from app.schemas.messages import (
     MessageDraftUpdate,
 )
 from app.services.ai_health import record_ai_call_outcome
+from app.services.llm.llm_connections import resolve_generation_adapter_settings
 from app.services.llm.llm_setting import get_llm_adapter
-from app.services.llm.provider_registry import get_active_llm_config
 from app.services.message_validation import validate_message_for_send
 
 
@@ -63,22 +64,22 @@ async def list_message_drafts(
 async def _generate_draft_content(
     prompt: str,
     template_name: str | None,
-    db: AsyncSession | None = None,
+    adapter_settings: dict[str, str] | None = None,
 ) -> tuple[str, str]:
+    """Draft a subject and body from a prompt.
+
+    Takes settings already resolved rather than a session: the caller has to
+    resolve them anyway to file the AI-health record under the right provider,
+    and doing it twice invites the two disagreeing.
+    """
     system = (
         "You draft class announcement emails for instructors. "
         "Respond with JSON only: {\"subject\": \"...\", \"body\": \"...\"}"
     )
     user_msg = f"Template: {template_name or 'general'}\nRequest: {prompt}"
-    if db is None:
-        adapter_settings = {"provider": settings.DEFAULT_LLM_PROVIDER}
-    else:
-        llm_config = await get_active_llm_config(db)
-        adapter_settings = {
-            "provider": llm_config.provider,
-            "model": llm_config.model,
-        }
-    adapter = get_llm_adapter(adapter_settings)
+    adapter = get_llm_adapter(
+        adapter_settings or {"provider": settings.DEFAULT_LLM_PROVIDER}
+    )
     raw = await adapter.generate(system, user_msg)
     try:
         data = json.loads(raw[raw.find("{") : raw.rfind("}") + 1])
@@ -92,23 +93,48 @@ async def create_message_draft(db: AsyncSession, user: User, body: MessageDraftC
     content = body.body or ""
 
     if body.prompt and not body.body:
-        # Resolved once so the outcome record matches whichever provider
-        # _generate_draft_content actually used (the admin's active
-        # provider, not always the .env DEFAULT_LLM_PROVIDER).
-        llm_config = await get_active_llm_config(db)
+        # Resolved once, before the call, so the outcome record names the
+        # provider that actually ran. It also attaches the instructor's own
+        # stored key: this used to build settings straight from the deployment
+        # config, so a personal provider connection was never used here.
         try:
-            subject, content = await _generate_draft_content(
-                body.prompt, body.template_name, db
+            provider, adapter_settings = await resolve_generation_adapter_settings(
+                db,
+                user.id,
+                body.model_settings.model_dump(exclude_none=True)
+                if body.model_settings
+                else None,
             )
-            await record_ai_call_outcome(db, user.id, llm_config.provider, operation="message_draft")
-        except Exception as e:
+        except (KeyError, ValueError) as e:
+            # A draft is still worth having without a model — the prompt
+            # becomes the body, exactly as it does when generation fails
+            # below. Failing the request outright would lose what they typed.
+            provider = settings.DEFAULT_LLM_PROVIDER
+            adapter_settings = None
+            generation_error: Exception | None = e
+        else:
+            generation_error = None
+
+        if generation_error is None:
+            try:
+                subject, content = await _generate_draft_content(
+                    body.prompt, body.template_name, adapter_settings
+                )
+            except Exception as e:  # noqa: BLE001 - recorded and degraded below
+                generation_error = e
+
+        if generation_error is None:
+            await record_ai_call_outcome(
+                db, user.id, provider, operation="message_draft"
+            )
+        else:
             subject = body.subject or f"{body.template_name or 'Course'} Announcement"
             content = body.prompt
             await record_ai_call_outcome(
                 db,
                 user.id,
-                llm_config.provider,
-                error_detail=str(e)[:500],
+                provider,
+                error_detail=safe_exception_text(generation_error)[:500],
                 operation="message_draft",
             )
 

@@ -1,7 +1,7 @@
 # app/backend/app/mcp_tools/schemas.py
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 
 
 def _normalize_due_date_str(value: str) -> str:
@@ -213,8 +213,14 @@ class UpdateGradeAction(BaseModel):
     student_id: int | None = None
     student_reference: str | None = None
     new_grade: str
-    feedback: str | None = None
-    reason: str | None = None
+    # `reason` is the deprecated spelling of this field. It stays accepted here
+    # — and only here — because the model still occasionally emits it from
+    # older prompt phrasings, and dropping an incoming value would silently
+    # lose the instructor's feedback text. Everything downstream reads
+    # `feedback`; there is no `.reason` attribute to fall back to.
+    feedback: str | None = Field(
+        default=None, validation_alias=AliasChoices("feedback", "reason")
+    )
 
     @field_validator("new_grade", mode="before")
     @classmethod

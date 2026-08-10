@@ -225,6 +225,12 @@ export function InstructorMessagesPage() {
         // pre-checked via preSelectedIds rather than filtering the list.
         const recipients = toStudentEmailRecipients(students);
         const preferredIds = aiDraft?.recipientIds;
+        // "Message my students" entry points cannot name ids before the roster
+        // exists, so they ask for all of it and resolve here. Named recipients
+        // still win — they are a narrower, deliberate choice.
+        const allIds = aiDraft?.selectAllRecipients
+          ? recipients.map((recipient) => recipient.id)
+          : undefined;
 
         setFetchOptions({
           courseId: localCourseId,
@@ -234,7 +240,7 @@ export function InstructorMessagesPage() {
           deliveryMode: aiDraft?.deliveryMode,
           recipients,
           preSelectedIds:
-            preferredIds && preferredIds.length > 0 ? preferredIds : undefined,
+            preferredIds && preferredIds.length > 0 ? preferredIds : allIds,
           conversationId: aiDraft?.conversationId,
           canvasUrl: selectedCanvasUrl,
         });

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { sharedDashboardQuickActions } from "@/types/dashboard";
 import { InstructorDashboardQuickActions } from "@/pages/Instructor/InstructorDashboard/InstructorDashboardQuickActions";
-import { paths } from "@/routes/paths";
+import { instructorMessagesPath, paths } from "@/routes/paths";
 import { renderWithRouter } from "@test/utils/renderWithRouter";
 
 const mockNavigate = vi.fn();
@@ -34,16 +34,17 @@ describe("InstructorDashboardQuickActions", () => {
     );
     expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assignmentCreate);
 
+    // Straight to compose, not through a chat turn: the assistant's only
+    // useful answer to "draft an announcement" was a handoff back to this
+    // page, so the detour cost a round trip and a guess about which of
+    // "student message" or "course announcement" was meant.
     mockNavigate.mockClear();
     await user.click(
       screen.getByRole("button", { name: /Draft Announcement/i }),
     );
-    expect(mockNavigate).toHaveBeenCalledWith(paths.instructor.assistant, {
-      state: {
-        initialPrompt:
-          "Draft a student message or course announcement for my active course. Propose a send_message action I can review and edit before sending.",
-      },
-    });
+    expect(mockNavigate).toHaveBeenCalledWith(
+      instructorMessagesPath({ tab: "compose" }),
+    );
 
     mockNavigate.mockClear();
     await user.click(

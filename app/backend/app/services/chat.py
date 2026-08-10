@@ -44,6 +44,8 @@ from app.models.canvas_course_name import CanvasCourseName
 from app.models.conversation import Conversation
 from app.models.course import Course
 from app.models.message import Message
+from app.models.student import Student
+from app.models.submission import Submission
 from app.models.tool_call_log import ToolCallLog
 from app.models.user import User
 from app.models.user_preference import UserPreference
@@ -62,16 +64,22 @@ from app.services.canvas_assistant_gate import (
     classify_action_for_limited_mode,
     user_has_canvas_credentials,
 )
+from app.services.canvas_timezone import get_instructor_canvas_timezone
 from app.services.deferred_assistant import defer_assistant_request, mark_deferred_request_resumed
+from app.services.due_date_resolver import resolve_due_date
 from app.services.failed_operations import record_failed_operation
 from app.services.field_memory import (
     _PARTIAL_PLAN_SAFE_KEYS,
     clear_course_scoped_field_memory,
+    clear_pending_expectation,
     format_field_memory_for_prompt,
     merge_field_memory,
     merge_grounded_facts_into_memory,
     merge_read_result_into_field_memory,
+    pending_expectation,
     record_course_context,
+    record_pending_expectation,
+    resolve_against_expectation,
     trim_tool_dump_for_history,
 )
 from app.services.intent import normalize_semantic_intent
@@ -149,6 +157,52 @@ def _explicit_dual_delivery_request(message: str) -> bool:
     has_private = bool(_PRIVATE_MESSAGE_REQUEST_RE.search(message))
     has_conjunction = bool(re.search(r"\b(?:and|also|both)\b", message, re.IGNORECASE))
     return has_announcement and has_private and has_conjunction
+
+
+def _is_combined_announcement_request(action: Any) -> bool:
+    """True when the action already says "announce AND message these people".
+
+    The action-shaped counterpart to _explicit_dual_delivery_request above,
+    which reads the same intent off the message text. Either is enough to keep
+    the private half: the phrasing may be too implicit for the regex while the
+    model has still understood it and filled in recipients.
+
+    also_announce_to_class exists for exactly one shape: a public announcement
+    plus targeted messages in the same turn. When the model has set it
+    alongside real recipients it has already understood a request like
+    "announce this and also message Alice separately", and forcing
+    announcement-only would silently drop Alice's message — the private half of
+    a request the instructor made explicitly, with nothing in the reply to say
+    it was dropped.
+
+    Deliberately narrow: it takes the flag AND recipients together. The flag
+    alone cannot re-enable private delivery, so a plain "announce this" is
+    still forced public exactly as before.
+    """
+    if action.action == "send_message":
+        return bool(
+            getattr(action, "also_announce_to_class", False)
+            and (
+                getattr(action, "recipient_directives", None)
+                or getattr(action, "recipient_canvas_user_ids", None)
+                or getattr(action, "recipient_handle", None)
+                or getattr(action, "broadcast_to_all_students", False)
+            )
+        )
+    if action.action == "intent_preview":
+        proposed = action.proposed_action
+        if not isinstance(proposed, dict) or proposed.get("action") != "send_message":
+            return False
+        return bool(
+            proposed.get("also_announce_to_class")
+            and (
+                proposed.get("recipient_directives")
+                or proposed.get("recipient_canvas_user_ids")
+                or proposed.get("recipient_handle")
+                or proposed.get("broadcast_to_all_students")
+            )
+        )
+    return False
 
 
 def _force_announcement_delivery(action: Any) -> Any:
@@ -289,6 +343,17 @@ _CHAINABLE_READ_ACTIONS = frozenset(
         "find_assignments_by_submission_status",
     }
 )
+
+# How many times one turn may answer its own clarify by going back to the model
+# for another tool call. Two: enough to try the obvious read and one follow-up,
+# short enough that a model which cannot resolve the reference reaches the
+# instructor quickly instead of burning the whole step budget in silence.
+_CLARIFY_RETRY_BUDGET = 2
+
+# Writes that create a brand-new Canvas resource inside a course. They have no
+# existing resource to resolve against, so the course is the only thing that
+# can be — and until _run_create_chain, the only thing that wasn't.
+_COURSE_SCOPED_CREATE_ACTIONS = frozenset({"create_assignment", "create_quiz"})
 # Failure paths (parse errors, timeouts, HTTP errors) log the full raw
 # diagnostic — for a "thinking" model that can mean the entire verbose
 # <think> block, hundreds to thousands of tokens — as the assistant message
@@ -724,26 +789,50 @@ def _match_course_name(course_names: list[CanvasCourseName], course_name: str | 
     return None
 
 
-_COURSE_CONTEXT_PATTERNS = (
-    re.compile(r"^\s*(?:course|couse|class)\s*(?:is|=|:)\s*(?P<name>.+?)\s*$", re.IGNORECASE),
-    re.compile(r"^\s*(?:use|switch(?:\s+to)?|set)\s+(?:course|class)\s+(?:to\s+)?(?P<name>.+?)\s*$", re.IGNORECASE),
-)
-
-
-def _resolve_course_context_statement(
-    course_names: list[CanvasCourseName],
-    user_message: str,
+def _prescan_course_reference(
+    course_names: list[CanvasCourseName], message: str
 ) -> CanvasCourseName | None:
-    """Fast path for terse course-selection replies such as "course is
-    COSC 777" (and the common typo "couse is ..."). These are not really
-    Canvas tasks; they are context-setting utterances. Resolving them
-    deterministically keeps the main LLM from replaying the previous task
-    with stale context."""
-    for pattern in _COURSE_CONTEXT_PATTERNS:
-        match = pattern.match(user_message)
-        if match:
-            return _match_course_name(course_names, match.group("name"))
-    return None
+    """The course a message names, matched locally against the instructor's
+    real course list — no LLM call, no Canvas round-trip.
+
+    _match_course_name answers "which course is this *name*"; this answers
+    "does this *message* name a course at all", which is what a resolver
+    running before the model has committed to anything needs. The normalized
+    substring test is the same one _message_may_name_another_course already
+    uses, so "... for capstone project" finds "Capstone Project" regardless of
+    case or punctuation.
+
+    Longest match wins for the same reason it does in
+    _prescan_assignment_reference: a message naming "COSC 499W" should not
+    bind to "COSC 499". Several rows matching at that same length go through
+    _resolve_duplicate_course_name_matches, which folds aliases together and
+    drops completed terms; anything still ambiguous returns None rather than
+    guessing between two live courses.
+    """
+    normalized_message = _normalize_course_text(message)
+    if not normalized_message:
+        return None
+
+    matches: list[tuple[int, CanvasCourseName]] = []
+    for course_name in course_names:
+        longest = 0
+        for value in _course_exact_match_texts(course_name):
+            normalized = _normalize_course_text(value)
+            # Short codes ("CS") turn up inside ordinary words.
+            if len(normalized) < _COURSE_NAME_FUZZY_MATCH_MIN_LENGTH:
+                continue
+            if normalized in normalized_message:
+                longest = max(longest, len(normalized))
+        if longest:
+            matches.append((longest, course_name))
+
+    if not matches:
+        return None
+    best_length = max(length for length, _ in matches)
+    top = [course_name for length, course_name in matches if length == best_length]
+    if len(top) == 1:
+        return top[0]
+    return _resolve_duplicate_course_name_matches(top)
 
 
 _PENDING_COURSE_CORRECTION_PATTERNS = (
@@ -832,6 +921,46 @@ or doesn't clearly and unambiguously point at one specific different course,
 respond with {"switched_to": null} instead of guessing."""
 
 COURSE_SWITCH_RESOLVER_TIMEOUT_SECONDS = 30.0
+
+
+def _message_may_name_another_course(
+    course_names: list[CanvasCourseName],
+    current_course_name: str | None,
+    message: str,
+) -> bool:
+    """Cheap local check for whether a turn is worth a pre-resolver call.
+
+    Decides only "does this message contain the name or code of one of this
+    instructor's other courses" — no LLM, no network. Used to let the
+    pre-resolver run on a conversation's first turn, where there is no history
+    to justify it but the message can still plainly name a different course.
+
+    Substring, not exact: _normalize_course_text strips everything but
+    alphanumerics, so "... for capstone project" contains "capstoneproject".
+    That also makes it case- and punctuation-blind, which is the difference
+    between "Capstone Project" and "capstone project" working equally well.
+
+    A false positive costs one small call that answers null. A false negative
+    just leaves the old behaviour, so this can only improve on it.
+    """
+    normalized_message = _normalize_course_text(message)
+    if not normalized_message:
+        return False
+    current = _normalize_course_text(current_course_name or "")
+
+    for course_name in course_names:
+        for value in _course_exact_match_texts(course_name):
+            normalized = _normalize_course_text(value)
+            # Short codes ("CS") turn up inside ordinary words, and the current
+            # course is not a switch however often it is named.
+            if (
+                len(normalized) < _COURSE_NAME_FUZZY_MATCH_MIN_LENGTH
+                or normalized == current
+            ):
+                continue
+            if normalized in normalized_message:
+                return True
+    return False
 
 
 async def _resolve_course_switch(
@@ -1061,6 +1190,289 @@ choose among multiple assignments solely because a pronoun was used."""
 
 ASSIGNMENT_RESOLVER_TIMEOUT_SECONDS = 30.0
 
+# Same rationale as _COURSE_NAME_FUZZY_MATCH_MIN_LENGTH: a title normalizing to
+# fewer characters than this ("HW", "Q1") appears inside ordinary prose too
+# easily to be treated as a deliberate reference.
+_PRESCAN_MIN_TITLE_LENGTH = 4
+
+
+async def _prescan_assignment_reference(
+    db: AsyncSession, conversation: Conversation, message: str
+) -> dict | None:
+    """Match an assignment named in the message against this course's already
+    synced titles, *before* the main model sees the turn.
+
+    Why this runs first: every other assignment resolution in this module is
+    downstream of the model committing to an action. When the model hedges
+    instead -- answering "Which assignment do you want the submissions for?" to
+    a message that already named one -- _resolve_assignment_reference is never
+    reached, and the instructor is asked to repeat themselves. Handing the
+    model the resolved title up front removes the thing it was hedging about.
+
+    Deliberately deterministic and local: it reads titles already synced into
+    the assignments table, so it costs no LLM call and no Canvas round-trip,
+    and it stays silent unless exactly one title is a confident match. Anything
+    ambiguous falls through to the existing LLM resolver, which is better at
+    "the latest one" than substring matching could be.
+    """
+    if conversation.course_id is None:
+        return None
+    normalized_message = _normalize_course_text(message)
+    if not normalized_message:
+        return None
+
+    rows = (
+        await db.execute(
+            select(Assignment.canvas_assignment_id, Assignment.title).where(
+                Assignment.course_id == conversation.course_id,
+                Assignment.is_active.is_(True),
+            )
+        )
+    ).all()
+
+    matches: list[tuple[int, str, str]] = []
+    for canvas_assignment_id, title in rows:
+        normalized_title = _normalize_course_text(title or "")
+        if len(normalized_title) < _PRESCAN_MIN_TITLE_LENGTH:
+            continue
+        if normalized_title in normalized_message:
+            matches.append((len(normalized_title), canvas_assignment_id, title))
+
+    if not matches:
+        return None
+    # Longest title wins: "user testing 2" contains "user testing", and the
+    # more specific one is what the instructor typed. A tie between two
+    # different assignments is genuine ambiguity -- stay out of it.
+    matches.sort(reverse=True)
+    if len(matches) > 1 and matches[0][0] == matches[1][0]:
+        return None
+
+    _, canvas_assignment_id, title = matches[0]
+    resolved_id = _coerce_int(canvas_assignment_id)
+    return None if resolved_id is None else {"assignment_id": resolved_id, "assignment_title": title}
+
+
+async def _prescan_student_references(
+    db: AsyncSession, conversation: Conversation, message: str
+) -> list[dict]:
+    """Students the message names, matched against this course's synced roster.
+
+    Same contract as _prescan_assignment_reference — deterministic, local, and
+    silent when unsure — but plural, because one message routinely names
+    several people ("message Coin and Alice about the midterm").
+
+    Three forms are matched per student, in the order the design fixes:
+    full name, then surname, then given name. A student is kept only on their
+    longest matching form, so "Alice Smith" does not also register as a hit on
+    a different Alice.
+
+    Two ways a match is dropped rather than guessed at:
+
+    * the same text matches two students ("Smith" with two Smiths on the
+      roster) — genuinely ambiguous, and dropping only those two still lets
+      every other name in the same message resolve;
+    * one student's matched text is a proper substring of another's, which is
+      what "Alice" is next to "Alice Smith" — the longer one is what was
+      actually typed.
+
+    Inactive enrollments are excluded: a withdrawn student is not a target,
+    and resolving one would put a name in the prompt that no later write could
+    act on.
+    """
+    if conversation.course_id is None:
+        return []
+    normalized_message = _normalize_course_text(message)
+    if not normalized_message:
+        return []
+
+    rows = (
+        await db.execute(
+            select(Student.canvas_user_id, Student.name, Student.sortable_name).where(
+                Student.course_id == conversation.course_id,
+                Student.enrollment_state == "active",
+            )
+        )
+    ).all()
+
+    # matched text -> the students it picked out, so an ambiguous name can be
+    # dropped without taking the unambiguous ones in the same message with it.
+    by_matched_text: dict[str, list[tuple[str, str]]] = {}
+    for canvas_user_id, name, sortable_name in rows:
+        best = ""
+        for form in _student_name_forms(name, sortable_name):
+            normalized_form = _normalize_course_text(form)
+            if len(normalized_form) < _PRESCAN_MIN_TITLE_LENGTH:
+                continue
+            if normalized_form in normalized_message and len(normalized_form) > len(best):
+                best = normalized_form
+        if best:
+            by_matched_text.setdefault(best, []).append((canvas_user_id, name))
+
+    unambiguous = {
+        text: students[0]
+        for text, students in by_matched_text.items()
+        if len(students) == 1
+    }
+    resolved: list[dict] = []
+    for text, (canvas_user_id, name) in unambiguous.items():
+        if any(text != other and text in other for other in unambiguous):
+            continue
+        student_id = _coerce_int(canvas_user_id)
+        if student_id is not None:
+            resolved.append({"student_id": student_id, "student_name": name})
+    resolved.sort(key=lambda entry: entry["student_id"])
+    return resolved
+
+
+def _student_name_forms(name: str | None, sortable_name: str | None) -> tuple[str, ...]:
+    """Full name, surname, given name — in the precedence order the matcher
+    relies on. sortable_name is Canvas's "Surname, Given", which is where the
+    surname can be read off without guessing at where a multi-word given name
+    ends."""
+    forms: list[str] = []
+    if name:
+        forms.append(name)
+    if sortable_name and "," in sortable_name:
+        surname, _, given = sortable_name.partition(",")
+        forms.extend(part.strip() for part in (surname, given) if part.strip())
+    elif name and " " in name:
+        given, _, surname = name.partition(" ")
+        forms.extend(part.strip() for part in (surname, given) if part.strip())
+    return tuple(forms)
+
+
+async def _prescan_submission_reference(
+    db: AsyncSession,
+    conversation: Conversation,
+    assignment: dict | None,
+    students: list[dict],
+) -> dict | None:
+    """The one submission a turn is about, once the assignment and exactly one
+    student are already known.
+
+    Derived rather than matched: nobody types a submission's name. It exists so
+    that "regrade Coin's midterm" arrives with the submission already
+    identified instead of the model asking which submission of which
+    assignment. Two named students means the turn is not about one submission,
+    so it stays silent.
+    """
+    if conversation.course_id is None or assignment is None or len(students) != 1:
+        return None
+
+    row = (
+        await db.execute(
+            select(Submission.canvas_submission_id, Submission.status)
+            .join(Assignment, Submission.assignment_id == Assignment.id)
+            .where(
+                Assignment.course_id == conversation.course_id,
+                Assignment.canvas_assignment_id == str(assignment["assignment_id"]),
+                Submission.student_canvas_id == str(students[0]["student_id"]),
+            )
+        )
+    ).first()
+    if row is None:
+        return None
+    submission_id = _coerce_int(row[0])
+    if submission_id is None:
+        return None
+    return {"submission_id": submission_id, "submission_status": row[1]}
+
+
+# Above this many named students, the roster goes behind a handle instead of
+# into the prompt. Five is the point at which a list stops being context and
+# starts being a data dump the model will happily paraphrase back at the user.
+_PRESCAN_STUDENT_NAME_LIMIT = 5
+
+
+async def _run_reference_prescan(
+    db: AsyncSession,
+    conversation: Conversation,
+    course_names: list[CanvasCourseName],
+    message: str,
+) -> dict:
+    """Every local reference the raw message already settles, resolved before
+    the model sees the turn.
+
+    The ordering is a dependency chain, not a preference: the submission needs
+    the assignment and the student, and both of those are scoped to the
+    conversation's course. Each step stays silent when unsure and leaves the
+    field to the existing LLM resolvers downstream, so this can only add
+    certainty — never remove a resolution path that already worked.
+    """
+    prescan: dict[str, Any] = {}
+
+    # An answer to the question the assistant is waiting on outranks anything
+    # matched from scratch. "the second one" carries no title to match at all,
+    # and "Lab Report B" typed in reply to "which of these?" means that
+    # offered option — not a fresh search that might land elsewhere. Taken
+    # first, and the generic matchers below defer to whatever it settled.
+    answered = resolve_against_expectation(
+        pending_expectation(conversation.field_memory), message
+    )
+    answered_field = answered.get("field") if answered else None
+    answered_id = answered.get("id") if answered else None
+
+    assignment: dict | None = None
+    students: list[dict] = []
+    if answered_id is not None and answered_field == "assignment_reference":
+        assignment = {
+            "assignment_id": answered_id,
+            "assignment_title": answered["label"],
+        }
+    if answered_id is not None and answered_field == "student_reference":
+        students = [{"student_id": answered_id, "student_name": answered["label"]}]
+
+    named_course = _prescan_course_reference(course_names, message)
+    if named_course is not None and named_course.local_course_id is not None:
+        prescan["local_course_id"] = named_course.local_course_id
+        prescan["course_name"] = _course_display_name(named_course)
+
+    if assignment is None:
+        assignment = await _prescan_assignment_reference(db, conversation, message)
+    if assignment:
+        prescan.update(assignment)
+
+    if not students:
+        students = await _prescan_student_references(db, conversation, message)
+    if 0 < len(students) <= _PRESCAN_STUDENT_NAME_LIMIT:
+        prescan["students"] = students
+    elif students:
+        # Past the limit the names are replaced by the same handle machinery
+        # resolve_missing_submissions already uses, so a later send_message
+        # turn can materialize the real recipients without them ever having
+        # been in the prompt.
+        resolved_set = await create_resolved_set(
+            db,
+            conversation,
+            kind="prescan_students",
+            query={"local_course_id": conversation.course_id, "source": "prescan"},
+            recipients=[
+                {"user_id": entry["student_id"], "name": entry["student_name"]}
+                for entry in students
+            ],
+        )
+        prescan["student_count"] = len(students)
+        prescan["recipient_handle"] = resolved_set.handle
+
+    submission = await _prescan_submission_reference(
+        db, conversation, assignment, students
+    )
+    if submission:
+        prescan.update(submission)
+
+    return prescan
+
+
+def _format_prescan_for_prompt(prescan: dict | None) -> str:
+    if not prescan:
+        return ""
+    return (
+        "RESOLVED REFERENCES (already matched server-side against this "
+        "course's real Canvas data — treat these as confirmed, use them "
+        "directly, and do NOT ask the user to name them again):\n"
+        f"{json.dumps(prescan, default=str)}"
+    )
+
 
 async def _resolve_assignment_reference(
     assignments: list[dict], reference: str | None, user_message: str, adapter: LLMAdapter,
@@ -1259,7 +1671,14 @@ async def _resolve_course_and_assignment(
                 "clarify": True,
                 "question": f"Which assignment in {course.name} did you mean? Options: {names}.",
                 "partial_plan": {"local_course_id": course.id},
-                "unresolved_fields": ["assignment_reference"],
+                # Recorded as a pending expectation so the next turn can read
+                # "the second one" against this exact list, in this order,
+                # instead of re-deriving it from the question text.
+                "clarify_field": "assignment_reference",
+                "clarify_candidates": [
+                    {"id": _coerce_int(a.get("id")), "label": a.get("name")}
+                    for a in assignments
+                ],
             }
 
     return course, assignment_id
@@ -2047,6 +2466,112 @@ async def _run_find_assignment_by_submission_rate_chain(
 _UPDATE_ASSIGNMENT_FIELDS = ("title", "description", "due_date", "points_possible")
 
 
+async def _resolve_create_target_course(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    course_names: list[CanvasCourseName],
+    proposed: dict[str, Any],
+    user_message: str,
+) -> Course | dict:
+    """Decide which course a create_assignment / create_quiz turn is really
+    about, before a preview quotes one.
+
+    Precedence, strongest signal first:
+
+    1. A course the message itself unambiguously names. The instructor typed
+       it; nothing beats that.
+    2. The conversation's course. By the time a turn reaches here this has
+       already survived the explicit dropdown selection and
+       _resolve_course_switch, so it is a resolved value, not a guess.
+    3. proposed["local_course_id"] — the model's own echo, which is the value
+       that goes wrong and so is trusted last.
+
+    Every branch ends at resolve_course, so an id that is not this
+    instructor's still fails the ownership check exactly as before.
+
+    Returns the Course, or a clarify dict when there is nothing to resolve.
+    """
+    named = _prescan_course_reference(course_names, user_message)
+    if named is not None and named.local_course_id is not None:
+        return await resolve_course(db, user, named.local_course_id)
+
+    for candidate in (conversation.course_id, proposed.get("local_course_id")):
+        resolved_id = _coerce_int(candidate)
+        if resolved_id is not None:
+            return await resolve_course(db, user, resolved_id)
+
+    options = ", ".join(
+        sorted({_course_display_name(course_name) for course_name in course_names})
+    )
+    return {
+        "action": "clarify",
+        "clarify": True,
+        "question": (
+            f"Which course should I create this in? Options: {options}."
+            if options
+            else "Which course should I create this in?"
+        ),
+        "partial_plan": {
+            key: value
+            for key, value in proposed.items()
+            if key not in ("action", "local_course_id") and value is not None
+        },
+    }
+
+
+async def _run_create_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    course_names: list[CanvasCourseName],
+    proposed: dict[str, Any],
+    user_message: str,
+    summary: str | None = None,
+) -> dict:
+    """create_assignment / create_quiz, with the course resolved server-side.
+
+    These two were the only writes with no resolver in front of them: the
+    model's action went straight to a preview. Nothing downstream catches a
+    wrong course either — the intent_preview path resolves
+    proposed["local_course_id"] only to check the instructor *owns* it, never
+    to check it is the one they meant. So "create an assignment for capstone
+    project" typed while another course was active built it against the active
+    course, and the confirm card named that course, which looks correct.
+
+    Only local_course_id is corrected here. Title, description, due date and
+    points stay exactly as the model produced them: resolving those would be
+    inventing them. Everything else — missing-field clarifies, the past-due-date
+    clarify, due-date timezone resolution and the preview metadata itself —
+    is left to the existing intent_preview dispatch rather than duplicated.
+
+    Takes the proposed dict rather than a parsed action because both routes in
+    have to land here: the model naming create_assignment directly, and the
+    model wrapping it in intent_preview as the system prompt asks. Guarding
+    only the first would leave the common case unresolved.
+    """
+    resolved = await _resolve_create_target_course(
+        db, user, conversation, course_names, proposed, user_message
+    )
+    if isinstance(resolved, dict):
+        return resolved
+
+    corrected = {**proposed, "local_course_id": resolved.id}
+    action_name = str(corrected.get("action", "create")).replace("_", " ")
+    return await execute_tool(
+        db,
+        user,
+        IntentPreviewAction(
+            summary=summary
+            or (
+                f"I'll {action_name} in {resolved.name} as described below. "
+                "Please review before confirming."
+            ),
+            proposed_action=corrected,
+        ),
+    )
+
+
 async def _run_update_assignment_chain(
     db: AsyncSession,
     user: User,
@@ -2091,12 +2616,19 @@ async def _run_update_assignment_chain(
     }
     if assignment_name:
         proposed_action["assignment_name"] = assignment_name
+    instructor_timezone = get_instructor_canvas_timezone(user, course.canvas_url)
     for field_name in _UPDATE_ASSIGNMENT_FIELDS:
         value = getattr(action, field_name)
         if value is not None:
+            # Resolve here too, so the confirm card and the Canvas write quote
+            # one instant rather than the raw string the model produced.
+            if field_name == "due_date" and isinstance(value, str):
+                value = resolve_due_date(value, user, course.canvas_url)
             proposed_action[field_name] = value
 
-    preview_metadata = generate_write_preview(proposed_action, course)
+    preview_metadata = generate_write_preview(
+        proposed_action, course, instructor_timezone
+    )
     return {
         "action": "intent_preview",
         "intent_preview": True,
@@ -2169,7 +2701,7 @@ async def _resolve_grade_target(
             assignment_id,
             submissions,
             action.new_grade,
-            action.reason or action.feedback,
+            action.feedback,
             assignment_name=assignment_name,
         )
 
@@ -2202,7 +2734,14 @@ async def _resolve_grade_target(
             "clarify": True,
             "question": f"Which student in {course.name} did you mean? Options: {names}.",
             "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
-                "unresolved_fields": ["student_reference"],
+            "clarify_field": "student_reference",
+            "clarify_candidates": [
+                {
+                    "id": _coerce_int(s.get("user_id")),
+                    "label": s.get("student_name") or f"Student {s.get('user_id')}",
+                }
+                for s in submissions
+            ],
         }
 
     selected = next(s for s in submissions if _coerce_int(s.get("user_id")) == student_id)
@@ -2211,7 +2750,7 @@ async def _resolve_grade_target(
         assignment_id,
         [selected],
         action.new_grade,
-        action.reason or action.feedback,
+        action.feedback,
         assignment_name=assignment_name,
     )
 
@@ -2243,7 +2782,7 @@ def _build_grade_handoff_result(
     assignment_id: int,
     submissions: list[dict],
     new_grade: str,
-    reason: str | None,
+    feedback: str | None,
     *,
     assignment_name: str | None = None,
 ) -> dict:
@@ -2273,7 +2812,7 @@ def _build_grade_handoff_result(
                 "assignment_id": assignment_id,
                 "student_reference": "all students",
                 "new_grade": new_grade,
-                "reason": reason,
+                "feedback": feedback,
             },
         }
 
@@ -2304,7 +2843,7 @@ def _build_grade_handoff_result(
             "student_ids": student_ids,
             "student_count": student_count,
             "new_grade": new_grade,
-            "reason": reason,
+            "feedback": feedback,
         },
     }
 
@@ -2314,12 +2853,12 @@ def _build_grouped_grade_update_result(
     assignment_id: int,
     submissions: list[dict],
     new_grade: str,
-    reason: str | None,
+    feedback: str | None,
 ) -> dict:
     # Compatibility wrapper for older tests/imports. Bulk grade updates now use
     # the same handoff shape as single-student updates.
     return _build_grade_handoff_result(
-        course, assignment_id, submissions, new_grade, reason
+        course, assignment_id, submissions, new_grade, feedback
     )
 
 
@@ -2334,7 +2873,6 @@ def _grade_partial_plan(action: Any, local_course_id: int, assignment_id: int | 
         "student_reference": getattr(action, "student_reference", None),
         "new_grade": getattr(action, "new_grade", None),
         "feedback": getattr(action, "feedback", None),
-        "reason": getattr(action, "reason", None),
     }
     return {key: value for key, value in plan.items() if value is not None}
 
@@ -2443,99 +2981,6 @@ async def _resolve_students_via_llm(
         return result
 
 
-async def _run_update_grade_chain(
-    db: AsyncSession,
-    user: User,
-    conversation: Conversation,
-    user_msg: Message,
-    action: Any,
-    user_message: str,
-    adapter: LLMAdapter,
-) -> dict:
-    """Resolve natural assignment/student references before grade preview.
-
-    Numeric Canvas IDs are selected only from real assignment and roster
-    data returned by existing backend fetches; they are never requested from
-    the instructor or invented by the general chat model.
-    """
-    resolved_assignment = await _resolve_course_and_assignment(
-        db,
-        user,
-        conversation,
-        user_msg,
-        action.local_course_id,
-        action.assignment_id,
-        action.assignment_reference,
-        user_message,
-        adapter,
-    )
-    if isinstance(resolved_assignment, dict):
-        return _preserve_grade_clarification_context(resolved_assignment, action)
-    course, assignment_id = resolved_assignment
-
-    student_id = action.student_id
-    if student_id is None:
-        if not action.student_reference:
-            return {
-                "action": "clarify",
-                "clarify": True,
-                "question": "Which student should receive this grade?",
-                "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
-                "unresolved_fields": ["student_reference"],
-            }
-        fetch_action = FetchStudentsAction(local_course_id=course.id)
-        roster_result = await _run_tracked_read(
-            db,
-            user,
-            conversation,
-            user_msg.id,
-            "fetch_students",
-            fetch_action.model_dump(),
-            execute_tool(db, user, fetch_action),
-        )
-        roster = roster_result.get("students", [])
-        candidates = llm_student_candidates(roster)
-        student_id = (
-            await _resolve_students_via_llm(
-                candidates, [action.student_reference], user_message, adapter
-            )
-        ).get(action.student_reference)
-        if student_id is None:
-            return {
-                "action": "clarify",
-                "clarify": True,
-                "question": (
-                    f'I could not confidently match "{action.student_reference}" '
-                    "to one student in this course. What is their full name or email?"
-                ),
-                "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
-                "unresolved_fields": ["student_reference"],
-            }
-
-    proposed_action = {
-        "action": "update_grade",
-        "local_course_id": course.id,
-        "assignment_id": assignment_id,
-        "assignment_reference": action.assignment_reference,
-        "student_id": student_id,
-        "student_reference": action.student_reference,
-        "new_grade": action.new_grade,
-        # Preserve both names used by the grade-history and Grades-tab paths
-        # so feedback is not lost in this resolver branch.
-        "feedback": action.feedback or action.reason,
-        "reason": action.reason or action.feedback,
-    }
-    proposed_action = {
-        key: value for key, value in proposed_action.items() if value is not None
-    }
-    preview_metadata = generate_write_preview(proposed_action, course)
-    return {
-        "action": "intent_preview",
-        "intent_preview": True,
-        "summary": preview_metadata["summary"],
-        "proposed_action": proposed_action,
-        "preview_metadata": preview_metadata,
-    }
 
 
 async def _resolve_recipient_directives(
@@ -3875,7 +4320,7 @@ preserved automatically.
 RESOLVING A STUDENT AND ASSIGNMENT FOR update_grade:
 update_grade handles both grade changes and assignment-specific submission
 feedback. A feedback-only request such as "leave feedback on ggg for Coin:
-work changes" should use update_grade with the feedback in reason and an
+work changes" should use update_grade with the text in the feedback field
 empty new_grade; do not use send_message for feedback tied to a specific
 assignment/submission. Treat words like feedback, submission comment,
 rubric note, or comment on assignment as gradebook feedback when an
@@ -4126,63 +4571,74 @@ async def handle_chat_message(
         )
         return conversation, {"error": user_facing_error}, True
 
-    if pending_message_id is None and local_course_id is None:
-        selected_course = _resolve_course_context_statement(course_names, message)
-        if selected_course is not None and selected_course.local_course_id is not None:
-            if conversation.course_id is None:
-                conversation.course_id = selected_course.local_course_id
-                conversation.course_name = await _stable_course_name(
-                    db, selected_course.local_course_id, _course_display_name(selected_course)
-                )
-            elif selected_course.local_course_id != conversation.course_id:
-                target = await _find_or_fork_conversation_for_course(
-                    db, user, selected_course.local_course_id, _course_display_name(selected_course)
-                )
-                user_msg.conversation_id = target.id
-                conversation = target
+    # Bind a course-less conversation to the course its first message names.
+    #
+    # This replaces _resolve_course_context_statement, a pair of regexes that
+    # matched only "course is X" / "switch to course X" and answered them with
+    # "Using X for this chat." — a whole turn spent acknowledging the course
+    # instead of doing the thing the message asked for. _prescan_course_reference
+    # finds the course anywhere in the sentence, so the turn now continues into
+    # the normal path and "course is CPSC 320, show me the assignments" shows
+    # the assignments.
+    #
+    # Only the course-less case is handled here. Moving an already-bound
+    # conversation to a different course stays with _resolve_course_switch
+    # below, which asks the model rather than a substring match — the switch is
+    # the destructive direction (it forks the thread), so it gets the more
+    # careful resolver.
+    if (
+        pending_message_id is None
+        and local_course_id is None
+        and conversation.course_id is None
+    ):
+        named_course = _prescan_course_reference(course_names, message)
+        if named_course is not None and named_course.local_course_id is not None:
+            conversation.course_id = named_course.local_course_id
+            conversation.course_name = await _stable_course_name(
+                db, named_course.local_course_id, _course_display_name(named_course)
+            )
             await _sync_course_context_envelope(
-                db, conversation, selected_course.local_course_id
+                db, conversation, named_course.local_course_id
             )
-            history = await _get_recent_messages(db, conversation.id)
-            await log_message(
-                db,
-                conversation,
-                role="assistant",
-                content=json.dumps(
-                    {
-                        "action": "respond",
-                        "message": f"Using {conversation.course_name} for this chat.",
-                    }
-                ),
-            )
-            await db.commit()
-            return conversation, {
-                "action": "respond",
-                "message": f"Using {conversation.course_name} for this chat.",
-            }, False
 
     # Pre-resolve a course switch from the raw message alone, before the
     # main prompt is built for this turn — see _resolve_course_switch's
     # docstring for why this has to happen here, not after the main LLM
-    # call. Gated on actually having prior history, not just
-    # conversation.course_id being set: a conversation's first-ever turn
-    # can already have course_id set (seeded from the "set active course"
-    # button or the persisted UserPreference fallback — see
-    # get_or_create_conversation) with nothing yet said in it, so there is
-    # no stale framing/history to leak and nothing worth paying an extra
-    # call for. Also skipped for a modify turn (pending_message_id set —
-    # that's revising an existing proposed action tied to this
-    # conversation, not a fresh request). Also skipped when local_course_id
-    # is explicitly given (the "set active course" button, sent alongside
-    # this same message) — that explicit selection is a stronger,
-    # deliberate signal than a course name the message happens to mention,
-    # and wins outright for this turn rather than being silently
-    # overridden by this resolver.
+    # call.
+    #
+    # This used to require prior history outright, on the reasoning that a
+    # first-ever turn has no stale framing to leak and so is not worth an
+    # extra call. That covered only half of what this resolver does. Leaking
+    # old history is one failure; the other is the main call being told
+    # "CURRENT COURSE: <active course>" while the message plainly names a
+    # different one — which happens just as much on turn one, and is where a
+    # write lands in the wrong Canvas course. Observed exactly that: the first
+    # "create an assignment ... for capstone project" built it against the
+    # active course, and only a retry (by then with history, so the resolver
+    # ran) got it right.
+    #
+    # A first turn now qualifies when the message actually names one of the
+    # instructor's other courses — a local substring check, no call. The
+    # original cost argument still holds for every turn that names nothing:
+    # those are the common case, and they stay at one call.
+    #
+    # Still skipped for a modify turn (pending_message_id set — that's
+    # revising an existing proposed action tied to this conversation, not a
+    # fresh request). Still skipped when local_course_id is explicitly given
+    # (the "set active course" button, sent alongside this same message) —
+    # that explicit selection is a stronger, deliberate signal than a course
+    # name the message happens to mention, and wins outright for this turn
+    # rather than being silently overridden by this resolver.
     if (
         pending_message_id is None
         and local_course_id is None
         and conversation.course_id is not None
-        and history
+        and (
+            history
+            or _message_may_name_another_course(
+                course_names, conversation.course_name, message
+            )
+        )
     ):
         switched = await _resolve_course_switch(course_names, conversation.course_name, message, adapter)
         if (
@@ -4246,6 +4702,15 @@ async def handle_chat_message(
     field_memory_block = format_field_memory_for_prompt(conversation.field_memory)
     if field_memory_block:
         system_prompt = f"{system_prompt}\n\n{field_memory_block}"
+    # Resolve references the message already names before the model answers, so
+    # it cannot ask for something it was just told. Skipped on a modify turn,
+    # which is revising an already-resolved proposed action.
+    if pending_message_id is None:
+        prescan_block = _format_prescan_for_prompt(
+            await _run_reference_prescan(db, conversation, course_names, message)
+        )
+        if prescan_block:
+            system_prompt = f"{system_prompt}\n\n{prescan_block}"
     first_llm_message = _build_llm_message(
         message,
         course_names,
@@ -4290,6 +4755,10 @@ async def handle_chat_message(
     # steps' prompts (_build_llm_message) can see everything gathered so
     # far in this same turn, distinct from `history` (prior turns only).
     loop_steps: list[dict] = []
+    # Separate from MAX_TURN_STEPS: see the clarify branch at the bottom of the
+    # loop for why a model going back for information gets its own, much
+    # smaller allowance than a plan making progress.
+    clarify_retries_left = _CLARIFY_RETRY_BUDGET
     result: dict = {}
 
     for step in range(1, MAX_TURN_STEPS + 1):
@@ -4553,7 +5022,9 @@ async def handle_chat_message(
                 action = _rebase_action_to_course(action, conversation.course_id)
             if _explicit_dual_delivery_request(message):
                 action = _preserve_dual_delivery(action)
-            elif _explicit_announcement_request(message):
+            elif _explicit_announcement_request(message) and not _is_combined_announcement_request(
+                action
+            ):
                 action = _force_announcement_delivery(action)
             needs_unwrap = False
             if action.action == "intent_preview":
@@ -4624,6 +5095,27 @@ async def handle_chat_message(
                 # model's own judgment over raw data it was never shown.
                 result = await _run_find_assignment_by_submission_rate_chain(
                     db, user, conversation, user_msg, action, message
+                )
+            elif action.action in _COURSE_SCOPED_CREATE_ACTIONS:
+                # The two writes that used to reach a preview with no course
+                # resolution at all — see _run_create_chain. Must come before
+                # the auto-wrap branch below, which is what previously handled
+                # a bare create action and trusted local_course_id outright.
+                result = await _run_create_chain(
+                    db, user, conversation, course_names, action.model_dump(), message
+                )
+            elif (
+                action.action == "intent_preview"
+                and isinstance(getattr(action, "proposed_action", None), dict)
+                and action.proposed_action.get("action") in _COURSE_SCOPED_CREATE_ACTIONS
+            ):
+                # The same resolution for the route the system prompt actually
+                # asks for: the model wrapping its own create in an
+                # intent_preview. Guarding only the bare-action branch above
+                # would leave the common case unresolved.
+                result = await _run_create_chain(
+                    db, user, conversation, course_names,
+                    action.proposed_action, message, action.summary,
                 )
             elif action.action == "update_assignment":
                 # Always route through the resolver chain — even when the
@@ -4718,14 +5210,40 @@ async def handle_chat_message(
             await db.commit()
             return conversation, {"error": detail}, True
 
-        # A clarify result is always terminal regardless of action name —
-        # it means the model needs the USER to answer something, so
-        # calling the LLM again immediately would be pointless. Otherwise,
-        # a _CHAINABLE_READ_ACTIONS result always continues (that's the
-        # entire point of those actions — see MAX_TURN_STEPS' docstring);
-        # any other read only continues once already mid-chain (step > 1),
-        # so a lone ordinary read at step 1 is untouched from before this
-        # loop existed.
+        # A clarify used to end the turn outright. Most of the time that is
+        # right — "what should the due date be?" is a question only the
+        # instructor can answer. But a resolver clarify is different: it means
+        # the SERVER could not resolve a reference, and the model may well be
+        # able to by calling a read tool it has not called yet. Ending there
+        # made the instructor do the lookup by hand.
+        #
+        # Retryable clarifies are the ones that arrive with candidates: the
+        # resolver got far enough to have a list and could not choose from it.
+        # A missing-field clarify has nothing to look up and stays terminal.
+        #
+        # Budgeted separately from MAX_TURN_STEPS, and deliberately small. The
+        # step budget is for a plan making progress; this one is for a model
+        # going back for information, where two attempts is the difference
+        # between "try the obvious tool" and a loop that spends fifteen steps
+        # asking itself the same question.
+        if (
+            result.get("clarify")
+            and result.get("clarify_candidates")
+            and pending_message_id is None
+            and clarify_retries_left > 0
+        ):
+            clarify_retries_left -= 1
+            loop_steps.append({"action": action.action, "result": result})
+            if step >= MAX_TURN_STEPS:
+                result = _step_budget_exhausted_response(loop_steps)
+                break
+            continue
+
+        # Otherwise, a _CHAINABLE_READ_ACTIONS result always continues (that's
+        # the entire point of those actions — see MAX_TURN_STEPS' docstring);
+        # any other read only continues once already mid-chain (step > 1), so a
+        # lone ordinary read at step 1 is untouched from before this loop
+        # existed.
         is_chainable_step = (
             pending_message_id is None
             and action.action in READ_ACTIONS
@@ -4862,8 +5380,30 @@ async def handle_chat_message(
                 merge_field_memory(
                     conversation,
                     server_preserved_grade_context,
-                    allowed_keys=frozenset({"new_grade", "feedback", "reason"}),
+                    # `reason` is deprecated: UpdateGradeAction normalizes the
+                    # old spelling to `feedback` at the boundary, so nothing
+                    # downstream produces or reads it.
+                    allowed_keys=frozenset({"new_grade", "feedback"}),
                 )
+            # Remember what was asked and what was on offer, so a bare "the
+            # second one" next turn is an answer rather than a new request.
+            # Only resolver clarifies carry candidates; a missing-field
+            # clarify ("what should the due date be?") has nothing to choose
+            # between and records nothing.
+            clarify_candidates = result.get("clarify_candidates")
+            if clarify_candidates:
+                record_pending_expectation(
+                    conversation,
+                    field=result.get("clarify_field") or "",
+                    question=result.get("question") or "",
+                    candidates=clarify_candidates,
+                    action=result.get("clarify_action"),
+                )
+        else:
+            # Any settled turn answers the outstanding question or abandons it;
+            # either way it is no longer outstanding. Leaving it would let a
+            # much later "yes" reattach to a question from several turns ago.
+            clear_pending_expectation(conversation)
         await _supersede_pending_workflow(
             db,
             conversation.id,
@@ -5072,7 +5612,9 @@ async def handle_modified_action(
             question_bank_groups=proposed.get("question_bank_groups"),
         )
 
-    preview_metadata = generate_write_preview(proposed, course)
+    preview_metadata = generate_write_preview(
+        proposed, course, get_instructor_canvas_timezone(user, course.canvas_url)
+    )
     result = {
         "action": "intent_preview",
         "intent_preview": True,

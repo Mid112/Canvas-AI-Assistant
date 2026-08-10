@@ -75,7 +75,14 @@ def client():
 
 
 @pytest.fixture(scope="module")
-def auth_headers(client):
+def canvas_token():
+    """The Canvas token `auth_headers` connects, exposed so tests can assert
+    that it is the value handed to the Canvas client."""
+    return f"test-canvas-token-{uuid.uuid4()}"
+
+
+@pytest.fixture(scope="module")
+def auth_headers(client, canvas_token):
     """A single registered user with a Canvas token connected."""
     email = f"test_{uuid.uuid4()}@example.com"
     response = client.post(
@@ -84,12 +91,16 @@ def auth_headers(client):
     )
     token = response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
+    # A literal token would be claimed by whichever module registered first and
+    # stay claimed across runs: a Canvas token may belong to only one account,
+    # so every later caller gets 409, no connection, and a baffling 403 later.
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
-        client.patch(
+        connected = client.patch(
             "/api/v1/auth/me/canvas-token",
             json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
+    assert connected.status_code == 200, connected.text
     return headers
 
 
@@ -110,11 +121,12 @@ def _register_with_canvas(client, *, token_suffix: str = "") -> dict:
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
-        client.patch(
+        connected = client.patch(
             "/api/v1/auth/me/canvas-token",
             json={"canvas_token": unique_canvas_token() + token_suffix, "canvas_url": CANVAS_URL},
             headers=headers,
         )
+    assert connected.status_code == 200, connected.text
     return headers
 
 
@@ -180,7 +192,7 @@ def test_list_courses_without_canvas_url_rejects_multiple_connections(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "other-token", "canvas_url": OTHER_CANVAS_URL},
+            json={"canvas_token": f"other-token-{uuid.uuid4()}", "canvas_url": OTHER_CANVAS_URL},
             headers=headers,
         )
 
@@ -252,7 +264,7 @@ def test_sync_same_canvas_course_id_across_institutions(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "other-token", "canvas_url": OTHER_CANVAS_URL},
+            json={"canvas_token": f"other-token-{uuid.uuid4()}", "canvas_url": OTHER_CANVAS_URL},
             headers=headers,
         )
 
@@ -345,7 +357,7 @@ def test_create_course_same_canvas_id_across_institutions(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "other-token", "canvas_url": OTHER_CANVAS_URL},
+            json={"canvas_token": f"other-token-{uuid.uuid4()}", "canvas_url": OTHER_CANVAS_URL},
             headers=headers,
         )
 
@@ -501,7 +513,7 @@ def test_list_courses_selects_correct_school(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "sfu-token", "canvas_url": "https://canvas.sfu.ca"},
+            json={"canvas_token": f"sfu-token-{uuid.uuid4()}", "canvas_url": "https://canvas.sfu.ca"},
             headers=headers,
         )
 
@@ -590,7 +602,8 @@ def test_list_cached_courses_excludes_deleted_course(client):
 # Verifies: List assignments.
 def test_list_assignments(client):
     """Assignments endpoint uses local course ID — seed a course first to get one."""
-    headers = _register_with_canvas(client)
+    canvas_token = f"test-token-{uuid.uuid4()}"
+    headers = _register_with_canvas(client, canvas_token)
     courses = [_unique_course()]
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
         mock.return_value = courses
@@ -631,17 +644,19 @@ def test_list_assignments_local_url_alias(client, monkeypatch):
     docker_canvas = "http://canvas_lms:3000"
 
     email = f"test_{uuid.uuid4()}@example.com"
+    canvas_token = f"test-token-{uuid.uuid4()}"
     reg = client.post(
         "/api/v1/auth/register",
         json={"name": "Local Canvas User", "email": email, "password": "Secret123!"},
     )
     headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
-        client.patch(
+        connected = client.patch(
             "/api/v1/auth/me/canvas-token",
             json={"canvas_token": unique_canvas_token(), "canvas_url": local_canvas},
             headers=headers,
         )
+    assert connected.status_code == 200, connected.text
 
     courses = [_unique_course()]
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
@@ -667,7 +682,7 @@ def test_list_assignments_local_url_alias(client, monkeypatch):
 
 
 # Verifies: Get assignment.
-def test_get_assignment(client, auth_headers):
+def test_get_assignment(client, auth_headers, canvas_token):
     local_course_id = _sync_local_course(client, auth_headers)
     with patch("app.services.canvas.fetch_assignment", new_callable=AsyncMock) as mock:
         mock.return_value = MOCK_ASSIGNMENT
@@ -744,7 +759,7 @@ def test_create_ungraded_assignment_sets_not_graded(client, auth_headers):
 
 
 # Verifies: Update assignment.
-def test_update_assignment(client, auth_headers):
+def test_update_assignment(client, auth_headers, canvas_token):
     local_course_id = _sync_local_course(client, auth_headers)
     payload = {
         "name": "Updated Assignment",
@@ -1403,7 +1418,10 @@ def test_create_course_uses_saved_connection_when_canvas_url_omitted(client, mon
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         saved = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "new-account-token", "canvas_url": connection_url},
+            json={
+                    "canvas_token": f"new-account-token-{uuid.uuid4()}",
+                    "canvas_url": connection_url,
+                },
             headers=headers,
         )
     assert saved.status_code == 200

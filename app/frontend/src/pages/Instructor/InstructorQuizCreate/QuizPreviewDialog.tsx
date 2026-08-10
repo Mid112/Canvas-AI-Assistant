@@ -1,6 +1,7 @@
 import { ChevronDown, Loader2 } from "lucide-react";
 import { useState } from "react";
 
+import { ActionStatusBadges } from "@/components/status/ActionStatusBadges";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -12,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
-import type { QuizPreviewSummary, QuizRiskLevel } from "@/types/quizCreate";
+import type { QuizPreviewSummary } from "@/types/quizCreate";
 
 interface QuizPreviewDialogProps {
   open: boolean;
@@ -21,18 +22,6 @@ interface QuizPreviewDialogProps {
   isCreating: boolean;
   onConfirm: () => void;
 }
-
-const riskStyles: Record<QuizRiskLevel, string> = {
-  low: "bg-emerald-50 text-emerald-800 ring-emerald-200",
-  medium: "bg-amber-50 text-amber-900 ring-amber-200",
-  high: "bg-red-50 text-red-800 ring-red-200",
-};
-
-const riskLabels: Record<QuizRiskLevel, string> = {
-  low: "Low risk",
-  medium: "Medium risk",
-  high: "High risk",
-};
 
 export function QuizPreviewDialog({
   open,
@@ -48,27 +37,27 @@ export function QuizPreviewDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg" showCloseButton={!isCreating}>
         <DialogHeader>
-          <DialogTitle>Create this quiz?</DialogTitle>
+          {/* pr-8 clears the dialog's absolutely positioned close button. */}
+          <div className="flex items-start justify-between gap-3 pr-8">
+            <DialogTitle>Create this quiz?</DialogTitle>
+            {preview ? (
+              <ActionStatusBadges
+                level={riskLevel}
+                reversible={preview.reversible}
+                className="shrink-0"
+              />
+            ) : null}
+          </div>
           <DialogDescription>
             {preview?.summary ?? "Review what will be created in Canvas."}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span
-            className={cn(
-              "inline-flex rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset",
-              riskStyles[riskLevel],
-            )}
-          >
-            {riskLabels[riskLevel]}
-          </span>
-          <span className="text-xs text-muted-foreground">
-            {preview?.reversible
-              ? "Reversible — can be removed from Canvas afterward"
-              : "Irreversible once submitted"}
-          </span>
-        </div>
+        <p className="text-xs text-muted-foreground">
+          {preview?.reversible
+            ? "This can be edited or removed in Canvas afterward."
+            : "This action cannot be undone."}
+        </p>
 
         {preview && preview.affectedResources.length > 0 ? (
           <ul className="space-y-1 text-sm text-muted-foreground">

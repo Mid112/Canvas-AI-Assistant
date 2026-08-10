@@ -37,7 +37,7 @@ class GradeHistory(Base):
     previous_grade: Mapped[str | None] = mapped_column(String, nullable=True)
     new_grade: Mapped[str] = mapped_column(String, nullable=False)
     previous_score: Mapped[float | None] = mapped_column(nullable=True)
-    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
     risk_level: Mapped[str] = mapped_column(String, nullable=False, default="high")
     rollback_available: Mapped[bool] = mapped_column(default=True, nullable=False)
     canvas_response: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

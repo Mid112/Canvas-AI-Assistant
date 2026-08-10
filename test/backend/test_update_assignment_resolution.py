@@ -217,6 +217,12 @@ def test_update_assignment_reference_all_fields(client):
 
 # Verifies: an unresolvable reference returns clarify, not an error or a
 # guessed ID.
+#
+# The reference resolver clarify now carries candidates, so the turn retries
+# it before giving up (see _CLARIFY_RETRY_BUDGET in services/chat.py) — three
+# passes, each costing a main call and one resolver call. The model never
+# resolves it here, so what the instructor finally sees is unchanged: the same
+# clarify, listing the same real assignments, with no guessed ID.
 def test_update_assignment_unresolvable_reference_returns_clarify(client):
     headers, _ = _register_with_canvas(client)
 
@@ -224,7 +230,7 @@ def test_update_assignment_unresolvable_reference_returns_clarify(client):
         '{"action": "update_assignment", "course_name": "CPSC 310", '
         '"assignment_reference": "the makeup quiz", "due_date": "2026-08-13T23:59:00"}',
         '{"assignment_id": null}',
-    ]
+    ] * 3
 
     with patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=_assignments())):
         body = _chat(client, headers, "push back the makeup quiz", llm_outputs)
@@ -318,3 +324,77 @@ def test_update_assignment_hour_change_normalizes_and_matches_preview(client):
     assert confirm_resp.json()["is_error"] is False
     mock_update.assert_awaited_once()
     assert mock_update.await_args.args[1] == 222  # the resolved assignment_id, not a guess
+
+
+# Verifies the reference pre-pass (_prescan_assignment_reference).
+#
+# Every other assignment resolution in chat.py runs *after* the model commits
+# to an action, so when the model hedges instead — "Which assignment do you
+# want the submissions for?" in reply to a message that already named one —
+# the resolver is never reached and the instructor is asked to repeat
+# themselves. This resolves the title from locally synced rows first and hands
+# it to the model as a confirmed fact, with no extra LLM or Canvas call.
+def test_prescan_resolves_an_assignment_named_in_the_message(client):
+    headers, local_course_id = _register_with_canvas(client)
+    _seed_local_assignment(local_course_id, 987, title="User Testing")
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "OK."}'
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        client.post(
+            "/api/v1/chat/",
+            json={
+                "message": "show me submissions for user testing",
+                "conversation_id": None,
+            },
+            headers=headers,
+        )
+
+    system_prompt = mock_adapter.generate.call_args_list[-1].args[0]
+    assert "RESOLVED REFERENCES" in system_prompt
+    assert "User Testing" in system_prompt
+    assert '"assignment_id": 987' in system_prompt
+
+
+# Verifies the pre-pass stays quiet when the message names nothing, so an
+# ordinary turn is not handed a reference the instructor never made.
+def test_prescan_is_silent_when_no_assignment_is_named(client):
+    headers, local_course_id = _register_with_canvas(client)
+    _seed_local_assignment(local_course_id, 654, title="User Testing")
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "OK."}'
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        client.post(
+            "/api/v1/chat/",
+            json={"message": "how are things going?", "conversation_id": None},
+            headers=headers,
+        )
+
+    system_prompt = mock_adapter.generate.call_args_list[-1].args[0]
+    assert "RESOLVED REFERENCES" not in system_prompt
+
+
+# Verifies two titles that both match stay ambiguous rather than the pre-pass
+# picking one — that judgement belongs to _resolve_assignment_reference, which
+# can weigh "the latest one" in a way substring matching cannot.
+def test_prescan_defers_when_two_titles_match_equally(client):
+    headers, local_course_id = _register_with_canvas(client)
+    # Equal normalized length, so neither is "more specific" than the other.
+    _seed_local_assignment(local_course_id, 111, title="Lab Report A")
+    _seed_local_assignment(local_course_id, 222, title="Lab Report B")
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = '{"action": "respond", "message": "OK."}'
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        client.post(
+            "/api/v1/chat/",
+            json={
+                "message": "submissions for lab report a and lab report b",
+                "conversation_id": None,
+            },
+            headers=headers,
+        )
+
+    system_prompt = mock_adapter.generate.call_args_list[-1].args[0]
+    assert "RESOLVED REFERENCES" not in system_prompt

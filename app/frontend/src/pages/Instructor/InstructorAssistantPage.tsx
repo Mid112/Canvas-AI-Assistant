@@ -1,4 +1,4 @@
-import { ChevronDown, History, Loader2, RefreshCw } from "lucide-react";
+import { ChevronRight, History, Loader2, RefreshCw } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -10,6 +10,7 @@ import {
 import { useLocation, useNavigate } from "react-router-dom";
 
 import { AssistantLimitedModeBanner } from "@/components/chat/AssistantLimitedModeBanner";
+import { ChatTabStrip } from "@/components/chat/ChatTabStrip";
 import { DraftWorkspacePanel } from "@/components/chat/DraftWorkspacePanel";
 import { ChatWindow, type ChatWindowHandle } from "@/components/chat/ChatWindow";
 import { ActiveCourseContextBar } from "@/components/courses/ActiveCourseContextBar";
@@ -19,7 +20,19 @@ import { useActiveCourse } from "@/contexts/useActiveCourse";
 import {
   InstructorAssistantSuggestedActions,
 } from "@/pages/Instructor/InstructorAssistant/InstructorAssistantHeader";
+import { useChatTabs } from "@/pages/Instructor/InstructorAssistant/useChatTabs";
 import { buildSuggestedActions } from "@/data/assistantSeedData";
+import {
+  activeChatTab,
+  chatTabLimit,
+  closeChatTab,
+  focusChatTab,
+  openChatTab,
+  setChatTabConversation,
+  switchChatTabCourse,
+  type ChatTab,
+} from "@/lib/chat-tabs";
+import { formatInstructorCourseTitle } from "@/lib/format-course-title";
 import {
   clearStoredDeferredDraft,
   getStoredDeferredDraft,
@@ -28,6 +41,7 @@ import {
   getStoredLlmProviderSettings,
   setStoredLlmProviderSettings,
 } from "@/lib/llm-provider-storage";
+import { resolveQuickAction } from "@/lib/quick-actions";
 import {
   buildTypedDraftResumeTarget,
   discardTypedDraft,
@@ -35,7 +49,6 @@ import {
   resolveTypedDraftCourseId,
   type TypedDraft,
 } from "@/lib/typed-draft-storage";
-import { cn } from "@/lib/utils";
 import {
   fetchInstructorLlmProviders,
   resolveConnectedSettings,
@@ -102,11 +115,11 @@ export function InstructorAssistantPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { accessToken, user } = useAuth();
-  const { activeCourse, availableCourses } = useActiveCourse();
-  const suggestedActions = useMemo(
-    () => buildSuggestedActions(activeCourse?.displayName),
-    [activeCourse?.displayName],
-  );
+  const { activeCourse, availableCourses, selectActiveCourse } =
+    useActiveCourse();
+  // Labels only — the active course now reaches the prompt through
+  // resolveQuickAction at click time, so this list no longer depends on it.
+  const suggestedActions = useMemo(() => buildSuggestedActions(), []);
   const [locationState] = useState(() =>
     getLocationState(
       location.state as InstructorAssistantLocationState | null,
@@ -160,11 +173,107 @@ export function InstructorAssistantPage() {
   // selection. pendingConversationId is read from a ref inside the effect so
   // loading a transcript does not POST /chat/course-context and fork away
   // from the conversation the instructor just opened (#1507 re-review).
+  //
+  // Synced in a layout effect rather than assigned during render: a render-time
+  // ref write is what react-hooks/refs flags, and it can be discarded when a
+  // render is thrown away. Committed before paint, so the effect below still
+  // reads the current value on the same tick.
   const pendingConversationIdRef = useRef(pendingConversationId);
   useLayoutEffect(() => {
     pendingConversationIdRef.current = pendingConversationId;
   }, [pendingConversationId]);
-  const lastSyncedCourseIdRef = useRef<number | null>(null);
+  // Keyed by tab *and* course, not by course alone. Tabs are one-per-course
+  // now, but the pairing is not stable over time: closing a course's tab and
+  // reopening it produces a new tab with no conversation id, and the sync is
+  // how it learns one. A course-only key would call that a repeat and skip it.
+  const lastSyncedTabRef = useRef<string | null>(null);
+
+  const {
+    state: tabsState,
+    update: updateTabs,
+    activeTab,
+    isHydrated: tabsHydrated,
+  } = useChatTabs(user?.id);
+
+  // selectActiveCourse closes over activeCourse, so the provider hands back a
+  // new function every time the course changes. An effect that both depends on
+  // it and calls it therefore re-fires on its own result — which is how the
+  // first version of this spun. These effects need to *call* it, never to
+  // react to which version of it exists, so it lives in a ref.
+  const selectActiveCourseRef = useRef(selectActiveCourse);
+  useEffect(() => {
+    selectActiveCourseRef.current = selectActiveCourse;
+  }, [selectActiveCourse]);
+
+  // Read at the moment of a course switch, not depended on: it flips while a
+  // reply streams, and re-running then would relocate the instructor to a tab
+  // they were deliberately left out of.
+  const hasPendingWorkRef = useRef(hasPendingAssistantWork);
+  useEffect(() => {
+    hasPendingWorkRef.current = hasPendingAssistantWork;
+  }, [hasPendingAssistantWork]);
+
+  const tabsStateRef = useRef(tabsState);
+  useEffect(() => {
+    tabsStateRef.current = tabsState;
+  }, [tabsState]);
+
+  // Declared before the routing effect below so the ids are populated by the
+  // time it first runs.
+  const availableCourseIdsRef = useRef<number[]>([]);
+  useEffect(() => {
+    availableCourseIdsRef.current = availableCourses.map((course) => course.id);
+  }, [availableCourses]);
+
+  /** The courses "+" is allowed to open a tab on.
+   *
+   * Published only, matching the active-course dropdown — a tab sets the
+   * active course, so offering one the dropdown would refuse produces a tab
+   * whose course never actually loads. Labelled with the same formatter the
+   * provider uses for displayName, so a tab opened with "+" reads identically
+   * to the same course's tab opened from the dropdown. */
+  const tabCourses = useMemo(
+    () =>
+      availableCourses
+        .filter((course) => course.isPublished)
+        .map((course) => ({
+          id: course.id,
+          name: formatInstructorCourseTitle(course),
+        })),
+    [availableCourses],
+  );
+  const newTabLimit = useMemo(
+    () => chatTabLimit(tabsState, tabCourses),
+    [tabsState, tabCourses],
+  );
+
+  /** Points the dropdown at a course, if that course still exists.
+   *
+   * Tabs survive a reload, so a stored one can name a course the instructor no
+   * longer has — unenrolled, unpublished, or wiped when the Canvas sandbox was
+   * rebuilt. selectActiveCourse fails server-side for those and the provider
+   * rolls the active course back, which is what made the page flicker: the
+   * rollback looked like another switch, so it was tried again, and again. */
+  const selectCourseIfAvailable = useCallback((courseId: number) => {
+    if (!availableCourseIdsRef.current.includes(courseId)) {
+      return;
+    }
+    void selectActiveCourseRef.current(courseId);
+  }, []);
+
+  // The course this page has already routed to a tab. One route per change:
+  // without it, any later re-render could re-run the routing with a different
+  // hasPendingWork and yank the instructor into a background tab.
+  const lastRoutedCourseIdRef = useRef<number | null>(null);
+
+  const rememberTabConversation = useCallback(
+    (tabId: string, conversationId: number | null) => {
+      updateTabs((current) =>
+        setChatTabConversation(current, tabId, conversationId),
+      );
+    },
+    [updateTabs],
+  );
 
   const [typedDraftRevision, setTypedDraftRevision] = useState(0);
   const [discardingTypedId, setDiscardingTypedId] = useState<string | null>(
@@ -268,10 +377,16 @@ export function InstructorAssistantPage() {
   // the indexed course_context envelope so follow-ups use that selection
   // without waiting for the next typed message.
   useEffect(() => {
-    if (!accessToken || !activeCourse?.localId) {
+    // The envelope follows the tab, not the course dropdown. They part company
+    // whenever a tab is opened in the background: the instructor has picked a
+    // new course, but the chat on screen still belongs to the old tab. Writing
+    // the new course against that tab's conversation would fork the thread
+    // holding their unconfirmed preview — the exact thing a background open
+    // exists to protect.
+    if (!accessToken || activeTab.courseId === null) {
       return;
     }
-    const courseId = activeCourse.localId;
+    const courseId = activeTab.courseId;
     const pendingId = pendingConversationIdRef.current;
     // When there is no pending conversation yet, wait for deferred-draft
     // hydration to finish before deciding whether we have a conversation
@@ -283,7 +398,7 @@ export function InstructorAssistantPage() {
     // active course. That must not re-POST course-context — syncing the
     // loaded id against a different sidebar course forks and the success
     // handler would drop the transcript the instructor just opened.
-    if (lastSyncedCourseIdRef.current === courseId) {
+    if (lastSyncedTabRef.current === `${activeTab.id}:${courseId}`) {
       return;
     }
     // Prefer a stored deferred draft's conversation id when the pending id
@@ -310,7 +425,11 @@ export function InstructorAssistantPage() {
     })
       .then((result) => {
         if (cancelled) return;
-        lastSyncedCourseIdRef.current = courseId;
+        lastSyncedTabRef.current = `${activeTab.id}:${courseId}`;
+        // The server owns conversation identity; the tab only records what it
+        // decided, so returning to this tab reopens this thread rather than
+        // the course's most recent one.
+        rememberTabConversation(activeTab.id, result.conversationId);
         // Course switches on an existing thread fork onto a different
         // conversation server-side (get_or_create_conversation), so the
         // returned id must always be adopted when it differs — not only
@@ -332,13 +451,65 @@ export function InstructorAssistantPage() {
     };
     // pendingConversationId is intentionally omitted: read via ref so history
     // load does not re-trigger sync. deferredListLoaded unlocks reading a
-    // stored draft id after hydrate; lastSyncedCourseIdRef prevents a second
-    // pass for the same course.
+    // stored draft id after hydrate; lastSyncedTabRef prevents a second pass
+    // for the same tab on the same course.
   }, [
     accessToken,
-    activeCourse?.localId,
+    activeTab.courseId,
+    activeTab.id,
     deferredListLoaded,
+    rememberTabConversation,
     user?.id,
+  ]);
+
+  // Every way of switching course lands here — the assistant's own dropdown,
+  // Set Active on the dashboard or the Courses tab, and the assistant naming a
+  // different course mid-request — so all four route to a tab identically.
+  //
+  // Pending work keeps the instructor where they are: the new course still
+  // gets its tab, it just opens behind the one holding their preview.
+  useEffect(() => {
+    const courseId = activeCourse?.localId;
+    // Wait for the stored strip: routing into the placeholder tab first
+    // would bind the course to a tab hydration is about to discard.
+    if (
+      !tabsHydrated ||
+      courseId === undefined ||
+      lastRoutedCourseIdRef.current === courseId
+    ) {
+      return;
+    }
+    lastRoutedCourseIdRef.current = courseId;
+
+    const current = tabsStateRef.current;
+    const next = switchChatTabCourse(current, {
+      courseId,
+      courseName: activeCourse?.displayName ?? null,
+      focus: !hasPendingWorkRef.current,
+    });
+    if (next === current) {
+      return;
+    }
+    updateTabs(() => next);
+
+    // A background open leaves the instructor on a tab for a different course,
+    // and the dropdown reads the tab in front of them — so put it back.
+    //
+    // Done here, once, rather than as an effect watching the active course:
+    // an effect that both reads and writes the active course is a loop with
+    // extra steps, and the ref guard above is what stops this correction from
+    // being re-routed as a switch of its own.
+    const nextActive = activeChatTab(next);
+    if (nextActive.courseId !== null && nextActive.courseId !== courseId) {
+      lastRoutedCourseIdRef.current = nextActive.courseId;
+      selectCourseIfAvailable(nextActive.courseId);
+    }
+  }, [
+    activeCourse?.localId,
+    activeCourse?.displayName,
+    selectCourseIfAvailable,
+    tabsHydrated,
+    updateTabs,
   ]);
 
   useEffect(() => {
@@ -418,10 +589,27 @@ export function InstructorAssistantPage() {
     [llmProviders, user],
   );
 
-  const handleSuggestedAction = (prompt: string) => {
+  const handleSuggestedAction = (actionId: string) => {
+    const behaviour = resolveQuickAction(actionId, activeCourse?.displayName);
+    if (!behaviour) {
+      return;
+    }
+
+    // Same destinations as the dashboard's Quick AI Actions: the creators are
+    // purpose-built forms, so these buttons open them instead of talking the
+    // instructor through the same task in chat.
+    if (behaviour.kind === "navigate") {
+      if (behaviour.state) {
+        navigate(behaviour.path, { state: behaviour.state });
+      } else {
+        navigate(behaviour.path);
+      }
+      return;
+    }
+
     setSelectedConversation(null);
     setShowStarterGuidance(false);
-    chatWindowRef.current?.sendPrompt(prompt);
+    chatWindowRef.current?.sendPrompt(behaviour.prompt);
   };
 
   const handleStartNewChat = () => {
@@ -434,6 +622,135 @@ export function InstructorAssistantPage() {
     setHistoryError(null);
     setShowStarterGuidance(true);
     setChatSessionKey((current) => current + 1);
+  };
+
+  /** Points the chat at whatever thread a tab was last showing.
+   *
+   * A tab with no conversation yet (a fresh one, or one opened in the
+   * background) clears the pending id, which is what leaves it on the welcome
+   * message instead of someone else's transcript. The next turn there creates
+   * the conversation server-side, and the sync handler records it back. */
+  const showTab = useCallback(
+    (tab: ChatTab) => {
+      setSelectedConversation(null);
+      setPendingDraft(null);
+      setPendingPrompt(null);
+      setPendingMessageId(undefined);
+      setPendingDeferredRequestId(null);
+      setHistoryError(null);
+      setPendingConversationId(tab.conversationId ?? undefined);
+      setShowStarterGuidance(tab.conversationId === null);
+      setChatSessionKey((current) => current + 1);
+      // Clicking a tab is an explicit choice, so the dropdown follows it here
+      // and marks the course as already routed — otherwise the effect above
+      // would treat this as a fresh switch and open a second tab for it.
+      if (tab.courseId !== null && tab.courseId !== activeCourse?.localId) {
+        lastRoutedCourseIdRef.current = tab.courseId;
+        selectCourseIfAvailable(tab.courseId);
+      }
+    },
+    [activeCourse?.localId, selectCourseIfAvailable],
+  );
+
+  const handleFocusTab = (tabId: string) => {
+    if (tabId === tabsState.activeTabId) {
+      return;
+    }
+    const tab = tabsState.tabs.find((entry) => entry.id === tabId);
+    if (!tab) {
+      return;
+    }
+    updateTabs((current) => focusChatTab(current, tabId));
+    showTab(tab);
+  };
+
+  const handleCloseTab = (tabId: string) => {
+    const next = closeChatTab(tabsState, tabId);
+    if (next === tabsState) {
+      return;
+    }
+    updateTabs(() => next);
+    // Closing the tab you were on lands you on another one, so the chat has
+    // to follow. Closing a background tab leaves the chat alone.
+    if (tabId === tabsState.activeTabId) {
+      showTab(activeChatTab(next));
+    }
+  };
+
+  /** The chat's own New Chat button: a fresh thread on the course you are on.
+   *
+   * It used to open a tab, back when two tabs could share a course. Under
+   * one-per-course that is not a tab it is allowed to open, and routing it to
+   * "+" instead would send the instructor to some other course — so the fresh
+   * thread happens here, in the tab they are already in. Clearing the recorded
+   * conversation is what makes it stick: leave it and coming back to this tab
+   * reopens the thread they just set aside. */
+  const handleNewConversation = () => {
+    updateTabs((current) =>
+      setChatTabConversation(current, current.activeTabId, null),
+    );
+    handleStartNewChat();
+  };
+
+  /** Moves the chat tab to the course a turn actually resolved to.
+   *
+   * The assistant re-resolves the course from the message, so asking for an
+   * assignment "for Capstone Project" while COSC 676 is selected produces a
+   * Capstone Project preview. Leaving that preview sitting in the COSC 676
+   * tab shows two different courses on one screen and invites confirming a
+   * write against the wrong one.
+   *
+   * Foreground, unlike a dropdown switch made mid-preview: the instructor
+   * asked for this course in this breath, so the preview they are about to
+   * review is the thing they want to be looking at. */
+  const handleResolvedCourse = useCallback(
+    (course: {
+      localCourseId: number;
+      courseName?: string;
+      conversationId?: number;
+    }) => {
+      lastRoutedCourseIdRef.current = course.localCourseId;
+      updateTabs((current) => {
+        const next = switchChatTabCourse(current, {
+          courseId: course.localCourseId,
+          courseName: course.courseName ?? null,
+          focus: true,
+        });
+        // The backend forks the conversation on a course change, so the tab
+        // records the id this turn ended up on rather than the one it started
+        // from — otherwise returning to it reopens the pre-fork thread.
+        return course.conversationId === undefined
+          ? next
+          : setChatTabConversation(
+              next,
+              activeChatTab(next).id,
+              course.conversationId,
+            );
+      });
+      selectCourseIfAvailable(course.localCourseId);
+    },
+    [selectCourseIfAvailable, updateTabs],
+  );
+
+  // A new tab is a different course, never a second thread on the one you are
+  // already in — that is what one-per-course means. The strip has already
+  // greyed "+" out and said why when there is no course left to open, so this
+  // is a second line of defence rather than the place the instructor finds out.
+  const handleNewTab = () => {
+    const next = openChatTab(tabsState, tabCourses);
+    if (next === tabsState) {
+      return;
+    }
+    updateTabs(() => next);
+    handleStartNewChat();
+    // The tab is the course, so opening one is a course switch. Marked as
+    // already routed first, or the effect above would see the dropdown move
+    // and try to open a tab for it a second time.
+    const opened = activeChatTab(next);
+    if (opened.courseId !== null && opened.courseId !== activeCourse?.localId) {
+      lastRoutedCourseIdRef.current = opened.courseId;
+      selectCourseIfAvailable(opened.courseId);
+    }
   };
 
   const handleLoadConversation = async (conversationId: number) => {
@@ -594,6 +911,15 @@ export function InstructorAssistantPage() {
         />
       ) : null}
 
+      <ChatTabStrip
+        tabs={tabsState.tabs}
+        activeTabId={tabsState.activeTabId}
+        limit={newTabLimit}
+        onFocus={handleFocusTab}
+        onClose={handleCloseTab}
+        onNew={handleNewTab}
+      />
+
       <InstructorAssistantSuggestedActions
         actions={suggestedActions}
         onSelect={handleSuggestedAction}
@@ -601,61 +927,101 @@ export function InstructorAssistantPage() {
         visible={showStarterGuidance}
       />
 
-      <section
-        aria-labelledby="assistant-history-heading"
-        className="flex shrink-0 flex-col overflow-hidden rounded-lg border border-border/70 bg-background px-3 py-2 shadow-sm"
-      >
-        <div className="flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={() => setIsHistoryExpanded((current) => !current)}
-            aria-expanded={isHistoryExpanded}
-            aria-controls="assistant-history-content"
-            className="flex min-w-0 flex-1 items-center gap-2 rounded text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <History className="size-4 shrink-0 text-muted-foreground" />
-            <h2
-              id="assistant-history-heading"
-              className="truncate text-sm font-semibold text-foreground"
-            >
-              Conversation History ({conversations.length})
-            </h2>
-            <ChevronDown
-              className={cn(
-                "size-4 shrink-0 text-muted-foreground transition-transform",
-                isHistoryExpanded && "rotate-180",
-              )}
-              aria-hidden="true"
-            />
-          </button>
-          {isHistoryExpanded ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              onClick={() => void loadConversationList()}
-              disabled={isHistoryLoading}
-              aria-label="Refresh conversation history"
-              title="Refresh conversation history"
-            >
-              {isHistoryLoading ? (
-                <Loader2 className="size-4 animate-spin" />
-              ) : (
-                <RefreshCw className="size-4" />
-              )}
-            </Button>
-          ) : null}
+      {/* Chat and history sit side by side, history on the right. It used to
+          be a full-width band above the chat, which cost vertical space on the
+          one surface that needs it most; as a column it costs horizontal space
+          only while it is open. */}
+      <div className="flex min-h-0 flex-1 gap-3 overflow-hidden">
+        {/* The chat is the primary surface: it takes every pixel the collapsed
+            panels don't need (min-h-0 + flex-1), and all scrolling happens
+            inside it rather than on the page frame, so the input never scrolls
+            out of reach (#1, #10, #1454). */}
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <ChatWindow
+            ref={chatWindowRef}
+            key={chatSessionKey}
+            initialPrompt={pendingPrompt}
+            initialDraft={pendingDraft}
+            initialConversationId={pendingConversationId}
+            initialPendingMessageId={pendingMessageId}
+            initialDeferredRequestId={pendingDeferredRequestId}
+            loadedConversation={selectedConversation}
+            onInitialPromptConsumed={() => setPendingPrompt(null)}
+            onModifyContextConsumed={() => {
+              setPendingDraft(null);
+              setPendingConversationId(undefined);
+              setPendingMessageId(undefined);
+            }}
+            onConversationChange={handleConversationChange}
+            onResolvedCourse={handleResolvedCourse}
+            onDeferredRequest={() => void loadDeferredRequests()}
+            onDeferredResumeComplete={() => {
+              setPendingDeferredRequestId(null);
+              void loadDeferredRequests();
+            }}
+            onLoadingChange={setIsLoading}
+            onConversationStarted={() => setShowStarterGuidance(false)}
+            onPendingWorkChange={setHasPendingAssistantWork}
+            onStartNewChat={handleNewConversation}
+            modelSettings={llmSettings}
+            llmProviders={llmProviders}
+            onModelProviderChange={handleModelProviderChange}
+          />
         </div>
 
         {isHistoryExpanded ? (
-          <div id="assistant-history-content" className="mt-2">
-            {historyError ? (
-              <p role="alert" className="mb-2 text-sm text-destructive">
-                {historyError}
-              </p>
-            ) : null}
+          <section
+            aria-labelledby="assistant-history-heading"
+            className="flex w-72 shrink-0 flex-col overflow-hidden rounded-lg border border-border/70 bg-background px-3 py-2 shadow-sm"
+          >
+            <div className="flex shrink-0 items-center justify-between gap-1">
+              <h2
+                id="assistant-history-heading"
+                className="truncate text-sm font-semibold text-foreground"
+              >
+                Conversation History ({conversations.length})
+              </h2>
+              <div className="flex shrink-0 items-center">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => void loadConversationList()}
+                  disabled={isHistoryLoading}
+                  aria-label="Refresh conversation history"
+                  title="Refresh conversation history"
+                >
+                  {isHistoryLoading ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="size-4" />
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setIsHistoryExpanded(false)}
+                  aria-expanded
+                  aria-controls="assistant-history-content"
+                  aria-label="Collapse conversation history"
+                  title="Collapse conversation history"
+                >
+                  <ChevronRight className="size-4" />
+                </Button>
+              </div>
+            </div>
 
-            <div className="max-h-56 space-y-1.5 overflow-y-auto">
+            <div
+              id="assistant-history-content"
+              className="mt-2 min-h-0 flex-1 space-y-1.5 overflow-y-auto"
+            >
+              {historyError ? (
+                <p role="alert" className="mb-2 text-sm text-destructive">
+                  {historyError}
+                </p>
+              ) : null}
+
               {conversations.length === 0 && !isHistoryLoading ? (
                 <p className="rounded-lg border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
                   Previous conversations appear here.
@@ -706,44 +1072,25 @@ export function InstructorAssistantPage() {
                 );
               })}
             </div>
+          </section>
+        ) : (
+          // Collapsed: a rail rather than nothing, so the panel stays
+          // discoverable and the chat does not jump width as it opens.
+          <div className="flex shrink-0 flex-col items-center">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              onClick={() => setIsHistoryExpanded(true)}
+              aria-expanded={false}
+              aria-controls="assistant-history-content"
+              aria-label={`Conversation History (${conversations.length})`}
+              title={`Conversation History (${conversations.length})`}
+            >
+              <History className="size-4" />
+            </Button>
           </div>
-        ) : null}
-      </section>
-
-      {/* The chat is the primary surface: it takes every pixel the collapsed
-          panels above don't need (min-h-0 + flex-1), and all scrolling happens
-          inside it rather than on the page frame, so the input never scrolls
-          out of reach (#1, #10, #1454). */}
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <ChatWindow
-          ref={chatWindowRef}
-          key={chatSessionKey}
-          initialPrompt={pendingPrompt}
-          initialDraft={pendingDraft}
-          initialConversationId={pendingConversationId}
-          initialPendingMessageId={pendingMessageId}
-          initialDeferredRequestId={pendingDeferredRequestId}
-          loadedConversation={selectedConversation}
-          onInitialPromptConsumed={() => setPendingPrompt(null)}
-          onModifyContextConsumed={() => {
-            setPendingDraft(null);
-            setPendingConversationId(undefined);
-            setPendingMessageId(undefined);
-          }}
-          onConversationChange={handleConversationChange}
-          onDeferredRequest={() => void loadDeferredRequests()}
-          onDeferredResumeComplete={() => {
-            setPendingDeferredRequestId(null);
-            void loadDeferredRequests();
-          }}
-          onLoadingChange={setIsLoading}
-          onConversationStarted={() => setShowStarterGuidance(false)}
-          onPendingWorkChange={setHasPendingAssistantWork}
-          onStartNewChat={handleStartNewChat}
-          modelSettings={llmSettings}
-          llmProviders={llmProviders}
-          onModelProviderChange={handleModelProviderChange}
-        />
+        )}
       </div>
     </div>
   );

@@ -66,6 +66,9 @@ _SENSITIVE_EXACT_CONTEXT_KEYS = frozenset({
     "prompt",
     "description",
     "admin_notes",
+    "feedback",
+    # Retired in favour of "feedback"; kept so context captured before the
+    # rename stays redacted.
     "reason",
 })
 

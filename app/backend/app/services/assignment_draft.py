@@ -6,13 +6,14 @@ import httpx
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.secret_redaction import safe_exception_text
 from app.schemas.preview import AssignmentDraftRequest, AssignmentDraftResponse
 from app.services.ai_health import record_ai_call_outcome
 from app.services.canvas_timezone import get_instructor_canvas_timezone_for_user
 from app.services.due_date import normalize_due_date_to_utc_iso, parse_due_date
 from app.services.llm.json_extraction import loads_llm_json
+from app.services.llm.llm_connections import resolve_generation_adapter_settings
 from app.services.llm.llm_setting import get_llm_adapter
-from app.services.llm.provider_registry import get_active_llm_config
 from app.services.profanity import check_assignment_content_safety
 
 _LIST_ITEM_RE = re.compile(r"<li[^>]*>", re.IGNORECASE)
@@ -54,18 +55,33 @@ async def generate_assignment_draft(
         "Use null for points_possible when the prompt describes an ungraded assignment. "
         "Never invent a default point value such as 10 or 100."
     )
-    llm_config = await get_active_llm_config(db)
-    adapter_settings = {
-        "provider": llm_config.provider,
-        "model": llm_config.model,
-    }
+    # Same resolution as a chat turn: the instructor's chosen provider, with
+    # their stored key decrypted and attached. Building settings straight from
+    # the deployment config here meant the generator ran on the admin's
+    # provider with no credentials at all.
+    try:
+        provider, adapter_settings = await resolve_generation_adapter_settings(
+            db,
+            user_id,
+            body.model_settings.model_dump(exclude_none=True)
+            if body.model_settings
+            else None,
+        )
+    except (KeyError, ValueError) as e:
+        # Not connected, or a key the provider has since rejected. That is the
+        # instructor's setup to fix, and build_adapter_settings already words
+        # it for them — a 502 would blame the generator for it instead.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=safe_exception_text(e),
+        ) from e
     adapter = get_llm_adapter(adapter_settings)
 
     try:
         raw = await adapter.generate(system, body.prompt)
     except httpx.HTTPStatusError as e:
         await record_ai_call_outcome(
-            db, user_id, llm_config.provider, error_detail=f"HTTP {e.response.status_code}",
+            db, user_id, provider, error_detail=f"HTTP {e.response.status_code}",
             operation="assignment_draft",
         )
         if e.response.status_code == 429:
@@ -79,7 +95,7 @@ async def generate_assignment_draft(
         ) from e
     except httpx.RequestError as e:
         await record_ai_call_outcome(
-            db, user_id, llm_config.provider, error_detail=str(e)[:500],
+            db, user_id, provider, error_detail=str(e)[:500],
             operation="assignment_draft",
         )
         raise HTTPException(
@@ -97,7 +113,7 @@ async def generate_assignment_draft(
         await record_ai_call_outcome(
             db,
             user_id,
-            llm_config.provider,
+            provider,
             error_detail="Unparseable model response",
             operation="assignment_draft",
         )
@@ -106,7 +122,7 @@ async def generate_assignment_draft(
             detail="Could not generate assignment draft",
         ) from e
 
-    await record_ai_call_outcome(db, user_id, llm_config.provider, operation="assignment_draft")
+    await record_ai_call_outcome(db, user_id, provider, operation="assignment_draft")
 
     instructor_timezone = await get_instructor_canvas_timezone_for_user(db, user_id)
     due_at = None

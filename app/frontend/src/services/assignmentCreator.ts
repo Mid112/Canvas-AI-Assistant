@@ -1,8 +1,10 @@
 import { API_BASE_URL } from "@/config/api";
 import { parseApiError } from "@/lib/api-request";
 import { formatDueDateForApi, formatDueDateForInput } from "@/lib/assignment-utils";
+import { toModelSettingsPayload } from "@/lib/llm-provider-storage";
 import { createAssignment } from "@/services/assignments";
 import type { AssignmentCreatePayload } from "@/types/assignment";
+import type { LlmProviderSettings } from "@/types/llmProvider";
 import type {
   AssignmentApprovePayload,
   AssignmentPreviewSummary,
@@ -35,6 +37,10 @@ interface GenerateAssignmentDraftOptions {
   accessToken: string;
   canvasUrl?: string;
   timeZone?: string;
+  /** The instructor's chosen provider/model. Without it the generator falls
+   * back to the deployment's provider, which is not necessarily one they have
+   * connected a key to. */
+  modelSettings?: LlmProviderSettings | null;
 }
 
 interface AssignmentDraftApiResponse {
@@ -61,7 +67,10 @@ export async function generateAssignmentDraft(
         "Content-Type": "application/json",
         Authorization: `Bearer ${options.accessToken}`,
       },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({
+        prompt,
+        model_settings: toModelSettingsPayload(options.modelSettings),
+      }),
     },
   );
 

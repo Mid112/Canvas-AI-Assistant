@@ -89,9 +89,13 @@ describe("ConfirmationDialog", () => {
       />,
     );
 
-    expect(
-      screen.getByText(/whole course as an announcement/i),
-    ).toBeInTheDocument();
+    // "announcement" now sits in its own <strong> so it can be emphasised,
+    // which splits the sentence across nodes — assert against the emphasised
+    // word and the sentence that carries it.
+    const mode = screen.getByText("announcement");
+    expect(mode.parentElement?.textContent).toMatch(
+      /whole course as an\s*announcement/i,
+    );
     await user.click(screen.getByRole("button", { name: "Confirm Send" }));
     expect(onConfirm).toHaveBeenCalledOnce();
   });
@@ -143,5 +147,77 @@ describe("ConfirmationDialog", () => {
 
     await user.click(screen.getByRole("button", { name: "Remove Alex Kim" }));
     expect(onRemoveRecipient).toHaveBeenCalledWith("3");
+  });
+
+  // Verifies: a sent Canvas message cannot be un-sent (send_message is
+  // classified irreversible in the backend), so the confirm dialog says so
+  // up front rather than only in the body copy.
+  it("shows High risk and Irreversible beside the title", () => {
+    render(
+      <ConfirmationDialog
+        open
+        onOpenChange={vi.fn()}
+        recipients={recipients}
+        selectedRecipientIds={new Set(["1"])}
+        onToggleRecipient={vi.fn()}
+        onRemoveRecipient={vi.fn()}
+        subject="Subject"
+        body="Body"
+        isSending={false}
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("High risk")).toBeInTheDocument();
+    const irreversible = screen.getByText("Irreversible");
+    expect(irreversible).toBeInTheDocument();
+    expect(irreversible.className).toContain("red");
+  });
+
+  // Verifies: which of the two sends this is has to survive skimming. The
+  // announcement/private distinction used to sit at body-copy weight on a
+  // dialog whose action cannot be undone.
+  it("emphasises ANNOUNCEMENT when no recipients are selected", () => {
+    render(
+      <ConfirmationDialog
+        open
+        onOpenChange={vi.fn()}
+        recipients={recipients}
+        selectedRecipientIds={new Set()}
+        onToggleRecipient={vi.fn()}
+        onRemoveRecipient={vi.fn()}
+        subject="Subject"
+        body="Body"
+        isSending={false}
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    const mode = screen.getByText("announcement");
+    expect(mode.tagName).toBe("STRONG");
+    expect(mode.className).toContain("uppercase");
+    expect(mode.className).toContain("font-bold");
+    expect(mode.className).toContain("text-base");
+  });
+
+  it("emphasises PRIVATE MESSAGE when recipients are selected", () => {
+    render(
+      <ConfirmationDialog
+        open
+        onOpenChange={vi.fn()}
+        recipients={recipients}
+        selectedRecipientIds={new Set(["1"])}
+        onToggleRecipient={vi.fn()}
+        onRemoveRecipient={vi.fn()}
+        subject="Subject"
+        body="Body"
+        isSending={false}
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    const mode = screen.getByText("private message");
+    expect(mode.tagName).toBe("STRONG");
+    expect(mode.className).toContain("uppercase");
   });
 });

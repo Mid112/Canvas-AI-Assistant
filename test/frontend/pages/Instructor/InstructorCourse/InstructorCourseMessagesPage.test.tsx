@@ -200,9 +200,12 @@ describe("InstructorCourseMessagesPage", () => {
     expect(screen.getByRole("button", { name: /^Send$/ })).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: /^Send$/ }));
-    expect(
-      await screen.findByText(/whole course as an announcement/i),
-    ).toBeInTheDocument();
+    // Asserted against the dialog's text content rather than a single node:
+    // "announcement" now sits in its own <strong> so the sentence spans
+    // elements. (It reads as caps via text-transform, not in the DOM.)
+    expect(await screen.findByRole("dialog")).toHaveTextContent(
+      /whole course as an announcement/i,
+    );
     await user.click(screen.getByRole("button", { name: "Confirm Send" }));
 
     await waitFor(() => {

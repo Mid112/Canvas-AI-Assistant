@@ -86,14 +86,17 @@ async def test_create_message_draft_generates_content_from_prompt():
     with (
         patch("app.services.messages._generate_draft_content", generated),
         patch(
-            "app.services.messages.get_active_llm_config",
-            new=AsyncMock(return_value=SimpleNamespace(provider="test-provider")),
+            "app.services.messages.resolve_generation_adapter_settings",
+            new=AsyncMock(return_value=("test-provider", {"provider": "test-provider"})),
         ),
     ):
         draft = await create_message_draft(db, user, body)
 
     assert draft.subject == "Midterm Reminder"
     assert draft.body == "Don't forget the midterm."
+    # The resolved settings reach the generator: that is the whole point of
+    # resolving them here, since they carry the instructor's decrypted key.
+    assert generated.await_args.args[2] == {"provider": "test-provider"}
 
 
 @pytest.mark.asyncio
@@ -108,14 +111,38 @@ async def test_create_message_draft_falls_back_when_generation_raises():
     with (
         patch("app.services.messages._generate_draft_content", failing),
         patch(
-            "app.services.messages.get_active_llm_config",
-            new=AsyncMock(return_value=SimpleNamespace(provider="test-provider")),
+            "app.services.messages.resolve_generation_adapter_settings",
+            new=AsyncMock(return_value=("test-provider", {"provider": "test-provider"})),
         ),
     ):
         draft = await create_message_draft(db, user, body)
 
     assert draft.subject == "reminder Announcement"
     assert draft.body == "remind about the midterm"
+
+
+# An instructor whose provider is not connected -- or whose saved key the
+# provider has since rejected -- must not lose what they typed. Resolution now
+# happens before the call, so its failure is a separate branch from the call
+# failing, and it degrades the same way.
+@pytest.mark.asyncio
+async def test_create_message_draft_keeps_the_prompt_when_no_provider_resolves():
+    db = _db_assigning_ids()
+    user = SimpleNamespace(id=1)
+    body = MessageDraftCreate(course_id=5, prompt="remind about the midterm", template_name="reminder")
+
+    unresolvable = AsyncMock(side_effect=ValueError("OpenAI is not connected"))
+    adapter = AsyncMock()
+    with (
+        patch("app.services.messages.resolve_generation_adapter_settings", unresolvable),
+        patch("app.services.messages.get_llm_adapter", return_value=adapter),
+    ):
+        draft = await create_message_draft(db, user, body)
+
+    assert draft.subject == "reminder Announcement"
+    assert draft.body == "remind about the midterm"
+    # No model was reached, so nothing should have been generated against one.
+    adapter.generate.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

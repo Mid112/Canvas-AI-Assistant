@@ -199,14 +199,14 @@ def _validate_grade_payload(body: GradeUpdateRequest) -> str:
     # Canvas accepts both numeric scores and grading-scheme text. Keep bonus
     # scores possible while rejecting malformed payloads before any mutation.
     posted_grade = body.posted_grade.strip()
-    feedback = (body.reason or "").strip()
+    feedback = (body.feedback or "").strip()
     if not posted_grade and not feedback:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Enter a new grade or feedback before previewing.",
         )
     if feedback:
-        # Grade-page "reason" is student-facing feedback text (#1300).
+        # Gradebook feedback is student-facing text (#1300).
         check_message_profanity(feedback, content_label="Feedback")
     if not posted_grade:
         return posted_grade
@@ -300,7 +300,7 @@ def _grade_warnings(body: GradeUpdateRequest, submission) -> list[str]:
 
 def _build_grade_preview(course, body: GradeUpdateRequest, submission) -> GradePreviewResponse:
     proposed_grade = _validate_grade_payload(body)
-    feedback = (body.reason or "").strip()
+    feedback = (body.feedback or "").strip()
     feedback_only = not proposed_grade and bool(feedback)
     current_grade = submission.grade if submission.grade is not None else "ungraded"
     student_name = submission.student_name or f"Canvas user {submission.user_id}"
@@ -329,7 +329,7 @@ def _build_grade_preview(course, body: GradeUpdateRequest, submission) -> GradeP
         },
         proposed={
             "posted_grade": proposed_grade,
-            "reason": feedback or None,
+            "feedback": feedback or None,
             "warnings": _grade_warnings(body, submission),
         },
         affected_resources=[
@@ -388,7 +388,7 @@ async def submit_grade_update(
     _assert_snapshot_matches_live(body, submission)
     preview = _build_grade_preview(course, body, submission)
     proposed_grade = body.posted_grade.strip()
-    feedback = (body.reason or "").strip()
+    feedback = (body.feedback or "").strip()
     feedback_only = not proposed_grade and bool(feedback)
 
     # Feature Reliability (#1188): same user-scoped mutex as other Canvas writes
@@ -449,7 +449,7 @@ async def submit_grade_update(
         previous_grade=submission.grade,
         previous_score=submission.score,
         new_grade=proposed_grade or submission.grade or "unchanged",
-        reason=feedback or None,
+        feedback=feedback or None,
         risk_level="medium" if feedback_only else "high",
         # History supports audit/manual correction, but there is no automated
         # undo endpoint for grade writes yet.

@@ -72,8 +72,11 @@ vi.mock("@/components/messages/MessageSentPanel", () => ({
 const mockedFetchStudents = vi.mocked(fetchCourseStudentsWithSubmissionFallback);
 const mockedFetchDraft = vi.mocked(fetchMessageDraft);
 
-function renderMessagesPage(options?: { compose?: boolean }) {
-  const initialEntry = options?.compose ? "/?tab=compose" : "/";
+function renderMessagesPage(options?: { compose?: boolean; tab?: string }) {
+  const initialEntry =
+    options?.tab ? `/?tab=${options.tab}`
+    : options?.compose ? "/?tab=compose"
+    : "/";
   return renderWithRouter(<InstructorMessagesPage />, {
     routerProps: { initialEntries: [initialEntry] },
   });
@@ -82,6 +85,9 @@ function renderMessagesPage(options?: { compose?: boolean }) {
 describe("InstructorMessagesPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // The page reads the instructor's stored LLM provider, so a value left by
+    // one test would decide what the next one sends.
+    localStorage.clear();
     mockedFetchDraft.mockResolvedValue({
       ...mockMessageDraft,
       recipients: [...mockMessageDraft.recipients],
@@ -180,6 +186,11 @@ describe("InstructorMessagesPage", () => {
       screen.getByRole("tab", { name: "Inbox & replies" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Sent" })).toBeInTheDocument();
+    // Announcements is no longer its own tab: the unified composer decides
+    // announcement vs private message from the recipient selection.
+    expect(
+      screen.queryByRole("tab", { name: "Announcements" }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Compose message" }),
     ).toBeInTheDocument();
@@ -188,6 +199,136 @@ describe("InstructorMessagesPage", () => {
         "View conversations across all courses. Select an active course to compose a new message.",
       ),
     ).toBeInTheDocument();
+  });
+
+  // Verifies the destination half of the Dashboard's Draft Announcement
+  // button: ?tab=compose with no handoff state must land on an announcement
+  // with nobody ticked. The button navigates here and passes no recipients, so
+  // "unselect all students" is really "MessageDraftPage defaults to an empty
+  // selection when preSelectedIds is absent" -- an invariant that lives in
+  // another file and would otherwise fail silently, from this page's side.
+  it("opens compose as a course announcement with no students selected", async () => {
+    mockUseAuth.mockReturnValue({
+      accessToken: "token",
+      user: {
+        id: 1,
+        name: "Dr. Jane Doe",
+        role: "instructor",
+        has_canvas_token: true,
+      },
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    });
+
+    renderMessagesPage({ compose: true });
+
+    expect(
+      await screen.findByText(
+        "No students selected — this will be a public course announcement.",
+      ),
+    ).toBeInTheDocument();
+    for (const checkbox of screen.getAllByRole("checkbox")) {
+      expect(checkbox).not.toBeChecked();
+    }
+  });
+
+  // Creating a draft from a prompt runs a model server-side, and it must be
+  // the instructor's own connected provider. Their choice lives in the
+  // browser, so if the page does not send it the backend falls back to the
+  // deployment's provider and their saved key is never used.
+  it("sends the instructor's LLM provider with the draft request", async () => {
+    mockUseAuth.mockReturnValue({
+      accessToken: "token",
+      user: {
+        id: 1,
+        name: "Dr. Jane Doe",
+        role: "instructor",
+        has_canvas_token: true,
+      },
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    });
+    localStorage.setItem(
+      "canvas-workflow-llm-provider:1",
+      JSON.stringify({ provider: "openai", model: "gpt-4o-mini", baseUrl: "" }),
+    );
+
+    renderMessagesPage({ compose: true });
+
+    await waitFor(() => expect(mockedFetchDraft).toHaveBeenCalled());
+    expect(mockedFetchDraft.mock.calls[0]![1]).toEqual(
+      expect.objectContaining({
+        modelSettings: { provider: "openai", model: "gpt-4o-mini", baseUrl: "" },
+      }),
+    );
+  });
+
+  // The other half of the Draft-a-student-message button. That action cannot
+  // know recipient ids before the course roster is fetched, so it asks for the
+  // whole roster and this resolves it once the students land. Reported as "the
+  // student recipient list is empty": the button shared an id with Draft
+  // Announcement, so it opened in announcement mode with nobody selected.
+  it("ticks the whole roster when the draft asks for all recipients", async () => {
+    mockUseAuth.mockReturnValue({
+      accessToken: "token",
+      user: {
+        id: 1,
+        name: "Dr. Jane Doe",
+        role: "instructor",
+        has_canvas_token: true,
+      },
+      isAuthenticated: true,
+      isLoading: false,
+      login: vi.fn(),
+      register: vi.fn(),
+      logout: vi.fn(),
+      refreshUser: vi.fn(),
+    });
+    // The real fetchMessageDraft echoes back the recipients it was handed
+    // (mapDraftResponse), and the selection is intersected against them — so a
+    // mock returning a fixed roster would drop every pre-selected id on the
+    // floor and this would pass whatever the page did.
+    mockedFetchDraft.mockImplementation(async (_token, options) => ({
+      ...mockMessageDraft,
+      recipients: options?.recipients ?? mockMessageDraft.recipients,
+    }));
+
+    renderWithRouter(<InstructorMessagesPage />, {
+      routerProps: {
+        initialEntries: [
+          {
+            pathname: "/",
+            search: "?tab=compose",
+            state: {
+              aiMessageDraft: {
+                deliveryMode: "private_message",
+                selectAllRecipients: true,
+              },
+            },
+          },
+        ],
+      },
+    });
+
+    await waitFor(() =>
+      expect(mockedFetchDraft).toHaveBeenCalledWith(
+        "token",
+        expect.objectContaining({ preSelectedIds: ["101"] }),
+      ),
+    );
+    expect(
+      screen.queryByText(
+        "No students selected — this will be a public course announcement.",
+      ),
+    ).not.toBeInTheDocument();
   });
 
   // Verifies: Course label is passed through to inbox; FAB opens compose.
@@ -243,6 +384,11 @@ describe("InstructorMessagesPage", () => {
       await screen.findByText("PUBLIC COURSE ANNOUNCEMENT"),
     ).toBeInTheDocument();
     expect(await screen.findByLabelText("Subject")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "No students selected — this will be a public course announcement.",
+      ),
+    ).toBeInTheDocument();
   });
 
   // Verifies: Sent tab mounts the sent panel for the active course.

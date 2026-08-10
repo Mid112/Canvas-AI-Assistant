@@ -1,5 +1,4 @@
 # app/backend/app/services/quiz_validation.py
-from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.course import Course
 from app.models.user import User
 from app.services.course_access import get_owned_course_or_404
+from app.services.due_date_resolver import DueDateError, resolve_due_date
 from app.services.profanity import check_message_profanity
 
 MIN_QUIZ_DESCRIPTION_LENGTH = 20
@@ -46,21 +46,24 @@ def _check_description(description: str | None) -> None:
     check_message_profanity(str(description), content_label="Quiz description")
 
 
-def _check_due_date(due_date: str) -> None:
+def _check_due_date(
+    due_date: str, user: User, canvas_url: str | None = None
+) -> None:
+    """Reject a quiz due date the same way an assignment's is rejected.
+
+    This used to parse with datetime.fromisoformat and treat a naive value as
+    UTC, ignoring the instructor's Canvas timezone entirely. For an instructor
+    in Vancouver that put a quiz 7 hours away from an assignment given the
+    identical input, and made an evening due date read as already past for the
+    seven hours before midnight UTC.
+    """
     try:
-        due_dt = datetime.fromisoformat(due_date)
-        if due_dt.tzinfo is None:
-            due_dt = due_dt.replace(tzinfo=UTC)
-        if due_dt <= datetime.now(UTC):
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Due date must be in the future.",
-            )
-    except ValueError:
+        resolve_due_date(due_date, user, canvas_url, require_future=True)
+    except DueDateError as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid due date format: {due_date}. Use ISO 8601, e.g. 2026-09-01T23:59:00.",
-        )
+            detail=str(exc),
+        ) from exc
 
 
 def _check_points_possible(points_possible: float) -> None:
@@ -347,7 +350,7 @@ async def validate_quiz_for_create(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Due date is required for quizzes.",
         )
-    _check_due_date(due_date)
+    _check_due_date(due_date, user, course.canvas_url)
 
     if points_possible is not None:
         _check_points_possible(points_possible)

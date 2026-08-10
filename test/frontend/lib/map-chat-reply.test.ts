@@ -75,7 +75,7 @@ describe("mapChatReply", () => {
     ).toEqual({
       content:
         'I have the title "Midterm". Which assignment should I update?',
-      acknowledgedFields: [{ label: "Title", value: "Midterm" }],
+      acknowledgedFields: [{ label: "Assignment title", value: "Midterm" }],
     });
   });
 
@@ -99,7 +99,7 @@ describe("mapChatReply", () => {
         'I have the Capstone Project course, the title "Research Proposal", the due date April 15, and 50 possible points. What description should I use?',
       acknowledgedFields: [
         { label: "Course", value: "Capstone Project" },
-        { label: "Title", value: "Research Proposal" },
+        { label: "Assignment title", value: "Research Proposal" },
         { label: "Due date", value: "April 15" },
         { label: "Possible points", value: "50" },
       ],
@@ -117,7 +117,7 @@ describe("mapChatReply", () => {
     );
 
     expect(result.content).toBe(
-      "I still need the title, description, and due date.",
+      "I still need the assignment title, description, and due date.",
     );
   });
 
@@ -165,7 +165,9 @@ describe("mapChatReply", () => {
     expect(result.content).toBe("Please provide a title for the quiz.");
   });
 
-  it("does not acknowledge failed resolver references or duplicate feedback", () => {
+  // `reason` is deliberately absent from the plan below: it is deprecated and
+  // normalized to `feedback` server-side, so a reply can no longer carry both.
+  it("does not acknowledge failed resolver references", () => {
     const result = mapChatReply(
       {
         action: "clarify",
@@ -174,7 +176,6 @@ describe("mapChatReply", () => {
         partial_plan: {
           student_reference: "coin",
           feedback: "Good work",
-          reason: "Good work",
         },
       },
       false,
@@ -182,7 +183,6 @@ describe("mapChatReply", () => {
 
     expect(result.content).toBe("I have the feedback provided. Which student did you mean?");
   });
-
   it("maps grade clarify partial plans to the Grades tab when grade scoped", () => {
     expect(
       mapChatReply(
@@ -196,7 +196,7 @@ describe("mapChatReply", () => {
             course_name: "COSC 777",
             assignment_reference: "leetcode",
             new_grade: "110",
-            reason: "Bonus adjustment",
+            feedback: "Bonus adjustment",
           },
         },
         false,
@@ -206,17 +206,17 @@ describe("mapChatReply", () => {
         { label: "Course", value: "COSC 777" },
         { label: "Assignment", value: "leetcode" },
         { label: "Proposed grade", value: "110" },
-        { label: "Reason", value: "Bonus adjustment" },
+        { label: "Feedback", value: "Bonus adjustment" },
       ],
       content:
-        'I have the COSC 777 course, the assignment "leetcode", a proposed grade of 110, and the reason "Bonus adjustment". Which assignment should I update?',
+        'I have the COSC 777 course, the assignment "leetcode", a proposed grade of 110, and the feedback provided. Which assignment should I update?',
       interpretedAction: {
         action: "Update Grade",
         course: "COSC 777",
         affectedStudents: "Course-wide",
         primaryLink: {
           label: "Open Grades tab",
-          href: "/instructor/courses/7/grades?grade=110&reason=Bonus+adjustment",
+          href: "/instructor/courses/7/grades?grade=110&feedback=Bonus+adjustment",
         },
       },
     });
@@ -234,7 +234,7 @@ describe("mapChatReply", () => {
             action: "update_grade",
             local_course_id: 7,
             student_reference: "Coin",
-            reason: "Please improve the explanation.",
+            feedback: "Please improve the explanation.",
           },
         },
         false,
@@ -242,10 +242,10 @@ describe("mapChatReply", () => {
     ).toEqual({
       acknowledgedFields: [
         { label: "Student", value: "Coin" },
-        { label: "Reason", value: "Please improve the explanation." },
+        { label: "Feedback", value: "Please improve the explanation." },
       ],
       content:
-        'I have the student "Coin" and the reason "Please improve the explanation." Do you want to add assignment feedback on a submission, or send a private message to the student?',
+        'I have the student "Coin" and the feedback provided. Do you want to add assignment feedback on a submission, or send a private message to the student?',
     });
   });
 
@@ -370,7 +370,7 @@ describe("mapChatReply", () => {
             student_ids: [42, 43],
             student_count: 2,
             new_grade: "110",
-            reason: "Bonus adjustment",
+            feedback: "Bonus adjustment",
           },
         },
         false,
@@ -383,7 +383,7 @@ describe("mapChatReply", () => {
         affectedStudents: "2 students",
         primaryLink: {
           label: "Open Grades tab",
-          href: "/instructor/courses/7/grades?assignmentId=10&studentIds=42%2C43&grade=110&reason=Bonus+adjustment",
+          href: "/instructor/courses/7/grades?assignmentId=10&studentIds=42%2C43&grade=110&feedback=Bonus+adjustment",
         },
       },
     });
@@ -408,7 +408,7 @@ describe("mapChatReply", () => {
     );
 
     expect(result.interpretedAction?.primaryLink?.href).toBe(
-      "/instructor/courses/7/grades?assignmentId=10&studentIds=42&grade=85&reason=Strong+work+on+the+explanation.",
+      "/instructor/courses/7/grades?assignmentId=10&studentIds=42&grade=85&feedback=Strong+work+on+the+explanation.",
     );
   });
 
@@ -554,7 +554,7 @@ describe("mapChatReply", () => {
     });
   });
 
-  it("offers send_message draft handoff without auto-redirecting", () => {
+  it("auto-redirects a single send_message to the Messages compose tab", () => {
     const result = mapChatReply(
       {
         intent_preview: true,
@@ -579,7 +579,23 @@ describe("mapChatReply", () => {
     );
 
     expect(result.pendingMessageId).toBeUndefined();
-    expect(result.navigateTo).toBeUndefined();
+    // The redirect is what makes this a form handoff: assistant.ts reads
+    // navigateTo to suppress chat's own "Approve this proposed action?"
+    // confirm, so without it the same send is reviewable in two places.
+    expect(result.navigateTo?.path).toBe("/instructor/messages?tab=compose");
+    expect(result.navigateTo?.state).toMatchObject({
+      returnTo: "/instructor/assistant",
+      aiMessageDraft: {
+        subject: "Deadline Reminder",
+        body: "Please submit by Friday.",
+        courseId: 5,
+        recipientIds: ["11", "22"],
+        deliveryMode: "private_message",
+        conversationId: 3,
+      },
+    });
+    // Kept for replayed history, where nothing navigates: the button is then
+    // the only route back to the draft.
     expect(result.interpretedAction?.primaryLink?.label).toBe(
       "Open message draft",
     );
@@ -597,6 +613,83 @@ describe("mapChatReply", () => {
       },
     });
     expect(result.interpretedAction?.secondaryLink).toBeUndefined();
+  });
+
+  // Verifies: a turn that resolved to several distinct messages stays in chat.
+  // Navigating could only ever open one of the drafts, and the others would be
+  // left with nothing pointing at them -- so grouped turns keep every row and
+  // its own "Open message draft" button instead.
+  //
+  // The extras were being dropped outright before this: additional_previews
+  // was read below the send_message branch, and that branch returns early, so
+  // the only action that produces them never reached the code that read them.
+  it("keeps every draft in chat when send_message resolved to several messages", () => {
+    const group = (subject: string, recipientId: number) => ({
+      intent_preview: true,
+      summary: `Send ${subject}.`,
+      proposed_action: {
+        action: "send_message",
+        local_course_id: 5,
+        subject,
+        body: "Please submit by Friday.",
+        recipient_canvas_user_ids: [recipientId],
+      },
+      preview_metadata: { course: "CPSC 310" },
+    });
+
+    const result = mapChatReply(
+      {
+        ...group("Deadline Reminder", 11),
+        additional_previews: [group("Late Penalty Notice", 22)],
+      },
+      false,
+      3,
+    );
+
+    expect(result.navigateTo).toBeUndefined();
+    expect(result.additionalPreviews).toHaveLength(1);
+    expect(result.additionalPreviews?.[0]?.interpretedAction?.primaryLink?.state)
+      .toMatchObject({
+        aiMessageDraft: { subject: "Late Penalty Notice", recipientIds: ["22"] },
+      });
+  });
+
+  // The assistant re-resolves the course from the message, so a preview can be
+  // for a course other than the selected one — "create an assignment ... for
+  // Capstone Project" while COSTCO is active. Surfacing the resolved id is
+  // what lets the assistant page move the chat tab to match, instead of
+  // leaving a Capstone Project preview sitting in the COSTCO tab.
+  it("reports the course a preview actually resolved to", () => {
+    const result = mapChatReply(
+      {
+        intent_preview: true,
+        summary: "Create 'Final project delivery' in Capstone Project.",
+        proposed_action: {
+          action: "create_assignment",
+          local_course_id: 12,
+          title: "Final project delivery",
+        },
+        preview_metadata: { course_name: "Capstone Project" },
+        pending_message_id: 5,
+      },
+      false,
+      3,
+    );
+
+    expect(result.resolvedCourse).toEqual({
+      localCourseId: 12,
+      courseName: "Capstone Project",
+    });
+  });
+
+  it("reports no course when the reply names none", () => {
+    const result = mapChatReply(
+      { action: "respond", message: "Hello." },
+      false,
+      3,
+    );
+
+    expect(result.resolvedCourse).toBeUndefined();
   });
 
   it("provides an explicit feedback-form link for update_grade", () => {

@@ -48,6 +48,7 @@ async def instructor_id(db_engine):
 
 
 @pytest.mark.asyncio
+@pytest.mark.requirement("FR11.4")
 async def test_concurrent_claim_returns_409_while_write_in_flight(
     db_engine, instructor_id
 ):

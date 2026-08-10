@@ -1,3 +1,5 @@
+import pytest
+
 from datetime import UTC, datetime
 
 from app.models.user import User
@@ -26,6 +28,7 @@ def _workflow(action_name: str, status: str = "executed", undone_at=None) -> Wor
 
 
 # Verifies: Supported executed Canvas writes return an available reversal option.
+@pytest.mark.requirement("FR7.3")
 def test_reversal_metadata_marks_supported_action_available():
     metadata = build_reversal_metadata(_workflow("update_assignment"))
 
@@ -36,6 +39,7 @@ def test_reversal_metadata_marks_supported_action_available():
 
 
 # Verifies: Irreversible operations explain why rollback is unavailable and how to recover.
+@pytest.mark.requirement("FR7.3")
 def test_reversal_metadata_explains_irreversible_action():
     metadata = build_reversal_metadata(_workflow("send_message"))
 
@@ -46,6 +50,7 @@ def test_reversal_metadata_explains_irreversible_action():
 
 
 # Verifies: Already reversed workflows expose reversal history and result messaging.
+@pytest.mark.requirement("FR8.5")
 def test_reversal_metadata_reports_completed_reversal_history():
     reversed_at = datetime(2026, 5, 1, 13, 0, tzinfo=UTC)
     metadata = build_reversal_metadata(_workflow("create_assignment", undone_at=reversed_at))

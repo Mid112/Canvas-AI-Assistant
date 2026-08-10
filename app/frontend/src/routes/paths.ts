@@ -92,7 +92,7 @@ export function instructorCourseGradesPrefillPath(
     assignmentId?: number | string;
     studentIds?: Array<number | string>;
     grade?: string;
-    reason?: string | null;
+    feedback?: string | null;
   },
 ) {
   // AI grade requests resolve real Canvas-backed ids server-side, then land
@@ -108,8 +108,8 @@ export function instructorCourseGradesPrefillPath(
   if (options?.grade) {
     params.set("grade", options.grade);
   }
-  if (options?.reason) {
-    params.set("reason", options.reason);
+  if (options?.feedback) {
+    params.set("feedback", options.feedback);
   }
 
   const query = params.toString();
@@ -164,6 +164,10 @@ export interface AiMessageDraftLocationState {
     prompt?: string;
     courseId?: number;
     recipientIds?: string[];
+    /** Tick the whole roster once it loads, for entry points that mean "message
+     * my students" and cannot know the ids before the course is fetched.
+     * recipientIds wins when both are set — it names specific people. */
+    selectAllRecipients?: boolean;
     deliveryMode?: "announcement" | "private_message";
     conversationId?: number;
   };

@@ -178,7 +178,12 @@ def normalize_semantic_intent(
         if action_name in {"fetch_submissions", "resolve_missing_submissions"}:
             if intent.assignment_reference:
                 result["assignment_reference"] = intent.assignment_reference
-        if action_name == "resolve_missing_submissions":
+        if action_name in {"resolve_missing_submissions", "analyze_course_submissions"}:
+            # Both actions take the same mutually-exclusive missing/late
+            # category. Leaving it off analyze_course_submissions let its
+            # schema default ("missing") answer a question about late work
+            # with missing work — the wrong students, presented as the right
+            # ones.
             result["status"] = intent.status or "missing"
         if action_name == "find_assignment_by_submission_rate":
             if intent.comparator is None or intent.threshold_percent is None:
@@ -193,11 +198,10 @@ def normalize_semantic_intent(
         if action_name == "find_assignments_by_submission_status":
             submission_status = intent.submission_status
             if intent.intent == "find_missing_submissions" and submission_status is None:
-                # ``status`` is the legacy semantic field used by the
-                # assignment-level missing-submissions action. Preserve it
-                # when the model omits the newer, more explicit field so a
-                # request for late work cannot silently become a missing-work
-                # query.
+                # find_missing_submissions covers both categories — status is
+                # what separates them. Defaulting straight to missing threw
+                # that away, so an unscoped "which assignments have late
+                # submissions?" came back listing missing ones instead.
                 submission_status = (
                     "late_submissions"
                     if intent.status == "late"
