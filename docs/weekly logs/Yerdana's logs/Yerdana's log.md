@@ -1632,3 +1632,163 @@ The `published` filter was a near miss in the same shape. The fix was correct fo
 
 
 
+
+
+# Cycle 23 personal log: 4/8 – 9/8 (August 4 – August 9)
+
+## Timesheet
+
+### Clockify Report
+<img width="1220" height="605" alt="Screenshot 2026-08-09 at 9 28 49 PM" src="https://github.com/user-attachments/assets/ee9ee4a8-f836-4715-9a6a-a6d37ba11a5f" />
+
+
+- **4/8 (Tuesday):** 09:21:50
+- **5/8 (Wednesday):** 0
+- **6/8 (Thursday):** 0
+- **7/8 (Friday):** 06:00:00
+- **8/8 (Saturday):** 11:49:46
+- **9/8 (Sunday):** 08:39:30
+
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Landed the Cycle 22 branch stack into develop (4/8)
+
+- Merged the five bugfix PRs the previous cycle had left open: #1519 (quiz points and quiz/assignment routing), #1497 (redact only for the LLM), #1498 (real Canvas read behind submission analysis), #1501 (assignment create), #1514 (creator workflow audit) and #1515 (draft course persistence)
+- Resolved conflicts across the whole stack rather than one branch at a time, since each of the five touched the assignment/chat path, and rebased onto develop's live Canvas timezone fetch so the merged result used the fetched instructor timezone rather than the assumption each branch had been written against
+- Caught while merging that quiz drafts were not storing `time allowed` and `attempts`, so a resumed quiz draft silently lost both. Fixed in the same pass
+
+### #2: Team meetings (4/8, 7/8)
+
+- Attended the Tuesday team meeting, syncing on the Cycle 22 wrap-up and priorities for this cycle
+- Attended the Friday team meeting, covering what still needed to change in the UI and the chat assistant
+
+### #3: One quick-action table for the dashboard and the assistant (`bugfix/quick-action-routing`, 7/8)
+
+- Fixed a bug from manual QA: "Create an Assignment" on the AI Assistant page had stopped pointing at the assignment creation form and instead sent a prompt into the chat, while the same-named button on the dashboard still navigated correctly
+- Root cause was two separate tables for the same six actions. The ids had also drifted apart, with the analytics action called `course-analytics` on one surface and `analyse-missing-submissions` on the other, so the same label did two different things depending on where the instructor clicked it
+- Added `lib/quick-actions.ts` as the single place a quick action resolves to a behaviour, either "open a creator page" or "run an assistant turn with a set prompt". Callers still own how they reach the assistant, because the dashboard has to navigate and carry the prompt in route state while the assistant is already on the page
+- Wired "Draft Announcement" to go straight to the Messages tab with recipients cleared, instead of bouncing through the assistant and asking which recipients should receive a message it had just been told was course-wide
+
+### #4: One due-date resolver for every write path (8/8)
+
+- Fixed bug 19 from manual QA, where the same typed due date came out differently depending on which workflow created it
+- Root cause was that each write path resolved its own due date and they disagreed. Assignments parsed with the instructor's Canvas timezone; quizzes called `datetime.fromisoformat` and treated a naive value as UTC. For an instructor in Vancouver the same string became two instants 7 hours apart, and a date-only value landed 31 hours apart, end-of-day against midnight
+- Populating `canvas_connections.time_zone` had only fixed the assignment half, because the quiz half never read the column. So the fix was not another timezone lookup but removing the split: `services/due_date_resolver.py` now owns both which timezone and which instant, and create/update assignment, create quiz, both drafts, both validators and the preview all resolve through it
+- `due_date.py` stays underneath as pure parsing that knows nothing about users or connections. It cannot own the lookup itself, because that needs `canvas_timezone`, which imports `services.canvas`, which imports `due_date`
+
+
+### #5: One risk and reversibility badge across every confirm surface (`bugfix/reversibility-status`, 8–9/8)
+
+- Manual QA asked for a reversibility sign on four confirm screens that did not have one: assignment create, feedback with no grade change, send message, and grade update
+- Adding four badges would have made the real problem worse. Risk and reversibility were already styled independently on every surface: the quiz dialog and the feedback dialog held byte-identical copies of the same table, the grades page hardcoded its labels and painted "Medium Risk" emerald where emerald meant low risk everywhere else, and `ReversibilityStatus` kept a fourth palette. An instructor comparing two confirm screens could reasonably conclude they meant different things
+- Added `components/status/ActionStatusBadges.tsx` as the one place risk and reversibility get a colour and a word, with one hue meaning one thing on both scales: emerald safe or undoable, amber caution, red irreversible or high risk
+- Applied it to the assignment, quiz and feedback preview dialogs, the message confirmation dialog and the grades page, so the four missing signs came from deleting duplicated tables rather than adding a fifth
+
+### #6: Feedback generation error and feedback draft persistence (9/8)
+
+- Fixed the "Something went wrong on our end" error on the dashboard's Draft Feedback action. A Canvas 404 was travelling untranslated to the browser, where `parseApiError` renders every 404 as a server fault the instructor can do nothing about
+- Canvas returns 404 here routinely, because local `Course` rows outlive the Canvas container and a rebuilt sandbox leaves `canvas_course_id` pointing at a course that no longer exists. That is now a 422 telling the instructor to re-sync their courses and pick again. Timeouts and outages still report as upstream, since those genuinely are
+- Fixed the feedback draft resume bug: the course and student dropdowns were not being saved, while the prompt itself was being polluted with an `Assignment: … Student: …` prefix, so the two selections survived as text in the wrong field and not as selections. The dropdowns now persist and the prompt keeps only what was typed
+
+### #7: Empty announcement body reaching a preview (9/8)
+
+- Fixed the case from manual QA where the assistant proposed `Send "" as a private Canvas message`, an empty body arriving at a confirm card that looked otherwise complete
+- Fixed on both sides, in `write_preview` so the server will not compose a preview around an empty body, and in `map-chat-reply` so the client does not render one
+
+### #8: Set Active from the dashboard (9/8)
+
+- The dashboard's Active Courses cards only offered View, so setting the active course meant going to the Courses tab or the assistant dropdown. Added Set Active to the card, making it the fourth place an instructor can switch course
+
+### #9: Chat tabs for the AI Assistant (9/8)
+
+- Replaced the modal that explained, on every course switch, that the open conversation would stay behind on the old course. The tab strip shows that now instead of describing it
+- Put the model in `lib/chat-tabs.ts` with no React in it, so the awkward cases could be tested directly rather than through a rendered page: the cap, which tab gets evicted, and which tab is reopened when several share a course
+- The one invariant everything else follows from is that the active course is the active tab's course, read back off the focused tab rather than tracked separately. That is what makes a background open coherent, since a tab opened without focus holds its course until it is clicked
+- Added `ChatTabStrip`, a `useChatTabs` hook and the assistant page rewiring on top of it, with a dedicated tab routing test
+
+### #10: Active-course resolution on the first turn (9/8)
+
+- Fixed the bug where the first message of a session failed to use the selected active course and the assistant asked which course was meant, while retyping the same prompt worked
+- The pre-resolver required prior history, on the reasoning that a first turn has no stale framing to leak. That covered only half of what the resolver does. Leaking old history is one failure; the other is the main call being told `CURRENT COURSE: <active course>` while the message plainly names a different one, which happens just as much on turn one and is where a write lands in the wrong Canvas course
+- A first turn now qualifies when the message actually names one of the instructor's other courses, decided by a local substring check with no extra call, so every turn that names nothing stays at one call. Still skipped on a modify turn, and still skipped when `local_course_id` was sent explicitly, since a deliberate selection should win over a course name the message happens to mention
+
+### #11: `local_course_id` regression and the assignment pre-pass (`bugfix/requirement-testing`, 9/8)
+
+- Tracked down why "show assignments for COSC 499" kept resolving to whatever course was active. The ambient active course was being sent as `local_course_id` on every turn, which the server takes as an explicit selection
+- This had been found and fixed once as #1509, and the codebase says so verbatim at `assistant.ts:291`. A teammate's commit reintroduced it by adding `localCourseId` to the ChatWindow send, where develop had only ever used that value for a display label. Removed it; nothing is lost, because the server seeds a course-less conversation from the persisted preference and the dropdown binds the course out of band
+- Pinned it with a test, then checked the test actually discriminates. My first version passed with the bug reinstated, because the default mock has no active course so the field was undefined either way. It now fails with the bug and passes without
+- Added `_prescan_assignment_reference`, which runs before the main call, matches the message against the course's locally synced assignment titles and injects a RESOLVED REFERENCES block into the system prompt. Deliberately deterministic and local: no extra LLM call and no Canvas round trip. The longest title wins, and an exact-length tie between two assignments stays silent and falls through to the LLM resolver, which handles "the latest one" better than substring matching can
+- Verification was blocked by an unrelated defect first: 13 of 24 tests in `test_chat_endpoint` were failing purely on 409s from a shared `"canvas_token": "test-token"` literal. Swept 43 occurrences across 33 files to unique values, taking that file from 13 failed to 24 passed
+
+### #12: Requirement traceability generated from tagged tests (`bugfix/requirement-testing`, 9/8)
+
+- Built the traceability matrix as something derived rather than maintained. `test/backend/requirements_registry.py` holds the full UR/FR list with each requirement's wording, a test opts in with `@pytest.mark.requirement("FR10.4")`, conftest hooks write the results as JSON and `tools/requirements_report.py` renders `docs/requirements-traceability.html`
+- Listing every requirement, not only the ones with tests, is the point. A matrix that omits untested requirements cannot show a gap, and the gaps are the part worth reading
+- Wrote the missing coverage found while tagging, the largest additions being authentication and the token fingerprint backfill, plus grade management, late and missing submissions, and Canvas
+
+### #13: `reason` to `feedback`, and the token fingerprint backfill (9/8)
+
+- Deprecated `grade_history.reason` in favour of `feedback` as agreed, via migration 046 and through the dispatcher, schemas, grade management service, frontend types and the grades page, so one field name means one thing end to end
+- Added `app/core/token_backfill.py` to fill `canvas_connections.token_fingerprint` for rows that predate the column. It is a command rather than a SQL migration because a fingerprint is an HMAC of the decrypted token, and a migration running inside Postgres has no access to the encryption key. Handing it the key would put plaintext Canvas tokens into a file replayed on every fresh database
+- It is also not done lazily on the next token connect, because a database written before the uniqueness rule can legitimately hold two rows sharing a token, and writing fingerprints opportunistically would throw an IntegrityError at whichever instructor happened to connect next for a conflict they had nothing to do with. Safe to re-run, and writes nothing without `--apply`
+
+### #14: Rebased onto a teammate's in-flight changes (9/8)
+
+- Rebased the branch onto Mridul's Canvas token registry and semantic intent work, reconciling the token registry, the chat reply mapper and the course switch resolution tests rather than resolving conflicts by taking one side
+
+
+## Progress Update (since 04/08/2026)
+
+| TASK/ISSUE #                                                             | STATUS            |
+| ------------------------------------------------------------------------ | ----------------- |
+| Merge the Cycle 22 branch stack (#1497, #1498, #1501, #1514, #1515, #1519) | Merged (4/8)      |
+| Fix quiz drafts not storing time allowed and attempts                     | Completed (4/8)   |
+| Fix CI and cancel superseded runs on the self-hosted runner               | Completed (4/8)   |
+| Share one quick-action table across dashboard and assistant               | Completed (7/8)   |
+| Route Draft Announcement straight to Messages with recipients cleared     | Completed (9/8)   |
+| Fix bug 19, one due-date resolver for every write path                    | Completed (8/8)   |
+| Unify risk and reversibility badges across all confirm surfaces           | Completed (9/8)   |
+| Fix the Draft Feedback "something went wrong" error                       | Completed (9/8)   |
+| Fix feedback draft persistence of course and student selections           | Completed (9/8)   |
+| Fix empty announcement body reaching a preview                            | Completed (9/8)   |
+| Add Set Active to the dashboard's Active Courses cards                    | Completed (9/8)   |
+| Chat tabs replacing the course-switch modal                               | Completed (9/8)   |
+| Fix active-course resolution failing on the first turn                    | Completed (9/8)   |
+| Remove the reintroduced `local_course_id` override (#1509 regression)     | Completed (9/8)   |
+| Add the deterministic assignment reference pre-pass                       | Completed (9/8)   |
+| Sweep 43 duplicated Canvas token literals across 33 test files            | Completed (9/8)   |
+| Requirement traceability generated from tagged tests                      | Completed (9/8)   |
+| Deprecate `reason` in favour of `feedback` (migration 046)                | Completed (9/8)   |
+| Token fingerprint backfill command                                        | Completed (9/8)   |
+| Chain create_assignment and create_quiz through the course resolver       | In Progress       |
+| Generalise the resolver pre-pass to course, student, quiz, submission     | Not Started       |
+| Delete the `_resolve_course_context_statement` regex resolver             | Not Started       |
+| Stop treating `clarify` as a terminal output                              | Not Started       |
+| Tabs revision: 5 tabs, one course per tab, explained cap                  | Not Started       |
+| Create-assignment preview restructuring                                   | Not Started       |
+| Late-submission filter matching the missing-submission one                | Not Started       |
+| Profanity handling for evasive input (carryover)                          | Not Started       |
+| Live e2e verification against the Canvas sandbox (carryover)              | Not Started       |
+
+
+## Cycle 23 Goal Review
+
+### Reflection:
+
+The theme this cycle was that four separate bug reports kept turning out to be one missing shared definition, and fixing the definition was both smaller and safer than fixing the four reports. The due date bug was not a timezone bug, it was two write paths each resolving their own instant. The quick action bug was not a broken button, it was two tables for the same six actions with ids that had drifted. The reversibility request was for four missing badges, but the reason they were missing is that four surfaces each owned their own copy of the same colour table, one of which used emerald for medium risk where emerald meant safe everywhere else. In each case the reported symptom was the cheapest thing to fix and the least useful.
+
+The `local_course_id` regression is the one I want to remember. The correct reasoning for not sending the ambient active course was already written down in the codebase, in a comment naming the issue number of the first time it was fixed, and the bug came back anyway because the value looked harmless where it was reintroduced. Develop had only ever used it as a display label. A comment explaining why a field is absent is apparently not enough on its own, which is why that one got a test rather than a longer comment, and why I checked the test would actually fail with the bug put back.
+
+### Retrospective:
+
+Writing the test twice was the useful part of that fix. My first version passed with the bug deliberately reinstated, because the default mock has no active course, so the field was undefined either way and the test proved nothing. It is easy to write a regression test that passes for a reason unrelated to the regression, and the only way to know is to reintroduce the bug and watch it fail.
+
+The other lesson is about unrelated defects blocking verification. I could not check the resolver work at all until the duplicated Canvas token literal was swept, because 13 of 24 tests in that file were failing on 409s from a shared value that had nothing to do with anything I had changed. Forty-three occurrences across 33 files is exactly the kind of thing that never gets its own ticket and quietly costs everyone else the same hour it cost me.
+
+I should also be honest that the volume of this cycle came at the price of branch hygiene. Several commits went in under names like "commiting to save", the reversibility and quick-action work ended up interleaved across branches rather than landing cleanly, and none of this cycle's work is merged into develop yet. The fixes are real and tested, but "on a branch and passing" is not the same as delivered.
+
+
+
+
+
