@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from fastapi import HTTPException
 
+from app.models.user import User
 from app.services.quiz_validation import (
     _check_allowed_attempts,
     _check_description,
@@ -240,4 +241,11 @@ def test_future_due_date_helper_still_accepts_iso():
     from app.services.quiz_validation import _check_due_date
 
     future = (datetime.now(UTC) + timedelta(days=3)).replace(microsecond=0).isoformat()
-    _check_due_date(future)
+    user = User(
+        id=1,
+        name="Instructor",
+        email="instructor@example.com",
+        hashed_password="x",
+        role="instructor",
+    )
+    _check_due_date(future, user)

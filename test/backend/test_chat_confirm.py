@@ -260,7 +260,14 @@ def test_modify_snapshots_previous_proposed_action(client):
     assert reply["pending_message_id"] == pending_message_id
     assert reply["proposed_action"]["points_possible"] == 50
     assert reply["previous_proposed_action"]["points_possible"] == 100
-    assert reply["previous_summary"] == "Create Midterm Exam"
+    # Preview summaries are server-authoritative.  The original LLM summary
+    # is intentionally replaced with the same detailed text shown in the
+    # confirmation preview, so a modify snapshot remains meaningful even if
+    # the model used a short or stale description.
+    assert reply["previous_summary"] == (
+        "Create assignment 'Midterm Exam' in CPSC 310, "
+        "due January 01, 2030 at 12:00 AM UTC, worth 100 points."
+    )
 
     # A second modify round only remembers one step back — the very first
     # version (100 points) is gone, replaced by the second (50 points).
@@ -332,8 +339,9 @@ def test_incomplete_create_assignment_is_clarified_not_previewed(client):
     caught before a preview is ever shown, not just documented as a
     system prompt instruction the model might not follow.
 
-    Ticket 16 / #1440: when description and points are both missing,
-    the clarify question must list both so the user can answer once."""
+    An explicit ``points_possible: null`` means the instructor chose an
+    ungraded assignment, so it must not be treated as a missing point value.
+    Only the empty description should be requested."""
     headers, local_course_id = _register_with_canvas(client)
 
     mock_adapter = AsyncMock()
@@ -355,11 +363,12 @@ def test_incomplete_create_assignment_is_clarified_not_previewed(client):
     assert reply["action"] == "clarify"
     question = reply["question"].lower()
     assert "description" in question
-    assert "point" in question
-    assert "one message" in question
+    assert "point" not in question
     assert reply["partial_plan"]["title"] == "test4"
     assert "description" not in reply["partial_plan"]
-    assert "points_possible" not in reply["partial_plan"]
+    # Preserve the explicit ungraded choice while asking only for the
+    # missing description.
+    assert reply["partial_plan"]["points_possible"] is None
     assert "intent_preview" not in reply
 
 

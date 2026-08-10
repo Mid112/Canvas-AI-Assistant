@@ -605,8 +605,7 @@ def test_list_cached_courses_excludes_deleted_course(client):
 # Verifies: List assignments.
 def test_list_assignments(client):
     """Assignments endpoint uses local course ID — seed a course first to get one."""
-    canvas_token = f"test-token-{uuid.uuid4()}"
-    headers = _register_with_canvas(client, canvas_token)
+    headers = _register_with_canvas(client)
     courses = [_unique_course()]
     with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as mock:
         mock.return_value = courses
@@ -619,7 +618,7 @@ def test_list_assignments(client):
         response = client.get(f"/api/v1/canvas/courses/{local_id}/assignments", headers=headers)
     assert response.status_code == 200
     assert response.json()[0]["name"] == "Assignment 1"
-    # token is unique_canvas_token() (set in _register_with_canvas); canvas_course_id is dynamic
+    # The helper derives a stable per-test token; canvas_course_id is dynamic.
     mock.assert_awaited_once_with(canvas_course_id, unique_canvas_token(), CANVAS_URL)
 
 

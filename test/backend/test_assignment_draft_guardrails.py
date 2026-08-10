@@ -27,8 +27,13 @@ async def test_generate_draft_allows_educational_prompt():
 
     with (
         patch(
-            "app.services.assignment_draft.get_active_llm_config",
-            new=AsyncMock(return_value=llm_config),
+            "app.services.assignment_draft.resolve_generation_adapter_settings",
+            new=AsyncMock(
+                return_value=(
+                    llm_config.provider,
+                    {"provider": llm_config.provider, "model": llm_config.model},
+                )
+            ),
         ),
         patch(
             "app.services.assignment_draft.get_llm_adapter",
