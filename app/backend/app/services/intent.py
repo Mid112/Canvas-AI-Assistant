@@ -34,7 +34,13 @@ _FIELD_ALLOWLIST: dict[str, frozenset[str]] = {
     "update_assignment": frozenset(
         {"title", "description", "due_date", "points_possible"}
     ),
-    "update_grade": frozenset({"new_grade", "feedback", "reason"}),
+    # recipient_handle lets a grade/feedback turn target a set an earlier
+    # resolver already computed, the same way send_message does. It is a
+    # handle string, not an ID: materialize_resolved_set re-checks that it
+    # belongs to this conversation and has not expired before it names anyone.
+    "update_grade": frozenset(
+        {"new_grade", "feedback", "reason", "recipient_handle"}
+    ),
     "send_message": frozenset(
         {
             "subject",

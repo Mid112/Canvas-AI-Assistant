@@ -2962,6 +2962,56 @@ async def _resolve_grade_target(
     )
     assignment_name = assignment_row.title if assignment_row else None
 
+    # A resolved set from an earlier resolve_missing_submissions /
+    # resolve_score_range turn targets that whole group at once. Checked
+    # before student_reference, because a handle is an exact set the app
+    # computed itself and a reference is a phrase the model wrote — when
+    # both arrive, the computed one wins.
+    handle = getattr(action, "recipient_handle", None)
+    if handle:
+        resolved_set = await materialize_resolved_set(db, handle, conversation.id)
+        if resolved_set is None:
+            return {
+                "action": "clarify",
+                "clarify": True,
+                "question": (
+                    "That resolved group is no longer available (it may have "
+                    "expired) — should I work out who it covered again?"
+                ),
+                "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
+            }
+        # The set may have been resolved against a DIFFERENT assignment
+        # ("who's missing lab 4" → "add 5 marks to them on lab 5"), which is a
+        # legitimate request. Intersect with this assignment's submissions so
+        # the grade targets are always rows that actually exist here, rather
+        # than trusting the snapshot's ids against the wrong assignment.
+        wanted = {
+            _coerce_int(r.get("user_id")) for r in resolved_set.snapshot_recipients
+        }
+        wanted.discard(None)
+        targeted = [
+            s for s in submissions if _coerce_int(s.get("user_id")) in wanted
+        ]
+        if not targeted:
+            return {
+                "action": "clarify",
+                "clarify": True,
+                "question": (
+                    f"None of those {len(wanted)} student(s) have a submission "
+                    f"record on that assignment in {course.name}, so there's "
+                    "nothing to grade for them there."
+                ),
+                "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
+            }
+        return _build_grade_handoff_result(
+            course,
+            assignment_id,
+            targeted,
+            action.new_grade,
+            action.feedback,
+            assignment_name=assignment_name,
+        )
+
     if bulk_update:
         return _build_grade_handoff_result(
             course,
@@ -3562,7 +3612,11 @@ async def _run_send_message_chain(
     turn that named recipients in natural language (recipient_directives),
     asked to broadcast privately to the whole class
     (broadcast_to_all_students), or referenced a server-computed set from an
-    earlier resolve_missing_submissions turn (recipient_handle) — mirrors
+    earlier resolver turn — resolve_missing_submissions or
+    resolve_score_range — via recipient_handle. Handles are kind-agnostic
+    here: materialize_resolved_set checks ownership and expiry, not which
+    criterion produced the set, so a score-range group messages exactly like
+    a missing-submissions one. Mirrors
     _run_fetch_submissions_chain's "resolve server-side, never trust the
     model with a raw ID" shape, for people instead of assignments. Only
     reached when handle_chat_message's dispatch sees one of those three
@@ -4784,7 +4838,16 @@ approve there. Never invent or guess numeric assignment_id or student_id
 values, and never ask the user for raw Canvas IDs. If the user asks to
 update grades for "everyone", "all students", or "the whole class", set
 student_reference to that exact phrase; the app will resolve the real
-submission list and hand off the full target set to the Grades tab. Never
+submission list and hand off the full target set to the Grades tab.
+If the group is one an earlier turn already resolved — students missing or
+late on an assignment, or students in a score range — do NOT describe it
+again in student_reference and do NOT rebuild it from the "sample" names.
+Set recipient_handle to that result's exact "handle" string instead, the
+same way send_message does. This is what makes "give feedback to everyone
+who scored below 50" or "add 5 marks to everyone missing lab 4" work: the
+app already computed that exact set and will grade or comment on all of
+them. A handle is the only way to target a resolved group here; the sample
+is a truncated preview, so grading from it silently skips students. Never
 call fetch_students for grade updates.
 If the user asks to "give feedback", "send feedback", or "leave a note"
 for a student but does not tie it to an assignment/submission/grade, ask

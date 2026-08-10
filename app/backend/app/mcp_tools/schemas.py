@@ -314,6 +314,14 @@ class UpdateGradeAction(BaseModel):
     assignment_reference: str | None = None
     student_id: int | None = None
     student_reference: str | None = None
+    # A handle from an earlier resolver turn in this conversation
+    # (resolve_missing_submissions / resolve_score_range), used to grade or
+    # give feedback to that whole set at once — "give everyone who scored
+    # below 50 another attempt", "add 5 marks to everyone missing lab 4".
+    # Copy the handle string verbatim from that result; never invent one, and
+    # never rebuild the group out of the result's "sample" names, which is a
+    # truncated preview rather than the full set.
+    recipient_handle: str | None = None
     new_grade: str
     # `reason` is the deprecated spelling of this field. It stays accepted here
     # — and only here — because the model still occasionally emits it from
