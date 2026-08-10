@@ -150,7 +150,10 @@ describe("InstructorDashboardPage", () => {
     expect(screen.getByText("83")).toBeInTheDocument();
     expect(screen.getByText("Quick AI Actions")).toBeInTheDocument();
     expect(screen.queryByText("Recent Activity")).not.toBeInTheDocument();
-    expect(screen.queryByText("Notifications")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Notifications" }),
+    ).toHaveAttribute("href", paths.instructor.notifications);
+    expect(screen.queryByText("Recent notifications")).not.toBeInTheDocument();
   });
 
   // Verifies: Navigates to the assistant from the dashboard CTA.
