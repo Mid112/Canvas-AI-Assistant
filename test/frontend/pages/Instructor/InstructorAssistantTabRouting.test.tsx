@@ -61,10 +61,17 @@ vi.mock("@/contexts/useActiveCourse", () => ({
     const localId = activeLocalId.current;
     if (!contextByCourse.has(localId)) {
       contextByCourse.set(localId, {
-        activeCourse: { localId, displayName: `Course ${localId}` },
+        // What the real provider stores: formatInstructorCourseTitle over the
+        // matching availableCourses entry. Spelled out rather than derived so
+        // a drift between the two shows up here as a failing label, which is
+        // exactly how the "+" test below caught it.
+        activeCourse: { localId, displayName: `C${localId}: Course ${localId}` },
+        // isPublished matters: the page offers "+" only the courses the
+        // active-course dropdown would accept, so dropping it here would
+        // leave the strip thinking the instructor has no courses at all.
         availableCourses: [
-          { id: 1, code: "C1", name: "Course 1" },
-          { id: 2, code: "C2", name: "Course 2" },
+          { id: 1, code: "C1", name: "Course 1", isPublished: true },
+          { id: 2, code: "C2", name: "Course 2", isPublished: true },
         ],
         coursesRevision: 0,
         isLoading: false,
@@ -250,6 +257,49 @@ describe("InstructorAssistantPage tab routing", () => {
 
     expect(renderCount.current).toBe(settled);
     expect(selectActiveCourseSpy).not.toHaveBeenCalledWith(99);
+  });
+
+  // "+" is a course switch now, not a second thread on the course you are on:
+  // it picks a course with no tab and moves the dropdown to match, because the
+  // tab in front of the instructor is what decides the active course.
+  it("opens + on a course that has no tab yet", async () => {
+    const user = userEvent.setup();
+    render(<CourseSwitchHarness />);
+    await screen.findByTestId("chat-window");
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(1));
+
+    await user.click(screen.getByRole("button", { name: "New chat tab" }));
+
+    await waitFor(() =>
+      expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+        "C1: Course 1",
+        "C2: Course 2",
+      ]),
+    );
+    expect(selectActiveCourseSpy).toHaveBeenCalledWith(2);
+  });
+
+  // The rule the instructor has to be able to see: two courses means two tabs,
+  // however high the cap is. Leaving "+" looking live would have them clicking
+  // a button that silently does nothing.
+  it("explains why + is unavailable once every course has a tab", async () => {
+    const user = userEvent.setup();
+    render(<CourseSwitchHarness />);
+    await screen.findByTestId("chat-window");
+    await user.click(screen.getByRole("button", { name: "New chat tab" }));
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+
+    expect(
+      screen.getByText(
+        "One tab per course, and all 2 of your courses are already open.",
+      ),
+    ).toBeInTheDocument();
+
+    selectActiveCourseSpy.mockClear();
+    await user.click(screen.getByRole("button", { name: "New chat tab" }));
+
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    expect(selectActiveCourseSpy).not.toHaveBeenCalled();
   });
 
   // Scenario 2: an unconfirmed preview is open, so the new course's tab opens

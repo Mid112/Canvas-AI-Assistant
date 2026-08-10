@@ -17,6 +17,7 @@ import { useChatTabs } from "@/pages/Instructor/InstructorAssistant/useChatTabs"
 import { buildSuggestedActions } from "@/data/assistantSeedData";
 import {
   activeChatTab,
+  chatTabLimit,
   closeChatTab,
   focusChatTab,
   openChatTab,
@@ -24,6 +25,7 @@ import {
   switchChatTabCourse,
   type ChatTab,
 } from "@/lib/chat-tabs";
+import { formatInstructorCourseTitle } from "@/lib/format-course-title";
 import {
   clearStoredDeferredDraft,
   getStoredDeferredDraft,
@@ -166,10 +168,10 @@ export function InstructorAssistantPage() {
   // from the conversation the instructor just opened (#1507 re-review).
   const pendingConversationIdRef = useRef(pendingConversationId);
   pendingConversationIdRef.current = pendingConversationId;
-  // Keyed by tab, not by course: two tabs can hold the same course (open one,
-  // then open another without switching away), and each is showing its own
-  // conversation. Deduping on the course alone would skip the second tab's
-  // sync and leave it posting into the first tab's thread.
+  // Keyed by tab *and* course, not by course alone. Tabs are one-per-course
+  // now, but the pairing is not stable over time: closing a course's tab and
+  // reopening it produces a new tab with no conversation id, and the sync is
+  // how it learns one. A course-only key would call that a repeat and skip it.
   const lastSyncedTabRef = useRef<string | null>(null);
 
   const {
@@ -208,6 +210,28 @@ export function InstructorAssistantPage() {
   useEffect(() => {
     availableCourseIdsRef.current = availableCourses.map((course) => course.id);
   }, [availableCourses]);
+
+  /** The courses "+" is allowed to open a tab on.
+   *
+   * Published only, matching the active-course dropdown — a tab sets the
+   * active course, so offering one the dropdown would refuse produces a tab
+   * whose course never actually loads. Labelled with the same formatter the
+   * provider uses for displayName, so a tab opened with "+" reads identically
+   * to the same course's tab opened from the dropdown. */
+  const tabCourses = useMemo(
+    () =>
+      availableCourses
+        .filter((course) => course.isPublished)
+        .map((course) => ({
+          id: course.id,
+          name: formatInstructorCourseTitle(course),
+        })),
+    [availableCourses],
+  );
+  const newTabLimit = useMemo(
+    () => chatTabLimit(tabsState, tabCourses),
+    [tabsState, tabCourses],
+  );
 
   /** Points the dropdown at a course, if that course still exists.
    *
@@ -639,9 +663,21 @@ export function InstructorAssistantPage() {
     }
   };
 
-  // Backs both "+" and the chat's own New Chat button. The spec has New Chat
-  // retiring the oldest tab at the cap, which is exactly what opening a tab
-  // does — so they are one action, not two that drift apart.
+  /** The chat's own New Chat button: a fresh thread on the course you are on.
+   *
+   * It used to open a tab, back when two tabs could share a course. Under
+   * one-per-course that is not a tab it is allowed to open, and routing it to
+   * "+" instead would send the instructor to some other course — so the fresh
+   * thread happens here, in the tab they are already in. Clearing the recorded
+   * conversation is what makes it stick: leave it and coming back to this tab
+   * reopens the thread they just set aside. */
+  const handleNewConversation = () => {
+    updateTabs((current) =>
+      setChatTabConversation(current, current.activeTabId, null),
+    );
+    handleStartNewChat();
+  };
+
   /** Moves the chat tab to the course a turn actually resolved to.
    *
    * The assistant re-resolves the course from the message, so asking for an
@@ -682,17 +718,25 @@ export function InstructorAssistantPage() {
     [selectCourseIfAvailable, updateTabs],
   );
 
+  // A new tab is a different course, never a second thread on the one you are
+  // already in — that is what one-per-course means. The strip has already
+  // greyed "+" out and said why when there is no course left to open, so this
+  // is a second line of defence rather than the place the instructor finds out.
   const handleNewTab = () => {
-    // Same course, new thread: a new tab is for a second conversation about
-    // what you are already working on. Switching course is what opens a tab
-    // somewhere else.
-    updateTabs((current) =>
-      openChatTab(current, {
-        courseId: activeCourse?.localId ?? null,
-        courseName: activeCourse?.displayName ?? null,
-      }),
-    );
+    const next = openChatTab(tabsState, tabCourses);
+    if (next === tabsState) {
+      return;
+    }
+    updateTabs(() => next);
     handleStartNewChat();
+    // The tab is the course, so opening one is a course switch. Marked as
+    // already routed first, or the effect above would see the dropdown move
+    // and try to open a tab for it a second time.
+    const opened = activeChatTab(next);
+    if (opened.courseId !== null && opened.courseId !== activeCourse?.localId) {
+      lastRoutedCourseIdRef.current = opened.courseId;
+      selectCourseIfAvailable(opened.courseId);
+    }
   };
 
   const handleLoadConversation = async (conversationId: number) => {
@@ -856,6 +900,7 @@ export function InstructorAssistantPage() {
       <ChatTabStrip
         tabs={tabsState.tabs}
         activeTabId={tabsState.activeTabId}
+        limit={newTabLimit}
         onFocus={handleFocusTab}
         onClose={handleCloseTab}
         onNew={handleNewTab}
@@ -903,7 +948,7 @@ export function InstructorAssistantPage() {
             onLoadingChange={setIsLoading}
             onConversationStarted={() => setShowStarterGuidance(false)}
             onPendingWorkChange={setHasPendingAssistantWork}
-            onStartNewChat={handleNewTab}
+            onStartNewChat={handleNewConversation}
             modelSettings={llmSettings}
             llmProviders={llmProviders}
             onModelProviderChange={handleModelProviderChange}

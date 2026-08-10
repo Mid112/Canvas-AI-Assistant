@@ -1,11 +1,18 @@
 import { Plus, X } from "lucide-react";
 
-import { chatTabLabels, type ChatTab } from "@/lib/chat-tabs";
+import {
+  chatTabLabels,
+  describeChatTabLimit,
+  type ChatTab,
+  type ChatTabLimit,
+} from "@/lib/chat-tabs";
 import { cn } from "@/lib/utils";
 
 interface ChatTabStripProps {
   tabs: ChatTab[];
   activeTabId: string;
+  /** Whether "+" can open anything, and if not, why. */
+  limit: ChatTabLimit;
   onFocus: (tabId: string) => void;
   onClose: (tabId: string) => void;
   onNew: () => void;
@@ -14,17 +21,18 @@ interface ChatTabStripProps {
 /**
  * The browser-style tab strip above the assistant chat.
  *
- * Each tab is a conversation bound to a course, named after it. Showing which
- * course a thread belongs to — and that switching course opens a different
- * thread rather than continuing this one — is the job the switch-course modal
- * used to do in prose.
+ * Each tab is a course, named after it, and no two tabs hold the same one.
+ * Showing which course a thread belongs to — and that switching course opens a
+ * different thread rather than continuing this one — is the job the
+ * switch-course modal used to do in prose.
  *
  * Purely presentational: every rule about what tabs exist, which is active and
- * what closing does lives in lib/chat-tabs.ts.
+ * why "+" is unavailable lives in lib/chat-tabs.ts.
  */
 export function ChatTabStrip({
   tabs,
   activeTabId,
+  limit,
   onFocus,
   onClose,
   onNew,
@@ -33,6 +41,8 @@ export function ChatTabStrip({
   // The last tab has no close control at all rather than a disabled one:
   // there is always somewhere to be, and "+" is right there for a fresh start.
   const canClose = tabs.length > 1;
+  const limitMessage = describeChatTabLimit(limit);
+  const blocked = limitMessage !== null;
 
   return (
     <div className="flex shrink-0 items-center gap-1 border-b border-border/60">
@@ -64,7 +74,7 @@ export function ChatTabStrip({
                 className={cn(
                   "min-w-0 truncate rounded-sm text-sm transition-colors duration-200",
                   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
-                  // A course name is long; cap it so three tabs still fit and
+                  // A course name is long; cap it so five tabs still fit and
                   // the strip never pushes the chat sideways.
                   "max-w-[10rem]",
                   isActive
@@ -96,20 +106,42 @@ export function ChatTabStrip({
 
       {/* Outside the tablist: it opens a tab rather than being one, and a
           non-tab child of a tablist is not something a screen reader can
-          make sense of. Never disabled at the cap -- opening the fourth tab
-          retires the oldest instead of refusing (see openChatTab). */}
+          make sense of.
+
+          aria-disabled rather than disabled, so the button keeps its place in
+          the focus order and a screen reader reaches the reason attached to
+          it. A `disabled` button is skipped entirely, which is how a blocked
+          "+" ends up unexplained for exactly the users who cannot see the
+          note beside it. */}
       <button
         type="button"
         aria-label="New chat tab"
-        onClick={onNew}
+        aria-disabled={blocked}
+        aria-describedby={blocked ? "chat-tab-limit" : undefined}
+        onClick={blocked ? undefined : onNew}
         className={cn(
-          "mb-1 shrink-0 rounded-md p-1 text-muted-foreground transition-colors duration-200",
-          "hover:bg-muted hover:text-foreground",
+          "mb-1 shrink-0 rounded-md p-1 transition-colors duration-200",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30",
+          blocked
+            ? "cursor-not-allowed text-muted-foreground/50"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground",
         )}
       >
         <Plus className="size-4" aria-hidden="true" />
       </button>
+
+      {/* Shown, not just announced. A greyed-out "+" with no explanation is
+          the thing this replaces: the ceiling is two different rules and
+          which one you hit changes whether closing a tab would help. */}
+      {limitMessage ? (
+        <p
+          id="chat-tab-limit"
+          className="ml-auto min-w-0 truncate pl-2 text-xs text-muted-foreground"
+          title={limitMessage}
+        >
+          {limitMessage}
+        </p>
+      ) : null}
     </div>
   );
 }

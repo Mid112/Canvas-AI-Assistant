@@ -503,10 +503,44 @@ describe("InstructorAssistantPage", () => {
   });
 });
 
-// The rules themselves are covered in lib/chat-tabs.test.ts. These check the
-// wiring: that the strip is mounted, its controls reach the reducers, and the
-// hook's persistence survives leaving the page.
+// The rules themselves are covered in lib/chat-tabs.test.ts, and "+" choosing
+// a course in test/frontend/pages/Instructor/InstructorAssistantTabRouting.
+// These check the wiring: that the strip is mounted, its controls reach the
+// reducers, and the hook's persistence survives leaving the page.
 describe("InstructorAssistantPage chat tabs", () => {
+  /** A strip as it would be stored for this page's signed-in user (id 1).
+   *
+   * Seeded rather than clicked into place because this file mounts the real
+   * ActiveCourseProvider, which has no Canvas courses here — and a tab is a
+   * course, so with none there is nothing "+" can open. */
+  function storeTwoTabs() {
+    localStorage.setItem(
+      "assistant-chat-tabs:1",
+      JSON.stringify({
+        tabs: [
+          {
+            id: "tab-capstone",
+            courseId: 3,
+            courseName: "Capstone Project",
+            conversationId: null,
+            createdSeq: 0,
+            focusedSeq: 0,
+          },
+          {
+            id: "tab-calculus",
+            courseId: 4,
+            courseName: "Calculus",
+            conversationId: null,
+            createdSeq: 1,
+            focusedSeq: 1,
+          },
+        ],
+        activeTabId: "tab-calculus",
+        nextSeq: 2,
+      }),
+    );
+  }
+
   beforeEach(() => {
     localStorage.clear();
   });
@@ -518,41 +552,56 @@ describe("InstructorAssistantPage chat tabs", () => {
     expect(screen.queryByRole("button", { name: /^Close / })).toBeNull();
   });
 
-  it("adds a tab from + without discarding the current one", async () => {
+  // An instructor with no Canvas courses is the first thing this page shows
+  // anyone, and a tab is a course — so "+" has nothing to open and has to say
+  // so rather than sit there looking clickable.
+  it("explains an unavailable + instead of doing nothing", async () => {
     const user = userEvent.setup();
     renderWithInstitution(<InstructorAssistantPage />);
+
+    expect(
+      screen.getByText("No courses to open a tab for yet."),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "New chat tab" }));
 
-    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
-    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent(
-      "New chat (2)",
-    );
-    // A second tab means closing is now possible on both.
-    expect(screen.getAllByRole("button", { name: /^Close / })).toHaveLength(2);
+    expect(screen.getAllByRole("tab")).toHaveLength(1);
   });
 
-  // The chat's own New Chat button and the strip's + are the same action, so
-  // New Chat opens a tab rather than silently reusing the current one.
-  it("treats the chat's New Chat button as opening a tab", async () => {
+  // New Chat used to be wired to "+". One tab per course leaves it nothing to
+  // open, and sending it to a different course would be a worse answer than
+  // the one it always meant: a fresh thread on the course you are on.
+  it("starts a fresh thread in place rather than opening a tab", async () => {
     const user = userEvent.setup();
+    storeTwoTabs();
     renderWithInstitution(<InstructorAssistantPage />);
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
 
     await user.click(screen.getByRole("button", { name: "New Chat" }));
 
-    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+    expect(screen.getAllByRole("tab")).toHaveLength(2);
+    expect(screen.getByRole("tab", { selected: true })).toHaveTextContent(
+      "Calculus",
+    );
+    expect(
+      await screen.findByRole("region", { name: "Quick actions" }),
+    ).toBeInTheDocument();
   });
 
   it("brings the strip back after leaving and returning to the page", async () => {
-    const user = userEvent.setup();
+    storeTwoTabs();
     renderWithInstitution(<InstructorAssistantPage />);
-    await user.click(screen.getByRole("button", { name: "New chat tab" }));
     await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
 
     cleanup();
     renderWithInstitution(<InstructorAssistantPage />);
 
-    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+    await waitFor(() =>
+      expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+        "Capstone Project",
+        "Calculus",
+      ]),
+    );
   });
 
   // History moved from a full-width band above the chat to a column beside it,
@@ -594,11 +643,13 @@ describe("InstructorAssistantPage chat tabs", () => {
 
   it("closes a tab from its x", async () => {
     const user = userEvent.setup();
+    storeTwoTabs();
     renderWithInstitution(<InstructorAssistantPage />);
-    await user.click(screen.getByRole("button", { name: "New chat tab" }));
     await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
 
-    await user.click(screen.getByRole("button", { name: "Close New chat" }));
+    await user.click(
+      screen.getByRole("button", { name: "Close Capstone Project" }),
+    );
 
     await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(1));
     expect(screen.queryByRole("button", { name: /^Close / })).toBeNull();

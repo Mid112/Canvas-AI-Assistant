@@ -4,11 +4,20 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ChatTabStrip } from "@/components/chat/ChatTabStrip";
 import {
+  MAX_CHAT_TABS,
+  chatTabLimit,
   createChatTabsState,
   openChatTab,
   switchChatTabCourse,
+  type ChatTabLimit,
   type ChatTabsState,
 } from "@/lib/chat-tabs";
+
+const COURSES = [
+  { id: 3, name: "Capstone Project" },
+  { id: 4, name: "Calculus" },
+  { id: 5, name: "World History" },
+];
 
 /** Built through the real reducers, so the strip is always rendering a state
  * the rules can actually produce. */
@@ -28,6 +37,7 @@ function threeCourses(): ChatTabsState {
 function renderStrip(
   state: ChatTabsState,
   handlers: Partial<{
+    limit: ChatTabLimit;
     onFocus: (id: string) => void;
     onClose: (id: string) => void;
     onNew: () => void;
@@ -41,6 +51,7 @@ function renderStrip(
     <ChatTabStrip
       tabs={state.tabs}
       activeTabId={state.activeTabId}
+      limit={handlers.limit ?? chatTabLimit(state, COURSES)}
       onFocus={onFocus}
       onClose={onClose}
       onNew={onNew}
@@ -103,41 +114,79 @@ describe("ChatTabStrip", () => {
     ).toBeInTheDocument();
   });
 
-  // At the cap, "+" retires the oldest tab rather than refusing -- so a
-  // disabled button here would block a supported action.
-  it("keeps the new-tab button available at the cap", () => {
-    const { onNew } = renderStrip(threeCourses());
-
-    expect(screen.getByRole("button", { name: "New chat tab" })).toBeEnabled();
-    expect(onNew).not.toHaveBeenCalled();
-  });
-
   it("asks for a new tab when + is clicked", async () => {
     const user = userEvent.setup();
-    const { onNew } = renderStrip(threeCourses());
+    const state = switchChatTabCourse(createChatTabsState(), {
+      courseId: 3,
+      courseName: "Capstone Project",
+    });
+    const { onNew } = renderStrip(state);
 
     await user.click(screen.getByRole("button", { name: "New chat tab" }));
 
     expect(onNew).toHaveBeenCalledTimes(1);
   });
 
-  // Two tabs on one course would otherwise render the same word twice, and
-  // the close buttons would be indistinguishable by name too.
-  it("distinguishes two tabs that share a course", () => {
-    let state = switchChatTabCourse(createChatTabsState(), {
-      courseId: 3,
-      courseName: "Capstone Project",
-    });
-    state = openChatTab(state, { courseId: 3, courseName: "Capstone Project" });
-    renderStrip(state);
+  describe("when + cannot open anything", () => {
+    // The requirement this whole prop exists for: a "+" that does nothing has
+    // to say why, because the two ways of running out have different answers
+    // and a greyed-out button tells you neither.
+    it("shows the reason and stops responding to clicks", async () => {
+      const user = userEvent.setup();
+      // All three courses open, so there is nothing left to open a tab on.
+      const { onNew } = renderStrip(threeCourses());
 
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
-      "Capstone Project",
-      "Capstone Project (2)",
-    ]);
-    expect(
-      screen.getByRole("button", { name: "Close Capstone Project (2)" }),
-    ).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "One tab per course, and all 3 of your courses are already open.",
+        ),
+      ).toBeInTheDocument();
+
+      await user.click(screen.getByRole("button", { name: "New chat tab" }));
+
+      expect(onNew).not.toHaveBeenCalled();
+    });
+
+    it("distinguishes the tab cap from running out of courses", () => {
+      renderStrip(threeCourses(), {
+        limit: { kind: "max-tabs", maxTabs: MAX_CHAT_TABS },
+      });
+
+      expect(
+        screen.getByText(
+          `${MAX_CHAT_TABS} tabs is the maximum. Close one to open another course.`,
+        ),
+      ).toBeInTheDocument();
+    });
+
+    // aria-disabled rather than disabled: a `disabled` button leaves the focus
+    // order, so a screen reader never reaches the note explaining it -- the one
+    // group of users who cannot simply read it off the strip.
+    it("keeps the button reachable and attaches the reason to it", () => {
+      renderStrip(threeCourses());
+
+      const button = screen.getByRole("button", { name: "New chat tab" });
+
+      expect(button).toHaveAttribute("aria-disabled", "true");
+      expect(button).toHaveAccessibleDescription(
+        "One tab per course, and all 3 of your courses are already open.",
+      );
+    });
+
+    it("says nothing while + still has a course to open", () => {
+      let state = switchChatTabCourse(createChatTabsState(), {
+        courseId: 3,
+        courseName: "Capstone Project",
+      });
+      state = openChatTab(state, COURSES);
+      renderStrip(state);
+
+      const button = screen.getByRole("button", { name: "New chat tab" });
+
+      expect(button).toHaveAttribute("aria-disabled", "false");
+      expect(button).not.toHaveAccessibleDescription();
+      expect(screen.queryByText(/One tab per course/)).toBeNull();
+    });
   });
 
   // The tab open before any course is picked still needs a name.
