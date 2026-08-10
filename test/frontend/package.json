@@ -1,0 +1,16 @@
+{
+  "name": "canvas-workflow-assistant-frontend-tests",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0",
+    "npm": ">=10.9.0"
+  },
+  "scripts": {
+    "pretest": "node ./scripts/ensure-node-modules.mjs",
+    "pretest:coverage": "node ./scripts/ensure-node-modules.mjs",
+    "test": "vitest run --config vitest.config.ts",
+    "test:watch": "vitest --config vitest.config.ts",
+    "test:coverage": "vitest run --config vitest.config.ts --coverage"
+  }
+}

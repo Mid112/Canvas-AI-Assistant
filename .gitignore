@@ -1,0 +1,83 @@
+.env
+.env.local
+.env.*.local
+actions-runner/
+venv/
+.venv/
+.venv.bak/
+__pycache__/
+.pytest_cache/
+.hypothesis/
+node_modules/
+app/node_modules
+app/frontend/node_modules/
+test/frontend/node_modules/
+test/vllm/venv/
+test/mcp/venv/
+test/backend/venv/
+.vscode/*
+
+# Local runtime + process files
+*.log
+*.pid
+
+# Test coverage artifacts
+.coverage
+coverage/
+test/backend/coverage/
+test/frontend/coverage/
+htmlcov/
+
+# Playwright / e2e artifacts
+test/e2e/test-results/
+test/e2e/playwright-report/
+test/e2e/blob-report/
+test/e2e/playwright/.cache/
+
+# Vite / Vitest cache
+**/.vite/
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# Environment variables - NEVER commit these
+.env
+.env.local
+.env.*.local
+
+# Node
+node_modules/
+dist/
+.next/
+.nuxt/
+
+# Vite
+app/frontend/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/

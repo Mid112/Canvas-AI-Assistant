@@ -1,0 +1,914 @@
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.database import get_db
+from app.dependencies import get_current_user, get_instructor_user
+from app.models.user import User
+from app.schemas.analysis import LateSubmissionAnalysis, MissingSubmissionAnalysis
+from app.schemas.canvas import (
+    ActiveCourseResponse,
+    ActiveCourseSet,
+    AssignmentCreate,
+    AssignmentPublishUpdate,
+    AssignmentResponse,
+    AssignmentUpdate,
+    CourseCreate,
+    CoursePublishUpdate,
+    CourseResponse,
+    GradePreviewResponse,
+    GradeUpdateRequest,
+    GradeUpdateResponse,
+    QuestionBankSummary,
+    QuizCapabilities,
+    QuizCreate,
+    QuizPublishUpdate,
+    QuizResponse,
+    SubmissionResponse,
+)
+from app.schemas.course_overview import CourseOverviewResponse
+from app.schemas.dashboard import InstructorDashboardResponse
+from app.schemas.preview import (
+    ActionPreviewResponse,
+    AssignmentDraftRequest,
+    AssignmentDraftResponse,
+    FeedbackDraftRequest,
+    FeedbackDraftResponse,
+    FeedbackPostRequest,
+    QuizDraftRequest,
+    QuizDraftResponse,
+)
+from app.schemas.student import StudentResponse
+from app.services.analysis import analyze_late_submissions, analyze_missing_submissions
+from app.services.assignment_draft import generate_assignment_draft
+from app.services.canvas import (
+    create_canvas_course,
+    create_course_assignment,
+    create_course_quiz,
+    get_active_course,
+    get_assignment,
+    get_assignments,
+    get_cached_courses,
+    get_course_question_banks,
+    get_course_quiz_capabilities,
+    get_course_quizzes,
+    get_courses,
+    get_submissions,
+    resolve_institution_canvas_url,
+    set_active_course,
+    set_assignment_published,
+    set_course_published,
+    set_quiz_published,
+    update_course_assignment,
+    update_course_grade,
+)
+from app.services.course_overview import get_course_overview
+from app.services.dashboard import get_instructor_dashboard
+from app.services.feedback_audit import record_feedback_post_history
+from app.services.feedback_draft import generate_feedback_draft
+from app.services.feedback_validation import validate_feedback_for_post
+from app.services.grade_management import preview_grade_update, submit_grade_update
+from app.services.preview import build_action_preview
+from app.services.quiz_draft import generate_quiz_draft
+from app.services.quiz_validation import short_answer_new_quiz_warnings
+from app.services.student import get_students
+from app.services.write_preview import generate_write_preview
+
+router = APIRouter(prefix="/canvas", tags=["canvas"])
+
+
+@router.get("/dashboard", response_model=InstructorDashboardResponse)
+async def instructor_dashboard(
+    current_user: User = Depends(get_instructor_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_instructor_dashboard(current_user, db)
+
+
+@router.get("/courses/{course_id}/overview", response_model=CourseOverviewResponse)
+async def course_overview(
+    course_id: int,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_course_overview(course_id, current_user, canvas_url, db)
+
+
+@router.get("/courses", response_model=list[CourseResponse])
+async def list_courses(
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    resolved_canvas_url = resolve_institution_canvas_url(current_user, canvas_url)
+    return await get_courses(current_user, resolved_canvas_url, db)
+
+
+@router.post("/courses", response_model=CourseResponse, status_code=status.HTTP_201_CREATED)
+async def create_course(
+    body: CourseCreate,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a Canvas course from the app and sync it into the local course list (#1285).
+
+    ``canvas_url`` may be omitted when the user has a single saved Canvas
+    connection, so newly connected accounts do not hit the global
+    CANVAS_API_URL mismatch (#1425).
+    """
+    resolved_canvas_url = resolve_institution_canvas_url(current_user, canvas_url)
+    return await create_canvas_course(body, current_user, resolved_canvas_url, db)
+
+
+@router.patch("/courses/{course_id}/publish", response_model=CourseResponse)
+async def publish_course(
+    course_id: int,
+    body: CoursePublishUpdate,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Publish or unpublish a course in Canvas from Course Management."""
+    return await set_course_published(course_id, body, current_user, canvas_url, db)
+
+
+# Last-synced courses straight from the local DB, no live Canvas call — lets the
+# dashboard paint instantly, with the frontend also calling GET /courses in the
+# background to revalidate. See get_cached_courses()'s docstring.
+@router.get("/courses/cached", response_model=list[CourseResponse])
+async def list_cached_courses(
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    resolved_canvas_url = resolve_institution_canvas_url(current_user, canvas_url)
+    return await get_cached_courses(current_user, resolved_canvas_url, db)
+
+
+@router.get("/courses/{course_id}/assignments", response_model=list[AssignmentResponse])
+async def list_assignments(
+    course_id: int,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_assignments(course_id, current_user, canvas_url, db)
+
+
+@router.post("/courses/{course_id}/assignments/generate-draft", response_model=AssignmentDraftResponse)
+async def generate_assignment_draft_endpoint(
+    course_id: int,
+    body: AssignmentDraftRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await generate_assignment_draft(body, db, current_user.id)
+
+
+@router.post("/courses/{course_id}/assignments/preview", response_model=ActionPreviewResponse)
+async def preview_assignment_endpoint(
+    course_id: int,
+    body: AssignmentCreate,
+    current_user: User = Depends(get_current_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.core.canvas_url import canvas_urls_equivalent, normalize_canvas_url
+    from app.services.assignment_validation import validate_assignment_for_create
+    from app.services.canvas import require_writable_course
+
+    # Validate required fields before preview so the dry-run matches what
+    # create will accept — same gate as quiz/feedback preview paths.
+    course = await validate_assignment_for_create(
+        course_id,
+        current_user,
+        body.name,
+        body.description,
+        body.due_at.isoformat() if body.due_at else None,
+        body.points_possible,
+        db,
+    )
+    normalized_canvas_url = normalize_canvas_url(canvas_url or course.canvas_url)
+    if not canvas_urls_equivalent(course.canvas_url, normalized_canvas_url):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Course not found or does not belong to you.",
+        )
+    if course.canvas_url != normalized_canvas_url:
+        course.canvas_url = normalized_canvas_url
+    require_writable_course(course)
+    proposed = {
+        "action": "create_assignment",
+        "local_course_id": course_id,
+        "title": body.name,
+        "description": body.description,
+        "due_date": body.due_at.isoformat() if body.due_at else None,
+        "points_possible": body.points_possible,
+    }
+    from app.services.canvas_timezone import get_instructor_canvas_timezone
+
+    preview = generate_write_preview(
+        proposed,
+        course,
+        get_instructor_canvas_timezone(current_user, course.canvas_url),
+    )
+    # Keep the exact payload that would be POSTed so the UI preview mirrors
+    # Canvas submission fields (name/due_at/points), not only display labels.
+    metadata = {
+        **preview["metadata"],
+        "name": body.name,
+        "description": body.description,
+        "due_at": body.due_at.isoformat() if body.due_at else None,
+        "points_possible_value": body.points_possible,
+        "submitted": body.model_dump(mode="json"),
+    }
+    return ActionPreviewResponse(
+        action=preview["action"],
+        summary=preview["summary"],
+        metadata=metadata,
+        reversible=preview["reversible"],
+        affected_resources=preview["affected_resources"],
+        risk_level=preview["risk_level"],
+    )
+
+
+@router.post("/courses/{course_id}/assignments", response_model=AssignmentResponse)
+async def create_assignment_endpoint(
+    course_id: int,
+    body: AssignmentCreate,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    conversation_id: int | None = Query(default=None),
+    preview_message_id: int | None = Query(default=None),
+):
+    """Creates the assignment, then records the Workflow + AuditLog the same
+    way create_quiz_endpoint does.
+
+    This endpoint used to be a bare passthrough, which left two holes. Every
+    assignment created through the wizard had no AuditLog row at all — real
+    Canvas writes with no audit trail. And when the wizard was reached from
+    an assistant intent_preview, chat had already opened a *pending* Workflow
+    for that preview (create_assignment is not in the form-handoff exclusion
+    set in services/chat.py, unlike create_quiz), which nothing ever
+    resolved. Confirming here left it pending forever, so workflow history
+    showed "pending" for an assignment that plainly existed in Canvas.
+
+    With preview_message_id, the assistant's pending Workflow is claimed and
+    marked executed. Without it (the plain "+ Create Assignment" path), a new
+    executed Workflow is recorded instead, so both routes leave an audit
+    trail.
+    """
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
+    from app.models.conversation import Conversation
+    from app.models.workflow import Workflow
+    from app.services.canvas import get_owned_course
+    from app.services.chat import _claim_pending_workflow, record_write_audit
+
+    # Ownership is settled before the Canvas write, not after. Rejecting a
+    # foreign or unknown conversation_id afterwards still left the assignment
+    # created in Canvas while the 404 unwound the request with no Workflow and
+    # no AuditLog written — an unaudited real write, which is the exact hole
+    # this endpoint exists to close.
+    linked_conversation_id: int | None = None
+    if conversation_id is not None:
+        conversation = await db.scalar(
+            select(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.user_id == current_user.id,
+            )
+        )
+        if conversation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found.",
+            )
+        linked_conversation_id = conversation.id
+
+    assignment = await create_course_assignment(
+        course_id, body, current_user, canvas_url, db
+    )
+    course = await get_owned_course(course_id, current_user, canvas_url, db)
+
+    affected_resources = [
+        {
+            "type": "course",
+            "id": course.id,
+            "name": course.name,
+            "status": "unchanged",
+        },
+        {
+            "type": "assignment",
+            "id": assignment.id,
+            "name": assignment.name,
+            "status": "created",
+        },
+    ]
+
+    workflow: Workflow | None = None
+    if preview_message_id is not None and linked_conversation_id is not None:
+        workflow = await db.scalar(
+            select(Workflow).where(
+                Workflow.preview_message_id == preview_message_id,
+                Workflow.conversation_id == linked_conversation_id,
+                Workflow.user_id == current_user.id,
+            )
+        )
+        # Only a still-pending preview is ours to close. If it was already
+        # confirmed or cancelled in chat, the Canvas write above still stands
+        # — fall through and record a standalone Workflow rather than
+        # rewriting settled history or failing after the write succeeded.
+        if workflow is not None and await _claim_pending_workflow(
+            db, workflow, "executed"
+        ):
+            # Commit the claim on its own, per _claim_pending_workflow's
+            # contract — the same thing handle_confirmed_action and
+            # handle_cancelled_action do. Holding it open until the audit
+            # insert below had a second failure mode beyond the row lock: the
+            # Canvas write above is already durable (create_course_assignment
+            # goes through run_idempotent_canvas_write, which commits
+            # independently), so any error between the claim and the final
+            # commit rolled the transition back to "pending" for an assignment
+            # that exists in Canvas — reproducing this endpoint's own bug, and
+            # returning 500 for a create that actually succeeded.
+            await db.commit()
+            workflow.status = "executed"
+            workflow.executed_at = datetime.now(UTC)
+            workflow.affected_resources = affected_resources
+        else:
+            workflow = None
+
+    if workflow is None:
+        workflow = Workflow(
+            conversation_id=linked_conversation_id,
+            user_id=current_user.id,
+            course_id=course.id,
+            source_user_message_id=None,
+            preview_message_id=None,
+            action_name="create_assignment",
+            user_prompt="Created via assignment creation form",
+            proposed_action={
+                "action": "create_assignment",
+                "local_course_id": course.id,
+                **body.model_dump(mode="json"),
+            },
+            affected_resources=affected_resources,
+            status="executed",
+            executed_at=datetime.now(UTC),
+        )
+        db.add(workflow)
+
+    await db.flush()
+
+    await record_write_audit(
+        db,
+        current_user,
+        workflow,
+        {
+            "data": assignment.model_dump(mode="json"),
+            "affected_resources": affected_resources,
+        },
+    )
+    await db.commit()
+    return assignment
+
+
+@router.post(
+    "/courses/{course_id}/feedback/generate-draft",
+    response_model=FeedbackDraftResponse,
+)
+async def generate_feedback_draft_endpoint(
+    course_id: int,
+    body: FeedbackDraftRequest,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    return await generate_feedback_draft(
+        course_id, body, current_user, canvas_url, db
+    )
+
+
+@router.post("/courses/{course_id}/feedback/preview", response_model=ActionPreviewResponse)
+async def preview_feedback_endpoint(
+    course_id: int,
+    body: FeedbackPostRequest,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    course = await validate_feedback_for_post(
+        course_id,
+        body.assignment_id,
+        body.student_id,
+        body.new_grade,
+        current_user,
+        canvas_url,
+        db,
+        feedback=body.feedback,
+    )
+    proposed = {
+        "action": "update_grade",
+        "local_course_id": course_id,
+        "assignment_id": body.assignment_id,
+        "student_id": body.student_id,
+        "assignment_reference": body.assignment_name,
+        "student_reference": body.student_name,
+        "new_grade": body.new_grade,
+        "feedback": body.feedback,
+    }
+    preview = generate_write_preview(proposed, course)
+    return ActionPreviewResponse(
+        action="update_grade",
+        summary=preview["summary"],
+        metadata=preview["metadata"],
+        reversible=preview["reversible"],
+        affected_resources=preview["affected_resources"],
+        risk_level=preview["risk_level"],
+    )
+
+
+@router.post("/courses/{course_id}/feedback")
+async def post_feedback_endpoint(
+    course_id: int,
+    body: FeedbackPostRequest,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    conversation_id: int | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    course = await validate_feedback_for_post(
+        course_id,
+        body.assignment_id,
+        body.student_id,
+        body.new_grade,
+        current_user,
+        canvas_url,
+        db,
+        feedback=body.feedback,
+    )
+    submission = await update_course_grade(
+        course_id,
+        body.assignment_id,
+        body.student_id,
+        body.new_grade.strip(),
+        current_user,
+        canvas_url,
+        db,
+        feedback=body.feedback.strip(),
+    )
+    proposed_action = {
+        "action": "update_grade",
+        "local_course_id": course_id,
+        "assignment_id": body.assignment_id,
+        "student_id": body.student_id,
+        "assignment_reference": body.assignment_name,
+        "student_reference": body.student_name,
+        "new_grade": body.new_grade,
+        "feedback": body.feedback,
+    }
+    await record_feedback_post_history(
+        db,
+        current_user,
+        course_id=course_id,
+        course_name=course.name,
+        proposed_action=proposed_action,
+        submission_result=submission,
+        user_prompt=(
+            f"Post feedback for {body.student_name} on {body.assignment_name}"
+        ),
+        conversation_id=conversation_id,
+    )
+    await db.commit()
+    return {
+        "assignment_id": body.assignment_id,
+        "student_id": body.student_id,
+        "submission_id": submission.get("id"),
+        "posted_grade": body.new_grade,
+        "feedback": body.feedback,
+    }
+
+
+@router.get("/courses/{course_id}/quizzes", response_model=list[QuizResponse])
+async def list_quizzes_endpoint(
+    course_id: int,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_course_quizzes(course_id, current_user, canvas_url, db)
+
+
+@router.patch(
+    "/courses/{course_id}/quizzes/{quiz_id}/publish",
+    response_model=QuizResponse,
+)
+async def publish_quiz_endpoint(
+    course_id: int,
+    quiz_id: int,
+    body: QuizPublishUpdate,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    quiz_engine: str = Query(default="classic"),
+    db: AsyncSession = Depends(get_db),
+):
+    return await set_quiz_published(
+        course_id,
+        quiz_id,
+        body,
+        current_user,
+        canvas_url,
+        db,
+        quiz_engine=quiz_engine,
+    )
+
+
+@router.get(
+    "/courses/{course_id}/quizzes/capabilities",
+    response_model=QuizCapabilities,
+)
+async def quiz_capabilities_endpoint(
+    course_id: int,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_course_quiz_capabilities(
+        course_id, current_user, canvas_url, db
+    )
+
+
+@router.get(
+    "/courses/{course_id}/quizzes/question-banks",
+    response_model=list[QuestionBankSummary],
+)
+async def list_question_banks_endpoint(
+    course_id: int,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_course_question_banks(
+        course_id, current_user, canvas_url, db
+    )
+
+
+@router.post("/courses/{course_id}/quizzes/generate-draft", response_model=QuizDraftResponse)
+async def generate_quiz_draft_endpoint(
+    course_id: int,
+    body: QuizDraftRequest,
+    current_user: User = Depends(get_instructor_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Require instructor role AND course ownership before spending an LLM call.
+    from app.services.course_access import get_owned_course_or_404
+
+    await get_owned_course_or_404(course_id, current_user, db)
+    return await generate_quiz_draft(body, db, current_user.id)
+
+
+@router.post("/courses/{course_id}/quizzes/preview", response_model=ActionPreviewResponse)
+async def preview_quiz_endpoint(
+    course_id: int,
+    body: QuizCreate,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.canvas import get_owned_course, require_writable_course
+    from app.services.quiz_validation import validate_quiz_for_create
+
+    await validate_quiz_for_create(
+        course_id,
+        current_user,
+        body.title,
+        body.description,
+        body.due_at.isoformat() if body.due_at else None,
+        body.points_possible,
+        db,
+        allowed_attempts=body.allowed_attempts,
+        time_limit=body.time_limit,
+        questions=[q.model_dump() for q in body.questions],
+        quiz_engine=body.quiz_engine,
+        question_bank_groups=[
+            group.model_dump() for group in body.question_bank_groups
+        ],
+    )
+    if body.quiz_engine == "new_quizzes":
+        capabilities = await get_course_quiz_capabilities(
+            course_id, current_user, canvas_url, db
+        )
+        if not capabilities.new_quizzes:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    capabilities.new_quizzes_unavailable_reason
+                    or "New Quizzes is not available for this course."
+                ),
+            )
+    course = await get_owned_course(course_id, current_user, canvas_url, db)
+    require_writable_course(course)
+    question_total = len(body.questions) + sum(
+        group.pick_count for group in body.question_bank_groups
+    )
+    question_note = (
+        f" with {question_total} question{'s' if question_total != 1 else ''}"
+        if question_total
+        else ""
+    )
+    metadata = body.model_dump(mode="json")
+    warnings = short_answer_new_quiz_warnings(
+        body.quiz_engine,
+        [question.model_dump() for question in body.questions],
+    )
+    if warnings:
+        metadata["warnings"] = warnings
+    preview = build_action_preview(
+        "create_quiz",
+        (
+            f"Create {'New' if body.quiz_engine == 'new_quizzes' else 'Classic'} "
+            f"Quiz '{body.title}' in {course.name}{question_note}"
+        ),
+        metadata,
+        course_name=course.name,
+    )
+    return ActionPreviewResponse(**preview)
+
+
+@router.post("/courses/{course_id}/quizzes", response_model=QuizResponse)
+async def create_quiz_endpoint(
+    course_id: int,
+    body: QuizCreate,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+    conversation_id: int | None = Query(default=None),
+):
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
+    from app.models.conversation import Conversation
+    from app.models.workflow import Workflow
+    from app.services.canvas import get_owned_course
+    from app.services.chat import record_write_audit
+    from app.services.quiz_validation import validate_quiz_for_create
+
+    await validate_quiz_for_create(
+        course_id,
+        current_user,
+        body.title,
+        body.description,
+        body.due_at.isoformat() if body.due_at else None,
+        body.points_possible,
+        db,
+        allowed_attempts=body.allowed_attempts,
+        time_limit=body.time_limit,
+        questions=[q.model_dump() for q in body.questions],
+        quiz_engine=body.quiz_engine,
+        question_bank_groups=[
+            group.model_dump() for group in body.question_bank_groups
+        ],
+    )
+    quiz = await create_course_quiz(course_id, body, current_user, canvas_url, db)
+    course = await get_owned_course(course_id, current_user, canvas_url, db)
+
+    linked_conversation_id: int | None = None
+    if conversation_id is not None:
+        conversation = await db.scalar(
+            select(Conversation).where(
+                Conversation.id == conversation_id,
+                Conversation.user_id == current_user.id,
+            )
+        )
+        if conversation is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found.",
+            )
+        linked_conversation_id = conversation.id
+
+    workflow = Workflow(
+        conversation_id=linked_conversation_id,
+        user_id=current_user.id,
+        course_id=course.id,
+        source_user_message_id=None,
+        preview_message_id=None,
+        action_name="create_quiz",
+        user_prompt="Created via quiz creation form",
+        proposed_action={
+            "action": "create_quiz",
+            "local_course_id": course.id,
+            **body.model_dump(mode="json"),
+        },
+        affected_resources=[
+            {
+                "type": "course",
+                "id": course.id,
+                "name": course.name,
+                "status": "unchanged",
+            },
+            {
+                "type": "quiz",
+                "id": quiz.id,
+                "name": quiz.title,
+                "status": "created",
+            },
+        ],
+        status="executed",
+        executed_at=datetime.now(UTC),
+    )
+    db.add(workflow)
+    await db.flush()
+
+    await record_write_audit(
+        db,
+        current_user,
+        workflow,
+        {
+            "data": quiz.model_dump(mode="json"),
+            "affected_resources": workflow.affected_resources,
+        },
+    )
+    await db.commit()
+    return quiz
+
+
+@router.get("/courses/{course_id}/assignments/{assignment_id}", response_model=AssignmentResponse)
+async def get_assignment_endpoint(
+    course_id: int,
+    assignment_id: int,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_assignment(course_id, assignment_id, current_user, canvas_url, db)
+
+
+@router.patch("/courses/{course_id}/assignments/{assignment_id}", response_model=AssignmentResponse)
+async def update_assignment_endpoint(
+    course_id: int,
+    assignment_id: int,
+    body: AssignmentUpdate,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    return await update_course_assignment(
+        course_id,
+        assignment_id,
+        body,
+        current_user,
+        canvas_url,
+        db,
+    )
+
+
+@router.patch(
+    "/courses/{course_id}/assignments/{assignment_id}/publish",
+    response_model=AssignmentResponse,
+)
+async def publish_assignment_endpoint(
+    course_id: int,
+    assignment_id: int,
+    body: AssignmentPublishUpdate,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await set_assignment_published(
+        course_id,
+        assignment_id,
+        body,
+        current_user,
+        canvas_url,
+        db,
+    )
+    await db.commit()
+    return result
+
+
+@router.get(
+    "/courses/{course_id}/assignments/{assignment_id}/submissions",
+    response_model=list[SubmissionResponse],
+)
+async def list_submissions(
+    course_id: int,
+    assignment_id: int,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_submissions(
+        course_id,
+        assignment_id,
+        current_user,
+        canvas_url,
+        db,
+    )
+
+
+@router.post(
+    "/courses/{course_id}/grades/preview",
+    response_model=GradePreviewResponse,
+)
+async def preview_grade_update_endpoint(
+    course_id: int,
+    body: GradeUpdateRequest,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    return await preview_grade_update(course_id, body, current_user, canvas_url, db)
+
+
+@router.post(
+    "/courses/{course_id}/grades/submit",
+    response_model=GradeUpdateResponse,
+)
+async def submit_grade_update_endpoint(
+    course_id: int,
+    body: GradeUpdateRequest,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    return await submit_grade_update(course_id, body, current_user, canvas_url, db)
+
+
+# Missing submission analysis (#550–#553) — compares the enrolled roster against
+# submissions for one assignment and returns missing students plus summary stats.
+@router.get(
+    "/courses/{course_id}/assignments/{assignment_id}/missing-submissions",
+    response_model=MissingSubmissionAnalysis,
+)
+async def missing_submission_analysis(
+    course_id: int,
+    assignment_id: int,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    return await analyze_missing_submissions(
+        course_id,
+        assignment_id,
+        current_user,
+        canvas_url,
+        db,
+    )
+
+
+# Late submission analysis (#554–#557) — detects late submissions among the enrolled
+# roster for one assignment and returns late students plus timing statistics.
+@router.get(
+    "/courses/{course_id}/assignments/{assignment_id}/late-submissions",
+    response_model=LateSubmissionAnalysis,
+)
+async def late_submission_analysis(
+    course_id: int,
+    assignment_id: int,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    return await analyze_late_submissions(
+        course_id,
+        assignment_id,
+        current_user,
+        canvas_url,
+        db,
+    )
+
+
+@router.get("/courses/{course_id}/students", response_model=list[StudentResponse])
+async def list_students(
+    course_id: int,
+    current_user: User = Depends(get_instructor_user),
+    canvas_url: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """List enrolled students for a course. ``course_id`` is the local DB course id."""
+    return await get_students(course_id, current_user, canvas_url, db)
+
+
+# Active course — stores which course the instructor is currently working in (UI selection state).
+# This is separate from conversation.course_id, which is a historical record per chat session.
+@router.get("/active-course", response_model=ActiveCourseResponse | None)
+async def get_active_course_endpoint(
+    current_user: User = Depends(get_instructor_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await get_active_course(current_user, db)
+
+
+@router.patch("/active-course", response_model=ActiveCourseResponse)
+async def set_active_course_endpoint(
+    body: ActiveCourseSet,
+    current_user: User = Depends(get_instructor_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await set_active_course(current_user, body.local_course_id, db)

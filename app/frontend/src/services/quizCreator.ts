@@ -1,0 +1,484 @@
+import { API_BASE_URL } from "@/config/api";
+import { parseApiError } from "@/lib/api-request";
+import { formatDueDateForApi, formatDueDateForInput } from "@/lib/assignment-utils";
+import type {
+  GeneratedQuizDraft,
+  QuizApprovePayload,
+  QuizCapabilities,
+  QuizPreviewSummary,
+  QuizQuestionBank,
+  QuizQuestionDraft,
+  QuizRiskLevel,
+} from "@/types/quizCreate";
+
+export class QuizCreatorApiError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "QuizCreatorApiError";
+  }
+}
+
+/**
+ * Ticket 45 / #1506: when regenerating with the same question count (e.g. a
+ * minor description edit), keep the instructor's prior per-question points
+ * instead of accepting whatever the model freshly allocates (10 → 5, etc.).
+ * Count mismatches fall through unchanged so a deliberate size change can
+ * still take the new allocation.
+ */
+export function preserveQuestionPoints<T extends { pointsPossible: number }>(
+  previous: readonly T[] | null | undefined,
+  next: T[],
+): T[] {
+  if (!previous || previous.length === 0 || previous.length !== next.length) {
+    return next;
+  }
+  return next.map((question, index) => ({
+    ...question,
+    pointsPossible: previous[index].pointsPossible,
+  }));
+}
+
+export function sumQuestionPoints(
+  questions: readonly { pointsPossible: number }[],
+): number {
+  return questions.reduce((sum, question) => sum + question.pointsPossible, 0);
+}
+
+/** Apply a parallel points array (from a resumed typed draft) onto generated questions. */
+export function applyPriorQuestionPoints<T extends { pointsPossible: number }>(
+  priorPoints: readonly number[] | null | undefined,
+  next: T[],
+): T[] {
+  if (!priorPoints || priorPoints.length !== next.length) {
+    return next;
+  }
+  return next.map((question, index) => {
+    const points = priorPoints[index];
+    return typeof points === "number" && Number.isFinite(points) && points > 0
+      ? { ...question, pointsPossible: points }
+      : question;
+  });
+}
+
+function appendCanvasUrl(url: string, canvasUrl?: string): string {
+  if (!canvasUrl) {
+    return url;
+  }
+  return `${url}?${new URLSearchParams({ canvas_url: canvasUrl }).toString()}`;
+}
+
+function defaultDueDate(): string {
+  const date = new Date();
+  date.setDate(date.getDate() + 14);
+  date.setHours(23, 59, 0, 0);
+  return formatDueDateForInput(date.toISOString());
+}
+
+interface QuizDraftApiResponse {
+  title: string;
+  description: string;
+  due_at: string | null;
+  points_possible: number | null;
+  allowed_attempts: number | null;
+  time_limit: number | null;
+  questions: Array<{
+    question_text: string;
+    question_type: QuizQuestionDraft["questionType"];
+    points_possible: number;
+    answers: Array<{ text?: string; weight?: number }>;
+  }>;
+}
+
+interface GenerateQuizDraftOptions {
+  accessToken: string;
+  canvasUrl?: string;
+}
+
+export async function generateQuizDraft(
+  courseId: number,
+  prompt: string,
+  options: GenerateQuizDraftOptions,
+): Promise<GeneratedQuizDraft> {
+  const response = await fetch(
+    appendCanvasUrl(
+      `${API_BASE_URL}/canvas/courses/${courseId}/quizzes/generate-draft`,
+      options.canvasUrl,
+    ),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${options.accessToken}`,
+      },
+      body: JSON.stringify({ prompt }),
+    },
+  );
+
+  if (!response.ok) {
+    throw new QuizCreatorApiError(await parseApiError(response));
+  }
+
+  const data = (await response.json()) as QuizDraftApiResponse;
+
+  const questions = (data.questions ?? []).map((question) => ({
+    questionText: question.question_text,
+    questionType: question.question_type,
+    // Preserve multi-point values from the draft API (Ticket 14).
+    pointsPossible:
+      typeof question.points_possible === "number" &&
+      Number.isFinite(question.points_possible) &&
+      question.points_possible > 0
+        ? question.points_possible
+        : 1,
+    answers: (question.answers ?? []).map((answer) => ({
+      text: String(answer.text ?? ""),
+      weight: Number(answer.weight ?? 0),
+    })),
+  }));
+  const questionPointsSum = questions.reduce(
+    (sum, question) => sum + question.pointsPossible,
+    0,
+  );
+  const quizPoints =
+    typeof data.points_possible === "number" &&
+    Number.isFinite(data.points_possible) &&
+    data.points_possible > 0
+      ? data.points_possible
+      : null;
+  // Keep quiz total aligned with per-question points so the review form
+  // stays valid when the model returns multi-point questions.
+  const pointsPossible =
+    questions.length > 0 &&
+    (quizPoints == null || Math.abs(quizPoints - questionPointsSum) > 0.01)
+      ? questionPointsSum
+      : (quizPoints ?? 100);
+
+  return {
+    name: data.title,
+    description: data.description,
+    dueDate: data.due_at ? formatDueDateForInput(data.due_at) : defaultDueDate(),
+    pointsPossible,
+    allowedAttempts: data.allowed_attempts,
+    timeLimit: data.time_limit,
+    quizEngine: "classic",
+    questions,
+    questionBankGroups: [],
+  };
+}
+
+function toQuizCreateBody(payload: QuizApprovePayload) {
+  const courseId = Number(payload.courseId);
+  if (!Number.isInteger(courseId) || courseId <= 0) {
+    throw new QuizCreatorApiError("A valid course is required.");
+  }
+
+  return {
+    courseId,
+    quiz: {
+      title: payload.name.trim(),
+      description: payload.description.trim() || null,
+      due_at: payload.dueDate ? formatDueDateForApi(payload.dueDate) : null,
+      points_possible: payload.pointsPossible,
+      allowed_attempts: payload.allowedAttempts,
+      time_limit: payload.timeLimit,
+      quiz_engine: payload.quizEngine ?? "classic",
+      published: false,
+      questions: payload.questions.map((question) => ({
+        question_text: question.questionText,
+        question_type: question.questionType,
+        points_possible: question.pointsPossible,
+        answers: question.answers.map((answer) => ({
+          text: answer.text,
+          weight: answer.weight,
+        })),
+      })),
+      question_bank_groups: (payload.questionBankGroups ?? []).map((group) => ({
+        bank_id: group.bankId,
+        bank_name: group.bankName,
+        pick_count: group.pickCount,
+        question_points: group.questionPoints,
+      })),
+    },
+  };
+}
+
+interface QuizPreviewApiResponse {
+  summary: string;
+  reversible: boolean;
+  risk_level?: QuizRiskLevel;
+  affected_resources: { type: string; name: string }[];
+  metadata?: Record<string, unknown>;
+}
+
+interface PreviewQuizDraftOptions {
+  accessToken: string;
+  canvasUrl?: string;
+}
+
+export async function previewQuizDraft(
+  payload: QuizApprovePayload,
+  options: PreviewQuizDraftOptions,
+): Promise<QuizPreviewSummary> {
+  const request = toQuizCreateBody(payload);
+  const response = await fetch(
+    appendCanvasUrl(
+      `${API_BASE_URL}/canvas/courses/${request.courseId}/quizzes/preview`,
+      options.canvasUrl,
+    ),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${options.accessToken}`,
+      },
+      body: JSON.stringify(request.quiz),
+    },
+  );
+
+  if (!response.ok) {
+    throw new QuizCreatorApiError(await parseApiError(response));
+  }
+
+  const data = (await response.json()) as QuizPreviewApiResponse;
+  return {
+    summary: data.summary,
+    reversible: data.reversible,
+    riskLevel: data.risk_level ?? "medium",
+    affectedResources: data.affected_resources,
+    metadata: data.metadata ?? {},
+  };
+}
+
+interface ApproveQuizDraftOptions {
+  accessToken: string;
+  canvasUrl?: string;
+  conversationId?: number;
+}
+
+export async function approveQuizDraft(
+  payload: QuizApprovePayload,
+  options: ApproveQuizDraftOptions,
+): Promise<{
+  id: number;
+  title: string;
+  warnings: string[];
+  published: boolean;
+  quizEngine: "classic" | "new_quizzes";
+  assignmentId: number | null;
+}> {
+  const request = toQuizCreateBody(payload);
+  let createUrl = appendCanvasUrl(
+    `${API_BASE_URL}/canvas/courses/${request.courseId}/quizzes`,
+    options.canvasUrl,
+  );
+  if (options.conversationId != null) {
+    const separator = createUrl.includes("?") ? "&" : "?";
+    createUrl += `${separator}conversation_id=${options.conversationId}`;
+  }
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${options.accessToken}`,
+  };
+
+  let response: Response;
+  try {
+    response = await fetch(createUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(request.quiz),
+    });
+  } catch {
+    const recovered = await recoverCreatedQuiz(payload, options);
+    if (recovered) {
+      return recovered;
+    }
+    throw new QuizCreatorApiError(
+      "Network error while creating the quiz. Check Canvas for a duplicate before retrying.",
+    );
+  }
+
+  if (response.ok) {
+    const data = (await response.json()) as {
+      id: number;
+      title: string;
+      warnings?: string[];
+      published?: boolean;
+      quiz_engine?: "classic" | "new_quizzes";
+      assignment_id?: number | null;
+    };
+    return {
+      id: data.id,
+      title: data.title,
+      warnings: data.warnings ?? [],
+      published: Boolean(data.published),
+      quizEngine: data.quiz_engine ?? payload.quizEngine ?? "classic",
+      assignmentId: data.assignment_id ?? null,
+    };
+  }
+
+  // 5xx / transport-ish failures may mean Canvas created the quiz but the
+  // response never arrived. Look for a matching quiz before surfacing failure.
+  if (response.status >= 500 || response.status === 0) {
+    const recovered = await recoverCreatedQuiz(payload, options);
+    if (recovered) {
+      return recovered;
+    }
+  }
+
+  throw new QuizCreatorApiError(await parseApiError(response));
+}
+
+async function recoverCreatedQuiz(
+  payload: QuizApprovePayload,
+  options: ApproveQuizDraftOptions,
+): Promise<{
+  id: number;
+  title: string;
+  warnings: string[];
+  published: boolean;
+  quizEngine: "classic" | "new_quizzes";
+  assignmentId: number | null;
+} | null> {
+  try {
+    const listResponse = await fetch(
+      appendCanvasUrl(
+        `${API_BASE_URL}/canvas/courses/${payload.courseId}/quizzes`,
+        options.canvasUrl,
+      ),
+      {
+        headers: { Authorization: `Bearer ${options.accessToken}` },
+      },
+    );
+    if (!listResponse.ok) {
+      return null;
+    }
+    const quizzes = (await listResponse.json()) as Array<{
+      id: number;
+      title: string;
+      description?: string | null;
+      due_at?: string | null;
+      points_possible?: number | null;
+      question_count?: number | null;
+      warnings?: string[];
+      published?: boolean;
+      quiz_engine?: "classic" | "new_quizzes";
+      assignment_id?: number | null;
+    }>;
+    const duePrefix = payload.dueDate.slice(0, 10);
+    const expectedEngine = payload.quizEngine ?? "classic";
+    const expectedQuestionCount =
+      payload.questions.length +
+      (payload.questionBankGroups ?? []).reduce(
+        (total, group) => total + group.pickCount,
+        0,
+      );
+    const match = quizzes.find((quiz) => {
+      if ((quiz.quiz_engine ?? "classic") !== expectedEngine) {
+        return false;
+      }
+      if (quiz.title !== payload.name) {
+        return false;
+      }
+      if (
+        payload.pointsPossible != null &&
+        quiz.points_possible != null &&
+        Math.abs(Number(quiz.points_possible) - payload.pointsPossible) > 0.01
+      ) {
+        return false;
+      }
+      if (
+        quiz.description != null &&
+        quiz.description.trim() !== "" &&
+        quiz.description.trim() !== payload.description.trim()
+      ) {
+        return false;
+      }
+      if (
+        quiz.question_count != null &&
+        quiz.question_count !== expectedQuestionCount
+      ) {
+        return false;
+      }
+      if (!quiz.due_at) {
+        return true;
+      }
+      return quiz.due_at.slice(0, 10) === duePrefix;
+    });
+    if (!match) {
+      return null;
+    }
+    return {
+      id: match.id,
+      title: match.title,
+      warnings: match.warnings ?? [
+        "Best-effort recovery: matched an existing Canvas quiz by title, points, due date, description, and question count after the create response failed. Confirm in Canvas that this is the quiz you just submitted before editing further.",
+      ],
+      published: Boolean(match.published),
+      quizEngine: match.quiz_engine ?? expectedEngine,
+      assignmentId: match.assignment_id ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchQuizCapabilities(
+  courseId: number,
+  options: GenerateQuizDraftOptions,
+): Promise<QuizCapabilities> {
+  const response = await fetch(
+    appendCanvasUrl(
+      `${API_BASE_URL}/canvas/courses/${courseId}/quizzes/capabilities`,
+      options.canvasUrl,
+    ),
+    {
+      headers: { Authorization: `Bearer ${options.accessToken}` },
+    },
+  );
+  if (!response.ok) {
+    throw new QuizCreatorApiError(await parseApiError(response));
+  }
+  const data = (await response.json()) as {
+    classic_quizzes: boolean;
+    new_quizzes: boolean;
+    question_banks: boolean;
+    preferred_engine: QuizCapabilities["preferredEngine"];
+    new_quizzes_unavailable_reason?: string | null;
+  };
+  return {
+    classicQuizzes: data.classic_quizzes,
+    newQuizzes: data.new_quizzes,
+    questionBanks: data.question_banks,
+    preferredEngine: data.preferred_engine,
+    newQuizzesUnavailableReason:
+      data.new_quizzes_unavailable_reason ?? undefined,
+  };
+}
+
+export async function fetchQuestionBanks(
+  courseId: number,
+  options: GenerateQuizDraftOptions,
+): Promise<QuizQuestionBank[]> {
+  const response = await fetch(
+    appendCanvasUrl(
+      `${API_BASE_URL}/canvas/courses/${courseId}/quizzes/question-banks`,
+      options.canvasUrl,
+    ),
+    {
+      headers: { Authorization: `Bearer ${options.accessToken}` },
+    },
+  );
+  if (!response.ok) {
+    throw new QuizCreatorApiError(await parseApiError(response));
+  }
+  const data = (await response.json()) as Array<{
+    id: number;
+    title: string;
+    question_count: number;
+  }>;
+  return data.map((bank) => ({
+    id: bank.id,
+    title: bank.title,
+    questionCount: bank.question_count,
+  }));
+}

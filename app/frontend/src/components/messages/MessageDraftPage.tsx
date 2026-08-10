@@ -1,0 +1,818 @@
+import { zodResolver } from "@hookform/resolvers/zod";
+import {
+  AlertCircle,
+  Bot,
+  CheckCircle2,
+  Loader2,
+  Megaphone,
+  MessageCircle,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useForm, useWatch } from "react-hook-form";
+import { useLocation } from "react-router-dom";
+
+import { ConfirmationDialog } from "@/components/messages/ConfirmationDialog";
+import {
+  getDeliveryAudienceError,
+  type MessageDeliveryMode,
+} from "@/components/messages/messageDelivery";
+import { MessageEditor } from "@/components/messages/MessageEditor";
+import { MessagePreview } from "@/components/messages/MessagePreview";
+import { MessageTemplateSummary } from "@/components/messages/MessageTemplateSummary";
+import {
+  messageDraftSchema,
+  type MessageDraftFormSchema,
+} from "@/components/messages/messageDraftSchema";
+import { MessageToolbar } from "@/components/messages/MessageToolbar";
+import { RecipientSummary } from "@/components/messages/RecipientSummary";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { getStoredLlmProviderSettings } from "@/lib/llm-provider-storage";
+import {
+  discardTypedDraft,
+  saveTypedDraft,
+} from "@/lib/typed-draft-storage";
+import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
+import type { AiMessageDraftLocationState } from "@/routes/paths";
+import {
+  fetchMessageDraft,
+  isMessageDraftSendMocked,
+  sendMessageDraft,
+} from "@/services/messageDraft";
+import {
+  createMessageTemplate,
+  deleteMessageTemplate,
+  listMessageTemplates,
+} from "@/services/messageTemplates";
+import type {
+  FetchMessageDraftOptions,
+  MessageDraft,
+  MessageDraftPageState,
+  MessageRecipient,
+  MessageTemplate,
+} from "@/types/messageDraft";
+
+interface MessageDraftPageProps {
+  fetchOptions?: FetchMessageDraftOptions;
+  onCancel?: () => void;
+}
+
+const TEMPLATE_PRESETS = {
+  "assignment-reminder": {
+    name: "Assignment Reminder",
+    subject: "Assignment Reminder: Course Update",
+    body: "Remind students about the assignment, due date, and any next steps.",
+    subjectPlaceholder: "Reminder: Assignment due Friday",
+    bodyPlaceholder: "Hi everyone, this is a reminder that...",
+  },
+  encouragement: {
+    name: "Encouragement",
+    subject: "Keep Going",
+    body: "Write an encouraging note that helps students stay engaged.",
+    subjectPlaceholder: "A quick note of encouragement",
+    bodyPlaceholder: "Hi everyone, I wanted to recognize your effort...",
+  },
+  "course-announcement": {
+    name: "Course Announcement",
+    subject: "Course Announcement",
+    body: "Share an important update with your class.",
+    subjectPlaceholder: "Important course update",
+    bodyPlaceholder: "Hi everyone, I’m sharing an update about...",
+  },
+} as const;
+
+type MessageTemplateId = keyof typeof TEMPLATE_PRESETS;
+
+interface SentMessageSnapshot {
+  recipients: MessageRecipient[];
+  subject: string;
+  body: string;
+}
+
+const TEMPLATE_SUBJECTS = new Set<string>(
+  Object.values(TEMPLATE_PRESETS).map((preset) => preset.subject),
+);
+const TEMPLATE_BODIES = new Set<string>(
+  Object.values(TEMPLATE_PRESETS).map((preset) => preset.body),
+);
+
+function isMessageTemplateId(templateId: string | undefined): templateId is MessageTemplateId {
+  return Boolean(templateId && templateId in TEMPLATE_PRESETS);
+}
+
+function canReplaceSubject(value: string): boolean {
+  const trimmed = value.trim();
+  return !trimmed || TEMPLATE_SUBJECTS.has(trimmed);
+}
+
+function canReplaceBody(value: string): boolean {
+  const trimmed = value.trim();
+  return !trimmed || TEMPLATE_BODIES.has(trimmed);
+}
+
+export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPageProps) {
+  const { accessToken, user } = useAuth();
+  // Supplied here rather than by each caller: creating a draft from a prompt
+  // runs a model, and it should be the instructor's connected provider — the
+  // same one the assistant uses — not the deployment default.
+  const userId = user?.id;
+  const modelSettings = useMemo(
+    () => (userId === undefined ? null : getStoredLlmProviderSettings(userId)),
+    [userId],
+  );
+  const location = useLocation();
+  const typedDraftId = (location.state as AiMessageDraftLocationState | null)
+    ?.typedDraftId;
+  const [savedTypedDraftId, setSavedTypedDraftId] = useState<string | undefined>(
+    typedDraftId,
+  );
+  const [draftSaveStatus, setDraftSaveStatus] = useState<string | null>(null);
+  const [pageState, setPageState] = useState<MessageDraftPageState>("loading");
+  const [draft, setDraft] = useState<MessageDraft | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [sentMessage, setSentMessage] = useState<SentMessageSnapshot | null>(null);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [recipients, setRecipients] = useState<MessageRecipient[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>();
+  const [selectedTemplateName, setSelectedTemplateName] = useState<string | undefined>();
+  const [templates, setTemplates] = useState<MessageTemplate[]>([]);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  const [selectedRecipientIds, setSelectedRecipientIds] = useState<Set<string>>(
+    new Set(),
+  );
+  const [deliveryMode, setDeliveryMode] = useState<MessageDeliveryMode>(
+    fetchOptions?.deliveryMode ?? "announcement",
+  );
+
+  const {
+    register,
+    control,
+    reset,
+    setValue,
+    trigger,
+    formState: { errors, isValid, isDirty },
+  } = useForm<MessageDraftFormSchema>({
+    resolver: zodResolver(messageDraftSchema),
+    defaultValues: {
+      subject: "",
+      body: "",
+    },
+    mode: "onChange",
+  });
+
+  const subjectValue = useWatch({ control, name: "subject", defaultValue: "" });
+  const bodyValue = useWatch({ control, name: "body", defaultValue: "" });
+
+  const loadDraft = useCallback(async () => {
+    setPageState("loading");
+    setLoadError(null);
+    setSendError(null);
+    setSuccessMessage(null);
+    setSentMessage(null);
+
+    try {
+      if (!accessToken) {
+        throw new Error("You must be signed in to load message drafts.");
+      }
+
+      const loadedDraft = await fetchMessageDraft(accessToken, {
+        ...fetchOptions,
+        // Only when there is something to say. A null here would add a key to
+        // every request that carries no information, including the ones that
+        // never reach a model at all.
+        ...(modelSettings ? { modelSettings } : {}),
+      });
+      setDraft(loadedDraft);
+      setRecipients(loadedDraft.recipients);
+      const preferred = fetchOptions?.preSelectedIds;
+      const initialSelectedRecipientIds =
+        preferred && preferred.length > 0
+          ? new Set(
+            loadedDraft.recipients
+              .map((recipient) => recipient.id)
+              .filter((id) => preferred.includes(id)),
+          )
+          : new Set<string>();
+      const initialDeliveryMode =
+        fetchOptions?.deliveryMode ??
+        (initialSelectedRecipientIds.size > 0
+          ? "private_message"
+          : "announcement");
+      const initialTemplateId: MessageTemplateId =
+        initialDeliveryMode === "announcement"
+          ? "course-announcement"
+          : isMessageTemplateId(loadedDraft.templateId)
+            ? loadedDraft.templateId
+            : "assignment-reminder";
+      const initialPreset = TEMPLATE_PRESETS[initialTemplateId];
+      const canUseTemplateDefault = !fetchOptions?.subject && !fetchOptions?.body;
+
+      setSelectedTemplateId(initialTemplateId);
+      setSelectedTemplateName(initialPreset.name);
+      setSelectedRecipientIds(initialSelectedRecipientIds);
+      setDeliveryMode(initialDeliveryMode);
+      reset({
+        subject:
+          canUseTemplateDefault || canReplaceSubject(loadedDraft.subject)
+            ? initialPreset.subject
+            : loadedDraft.subject,
+        body:
+          canUseTemplateDefault || canReplaceBody(loadedDraft.body)
+            ? initialPreset.body
+            : loadedDraft.body,
+      });
+      setPageState("editing");
+      void trigger();
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load message draft. Please try again.",
+      );
+      setPageState("editing");
+    }
+  }, [accessToken, fetchOptions, modelSettings, reset, trigger]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async draft load on mount
+    void loadDraft();
+  }, [loadDraft]);
+
+  const previewValues = useMemo(
+    () => ({
+      subject: subjectValue,
+      body: bodyValue,
+    }),
+    [subjectValue, bodyValue],
+  );
+
+  const selectedRecipients = useMemo(
+    () => recipients.filter((recipient) => selectedRecipientIds.has(recipient.id)),
+    [recipients, selectedRecipientIds],
+  );
+
+  const selectedPreset = isMessageTemplateId(selectedTemplateId)
+    ? TEMPLATE_PRESETS[selectedTemplateId]
+    : undefined;
+
+  const applyTemplatePreset = useCallback((
+    templateId: MessageTemplateId,
+    options: { force?: boolean } = {},
+  ) => {
+    const preset = TEMPLATE_PRESETS[templateId];
+    setSelectedTemplateId(templateId);
+    setSelectedTemplateName(preset.name);
+
+    if (options.force || canReplaceSubject(subjectValue)) {
+      setValue("subject", preset.subject, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+
+    if (options.force || canReplaceBody(bodyValue)) {
+      setValue("body", preset.body, {
+        shouldDirty: true,
+        shouldValidate: true,
+      });
+    }
+  }, [bodyValue, setValue, subjectValue]);
+
+  const syncTemplateForRecipientSelection = useCallback((
+    nextSelectedRecipientIds: ReadonlySet<string>,
+  ) => {
+    // Keep template selection aligned with delivery scope without using an
+    // effect that sets state during render cleanup/lint-sensitive phases.
+    if (
+      nextSelectedRecipientIds.size === 0 &&
+      selectedTemplateId !== "course-announcement"
+    ) {
+      applyTemplatePreset("course-announcement");
+      return;
+    }
+
+    if (
+      nextSelectedRecipientIds.size > 0 &&
+      selectedTemplateId === "course-announcement"
+    ) {
+      applyTemplatePreset("assignment-reminder");
+    }
+  }, [applyTemplatePreset, selectedTemplateId]);
+
+  const handleToggleRecipient = (recipientId: string) => {
+    const next = new Set(selectedRecipientIds);
+    if (next.has(recipientId)) {
+      next.delete(recipientId);
+    } else {
+      next.add(recipientId);
+    }
+    setSelectedRecipientIds(next);
+    setDeliveryMode(next.size === 0 ? deliveryMode : "private_message");
+    syncTemplateForRecipientSelection(next);
+  };
+
+  const handleRemoveRecipient = (recipientId: string) => {
+    setRecipients((prev) => prev.filter((recipient) => recipient.id !== recipientId));
+    const next = new Set(selectedRecipientIds);
+    next.delete(recipientId);
+    setSelectedRecipientIds(next);
+    setDeliveryMode(next.size === 0 ? deliveryMode : "private_message");
+    syncTemplateForRecipientSelection(next);
+  };
+
+  const handleSelectAllRecipients = () => {
+    const next =
+      selectedRecipientIds.size === recipients.length
+        ? new Set<string>()
+        : new Set(recipients.map((recipient) => recipient.id));
+    setSelectedRecipientIds(next);
+    setDeliveryMode(next.size === 0 ? deliveryMode : "private_message");
+    syncTemplateForRecipientSelection(next);
+  };
+
+  const handleSelectTemplate = (templateId: string) => {
+    const template = templates.find((item) => item.id === templateId);
+    if (!template) {
+      return;
+    }
+
+    setSelectedTemplateId(template.id);
+    setSelectedTemplateName(template.name);
+    setTemplateError(null);
+    setValue("subject", template.name, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setValue("body", template.content ?? template.description, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  };
+
+  const refreshTemplates = useCallback(async () => {
+    if (!accessToken) {
+      return;
+    }
+    try {
+      const loaded = await listMessageTemplates(
+        accessToken,
+        fetchOptions?.courseId,
+      );
+      setTemplates(loaded);
+    } catch (error) {
+      setTemplateError(
+        error instanceof Error
+          ? error.message
+          : "Unable to load message templates.",
+      );
+    }
+  }, [accessToken, fetchOptions]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async template list load on mount/auth changes
+    void refreshTemplates();
+  }, [refreshTemplates]);
+
+  const handleSaveCurrentAsTemplate = async () => {
+    if (!accessToken) {
+      setTemplateError("You must be signed in to save templates.");
+      return;
+    }
+    const title = subjectValue.trim();
+    const content = bodyValue.trim();
+    if (!title || !content) {
+      setTemplateError("Add a subject and body before saving a template.");
+      return;
+    }
+
+    setIsSavingTemplate(true);
+    setTemplateError(null);
+    try {
+      const created = await createMessageTemplate(accessToken, {
+        title,
+        content,
+        courseId: fetchOptions?.courseId,
+      });
+      setTemplates((current) => [created, ...current]);
+      setSelectedTemplateId(created.id);
+      setSelectedTemplateName(created.name);
+    } catch (error) {
+      setTemplateError(
+        error instanceof Error
+          ? error.message
+          : "Unable to save message template.",
+      );
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    if (!accessToken) {
+      return;
+    }
+    setTemplateError(null);
+    try {
+      await deleteMessageTemplate(accessToken, templateId);
+      setTemplates((current) =>
+        current.filter((template) => template.id !== templateId),
+      );
+      if (selectedTemplateId === templateId) {
+        setSelectedTemplateId(undefined);
+        setSelectedTemplateName(undefined);
+      }
+    } catch (error) {
+      setTemplateError(
+        error instanceof Error
+          ? error.message
+          : "Unable to delete message template.",
+      );
+    }
+  };
+
+  const handleCancel = () => {
+    if (onCancel) {
+      onCancel();
+      return;
+    }
+
+    if (draft) {
+      reset({
+        subject: draft.subject,
+        body: draft.body,
+      });
+    }
+
+    setSendError(null);
+    setSuccessMessage(null);
+    setIsConfirmOpen(false);
+  };
+
+  const handleSendClick = () => {
+    setSendError(null);
+    setSuccessMessage(null);
+    setSentMessage(null);
+
+    const audienceError = getDeliveryAudienceError(
+      deliveryMode,
+      selectedRecipients.length,
+    );
+    if (audienceError) {
+      setSendError(audienceError);
+      return;
+    }
+
+    setIsConfirmOpen(true);
+  };
+
+  const handleSaveTypedDraft = () => {
+    if (!user?.id) return;
+    const subject = subjectValue.trim();
+    const body = bodyValue.trim();
+    if (!subject && !body) {
+      setDraftSaveStatus("Add a subject or body before saving a draft.");
+      return;
+    }
+    const saved = saveTypedDraft(user.id, {
+      id: savedTypedDraftId,
+      kind: "message",
+      content: {
+        ...(subject ? { title: subject } : {}),
+        ...(body ? { body } : {}),
+      },
+    });
+    setSavedTypedDraftId(saved.id);
+    setDraftSaveStatus("Draft saved. Resume it anytime from the assistant.");
+  };
+
+  const handleConfirmSend = async () => {
+    if (!draft) {
+      return;
+    }
+
+    const audienceError = getDeliveryAudienceError(
+      deliveryMode,
+      selectedRecipients.length,
+    );
+    if (audienceError) {
+      setIsConfirmOpen(false);
+      setSendError(audienceError);
+      return;
+    }
+
+    setPageState("sending");
+    setSendError(null);
+
+    try {
+      if (!accessToken) {
+        throw new Error("You must be signed in to send messages.");
+      }
+
+      const messageToSend: SentMessageSnapshot = {
+        recipients: selectedRecipients,
+        subject: subjectValue.trim(),
+        body: bodyValue.trim(),
+      };
+
+      await sendMessageDraft(accessToken, {
+        draftId: draft.id,
+        subject: messageToSend.subject,
+        body: messageToSend.body,
+        recipientIds: messageToSend.recipients.map((recipient) => recipient.id),
+        recipients: messageToSend.recipients,
+        conversationId: fetchOptions?.conversationId,
+        canvasUrl: fetchOptions?.canvasUrl,
+      });
+
+      if (user?.id && savedTypedDraftId) {
+        discardTypedDraft(user.id, savedTypedDraftId);
+        setSavedTypedDraftId(undefined);
+      }
+
+      setIsConfirmOpen(false);
+      setSentMessage(messageToSend);
+      setDraft(null);
+      setSuccessMessage(
+        isMessageDraftSendMocked
+          ? messageToSend.recipients.length === 0
+            ? "Course announcement draft approved. No announcement has been posted through Canvas yet."
+            : `Draft approved for ${messageToSend.recipients.length} student${
+                messageToSend.recipients.length === 1 ? "" : "s"
+              }. No message has been sent through Canvas yet.`
+          : messageToSend.recipients.length === 0
+            ? "Course announcement posted successfully."
+            : `Message sent successfully to ${messageToSend.recipients.length} student${
+                messageToSend.recipients.length === 1 ? "" : "s"
+              }.`,
+      );
+      setPageState("success");
+    } catch (error) {
+      setIsConfirmOpen(false);
+      setSendError(
+        error instanceof Error
+          ? error.message
+          : "Unable to send message. Please try again.",
+      );
+      setPageState("editing");
+    }
+  };
+
+  const handleComposeAnother = () => {
+    setSuccessMessage(null);
+    setSendError(null);
+    void loadDraft();
+  };
+
+  if (pageState === "success" && sentMessage) {
+    return (
+      <div className="space-y-6">
+        {successMessage ? (
+          <div
+            role="status"
+            className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-emerald-800"
+          >
+            <CheckCircle2 className="mt-0.5 size-5 shrink-0" aria-hidden="true" />
+            <p className="text-sm font-medium">{successMessage}</p>
+          </div>
+        ) : null}
+
+        <Card className="shadow-sm ring-1 ring-border/60">
+          <CardHeader className="space-y-3">
+            <div className="flex items-center gap-3 text-emerald-700">
+              <CheckCircle2 className="size-6" aria-hidden="true" />
+              <CardTitle>
+                {isMessageDraftSendMocked ? "Draft Approved" : "Message Sent"}
+              </CardTitle>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {isMessageDraftSendMocked
+                ? "Canvas messaging is not connected yet. This step recorded your review only—nothing was delivered to students."
+                : "Your message has been queued for delivery through Canvas."}
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <MessagePreview
+              recipients={sentMessage.recipients}
+              subject={sentMessage.subject}
+              body={sentMessage.body}
+            />
+          </CardContent>
+          <CardFooter className="border-t bg-transparent">
+            <Button type="button" onClick={handleComposeAnother}>
+              Compose Another Message
+            </Button>
+          </CardFooter>
+        </Card>
+      </div>
+    );
+  }
+
+  const isLoading = pageState === "loading";
+
+  return (
+    <div className="space-y-6">
+      {loadError ? (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3"
+        >
+          <div className="flex items-start gap-3">
+            <AlertCircle
+              className="mt-0.5 size-5 shrink-0 text-destructive"
+              aria-hidden="true"
+            />
+            <p className="text-sm text-destructive">{loadError}</p>
+          </div>
+          <Button type="button" variant="outline" size="sm" onClick={() => void loadDraft()}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
+      {sendError ? (
+        <div
+          role="alert"
+          className="flex items-start gap-3 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3"
+        >
+          <AlertCircle
+            className="mt-0.5 size-5 shrink-0 text-destructive"
+            aria-hidden="true"
+          />
+          <p className="text-sm text-destructive">{sendError}</p>
+        </div>
+      ) : null}
+
+      <div
+        role="status"
+        className={cn(
+          "flex items-start gap-3 rounded-xl border px-4 py-4 shadow-sm",
+          deliveryMode === "announcement"
+            ? "border-amber-300 bg-amber-50 text-amber-950"
+            : "border-sky-300 bg-sky-50 text-sky-950",
+        )}
+      >
+        {deliveryMode === "announcement" ? (
+          <Megaphone className="mt-0.5 size-6 shrink-0" aria-hidden="true" />
+        ) : (
+          <MessageCircle className="mt-0.5 size-6 shrink-0" aria-hidden="true" />
+        )}
+        <div className="space-y-1">
+          <p className="font-semibold">
+            {deliveryMode === "announcement"
+              ? "PUBLIC COURSE ANNOUNCEMENT"
+              : "PRIVATE MESSAGE"}
+          </p>
+          <p className="text-sm">
+            {deliveryMode === "announcement"
+              ? "No students are selected. This will be visible to everyone in the course. Select students to send private messages instead."
+              : selectedRecipients.length > 0
+                ? `This will be sent privately to ${selectedRecipients.length} selected student${selectedRecipients.length === 1 ? "" : "s"}.`
+                : "Select students to send privately, or leave everyone unselected for a course announcement."}
+          </p>
+          {deliveryMode === "private_message" && selectedRecipients.length === 0 ? (
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto px-0 text-sky-950 underline"
+              onClick={() => {
+                setDeliveryMode("announcement");
+                applyTemplatePreset("course-announcement");
+              }}
+            >
+              Switch to course announcement
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+        <aside className="space-y-4">
+          <RecipientSummary
+            recipients={recipients}
+            selectedIds={selectedRecipientIds}
+            onToggle={handleToggleRecipient}
+            onRemove={handleRemoveRecipient}
+            onSelectAll={handleSelectAllRecipients}
+          />
+          <MessageTemplateSummary
+            templates={templates}
+            selectedTemplateId={selectedTemplateId}
+            selectedTemplateName={selectedTemplateName}
+            onSelectTemplate={handleSelectTemplate}
+            onDeleteTemplate={(templateId) => {
+              void handleDeleteTemplate(templateId);
+            }}
+            onSaveCurrentAsTemplate={() => {
+              void handleSaveCurrentAsTemplate();
+            }}
+            isSavingTemplate={isSavingTemplate}
+          />
+          {templateError ? (
+            <p className="text-sm text-destructive" role="alert">
+              {templateError}
+            </p>
+          ) : null}
+        </aside>
+
+        <section>
+          <Card className="flex min-h-[520px] flex-col shadow-sm ring-1 ring-border/60">
+            <CardHeader className="border-b border-border/60 pb-4">
+              <CardTitle className="text-base">Review Message Draft</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Edit the generated message, then send when ready. You&apos;ll
+                see the full message again before it goes out.
+              </p>
+            </CardHeader>
+
+            {isLoading ? (
+              <CardContent className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-center">
+                <Loader2
+                  className="size-8 animate-spin text-primary"
+                  aria-hidden="true"
+                />
+                <p className="text-sm font-medium">Loading message draft...</p>
+                <p className="max-w-sm text-sm text-muted-foreground">
+                  Fetching AI-generated content and recipient details.
+                </p>
+              </CardContent>
+            ) : (
+              <>
+                <CardContent className="flex-1 py-6">
+                  <MessageEditor
+                    register={register}
+                    errors={errors}
+                    bodyValue={bodyValue}
+                    subjectPlaceholder={selectedPreset?.subjectPlaceholder}
+                    bodyPlaceholder={selectedPreset?.bodyPlaceholder}
+                    hasUnsavedChanges={isDirty}
+                    disabled={pageState === "sending"}
+                  />
+                </CardContent>
+                <CardFooter className="mt-auto flex-col gap-3 border-t bg-muted/20 px-6 py-4">
+                  {draftSaveStatus ? (
+                    <p role="status" className="w-full text-sm text-muted-foreground">
+                      {draftSaveStatus}
+                    </p>
+                  ) : null}
+                  <MessageToolbar
+                    onCancel={handleCancel}
+                    onSend={handleSendClick}
+                    onSaveDraft={handleSaveTypedDraft}
+                    isSending={pageState === "sending"}
+                    isValid={isValid}
+                    disabled={isLoading}
+                  />
+                </CardFooter>
+              </>
+            )}
+          </Card>
+        </section>
+      </div>
+
+      <ConfirmationDialog
+        open={isConfirmOpen}
+        onOpenChange={setIsConfirmOpen}
+        recipients={recipients}
+        selectedRecipientIds={selectedRecipientIds}
+        onToggleRecipient={handleToggleRecipient}
+        onRemoveRecipient={handleRemoveRecipient}
+        subject={previewValues.subject}
+        body={previewValues.body}
+        isSending={pageState === "sending"}
+        deliveryMode={deliveryMode}
+        onConfirm={() => void handleConfirmSend()}
+      />
+    </div>
+  );
+}
+
+export function MessageDraftPageHeader() {
+  return (
+    <header>
+      <div className="flex items-start gap-3">
+        <div
+          className={cn(
+            "flex size-11 shrink-0 items-center justify-center",
+            dashboardColors.purple.iconSquare,
+          )}
+        >
+          <Bot className="size-5" aria-hidden="true" />
+        </div>
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
+            AI Message Drafting
+          </h1>
+          <p className="text-muted-foreground">
+            Generate personalized messages for students
+          </p>
+        </div>
+      </div>
+    </header>
+  );
+}

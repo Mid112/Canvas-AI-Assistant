@@ -1,0 +1,129 @@
+import { Loader2 } from "lucide-react";
+
+import { EditableRecipientList } from "@/components/messages/EditableRecipientList";
+import { ActionStatusBadges } from "@/components/status/ActionStatusBadges";
+import { MessageContentPreview } from "@/components/messages/MessagePreview";
+import type { MessageDeliveryMode } from "@/components/messages/messageDelivery";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+import { dashboardColors } from "@/pages/Instructor/InstructorDashboard/dashboardColors";
+import type { MessageRecipient } from "@/types/messageDraft";
+
+interface ConfirmationDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  recipients: MessageRecipient[];
+  selectedRecipientIds: ReadonlySet<string>;
+  onToggleRecipient: (recipientId: string) => void;
+  onRemoveRecipient: (recipientId: string) => void;
+  subject: string;
+  body: string;
+  isSending: boolean;
+  deliveryMode: MessageDeliveryMode;
+  onConfirm: () => void;
+}
+
+export function ConfirmationDialog({
+  open,
+  onOpenChange,
+  recipients,
+  selectedRecipientIds,
+  onToggleRecipient,
+  onRemoveRecipient,
+  subject,
+  body,
+  isSending,
+  deliveryMode,
+  onConfirm,
+}: ConfirmationDialogProps) {
+  const selectedCount = recipients.filter((recipient) =>
+    selectedRecipientIds.has(recipient.id),
+  ).length;
+  const recipientText =
+    selectedCount === 1 ? "1 student" : `${selectedCount} students`;
+  const isAnnouncement = deliveryMode === "announcement";
+  const deliveryText = isAnnouncement
+    ? "the whole course as an announcement"
+    : recipientText;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg" showCloseButton={!isSending}>
+        <DialogHeader>
+          {/* pr-8 clears the dialog's absolutely positioned close button. */}
+          <div className="flex items-start justify-between gap-3 pr-8">
+            <DialogTitle>Send Message?</DialogTitle>
+            {/* send_message is classified irreversible in the backend -- a sent
+                Canvas announcement or message cannot be un-sent. */}
+            <ActionStatusBadges
+              level="high"
+              reversible={false}
+              className="shrink-0"
+            />
+          </div>
+          <DialogDescription>
+            Review exactly what will be sent to {deliveryText} before confirming.
+            <strong className="block text-foreground">
+              {isAnnouncement ? "ANNOUNCEMENT" : "PRIVATE MESSAGE"}
+            </strong>{" "}
+            {isAnnouncement
+              ? "This will be visible to everyone in the course."
+              : "Uncheck or remove anyone who should not receive a private message."}
+            This action cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-1">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            {isAnnouncement ? "Audience" : `To (${selectedCount} of ${recipients.length})`}
+          </p>
+          <div className="max-h-48 overflow-y-auto rounded-lg border border-border/60">
+            <EditableRecipientList
+              recipients={recipients}
+              selectedIds={selectedRecipientIds}
+              onToggle={onToggleRecipient}
+              onRemove={onRemoveRecipient}
+              idPrefix="confirm-recipient"
+            />
+          </div>
+        </div>
+
+        <MessageContentPreview subject={subject} body={body} />
+
+        <DialogFooter className="sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isSending}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            className={cn(dashboardColors.blue.button)}
+            onClick={onConfirm}
+            disabled={isSending}
+          >
+            {isSending ? (
+              <>
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                Sending...
+              </>
+            ) : (
+              "Confirm Send"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

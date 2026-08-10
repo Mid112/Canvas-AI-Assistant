@@ -1,0 +1,212 @@
+import { MemoryRouter } from "react-router-dom";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi, beforeEach } from "vitest";
+
+import { institutionCourseData } from "@/data/institutionCourseData";
+import { formatInstructorCourseTitle } from "@/lib/format-course-title";
+import { InstructorCourseHeader } from "@/pages/Instructor/InstructorCourse/InstructorCourseHeader";
+import { InstructorCourseTabs } from "@/pages/Instructor/InstructorCourse/InstructorCourseTabs";
+import { InstructorCourseOverviewMetrics } from "@/pages/Instructor/InstructorCourse/InstructorCourseOverviewMetrics";
+import { RecentAssignmentsCard } from "@/pages/Instructor/InstructorCourse/RecentAssignmentsCard";
+import { instructorCoursePath } from "@/routes/paths";
+import type { CourseOverviewData } from "@/types/courseOverview";
+
+const course = institutionCourseData[0]!.courses[0]!;
+
+const mockUseActiveCourse = vi.fn();
+
+vi.mock("@/contexts/useActiveCourse", () => ({
+  useActiveCourse: () => mockUseActiveCourse(),
+}));
+
+const overview: CourseOverviewData = {
+  localId: course.id,
+  canvasCourseId: "123",
+  name: course.name,
+  term: "Fall 2026",
+  isActive: true,
+  studentCount: 45,
+  assignmentCount: 8,
+  missingSubmissions: 2,
+  lateSubmissions: 1,
+  averageGrade: 82,
+  completionRate: 91,
+  recentAssignments: [
+    {
+      localId: 1,
+      title: "Variables and Data Types Quiz",
+      dueDate: "2026-10-15T00:00:00Z",
+      submittedCount: 38,
+      totalStudents: 45,
+      status: "active",
+    },
+  ],
+  recentActivity: [
+    {
+      studentName: "Sarah Johnson",
+      action: "Submitted Assignment 3",
+      occurredAt: "2026-10-10T12:00:00Z",
+    },
+  ],
+};
+
+describe("InstructorCourseHeader", () => {
+  beforeEach(() => {
+    mockUseActiveCourse.mockReturnValue({
+      activeCourse: {
+        localId: course.id,
+        displayName: formatInstructorCourseTitle(course),
+      },
+      isSaving: false,
+      selectActiveCourse: vi.fn(),
+    });
+  });
+
+  // Verifies: Renders course title and active status.
+  it("renders course title and active status", () => {
+    render(
+      <MemoryRouter>
+        <InstructorCourseHeader localCourseId={course.id} course={course} />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("heading", {
+        name: formatInstructorCourseTitle(course),
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/45 Students · 8 Assignments/)).toBeInTheDocument();
+    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Back to Courses/i }),
+    ).toHaveAttribute("href", "/instructor/courses");
+  });
+
+  // Verifies: Omits the active badge when the course is not the active course.
+  it("omits the active badge when the course is not the active course", () => {
+    mockUseActiveCourse.mockReturnValue({
+      activeCourse: {
+        localId: 999,
+        displayName: "Another course",
+      },
+      isSaving: false,
+      selectActiveCourse: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter>
+        <InstructorCourseHeader localCourseId={course.id} course={course} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/45 Students · 8 Assignments/)).toBeInTheDocument();
+    expect(screen.queryByText("Active")).not.toBeInTheDocument();
+  });
+});
+
+describe("InstructorCourseTabs", () => {
+  // Verifies: Renders course section tabs.
+  it("renders course section tabs", () => {
+    render(
+      <MemoryRouter initialEntries={[instructorCoursePath(course.id)]}>
+        <InstructorCourseTabs localCourseId={course.id} />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute(
+      "href",
+      instructorCoursePath(course.id),
+    );
+    expect(screen.getByRole("link", { name: "Assignments" })).toHaveAttribute(
+      "href",
+      `/instructor/courses/${course.id}/assignments`,
+    );
+    expect(screen.getByRole("link", { name: "Quizzes" })).toHaveAttribute(
+      "href",
+      `/instructor/courses/${course.id}/quizzes`,
+    );
+    expect(screen.getByRole("link", { name: "Students" })).toHaveAttribute(
+      "href",
+      `/instructor/courses/${course.id}/students`,
+    );
+    expect(screen.getByRole("link", { name: "Analytics" })).toHaveAttribute(
+      "href",
+      `/instructor/courses/${course.id}/analytics`,
+    );
+  });
+});
+
+describe("InstructorCourseOverviewMetrics", () => {
+  // Verifies: Renders overview metric cards.
+  it("renders overview metric cards", () => {
+    render(
+      <InstructorCourseOverviewMetrics course={course} overview={overview} />,
+    );
+
+    expect(screen.getByText("Total Students")).toBeInTheDocument();
+    expect(screen.getByText("45")).toBeInTheDocument();
+    expect(screen.getByText("Average Grade")).toBeInTheDocument();
+    expect(screen.getByText("82%")).toBeInTheDocument();
+    expect(screen.getByText("91%")).toBeInTheDocument();
+  });
+
+  // Verifies: Prefers the Canvas course student count when overview has a stale zero.
+  it("prefers the Canvas course student count when overview has a stale zero", () => {
+    render(
+      <InstructorCourseOverviewMetrics
+        course={course}
+        overview={{ ...overview, studentCount: 0 }}
+      />,
+    );
+
+    expect(screen.getByText("Total Students")).toBeInTheDocument();
+    expect(screen.getByText(String(course.studentCount))).toBeInTheDocument();
+  });
+});
+
+describe("RecentAssignmentsCard", () => {
+  // Verifies: Renders recent assignments with status.
+  it("renders recent assignments with status", () => {
+    render(
+      <MemoryRouter>
+        <RecentAssignmentsCard
+          localCourseId={course.id}
+          assignments={overview.recentAssignments}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByText("Variables and Data Types Quiz"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("active")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View All" })).toHaveAttribute(
+      "href",
+      `/instructor/courses/${course.id}/assignments`,
+    );
+  });
+
+  // Verifies: Uses the course student total when assignment summaries have a stale zero.
+  it("uses the course student total when assignment summaries have a stale zero", () => {
+    render(
+      <MemoryRouter>
+        <RecentAssignmentsCard
+          localCourseId={course.id}
+          totalStudents={course.studentCount}
+          assignments={[
+            {
+              ...overview.recentAssignments[0]!,
+              submittedCount: 1,
+              totalStudents: 0,
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText(/Due Oct 14, 2026, 5:00 PM/)).toBeInTheDocument();
+    expect(
+      screen.getByText(new RegExp(`1/${course.studentCount} submitted`)),
+    ).toBeInTheDocument();
+  });
+});
