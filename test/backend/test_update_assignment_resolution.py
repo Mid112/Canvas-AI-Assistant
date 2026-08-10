@@ -218,6 +218,12 @@ def test_update_assignment_reference_all_fields(client):
 
 # Verifies: an unresolvable reference returns clarify, not an error or a
 # guessed ID.
+#
+# The reference resolver clarify now carries candidates, so the turn retries
+# it before giving up (see _CLARIFY_RETRY_BUDGET in services/chat.py) — three
+# passes, each costing a main call and one resolver call. The model never
+# resolves it here, so what the instructor finally sees is unchanged: the same
+# clarify, listing the same real assignments, with no guessed ID.
 def test_update_assignment_unresolvable_reference_returns_clarify(client):
     headers, _ = _register_with_canvas(client)
 
@@ -225,7 +231,7 @@ def test_update_assignment_unresolvable_reference_returns_clarify(client):
         '{"action": "update_assignment", "course_name": "CPSC 310", '
         '"assignment_reference": "the makeup quiz", "due_date": "2026-08-13T23:59:00"}',
         '{"assignment_id": null}',
-    ]
+    ] * 3
 
     with patch("app.services.canvas.fetch_assignments", new=AsyncMock(return_value=_assignments())):
         body = _chat(client, headers, "push back the makeup quiz", llm_outputs)

@@ -71,11 +71,15 @@ from app.services.failed_operations import record_failed_operation
 from app.services.field_memory import (
     _PARTIAL_PLAN_SAFE_KEYS,
     clear_course_scoped_field_memory,
+    clear_pending_expectation,
     format_field_memory_for_prompt,
     merge_field_memory,
     merge_grounded_facts_into_memory,
     merge_read_result_into_field_memory,
+    pending_expectation,
     record_course_context,
+    record_pending_expectation,
+    resolve_against_expectation,
     trim_tool_dump_for_history,
 )
 from app.services.intent import normalize_semantic_intent
@@ -250,6 +254,12 @@ MAX_TURN_STEPS = 15
 # read. Adding a future resolver here is the only wiring a new one needs
 # to get automatic multi-step chaining — no loop/dispatch changes required.
 _CHAINABLE_READ_ACTIONS = frozenset({"resolve_missing_submissions", "find_assignment_by_submission_rate"})
+
+# How many times one turn may answer its own clarify by going back to the model
+# for another tool call. Two: enough to try the obvious read and one follow-up,
+# short enough that a model which cannot resolve the reference reaches the
+# instructor quickly instead of burning the whole step budget in silence.
+_CLARIFY_RETRY_BUDGET = 2
 
 # Writes that create a brand-new Canvas resource inside a course. They have no
 # existing resource to resolve against, so the course is the only thing that
@@ -1261,16 +1271,39 @@ async def _run_reference_prescan(
     """
     prescan: dict[str, Any] = {}
 
+    # An answer to the question the assistant is waiting on outranks anything
+    # matched from scratch. "the second one" carries no title to match at all,
+    # and "Lab Report B" typed in reply to "which of these?" means that
+    # offered option — not a fresh search that might land elsewhere. Taken
+    # first, and the generic matchers below defer to whatever it settled.
+    answered = resolve_against_expectation(
+        pending_expectation(conversation.field_memory), message
+    )
+    answered_field = answered.get("field") if answered else None
+    answered_id = answered.get("id") if answered else None
+
+    assignment: dict | None = None
+    students: list[dict] = []
+    if answered_id is not None and answered_field == "assignment_reference":
+        assignment = {
+            "assignment_id": answered_id,
+            "assignment_title": answered["label"],
+        }
+    if answered_id is not None and answered_field == "student_reference":
+        students = [{"student_id": answered_id, "student_name": answered["label"]}]
+
     named_course = _prescan_course_reference(course_names, message)
     if named_course is not None and named_course.local_course_id is not None:
         prescan["local_course_id"] = named_course.local_course_id
         prescan["course_name"] = _course_display_name(named_course)
 
-    assignment = await _prescan_assignment_reference(db, conversation, message)
+    if assignment is None:
+        assignment = await _prescan_assignment_reference(db, conversation, message)
     if assignment:
         prescan.update(assignment)
 
-    students = await _prescan_student_references(db, conversation, message)
+    if not students:
+        students = await _prescan_student_references(db, conversation, message)
     if 0 < len(students) <= _PRESCAN_STUDENT_NAME_LIMIT:
         prescan["students"] = students
     elif students:
@@ -1508,6 +1541,14 @@ async def _resolve_course_and_assignment(
                 "clarify": True,
                 "question": f"Which assignment in {course.name} did you mean? Options: {names}.",
                 "partial_plan": {"local_course_id": course.id},
+                # Recorded as a pending expectation so the next turn can read
+                # "the second one" against this exact list, in this order,
+                # instead of re-deriving it from the question text.
+                "clarify_field": "assignment_reference",
+                "clarify_candidates": [
+                    {"id": _coerce_int(a.get("id")), "label": a.get("name")}
+                    for a in assignments
+                ],
             }
 
     return course, assignment_id
@@ -2394,6 +2435,14 @@ async def _resolve_grade_target(
             "clarify": True,
             "question": f"Which student in {course.name} did you mean? Options: {names}.",
             "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
+            "clarify_field": "student_reference",
+            "clarify_candidates": [
+                {
+                    "id": _coerce_int(s.get("user_id")),
+                    "label": s.get("student_name") or f"Student {s.get('user_id')}",
+                }
+                for s in submissions
+            ],
         }
 
     selected = next(s for s in submissions if _coerce_int(s.get("user_id")) == student_id)
@@ -2633,103 +2682,6 @@ async def _resolve_students_via_llm(
         return result
 
 
-async def _run_update_grade_chain(
-    db: AsyncSession,
-    user: User,
-    conversation: Conversation,
-    user_msg: Message,
-    action: Any,
-    user_message: str,
-    adapter: LLMAdapter,
-) -> dict:
-    """Resolve natural assignment/student references before grade preview.
-
-    Numeric Canvas IDs are selected only from real assignment and roster
-    data returned by existing backend fetches; they are never requested from
-    the instructor or invented by the general chat model.
-    """
-    resolved_assignment = await _resolve_course_and_assignment(
-        db,
-        user,
-        conversation,
-        user_msg,
-        action.local_course_id,
-        action.assignment_id,
-        action.assignment_reference,
-        user_message,
-        adapter,
-    )
-    if isinstance(resolved_assignment, dict):
-        return resolved_assignment
-    course, assignment_id = resolved_assignment
-
-    student_id = action.student_id
-    if student_id is None:
-        if not action.student_reference:
-            return {
-                "action": "clarify",
-                "clarify": True,
-                "question": "Which student should receive this grade?",
-                "partial_plan": {
-                    "assignment_reference": action.assignment_reference,
-                    "new_grade": action.new_grade,
-                    "feedback": action.feedback,
-                },
-            }
-        fetch_action = FetchStudentsAction(local_course_id=course.id)
-        roster_result = await _run_tracked_read(
-            db,
-            user,
-            conversation,
-            user_msg.id,
-            "fetch_students",
-            fetch_action.model_dump(),
-            execute_tool(db, user, fetch_action),
-        )
-        roster = roster_result.get("students", [])
-        candidates = llm_student_candidates(roster)
-        student_id = (
-            await _resolve_students_via_llm(
-                candidates, [action.student_reference], user_message, adapter
-            )
-        ).get(action.student_reference)
-        if student_id is None:
-            return {
-                "action": "clarify",
-                "clarify": True,
-                "question": (
-                    f'I could not confidently match "{action.student_reference}" '
-                    "to one student in this course. What is their full name or email?"
-                ),
-                "partial_plan": {
-                    "assignment_reference": action.assignment_reference,
-                    "student_reference": action.student_reference,
-                    "new_grade": action.new_grade,
-                    "feedback": action.feedback,
-                },
-            }
-
-    proposed_action = {
-        "action": "update_grade",
-        "local_course_id": course.id,
-        "assignment_id": assignment_id,
-        "assignment_reference": action.assignment_reference,
-        "student_id": student_id,
-        "student_reference": action.student_reference,
-        "new_grade": action.new_grade,
-        "feedback": action.feedback,
-    }
-    proposed_action = {
-        key: value for key, value in proposed_action.items() if value is not None
-    }
-    preview_metadata = generate_write_preview(proposed_action, course)
-    return {
-        "action": "intent_preview",
-        "intent_preview": True,
-        "summary": preview_metadata["summary"],
-        "proposed_action": proposed_action,
-        "preview_metadata": preview_metadata,
-    }
 
 
 async def _resolve_recipient_directives(
@@ -4448,6 +4400,10 @@ async def handle_chat_message(
     # steps' prompts (_build_llm_message) can see everything gathered so
     # far in this same turn, distinct from `history` (prior turns only).
     loop_steps: list[dict] = []
+    # Separate from MAX_TURN_STEPS: see the clarify branch at the bottom of the
+    # loop for why a model going back for information gets its own, much
+    # smaller allowance than a plan making progress.
+    clarify_retries_left = _CLARIFY_RETRY_BUDGET
     result: dict = {}
 
     for step in range(1, MAX_TURN_STEPS + 1):
@@ -4895,14 +4851,40 @@ async def handle_chat_message(
             await db.commit()
             return conversation, {"error": detail}, True
 
-        # A clarify result is always terminal regardless of action name —
-        # it means the model needs the USER to answer something, so
-        # calling the LLM again immediately would be pointless. Otherwise,
-        # a _CHAINABLE_READ_ACTIONS result always continues (that's the
-        # entire point of those actions — see MAX_TURN_STEPS' docstring);
-        # any other read only continues once already mid-chain (step > 1),
-        # so a lone ordinary read at step 1 is untouched from before this
-        # loop existed.
+        # A clarify used to end the turn outright. Most of the time that is
+        # right — "what should the due date be?" is a question only the
+        # instructor can answer. But a resolver clarify is different: it means
+        # the SERVER could not resolve a reference, and the model may well be
+        # able to by calling a read tool it has not called yet. Ending there
+        # made the instructor do the lookup by hand.
+        #
+        # Retryable clarifies are the ones that arrive with candidates: the
+        # resolver got far enough to have a list and could not choose from it.
+        # A missing-field clarify has nothing to look up and stays terminal.
+        #
+        # Budgeted separately from MAX_TURN_STEPS, and deliberately small. The
+        # step budget is for a plan making progress; this one is for a model
+        # going back for information, where two attempts is the difference
+        # between "try the obvious tool" and a loop that spends fifteen steps
+        # asking itself the same question.
+        if (
+            result.get("clarify")
+            and result.get("clarify_candidates")
+            and pending_message_id is None
+            and clarify_retries_left > 0
+        ):
+            clarify_retries_left -= 1
+            loop_steps.append({"action": action.action, "result": result})
+            if step >= MAX_TURN_STEPS:
+                result = _step_budget_exhausted_response(loop_steps)
+                break
+            continue
+
+        # Otherwise, a _CHAINABLE_READ_ACTIONS result always continues (that's
+        # the entire point of those actions — see MAX_TURN_STEPS' docstring);
+        # any other read only continues once already mid-chain (step > 1), so a
+        # lone ordinary read at step 1 is untouched from before this loop
+        # existed.
         is_chainable_step = (
             pending_message_id is None
             and action.action in READ_ACTIONS
@@ -5022,6 +5004,25 @@ async def handle_chat_message(
                 result.get("partial_plan"),
                 allowed_keys=_PARTIAL_PLAN_SAFE_KEYS,
             )
+            # Remember what was asked and what was on offer, so a bare "the
+            # second one" next turn is an answer rather than a new request.
+            # Only resolver clarifies carry candidates; a missing-field
+            # clarify ("what should the due date be?") has nothing to choose
+            # between and records nothing.
+            clarify_candidates = result.get("clarify_candidates")
+            if clarify_candidates:
+                record_pending_expectation(
+                    conversation,
+                    field=result.get("clarify_field") or "",
+                    question=result.get("question") or "",
+                    candidates=clarify_candidates,
+                    action=result.get("clarify_action"),
+                )
+        else:
+            # Any settled turn answers the outstanding question or abandons it;
+            # either way it is no longer outstanding. Leaving it would let a
+            # much later "yes" reattach to a question from several turns ago.
+            clear_pending_expectation(conversation)
         await _supersede_pending_workflow(
             db,
             conversation.id,
