@@ -47,7 +47,7 @@ make build && make up
 
 ## Verify web deployment
 
-- [ ] UI loads over HTTP(S)
-- [ ] Login works
-- [ ] API calls succeed (no CORS failures)
-- [ ] Static assets load through nginx (compose mode)
+- [x] UI loads over HTTP(S)
+- [x] Login works
+- [x] API calls succeed (no CORS failures)
+- [x] Static assets load through nginx (compose mode)

@@ -23,8 +23,8 @@
 
 ## Configuration verification
 
-- [ ] Backend starts without Settings validation errors
-- [ ] CORS allows the frontend origin
-- [ ] Fernet key decodes
-- [ ] Admin seed works once
-- [ ] Instructor Canvas encrypt/decrypt round-trip succeeds
+- [x] Backend starts without Settings validation errors
+- [x] CORS allows the frontend origin
+- [x] Fernet key decodes
+- [x] Admin seed works once
+- [x] Instructor Canvas encrypt/decrypt round-trip succeeds

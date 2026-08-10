@@ -17,11 +17,11 @@ make down
 
 ## Networking checklist
 
-- [ ] Frontend reaches API via nginx `/api` or `VITE_API_BASE_URL`
-- [ ] Backend reaches Postgres hostname from compose network
-- [ ] Backend reaches Canvas URL (public or sandbox)
-- [ ] If MCP enabled: backend ↔ MCP on internal network; Canvas hosts allowlisted
-- [ ] No accidental publish of MCP/Postgres in locked-down prod
+- [x] Frontend reaches API via nginx `/api` or `VITE_API_BASE_URL`
+- [x] Backend reaches Postgres hostname from compose network
+- [x] Backend reaches Canvas URL (public or sandbox)
+- [x] If MCP enabled: backend ↔ MCP on internal network; Canvas hosts allowlisted
+- [x] No accidental publish of MCP/Postgres in locked-down prod
 
 ## Container checks
 
