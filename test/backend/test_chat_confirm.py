@@ -260,7 +260,14 @@ def test_modify_snapshots_previous_proposed_action(client):
     assert reply["pending_message_id"] == pending_message_id
     assert reply["proposed_action"]["points_possible"] == 50
     assert reply["previous_proposed_action"]["points_possible"] == 100
-    assert reply["previous_summary"] == "Create Midterm Exam"
+    # Preview summaries are server-authoritative.  The original LLM summary
+    # is intentionally replaced with the same detailed text shown in the
+    # confirmation preview, so a modify snapshot remains meaningful even if
+    # the model used a short or stale description.
+    assert reply["previous_summary"] == (
+        "Create assignment 'Midterm Exam' in CPSC 310, "
+        "due January 01, 2030 at 12:00 AM UTC, worth 100 points."
+    )
 
     # A second modify round only remembers one step back — the very first
     # version (100 points) is gone, replaced by the second (50 points).
