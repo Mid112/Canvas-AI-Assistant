@@ -8,16 +8,43 @@ def normalize_canvas_url(url: str) -> str:
 
 
 def canonicalize_canvas_institution_url(url: str) -> str:
-    """Use one stored identity for the local aliases used by Docker/dev."""
+    """Return the stable storage identity for a Canvas institution.
+
+    URL schemes and DNS hostnames are case-insensitive, but URL parsers may
+    preserve their original spelling in ``netloc``. Canonicalizing the
+    authority here keeps the database uniqueness key aligned with the URL
+    equivalence checks used by the application.
+    """
     normalized = normalize_canvas_url(url)
     parsed = urlparse(normalized)
-    if parsed.hostname not in _LOCAL_HTTP_HOSTS:
+
+    if parsed.hostname is None:
         return normalized
 
-    netloc = "localhost"
+    hostname = parsed.hostname.lower()
+    if hostname in _LOCAL_HTTP_HOSTS:
+        hostname = "localhost"
+
+    if ":" in hostname and not hostname.startswith("["):
+        hostname = f"[{hostname}]"
     if parsed.port is not None:
-        netloc = f"{netloc}:{parsed.port}"
-    return urlunparse(parsed._replace(netloc=netloc))
+        hostname = f"{hostname}:{parsed.port}"
+
+    # Canvas URLs are expected to be ordinary origin URLs without userinfo;
+    # preserve it if one is supplied rather than silently changing credentials.
+    userinfo = ""
+    if parsed.username is not None:
+        userinfo = parsed.username
+        if parsed.password is not None:
+            userinfo += f":{parsed.password}"
+        userinfo += "@"
+
+    return urlunparse(
+        parsed._replace(
+            scheme=parsed.scheme.lower(),
+            netloc=f"{userinfo}{hostname}",
+        )
+    )
 
 
 def canvas_url_candidates(url: str) -> tuple[str, ...]:

@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 """
 Integration tests for POST /api/v1/messages/drafts/{id}/send's
 recipient-enrollment validation.
@@ -46,7 +48,7 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
 
@@ -77,7 +79,7 @@ def _register_with_canvas_url(client, canvas_url: str) -> tuple[dict, int]:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": canvas_url},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": canvas_url},
             headers=headers,
         )
 

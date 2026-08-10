@@ -61,13 +61,17 @@ If you have a genuinely ancient local database (created before the `ta` role was
 | `044_canvas_connection_time_zone.sql` | Adds `canvas_connections.time_zone` (IANA name from Canvas `/api/v1/users/self`) as the instructor source of truth when interpreting naive assignment due dates (#1435) |
 | `045_unique_canvas_token_fingerprint.sql` | Adds keyed Canvas-token fingerprints and the initial partial uniqueness index; legacy rows are upgraded by the application when they are next checked |
 | `046_scope_canvas_token_fingerprint_to_institution.sql` | Replaces the initial global index with partial uniqueness on `(canvas_url, token_fingerprint)`, with local Docker aliases canonicalized by the application |
+| `047_canonicalize_canvas_connection_urls.sql` | Canonicalizes existing Canvas connection scheme/hostname casing and local Docker aliases; fails safely if canonicalization would create an existing-row collision |
 
 ## Canvas token uniqueness rollout
 
-Deployments must apply both `045_unique_canvas_token_fingerprint.sql` and
-`046_scope_canvas_token_fingerprint_to_institution.sql`, in that order. A fresh
-database gets both entries from `db/init/01_schema.sql`; an existing database
-applies them automatically on backend startup.
+Deployments must apply `045_unique_canvas_token_fingerprint.sql`,
+`046_scope_canvas_token_fingerprint_to_institution.sql`, and
+`047_canonicalize_canvas_connection_urls.sql`, in that order. A fresh database
+gets all three entries from `db/init/01_schema.sql`; an existing database
+applies them automatically on backend startup. Migration 047 fails safely if
+URL canonicalization would create an existing connection or fingerprint
+collision, so resolve the reported rows before retrying deployment.
 
 The fingerprint is a versioned, domain-separated HMAC. The application checks
 the indexed fingerprint first, then decrypts only legacy rows whose fingerprint

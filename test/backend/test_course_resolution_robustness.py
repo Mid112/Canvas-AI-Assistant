@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 """Tests for the concurrency/session-isolation and course-resolution
 fixes in app/backend/app/services/chat.py and
 app/backend/app/services/canvas.py:
@@ -47,7 +49,7 @@ def _register_with_canvas(client) -> dict:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
     return headers

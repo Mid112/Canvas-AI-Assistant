@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 """
 API endpoint coverage for Feature #685 / #706.
 
@@ -54,14 +56,14 @@ def _register(client, password: str = "Secret123!") -> dict:
     }
 
 
-def _register_with_canvas(client) -> tuple[dict, int]:
+def _register_with_canvas(client, *, token_suffix: str = "") -> tuple[dict, int]:
     reg = _register(client)
     headers = reg["headers"]
 
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token() + token_suffix, "canvas_url": CANVAS_URL},
             headers=headers,
         )
 
@@ -194,7 +196,7 @@ def test_assignment_create_rejects_past_due_date(client):
 
 def test_assignment_preview_course_not_owned(client):
     headers_a, local_course_id = _register_with_canvas(client)
-    headers_b, _ = _register_with_canvas(client)
+    headers_b, _ = _register_with_canvas(client, token_suffix="-second")
     resp = client.post(
         f"/api/v1/canvas/courses/{local_course_id}/assignments/preview"
         f"?canvas_url={CANVAS_URL}",

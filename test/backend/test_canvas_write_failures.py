@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 """
 Canvas write-path and integration failure coverage (#709).
 
@@ -51,7 +53,7 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
 

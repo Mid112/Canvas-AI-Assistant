@@ -23,9 +23,25 @@ def test_canonicalize_canvas_institution_url_local_aliases():
     assert canonicalize_canvas_institution_url("https://canvas.example.edu/") == "https://canvas.example.edu"
 
 
+# Verifies: Scheme and hostname casing cannot split a stored institution identity.
+def test_canonicalize_canvas_institution_url_normalizes_authority_case():
+    assert (
+        canonicalize_canvas_institution_url("HTTPS://Canvas.Example.edu/")
+        == "https://canvas.example.edu"
+    )
+
+
 # Verifies: Canvas urls equivalent different hosts.
 def test_canvas_urls_equivalent_different_hosts():
     assert not canvas_urls_equivalent("https://canvas.example.edu", "https://canvas.sfu.ca")
+
+
+# Verifies: URL equivalence agrees with canonical storage for authority case.
+def test_canvas_urls_equivalent_ignores_authority_case():
+    assert canvas_urls_equivalent(
+        "HTTPS://Canvas.Example.edu/",
+        "https://canvas.example.edu",
+    )
 
 
 # Verifies: Resolve server canvas url maps local aliases.

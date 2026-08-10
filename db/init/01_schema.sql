@@ -686,4 +686,5 @@ INSERT INTO schema_migrations (filename) VALUES
     ('043_repair_canvas_course_names.sql'),
     ('044_canvas_connection_time_zone.sql'),
     ('045_unique_canvas_token_fingerprint.sql'),
-    ('046_scope_canvas_token_fingerprint_to_institution.sql');
+    ('046_scope_canvas_token_fingerprint_to_institution.sql'),
+    ('047_canonicalize_canvas_connection_urls.sql');

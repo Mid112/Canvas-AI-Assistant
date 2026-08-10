@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from canvas_test_utils import unique_canvas_token
+
 import uuid
 from unittest.mock import AsyncMock, patch
 
@@ -140,7 +142,7 @@ def test_resume_deferred_requires_canvas_credentials(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": "https://canvas.example.edu"},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": "https://canvas.example.edu"},
             headers=headers,
         )
 

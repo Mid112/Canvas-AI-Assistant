@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 """Backend HTTP coverage for previously untested endpoints.
 
 Fills the gaps tracked under Backend Testing & Validation (#698 / #699):
@@ -45,7 +47,7 @@ def _register_with_canvas(client) -> dict:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         resp = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-canvas-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
     assert resp.status_code == 200, resp.json()

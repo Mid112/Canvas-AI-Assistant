@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 import uuid
 import asyncio
 from datetime import UTC, datetime, timedelta
@@ -373,7 +375,7 @@ def test_validate_canvas_token(client):
     ):
         resp = client.post(
             "/api/v1/auth/me/canvas-token/validate",
-            json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
 
@@ -385,7 +387,7 @@ def test_validate_canvas_token(client):
 def test_validate_canvas_token_requires_auth(client):
     resp = client.post(
         "/api/v1/auth/me/canvas-token/validate",
-        json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+        json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
     )
     assert resp.status_code == 401
 
@@ -413,7 +415,7 @@ def test_validate_canvas_token_requires_canvas_url(client):
 
     resp = client.post(
         "/api/v1/auth/me/canvas-token/validate",
-        json={"canvas_token": "test-token"},
+        json={"canvas_token": unique_canvas_token()},
         headers=headers,
     )
 

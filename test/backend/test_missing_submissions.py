@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 import uuid
 import pytest
 from unittest.mock import AsyncMock, patch
@@ -71,7 +73,7 @@ def auth_headers(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-canvas-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
     return headers

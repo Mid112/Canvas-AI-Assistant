@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const python = path.join(rootDir, "app/backend/.venv/bin/python");
 const script = path.join(rootDir, "test/e2e/ensure_admin.py");
+const resetScript = path.join(rootDir, "test/e2e/reset_canvas_connections.py");
 
 /** Prefer a non-empty env value; otherwise use the e2e default. */
 function envOr(key: string, fallback: string): string {
@@ -28,6 +29,18 @@ function databaseUrl(): string {
 }
 
 export default async function globalSetup() {
+  execFileSync(python, [resetScript], {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      DATABASE_URL: databaseUrl(),
+      CANVAS_TOKEN_ENCRYPTION_KEY: envOr(
+        "CANVAS_TOKEN_ENCRYPTION_KEY",
+        "ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=",
+      ),
+    },
+  });
+
   execFileSync(python, [script], {
     stdio: "inherit",
     env: {
