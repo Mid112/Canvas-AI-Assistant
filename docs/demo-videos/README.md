@@ -9,6 +9,7 @@ Client and planning demo videos for the **Canvas Helper AI Assistant** (UBCO COS
 | --- | --- |
 | Design Document Client Video | [Watch on YouTube](https://www.youtube.com/watch?v=PmkCHgSYLnI) |
 | Project Planning | [Watch on YouTube](https://www.youtube.com/watch?v=_AsN9iKlOZ0) |
+| Final Demo | [Watch on YouTube](https://www.youtube.com/watch?v=zyQEU_i5e-0) |
 
 ### Design Document Client Video
 
@@ -17,3 +18,7 @@ Client and planning demo videos for the **Canvas Helper AI Assistant** (UBCO COS
 ### Project Planning
 
 [https://www.youtube.com/watch?v=_AsN9iKlOZ0](https://www.youtube.com/watch?v=_AsN9iKlOZ0)
+
+### Final Demo
+
+[https://www.youtube.com/watch?v=zyQEU_i5e-0](https://www.youtube.com/watch?v=zyQEU_i5e-0)
