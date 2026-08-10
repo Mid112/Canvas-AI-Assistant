@@ -16,6 +16,7 @@ Use this folder as the entry point for user guides, developer docs, deployment g
 | Repository structure | [repository-structure.md](./repository-structure.md) |
 | Final testing report | [`../testing report/Final_Testing_Report_Detailed.pdf`](../testing%20report/Final_Testing_Report_Detailed.pdf) |
 | Requirements traceability matrix | [Requirements_Traceability_Matrix.pdf](./Requirements_Traceability_Matrix.pdf) |
+| Demo videos | [`../demo-videos/README.md`](../demo-videos/README.md) |
 
 ## How to run the product
 
@@ -37,5 +38,6 @@ User guides include screenshot placeholders. Add images under [`user-guides/scre
 ## Related project docs
 
 - Design: [`../design/README.md`](../design/README.md)
+- Demo videos: [`../demo-videos/README.md`](../demo-videos/README.md)
 - Testing Event reports: [`../testing report/`](../testing%20report/), [`../testing event outcomes/`](../testing%20event%20outcomes/)
 - Full documentation index: [`../TOC.md`](../TOC.md)

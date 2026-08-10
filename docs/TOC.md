@@ -24,6 +24,7 @@ Start here: **[final/README.md](./final/README.md)**
 ### Final package extras
 - [Architecture](./final/architecture.md) · [API reference](./final/api-reference.md)
 - [Testing report (PDF)](./testing%20report/Final_Testing_Report_Detailed.pdf) · [Traceability matrix (PDF)](./final/Requirements_Traceability_Matrix.pdf)
+- [Demo videos](./demo-videos/README.md)
 
 ## Other docs
 
