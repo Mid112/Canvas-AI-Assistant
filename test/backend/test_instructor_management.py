@@ -516,10 +516,14 @@ class TestInstructorCanvasConnections:
 
     # Verifies: resetting a token validates against Canvas, then creates a connection.
     def test_admin_can_reset_canvas_token(self, client, admin_token, instructor_id):
+        # Unique per run: a token can be connected to only one account, so a
+        # literal here would be claimed by the first run and 409 on every
+        # run after that.
+        canvas_token = f"new-token-value-{uuid.uuid4()}"
         with patch("app.integrations.canvas.validate_token", new_callable=AsyncMock):
             resp = client.patch(
                 f"{BASE}/{instructor_id}/canvas-token",
-                json={"canvas_url": "https://canvas.example.edu", "canvas_token": "new-token-value"},
+                json={"canvas_url": "https://canvas.example.edu", "canvas_token": canvas_token},
                 headers=_auth(admin_token),
             )
         assert resp.status_code == 200
@@ -528,19 +532,25 @@ class TestInstructorCanvasConnections:
         assert connections[0]["canvas_url"] == "https://canvas.example.edu"
         assert connections[0]["last_sync_error"] is None
         # Raw token never round-trips into the response.
-        assert "new-token-value" not in resp.text
+        assert canvas_token not in resp.text
 
     # Verifies: resetting the same canvas_url again updates in place (no duplicate row).
     def test_reset_token_upserts_existing_connection(self, client, admin_token, instructor_id):
         with patch("app.integrations.canvas.validate_token", new_callable=AsyncMock):
             client.patch(
                 f"{BASE}/{instructor_id}/canvas-token",
-                json={"canvas_url": "https://canvas.example.edu", "canvas_token": "first-token"},
+                json={
+                    "canvas_url": "https://canvas.example.edu",
+                    "canvas_token": f"first-token-{uuid.uuid4()}",
+                },
                 headers=_auth(admin_token),
             )
             resp = client.patch(
                 f"{BASE}/{instructor_id}/canvas-token",
-                json={"canvas_url": "https://canvas.example.edu", "canvas_token": "second-token"},
+                json={
+                    "canvas_url": "https://canvas.example.edu",
+                    "canvas_token": f"second-token-{uuid.uuid4()}",
+                },
                 headers=_auth(admin_token),
             )
         assert resp.status_code == 200
@@ -551,12 +561,18 @@ class TestInstructorCanvasConnections:
         with patch("app.integrations.canvas.validate_token", new_callable=AsyncMock):
             client.patch(
                 f"{BASE}/{instructor_id}/canvas-token",
-                json={"canvas_url": "https://school-one.example.edu", "canvas_token": "token-1"},
+                json={
+                    "canvas_url": "https://school-one.example.edu",
+                    "canvas_token": f"token-1-{uuid.uuid4()}",
+                },
                 headers=_auth(admin_token),
             )
             resp = client.patch(
                 f"{BASE}/{instructor_id}/canvas-token",
-                json={"canvas_url": "https://school-two.example.edu", "canvas_token": "token-2"},
+                json={
+                    "canvas_url": "https://school-two.example.edu",
+                    "canvas_token": f"token-2-{uuid.uuid4()}",
+                },
                 headers=_auth(admin_token),
             )
         assert resp.status_code == 200
@@ -584,7 +600,10 @@ class TestInstructorCanvasConnections:
         with patch("app.integrations.canvas.validate_token", new_callable=AsyncMock):
             resp = client.patch(
                 f"{BASE}/{instructor_id}/canvas-token",
-                json={"canvas_url": "https://canvas.example.edu", "canvas_token": "fresh-token"},
+                json={
+                    "canvas_url": "https://canvas.example.edu",
+                    "canvas_token": f"fresh-token-{uuid.uuid4()}",
+                },
                 headers=_auth(admin_token),
             )
         assert resp.status_code == 200
@@ -639,7 +658,10 @@ class TestInstructorCanvasConnections:
         with patch("app.integrations.canvas.validate_token", new_callable=AsyncMock):
             client.patch(
                 f"{BASE}/{instructor_id}/canvas-token",
-                json={"canvas_url": "https://canvas.example.edu", "canvas_token": "token-value"},
+                json={
+                    "canvas_url": "https://canvas.example.edu",
+                    "canvas_token": f"token-value-{uuid.uuid4()}",
+                },
                 headers=_auth(admin_token),
             )
 

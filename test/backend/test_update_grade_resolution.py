@@ -26,7 +26,7 @@ def test_update_grade_action_accepts_numeric_grade():
     assert action.new_grade == "100"
 
 
-def test_grade_partial_plan_preserves_feedback_as_reason():
+def test_grade_partial_plan_preserves_feedback():
     action = UpdateGradeAction.model_validate(
         {
             "action": "update_grade",
@@ -40,7 +40,8 @@ def test_grade_partial_plan_preserves_feedback_as_reason():
 
     partial_plan = _grade_partial_plan(action, local_course_id=7, assignment_id=10)
 
-    assert partial_plan["reason"] == "Strong explanation of the solution."
+    assert partial_plan["feedback"] == "Strong explanation of the solution."
+    assert "reason" not in partial_plan
 
 
 def test_bulk_grade_update_builds_grades_tab_handoff():
@@ -58,7 +59,7 @@ def test_bulk_grade_update_builds_grades_tab_handoff():
             {"id": 2, "assignment_id": 10, "user_id": 102, "student_name": "Mn", "grade": "88"},
         ],
         new_grade="100",
-        reason="Curve applied",
+        feedback="Curve applied",
     )
 
     assert result["action"] == "respond"
@@ -70,7 +71,7 @@ def test_bulk_grade_update_builds_grades_tab_handoff():
         "student_ids": [101, 102],
         "student_count": 2,
         "new_grade": "100",
-        "reason": "Curve applied",
+        "feedback": "Curve applied",
     }
     assert result["message"] == (
         "I found Coin and Mn for COSC 777. Open the Grades tab to review the Canvas "
@@ -91,7 +92,7 @@ def test_grade_handoff_uses_assignment_name_and_single_student_name():
             {"id": 1, "assignment_id": 10, "user_id": 101, "student_name": "Coin"},
         ],
         new_grade="100",
-        reason=None,
+        feedback=None,
         assignment_name="Recursion Homework",
     )
 
@@ -111,7 +112,7 @@ def test_grade_handoff_falls_back_to_student_count_for_large_sets():
         assignment_id=10,
         submissions=submissions,
         new_grade="100",
-        reason=None,
+        feedback=None,
     )
 
     assert "5 students for COSC 777" in result["message"]
@@ -128,7 +129,7 @@ def test_grouped_grade_update_wrapper_uses_grades_tab_handoff():
             {"id": 1, "assignment_id": 10, "user_id": 101, "student_name": "Coin"},
         ],
         new_grade="100",
-        reason=None,
+        feedback=None,
     )
 
     assert result["action"] == "respond"
@@ -145,6 +146,8 @@ def test_grade_clarification_partial_plan_preserves_target_context():
             "assignment_reference": "ggg",
             "student_reference": "all astudent",
             "new_grade": "110",
+            # Deprecated spelling: still accepted at the LLM boundary and
+            # normalized to feedback, so an older prompt cannot drop the text.
             "reason": "Curve adjustment",
         }
     )
@@ -158,7 +161,7 @@ def test_grade_clarification_partial_plan_preserves_target_context():
         "assignment_reference": "ggg",
         "student_reference": "all astudent",
         "new_grade": "110",
-        "reason": "Curve adjustment",
+        "feedback": "Curve adjustment",
     }
 
 

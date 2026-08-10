@@ -115,6 +115,7 @@ async def test_migrations_028_through_034_are_applied(db_engine):
 
 
 @pytest.mark.asyncio
+@pytest.mark.requirement("FR11.4")
 async def test_concurrent_create_course_assignment_writes_canvas_once(
     db_engine, instructor_id
 ):
@@ -222,6 +223,7 @@ async def test_concurrent_create_course_assignment_writes_canvas_once(
 
 
 @pytest.mark.asyncio
+@pytest.mark.requirement("FR11.4")
 async def test_mcp_create_assignment_second_call_returns_cached(
     db_engine, instructor_id
 ):

@@ -196,3 +196,63 @@ def admin_credentials():
         loop.close()
 
     return {"email": email, "password": password}
+
+
+# ── Requirement traceability ─────────────────────────────────────────────
+# Records which UR/FR each @pytest.mark.requirement test demonstrates and
+# whether it passed, so the traceability report is generated from the tests
+# that actually ran rather than from a hand-maintained list that goes stale.
+# Writes nothing unless --requirements-json is passed.
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--requirements-json",
+        action="store",
+        default=None,
+        help="write requirement->test results to this path (see tools/requirements_report.py)",
+    )
+
+
+def pytest_configure(config):
+    config._requirement_results = {}
+
+
+def pytest_runtest_logreport(report):
+    # Only the call phase decides pass/fail; setup/teardown would double-count
+    # and would report a passing test as failed on a teardown error.
+    if report.when != "call":
+        return
+    config = getattr(report, "_config", None)
+    store = getattr(config, "_requirement_results", None) if config else None
+    if store is None:
+        return
+    for requirement_id in getattr(report, "_requirement_ids", ()):
+        store.setdefault(requirement_id, []).append(
+            {"test": report.nodeid, "outcome": report.outcome}
+        )
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    report = outcome.get_result()
+    # The marker lives on the item, not the report — carry it across, along
+    # with the config the logreport hook needs to find the store.
+    report._requirement_ids = [
+        mark.args[0]
+        for mark in item.iter_markers(name="requirement")
+        if mark.args
+    ]
+    report._config = item.config
+
+
+def pytest_sessionfinish(session, exitstatus):
+    path = session.config.getoption("--requirements-json")
+    if not path:
+        return
+    import json
+    from pathlib import Path
+
+    Path(path).write_text(
+        json.dumps(session.config._requirement_results, indent=2, sort_keys=True)
+    )

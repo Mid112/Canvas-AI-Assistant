@@ -3,7 +3,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, field_validator
 
 COURSE_CODE_HELP_TEXT = "Use a subject and number like COSC 499 or COSC499."
 COURSE_CODE_PATTERN = re.compile(r"^[A-Za-z]{1,12}(?:\s?\d{2,4}[A-Za-z]?)?$")
@@ -218,7 +218,14 @@ class GradeUpdateRequest(BaseModel):
     assignment_id: int
     user_id: int
     posted_grade: str = Field(default="", max_length=32)
-    reason: str | None = Field(default=None, max_length=500)
+    # Student-facing submission comment. `reason` was the old name for it and
+    # is still accepted so a cached frontend build keeps working against a
+    # deployed backend; nothing reads `.reason` past this boundary.
+    feedback: str | None = Field(
+        default=None,
+        max_length=500,
+        validation_alias=AliasChoices("feedback", "reason"),
+    )
     current_submission: dict | None = None
 
 

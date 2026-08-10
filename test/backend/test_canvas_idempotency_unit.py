@@ -23,6 +23,7 @@ def test_build_idempotency_key_is_stable():
     assert len(first) == 64
 
 
+@pytest.mark.requirement("FR11.4")
 def test_duplicate_in_flight_is_409():
     exc = duplicate_in_flight_http_exception()
     assert isinstance(exc, HTTPException)
@@ -30,6 +31,7 @@ def test_duplicate_in_flight_is_409():
 
 
 @pytest.mark.asyncio
+@pytest.mark.requirement("FR11.4")
 async def test_run_idempotent_skips_write_on_cache_hit():
     db = MagicMock()
     write = AsyncMock(return_value={"id": 99})
@@ -134,6 +136,7 @@ async def test_run_idempotent_releases_claim_when_write_fails():
 
 
 @pytest.mark.asyncio
+@pytest.mark.requirement("FR11.4")
 async def test_run_idempotent_loser_returns_winner_result():
     db = MagicMock()
     write = AsyncMock(return_value={"id": 1})
@@ -167,6 +170,7 @@ async def test_run_idempotent_loser_returns_winner_result():
 
 
 @pytest.mark.asyncio
+@pytest.mark.requirement("FR11.4")
 async def test_run_idempotent_loser_raises_409_while_pending():
     db = MagicMock()
     write = AsyncMock(return_value={"id": 1})

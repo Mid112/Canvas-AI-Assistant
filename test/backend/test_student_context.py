@@ -1,3 +1,5 @@
+import pytest
+
 from app.schemas.canvas import SubmissionResponse, SubmissionStatus
 from app.schemas.student import StudentResponse
 from app.services.llm.student_context import (
@@ -11,6 +13,7 @@ from app.services.llm.student_context import (
 )
 
 
+@pytest.mark.requirement("FR10.4")
 def test_llm_student_candidates_strip_identifiers():
     candidates = llm_student_candidates(
         [
@@ -29,6 +32,7 @@ def test_llm_student_candidates_strip_identifiers():
     assert "Alex Chen" in listing
 
 
+@pytest.mark.requirement("FR10.4")
 def test_llm_safe_submission_dict_strips_contact_fields():
     # Feature 14 (#908): tool results echoed to the LLM must not include
     # student email/login even when Canvas returned them on the submission.
@@ -54,6 +58,7 @@ def test_llm_safe_submission_dict_strips_contact_fields():
     assert "login_id" not in safe
 
 
+@pytest.mark.requirement("FR10.4")
 def test_llm_safe_student_dict_strips_login_id():
     student = StudentResponse(
         id=1,
@@ -88,6 +93,7 @@ def test_collect_grounded_ids_from_tool_payloads():
     assert grounded == {3, 10, 77}
 
 
+@pytest.mark.requirement("FR3.8")
 def test_strip_ungrounded_ids_redacts_unknown_numbers():
     text = strip_ungrounded_ids(
         "Assignment 10 for student 77 and mystery 99999.",
@@ -108,6 +114,7 @@ def test_filter_grounded_dict_fields():
     assert "student_id" not in filtered
 
 
+@pytest.mark.requirement("FR3.8")
 def test_strip_ungrounded_canvas_id_claims_keeps_years_and_points():
     from app.services.llm.student_context import strip_ungrounded_canvas_id_claims
 
@@ -122,6 +129,7 @@ def test_strip_ungrounded_canvas_id_claims_keeps_years_and_points():
     assert "999" not in text
 
 
+@pytest.mark.requirement("FR3.8")
 def test_strip_ungrounded_canvas_id_claims_keeps_assignment_titles():
     from app.services.llm.student_context import strip_ungrounded_canvas_id_claims
 

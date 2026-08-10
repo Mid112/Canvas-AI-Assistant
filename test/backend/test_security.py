@@ -1,3 +1,5 @@
+import pytest
+
 """
 Pure unit tests for app.core.security — no DB, no HTTP client.
 
@@ -121,6 +123,7 @@ def test_canvas_token_fingerprint_is_deterministic():
     assert fingerprint_canvas_token("canvas-token") == fingerprint_canvas_token("canvas-token")
 
 
+@pytest.mark.requirement("FR1.5")
 def test_canvas_token_fingerprint_does_not_equal_raw_token():
     assert fingerprint_canvas_token("canvas-token") != "canvas-token"
 

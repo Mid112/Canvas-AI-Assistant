@@ -92,7 +92,7 @@ export function instructorCourseGradesPrefillPath(
     assignmentId?: number | string;
     studentIds?: Array<number | string>;
     grade?: string;
-    reason?: string | null;
+    feedback?: string | null;
   },
 ) {
   // AI grade requests resolve real Canvas-backed ids server-side, then land
@@ -108,8 +108,8 @@ export function instructorCourseGradesPrefillPath(
   if (options?.grade) {
     params.set("grade", options.grade);
   }
-  if (options?.reason) {
-    params.set("reason", options.reason);
+  if (options?.feedback) {
+    params.set("feedback", options.feedback);
   }
 
   const query = params.toString();

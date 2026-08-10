@@ -79,12 +79,19 @@ def auth_headers(client):
     )
     token = response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
+    # A literal token would be claimed by whichever module registered first and
+    # stay claimed across runs: a Canvas token may belong to only one account,
+    # so every later caller gets 409, no connection, and a baffling 403 later.
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
-        client.patch(
+        connected = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-canvas-token", "canvas_url": CANVAS_URL},
+            json={
+                "canvas_token": f"test-canvas-token-{uuid.uuid4()}",
+                "canvas_url": CANVAS_URL,
+            },
             headers=headers,
         )
+    assert connected.status_code == 200, connected.text
     return headers
 
 

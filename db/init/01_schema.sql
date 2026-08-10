@@ -442,7 +442,8 @@ CREATE TABLE grade_history (
     previous_grade      VARCHAR,
     new_grade           VARCHAR NOT NULL,
     previous_score      DOUBLE PRECISION,
-    reason              TEXT,
+    -- Student-facing submission comment. Named `reason` until migration 046.
+    feedback            TEXT,
     risk_level          VARCHAR NOT NULL DEFAULT 'high',
     rollback_available  BOOLEAN NOT NULL DEFAULT TRUE,
     canvas_response     JSONB,

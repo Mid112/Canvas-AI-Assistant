@@ -165,7 +165,7 @@ describe("mapChatReply", () => {
             course_name: "COSC 777",
             assignment_reference: "leetcode",
             new_grade: "110",
-            reason: "Bonus adjustment",
+            feedback: "Bonus adjustment",
           },
         },
         false,
@@ -175,17 +175,17 @@ describe("mapChatReply", () => {
         { label: "Course", value: "COSC 777" },
         { label: "Assignment", value: "leetcode" },
         { label: "Proposed grade", value: "110" },
-        { label: "Reason", value: "Bonus adjustment" },
+        { label: "Feedback", value: "Bonus adjustment" },
       ],
       content:
-        'I have the COSC 777 course, the assignment "leetcode", a proposed grade of 110, and the reason "Bonus adjustment". Which assignment should I update?',
+        'I have the COSC 777 course, the assignment "leetcode", a proposed grade of 110, and the feedback provided. Which assignment should I update?',
       interpretedAction: {
         action: "Update Grade",
         course: "COSC 777",
         affectedStudents: "Course-wide",
         primaryLink: {
           label: "Open Grades tab",
-          href: "/instructor/courses/7/grades?grade=110&reason=Bonus+adjustment",
+          href: "/instructor/courses/7/grades?grade=110&feedback=Bonus+adjustment",
         },
       },
     });
@@ -203,7 +203,7 @@ describe("mapChatReply", () => {
             action: "update_grade",
             local_course_id: 7,
             student_reference: "Coin",
-            reason: "Please improve the explanation.",
+            feedback: "Please improve the explanation.",
           },
         },
         false,
@@ -211,10 +211,10 @@ describe("mapChatReply", () => {
     ).toEqual({
       acknowledgedFields: [
         { label: "Student", value: "Coin" },
-        { label: "Reason", value: "Please improve the explanation." },
+        { label: "Feedback", value: "Please improve the explanation." },
       ],
       content:
-        'I have the student "Coin" and the reason "Please improve the explanation." Do you want to add assignment feedback on a submission, or send a private message to the student?',
+        'I have the student "Coin" and the feedback provided. Do you want to add assignment feedback on a submission, or send a private message to the student?',
     });
   });
 
@@ -339,7 +339,7 @@ describe("mapChatReply", () => {
             student_ids: [42, 43],
             student_count: 2,
             new_grade: "110",
-            reason: "Bonus adjustment",
+            feedback: "Bonus adjustment",
           },
         },
         false,
@@ -352,7 +352,7 @@ describe("mapChatReply", () => {
         affectedStudents: "2 students",
         primaryLink: {
           label: "Open Grades tab",
-          href: "/instructor/courses/7/grades?assignmentId=10&studentIds=42%2C43&grade=110&reason=Bonus+adjustment",
+          href: "/instructor/courses/7/grades?assignmentId=10&studentIds=42%2C43&grade=110&feedback=Bonus+adjustment",
         },
       },
     });
@@ -377,7 +377,7 @@ describe("mapChatReply", () => {
     );
 
     expect(result.interpretedAction?.primaryLink?.href).toBe(
-      "/instructor/courses/7/grades?assignmentId=10&studentIds=42&grade=85&reason=Strong+work+on+the+explanation.",
+      "/instructor/courses/7/grades?assignmentId=10&studentIds=42&grade=85&feedback=Strong+work+on+the+explanation.",
     );
   });
 

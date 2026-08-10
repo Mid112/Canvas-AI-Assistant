@@ -50,7 +50,6 @@ const CLARIFICATION_FIELD_LABELS: Record<string, string> = {
   assignment_reference: "assignment",
   student_reference: "student",
   new_grade: "proposed grade",
-  reason: "reason",
   title: "assignment title",
   description: "description",
   due_date: "due date",
@@ -81,8 +80,6 @@ function formatAcknowledgedField(field: string, value: string): string {
       return `the student "${value}"`;
     case "new_grade":
       return `a proposed grade of ${value}`;
-    case "reason":
-      return `the reason "${value}"`;
     case "title":
       return `the title "${value}"`;
     case "description":
@@ -370,7 +367,7 @@ function buildGradeHandoffAction(
   }
 
   const studentIds = readNumberArray(handoff.student_ids);
-  const feedback = readString(handoff.reason) ?? readString(handoff.feedback);
+  const feedback = readString(handoff.feedback);
   return {
     action: "Update Grade",
     course: readString(handoff.course_name) ?? "Active course",
@@ -386,7 +383,7 @@ function buildGradeHandoffAction(
         assignmentId,
         studentIds,
         grade: readString(handoff.new_grade),
-        reason: feedback,
+        feedback,
       }),
     },
   };
@@ -420,8 +417,7 @@ function buildGradeClarifyHandoffAction(
   const studentIds =
     readNumberArray(partialPlan.student_ids) ??
     (studentId !== undefined ? [studentId] : undefined);
-  const feedback =
-    readString(partialPlan.reason) ?? readString(partialPlan.feedback);
+  const feedback = readString(partialPlan.feedback);
 
   return {
     action: "Update Grade",
@@ -435,7 +431,7 @@ function buildGradeClarifyHandoffAction(
         assignmentId: readNumber(partialPlan.assignment_id),
         studentIds,
         grade: readString(partialPlan.new_grade),
-        reason: feedback,
+        feedback,
       }),
     },
   };
@@ -1060,8 +1056,8 @@ function mapReplyBody(
         : [];
     const acknowledgedText = joinAcknowledgements(acknowledgedEntries);
     // Look through a trailing quote before deciding the sentence needs a
-    // period. Acknowledgements now quote their values, so a reason that ends
-    // in its own full stop arrives here as `the reason "...explanation."` --
+    // period. Acknowledgements now quote their values, so a value that ends
+    // in its own full stop arrives here as `the title "...explanation."` --
     // matching only /[.!?]$/ would see the quote, miss the stop, and produce
     // `explanation.".`
     const acknowledgement =

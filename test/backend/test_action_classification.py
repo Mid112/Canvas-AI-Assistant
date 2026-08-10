@@ -1,6 +1,18 @@
+import pytest
+
 from app.mcp_tools.schemas import ACTION_CLASSIFICATION, ACTION_SCHEMAS, is_reversible
 
-CONVERSATIONAL_ACTIONS = {"out_of_scope", "clarify", "intent_preview", "respond"}
+CONVERSATIONAL_ACTIONS = {
+    "out_of_scope",
+    "clarify",
+    "intent_preview",
+    "respond",
+    # A language-facing envelope, not a Canvas operation: normalize_semantic_intent
+    # rewrites it into one of the strict actions before anything is dispatched, so
+    # the action that gets classified is always the rewritten one. Classifying the
+    # envelope itself would invent a risk level for something that never executes.
+    "semantic_intent",
+}
 
 
 # Verifies: Read actions are read only.
@@ -16,6 +28,7 @@ def test_writes_are_modifying():
 
 
 # Verifies: Writes without undo paths are irreversible.
+@pytest.mark.requirement("FR7.6")
 def test_writes_without_undo_paths_are_irreversible():
     assert ACTION_CLASSIFICATION["send_message"] == "irreversible"
     assert ACTION_CLASSIFICATION["update_grade"] == "irreversible"
@@ -30,6 +43,7 @@ def test_conversational_actions_are_not_classified():
 
 
 # Verifies: Every real action schema is classified.
+@pytest.mark.requirement("FR7.6")
 def test_every_real_action_schema_is_classified():
     """Every action in ACTION_SCHEMAS other than the conversational ones
     must have a classification — update_grade is the one exception
@@ -41,6 +55,7 @@ def test_every_real_action_schema_is_classified():
 
 
 # Verifies: Is reversible matches classification.
+@pytest.mark.requirement("FR7.6")
 def test_is_reversible_matches_classification():
     assert is_reversible("fetch_courses") is True
     assert is_reversible("create_assignment") is True

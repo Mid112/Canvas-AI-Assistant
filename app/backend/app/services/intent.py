@@ -33,7 +33,7 @@ _FIELD_ALLOWLIST: dict[str, frozenset[str]] = {
     "update_assignment": frozenset(
         {"title", "description", "due_date", "points_possible"}
     ),
-    "update_grade": frozenset({"new_grade", "feedback", "reason"}),
+    "update_grade": frozenset({"new_grade", "feedback"}),
     "send_message": frozenset(
         {
             "subject",

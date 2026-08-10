@@ -156,7 +156,7 @@ export function InstructorCourseGradesPage() {
   const [submissions, setSubmissions] = useState<ApiSubmission[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [postedGrade, setPostedGrade] = useState("");
-  const [reason, setReason] = useState("");
+  const [feedback, setFeedback] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [studentFilter, setStudentFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<GradeStatusFilter>("all");
@@ -180,7 +180,7 @@ export function InstructorCourseGradesPage() {
       assignmentId: Number.isFinite(assignmentIdParam) ? assignmentIdParam : null,
       studentIds,
       grade: searchParams.get("grade") ?? "",
-      reason: searchParams.get("reason") ?? "",
+      feedback: searchParams.get("feedback") ?? "",
     };
   }, [searchParams]);
 
@@ -206,10 +206,10 @@ export function InstructorCourseGradesPage() {
           if (prefill.grade) {
             setPostedGrade(prefill.grade);
           }
-          // Reason is optional but included in the same prefill path so grade
-          // history and Canvas comments can share the instructor's rationale.
-          if (prefill.reason) {
-            setReason(prefill.reason);
+          // Feedback is optional but included in the same prefill path so
+          // grade history and the Canvas comment share the same text.
+          if (prefill.feedback) {
+            setFeedback(prefill.feedback);
           }
           setError(null);
         }
@@ -234,7 +234,7 @@ export function InstructorCourseGradesPage() {
     parsedLocalCourseId,
     prefill.assignmentId,
     prefill.grade,
-    prefill.reason,
+    prefill.feedback,
     user?.has_canvas_token,
   ]);
 
@@ -330,9 +330,9 @@ export function InstructorCourseGradesPage() {
   const numericPostedGrade = Number(postedGrade);
   const hasGradeChange = postedGrade.trim().length > 0;
   const gradeValidationError = getGradeValidationError(postedGrade);
-  const hasFeedback = reason.trim().length > 0;
+  const hasFeedback = feedback.trim().length > 0;
   const isFeedbackOnly = !hasGradeChange && hasFeedback;
-  const feedbackHasProfanity = containsProfanity(reason);
+  const feedbackHasProfanity = containsProfanity(feedback);
   const exceedsPointsPossible =
     hasGradeChange &&
     Number.isFinite(numericPostedGrade) &&
@@ -346,7 +346,7 @@ export function InstructorCourseGradesPage() {
           assignment_id: assignmentId,
           user_id: submission.user_id,
           posted_grade: postedGrade,
-          reason: reason || null,
+          feedback: feedback || null,
           // Reuse the row the page already fetched from Canvas so preview
           // can render the before/after diff without another submissions read.
           current_submission: {
@@ -355,7 +355,7 @@ export function InstructorCourseGradesPage() {
           },
         }))
         : [],
-    [assignmentId, postedGrade, reason, selectedAssignment?.points_possible, selectedSubmissions],
+    [assignmentId, postedGrade, feedback, selectedAssignment?.points_possible, selectedSubmissions],
   );
 
   const allDisplayedSelected =
@@ -467,7 +467,7 @@ export function InstructorCourseGradesPage() {
         // Avoid leaving feedback text behind after a grade write; otherwise the
         // panel can reclassify the empty grade draft as feedback-only.
         setPostedGrade("");
-        setReason("");
+        setFeedback("");
       }
       if (assignmentId) {
         const refreshedSubmissions = await fetchAssignmentSubmissions(
@@ -735,12 +735,12 @@ export function InstructorCourseGradesPage() {
               </div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="reason">Feedback</Label>
+              <Label htmlFor="feedback">Feedback</Label>
               <Textarea
-                id="reason"
-                value={reason}
+                id="feedback"
+                value={feedback}
                 onChange={(event) => {
-                  setReason(event.target.value);
+                  setFeedback(event.target.value);
                   setPreviews([]);
                   setError(null);
                 }}

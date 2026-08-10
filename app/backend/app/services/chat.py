@@ -1995,7 +1995,7 @@ async def _resolve_grade_target(
             assignment_id,
             submissions,
             action.new_grade,
-            action.reason or action.feedback,
+            action.feedback,
             assignment_name=assignment_name,
         )
 
@@ -2036,7 +2036,7 @@ async def _resolve_grade_target(
         assignment_id,
         [selected],
         action.new_grade,
-        action.reason or action.feedback,
+        action.feedback,
         assignment_name=assignment_name,
     )
 
@@ -2068,7 +2068,7 @@ def _build_grade_handoff_result(
     assignment_id: int,
     submissions: list[dict],
     new_grade: str,
-    reason: str | None,
+    feedback: str | None,
     *,
     assignment_name: str | None = None,
 ) -> dict:
@@ -2098,7 +2098,7 @@ def _build_grade_handoff_result(
                 "assignment_id": assignment_id,
                 "student_reference": "all students",
                 "new_grade": new_grade,
-                "reason": reason,
+                "feedback": feedback,
             },
         }
 
@@ -2129,7 +2129,7 @@ def _build_grade_handoff_result(
             "student_ids": student_ids,
             "student_count": student_count,
             "new_grade": new_grade,
-            "reason": reason,
+            "feedback": feedback,
         },
     }
 
@@ -2139,12 +2139,12 @@ def _build_grouped_grade_update_result(
     assignment_id: int,
     submissions: list[dict],
     new_grade: str,
-    reason: str | None,
+    feedback: str | None,
 ) -> dict:
     # Compatibility wrapper for older tests/imports. Bulk grade updates now use
     # the same handoff shape as single-student updates.
     return _build_grade_handoff_result(
-        course, assignment_id, submissions, new_grade, reason
+        course, assignment_id, submissions, new_grade, feedback
     )
 
 
@@ -2158,7 +2158,7 @@ def _grade_partial_plan(action: Any, local_course_id: int, assignment_id: int | 
         "student_id": getattr(action, "student_id", None),
         "student_reference": getattr(action, "student_reference", None),
         "new_grade": getattr(action, "new_grade", None),
-        "reason": getattr(action, "reason", None) or getattr(action, "feedback", None),
+        "feedback": getattr(action, "feedback", None),
     }
     return {key: value for key, value in plan.items() if value is not None}
 
@@ -3692,7 +3692,7 @@ preserved automatically.
 RESOLVING A STUDENT AND ASSIGNMENT FOR update_grade:
 update_grade handles both grade changes and assignment-specific submission
 feedback. A feedback-only request such as "leave feedback on ggg for Coin:
-work changes" should use update_grade with the feedback in reason and an
+work changes" should use update_grade with the text in the feedback field
 empty new_grade; do not use send_message for feedback tied to a specific
 assignment/submission. Treat words like feedback, submission comment,
 rubric note, or comment on assignment as gradebook feedback when an

@@ -43,7 +43,7 @@ _FIELD_MEMORY_KEYS = frozenset(
 #     the user explicitly provided
 #
 # Exclude ALL student-related fields (student_id, student_reference) and
-# grade-related fields (new_grade, feedback, reason) because a clarify
+# grade-related fields (new_grade, feedback) because a clarify
 # means those values were NOT confirmed — they either failed resolution
 # or were never provided. Also exclude assignment_id (raw Canvas ID,
 # may be hallucinated).

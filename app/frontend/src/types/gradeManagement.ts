@@ -4,7 +4,8 @@ export interface GradeUpdatePayload {
   assignment_id: number;
   user_id: number;
   posted_grade: string;
-  reason?: string | null;
+  /** Student-facing submission comment (named `reason` before #1300 cleanup). */
+  feedback?: string | null;
   current_submission?: ApiSubmission & { assignment_points_possible?: number | null };
 }
 
@@ -25,7 +26,7 @@ export interface GradePreview {
   };
   proposed: {
     posted_grade: string;
-    reason: string | null;
+    feedback: string | null;
     warnings?: string[];
   };
   affected_resources: Array<{

@@ -100,7 +100,7 @@ describe("InstructorCourseGradesPage", () => {
       },
       proposed: {
         posted_grade: "110",
-        reason: null,
+        feedback: null,
         warnings: ["This grade is above the assignment's 100 possible points; submit only if this is intentional bonus or adjusted grading."],
       },
       affected_resources: [],
@@ -302,7 +302,7 @@ describe("InstructorCourseGradesPage", () => {
         student_name: "Coin",
         student_canvas_id: 42,
       },
-      proposed: { posted_grade: "110", reason: null },
+      proposed: { posted_grade: "110", feedback: null },
       affected_resources: [],
       submitted: true,
       history_id: 12,
@@ -392,7 +392,7 @@ describe("InstructorCourseGradesPage", () => {
         student_name: `Student ${payload.user_id}`,
         student_canvas_id: payload.user_id,
       },
-      proposed: { posted_grade: "95", reason: null, warnings: [] },
+      proposed: { posted_grade: "95", feedback: null, warnings: [] },
       affected_resources: [],
     }));
     let resolveFirstSubmit!: (value: GradeUpdateResult) => void;
@@ -414,7 +414,7 @@ describe("InstructorCourseGradesPage", () => {
         student_name: "Coin",
         student_canvas_id: 42,
       },
-      proposed: { posted_grade: "95", reason: null },
+      proposed: { posted_grade: "95", feedback: null },
       affected_resources: [],
       submitted: true,
       history_id: 12,
@@ -485,7 +485,7 @@ describe("InstructorCourseGradesPage", () => {
       },
       proposed: {
         posted_grade: "",
-        reason: "Work changes. You can do it.",
+        feedback: "Work changes. You can do it.",
       },
       affected_resources: [],
     });
@@ -506,7 +506,7 @@ describe("InstructorCourseGradesPage", () => {
       },
       proposed: {
         posted_grade: "",
-        reason: "Work changes. You can do it.",
+        feedback: "Work changes. You can do it.",
       },
       affected_resources: [],
       submitted: true,
@@ -545,7 +545,7 @@ describe("InstructorCourseGradesPage", () => {
       7,
       expect.objectContaining({
         posted_grade: "",
-        reason: "Work changes. You can do it.",
+        feedback: "Work changes. You can do it.",
       }),
       "access-token",
       "https://canvas.test",

@@ -1000,7 +1000,7 @@ async def execute_tool(
                     log_detail=f"Unresolved update_grade action reached dispatcher: {action.model_dump()}",
                 )
             new_grade = (getattr(action, "new_grade", None) or "").strip()
-            feedback = getattr(action, "feedback", None) or getattr(action, "reason", None)
+            feedback = getattr(action, "feedback", None)
             if feedback and str(feedback).strip():
                 # Shared student-communication blocklist (#1300) — cover chat/MCP
                 # grade updates, not only the feedback wizard / grades UI.
@@ -1082,7 +1082,7 @@ async def execute_tool(
                     assignment_id=assignment_id,
                     user_id=student_id,
                     posted_grade=new_grade,
-                    reason=feedback,
+                    feedback=feedback,
                 ),
                 user,
                 course.canvas_url,
