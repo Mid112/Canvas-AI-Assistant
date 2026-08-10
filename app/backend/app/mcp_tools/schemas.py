@@ -1,4 +1,5 @@
 # app/backend/app/mcp_tools/schemas.py
+from collections.abc import Iterable
 from typing import Any, Literal
 
 from pydantic import AliasChoices, BaseModel, Field, field_validator
@@ -7,6 +8,56 @@ from pydantic import AliasChoices, BaseModel, Field, field_validator
 def _normalize_due_date_str(value: str) -> str:
     """Strip whitespace; instructor-timezone normalization happens at execution."""
     return value.strip()
+
+
+SubmissionStatusFilter = Literal["missing", "late"]
+
+# Canonical order, so the same request always produces the same handle kind
+# and the same wording regardless of the order the model emitted the
+# categories in ("late,missing" and "missing,late" are one query).
+_STATUS_ORDER: tuple[SubmissionStatusFilter, ...] = ("missing", "late")
+
+
+def normalize_status_filters(
+    value: SubmissionStatusFilter | Iterable[SubmissionStatusFilter] | None,
+) -> tuple[SubmissionStatusFilter, ...]:
+    """One or more status categories, deduped and in canonical order.
+
+    Normalized here at the trust boundary rather than at each use, so no call
+    site can be the one that forgets and produces a differently-ordered slug.
+    Accepts the bare string every existing prompt and caller still emits, so
+    single-status behaviour is unchanged. An empty or unrecognized request
+    falls back to "missing" rather than matching nothing — the schema's
+    long-standing default.
+    """
+    if value is None:
+        return ("missing",)
+    requested = {value} if isinstance(value, str) else set(value)
+    ordered = tuple(status for status in _STATUS_ORDER if status in requested)
+    return ordered or ("missing",)
+
+
+# The unit a score range is read in. Both spellings the model plausibly
+# emits ("percent", "pts", "marks") collapse to one of two values here, at
+# the trust boundary, so no downstream comparison has to know the synonyms.
+# Anything unrecognized is passed through untouched for the Literal to
+# reject — quietly mapping an unknown word to a default would turn a
+# malformed request into a confidently wrong set of students.
+_BASIS_SYNONYMS = {
+    "percent": "percentage", "percentage": "percentage", "%": "percentage",
+    "pct": "percentage", "percent_based": "percentage",
+    "point": "points", "points": "points", "pts": "points", "pt": "points",
+    "mark": "points", "marks": "points", "raw": "points", "points_based": "points",
+}
+
+
+def normalize_score_basis(value: object) -> object:
+    if not isinstance(value, str):
+        return value
+    cleaned = value.strip().lower()
+    if not cleaned:
+        return None
+    return _BASIS_SYNONYMS.get(cleaned, cleaned)
 
 
 class FetchCoursesAction(BaseModel):
@@ -57,7 +108,53 @@ class ResolveMissingSubmissionsAction(BaseModel):
     # separate, mutually exclusive category from "missing". See
     # compute_submissions_by_status in services/resolved_set.py for the
     # exact definitions.
-    status: Literal["missing", "late"] = "missing"
+    #
+    # Pass BOTH (["missing", "late"]) when the instructor asks about both at
+    # once — they resolve to the union, and the reply says the group is a
+    # combination. Emitting a single category for a request that named two
+    # silently drops half the students, which is why a list is accepted.
+    status: tuple[SubmissionStatusFilter, ...] = ("missing",)
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _normalize_status(cls, value):
+        return normalize_status_filters(value)
+
+
+class ResolveScoreRangeAction(BaseModel):
+    """Students whose score on one assignment falls in a band.
+
+    Separate from ResolveMissingSubmissionsAction rather than another
+    `status` category: that action's categories are about whether work
+    arrived, this one is about how it was graded, and the two need different
+    inputs (a band, and a decision about what the band's units are).
+    """
+
+    action: Literal["resolve_score_range"] = "resolve_score_range"
+    local_course_id: int
+    # Same convention as the other resolvers: only pass assignment_id when
+    # it's already a real Canvas ID from earlier in this conversation,
+    # otherwise describe the assignment and let the app resolve it.
+    assignment_id: int | None = None
+    assignment_reference: str | None = None
+    # The band, inclusive at both ends. Copy the instructor's numbers as
+    # they said them — do NOT convert between percent and points, that
+    # decision is made server-side where points_possible is known (see
+    # services/score_range.py). Order is normalized, so 90/70 is fine.
+    min_score: float
+    max_score: float
+    # Set ONLY when the instructor named the unit outright ("70 percent",
+    # "70 points", "70 marks"). Leave it null when they just said "between
+    # 70 and 90" — the app then compares what each reading would select and
+    # either resolves it or asks. Guessing here defeats that entirely: on an
+    # assignment out of 200, the two readings pick opposite groups of
+    # students.
+    basis: Literal["percentage", "points"] | None = None
+
+    @field_validator("basis", mode="before")
+    @classmethod
+    def _normalize_basis(cls, value):
+        return normalize_score_basis(value)
 
 
 class AnalyzeCourseSubmissionsAction(BaseModel):
@@ -72,10 +169,15 @@ class AnalyzeCourseSubmissionsAction(BaseModel):
 
     action: Literal["analyze_course_submissions"] = "analyze_course_submissions"
     local_course_id: int
-    # Same mutually-exclusive categories as resolve_missing_submissions —
-    # see compute_submissions_by_status in services/resolved_set.py for
-    # exactly what each one means.
-    status: Literal["missing", "late"] = "missing"
+    # Same categories as resolve_missing_submissions — see
+    # compute_submissions_by_status in services/resolved_set.py for exactly
+    # what each one means, and pass both to get their union.
+    status: tuple[SubmissionStatusFilter, ...] = ("missing",)
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _normalize_status(cls, value):
+        return normalize_status_filters(value)
 
 
 class FindAssignmentsBySubmissionStatusAction(BaseModel):
@@ -341,6 +443,7 @@ class SemanticIntentAction(BaseModel):
         "read_quizzes",
         "analyze_submissions",
         "find_missing_submissions",
+        "find_score_range",
         "find_assignments_by_submission_status",
         "find_assignment_by_rate",
         "create_assignment",
@@ -356,7 +459,17 @@ class SemanticIntentAction(BaseModel):
     assignment_reference: str | None = None
     student_reference: str | None = None
     delivery_mode: Literal["announcement", "private_message"] | None = None
-    status: Literal["missing", "late"] | None = None
+    # Accepts a list ("missing and late") as well as a single category — this
+    # is the path the prompt actually steers the model down, so it has to be
+    # able to express the union or the combined request dies here instead of
+    # reaching resolve_missing_submissions. None stays None (meaning "not
+    # specified"), distinct from an explicit ["missing"].
+    status: tuple[SubmissionStatusFilter, ...] | None = None
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _normalize_status(cls, value):
+        return None if value is None else normalize_status_filters(value)
     submission_status: Literal[
         "any_submissions",
         "no_submissions",
@@ -365,6 +478,17 @@ class SemanticIntentAction(BaseModel):
     ] | None = None
     comparator: Literal["below", "above"] | None = None
     threshold_percent: float | None = None
+    # Score band for find_score_range. Copy the instructor's numbers
+    # verbatim and leave `basis` null unless they named the unit — see
+    # ResolveScoreRangeAction for why converting here would be wrong.
+    min_score: float | None = None
+    max_score: float | None = None
+    basis: Literal["percentage", "points"] | None = None
+
+    @field_validator("basis", mode="before")
+    @classmethod
+    def _normalize_basis(cls, value):
+        return normalize_score_basis(value)
     # Natural-language extraction only. Values are copied selectively by the
     # mapper; raw IDs and unknown keys are never trusted downstream.
     fields: dict[str, Any] = Field(default_factory=dict)
@@ -385,6 +509,7 @@ ACTION_SCHEMAS: dict[str, type[BaseModel]] = {
     "fetch_students": FetchStudentsAction,
     "fetch_quizzes": FetchQuizzesAction,
     "resolve_missing_submissions": ResolveMissingSubmissionsAction,
+    "resolve_score_range": ResolveScoreRangeAction,
     "analyze_course_submissions": AnalyzeCourseSubmissionsAction,
     "find_assignments_by_submission_status": FindAssignmentsBySubmissionStatusAction,
     "find_assignment_by_submission_rate": FindAssignmentBySubmissionRateAction,
@@ -420,6 +545,7 @@ ACTION_CLASSIFICATION: dict[str, ActionClassification] = {
     "fetch_students": "read_only",
     "fetch_quizzes": "read_only",
     "resolve_missing_submissions": "read_only",
+    "resolve_score_range": "read_only",
     "analyze_course_submissions": "read_only",
     "find_assignments_by_submission_status": "read_only",
     "find_assignment_by_submission_rate": "read_only",

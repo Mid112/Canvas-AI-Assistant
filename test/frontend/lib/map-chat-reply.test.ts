@@ -977,6 +977,136 @@ describe("mapChatReply", () => {
     );
   });
 
+  // A combined missing+late request arrives as the single slug "missing_late".
+  // Rendering it as plain "missing" would present a joint group as one
+  // category — the same silent half-answer the backend union exists to stop.
+  it("renders a missing+late union as a combined group, not as missing", () => {
+    const result = mapChatReply(
+      {
+        action: "resolve_missing_submissions",
+        status: "missing_late",
+        statuses: ["missing", "late"],
+        status_counts: { missing: 2, late: 1 },
+        count: 3,
+        sample: ["Alice", "Bob", "Cy"],
+        local_course_id: 12,
+        course_name: "CPSC 310",
+        assignment_id: 222,
+        assignment_name: "Assignment 4",
+        due_at: null,
+        summary: "3 active student(s) in CPSC 310 — 2 missing and 1 late.",
+      },
+      false,
+    );
+
+    expect(result.content).toContain("3 students missing or submitted late:");
+    expect(result.content).toContain("2 missing and 1 late");
+    expect(result.content).toContain("one combined group");
+    expect(result.interpretedAction?.action).toBe("Missing or late submissions");
+    // No single-category deep link exists for a union, so the analytics link
+    // degrades to the unfiltered course view rather than picking a side.
+    expect(result.interpretedAction?.primaryLink?.href).not.toContain("status=");
+  });
+
+  it("keeps a zero side visible in a union breakdown", () => {
+    const result = mapChatReply(
+      {
+        action: "resolve_missing_submissions",
+        status: "missing_late",
+        statuses: ["missing", "late"],
+        status_counts: { missing: 4, late: 0 },
+        count: 4,
+        sample: ["Alice"],
+        local_course_id: 12,
+        course_name: "CPSC 310",
+        assignment_id: 222,
+        assignment_name: "Assignment 4",
+        due_at: null,
+      },
+      false,
+    );
+
+    expect(result.content).toContain("4 missing and 0 late");
+  });
+
+  it("renders a score range with the interpretation it used", () => {
+    const result = mapChatReply(
+      {
+        action: "resolve_score_range",
+        count: 2,
+        sample: ["Alice", "Bob"],
+        local_course_id: 12,
+        course_name: "CPSC 310",
+        assignment_id: 222,
+        assignment_name: "Midterm",
+        min_score: 70,
+        max_score: 90,
+        points_possible: 50,
+        basis: "percentage",
+        basis_reason: "range_exceeds_points_possible",
+        basis_explanation:
+          "Read as 70-90 percent — the assignment is out of 50 points, so 70-90 points isn't a possible score.",
+        range_label: "70-90 percent",
+      },
+      false,
+    );
+
+    expect(result.content).toContain("2 students scored 70-90 percent");
+    expect(result.content).toContain("- Alice");
+    // The auto-picked basis has to reach the instructor, or a wrong pick is
+    // uncorrectable before the follow-up message goes out.
+    expect(result.content).toContain("out of 50 points");
+  });
+
+  it("states the interpretation even when the range matched nobody", () => {
+    const result = mapChatReply(
+      {
+        action: "resolve_score_range",
+        count: 0,
+        sample: [],
+        local_course_id: 12,
+        course_name: "CPSC 310",
+        assignment_id: 222,
+        assignment_name: "Midterm",
+        basis: "points",
+        basis_reason: "no_points_possible",
+        basis_explanation:
+          "Read as 70-90 points — this assignment has no points value, so a percentage can't be computed.",
+        range_label: "70-90 points",
+      },
+      false,
+    );
+
+    expect(result.content).toContain("No active students scored 70-90 points");
+    // Without this, "nobody matched" is indistinguishable from having
+    // silently banded against the wrong unit.
+    expect(result.content).toContain("no points value");
+  });
+
+  it("does not attach a submission-status filter to a score-range link", () => {
+    const result = mapChatReply(
+      {
+        action: "resolve_score_range",
+        count: 3,
+        sample: ["Alice"],
+        local_course_id: 12,
+        course_name: "CPSC 310",
+        assignment_id: 222,
+        assignment_name: "Midterm",
+        basis: "points",
+        range_label: "70-90 points",
+      },
+      false,
+    );
+
+    // A score band is orthogonal to submission status; a status filter here
+    // would present a different group than the one that was resolved.
+    expect(result.interpretedAction?.primaryLink?.href).not.toContain("status=");
+    expect(result.interpretedAction?.primaryLink?.href).toContain(
+      "assignmentId=222",
+    );
+  });
+
   it("omits the due line when due_at and due_date are null", () => {
     const result = mapChatReply(
       {

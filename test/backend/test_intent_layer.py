@@ -56,7 +56,9 @@ def test_semantic_missing_submissions_preserves_natural_reference_and_status():
 
     assert normalized["action"] == "resolve_missing_submissions"
     assert normalized["assignment_reference"] == "the midterm essay"
-    assert normalized["status"] == "late"
+    # Carried as a list since a request may name both categories; a single
+    # category is a one-element list, not a bare string.
+    assert normalized["status"] == ["late"]
 
 
 # Verifies the unscoped late request is not silently answered as a missing one.
@@ -99,9 +101,29 @@ def test_semantic_analyze_submissions_carries_the_late_category():
     normalized = normalize_semantic_intent(intent, local_course_id=22)
 
     assert normalized["action"] == "analyze_course_submissions"
-    assert normalized["status"] == "late"
+    assert normalized["status"] == ["late"]
     parsed = parse_action(json.dumps(normalized))
-    assert parsed.status == "late"
+    assert parsed.status == ("late",)
+
+
+# The union is the whole point of accepting a list: an instructor asking about
+# missing AND late used to get one category silently, with no signal that half
+# the students had been dropped.
+@pytest.mark.requirement("FR2.8")
+def test_semantic_intent_carries_both_categories_as_a_union():
+    intent = SemanticIntentAction(
+        intent="find_missing_submissions",
+        assignment_reference="the midterm essay",
+        status=["late", "missing"],
+    )
+
+    normalized = normalize_semantic_intent(intent, local_course_id=22)
+
+    assert normalized["action"] == "resolve_missing_submissions"
+    # Canonical order, not the order the model happened to emit.
+    assert normalized["status"] == ["missing", "late"]
+    parsed = parse_action(json.dumps(normalized))
+    assert parsed.status == ("missing", "late")
 
 
 def test_semantic_submission_status_maps_to_explicit_assignment_filter():

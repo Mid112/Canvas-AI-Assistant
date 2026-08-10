@@ -260,7 +260,12 @@ def test_modify_snapshots_previous_proposed_action(client):
     assert reply["pending_message_id"] == pending_message_id
     assert reply["proposed_action"]["points_possible"] == 50
     assert reply["previous_proposed_action"]["points_possible"] == 100
-    assert reply["previous_summary"] == "Create Midterm Exam"
+    # The snapshot carries the summary the user actually saw, which is the
+    # server-generated one (generate_write_preview), not the model's terser
+    # "summary" field — asserting the model's raw string here would pin the
+    # preview back to text that is no longer shown to anyone.
+    assert "Midterm Exam" in reply["previous_summary"]
+    assert "100 points" in reply["previous_summary"]
 
     # A second modify round only remembers one step back — the very first
     # version (100 points) is gone, replaced by the second (50 points).
@@ -333,7 +338,13 @@ def test_incomplete_create_assignment_is_clarified_not_previewed(client):
     system prompt instruction the model might not follow.
 
     Ticket 16 / #1440: when description and points are both missing,
-    the clarify question must list both so the user can answer once."""
+    the clarify question must list both so the user can answer once.
+
+    "Missing" for points means the model never addressed points at all —
+    i.e. the key is absent. Ticket 21 later gave an explicit null its own
+    meaning ("ungraded", and complete), so this case omits the key rather
+    than sending null; test_explicit_null_points_is_treated_as_ungraded
+    covers the other side."""
     headers, local_course_id = _register_with_canvas(client)
 
     mock_adapter = AsyncMock()
@@ -341,7 +352,7 @@ def test_incomplete_create_assignment_is_clarified_not_previewed(client):
         '{"action": "intent_preview", "summary": "Create test4 due November 20th.", '
         '"proposed_action": {"action": "create_assignment", '
         f'"local_course_id": {local_course_id}, "title": "test4", '
-        '"description": "", "due_date": "2030-11-20", "points_possible": null}}'
+        '"description": "", "due_date": "2030-11-20"}}'
     )
     with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
         response = client.post(
@@ -361,6 +372,37 @@ def test_incomplete_create_assignment_is_clarified_not_previewed(client):
     assert "description" not in reply["partial_plan"]
     assert "points_possible" not in reply["partial_plan"]
     assert "intent_preview" not in reply
+
+
+def test_explicit_null_points_is_treated_as_ungraded_not_missing(client):
+    """Ticket 21: an explicit null points_possible means "ungraded", which is
+    a complete answer — not an unanswered field.
+
+    The distinction is the whole point of the rule: re-asking here would
+    train the model to invent a point value (the "default to 10" failure
+    Ticket 21 exists to prevent), and it is the only thing separating
+    "ungraded" from "hasn't said yet"."""
+    headers, local_course_id = _register_with_canvas(client)
+
+    mock_adapter = AsyncMock()
+    mock_adapter.generate.return_value = (
+        '{"action": "intent_preview", "summary": "Create Reading Log", '
+        '"proposed_action": {"action": "create_assignment", '
+        f'"local_course_id": {local_course_id}, "title": "Reading Log", '
+        '"description": "Weekly reading reflections", '
+        '"due_date": "2030-11-20T23:59:00", "points_possible": null}}'
+    )
+    with patch("app.services.chat.get_llm_adapter", return_value=mock_adapter):
+        response = client.post(
+            "/api/v1/chat/",
+            json={"message": 'create an ungraded assignment called "Reading Log"'},
+            headers=headers,
+        )
+
+    assert response.status_code == 200
+    reply = response.json()["reply"]
+    assert reply["action"] == "intent_preview", reply
+    assert reply["proposed_action"]["points_possible"] is None
 
 
 # Verifies: Create assignment with past due date is clarified not previewed.

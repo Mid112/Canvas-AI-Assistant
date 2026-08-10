@@ -3,7 +3,7 @@ import asyncio
 import json
 import logging
 import re
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import Any, TypeVar, cast
@@ -35,6 +35,7 @@ from app.mcp_tools.schemas import (
     IntentPreviewAction,
     RecipientDirective,
     ResolveMissingSubmissionsAction,
+    ResolveScoreRangeAction,
     SemanticIntentAction,
 )
 from app.models.assignment import Assignment
@@ -106,9 +107,17 @@ from app.services.llm.student_context import (
 from app.services.quiz_validation import validate_quiz_for_create
 from app.services.resolved_set import (
     active_roster_names,
-    compute_submissions_by_status,
+    compute_submissions_by_score_range,
+    compute_submissions_by_status_breakdown,
     create_resolved_set,
     materialize_resolved_set,
+    status_label,
+    status_slug,
+)
+from app.services.score_range import (
+    describe_basis,
+    detect_explicit_basis,
+    format_range,
 )
 from app.services.student import get_submission_derived_students
 from app.services.write_preview import generate_write_preview
@@ -339,6 +348,7 @@ MAX_TURN_STEPS = 15
 _CHAINABLE_READ_ACTIONS = frozenset(
     {
         "resolve_missing_submissions",
+        "resolve_score_range",
         "find_assignment_by_submission_rate",
         "find_assignments_by_submission_status",
     }
@@ -1838,9 +1848,11 @@ async def _run_resolve_missing_submissions_chain(
     {count, sample, handle} summary is returned; the handle is later
     materialized by _run_send_message_chain when a send_message turn sets
     recipient_handle, scoped to this conversation
-    (see materialize_resolved_set). action.status picks which category
-    (see compute_submissions_by_status) — "missing" and "late" are
-    mutually exclusive, so this always resolves exactly one at a time."""
+    (see materialize_resolved_set). action.status picks which categories
+    (see compute_submissions_by_status); "missing" and "late" are mutually
+    exclusive, but both can be requested at once and resolve to their union,
+    with the summary naming the split so a combined group never reads as a
+    single category."""
     resolved = await _resolve_course_and_assignment(
         db, user, conversation, user_msg,
         action.local_course_id, action.assignment_id, action.assignment_reference, user_message,
@@ -1864,16 +1876,27 @@ async def _run_resolve_missing_submissions_chain(
     )
     due_at = assignment_row.due_date if assignment_row else None
 
-    print(f"Checking {course.name} for {action.status} submissions")
-    matched = await _run_tracked_read(
+    statuses = action.status
+    slug = status_slug(statuses)
+    query = {
+        "local_course_id": course.id,
+        "assignment_id": assignment_id,
+        "status": slug,
+        "statuses": list(statuses),
+    }
+
+    print(f"Checking {course.name} for {status_label(statuses)} submissions")
+    matched, status_counts = await _run_tracked_read(
         db, user, conversation, user_msg.id, "resolve_missing_submissions",
-        {"local_course_id": course.id, "assignment_id": assignment_id, "status": action.status},
-        compute_submissions_by_status(course, assignment_id, user, db, action.status),
+        query,
+        compute_submissions_by_status_breakdown(
+            course, assignment_id, user, db, statuses
+        ),
     )
 
     resolved_set = await create_resolved_set(
-        db, conversation, kind=f"{action.status}_submissions",
-        query={"local_course_id": course.id, "assignment_id": assignment_id, "status": action.status},
+        db, conversation, kind=f"{slug}_submissions",
+        query=query,
         recipients=matched,
     )
 
@@ -1882,19 +1905,213 @@ async def _run_resolve_missing_submissions_chain(
         course_name=course.name,
         assignment_name=assignment_name,
         due_at=due_at,
-        status=action.status,
+        statuses=statuses,
+        status_counts=status_counts,
         matched_count=len(matched),
         sample=sample,
     )
 
     return {
         "action": "resolve_missing_submissions",
-        "status": action.status,
+        # Kept a single string: the frontend reads this with a string reader
+        # (map-chat-reply.ts), which would silently fall back to "missing" on
+        # a list and mislabel a union as a missing-only result.
+        "status": slug,
+        "statuses": list(statuses),
+        "status_counts": {status: status_counts[status] for status in statuses},
         "local_course_id": course.id,
         "course_name": course.name,
         "assignment_id": assignment_id,
         "assignment_name": assignment_name,
         "due_at": due_at.isoformat() if due_at else None,
+        "count": len(matched),
+        "sample": sample,
+        "handle": resolved_set.handle,
+        "summary": summary,
+    }
+
+
+def _basis_clarify_question(
+    course_name: str,
+    assignment_name: str,
+    low: float,
+    high: float,
+    percentage_matched: list[dict],
+    points_matched: list[dict],
+) -> str:
+    """The ambiguous-range question, showing what each reading would select.
+
+    Both counts AND names, because counts alone are exactly the information
+    that makes the two readings look interchangeable — "4 or 3?" invites a
+    coin flip, while seeing two disjoint name lists makes it obvious that
+    only one of them is the group the instructor had in mind.
+    """
+
+    def _side(label: str, rows: list[dict]) -> str:
+        names = ", ".join(row["name"] for row in rows[:_RESOLVED_SET_SAMPLE_SIZE])
+        more = len(rows) - _RESOLVED_SET_SAMPLE_SIZE
+        if more > 0:
+            names += f", and {more} more"
+        return f"{label} matches {len(rows)} student(s): {names}."
+
+    return (
+        f'Did you mean {format_range(low, high, "percentage")} or '
+        f'{format_range(low, high, "points")} on "{assignment_name}" in '
+        f"{course_name}? They select different students. "
+        + _side(format_range(low, high, "percentage").capitalize(), percentage_matched)
+        + " "
+        + _side(format_range(low, high, "points").capitalize(), points_matched)
+    )
+
+
+async def _run_resolve_score_range_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    user_msg: Message,
+    action: ResolveScoreRangeAction,
+    user_message: str,
+    adapter: LLMAdapter,
+) -> dict:
+    """Resolves "students who scored between X and Y" to a recipient handle.
+
+    Same shape as _run_resolve_missing_submissions_chain — resolve the
+    course/assignment server-side, compute the set without ever putting raw
+    per-student scores in the LLM's context, persist a ResolvedSet so a
+    follow-up send_message/feedback turn can materialize it. The one thing
+    it adds is deciding whether the band meant percent or points, which is
+    genuinely ambiguous and can select opposite groups of students; see
+    services/score_range.py for the rule, and note that this chain always
+    states the interpretation it used, including when it picked
+    automatically.
+    """
+    resolved = await _resolve_course_and_assignment(
+        db, user, conversation, user_msg,
+        action.local_course_id, action.assignment_id, action.assignment_reference, user_message,
+        adapter,
+    )
+    if isinstance(resolved, dict):
+        return resolved
+    course, assignment_id = resolved
+
+    assignment_row = await db.scalar(
+        select(Assignment).where(
+            Assignment.course_id == course.id,
+            Assignment.canvas_assignment_id == str(assignment_id),
+        )
+    )
+    assignment_name = (
+        assignment_row.title if assignment_row else f"Assignment {assignment_id}"
+    )
+    points_possible = assignment_row.points_possible if assignment_row else None
+
+    low, high = sorted((action.min_score, action.max_score))
+    # The model's `basis` is only a report of what the instructor wrote, so
+    # the literal text is checked first: it is the same evidence, available
+    # server-side, and not subject to the model having paraphrased it away.
+    requested_basis = detect_explicit_basis(user_message) or action.basis
+
+    print(f"Checking {course.name} for scores in {low}-{high}")
+    decision = await _run_tracked_read(
+        db, user, conversation, user_msg.id, "resolve_score_range",
+        {
+            "local_course_id": course.id,
+            "assignment_id": assignment_id,
+            "min_score": low,
+            "max_score": high,
+            "basis": requested_basis,
+        },
+        compute_submissions_by_score_range(
+            course, assignment_id, user, db,
+            low=low, high=high, points_possible=points_possible,
+            requested_basis=requested_basis,
+        ),
+    )
+
+    if decision.unsupported:
+        # Not a clarify with candidates: there is no percent-or-points choice
+        # to offer, the assignment simply has no scores to band.
+        return {
+            "action": "clarify",
+            "clarify": True,
+            "question": (
+                f'"{assignment_name}" in {course.name} is graded '
+                "complete/incomplete rather than with scores, so a range of "
+                f"{low}-{high} doesn't apply to it. Did you mean a different "
+                "assignment?"
+            ),
+            "partial_plan": {"local_course_id": course.id},
+        }
+
+    if decision.needs_clarification:
+        question = _basis_clarify_question(
+            course.name, assignment_name, low, high,
+            decision.percentage_matched or [], decision.points_matched,
+        )
+        return {
+            "action": "clarify",
+            "clarify": True,
+            "question": question,
+            "partial_plan": {
+                "local_course_id": course.id,
+                "assignment_id": assignment_id,
+                "min_score": low,
+                "max_score": high,
+            },
+            # Recorded so a one-word "percentage" answers this question
+            # instead of reading as a fresh request. Labels stay bare unit
+            # words because resolve_against_expectation matches them as
+            # substrings of the reply.
+            "clarify_field": "basis",
+            "clarify_candidates": [
+                {"id": "percentage", "label": "percentage"},
+                {"id": "points", "label": "points"},
+            ],
+        }
+
+    matched = decision.matched
+    basis = decision.basis
+    query = {
+        "local_course_id": course.id,
+        "assignment_id": assignment_id,
+        "min_score": low,
+        "max_score": high,
+        "basis": basis,
+        "points_possible": points_possible,
+    }
+    resolved_set = await create_resolved_set(
+        db, conversation, kind="score_range", query=query, recipients=matched,
+    )
+
+    sample = [r["name"] for r in matched[:_RESOLVED_SET_SAMPLE_SIZE]]
+    interpretation = describe_basis(decision, low, high, points_possible)
+    band = format_range(low, high, basis)
+    if matched:
+        summary = (
+            f"{len(matched)} active student(s) in {course.name} scored "
+            f'{band} on "{assignment_name}". {interpretation}'
+        )
+        if sample:
+            summary += f" Examples: {', '.join(sample)}."
+    else:
+        summary = (
+            f"No active students in {course.name} scored {band} on "
+            f'"{assignment_name}". {interpretation}'
+        )
+
+    return {
+        "action": "resolve_score_range",
+        "local_course_id": course.id,
+        "course_name": course.name,
+        "assignment_id": assignment_id,
+        "assignment_name": assignment_name,
+        "points_possible": points_possible,
+        "min_score": low,
+        "max_score": high,
+        "basis": basis,
+        "basis_reason": decision.reason,
+        "basis_explanation": interpretation,
+        "range_label": band,
         "count": len(matched),
         "sample": sample,
         "handle": resolved_set.handle,
@@ -1947,6 +2164,8 @@ async def _run_analyze_course_submissions_chain(
     here.
     """
     course = await resolve_course(db, user, action.local_course_id)
+    statuses = action.status
+    slug = status_slug(statuses)
 
     logger.info("Gathering %s assignments", course.name)
     fetch_action = FetchAssignmentsAction(local_course_id=course.id)
@@ -1958,7 +2177,7 @@ async def _run_analyze_course_submissions_chain(
     if not assignments:
         return {
             "action": "analyze_course_submissions",
-            "status": action.status,
+            "status": slug,
             "course": course.name,
             "assignments": [],
             "total": 0,
@@ -1977,7 +2196,7 @@ async def _run_analyze_course_submissions_chain(
     if not published:
         return {
             "action": "analyze_course_submissions",
-            "status": action.status,
+            "status": slug,
             "course": course.name,
             "assignments": [],
             "total": 0,
@@ -1988,7 +2207,7 @@ async def _run_analyze_course_submissions_chain(
         }
 
     logger.info(
-        "Checking %s for %s submissions", course.name, action.status
+        "Checking %s for %s submissions", course.name, status_label(statuses)
     )
     # One roster for the whole scan. compute_submissions_by_status would
     # otherwise re-fetch enrollments from Canvas for every assignment.
@@ -1996,23 +2215,29 @@ async def _run_analyze_course_submissions_chain(
     per_assignment: list[dict] = []
     names_budget = _COURSE_ANALYSIS_MAX_NAMES
     truncated = False
+    # Course-wide split, accumulated across assignments so a combined scan can
+    # report "12 missing and 5 late" rather than an unattributed 17.
+    total_counts: dict[str, int] = dict.fromkeys(statuses, 0)
 
     for assignment in published:
         canvas_assignment_id = assignment.get("id")
         if canvas_assignment_id is None:
             continue
-        matched = await _run_tracked_read(
+        matched, assignment_counts = await _run_tracked_read(
             db, user, conversation, user_msg.id, "analyze_course_submissions",
             {
                 "local_course_id": course.id,
                 "assignment_id": canvas_assignment_id,
-                "status": action.status,
+                "status": slug,
+                "statuses": list(statuses),
             },
-            compute_submissions_by_status(
-                course, canvas_assignment_id, user, db, action.status,
+            compute_submissions_by_status_breakdown(
+                course, canvas_assignment_id, user, db, statuses,
                 active_names=active_names,
             ),
         )
+        for status, count in assignment_counts.items():
+            total_counts[status] += count
         names = [student["name"] for student in matched]
         # Truncation is tracked per assignment, not just globally: the budget
         # is shared across the whole scan, so a later assignment can be cut
@@ -2036,13 +2261,21 @@ async def _run_analyze_course_submissions_chain(
         )
 
     total = sum(entry["count"] for entry in per_assignment)
-    label = "missing" if action.status == "missing" else "late"
+    combined = len(statuses) > 1
+    label = status_label(statuses)
     if total == 0:
         # A late scan only establishes that nothing was submitted late. It
         # says nothing about work never submitted at all, so it must not
         # claim students are up to date — that is the assistant contradicting
-        # the course, in the opposite direction from bug 12.
-        if action.status == "missing":
+        # the course, in the opposite direction from bug 12. A combined scan
+        # did cover both, so it is the one case that can say so.
+        if combined:
+            summary = (
+                f"No missing or late submissions in {course.name} — every active "
+                f"student has submitted all {len(per_assignment)} published "
+                "assignment(s) on time."
+            )
+        elif statuses[0] == "missing":
             summary = (
                 f"No missing submissions in {course.name} — every active student "
                 f"has submitted all {len(per_assignment)} published assignment(s)."
@@ -2061,6 +2294,11 @@ async def _run_analyze_course_submissions_chain(
             f"{total} {label} submission(s) across {len(affected)} of "
             f"{len(per_assignment)} published assignment(s) in {course.name}. {lines}."
         )
+        if combined:
+            split = " and ".join(
+                f"{total_counts.get(status, 0)} {status}" for status in statuses
+            )
+            summary += f" Combined from both categories: {split}."
         if truncated:
             summary += (
                 f" Student names are capped at {_COURSE_ANALYSIS_MAX_NAMES} for "
@@ -2070,7 +2308,9 @@ async def _run_analyze_course_submissions_chain(
 
     return {
         "action": "analyze_course_submissions",
-        "status": action.status,
+        "status": slug,
+        "statuses": list(statuses),
+        "status_counts": {status: total_counts[status] for status in statuses},
         "course": course.name,
         "assignments": per_assignment,
         "total": total,
@@ -2333,21 +2573,38 @@ async def _run_find_assignments_by_submission_status_chain(
         "recipient_handle": recipient_handle,
         "summary": summary,
     }
+_STATUS_VERBS = {"missing": "are missing", "late": "submitted late"}
+
+
 def _build_resolve_missing_summary(
     *,
     course_name: str,
     assignment_name: str,
     due_at: datetime | None,
-    status: str,
+    statuses: Sequence[str],
+    status_counts: dict[str, int],
     matched_count: int,
     sample: list[str],
 ) -> str:
     """Name the assignment/course explicitly and explain empty results
     clearly — mirrors _build_fetch_submissions_summary so chat analytics
-    are scannable even when the model paraphrases in a follow-up respond."""
+    are scannable even when the model paraphrases in a follow-up respond.
+
+    A multi-status request always states the per-category split, including a
+    zero side ("4 missing and 0 late"). Collapsing "0 late" away would make a
+    real union indistinguishable from the model having quietly resolved one
+    category, which is the failure this combined mode exists to prevent.
+    """
     due_part = f" (due {due_at.strftime('%B %d, %Y at %I:%M %p')})" if due_at else ""
+    combined = len(statuses) > 1
+
     if matched_count == 0:
-        if status == "late":
+        if combined:
+            return (
+                f'No active students are missing or submitted "{assignment_name}"'
+                f"{due_part} late in {course_name}."
+            )
+        if statuses and statuses[0] == "late":
             return (
                 f'No active students submitted "{assignment_name}"{due_part} '
                 f"late in {course_name}."
@@ -2357,11 +2614,21 @@ def _build_resolve_missing_summary(
             f"in {course_name}."
         )
 
-    verb = "submitted late" if status == "late" else "are missing"
-    summary = (
-        f'{matched_count} active student(s) in {course_name} {verb} '
-        f'"{assignment_name}"{due_part}.'
-    )
+    if combined:
+        split = " and ".join(
+            f"{status_counts.get(status, 0)} {status}" for status in statuses
+        )
+        summary = (
+            f"{matched_count} active student(s) in {course_name} — {split} — "
+            f'for "{assignment_name}"{due_part}. '
+            "This is one combined group of both categories."
+        )
+    else:
+        verb = _STATUS_VERBS.get(statuses[0] if statuses else "missing", "are missing")
+        summary = (
+            f'{matched_count} active student(s) in {course_name} {verb} '
+            f'"{assignment_name}"{due_part}.'
+        )
     if sample:
         summary += f" Examples: {', '.join(sample)}."
     return summary
@@ -2757,6 +3024,73 @@ async def _resolve_grade_target(
 
 _GRADE_HANDOFF_NAMED_STUDENT_LIMIT = 3
 
+# "+5" / "-3" — a relative adjustment rather than a grade.
+#
+# "Add 5 marks to everyone" has no single new_grade: each student's target
+# depends on what they already have. Emitting one absolute value for a
+# relative request would set the whole class to 5, which is why this is
+# parsed out and applied per student against real fetched scores instead.
+_GRADE_DELTA_RE = re.compile(r"^([+-])\s*(\d+(?:\.\d+)?)$")
+
+
+def parse_grade_delta(new_grade: str) -> float | None:
+    """The signed adjustment in a relative grade, or None if it's absolute.
+
+    Deliberately strict: only a leading sign followed by a bare number. "85"
+    stays absolute (a student can legitimately be given 85), and anything
+    else — letter grades, "complete", percentages — is left alone for the
+    existing path to handle.
+    """
+    match = _GRADE_DELTA_RE.match((new_grade or "").strip())
+    if not match:
+        return None
+    sign, magnitude = match.groups()
+    return float(magnitude) if sign == "+" else -float(magnitude)
+
+
+def _format_grade_value(value: float) -> str:
+    return str(int(value)) if float(value).is_integer() else str(round(value, 2))
+
+
+def apply_grade_delta(
+    submissions: list[dict], delta: float
+) -> tuple[list[dict], list[dict]]:
+    """Per-student targets for a relative adjustment.
+
+    Returns (adjusted, skipped). A student with no score yet is *skipped*,
+    not treated as a zero: "add 5" to someone who has never been graded
+    would invent a 5 out of nothing and mark ungraded work as graded. The
+    caller says how many were skipped rather than quietly shrinking the
+    group.
+
+    Results are clamped at 0 — Canvas rejects negative scores, and silently
+    submitting one would fail the whole batch partway through.
+    """
+    adjusted: list[dict] = []
+    skipped: list[dict] = []
+    for submission in submissions:
+        user_id = _coerce_int(submission.get("user_id"))
+        if user_id is None:
+            continue
+        current = submission.get("score")
+        if current is None:
+            skipped.append(submission)
+            continue
+        try:
+            target = float(current) + delta
+        except (TypeError, ValueError):
+            skipped.append(submission)
+            continue
+        adjusted.append(
+            {
+                "user_id": user_id,
+                "name": submission.get("student_name") or f"Student {user_id}",
+                "current_score": float(current),
+                "new_grade": _format_grade_value(max(target, 0.0)),
+            }
+        )
+    return adjusted, skipped
+
 
 def _grade_handoff_student_phrase(submissions: list[dict], student_count: int) -> str:
     """Name a small resolved set in the assistant bubble; fall back to count."""
@@ -2816,6 +3150,33 @@ def _build_grade_handoff_result(
             },
         }
 
+    # A relative request ("add 5 marks to everyone") resolves to a different
+    # target per student, computed here from the scores the chain already
+    # fetched — the one place that has them.
+    delta = parse_grade_delta(new_grade)
+    student_grades: list[dict] | None = None
+    skipped: list[dict] = []
+    if delta is not None:
+        student_grades, skipped = apply_grade_delta(submissions, delta)
+        if not student_grades:
+            return {
+                "action": "clarify",
+                "clarify": True,
+                "question": (
+                    f"No students in {course.name} have a grade on that assignment "
+                    f"yet, so there's nothing to adjust by {new_grade}. Did you mean "
+                    "to set a grade instead?"
+                ),
+                "partial_plan": {
+                    "action": "update_grade",
+                    "local_course_id": course.id,
+                    "assignment_id": assignment_id,
+                    "new_grade": new_grade,
+                    "feedback": feedback,
+                },
+            }
+        student_ids = [row["user_id"] for row in student_grades]
+
     student_count = len(student_ids)
     assignment_label = (
         f'assignment "{assignment_name}"'
@@ -2825,10 +3186,29 @@ def _build_grade_handoff_result(
     student_phrase = _grade_handoff_student_phrase(submissions, student_count)
     # Keep the assistant bubble brief; the action card carries the actual link
     # and the Grades tab carries the detailed warnings/confirmation state.
-    message = (
-        f"I found {student_phrase} for {course.name}. Open the Grades tab to review "
-        "the Canvas preview, warnings, and approval step before anything is submitted."
-    )
+    if delta is not None:
+        direction = "Adding" if delta > 0 else "Subtracting"
+        message = (
+            f"{direction} {_format_grade_value(abs(delta))} to {student_count} "
+            f"already-graded student(s) in {course.name}."
+        )
+        if skipped:
+            # Said out loud: an unexplained smaller number reads as the
+            # resolver having lost students rather than having declined to
+            # invent grades for work nobody has marked.
+            message += (
+                f" {len(skipped)} student(s) have no grade yet and were left out — "
+                "a relative change needs an existing score."
+            )
+        message += (
+            " Open the Grades tab to review the Canvas preview, warnings, and "
+            "approval step before anything is submitted."
+        )
+    else:
+        message = (
+            f"I found {student_phrase} for {course.name}. Open the Grades tab to review "
+            "the Canvas preview, warnings, and approval step before anything is submitted."
+        )
     return {
         "action": "respond",
         "message": message,
@@ -2842,7 +3222,14 @@ def _build_grade_handoff_result(
             "assignment_label": assignment_label,
             "student_ids": student_ids,
             "student_count": student_count,
+            # Absolute for a normal update. For a relative one this stays the
+            # instructor's literal "+5" so the card can show what was asked,
+            # while student_grades carries the actual per-student targets —
+            # sending "+5" to the Grades tab as a grade would set everyone to 5.
             "new_grade": new_grade,
+            "grade_delta": delta,
+            "student_grades": student_grades,
+            "skipped_ungraded_count": len(skipped) if delta is not None else 0,
             "feedback": feedback,
         },
     }
@@ -3218,9 +3605,13 @@ async def _run_send_message_chain(
             return {
                 "action": "clarify",
                 "clarify": True,
+                # Deliberately not "students missing this assignment": handles
+                # now also come from score-range resolution, and naming the
+                # wrong criterion here invites the instructor to confirm a
+                # re-run of a query they never asked for.
                 "question": (
-                    "That resolved recipient set is no longer available (it may have "
-                    "expired) — should I check again for students missing this assignment?"
+                    "That resolved recipient set is no longer available (it may "
+                    "have expired) — should I work out who it covered again?"
                 ),
                 "partial_plan": {"local_course_id": course.id},
             }
@@ -3502,11 +3893,16 @@ def _step_budget_exhausted_response(loop_steps: list[dict]) -> dict:
 
 
 _STRUCTURED_ANALYTICS_ACTIONS = frozenset(
-    {"resolve_missing_submissions", "find_assignment_by_submission_rate"}
+    {
+        "resolve_missing_submissions",
+        "resolve_score_range",
+        "find_assignment_by_submission_rate",
+    }
 )
 _STRUCTURED_ANALYTICS_FIELDS = (
     "action",
     "status",
+    "status_counts",
     "count",
     "sample",
     "summary",
@@ -3518,6 +3914,15 @@ _STRUCTURED_ANALYTICS_FIELDS = (
     "matched",
     "submission_rate_percent",
     "handle",
+    # Without these a score-range result that ends in a respond loses the
+    # interpretation it used, which is the one part of the answer the
+    # instructor most needs to see in order to catch a wrong auto-pick.
+    "basis",
+    "basis_explanation",
+    "range_label",
+    "min_score",
+    "max_score",
+    "points_possible",
 )
 
 
@@ -3968,6 +4373,7 @@ _MODEL_HIDDEN_ACTIONS = frozenset(
         # choosing between several overlapping submission tools.
         "semantic_intent",
         "resolve_missing_submissions",
+        "resolve_score_range",
         "analyze_course_submissions",
         "find_assignments_by_submission_status",
         "find_assignment_by_submission_rate",
@@ -4179,11 +4585,13 @@ the meaning instead of guessing an exact internal tool name. Return ONLY:
 "delivery_mode":"announcement|private_message|null",
 "status":"missing|late|null","comparator":"below|above|null",
 "submission_status":"any_submissions|no_submissions|missing_submissions|late_submissions|null",
-"threshold_percent":<number|null>,"fields":{},"criteria":{},
+"threshold_percent":<number|null>,
+"min_score":<number|null>,"max_score":<number|null>,
+"basis":"percentage|points|null","fields":{},"criteria":{},
 "message":"<optional>","question":"<optional>","partial_plan":{},"confidence":<0 to 1>}
  Supported intents are read_courses, read_assignments, read_submissions,
  read_students, read_quizzes, analyze_submissions, find_missing_submissions,
- find_assignments_by_submission_status,
+ find_score_range, find_assignments_by_submission_status,
 find_assignment_by_rate, create_assignment, create_quiz, update_assignment,
 update_grade, send_message, respond, clarify, and unsupported. Put only the
 user's natural-language values in fields/criteria; never invent Canvas or
@@ -4252,13 +4660,49 @@ Set status to "missing" (the default — not submitted at all) or "late"
 (submitted, but after the due date) — these are separate, mutually
 exclusive groups; never guess which one the user means if it's ambiguous
 ("students behind on assignment 4" usually means missing; "students who
-turned it in late" means late). The result gives you a "count", a short
+turned it in late" means late).
+When the user asks for BOTH at once ("missing and late", "everyone who
+didn't submit or was late", "anyone behind or late on assignment 4"), set
+status to the list ["missing", "late"]. The server returns their union as
+one recipient set and says out loud that it is a combined group. Do NOT
+pick just one category for a request that named both — that silently drops
+half the students, and the instructor has no way to see it happened.
+The result gives you a "count", a short
 "sample" of names, and a "handle" string — never the full list. To
 message everyone in that resolved set, propose send_message with
 recipient_handle set to that exact handle string, copied verbatim from
 the result — never invent one, and never build recipient_directives out
 of the "sample" names instead, that's only a preview excerpt, not the
 full set.
+
+FINDING STUDENTS BY SCORE RANGE:
+When the user picks students out by the score they got rather than by
+whether they submitted (e.g. "message everyone who got between 70 and 90",
+"send feedback to students scoring under 50 on the midterm", "who scored
+90 to 100 on quiz 2"), use semantic intent find_score_range with
+assignment_reference, min_score and max_score. Do not propose
+fetch_submissions and pick the students out yourself — same reason as
+above, and the range needs the assignment's points_possible, which the
+server has and you do not.
+Copy the user's two numbers EXACTLY as they said them. Never convert
+between percent and points yourself, and never fill in a bound the user
+did not give: for "under 50" use min_score 0 and max_score 50, for "above
+80" use min_score 80 and max_score 100 only if they clearly meant percent,
+otherwise leave the intent for the server by still copying their number
+and letting it decide.
+Set "basis" ONLY when the user named the unit outright — "70 percent" or
+"70%" gives basis "percentage", "70 points"/"70 marks"/"70 out of 100"
+gives basis "points". If they just said "between 70 and 90", leave basis
+null. That null is meaningful: the server then works out what each reading
+would select and either resolves it (when one reading is impossible, or
+when both pick exactly the same students) or asks the instructor. Guessing
+a basis destroys that check — on an assignment out of 200, percent and
+points select opposite groups of students.
+The result carries "count", a short "sample", a "handle", and a
+"basis_explanation" saying which reading was used. Always pass the
+basis_explanation on to the user; do not drop it. Message the group the
+same way as above, with send_message and recipient_handle set to that
+exact handle string.
 
 ANALYSING A WHOLE COURSE'S SUBMISSIONS:
 When the user asks about submissions across a course rather than one
@@ -4267,8 +4711,9 @@ anything", "how are submissions looking in this course", "give me a
 submission overview"), use semantic intent analyze_submissions — NOT
 find_missing_submissions, which needs one specific assignment, and never a
 plain "respond" written from memory. Set status to missing or late when the
-user explicitly requests one; otherwise use the existing course-overview
-default for compatibility.
+user explicitly requests one, or to ["missing", "late"] when they ask for
+both at once; otherwise use the existing course-overview default for
+compatibility.
 The result carries "total", "course", and an "assignments" list, each
 entry with assignment_name, count, and the "students" who match. Report
 those numbers and names as given — never estimate a submission rate,
@@ -5074,6 +5519,14 @@ async def handle_chat_message(
                 # plus server-side filtering down to a compact
                 # {count, sample, handle} summary — never the raw list.
                 result = await _run_resolve_missing_submissions_chain(
+                    db, user, conversation, user_msg, action, message, adapter
+                )
+            elif action.action == "resolve_score_range":
+                # Same server-side resolution and compact-summary shape as
+                # resolve_missing_submissions, but filtered by score rather
+                # than submission status — and it decides percent-vs-points
+                # (or asks) before producing a handle.
+                result = await _run_resolve_score_range_chain(
                     db, user, conversation, user_msg, action, message, adapter
                 )
             elif action.action == "analyze_course_submissions":
