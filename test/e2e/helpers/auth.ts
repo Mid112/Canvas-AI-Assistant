@@ -65,7 +65,9 @@ export async function completeOnboardingWithCanvas(
   await expect(page).toHaveURL(/\/review-permissions/, { timeout: 30_000 });
   await page.getByRole("button", { name: "Approve & Continue" }).click();
   await expect(page).toHaveURL(/\/instructor\//, { timeout: 30_000 });
-  await expect(page.getByText("Limited mode")).toHaveCount(0);
+  await expect(
+    page.getByRole("status").getByText("Limited mode", { exact: true }),
+  ).toHaveCount(0);
 }
 
 export async function registerAndConnectCanvas(page: Page) {

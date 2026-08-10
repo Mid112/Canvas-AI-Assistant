@@ -19,7 +19,9 @@ test.describe("Instructor workflows (#711)", () => {
     await registerAndSkipCanvas(page);
     // Layout header (with "AI Assistant" h1) is omitted on this route for chat height.
     await expect(page).toHaveURL(/\/instructor\/assistant/);
-    await expect(page.getByText("Limited mode")).toBeVisible();
+    await expect(
+      page.getByRole("status").getByText("Limited mode", { exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByRole("textbox", { name: "Chat message" }),
     ).toBeVisible();
@@ -99,10 +101,14 @@ test.describe("Instructor workflows (#711)", () => {
   }) => {
     await registerAndConnectCanvas(page);
     await expect(page).toHaveURL(/\/instructor\//);
-    await expect(page.getByText("Limited mode")).toHaveCount(0);
+    await expect(
+      page.getByRole("status").getByText("Limited mode", { exact: true }),
+    ).toHaveCount(0);
     await page.goto("/instructor/assistant");
     await expect(page).toHaveURL(/\/instructor\/assistant/);
-    await expect(page.getByText("Limited mode")).toHaveCount(0);
+    await expect(
+      page.getByRole("status").getByText("Limited mode", { exact: true }),
+    ).toHaveCount(0);
     await expect(
       page.getByRole("textbox", { name: "Chat message" }),
     ).toBeVisible();
@@ -113,7 +119,9 @@ test.describe("Instructor workflows (#711)", () => {
 
     await page.goto("/instructor/assistant");
     await expect(page).toHaveURL(/\/instructor\/assistant/);
-    await expect(page.getByText("Limited mode")).toHaveCount(0);
+    await expect(
+      page.getByRole("status").getByText("Limited mode", { exact: true }),
+    ).toHaveCount(0);
     await expect(page.getByRole("textbox", { name: "Chat message" })).toBeVisible();
 
     await page.goto("/instructor/settings");
