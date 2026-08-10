@@ -394,7 +394,9 @@ async def test_execute_intent_preview_write_action_resolves_course_and_preview()
     db = _db_with_course(course)
     user = MagicMock(id=1)
     action = IntentPreviewAction(
-        summary="do a thing",
+        # Deliberately diverges from the server-resolved preview to ensure the
+        # chat-facing summary cannot describe a different write target.
+        summary="Create HW1 in COSC 322",
         proposed_action={
             "action": "create_assignment",
             "local_course_id": 1,
@@ -405,12 +407,16 @@ async def test_execute_intent_preview_write_action_resolves_course_and_preview()
 
     with patch(
         "app.mcp_tools.dispatcher.generate_write_preview",
-        return_value={"course": "COSC 111"},
+        return_value={"course": "COSC 111", "summary": "Create HW1 in COSC 111."},
     ) as mock_preview:
         result = await execute_tool(db, user, action)
 
     assert result["intent_preview"] is True
-    assert result["preview_metadata"] == {"course": "COSC 111"}
+    assert result["summary"] == "Create HW1 in COSC 111."
+    assert result["preview_metadata"] == {
+        "course": "COSC 111",
+        "summary": "Create HW1 in COSC 111.",
+    }
     mock_preview.assert_called_once()
 
 

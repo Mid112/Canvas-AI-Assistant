@@ -202,6 +202,9 @@ describe("InstructorAssistantPage course sync fork adoption", () => {
       await screen.findByRole("button", { name: /Conversation History/ }),
     );
     await user.click(
+      await screen.findByRole("button", { name: /Conversation History/ }),
+    );
+    await user.click(
       await screen.findByRole("button", { name: /Previous conversation/ }),
     );
 

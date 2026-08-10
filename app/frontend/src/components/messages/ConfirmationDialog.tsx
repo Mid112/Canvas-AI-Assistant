@@ -25,6 +25,7 @@ interface ConfirmationDialogProps {
   subject: string;
   body: string;
   isSending: boolean;
+  deliveryMode: "announcement" | "private_message";
   onConfirm: () => void;
 }
 
@@ -38,6 +39,7 @@ export function ConfirmationDialog({
   subject,
   body,
   isSending,
+  deliveryMode,
   onConfirm,
 }: ConfirmationDialogProps) {
   const selectedCount = recipients.filter((recipient) =>
@@ -45,8 +47,8 @@ export function ConfirmationDialog({
   ).length;
   const recipientText =
     selectedCount === 1 ? "1 student" : `${selectedCount} students`;
-  const deliveryText =
-    selectedCount === 0 ? "the whole course as an announcement" : recipientText;
+  const isAnnouncement = deliveryMode === "announcement";
+  const deliveryText = isAnnouncement ? "the whole course as an announcement" : recipientText;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -55,14 +57,19 @@ export function ConfirmationDialog({
           <DialogTitle>Send Message?</DialogTitle>
           <DialogDescription>
             Review exactly what will be sent to {deliveryText} before confirming.
-            Uncheck or remove anyone who shouldn&apos;t receive a private message.
+            <strong className="block text-foreground">
+              {isAnnouncement ? "ANNOUNCEMENT" : "PRIVATE MESSAGE"}
+            </strong>{" "}
+            {isAnnouncement
+              ? "This will be visible to everyone in the course."
+              : "Uncheck or remove anyone who should not receive a private message."}
             This action cannot be undone.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-1">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            To ({selectedCount} of {recipients.length})
+            {isAnnouncement ? "Audience" : `To (${selectedCount} of ${recipients.length})`}
           </p>
           <div className="max-h-48 overflow-y-auto rounded-lg border border-border/60">
             <EditableRecipientList

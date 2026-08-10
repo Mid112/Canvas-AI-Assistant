@@ -208,6 +208,9 @@ jobs:
             # shellcheck disable=SC2086
             docker rm -f $orphans >/dev/null 2>&1 || true
           fi
+          # Stop at the first failure so a broken test cannot consume the
+          # entire 40-minute job without exposing its traceback. Durations
+          # make slow integration tests visible in the job log.
           docker run --rm \
             --memory=3g \
             --cpus=2 \
@@ -223,7 +226,7 @@ jobs:
             -e PYTHONPATH=/workspace/app/backend \
             -e PYTHONUNBUFFERED=1 \
             "${{ steps.backend_image.outputs.image }}" \
-            pytest ../../test/backend/ -q -m "not fuzz" --tb=line --cov --cov-report=term
+            pytest ../../test/backend/ -q -m "not fuzz" --tb=short --maxfail=1 --durations=25 --cov --cov-report=term
       - name: Stop PostgreSQL
         if: always()
         run: |

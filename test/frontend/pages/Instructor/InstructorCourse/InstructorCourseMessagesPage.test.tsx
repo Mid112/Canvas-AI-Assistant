@@ -194,7 +194,9 @@ describe("InstructorCourseMessagesPage", () => {
     renderWithRouter(<CourseMessagesRoute />);
 
     await user.click(await screen.findByRole("button", { name: /Course Announcement/i }));
-    expect(screen.getByText("Course announcement selected")).toBeInTheDocument();
+    expect(
+      screen.getByText("No students selected — this will be a public course announcement."),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Send$/ })).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: /^Send$/ }));
