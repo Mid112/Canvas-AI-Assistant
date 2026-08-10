@@ -940,3 +940,105 @@ Managing team pull requests proved to be an essential exercise in maintaining ve
 *   Create PRs for my remaining assigned bug fix issues.
 *   Begin working on the user guides documentation for the final handover.
 *   Review open PRs to help teammates close their issues and keep the board clear.
+
+# Cycle 23: Tuesday (08/04) – Sunday (08/09)
+
+## Timesheet & Daily Log
+
+**Total Cycle Time:** 29:06:02
+
+### **Tuesday (08/04) — 08:42:08**
+<img width="1339" height="472" alt="Untitled" src="https://github.com/user-attachments/assets/452a5dd5-3fe0-4a59-91bf-4162d6046ed7" />
+
+*   **Tasks:**
+*   Held a team meeting to align on final week priorities.
+*   Reviewed teammates’ Cycle 22 personal logs (Mridul, Yerdana, Jessica, Bao).
+*   Built and merged Ticket 27: Harden Password Requirements and Field Feedback (PR #1535 / Issue #1451).
+*   Shipped Ticket 17: First-time AI prompt guidance (PR #1534). Spent time testing and fixing bugs on open PRs, handling review and CI follow-ups on PRs #1522, #1523, #1524, #1474, and #1534.
+*   Started reviewing quiz/assignment draft PRs (#1536, #1537).
+
+### **Wednesday (08/05) — 03:34:42**
+<img width="1341" height="291" alt="Untitled 2" src="https://github.com/user-attachments/assets/0da52528-dae7-42cc-a2f0-42cde80e43ec" />
+
+*   **Tasks:**
+*   Dedicated the session entirely to PR reviews.
+*   Processed a massive batch of PRs (#1536–#1545, #1546, #1548–#1550), conducting rigorous request-changes and re-review cycles to ensure code quality. Began preparations for Knowledge Quiz #2 off-the-clock.
+
+### **Thursday (08/06) — Untracked Study Time**
+*   **Tasks:** Full Knowledge Quiz #2 preparation and ran through practice rounds to prepare for the assessment.
+
+### **Friday (08/07) — 04:17:22**
+<img width="1338" height="173" alt="Untitled 3" src="https://github.com/user-attachments/assets/eb67a147-3563-40e4-b46d-94e693866b7d" />
+
+*   **Tasks:**
+*   Held a major team meeting for final submissions and triaging.
+*   Updated the use case diagrams and descriptions in the docs and opened a PR.
+*   Triaged bugs on `develop`, identified the last stable commit point, and planned selective reverts and highest-impact fixes.
+*    Mapped Functional Requirement (FR) coverage in plain language for the final documentation.
+
+### **Saturday (08/08) — 04:28:07**
+<img width="1338" height="110" alt="Untitled 4" src="https://github.com/user-attachments/assets/2959c303-14d1-4bf8-bb44-9df02740ca92" />
+
+*   **Tasks:**
+*   Focused on final documentation, gathering all relevant data, screenshots, and writing the Final Design and Analysis Report.
+*   Drafted my individual reflection and documented lessons learned throughout the capstone for the final submission package. 
+
+### **Sunday (08/09) — 08:03:43**
+<img width="1341" height="542" alt="Untitled 5" src="https://github.com/user-attachments/assets/44029360-9a85-45ef-b6de-11a84cde9a4d" />
+
+*   **Tasks:**
+*   Conducted a deep, multi-pass review of PRs #1555–#1558 (approved #1555, #1556, and #1557 after fixes; requested #1558 be split/rebased).
+*   Recommended a strict merge order to avoid conflicts (1557 → 1556 → 1555 → split 1558).
+*   Finalized `docs/final-submission` materials.
+*   Prepared script, set up environments, and recorded the final demo video showcasing main workflows, the AI assistant, and both the instructor/admin portals.
+
+---
+
+## Feature & Task Association
+
+| Feature / Topic | Concrete Tasks This Cycle | Status |
+| :--- | :--- | :--- |
+| **UX Polish & AI Guidance** | Built and merged Ticket 27 (Password Requirements, PR #1535). Shipped Ticket 17 (AI Prompt Guidance, PR #1534). Handled CI/review follow-ups on Tickets 15, 16, 19, 20. | **Completed / Shipped** |
+| **Peer Code Reviews** | Heavy, multi-pass reviews on PR batches (#1536–1550, #1555–1558). Managed merge orders and re-reviews. | **Completed** |
+| **Final Documentation** | Updated Use Case diagrams, mapped FR coverage, and drafted individual reflection for the final docs package. | **Completed** |
+| **Final Demo Video** | Prepped, recorded, and finalized the main demo showcasing all portals and AI workflows. | **Completed** |
+| **Bug Triage** | Triaged `develop`, mapped stable points, and planned selective reverts to protect the main branch for the final demo. | **Completed** |
+
+---
+
+## Progress Status
+
+| TASK / ISSUE | STATUS |
+| :--- | :--- |
+| Ticket 17 (#1534) & Ticket 27 (#1535 / #1451) implementations | Completed (Merged/Shipped) |
+| Fix bugs/CI follow-ups on PRs #1522, #1523, #1524, #1474, #1534 | Completed |
+| PR Reviews (#1536-1550, #1555-1558) & Teammate Logs | Completed |
+| Knowledge Quiz #2 Prep | Completed |
+| Final Documentation (Use Cases, Reflections, FR Mapping) | Completed |
+| Record Final Demo Video | Completed |
+| Triage `develop` and establish stable branch point | Completed |
+
+---
+
+## Cycle Goal Review & Reflection
+
+**Achievements vs. Cycle Goals:**
+*   **Merge Open PRs / Close Bugs:** Met. Addressed all lingering feedback on my own PRs (#1522, #1524, #1523, #1474) and successfully shipped Tickets 17 and 27, while heavily unblocking the team by reviewing over a dozen peer PRs.
+*   **Documentation & Final Handovers:** Met. Successfully finalized the Use Case models, FR mappings, and my individual reflection for the deployment package.
+*   **Final Demo Readiness:** Met. The final demo video was successfully recorded, highlighting the full scope of our AI assistant and multi-portal system. 
+
+**Challenges & Learnings:**
+*   **Protecting the Main Branch:** Triaging `develop` on Friday revealed the fragility of late-stage merges. I learned that identifying a "last stable point" and executing selective reverts is a much safer strategy.
+*   **Complex Merge Ordering:** Reviewing PRs #1555-1558 required mapping out a strict sequence (1557 → 1556 → 1555 → split 1558) to avoid massive integration conflicts, reinforcing the importance of granular, focused PRs.
+
+**Learning Needs:**
+*   This cycle highlighted the importance of strict branch protection rules and release tagging, which I want to apply more rigorously at the start of future projects rather than just at the end.
+
+---
+
+## Next Cycle Goals
+
+*   Submit the final documentation package, codebase, and demo video for final grading.
+*   Execute any final project teardown or environment cleanup required.
+*   Complete the final peer evaluations and project wrap-up administrative tasks.
+*   Deliver the final live presentation.
