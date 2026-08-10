@@ -1,0 +1,33 @@
+fastapi==0.136.3
+uvicorn[standard]==0.34.0
+pydantic==2.13.4
+pydantic-settings==2.14.1
+python-dotenv==1.2.2
+email-validator==2.2.0
+python-dateutil==2.9.0.post0
+
+# Database
+sqlalchemy[asyncio]==2.0.50
+asyncpg==0.31.0
+alembic==1.14.0
+
+# Auth
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+# passlib 1.7.4 reads bcrypt.__about__.__version__, which bcrypt >=4.1 removed.
+bcrypt==4.0.1
+slowapi==0.1.9
+
+# Testing
+pytest==8.3.5
+httpx==0.28.1
+pytest-asyncio==0.24.0
+pytest-cov==6.0.0
+pytest-timeout==2.3.1
+# Property-based / fuzz testing (#1301) — pure parser harness via `make test-fuzz`
+hypothesis==6.135.26
+
+# Linting / Type checking
+ruff==0.8.4
+mypy==1.13.0
+types-python-dateutil==2.9.0.20250822

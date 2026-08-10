@@ -1,0 +1,542 @@
+name: CI
+
+on:
+  # Only run on PRs targeting main/develop — not on every direct push.
+  # This means CI runs once per PR (and again on each new commit pushed
+  # to that PR), rather than on every single push to a branch.
+  pull_request:
+    branches: [main, develop]
+  # Still run on direct pushes to main/develop themselves, since those
+  # represent code actually landing in a protected branch.
+  push:
+    branches: [main, develop]
+
+# Cancels older in-progress runs for the same branch/PR when a new
+# commit is pushed. Prevents CI minutes being wasted on stale runs
+# and means only the latest push actually finishes running.
+#
+# Keep this true while CI runs on a single self-hosted runner. Setting it
+# false does not make superseded runs finish alongside the new one — the
+# concurrency group still admits one run at a time, so the new run queues
+# behind the old one instead of replacing it. Three pushes then cost three
+# full sequential runs on the one machine, and every other PR waits behind
+# them.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Helps setup-node use the runner's writable _work/_tool cache.
+  # Note: setup-python on macOS always installs to /Users/runner/hostedtoolcache,
+  # so backend jobs use the system Python instead (see setup steps below).
+  RUNNER_TOOL_CACHE: ${{ github.workspace }}/../../_tool
+  AGENT_TOOLSDIRECTORY: ${{ github.workspace }}/../../_tool
+
+jobs:
+  # ── 0. Detect which parts of the repo changed ──────────
+  # This lets backend-only changes skip frontend jobs and vice versa.
+  changes:
+    runs-on:
+    - self-hosted
+    - macOS
+    - ARM64
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      e2e: ${{ steps.filter.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'app/backend/**'
+              - 'test/backend/**'
+              - '.github/workflows/ci.yml'
+              - '.github/docker/**'
+              - '.github/scripts/**'
+            frontend:
+              - 'app/frontend/**'
+              - 'test/frontend/**'
+              - '.github/workflows/ci.yml'
+            e2e:
+              - 'app/backend/**'
+              - 'app/frontend/**'
+              - 'test/e2e/**'
+              - '.github/workflows/ci.yml'
+              - '.github/docker/**'
+              - '.github/scripts/**'
+              - 'docker-compose.dev.yml'
+
+  # ── 1. Backend lint + type check ──────────
+  backend-lint:
+    runs-on:
+    - self-hosted
+    - macOS
+    - ARM64
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    defaults:
+      run:
+        working-directory: ./app/backend
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        working-directory: ${{ github.workspace }}
+        run: |
+          python3.12 --version
+          python3.12 -m venv .ci-venv
+          echo "$GITHUB_WORKSPACE/.ci-venv/bin" >> $GITHUB_PATH
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ runner.arch }}-py3.12-${{ hashFiles('app/backend/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-${{ runner.arch }}-py3.12-
+      - name: Install dependencies
+        env:
+          PYTHONNOUSERSITE: 1
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt ruff mypy
+      - name: Lint
+        env:
+          PYTHONNOUSERSITE: 1
+        run: python -m ruff check .
+      - name: Type check
+        # continue-on-error: true means mypy issues are visible in the
+        # CI log and job summary, but won't block merges yet. Remove
+        # this once the codebase has been typed-checked end to end
+        # and you're ready to enforce it strictly.
+        # Cap runtime: unbounded mypy on this self-hosted Mac has repeatedly
+        # caused the runner to lose heartbeat ("lost communication") and mark
+        # the whole backend-lint job failed even when ruff already passed.
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          PYTHONNOUSERSITE: 1
+        run: python -m mypy . --ignore-missing-imports
+
+  # ── 2. Backend tests ──────────────────────
+  # Postgres is started via docker run — not services: (Linux runners only).
+  # Runs in parallel with backend-lint (same changes gate) so lint no longer
+  # serializes the suite on the single self-hosted Mac.
+  backend-test:
+    runs-on:
+    - self-hosted
+    - macOS
+    - ARM64
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1]
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure Docker daemon
+        run: bash .github/scripts/ensure-docker.sh
+      - name: Start PostgreSQL
+        # Service containers only work on Linux runners. On macOS self-hosted
+        # runners, start Postgres via Docker instead.
+        run: |
+          NETWORK="ci-net-${{ github.run_id }}-${{ matrix.shard }}"
+          CONTAINER="ci-postgres-${{ github.run_id }}-${{ matrix.shard }}"
+          docker rm -f "$CONTAINER" 2>/dev/null || true
+          # Drop anything still attached (cancelled runs leave orphans), then
+          # recreate the network. Reuse if rm fails mid-race.
+          if docker network inspect "$NETWORK" >/dev/null 2>&1; then
+            attached=$(docker network inspect "$NETWORK" -f '{{range $k,$v := .Containers}}{{$k}} {{end}}' 2>/dev/null || true)
+            for id in $attached; do
+              docker rm -f "$id" 2>/dev/null || true
+            done
+            docker network rm "$NETWORK" 2>/dev/null || true
+          fi
+          docker network create "$NETWORK" 2>/dev/null || docker network inspect "$NETWORK" >/dev/null
+          docker run -d \
+            --name "$CONTAINER" \
+            --network "$NETWORK" \
+            -v "${{ github.workspace }}/db/init:/docker-entrypoint-initdb.d:ro" \
+            -e POSTGRES_USER=testuser \
+            -e POSTGRES_PASSWORD=testpass \
+            -e POSTGRES_DB=testdb \
+            postgres:16-alpine
+          for i in $(seq 1 30); do
+            if docker exec "$CONTAINER" pg_isready -U testuser -d testdb >/dev/null 2>&1; then
+              echo "PostgreSQL is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "PostgreSQL failed to start"
+          docker logs "$CONTAINER"
+          exit 1
+      - name: Build or reuse backend test image
+        # Skip cold `pip install` on every run. Rebuild only when
+        # requirements.txt changes (tag includes content hash).
+        id: backend_image
+        run: |
+          REQ_HASH=$(shasum -a 256 app/backend/requirements.txt | cut -c1-16)
+          IMAGE="ci-backend-test:${REQ_HASH}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          if docker image inspect "$IMAGE" >/dev/null 2>&1; then
+            echo "Reusing cached image ${IMAGE}"
+          else
+            echo "Building ${IMAGE} (requirements changed or first run)"
+            docker build \
+              -t "$IMAGE" \
+              -f .github/docker/Dockerfile.backend-test \
+              app/backend
+          fi
+          # Drop older requirement-tagged images so the runner disk stays lean.
+          docker images ci-backend-test --format '{{.Repository}}:{{.Tag}}' | while read -r old; do
+            if [ "$old" != "$IMAGE" ]; then
+              docker rmi "$old" 2>/dev/null || true
+            fi
+          done
+      - name: Run tests with coverage
+        # x64 Rosetta on Apple Silicon breaks native wheels like cryptography.
+        # Run pytest inside Linux Docker with Postgres on the same network.
+        # Coverage config (including fail_under) lives in app/backend/pyproject.toml,
+        # so we run from that directory so pytest-cov picks it up.
+        #
+        # Cap container CPU/RAM so Docker Desktop cannot starve the self-hosted
+        # Mac runner of heartbeat (OOM → "lost communication" failures).
+        # Quieter pytest + lighter cov report also cut memory/log pressure.
+        run: |
+          TEST_CONTAINER="ci-backend-test-${{ github.run_id }}-${{ matrix.shard }}"
+          docker rm -f "$TEST_CONTAINER" >/dev/null 2>&1 || true
+          docker run --rm \
+            --name "$TEST_CONTAINER" \
+            --memory=3g \
+            --cpus=2 \
+            --network "ci-net-${{ github.run_id }}-${{ matrix.shard }}" \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace/app/backend \
+            -e DATABASE_URL=postgresql+asyncpg://testuser:testpass@ci-postgres-${{ github.run_id }}-${{ matrix.shard }}:5432/testdb \
+            -e ENVIRONMENT=test \
+            -e SECRET_KEY=ci-test-secret \
+            -e CANVAS_TOKEN_ENCRYPTION_KEY=cS_xtOdvX6UctctAErcx3JJC1e3YBBM-Kwh9WLY3ocI= \
+            -e HF_TOKEN=ci-test-hf-token \
+            -e DEFAULT_LLM_PROVIDER=huggingface \
+            -e PYTHONPATH=/workspace/app/backend \
+            -e PYTHONUNBUFFERED=1 \
+            -e PYTEST_SHARD_INDEX=${{ matrix.shard }} \
+            -e PYTEST_SHARD_COUNT=2 \
+            -e COVERAGE_FILE=/workspace/.coverage.backend-${{ matrix.shard }} \
+            "${{ steps.backend_image.outputs.image }}" \
+            pytest ../../test/backend/ -q -m "not fuzz" --tb=short --maxfail=1 --durations=25 --timeout=180 --timeout-method=signal --cov --cov-report=term --cov-fail-under=0
+      - name: Upload shard coverage data
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-coverage-${{ matrix.shard }}
+          path: .coverage.backend-${{ matrix.shard }}
+          include-hidden-files: true
+          if-no-files-found: error
+      - name: Stop PostgreSQL
+        if: always()
+        run: |
+          docker rm -f "ci-backend-test-${{ github.run_id }}-${{ matrix.shard }}" 2>/dev/null || true
+          docker rm -f "ci-postgres-${{ github.run_id }}-${{ matrix.shard }}" 2>/dev/null || true
+          docker network rm "ci-net-${{ github.run_id }}-${{ matrix.shard }}" 2>/dev/null || true
+
+  backend-coverage:
+    runs-on:
+    - self-hosted
+    - macOS
+    - ARM64
+    timeout-minutes: 10
+    needs: backend-test
+    if: needs.backend-test.result == 'success'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download shard coverage data
+        uses: actions/download-artifact@v4
+        with:
+          pattern: backend-coverage-*
+          path: .coverage-artifacts
+          merge-multiple: true
+      - name: Build or reuse backend test image
+        id: backend_image
+        run: |
+          REQ_HASH=$(shasum -a 256 app/backend/requirements.txt | cut -c1-16)
+          IMAGE="ci-backend-test:${REQ_HASH}"
+          echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
+          if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+            docker build -t "$IMAGE" -f .github/docker/Dockerfile.backend-test app/backend
+          fi
+      - name: Combine coverage and enforce threshold
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace/app/backend \
+            "${{ steps.backend_image.outputs.image }}" \
+            sh -c 'coverage combine /workspace/.coverage-artifacts && coverage report --fail-under=68'
+
+  # ── 3. Frontend lint + test ───────────────
+  frontend-test:
+    runs-on:
+    - self-hosted
+    - macOS
+    - ARM64
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    defaults:
+      run:
+        working-directory: ./app/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+          cache: "npm"
+          cache-dependency-path: app/frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Run tests with coverage
+        # package.json test:coverage proxies to test/frontend and enforces
+        # vitest coverage thresholds from vitest.config.ts
+        run: npm run test:coverage
+
+  # ── 3b. Browser E2E (Playwright) ───────────
+  e2e-test:
+    runs-on:
+    - self-hosted
+    - macOS
+    - ARM64
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure Docker daemon
+        run: bash .github/scripts/ensure-docker.sh
+      - name: Start isolated PostgreSQL
+        run: |
+          CONTAINER="ci-e2e-postgres-${{ github.run_id }}-${{ github.run_attempt }}"
+          # Unique host port per workflow run — using only run_attempt made
+          # concurrent PR e2e jobs fight over the same 15433 binding.
+          # Keep the range in 15432–17431 so it stays clear of local :5433.
+          HOST_PORT=$((15432 + (${{ github.run_id }} % 2000)))
+
+          docker rm -f "$CONTAINER" 2>/dev/null || true
+          # Drop any stale listener on the chosen host port.
+          if command -v lsof >/dev/null 2>&1; then
+            pids=$(lsof -tiTCP:"$HOST_PORT" -sTCP:LISTEN 2>/dev/null || true)
+            if [ -n "$pids" ]; then
+              echo "Freeing stale listener(s) on :$HOST_PORT: $pids"
+              kill $pids 2>/dev/null || true
+              sleep 1
+              kill -9 $pids 2>/dev/null || true
+            fi
+          fi
+
+          docker run -d \
+            --name "$CONTAINER" \
+            -p "127.0.0.1:${HOST_PORT}:5432" \
+            -v "${{ github.workspace }}/db/init:/docker-entrypoint-initdb.d:ro" \
+            -e POSTGRES_USER=appuser \
+            -e POSTGRES_PASSWORD=localdev \
+            -e POSTGRES_DB=appdb \
+            postgres:16-alpine
+
+          for i in $(seq 1 90); do
+            if docker exec "$CONTAINER" pg_isready -U appuser -d appdb >/dev/null 2>&1; then
+              # pg_isready inside the container is not enough on Docker Desktop —
+              # wait until the published host port actually accepts TCP.
+              if nc -z 127.0.0.1 "$HOST_PORT" 2>/dev/null \
+                || python3 -c "import socket; s=socket.create_connection(('127.0.0.1', int('$HOST_PORT')), 1); s.close()" 2>/dev/null; then
+                echo "PostgreSQL is ready on 127.0.0.1:${HOST_PORT}"
+                echo "E2E_DB_CONTAINER=$CONTAINER" >> "$GITHUB_ENV"
+                echo "E2E_DB_PORT=$HOST_PORT" >> "$GITHUB_ENV"
+                exit 0
+              fi
+            fi
+            # Surface early if the container already crashed (e.g. disk full).
+            if ! docker ps -q --filter "name=^/${CONTAINER}$" --filter "status=running" | grep -q .; then
+              echo "PostgreSQL container exited before becoming ready"
+              docker ps -a --filter "name=$CONTAINER"
+              docker logs "$CONTAINER" || true
+              exit 1
+            fi
+            sleep 1
+          done
+          echo "PostgreSQL failed to become reachable on 127.0.0.1:${HOST_PORT}"
+          docker ps -a --filter "name=$CONTAINER"
+          docker logs "$CONTAINER" || true
+          exit 1
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ runner.arch }}-py3.12-e2e-${{ hashFiles('app/backend/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-${{ runner.arch }}-py3.12-e2e-
+            pip-${{ runner.os }}-${{ runner.arch }}-py3.12-
+      - name: Set up Python venv + backend deps
+        run: |
+          python3.12 -m venv app/backend/.venv
+          app/backend/.venv/bin/pip install --upgrade pip
+          app/backend/.venv/bin/pip install -r app/backend/requirements.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.13.0"
+          cache: "npm"
+          cache-dependency-path: |
+            app/frontend/package-lock.json
+            test/e2e/package-lock.json
+      - name: Install frontend deps
+        working-directory: ./app/frontend
+        run: npm ci
+      - name: Install Playwright
+        working-directory: ./test/e2e
+        run: |
+          npm ci
+          # On the self-hosted Mac, browsers persist under the Playwright cache.
+          # `install` is a no-op when chromium is already present (skips the
+          # multi-minute download). Keep --with-deps only on first install.
+          if compgen -G "${HOME}/Library/Caches/ms-playwright/chromium-*" > /dev/null \
+            || compgen -G "${HOME}/.cache/ms-playwright/chromium-*" > /dev/null; then
+            echo "Playwright chromium cache found; ensuring install is complete"
+            npx playwright install chromium
+          else
+            npx playwright install --with-deps chromium
+          fi
+      - name: Ensure Canvas sandbox
+        run: |
+          # Instructor e2e onboarding requires a live Canvas API token against
+          # the local sandbox (default token: canvas-docker).
+          if docker inspect canvas_lms >/dev/null 2>&1; then
+            docker start canvas_lms >/dev/null || true
+          else
+            docker compose -f docker-compose.dev.yml up -d canvas-docker
+          fi
+          for i in $(seq 1 60); do
+            if curl -sf -H "Authorization: Bearer ${E2E_CANVAS_TOKEN:-canvas-docker}" \
+              "http://127.0.0.1:3000/api/v1/users/self" >/dev/null; then
+              echo "Canvas sandbox ready on :3000"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Canvas sandbox failed to become ready on :3000"
+          docker ps -a --filter name=canvas
+          exit 1
+      - name: Free E2E ports
+        # Self-hosted runners can retain stale backend/frontend processes from
+        # prior runs; Playwright sets reuseExistingServer=false in CI.
+        # Include both local defaults and the CI-mapped ports.
+        run: |
+          for port in 8000 5173 18000 15173; do
+            pids=$(lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true)
+            if [ -n "$pids" ]; then
+              echo "Killing stale listener(s) on :$port: $pids"
+              kill $pids 2>/dev/null || true
+              sleep 1
+              kill -9 $pids 2>/dev/null || true
+            fi
+          done
+      - name: Run browser E2E tests
+        working-directory: ./test/e2e
+        env:
+          CI: "true"
+          E2E_BACKEND_PORT: "18000"
+          E2E_FRONTEND_PORT: "15173"
+          E2E_BASE_URL: "http://127.0.0.1:15173"
+          ADMIN_EMAIL: admin@example.com
+          ADMIN_PASSWORD: AdminPass123!
+          SECRET_KEY: ci-e2e-secret
+          CANVAS_API_URL: http://127.0.0.1:3000
+          CANVAS_TOKEN_ENCRYPTION_KEY: ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=
+          E2E_CANVAS_URL: http://127.0.0.1:3000
+          E2E_CANVAS_TOKEN: canvas-docker
+        run: |
+          if [[ ! "${E2E_DB_PORT:-}" =~ ^[0-9]+$ ]]; then
+            echo "E2E_DB_PORT is missing or invalid: '${E2E_DB_PORT:-}'"
+            exit 1
+          fi
+          if ! docker inspect -f '{{.State.Running}}' "$E2E_DB_CONTAINER" 2>/dev/null | grep -q true; then
+            echo "E2E Postgres container is not running: ${E2E_DB_CONTAINER:-unset}"
+            docker ps -a
+            exit 1
+          fi
+          # Self-hosted workspaces can retain a developer .env pointing at :5433.
+          # Playwright/uvicorn cwd is app/backend, so remove it so CI's DATABASE_URL wins.
+          rm -f "${{ github.workspace }}/app/backend/.env"
+          if ! nc -z 127.0.0.1 "$E2E_DB_PORT" 2>/dev/null \
+            && ! python3 -c "import socket; s=socket.create_connection(('127.0.0.1', int('$E2E_DB_PORT')), 2); s.close()"; then
+            echo "Host port 127.0.0.1:${E2E_DB_PORT} is not accepting connections"
+            docker logs "$E2E_DB_CONTAINER" || true
+            exit 1
+          fi
+          export DATABASE_URL="postgresql+asyncpg://appuser:localdev@127.0.0.1:${E2E_DB_PORT}/appdb"
+          echo "Using Postgres at 127.0.0.1:${E2E_DB_PORT}"
+          npm test
+      - name: Stop isolated PostgreSQL
+        if: always()
+        run: docker rm -f "${E2E_DB_CONTAINER:-ci-e2e-postgres-${{ github.run_id }}-${{ github.run_attempt }}}" 2>/dev/null || true
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: test/e2e/playwright-report
+          retention-days: 7
+
+  # ── 4. Docker build check ─────────────────
+  # Only runs after both lint/test jobs succeed (or are skipped
+  # because that part of the repo didn't change).
+  docker-build:
+    runs-on:
+    - self-hosted
+    - macOS
+    - ARM64
+    timeout-minutes: 30
+    needs: [backend-lint, backend-test, backend-coverage, frontend-test, e2e-test]
+    if: always() && !failure() && !cancelled()
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure Docker daemon
+        run: bash .github/scripts/ensure-docker.sh
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Build backend image
+        timeout-minutes: 10
+        uses: docker/build-push-action@v6
+        with:
+          context: ./app/backend
+          push: false
+          tags: app-backend:test
+          cache-from: type=local,src=/tmp/.buildx-cache-backend
+          cache-to: type=local,dest=/tmp/.buildx-cache-backend-new,mode=max
+      - name: Build frontend image
+        timeout-minutes: 15
+        uses: docker/build-push-action@v6
+        with:
+          context: ./app/frontend
+          push: false
+          tags: app-frontend:test
+          cache-from: type=local,src=/tmp/.buildx-cache-frontend
+          cache-to: type=local,dest=/tmp/.buildx-cache-frontend-new,mode=max
+      # Feature 13 (#862): verify the Dockerized MCP image still builds in CI.
+      - name: Build MCP image
+        timeout-minutes: 10
+        uses: docker/build-push-action@v6
+        with:
+          context: ./app/mcp
+          push: false
+          tags: app-mcp:test
+          cache-from: type=local,src=/tmp/.buildx-cache-mcp
+          cache-to: type=local,dest=/tmp/.buildx-cache-mcp-new,mode=max
+      - name: Rotate Buildx caches
+        if: always()
+        run: |
+          for name in backend frontend mcp; do
+            rm -rf "/tmp/.buildx-cache-${name}"
+            if [ -d "/tmp/.buildx-cache-${name}-new" ]; then
+              mv "/tmp/.buildx-cache-${name}-new" "/tmp/.buildx-cache-${name}"
+            fi
+          done

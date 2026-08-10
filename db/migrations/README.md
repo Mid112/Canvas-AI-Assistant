@@ -1,0 +1,89 @@
+# Database migrations
+
+`db/init/01_schema.sql` is applied automatically on **fresh** database containers. It reflects the current schema only.
+
+**Existing databases catch up automatically.** `app/backend/app/core/migrations.py` runs on every backend startup: it applies any `db/migrations/*.sql` file not yet recorded in the `schema_migrations` table, in filename order. You don't need to do anything by hand after a `git pull` that adds a migration — just start the backend (`make reload` / `make dev`) and it applies itself. This exists because `Base.metadata.create_all()` (also run on startup) only creates tables that don't exist yet — it never `ALTER`s an existing one, so without this an existing database would crash the first time a query touched a column/table a migration added.
+
+This automatic runner **never touches migrations 002 through 010** — a few of them (`003`'s bare `RENAME`, `004`/`010`'s unconditional `DROP TABLE` before recreating) are not safe to run a second time, and `004`/`010` are outright destructive if they were. Only migrations from `011` onward — written to the idempotent convention below — are ever candidates to run unattended. This is never actually a gap in practice: any database that can run today's application code already reflects `002`-`010`'s cumulative effect one way or another, either because they were genuinely applied in order, or (the common case) because the database was created from a `db/init/01_schema.sql` snapshot that already baked their result in directly — that file is always a flat snapshot of the *current* schema, never a replay of history.
+
+**Adding a new migration:** write the new file as `NNN_description.sql`, following the `ADD COLUMN IF NOT EXISTS` / `CREATE TABLE IF NOT EXISTS` convention below so it's safe if the automatic runner ends up executing it more than once. Then update three places to match: this table, `db/init/01_schema.sql`'s table definitions (so a fresh database gets the same end state directly), and `db/init/01_schema.sql`'s `schema_migrations` baseline `INSERT` at the bottom of that file (so a fresh database doesn't also try to re-run it).
+
+If you have a genuinely ancient local database (created before the `ta` role was removed, i.e. before migration `002`), the automatic runner won't help — recreate it instead (`docker compose down -v && docker compose up`, or `make db-reset`).
+
+| Migration | Purpose |
+|-----------|---------|
+| `002_remove_ta_role.sql` | Reassigns legacy `ta` users to `instructor` and tightens the role check constraint |
+| `002_submission_status_and_grading.sql` | Adds `grade`/`graded_at` to `submissions` and expands the status check constraint |
+| `003_rename_audit_logs_to_session.sql` | Renames `audit_logs` to `audit_logs_session` (table, constraints, sequence, indexes) to free up the `audit_logs` name for the new workflow/audit-log design — **must run before `004_workflow_auditlog_redesign.sql`** |
+| `004_workflow_auditlog_redesign.sql` | Drops and recreates `workflows`/`audit_logs` with the action-lifecycle schema that fixes the confirm replay bug (both tables were unused, so no data migration is needed) |
+| `005_assignment_description.sql` | Adds `description` to `assignments` for Canvas assignment upserts |
+| `006_workflow_affected_resources.sql` | Adds `affected_resources` JSONB column to `workflows` for action history (#621, #870) |
+| `007_audit_logs_allow_conversation_resource_type.sql` | Allows `'conversation'` as an `audit_logs.resource_type`, alongside `'assignment'`/`'announcement'`, since targeted `send_message` now produces a private conversation instead of an announcement |
+| `008_unstarted_backend_features.sql` | Adds `notification_settings` to `user_preferences`, and the `password_reset_tokens`/`message_drafts`/`system_settings` tables — must run after `004_workflow_auditlog_redesign.sql` |
+| `009_assignment_unique_per_course.sql` | Changes `assignments.canvas_assignment_id` from a globally-unique column to a composite unique constraint on `(canvas_assignment_id, course_id)`, so co-instructors on the same Canvas course each get their own `Assignment` row instead of silently reusing (or failing to insert) one another's |
+| `010_workflow_schema_repair.sql` | Repairs legacy `workflows` tables when `004` could not drop the old schema because `audit_logs_session` still referenced it. Aborts if either table already has rows (row checks run via dynamic SQL only when `to_regclass` confirms the table exists). |
+| `011_course_name_tracking.sql` | Adds `conversations.course_name` (backfilled from `courses`) and `canvas_connections.courses_synced_at`, and creates `canvas_course_names` — a connection-scoped index the chat pipeline uses to resolve a course by name without ever exposing a numeric ID to the LLM |
+| `012_tool_call_logs.sql` | Creates `tool_call_logs`, tracking the pending/executing/executed/failed lifecycle of each individual `fetch_courses`/`fetch_assignments`/`fetch_students`/`fetch_submissions` call now that reads execute immediately instead of going through `workflows`' preview/confirm gate |
+| `013_resolved_sets.sql` | Creates `resolved_sets`, storing server-computed recipient sets (e.g. `resolve_missing_submissions`'s output) behind an opaque handle so the LLM only ever sees a `{count, sample, handle}` summary; `send_message`'s `recipient_handle` field materializes one back into real recipients, scoped to the conversation that created it |
+| `014_canvas_course_names_workflow_state.sql` | Adds `canvas_course_names.workflow_state`, letting `_match_course_name` narrow a duplicate-name match (same course code across multiple terms — `fetch_courses` deliberately includes completed terms) to the still-active offering instead of treating every such match as unresolvable |
+| `015_course_workflow_state_and_assignment_active.sql` | Adds `courses.workflow_state` and `assignments.is_active`, letting `set_active_course()` reject unpublished/non-selectable courses without a live Canvas call, and `get_assignments()`/`get_students()` reconcile rows Canvas no longer returns instead of counting them as active forever |
+| `016_assignment_published.sql` | Adds `assignments.published`, Canvas's own draft/published distinction — a draft assignment is invisible to students and can't have real submissions, so missing/late counts and other analysis surfaces exclude them |
+| `017_course_synced_at.sql` | Adds `courses.synced_at`, so `set_active_course()` can tell a row confirmed against a real Canvas response apart from one merely trusting `015`'s `workflow_state` backfill default |
+| `018_workflow_undo.sql` | Adds `workflows.undone_at`, marking a reversible action (e.g. `update_assignment`) as unambiguously reverted without overloading the existing `status` lifecycle column |
+| `019_audit_logs_allow_delete_operation.sql` | Allows `'delete'` as a valid `audit_logs.operation`, alongside `'create'`/`'update'` — undoing a `create_assignment` action deletes the Canvas assignment, which needs its own audit row |
+| `020_course_cache_columns.sql` | Adds `courses.course_code` and `courses.total_students`, so `get_cached_courses()` can render a full course card straight from the local DB — no live Canvas call needed just to paint the dashboard |
+| `021_audit_logs_allow_quiz_resource_type.sql` | Allows `'quiz'` as an `audit_logs.resource_type` for `create_quiz` / undo. Kept as its own step (rather than folding into 022) because quiz and feedback landed on separate feature branches before merge; 022 is the cumulative final constraint. |
+| `022_audit_logs_allow_submission_resource_type.sql` | Allows `'submission'` as an `audit_logs.resource_type` for `update_grade` audit rows (grade/feedback workflows that write submission resources). Replaces the 021 check with the full set (`assignment`/`announcement`/`conversation`/`quiz`/`submission`). |
+| `023_workflow_nullable_preview.sql` | Makes `workflows.conversation_id`, `source_user_message_id`, and `preview_message_id` nullable so form-created writes (quiz creation form) can be audited without a chat preview message |
+| `024_grade_history.sql` | Creates `grade_history` for high-risk Canvas grade updates, including previous grade/score, reason, rollback metadata, and the Canvas response snapshot |
+| `024_llm_response_cache.sql` | Creates `llm_response_cache`, an expiring user-scoped cache for safe, non-Canvas assistant responses — prompts are keyed only by a SHA-256 digest, raw prompt text is never persisted |
+| `025_instructor_llm_connections.sql` | Creates `instructor_llm_connections`, one row per `(user_id, provider_id)` holding an instructor's configured LLM provider/model/base URL and Fernet-encrypted API key (same encryption key as `canvas_connections.encrypted_token`) |
+| `025_submission_cache_key.sql` | Changes submission cache uniqueness from global `canvas_submission_id` to `(assignment_id, canvas_submission_id)`, matching Canvas IDs that can repeat across assignments/courses |
+| `026_deferred_assistant_requests.sql` | Creates `deferred_assistant_requests`, tracking chat requests paused pending a missing precondition (e.g. no active course/Canvas token) so they can be resumed once the user resolves it, instead of failing outright |
+| `027_llm_response_cache_constraint_name.sql` | Renames `llm_response_cache`'s auto-generated `UNIQUE` constraint (from older `01_schema.sql` snapshots) to the named `uq_llm_response_cache_key` constraint the SQLAlchemy model expects; idempotent if the named constraint already exists |
+| `028_health_checks.sql` | Creates `health_checks`, an audit trail of every backend/database/canvas/ai status logged by `GET /admin/health` (Feature 9, System Health Monitoring) — one row per service per run; also backs `GET /admin/health/history`'s sparkline (Phase 2), bounded by a retention prune |
+| `029_canvas_connection_last_sync_error.sql` | Adds `canvas_connections.last_sync_error`, persisting the outcome `run_course_sync_sweep` already computes on its existing ~60s per-connection Canvas sweep (previously discarded after a log line) — backs the admin System Health page's per-instructor Canvas connectivity summary (Feature 9 Phase 2), at zero new Canvas calls |
+| `030_ai_call_health.sql` | Creates `ai_call_health`, one row per user holding their most recent observed AI call outcome (message-draft/assignment-draft generation only — not the main chat assistant, which is a documented follow-up) — backs the admin System Health page's per-instructor AI usage summary (Feature 9 Phase 2) |
+| `031_canvas_idempotency_keys.sql` | Creates `canvas_idempotency_keys`, caching successful Canvas write outcomes by idempotency key so network retries after success do not create a second Canvas object (Feature Reliability #1189) |
+| `032_conversation_field_memory.sql` | Adds `conversations.field_memory` JSONB for confirmed/collected assistant fields reused across turns (Feature Assistant Context #1235) |
+| `033_workflow_paused_status.sql` | Adds `paused` to `workflows.status` check constraint for multi-preview pause/resume (#1237) |
+| `034_canvas_idempotency_claim_and_retention.sql` | Adds `status` (`pending`/`completed`) and nullable `response_json` for reserve-first idempotency claims; indexes `created_at` for 7-day completed / 5-minute pending TTL pruning (#1189) |
+| `035_workflow_display_name.sql` | Adds `workflows.display_name` for instructor-facing rename of open multi-workflows (#1237) |
+| `036_audit_log_session_nullable_user.sql` | Allows `audit_logs_session.user_id` to be null so failed login attempts against unknown emails can still be audited |
+| `036_failed_operations.sql` | Creates `failed_operations`, an append-only log of Canvas read/write failures and AI call failures — backs the admin Failed Operations dashboard (Feature 11, UR1.6) |
+| `037_failed_operations_human_summary.sql` | Adds `failed_operations.human_summary`, a plain-language description generated at write time so the admin dashboard doesn't translate raw error text at render time (Feature 12, Secure Troubleshooting) |
+| `038_support_tickets.sql` | Creates `support_tickets`, one-per-`failed_operation` admin escalation tracking (status/notes/resolved_by) for the Secure Troubleshooting ticket workflow (Feature 12) |
+| `039_support_ticket_assigned_admin.sql` | Adds `support_tickets.assigned_to` so admins can claim escalated support tickets before resolving them |
+| `040_grade_history_local_relationships.sql` | Adds nullable local `assignments`/`students` foreign keys to `grade_history` and backfills them from the existing Canvas assignment/student IDs when local mirror rows exist. |
+| `041_canvas_course_names_aliases.sql` | Converts `canvas_course_names` from one mutable label per Canvas course to a connection-scoped alias table with `last_seen_at`, preserving historical names for chat resolution while prompts display current `courses.name`/`course_code` |
+| `042_course_unique_per_instructor_url.sql` | Widens `courses.uq_course_per_instructor` from `(canvas_course_id, instructor_id)` to `(canvas_course_id, instructor_id, canvas_url)` so an instructor with two Canvas institutions can keep separate rows when numeric course IDs collide across hosts |
+| `043_repair_canvas_course_names.sql` | Repairs stale chat course snapshots after the alias-table migration: preserves historical `canvas_course_names` aliases, ensures a current `courses.name` alias exists, refreshes alias workflow state, and backfills `conversations.course_name` from `courses.name`. Numbered `043` because `041` and `042` are already used by the alias-table and course-unique migrations. |
+| `044_canvas_connection_time_zone.sql` | Adds `canvas_connections.time_zone` (IANA name from Canvas `/api/v1/users/self`) as the instructor source of truth when interpreting naive assignment due dates (#1435) |
+| `045_unique_canvas_token_fingerprint.sql` | Adds keyed Canvas-token fingerprints and the initial partial uniqueness index; legacy rows are upgraded by the application when they are next checked |
+| `046_scope_canvas_token_fingerprint_to_institution.sql` | Replaces the initial global index with partial uniqueness on `(canvas_url, token_fingerprint)`, with local Docker aliases canonicalized by the application |
+| `047_canonicalize_canvas_connection_urls.sql` | Canonicalizes existing Canvas connection scheme/hostname casing and local Docker aliases; fails safely if canonicalization would create an existing-row collision |
+
+## Canvas token uniqueness rollout
+
+Deployments must apply `045_unique_canvas_token_fingerprint.sql`,
+`046_scope_canvas_token_fingerprint_to_institution.sql`, and
+`047_canonicalize_canvas_connection_urls.sql`, in that order. A fresh database
+gets all three entries from `db/init/01_schema.sql`; an existing database
+applies them automatically on backend startup. Migration 047 fails safely if
+URL canonicalization would create an existing connection or fingerprint
+collision, so resolve the reported rows before retrying deployment.
+
+The fingerprint is a versioned, domain-separated HMAC. The application checks
+the indexed fingerprint first, then decrypts only legacy rows whose fingerprint
+has not yet been upgraded. Safe legacy rows are backfilled during that check.
+If pre-existing legacy rows contain the same plaintext token, the application
+does not silently overwrite either connection: the duplicate remains available
+for an administrator to identify and resolve by forcing one instructor to
+reconnect with a different token. Do not attempt to backfill plaintext tokens
+with SQL; raw tokens are never available to SQL.
+
+Rotating `CANVAS_TOKEN_ENCRYPTION_KEY` also changes fingerprints. Treat that as
+a coordinated maintenance operation: decrypt each existing token in the
+application, recompute its fingerprint under the new key, resolve duplicates,
+and only then enable the new key for normal writes. The encrypted token and
+fingerprint key must be rotated together.

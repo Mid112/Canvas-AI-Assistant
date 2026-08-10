@@ -1,0 +1,210 @@
+import { AlertTriangle } from "lucide-react";
+
+import { AssistantAvatar } from "@/components/brand/AssistantAvatar";
+
+import { ActionCard } from "@/components/chat/ActionCard";
+import { ExplanationCard } from "@/components/chat/ExplanationCard";
+import { PendingActionControls } from "@/components/chat/PendingActionControls";
+import { RiskAlerts } from "@/components/chat/RiskAlerts";
+import type { ChatMessage } from "@/types/chat";
+
+interface AssistantMessageProps {
+  message: ChatMessage;
+  isResolvingPendingAction?: boolean;
+  pendingActionError?: string | null;
+  confirmBlockedReason?: string | null;
+  onConfirmPendingAction?: () => void;
+  onCancelPendingAction?: () => void;
+  onModifyPendingAction?: () => void;
+  onPausePendingAction?: () => void;
+  onResumePendingAction?: () => void;
+  onRenamePendingAction?: (displayName: string) => void;
+  onDismissHandoff?: () => void;
+  isReversingAction?: boolean;
+  reversedWorkflowIds?: ReadonlySet<number>;
+  onReverseAction?: (message: ChatMessage) => void;
+}
+
+function formatTimestamp(timestamp: Date): string {
+  return timestamp.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+export function AssistantMessage({
+  message,
+  isResolvingPendingAction = false,
+  pendingActionError = null,
+  confirmBlockedReason = null,
+  onConfirmPendingAction,
+  onCancelPendingAction,
+  onModifyPendingAction,
+  onPausePendingAction,
+  onResumePendingAction,
+  onRenamePendingAction,
+  onDismissHandoff,
+  isReversingAction = false,
+  reversedWorkflowIds,
+  onReverseAction,
+}: AssistantMessageProps) {
+  const showPendingControls =
+    message.pendingMessageId !== undefined && message.pendingActionStatus;
+  // The interpreted-action card is an offer to review/edit/confirm a proposal,
+  // not a permanent audit record. Once the workflow settles, keep the status
+  // and risk/reversal surfaces below, but hide stale preview/edit links.
+  const isActionOfferActive =
+    !showPendingControls ||
+    message.pendingActionStatus === "pending" ||
+    message.pendingActionStatus === "paused";
+  const showActionOffer =
+    !message.handoffDismissed &&
+    isActionOfferActive &&
+    Boolean(message.interpretedAction);
+  const canActOnPending =
+    message.pendingActionStatus === "pending" ||
+    message.pendingActionStatus === "paused";
+
+  return (
+    <div className="flex gap-3">
+      <AssistantAvatar size="sm" />
+
+      <div className="min-w-0 max-w-[85%] space-y-2 sm:max-w-[75%]">
+        <div className="rounded-2xl rounded-tl-md bg-muted/70 px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap">
+          {message.content}
+        </div>
+
+        {message.acknowledgedFields &&
+        message.acknowledgedFields.length > 0 ? (
+          <div className="rounded-lg border border-border/70 bg-background px-3 py-2.5">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
+              Already provided
+            </p>
+            <dl className="grid gap-1.5 text-sm sm:grid-cols-2">
+              {message.acknowledgedFields.map((field) => (
+                <div key={field.label}>
+                  <dt className="text-xs text-muted-foreground">{field.label}</dt>
+                  <dd className="font-medium">{field.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        ) : null}
+
+        {/* The reply text above is shown exactly as written. This notice
+            replaces the old behaviour of rewriting unbacked numbers to
+            "[grade redacted]" inside the message itself, which hid real
+            answers far more often than fake ones (bugs 12 and 13). */}
+        {message.unverifiedClaims && message.unverifiedClaims.length > 0 ? (
+          <div
+            role="status"
+            className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-950"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <p>
+              Some figures in this answer could not be verified against your
+              Canvas data, so they may be inaccurate. Open the course to
+              confirm before acting on them.
+            </p>
+          </div>
+        ) : null}
+
+        {message.safetyBlocked && message.safetyMessage ? (
+          <div
+            role="alert"
+            className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-950"
+          >
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            <p>{message.safetyMessage}</p>
+          </div>
+        ) : null}
+
+        {!message.handoffDismissed && message.explanation ? (
+          <ExplanationCard explanation={message.explanation} />
+        ) : null}
+
+        {showActionOffer && message.interpretedAction ? (
+          <ActionCard
+            action={message.interpretedAction}
+            onDismiss={
+              !showPendingControls && onDismissHandoff
+                ? onDismissHandoff
+                : undefined
+            }
+          />
+        ) : null}
+
+        {message.interpretedAction?.risk || pendingActionError ? (
+          <RiskAlerts
+            risk={message.interpretedAction?.risk}
+            error={pendingActionError}
+            canReverseAction={
+              message.pendingActionStatus === "confirmed" &&
+              message.workflowId !== undefined
+            }
+            isReversingAction={isReversingAction}
+            reversalCompleted={
+              message.workflowId !== undefined &&
+              Boolean(reversedWorkflowIds?.has(message.workflowId))
+            }
+            onReverseAction={
+              onReverseAction ? () => onReverseAction(message) : undefined
+            }
+          />
+        ) : null}
+
+        {showPendingControls ? (
+          <PendingActionControls
+            status={message.pendingActionStatus}
+            risk={message.interpretedAction?.risk}
+            displayName={message.workflowDisplayName}
+            confirmBlockedReason={confirmBlockedReason}
+            isLoading={isResolvingPendingAction}
+            onConfirm={
+              message.pendingActionStatus === "pending"
+                ? onConfirmPendingAction!
+                : () => {}
+            }
+            onCancel={
+              message.pendingActionStatus === "pending"
+                ? onCancelPendingAction!
+                : () => {}
+            }
+            onModify={
+              message.pendingActionStatus === "pending"
+                ? onModifyPendingAction
+                : undefined
+            }
+            onPause={
+              message.pendingActionStatus === "pending"
+                ? onPausePendingAction
+                : undefined
+            }
+            onResume={
+              message.pendingActionStatus === "paused"
+                ? onResumePendingAction
+                : undefined
+            }
+            onRename={canActOnPending ? onRenamePendingAction : undefined}
+          />
+        ) : null}
+
+        {message.handoffDismissed && !showPendingControls ? (
+          <p
+            role="status"
+            className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm font-medium text-amber-950"
+          >
+            This action was cancelled.
+          </p>
+        ) : null}
+
+        <time
+          dateTime={message.timestamp.toISOString()}
+          className="block text-xs text-muted-foreground"
+        >
+          {formatTimestamp(message.timestamp)}
+        </time>
+      </div>
+    </div>
+  );
+}

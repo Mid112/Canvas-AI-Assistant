@@ -1,0 +1,603 @@
+"""Conversation field memory helpers (Feature Assistant Context #1235)."""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from app.models.conversation import Conversation
+
+# Fields safe to persist and reuse across turns. IDs and instructor-confirmed
+# draft params only — never free-form tool dumps.
+_FIELD_MEMORY_KEYS = frozenset(
+    {
+        "local_course_id",
+        "assignment_id",
+        "assignment_reference",
+        "student_id",
+        "student_reference",
+        "title",
+        "description",
+        "due_date",
+        "points_possible",
+        "quiz_engine",
+        "subject",
+        "body",
+        "new_grade",
+        "feedback",
+        "reason",
+        "action",
+    }
+)
+
+# Subset of _FIELD_MEMORY_KEYS that are safe to persist from a clarify
+# partial_plan. A clarify fires when the LLM's action was missing a field
+# OR a field failed to resolve (e.g. student_reference "999999" didn't
+# match any real student). Persisting the unresolved values would poison
+# the next turn — the LLM would see them in field memory labeled as
+# "confirmed earlier" and reuse them even if the user never re-mentioned them.
+#
+# Only persist fields that are context-setting, not action-specific:
+#   - local_course_id: which course we're working in (safe, verified)
+#   - assignment_reference: the user's own words for which assignment
+#   - title, description, due_date, points_possible: assignment draft params
+#     the user explicitly provided
+#   - grade/feedback values are persisted only through the server-side grade
+#     resolver path; generic LLM clarification plans must not retain them.
+#
+# Exclude ALL student-related fields (student_id, student_reference) and
+# assignment_id (raw Canvas IDs, which may be hallucinated), and grade fields
+# from generic LLM plans. Resolver-produced grade context is merged through a
+# separate allowlist after the server has validated the action.
+_PARTIAL_PLAN_SAFE_KEYS = _FIELD_MEMORY_KEYS - {
+    "assignment_id",
+    "student_id",
+    "student_reference",
+    "new_grade",
+    "feedback",
+    "reason",
+}
+
+# Capped MRU lists persisted alongside scalar keys (#1302). Not free-form
+# tool dumps — only id + display label for prompt context.
+_RECENT_ASSIGNMENTS_KEY = "recent_assignments"
+_RECENT_STUDENTS_KEY = "recent_students"
+_RECENT_LIST_CAP = 5
+
+# Append-only grounding accumulator from real tool fetches (#1303). Stored
+# separately so scalar memory fields never authorize grade/title claims alone.
+_GROUNDED_FACTS_KEY = "grounded_facts"
+_GROUNDED_FACTS_CAP = 64
+
+# Compact course-selection envelope (#1507 / Ticket 46). Indexed + timestamped
+# so follow-ups can prefer the latest selection without dumping the full
+# course list into every turn. Not in _FIELD_MEMORY_KEYS — it is structured
+# metadata, formatted explicitly in format_field_memory_for_prompt.
+_COURSE_CONTEXT_KEY = "course_context"
+
+
+def record_course_context(
+    conversation: Conversation,
+    *,
+    local_course_id: int,
+    course_name: str | None = None,
+    course_code: str | None = None,
+) -> dict[str, Any]:
+    """Upsert the indexed, timestamped course-selection envelope (#1507).
+
+    Bumps ``index`` when the selected course changes (or on first write) so
+    recency/order is obvious in the prompt JSON. Re-recording the same
+    course is a no-op so ordinary chat turns do not inflate the counter.
+    """
+    from datetime import UTC, datetime
+
+    memory = dict(conversation.field_memory or {})
+    previous = memory.get(_COURSE_CONTEXT_KEY)
+    previous_dict = previous if isinstance(previous, dict) else None
+    previous_id = _coerce_int((previous_dict or {}).get("local_course_id"))
+
+    if previous_dict is not None and previous_id == local_course_id:
+        # Same selection — keep the existing envelope, still ensure the
+        # scalar course id matches for older readers of field memory.
+        memory["local_course_id"] = local_course_id
+        conversation.field_memory = memory
+        return previous_dict
+
+    try:
+        previous_index = int((previous_dict or {}).get("index") or 0)
+    except (TypeError, ValueError):
+        previous_index = 0
+
+    envelope: dict[str, Any] = {
+        "index": previous_index + 1,
+        "selected_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "local_course_id": local_course_id,
+    }
+    if course_name:
+        envelope["course_name"] = course_name
+    if course_code:
+        envelope["course_code"] = course_code
+
+    memory[_COURSE_CONTEXT_KEY] = envelope
+    memory["local_course_id"] = local_course_id
+    conversation.field_memory = memory
+    return envelope
+
+
+def merge_field_memory(
+    conversation: Conversation,
+    source: dict[str, Any] | None,
+    *,
+    allowed_keys: frozenset[str] | None = None,
+) -> None:
+    """Merge confirmed/collected fields into conversation.field_memory.
+
+    When ``allowed_keys`` is given (e.g. ``_PARTIAL_PLAN_SAFE_KEYS``), only
+    those keys are persisted — used for clarify ``partial_plan`` merges where
+    raw Canvas IDs from the LLM must not be trusted (see #1305).
+    """
+    if not source:
+        return
+    keys = allowed_keys if allowed_keys is not None else _FIELD_MEMORY_KEYS
+    memory = dict(conversation.field_memory or {})
+    for key, value in source.items():
+        if key not in keys or value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        memory[key] = value
+    conversation.field_memory = memory
+
+
+# The one question the assistant is currently waiting on an answer to.
+#
+# Nothing in the schema links a reply to what it replies to: messages hold
+# role + text, and the only cross-turn pointer in the system is
+# pending_message_id, which points at a preview. So "the second one" arrives
+# as three words with no record of what was on offer, and the model re-derives
+# the list from history or gives up and asks again.
+#
+# Deliberately a single record, not a graph. One question is outstanding at a
+# time by construction — the assistant asks, then waits — and a list of stale
+# expectations is a source of wrong answers, not context.
+_PENDING_EXPECTATION_KEY = "pending_expectation"
+
+# Enough to answer "which of these did you mean" without turning field memory
+# into a roster dump.
+_EXPECTATION_CANDIDATE_CAP = 12
+
+_AFFIRMATIVES = frozenset(
+    {"yes", "yep", "yeah", "yup", "sure", "ok", "okay", "correct", "right", "y"}
+)
+
+_ORDINAL_WORDS = {
+    "first": 1, "1st": 1, "one": 1,
+    "second": 2, "2nd": 2, "two": 2,
+    "third": 3, "3rd": 3, "three": 3,
+    "fourth": 4, "4th": 4, "four": 4,
+    "fifth": 5, "5th": 5, "five": 5,
+}
+
+
+def record_pending_expectation(
+    conversation: Conversation,
+    *,
+    field: str,
+    question: str,
+    candidates: list[dict[str, Any]] | None = None,
+    action: str | None = None,
+) -> None:
+    """Remember what the assistant just asked, so the next turn can read the
+    reply as an answer to it rather than as a fresh request."""
+    memory = dict(conversation.field_memory or {})
+    memory[_PENDING_EXPECTATION_KEY] = {
+        "field": field,
+        "question": question,
+        "action": action,
+        "candidates": [
+            {"id": candidate.get("id"), "label": str(candidate.get("label", ""))}
+            for candidate in (candidates or [])[:_EXPECTATION_CANDIDATE_CAP]
+        ],
+    }
+    conversation.field_memory = memory
+
+
+def pending_expectation(memory: dict[str, Any] | None) -> dict[str, Any] | None:
+    expectation = (memory or {}).get(_PENDING_EXPECTATION_KEY)
+    return expectation if isinstance(expectation, dict) else None
+
+
+def clear_pending_expectation(conversation: Conversation) -> None:
+    memory = dict(conversation.field_memory or {})
+    if memory.pop(_PENDING_EXPECTATION_KEY, None) is not None:
+        conversation.field_memory = memory
+
+
+def resolve_against_expectation(
+    expectation: dict[str, Any] | None, reply: str
+) -> dict[str, Any] | None:
+    """Read a short reply as an answer to the recorded question.
+
+    Three forms, in order of how unambiguous they are:
+
+    * a label the reply names outright ("lab report b"), longest match winning
+      so a label containing another does not lose to it;
+    * an ordinal into the list as it was offered ("the second one", "2");
+    * a bare "yes" — but only when exactly one candidate was offered, since
+      "yes" to a list of three says nothing about which.
+
+    Returns ``{"field": ..., "id": ..., "label": ...}`` or None. None means
+    the reply was not an answer to this question, which is the common case:
+    instructors change the subject mid-thread, and treating "actually show me
+    the roster" as a choice of assignment would be worse than asking again.
+    """
+    if not expectation:
+        return None
+    candidates = [
+        candidate
+        for candidate in expectation.get("candidates") or []
+        if candidate.get("label")
+    ]
+    if not candidates:
+        return None
+
+    normalized = " ".join(reply.lower().split())
+    stripped = normalized.strip(" .!?,")
+
+    matches = [
+        candidate
+        for candidate in candidates
+        if candidate["label"].lower() in normalized
+    ]
+    if matches:
+        best = max(matches, key=lambda candidate: len(candidate["label"]))
+        # A tie between two different labels of the same length is genuine
+        # ambiguity — the same rule the reference pre-pass uses.
+        if sum(1 for c in matches if len(c["label"]) == len(best["label"])) == 1:
+            return {"field": expectation.get("field"), **best}
+
+    index = _ORDINAL_WORDS.get(stripped)
+    if index is None and stripped.isdigit():
+        # A bare number is the shortest possible answer to a numbered list and
+        # the one instructors actually type.
+        index = int(stripped)
+    if index is None:
+        for word in stripped.replace(",", " ").split():
+            if word in _ORDINAL_WORDS:
+                index = _ORDINAL_WORDS[word]
+                break
+    if index is not None and 1 <= index <= len(candidates):
+        return {"field": expectation.get("field"), **candidates[index - 1]}
+
+    if stripped in _AFFIRMATIVES and len(candidates) == 1:
+        return {"field": expectation.get("field"), **candidates[0]}
+
+    return None
+
+
+def clear_course_scoped_field_memory(conversation: Conversation) -> None:
+    """Clear assignment/student-scoped fields when the conversation switches
+    courses (#1306). Without this, ``recent_assignments`` and
+    ``recent_students`` from course A leak into course B's context, and the
+    LLM may reference them as if they belong to the new course. Also clears
+    scalar ``assignment_id``/``student_id`` and their reference strings,
+    since those are course-scoped by definition. ``grounded_facts`` is
+    cleared too — its IDs are course-scoped (a student ID from course A
+    is not valid in course B). ``local_course_id`` is kept since the
+    caller sets it to the new course immediately after.
+    """
+    memory = dict(conversation.field_memory or {})
+    for key in (
+        "assignment_id",
+        "assignment_reference",
+        "student_id",
+        "student_reference",
+        "new_grade",
+        "feedback",
+        "reason",
+        _RECENT_ASSIGNMENTS_KEY,
+        _RECENT_STUDENTS_KEY,
+        _GROUNDED_FACTS_KEY,
+        # The outstanding question was about the old course's assignments or
+        # roster; answering it against the new course would resolve an id that
+        # does not exist there.
+        _PENDING_EXPECTATION_KEY,
+    ):
+        memory.pop(key, None)
+    conversation.field_memory = memory
+
+
+def _coerce_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _remember_recent(
+    memory: dict[str, Any],
+    list_key: str,
+    entry: dict[str, Any],
+    *,
+    id_key: str,
+    cap: int = _RECENT_LIST_CAP,
+) -> None:
+    entity_id = entry.get(id_key)
+    if entity_id is None:
+        return
+    current = [
+        item
+        for item in (memory.get(list_key) or [])
+        if isinstance(item, dict) and item.get(id_key) != entity_id
+    ]
+    current.insert(0, entry)
+    memory[list_key] = current[:cap]
+
+
+def _assignment_id_from_nested(assignment: dict[str, Any]) -> int | None:
+    """Accept both ``id`` and chat-chain ``assignment_id`` nested shapes."""
+    return _coerce_int(
+        assignment.get("id")
+        or assignment.get("assignment_id")
+        or assignment.get("canvas_assignment_id")
+    )
+
+
+def _assignment_name_from_nested(assignment: dict[str, Any]) -> str | None:
+    for key in ("name", "assignment_name", "title"):
+        value = assignment.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def extract_refs_from_read_result(
+    action_dump: dict[str, Any] | None,
+    result: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Pull resolved assignment/student refs from a read action + result (#1302)."""
+    action_dump = action_dump or {}
+    result = result or {}
+    refs: dict[str, Any] = {}
+
+    course_id = _coerce_int(result.get("local_course_id") or action_dump.get("local_course_id"))
+    if course_id is not None:
+        refs["local_course_id"] = course_id
+
+    assignment_id = _coerce_int(result.get("assignment_id"))
+    if assignment_id is None and isinstance(result.get("assignment"), dict):
+        assignment_id = _assignment_id_from_nested(result["assignment"])
+    if assignment_id is None:
+        assignment_id = _coerce_int(action_dump.get("assignment_id"))
+    if assignment_id is not None:
+        refs["assignment_id"] = assignment_id
+
+    assignment_ref = result.get("assignment_name") or result.get("assignment_reference")
+    if isinstance(result.get("assignment"), dict):
+        assignment_ref = assignment_ref or _assignment_name_from_nested(result["assignment"])
+    if not assignment_ref:
+        assignment_ref = action_dump.get("assignment_reference")
+    if isinstance(assignment_ref, str) and assignment_ref.strip():
+        refs["assignment_reference"] = assignment_ref.strip()
+
+    student_id = _coerce_int(result.get("student_id") or action_dump.get("student_id"))
+    if student_id is not None:
+        refs["student_id"] = student_id
+
+    student_ref = result.get("student_name") or result.get("student_reference") or action_dump.get(
+        "student_reference"
+    )
+    if isinstance(student_ref, str) and student_ref.strip():
+        refs["student_reference"] = student_ref.strip()
+
+    return refs
+
+
+def _remember_assignments_from_list(memory: dict[str, Any], items: list[Any]) -> None:
+    """Populate recent_assignments from fetch_assignments-style payloads."""
+    # Insert in reverse so the first list item ends up most-recent (front).
+    for item in reversed(items):
+        if not isinstance(item, dict):
+            continue
+        assignment_id = _assignment_id_from_nested(item)
+        if assignment_id is None:
+            continue
+        name = _assignment_name_from_nested(item) or f"Assignment {assignment_id}"
+        _remember_recent(
+            memory,
+            _RECENT_ASSIGNMENTS_KEY,
+            {"id": assignment_id, "name": name},
+            id_key="id",
+        )
+
+
+def _remember_students_from_list(memory: dict[str, Any], items: list[Any]) -> None:
+    """Populate recent_students from fetch_students-style payloads.
+
+    Prefer Canvas user ids (``canvas_user_id`` / ``user_id``) over the local
+    Student row ``id`` — follow-up grade/student resolvers match submission
+    ``user_id`` / prompt ``canvas_user_id``, not the local PK (#1302).
+    """
+    for item in reversed(items):
+        if not isinstance(item, dict):
+            continue
+        student_id = _coerce_int(
+            item.get("canvas_user_id") or item.get("user_id") or item.get("id")
+        )
+        if student_id is None:
+            continue
+        name = item.get("name")
+        if not isinstance(name, str) or not name.strip():
+            name = f"Student {student_id}"
+        else:
+            name = name.strip()
+        _remember_recent(
+            memory,
+            _RECENT_STUDENTS_KEY,
+            {"id": student_id, "name": name},
+            id_key="id",
+        )
+
+
+def merge_read_result_into_field_memory(
+    conversation: Conversation,
+    action_dump: dict[str, Any] | None,
+    result: dict[str, Any] | None,
+) -> None:
+    """Persist resolved read refs + capped recent entity lists (#1302)."""
+    if not isinstance(result, dict) or result.get("clarify") or result.get("error"):
+        return
+    refs = extract_refs_from_read_result(action_dump, result)
+    assignments_list = result.get("assignments")
+    students_list = result.get("students")
+    has_assignment_list = isinstance(assignments_list, list) and bool(assignments_list)
+    has_student_list = isinstance(students_list, list) and bool(students_list)
+    if not refs and not has_assignment_list and not has_student_list:
+        return
+
+    if refs:
+        merge_field_memory(conversation, refs)
+    memory = dict(conversation.field_memory or {})
+
+    if "assignment_id" in refs:
+        _remember_recent(
+            memory,
+            _RECENT_ASSIGNMENTS_KEY,
+            {
+                "id": refs["assignment_id"],
+                "name": refs.get("assignment_reference") or f"Assignment {refs['assignment_id']}",
+            },
+            id_key="id",
+        )
+    if "student_id" in refs:
+        _remember_recent(
+            memory,
+            _RECENT_STUDENTS_KEY,
+            {
+                "id": refs["student_id"],
+                "name": refs.get("student_reference") or f"Student {refs['student_id']}",
+            },
+            id_key="id",
+        )
+
+    if has_assignment_list:
+        assignments = assignments_list if isinstance(assignments_list, list) else []
+        _remember_assignments_from_list(memory, assignments)
+        # Prefer the first list entry as the scalar follow-up default when the
+        # read did not already resolve a single assignment.
+        if "assignment_id" not in refs:
+            first = next(
+                (
+                    item
+                    for item in assignments
+                    if isinstance(item, dict) and _assignment_id_from_nested(item) is not None
+                ),
+                None,
+            )
+            if first is not None:
+                memory["assignment_id"] = _assignment_id_from_nested(first)
+                first_name = _assignment_name_from_nested(first)
+                if first_name:
+                    memory["assignment_reference"] = first_name
+
+    if has_student_list:
+        students = students_list if isinstance(students_list, list) else []
+        _remember_students_from_list(memory, students)
+
+    conversation.field_memory = memory
+
+
+def format_field_memory_for_prompt(memory: dict[str, Any] | None) -> str:
+    if not memory:
+        return ""
+    compact = {k: v for k, v in memory.items() if k in _FIELD_MEMORY_KEYS and v is not None}
+    recent_assignments = memory.get(_RECENT_ASSIGNMENTS_KEY) or []
+    recent_students = memory.get(_RECENT_STUDENTS_KEY) or []
+    if recent_assignments:
+        compact[_RECENT_ASSIGNMENTS_KEY] = recent_assignments
+    if recent_students:
+        compact[_RECENT_STUDENTS_KEY] = recent_students
+    course_context = memory.get(_COURSE_CONTEXT_KEY)
+    if isinstance(course_context, dict) and course_context:
+        # Ticket 46 / #1507: compact JSON the model can trust for the
+        # active selection without re-pasting the full course catalog.
+        compact[_COURSE_CONTEXT_KEY] = course_context
+    if not compact:
+        return ""
+    return (
+        "FIELD MEMORY (confirmed earlier in this conversation — reuse these "
+        "values on follow-ups unless the user explicitly overrides them):\n"
+        f"{json.dumps(compact, default=str)}"
+    )
+
+
+def grounded_facts_from_memory(memory: dict[str, Any] | None) -> dict[str, list]:
+    """Return the persisted grounded_facts blob (lists) or empty lists."""
+    raw = (memory or {}).get(_GROUNDED_FACTS_KEY) or {}
+    if not isinstance(raw, dict):
+        return {"ids": [], "names": [], "grades": [], "dates": []}
+    return {
+        "ids": [coerced for v in (raw.get("ids") or []) if (coerced := _coerce_int(v)) is not None],
+        "names": [str(v) for v in (raw.get("names") or []) if str(v).strip()],
+        "grades": [str(v) for v in (raw.get("grades") or []) if str(v).strip()],
+        "dates": [str(v) for v in (raw.get("dates") or []) if str(v).strip()],
+    }
+
+
+def merge_grounded_facts_into_memory(
+    conversation: Conversation,
+    *,
+    ids: set[int],
+    names: set[str],
+    grades: set[str],
+    dates: set[str],
+    cap: int = _GROUNDED_FACTS_CAP,
+) -> None:
+    """Append-only union of tool-derived facts into field_memory (#1303)."""
+    if not (ids or names or grades or dates):
+        return
+    memory = dict(conversation.field_memory or {})
+    prior = grounded_facts_from_memory(memory)
+
+    def _merge_list(existing: list, incoming: set[str] | set[int], *, as_int: bool = False) -> list:
+        merged: list = list(existing)
+        seen = set(merged)
+        for item in sorted(incoming, key=lambda value: str(value)):
+            merged_value: int | str
+            if as_int:
+                coerced = _coerce_int(item)
+                if coerced is None:
+                    continue
+                merged_value = coerced
+            else:
+                merged_value = str(item)
+            if merged_value in seen:
+                continue
+            merged.append(merged_value)
+            seen.add(merged_value)
+        return merged[-cap:]
+
+    memory[_GROUNDED_FACTS_KEY] = {
+        "ids": _merge_list(prior["ids"], ids, as_int=True),
+        "names": _merge_list(prior["names"], names),
+        "grades": _merge_list(prior["grades"], grades),
+        "dates": _merge_list(prior["dates"], dates),
+    }
+    conversation.field_memory = memory
+
+
+def trim_tool_dump_for_history(result: Any, *, max_chars: int = 2500) -> Any:
+    """Keep field memory-sized context; truncate large tool payloads for the
+    LLM history window (#1235 context-window audit)."""
+    if isinstance(result, str):
+        return result if len(result) <= max_chars else result[: max_chars - 3] + "..."
+    try:
+        encoded = json.dumps(result, default=str)
+    except TypeError:
+        return result
+    if len(encoded) <= max_chars:
+        return result
+    return {
+        "_truncated": True,
+        "preview": encoded[: max_chars - 3] + "...",
+    }

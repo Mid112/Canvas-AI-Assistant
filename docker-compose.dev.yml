@@ -1,0 +1,133 @@
+# ─────────────────────────────────────────────
+# docker-compose.dev.yml — Local Development
+#
+# Use this for day-to-day development.
+# Key differences from docker-compose.yml:
+#   - Postgres exposed on 5433 so you can use TablePlus/pgAdmin
+#   - Backend runs with --reload (auto-restarts on code changes)
+#   - Backend code mounted as a volume (no rebuild needed)
+#   - No frontend container (run npm run dev separately)
+#   - No nginx (access backend directly on port 8000)
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up
+#   cd app/frontend && npm run dev   (in a separate terminal)
+# ─────────────────────────────────────────────
+
+networks:
+  backend_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  canvas_data:
+
+services:
+  # ─────────────────────────────────────────────
+  # Database
+  # ─────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: app_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-appuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
+      POSTGRES_DB: ${POSTGRES_DB:-appdb}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Auto-runs schema on first startup
+      - ./db/init:/docker-entrypoint-initdb.d
+    ports:
+      # Exposed on 5433 (not 5432) to avoid conflicts with any
+      # local postgres installation you may already have running.
+      # Connect with: host=localhost port=5433 user=appuser
+      - "5433:5432"
+    networks:
+      - backend_net
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-appuser} -d ${POSTGRES_DB:-appdb}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  canvas-docker:
+    image: lbjay/canvas-docker
+    platform: linux/amd64
+    container_name: canvas_lms
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - canvas_data:/opt/canvas-lms/tmp
+    networks:
+      - backend_net
+  # ─────────────────────────────────────────────
+  # Backend (FastAPI) — dev mode
+  # ─────────────────────────────────────────────
+  backend:
+    build:
+      context: ./app/backend
+      dockerfile: Dockerfile
+    container_name: app_backend
+    restart: unless-stopped
+    environment:
+      # Points to the postgres service above via Docker internal DNS
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-appuser}:${POSTGRES_PASSWORD:-localdev}@postgres:5432/${POSTGRES_DB:-appdb}
+      SECRET_KEY: ${SECRET_KEY:-localdevsecret}
+      DEBUG: "true"
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:5173}
+      CANVAS_API_URL: ${CANVAS_API_URL:-http://canvas_lms:3000}
+      CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-}
+      CANVAS_TOKEN_ENCRYPTION_KEY: ${CANVAS_TOKEN_ENCRYPTION_KEY:-ebcquOyeXkl8geXIi5sS4BYEeh1mYSdWHiSuBkXr9T4=}
+      # Feature 13 MCP sidecar (optional). Default off so local day-to-day
+      # work still uses direct Canvas; set MCP_ENABLED=true to exercise the
+      # required-action routing path against mcp_server below.
+      MCP_SERVER_URL: ${MCP_SERVER_URL:-http://mcp_server:8001}
+      MCP_ENABLED: ${MCP_ENABLED:-false}
+      MCP_SHARED_SECRET: ${MCP_SHARED_SECRET:-local-mcp-shared-secret}
+    volumes:
+      # Mount your local code into the container so changes
+      # are reflected immediately without rebuilding the image.
+      - ./app/backend:/app
+      # Keep startup migrations available even though /app is a dev bind mount.
+      - ./db/migrations:/db/migrations:ro
+    ports:
+      # Access the API directly at http://localhost:8000
+      # Swagger docs available at http://localhost:8000/docs
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend_net
+    # --reload watches for file changes and restarts uvicorn
+    # automatically — no manual restarts needed during development
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ─────────────────────────────────────────────
+  # MCP Server (Canvas tool sidecar) — Feature 13
+  # ─────────────────────────────────────────────
+  mcp_server:
+    build:
+      context: ./app/mcp
+      dockerfile: Dockerfile
+    container_name: app_mcp
+    restart: unless-stopped
+    environment:
+      CANVAS_API_URL: ${CANVAS_API_URL:-http://canvas_lms:3000}
+      CANVAS_API_TOKEN: ${CANVAS_API_TOKEN:-}
+      MCP_SHARED_SECRET: ${MCP_SHARED_SECRET:-local-mcp-shared-secret}
+      MCP_ALLOWED_CANVAS_HOSTS: ${MCP_ALLOWED_CANVAS_HOSTS:-canvas_lms,localhost}
+    # Host publish is for local debugging only; /tools/call and /mcp still
+    # require MCP_SHARED_SECRET so the port is not an open proxy.
+    ports:
+      - "8001:8001"
+    depends_on:
+      - backend
+    networks:
+      - backend_net
