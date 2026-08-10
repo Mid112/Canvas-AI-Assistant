@@ -9,10 +9,6 @@ Briefly describe the changes in this PR.
 - [ ] Documentation update
 - [ ] Other (please describe)
 
-## Related Issues
-
-Closes #(issue number)
-
 ## Changes Made
 
 - [Change 1]
