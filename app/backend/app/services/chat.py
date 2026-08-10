@@ -207,6 +207,11 @@ MAX_TURN_STEPS = 15
 # read. Adding a future resolver here is the only wiring a new one needs
 # to get automatic multi-step chaining — no loop/dispatch changes required.
 _CHAINABLE_READ_ACTIONS = frozenset({"resolve_missing_submissions", "find_assignment_by_submission_rate"})
+
+# Writes that create a brand-new Canvas resource inside a course. They have no
+# existing resource to resolve against, so the course is the only thing that
+# can be — and until _run_create_chain, the only thing that wasn't.
+_COURSE_SCOPED_CREATE_ACTIONS = frozenset({"create_assignment", "create_quiz"})
 # Failure paths (parse errors, timeouts, HTTP errors) log the full raw
 # diagnostic — for a "thinking" model that can mean the entire verbose
 # <think> block, hundreds to thousands of tokens — as the assistant message
@@ -640,6 +645,52 @@ def _match_course_name(course_names: list[CanvasCourseName], course_name: str | 
     if len(substring_matches) > 1:
         return _resolve_duplicate_course_name_matches(substring_matches)
     return None
+
+
+def _prescan_course_reference(
+    course_names: list[CanvasCourseName], message: str
+) -> CanvasCourseName | None:
+    """The course a message names, matched locally against the instructor's
+    real course list — no LLM call, no Canvas round-trip.
+
+    _match_course_name answers "which course is this *name*"; this answers
+    "does this *message* name a course at all", which is what a resolver
+    running before the model has committed to anything needs. The normalized
+    substring test is the same one _message_may_name_another_course already
+    uses, so "... for capstone project" finds "Capstone Project" regardless of
+    case or punctuation.
+
+    Longest match wins for the same reason it does in
+    _prescan_assignment_reference: a message naming "COSC 499W" should not
+    bind to "COSC 499". Several rows matching at that same length go through
+    _resolve_duplicate_course_name_matches, which folds aliases together and
+    drops completed terms; anything still ambiguous returns None rather than
+    guessing between two live courses.
+    """
+    normalized_message = _normalize_course_text(message)
+    if not normalized_message:
+        return None
+
+    matches: list[tuple[int, CanvasCourseName]] = []
+    for course_name in course_names:
+        longest = 0
+        for value in _course_exact_match_texts(course_name):
+            normalized = _normalize_course_text(value)
+            # Short codes ("CS") turn up inside ordinary words.
+            if len(normalized) < _COURSE_NAME_FUZZY_MATCH_MIN_LENGTH:
+                continue
+            if normalized in normalized_message:
+                longest = max(longest, len(normalized))
+        if longest:
+            matches.append((longest, course_name))
+
+    if not matches:
+        return None
+    best_length = max(length for length, _ in matches)
+    top = [course_name for length, course_name in matches if length == best_length]
+    if len(top) == 1:
+        return top[0]
+    return _resolve_duplicate_course_name_matches(top)
 
 
 _COURSE_CONTEXT_PATTERNS = (
@@ -1864,6 +1915,112 @@ async def _run_find_assignment_by_submission_rate_chain(
 
 
 _UPDATE_ASSIGNMENT_FIELDS = ("title", "description", "due_date", "points_possible")
+
+
+async def _resolve_create_target_course(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    course_names: list[CanvasCourseName],
+    proposed: dict[str, Any],
+    user_message: str,
+) -> Course | dict:
+    """Decide which course a create_assignment / create_quiz turn is really
+    about, before a preview quotes one.
+
+    Precedence, strongest signal first:
+
+    1. A course the message itself unambiguously names. The instructor typed
+       it; nothing beats that.
+    2. The conversation's course. By the time a turn reaches here this has
+       already survived the explicit dropdown selection and
+       _resolve_course_switch, so it is a resolved value, not a guess.
+    3. proposed["local_course_id"] — the model's own echo, which is the value
+       that goes wrong and so is trusted last.
+
+    Every branch ends at resolve_course, so an id that is not this
+    instructor's still fails the ownership check exactly as before.
+
+    Returns the Course, or a clarify dict when there is nothing to resolve.
+    """
+    named = _prescan_course_reference(course_names, user_message)
+    if named is not None and named.local_course_id is not None:
+        return await resolve_course(db, user, named.local_course_id)
+
+    for candidate in (conversation.course_id, proposed.get("local_course_id")):
+        resolved_id = _coerce_int(candidate)
+        if resolved_id is not None:
+            return await resolve_course(db, user, resolved_id)
+
+    options = ", ".join(
+        sorted({_course_display_name(course_name) for course_name in course_names})
+    )
+    return {
+        "action": "clarify",
+        "clarify": True,
+        "question": (
+            f"Which course should I create this in? Options: {options}."
+            if options
+            else "Which course should I create this in?"
+        ),
+        "partial_plan": {
+            key: value
+            for key, value in proposed.items()
+            if key not in ("action", "local_course_id") and value is not None
+        },
+    }
+
+
+async def _run_create_chain(
+    db: AsyncSession,
+    user: User,
+    conversation: Conversation,
+    course_names: list[CanvasCourseName],
+    proposed: dict[str, Any],
+    user_message: str,
+    summary: str | None = None,
+) -> dict:
+    """create_assignment / create_quiz, with the course resolved server-side.
+
+    These two were the only writes with no resolver in front of them: the
+    model's action went straight to a preview. Nothing downstream catches a
+    wrong course either — the intent_preview path resolves
+    proposed["local_course_id"] only to check the instructor *owns* it, never
+    to check it is the one they meant. So "create an assignment for capstone
+    project" typed while another course was active built it against the active
+    course, and the confirm card named that course, which looks correct.
+
+    Only local_course_id is corrected here. Title, description, due date and
+    points stay exactly as the model produced them: resolving those would be
+    inventing them. Everything else — missing-field clarifies, the past-due-date
+    clarify, due-date timezone resolution and the preview metadata itself —
+    is left to the existing intent_preview dispatch rather than duplicated.
+
+    Takes the proposed dict rather than a parsed action because both routes in
+    have to land here: the model naming create_assignment directly, and the
+    model wrapping it in intent_preview as the system prompt asks. Guarding
+    only the first would leave the common case unresolved.
+    """
+    resolved = await _resolve_create_target_course(
+        db, user, conversation, course_names, proposed, user_message
+    )
+    if isinstance(resolved, dict):
+        return resolved
+
+    corrected = {**proposed, "local_course_id": resolved.id}
+    action_name = str(corrected.get("action", "create")).replace("_", " ")
+    return await execute_tool(
+        db,
+        user,
+        IntentPreviewAction(
+            summary=summary
+            or (
+                f"I'll {action_name} in {resolved.name} as described below. "
+                "Please review before confirming."
+            ),
+            proposed_action=corrected,
+        ),
+    )
 
 
 async def _run_update_assignment_chain(
@@ -4417,6 +4574,27 @@ async def handle_chat_message(
                 # model's own judgment over raw data it was never shown.
                 result = await _run_find_assignment_by_submission_rate_chain(
                     db, user, conversation, user_msg, action, message
+                )
+            elif action.action in _COURSE_SCOPED_CREATE_ACTIONS:
+                # The two writes that used to reach a preview with no course
+                # resolution at all — see _run_create_chain. Must come before
+                # the auto-wrap branch below, which is what previously handled
+                # a bare create action and trusted local_course_id outright.
+                result = await _run_create_chain(
+                    db, user, conversation, course_names, action.model_dump(), message
+                )
+            elif (
+                action.action == "intent_preview"
+                and isinstance(getattr(action, "proposed_action", None), dict)
+                and action.proposed_action.get("action") in _COURSE_SCOPED_CREATE_ACTIONS
+            ):
+                # The same resolution for the route the system prompt actually
+                # asks for: the model wrapping its own create in an
+                # intent_preview. Guarding only the bare-action branch above
+                # would leave the common case unresolved.
+                result = await _run_create_chain(
+                    db, user, conversation, course_names,
+                    action.proposed_action, message, action.summary,
                 )
             elif action.action == "update_assignment":
                 # Always route through the resolver chain — even when the
