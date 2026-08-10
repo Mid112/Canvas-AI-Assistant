@@ -1,51 +1,61 @@
 """Grading an unpublished assignment: refused up front, and named correctly.
 
-Two defects, reported together from one session. Canvas will not accept a
-grade or a submission comment on an unpublished assignment, but nothing
-checked that before the write — the instructor filled in a grade, confirmed a
-preview, and only then got an error. Worse, the error Canvas returns for this
-is a 401, which every caller mapped to "Invalid Canvas API token", so the
-message told them to reconnect a token that was working.
+Two defects reported together from one session. Canvas will not accept a grade
+or a submission comment on an unpublished assignment, but nothing checked that
+before the write — the instructor filled in a grade, confirmed a preview, and
+only then saw an error. Worse, Canvas reports that refusal as a 401, which was
+mapped unconditionally to "Invalid Canvas API token", so the message told them
+to reconnect a token that was working perfectly.
+
+Deliberately DB-free: both fixes are pure decisions (which HTTP error a Canvas
+response means, and whether a mirrored assignment may be written to), so they
+are driven directly rather than through the endpoint stack.
 """
-import uuid
-from unittest.mock import AsyncMock, patch
+import asyncio
+from types import SimpleNamespace
 
 import httpx
 import pytest
 from fastapi import HTTPException
-from fastapi.testclient import TestClient
 
 from app.integrations.canvas import _raise_for_canvas_error
-from app.main import app
+from app.services.canvas import require_published_assignment, require_writable_course
 
 CANVAS_URL = "https://canvas.example.edu"
 
 
-@pytest.fixture(scope="module")
-def client():
-    with TestClient(app) as c:
-        yield c
-
-
-def _canvas_401(payload: dict | None, text: str | None = None) -> httpx.Response:
+def _canvas_401(payload: dict | None = None, text: str = "") -> httpx.Response:
     request = httpx.Request("PUT", f"{CANVAS_URL}/api/v1/courses/1/assignments/2/submissions/3")
     if payload is not None:
         return httpx.Response(401, json=payload, request=request)
-    return httpx.Response(401, text=text or "", request=request)
+    return httpx.Response(401, text=text, request=request)
+
+
+class _FakeDb:
+    """Stands in for the session: require_published_assignment does one read."""
+
+    def __init__(self, row):
+        self._row = row
+
+    async def scalar(self, _stmt):
+        return self._row
 
 
 # ---------------------------------------------------------------------------
-# The 401 mapping
+# Which kind of 401 was it?
 # ---------------------------------------------------------------------------
 
 
-# Verifies the reported symptom directly: this is the body Canvas returns when
-# a valid token grades an unpublished assignment. Reporting it as a token
-# problem sends the instructor to Settings to fix something that is not broken.
+# The reported symptom. This is the body Canvas returns when a valid token
+# grades an unpublished assignment; calling it a token problem sends the
+# instructor to Settings to fix something that is not broken.
 @pytest.mark.requirement("FR2.6")
 def test_permission_401_is_not_reported_as_an_invalid_token():
     response = _canvas_401(
-        {"status": "unauthorized", "errors": [{"message": "user not authorized to perform that action"}]}
+        {
+            "status": "unauthorized",
+            "errors": [{"message": "user not authorized to perform that action"}],
+        }
     )
 
     with pytest.raises(HTTPException) as excinfo:
@@ -56,23 +66,20 @@ def test_permission_401_is_not_reported_as_an_invalid_token():
     assert "not authorized to perform that action" in excinfo.value.detail
 
 
-# Verifies the other half still works. troubleshoot.py and
-# failed_operations.py both classify a token problem by this exact prefix to
-# offer the reconnect path, so a real bad token must keep the wording.
+# The other half still has to work: troubleshoot.py and failed_operations.py
+# both classify a token problem by this exact prefix to offer the reconnect
+# path, so a genuinely bad token must keep the wording.
 @pytest.mark.requirement("FR1.8")
 def test_genuine_token_401_still_says_invalid_token():
-    response = _canvas_401({"errors": [{"message": "Invalid access token."}]})
-
     with pytest.raises(HTTPException) as excinfo:
-        _raise_for_canvas_error(response)
+        _raise_for_canvas_error(_canvas_401({"errors": [{"message": "Invalid access token."}]}))
 
     assert excinfo.value.status_code == 422
     assert excinfo.value.detail == "Invalid Canvas API token"
 
 
-# Verifies the safe default. A proxy that swallows the body leaves nothing to
-# classify, and of the two guesses "your token was rejected" is the one that
-# points at something the instructor can actually check.
+# A proxy that swallows the body leaves nothing to classify. Of the two
+# guesses, "your token was rejected" points at something checkable.
 @pytest.mark.requirement("FR1.8")
 def test_401_with_no_usable_body_stays_a_token_error():
     with pytest.raises(HTTPException) as excinfo:
@@ -86,64 +93,52 @@ def test_401_with_no_usable_body_stays_a_token_error():
 # The pre-write guard
 # ---------------------------------------------------------------------------
 
-
-def _register(client) -> tuple[dict, int, int]:
-    """Instructor with one synced course holding one unpublished assignment."""
-    email = f"unpub_{uuid.uuid4()}@example.com"
-    reg = client.post(
-        "/api/v1/auth/register",
-        json={"name": "Unpublished Tester", "email": email, "password": "Secret123!"},
-    )
-    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
-    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
-        connected = client.patch(
-            "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": f"unpub-{uuid.uuid4()}", "canvas_url": CANVAS_URL},
-            headers=headers,
-        )
-    assert connected.status_code == 200, connected.text
-
-    canvas_course_id = uuid.uuid4().int % 10_000_000
-    with patch("app.services.canvas.fetch_courses", new_callable=AsyncMock) as courses:
-        courses.return_value = [{
-            "id": canvas_course_id, "name": "COSC 499", "course_code": "COSC499",
-            "enrollment_term_id": 1, "workflow_state": "available",
-        }]
-        synced = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
-    local_course_id = synced.json()[0]["local_id"]
-
-    with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock) as assignments:
-        assignments.return_value = [{
-            "id": 4242, "name": "Draft Lab", "description": None, "due_at": None,
-            "points_possible": 10.0, "course_id": canvas_course_id, "published": False,
-        }]
-        synced_assignments = client.get(
-            f"/api/v1/canvas/courses/{local_course_id}/assignments?canvas_url={CANVAS_URL}",
-            headers=headers,
-        )
-    assert synced_assignments.status_code == 200, synced_assignments.text
-    return headers, local_course_id, 4242
+_COURSE = SimpleNamespace(id=1, workflow_state="available")
 
 
-# Verifies the write never leaves the building. The instructor is told before
-# they invest anything, and — the part that matters most — Canvas is never
-# asked, so there is no partial state to reason about.
+# Named, actionable, and raised before any Canvas call — so there is no
+# partial state to reason about and nothing was typed for nothing.
 @pytest.mark.requirement("FR2.6")
-def test_grading_an_unpublished_assignment_is_refused_before_reaching_canvas(client):
-    headers, local_course_id, assignment_id = _register(client)
+def test_unpublished_assignment_is_refused_and_named():
+    db = _FakeDb(SimpleNamespace(published=False, title="Draft Lab"))
 
-    with patch(
-        "app.integrations.canvas.update_submission_grade", new_callable=AsyncMock
-    ) as write:
-        response = client.post(
-            f"/api/v1/canvas/courses/{local_course_id}/grades?canvas_url={CANVAS_URL}",
-            json={"assignment_id": assignment_id, "user_id": 101, "posted_grade": "90"},
-            headers=headers,
-        )
+    with pytest.raises(HTTPException) as excinfo:
+        asyncio.run(require_published_assignment(db, _COURSE, 4242))
 
-    assert response.status_code == 400, response.text
-    detail = response.json()["detail"]
-    assert "unpublished" in detail
-    assert "Draft Lab" in detail
-    assert "Invalid Canvas API token" not in detail
-    write.assert_not_awaited()
+    assert excinfo.value.status_code == 400
+    assert "Draft Lab" in excinfo.value.detail
+    assert "unpublished" in excinfo.value.detail
+    assert "Invalid Canvas API token" not in excinfo.value.detail
+
+
+@pytest.mark.requirement("FR2.6")
+def test_published_assignment_is_allowed_through():
+    db = _FakeDb(SimpleNamespace(published=True, title="Real Lab"))
+
+    asyncio.run(require_published_assignment(db, _COURSE, 1))
+
+
+# The mirror is a cache. A just-created assignment may not be in it yet, and
+# blocking on a cache miss would refuse writes Canvas would have accepted.
+@pytest.mark.requirement("FR2.6")
+def test_assignment_missing_from_the_local_mirror_is_allowed():
+    asyncio.run(require_published_assignment(_FakeDb(None), _COURSE, 999))
+
+
+# An unpublished course is a draft, not a finished one. "This course has
+# concluded" described the opposite situation and hid the one-click fix.
+@pytest.mark.requirement("FR2.6")
+def test_unpublished_course_is_not_described_as_concluded():
+    with pytest.raises(HTTPException) as excinfo:
+        require_writable_course(SimpleNamespace(id=1, workflow_state="unpublished"))
+
+    assert "unpublished" in excinfo.value.detail
+    assert "concluded" not in excinfo.value.detail
+
+
+@pytest.mark.requirement("FR2.6")
+def test_concluded_course_keeps_its_own_wording():
+    with pytest.raises(HTTPException) as excinfo:
+        require_writable_course(SimpleNamespace(id=1, workflow_state="completed"))
+
+    assert "concluded" in excinfo.value.detail
