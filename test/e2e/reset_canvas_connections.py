@@ -47,9 +47,10 @@ async def reset_canvas_connections() -> None:
     engine = create_async_engine(settings.DATABASE_URL)
     try:
         async with async_sessionmaker(engine, expire_on_commit=False)() as db:
-            # E2E instructors are deliberately namespaced by the helper. Do
-            # not clear real local instructors' connections when running e2e.
-            e2e_users = select(User.id).where(User.email.like("e2e_inst_%@example.com"))
+            # E2E users are deliberately namespaced by the helpers (for
+            # example, e2e_inst_* and e2e_return_canvas_*). Do not clear real
+            # local instructors' connections when running e2e.
+            e2e_users = select(User.id).where(User.email.like("e2e_%@example.com"))
             await db.execute(
                 delete(CanvasConnection).where(CanvasConnection.user_id.in_(e2e_users))
             )
