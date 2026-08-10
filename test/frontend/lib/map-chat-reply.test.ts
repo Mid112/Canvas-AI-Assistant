@@ -554,7 +554,7 @@ describe("mapChatReply", () => {
     });
   });
 
-  it("auto-redirects a single send_message to the Messages compose tab", () => {
+  it("hands a single send_message to Messages on a button, not a redirect", () => {
     const result = mapChatReply(
       {
         intent_preview: true,
@@ -579,9 +579,14 @@ describe("mapChatReply", () => {
     );
 
     expect(result.pendingMessageId).toBeUndefined();
-    // The redirect is what makes this a form handoff: assistant.ts reads
-    // navigateTo to suppress chat's own "Approve this proposed action?"
-    // confirm, so without it the same send is reviewable in two places.
+    // Being redirected mid-conversation ends the thread: no way back to keep
+    // refining the draft with the assistant, or to ask it anything else. The
+    // instructor goes when they click, the way create_quiz already works.
+    expect(result.autoNavigate).toBe(false);
+    // navigateTo stays: assistant.ts reads it to recognise a form handoff and
+    // suppress chat's own "Approve this proposed action?" confirm, so without
+    // it the same send would be reviewable in two places at once. It is the
+    // button's destination now rather than an automatic jump.
     expect(result.navigateTo?.path).toBe("/instructor/messages?tab=compose");
     expect(result.navigateTo?.state).toMatchObject({
       returnTo: "/instructor/assistant",
@@ -623,6 +628,46 @@ describe("mapChatReply", () => {
   // The extras were being dropped outright before this: additional_previews
   // was read below the send_message branch, and that branch returns early, so
   // the only action that produces them never reached the code that read them.
+  // Reported from a real turn: the clarify read back
+  //   'I have the broadcast to all students "false" and the also announce to
+  //    class "false". What should the message subject be?'
+  // Neither flag was provided by anyone -- the model sets them for its own
+  // routing -- and a false flag is the absence of a choice, not information.
+  it("does not read delivery routing flags back as provided details", () => {
+    const result = mapChatReply(
+      {
+        action: "clarify",
+        question: "What should the message subject be?",
+        partial_plan: {
+          broadcast_to_all_students: false,
+          also_announce_to_class: false,
+          delivery_mode: "private_message",
+          student_reference: "student two",
+        },
+      },
+      false,
+    );
+
+    expect(result.content).toBe(
+      'I have the student "student two". What should the message subject be?',
+    );
+    expect(result.acknowledgedFields).toEqual([
+      { label: "Student", value: "student two" },
+    ]);
+  });
+
+  // Same turn, second defect: every label was substituted into the question
+  // text, so "subject" inside "What should the message subject be?" became
+  // "message subject" and produced "the message message subject".
+  it("does not double a label already spelled out in the question", () => {
+    const result = mapChatReply(
+      { action: "clarify", question: "What should the message subject be?", partial_plan: {} },
+      false,
+    );
+
+    expect(result.content).toBe("What should the message subject be?");
+  });
+
   it("keeps every draft in chat when send_message resolved to several messages", () => {
     const group = (subject: string, recipientId: number) => ({
       intent_preview: true,

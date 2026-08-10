@@ -133,9 +133,50 @@ def require_writable_course(course: Course) -> None:
     directly in a test, not yet flushed) reads back as None in Python even
     though the column's DB default is "available"."""
     if course.workflow_state is not None and course.workflow_state != WRITABLE_WORKFLOW_STATE:
+        # An unpublished course is a draft, not a finished one. Telling an
+        # instructor their brand-new course "has concluded" describes the
+        # opposite situation and hides the one-click fix (publish it).
+        if course.workflow_state == "unpublished":
+            detail = (
+                "This course is unpublished, so Canvas does not accept writes to it yet. "
+                "Publish the course first."
+            )
+        else:
+            detail = "This course has concluded and is read-only — writes are disabled."
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+async def require_published_assignment(
+    db: AsyncSession,
+    course: Course,
+    canvas_assignment_id: int | str,
+) -> None:
+    """Raises if this assignment is still a draft — call before grading it.
+
+    Canvas rejects grades and submission comments on an unpublished
+    assignment, but only at the end of the write, and it reports the refusal
+    as a 401 that used to surface as "Invalid Canvas API token". The
+    instructor filled in a grade, confirmed a preview, and was then told to
+    reconnect a token that was fine. Checking the local mirror first turns
+    that into an upfront, accurate explanation.
+
+    A missing mirror row is treated as publishable: the local copy is a cache
+    that a newly created assignment may not be in yet, and Canvas remains the
+    authority that ultimately accepts or refuses the write.
+    """
+    row = await db.scalar(
+        select(Assignment).where(
+            Assignment.canvas_assignment_id == str(canvas_assignment_id),
+            Assignment.course_id == course.id,
+        )
+    )
+    if row is not None and not row.published:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This course has concluded and is read-only — writes are disabled.",
+            detail=(
+                f'"{row.title}" is unpublished, so Canvas will not accept grades or '
+                "feedback for it. Publish the assignment first."
+            ),
         )
 
 
@@ -1706,6 +1747,7 @@ async def update_course_grade(
     resolved_canvas_url = course.canvas_url
     token = require_canvas_token(user, resolved_canvas_url)
     require_writable_course(course)
+    await require_published_assignment(db, course, assignment_id)
     return await update_submission_grade(
         int(course.canvas_course_id),
         assignment_id,

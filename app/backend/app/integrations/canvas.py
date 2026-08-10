@@ -50,9 +50,27 @@ def _canvas_error_detail(response: httpx.Response) -> str:
 
 
 def _raise_for_canvas_error(response: httpx.Response) -> None:
-    # Canvas 401 means bad/expired token — re-map to 422 so callers don't confuse it
-    # with our own JWT 401 (two different auth layers)
+    # Canvas answers 401 for two unrelated things: a bad/expired token, and an
+    # authenticated instructor attempting something the object's state forbids
+    # — grading an unpublished assignment is the common one, and Canvas calls
+    # that "user not authorized to perform that action".
+    #
+    # Both used to become "Invalid Canvas API token", which sent instructors to
+    # reconnect a token that was working perfectly. Only a genuine token
+    # failure keeps that wording: troubleshoot.py and failed_operations.py both
+    # classify by that exact prefix to offer the reconnect path.
     if response.status_code == 401:
+        detail = _canvas_error_detail(response)
+        # An empty or unparseable body stays a token error — that is what a
+        # rejected token looks like from a proxy that swallowed the payload,
+        # and it is the safer default of the two.
+        if detail and "access token" not in detail.lower():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Canvas refused this action: {detail}",
+            )
+        # Re-mapped to 422 so callers don't confuse it with our own JWT 401
+        # (two different auth layers).
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Invalid Canvas API token")
     if response.status_code == 403:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Canvas token lacks permission for this resource")

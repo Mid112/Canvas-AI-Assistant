@@ -21,6 +21,7 @@ from app.services.canvas import (
     _parse_submission,
     get_owned_course,
     require_canvas_token,
+    require_published_assignment,
     require_writable_course,
 )
 from app.services.canvas_idempotency import (
@@ -70,6 +71,7 @@ async def _find_submission(
 ):
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     require_writable_course(course)
+    await require_published_assignment(db, course, body.assignment_id)
     token = require_canvas_token(user, course.canvas_url)
     raw_submissions = await fetch_submissions(
         int(course.canvas_course_id),
@@ -354,6 +356,10 @@ async def preview_grade_update(
 ) -> GradePreviewResponse:
     course = await get_owned_course(local_course_id, user, canvas_url, db)
     require_writable_course(course)
+    # Also checked here, not only in _find_submission: a preview that carries a
+    # submission snapshot skips that lookup entirely, and the point of this
+    # guard is that the instructor learns before filling anything in.
+    await require_published_assignment(db, course, body.assignment_id)
     submission = _submission_from_snapshot(body)
     if submission is None:
         course, _, submission = await _find_submission(

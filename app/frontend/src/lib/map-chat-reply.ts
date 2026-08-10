@@ -43,6 +43,14 @@ const INTERNAL_FIELDS = new Set([
   "recipient_canvas_user_ids",
   "recipient_handle",
   "preview_id",
+  // Delivery routing the model sets for itself, not anything the instructor
+  // said. They were being read back as content — 'I have the broadcast to all
+  // students "false" and the also announce to class "false"' — which is both
+  // unreadable and untrue: nobody provided them, and a false flag is the
+  // absence of a choice. The audience is already stated by the recipients.
+  "broadcast_to_all_students",
+  "also_announce_to_class",
+  "delivery_mode",
 ]);
 
 const CLARIFICATION_FIELD_LABELS: Record<string, string> = {
@@ -980,26 +988,30 @@ function mapReplyBody(
       };
     }
 
-    // send_message hands off to the Messages compose form, so a single
-    // message goes straight there. It used to stop at an "Open message draft"
-    // button, which left the write reviewable in two places at once: chat
-    // offered its own "Approve this proposed action?" confirm for a draft the
-    // Messages tab was about to confirm again. Both toAssistantMessageResult
-    // and mapConversationToChatMessages decide "this is a form handoff" by
-    // looking for navigateTo, and both already named send_message as one —
-    // this branch was the only thing not saying so.
+    // send_message hands off to the Messages compose form, but on the
+    // instructor's click rather than by yanking them out of chat.
     //
-    // A grouped turn stays in chat: navigating could only open one of the
-    // drafts, and the others would disappear with nothing left pointing at
-    // them. Each row keeps its own "Open message draft" instead.
+    // navigateTo still names the destination — toAssistantMessageResult and
+    // mapConversationToChatMessages both read it to recognise a form handoff,
+    // and it seeds the button's target — while autoNavigate: false leaves the
+    // move to the "Open message draft" button on the card. Being redirected
+    // mid-conversation ends the thread you were in: there is no way back to
+    // keep refining the draft with the assistant, or to ask it for anything
+    // else, which is the whole reason for drafting in chat. Same shape as
+    // create_quiz above.
+    //
+    // A grouped turn has no single destination at all: navigating could only
+    // open one of the drafts and the others would be left with nothing
+    // pointing at them, so each row keeps its own button instead.
     if (proposed?.action === "send_message") {
       const isGrouped = (additionalPreviews?.length ?? 0) > 0;
       return {
         content:
           readString(reply.summary) ??
-          "I prepared a message draft with your details.",
+          "I prepared a message draft — open it to review and send.",
         explanation:
           "Messages are drafted and sent in the Messages tab so the write is reviewed once and recorded in workflow history.",
+        autoNavigate: false,
         ...(isGrouped
           ? { additionalPreviews }
           : {
