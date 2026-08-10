@@ -367,6 +367,26 @@ async def test_enrollment_fetchers_request_active_state_only(func, args):
     assert call_params["state[]"] == "active"
 
 
+@pytest.mark.asyncio
+async def test_fetch_student_enrollment_uses_scalar_user_id():
+    """canvas-docker returns 404 for user_id[] on course enrollments even when
+    the course and student exist; scalar user_id works. Pin the param form so
+    a regression does not revive the Feedback Creator "course no longer
+    available" false positive.
+    """
+    response = httpx.Response(
+        200, json=[], request=httpx.Request("GET", "https://canvas.test/x")
+    )
+    client = _client_returning(response, method="get")
+
+    with patch("app.integrations.canvas.httpx.AsyncClient", return_value=client):
+        await fetch_student_enrollment(1, 2, "tok", CANVAS_URL)
+
+    call_params = client.__aenter__.return_value.get.call_args.kwargs["params"]
+    assert call_params["user_id"] == 2
+    assert "user_id[]" not in call_params
+
+
 # ---------------------------------------------------------------------------
 # _fetch_all_pages — pagination follow + max-page truncation
 # ---------------------------------------------------------------------------
