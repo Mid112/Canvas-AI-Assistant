@@ -2,6 +2,7 @@ import { Loader2 } from "lucide-react";
 
 import { EditableRecipientList } from "@/components/messages/EditableRecipientList";
 import { MessageContentPreview } from "@/components/messages/MessagePreview";
+import type { MessageDeliveryMode } from "@/components/messages/messageDelivery";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,7 +26,7 @@ interface ConfirmationDialogProps {
   subject: string;
   body: string;
   isSending: boolean;
-  deliveryMode: "announcement" | "private_message";
+  deliveryMode: MessageDeliveryMode;
   onConfirm: () => void;
 }
 
@@ -48,7 +49,9 @@ export function ConfirmationDialog({
   const recipientText =
     selectedCount === 1 ? "1 student" : `${selectedCount} students`;
   const isAnnouncement = deliveryMode === "announcement";
-  const deliveryText = isAnnouncement ? "the whole course as an announcement" : recipientText;
+  const deliveryText = isAnnouncement
+    ? "the whole course as an announcement"
+    : recipientText;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

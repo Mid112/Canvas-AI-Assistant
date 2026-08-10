@@ -12,6 +12,10 @@ import { useForm, useWatch } from "react-hook-form";
 import { useLocation } from "react-router-dom";
 
 import { ConfirmationDialog } from "@/components/messages/ConfirmationDialog";
+import {
+  getDeliveryAudienceError,
+  type MessageDeliveryMode,
+} from "@/components/messages/messageDelivery";
 import { MessageEditor } from "@/components/messages/MessageEditor";
 import { MessagePreview } from "@/components/messages/MessagePreview";
 import { MessageTemplateSummary } from "@/components/messages/MessageTemplateSummary";
@@ -132,9 +136,9 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<Set<string>>(
     new Set(),
   );
-  const [deliveryMode, setDeliveryMode] = useState<
-    "announcement" | "private_message"
-  >(fetchOptions?.deliveryMode ?? "announcement");
+  const [deliveryMode, setDeliveryMode] = useState<MessageDeliveryMode>(
+    fetchOptions?.deliveryMode ?? "announcement",
+  );
 
   const {
     register,
@@ -438,6 +442,16 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
     setSendError(null);
     setSuccessMessage(null);
     setSentMessage(null);
+
+    const audienceError = getDeliveryAudienceError(
+      deliveryMode,
+      selectedRecipients.length,
+    );
+    if (audienceError) {
+      setSendError(audienceError);
+      return;
+    }
+
     setIsConfirmOpen(true);
   };
 
@@ -466,11 +480,13 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
       return;
     }
 
-    if (deliveryMode === "private_message" && selectedRecipients.length === 0) {
+    const audienceError = getDeliveryAudienceError(
+      deliveryMode,
+      selectedRecipients.length,
+    );
+    if (audienceError) {
       setIsConfirmOpen(false);
-      setSendError(
-        "Select at least one student for a private message, or switch to a course announcement.",
-      );
+      setSendError(audienceError);
       return;
     }
 
@@ -756,6 +772,7 @@ export function MessageDraftPage({ fetchOptions, onCancel }: MessageDraftPagePro
         isSending={pageState === "sending"}
         deliveryMode={deliveryMode}
         onConfirm={() => void handleConfirmSend()}
+        deliveryMode={deliveryMode}
       />
     </div>
   );

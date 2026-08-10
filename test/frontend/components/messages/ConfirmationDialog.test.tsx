@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { ConfirmationDialog } from "@/components/messages/ConfirmationDialog";
+import { getDeliveryAudienceError } from "@/components/messages/messageDelivery";
 
 const recipients = [
   { id: "1", name: "John Smith", email: "john@university.edu" },
@@ -11,6 +12,14 @@ const recipients = [
 ];
 
 describe("ConfirmationDialog", () => {
+  it("shares the private-audience guard used before and during confirmation", () => {
+    expect(getDeliveryAudienceError("private_message", 0)).toMatch(
+      /Select at least one student/i,
+    );
+    expect(getDeliveryAudienceError("private_message", 1)).toBeNull();
+    expect(getDeliveryAudienceError("announcement", 0)).toBeNull();
+  });
+
   it("renders the full subject and body alongside the recipient count", () => {
     render(
       <ConfirmationDialog
