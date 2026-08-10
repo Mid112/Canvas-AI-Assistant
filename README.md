@@ -1,23 +1,66 @@
-# Project-Starter
+# Canvas Helper AI Assistant
 
-Please use the provided folder structure for your docs (project plan, design documenation, communications log, weekly logs and final documentation), source code, tesing, etc.    You are free to organize any additional internal folder structure as required by the project.  The team **MUST** use a branching workflow and once an item is ready, do remember to issue a PR, review and merge in into the master brach.
-```
-.
-├── docs                    # Documentation files (alternatively `doc`)
-│   ├── TOC.md              # Table of contents
-|   ├── charter/charter.md  # Team Charter
-│   ├── plan                # Project Scope and Project Charter
-│   ├── design              # Getting started guide
-│   ├── final               # Getting started guide
-│   ├── logs                # Team Logs
-│   └── ...
-├── build                   # Compiled files (alternatively `dist`))    
-├── app                     # Source files (alternatively `lib` or `src`)
-├── test                    # Automated tests (alternatively `spec` or `tests`)
-├── tools                   # Tools and utilities
-├── LICENSE                 # The license for this project 
-└── README.md
-```
-You can find additional information on folder structure convetions [here](https://github.com/kriasoft/Folder-Structure-Conventions). 
+**UBCO COSC 499 · Capstone Team 16**  
+**Client:** Mohamed Mostafa
 
-Also, update your README.md file with the team and client/project information.  You can find details on writing GitHub Markdown [here](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax) as well as a [handy cheatsheet](https://enterprise.github.com/downloads/en/markdown-cheatsheet.pdf).   
+An AI-assisted Canvas LMS workflow tool for instructors, with administrator oversight. Natural-language requests become structured Canvas actions only after an explicit **preview → confirm** step — the assistant never writes to Canvas on a normal chat turn.
+
+## What it does
+
+- **Instructors:** connect Canvas, manage an active course, run the AI assistant, create/update assignments and quizzes, analyze submissions, draft messages and feedback, and update grades — all with dry-run preview and confirmation.
+- **Administrators:** manage instructor accounts, review audit logs, monitor system health and failed operations, and troubleshoot without exposing credentials.
+- **Platform:** FastAPI + React, PostgreSQL, encrypted Canvas tokens, multi-provider LLM support, optional MCP Canvas sidecar, Docker Compose deployment.
+
+## Quick start
+
+**Prerequisites:** Docker + Docker Compose, Make, Python 3.12+, Node 22.13+ (see `.nvmrc`).
+
+```bash
+make install
+cp .env.example .env
+# Set a unique CANVAS_TOKEN_ENCRYPTION_KEY (Fernet) and SECRET_KEY
+cp app/backend/.env.example app/backend/.env
+
+# Developer loop (API :8000, UI :5173, Canvas sandbox :3000)
+make e2e-up
+
+# Or full stack behind nginx (:8888)
+make build && make up
+```
+
+Full install steps: [`docs/final/deployment/installation-guide.md`](docs/final/deployment/installation-guide.md).
+
+## Documentation
+
+Start with the final package index: [`docs/final/README.md`](docs/final/README.md) · table of contents: [`docs/TOC.md`](docs/TOC.md)
+
+| Audience | Path |
+| --- | --- |
+| Instructors & administrators | [`docs/final/user-guides/`](docs/final/user-guides/) |
+| Developers | [`docs/final/developer/`](docs/final/developer/) |
+| Deploy & install | [`docs/final/deployment/`](docs/final/deployment/) |
+| Architecture | [`docs/final/architecture.md`](docs/final/architecture.md) |
+| API overview | [`docs/final/api-reference.md`](docs/final/api-reference.md) |
+| Testing report | [`docs/testing report/Final_Testing_Report_Detailed.pdf`](docs/testing%20report/Final_Testing_Report_Detailed.pdf) |
+| Final design and analysis report | [`docs/final/Final_Design_and_Analysis_Report.pdf`](docs/final/Final_Design_and_Analysis_Report.pdf) |
+| Requirements traceability | [`docs/final/Requirements_Traceability_Matrix.pdf`](docs/final/Requirements_Traceability_Matrix.pdf) |
+| Design | [`docs/design/README.md`](docs/design/README.md) |
+
+## Testing
+
+```bash
+make test        # backend pytest (excl. fuzz) + frontend vitest coverage
+make test-e2e    # Playwright
+make test-fuzz   # Hypothesis (opt-in)
+```
+
+## Safety model
+
+1. **Reads** (course data, analytics, missing submissions) can run immediately.  
+2. **Writes** to Canvas require preview and explicit confirmation.  
+3. High-risk actions (send message, update grade) may require typing `CONFIRM`.  
+4. Scope limits: no autonomous Canvas writes, no arbitrary Canvas API calls, no institution-wide Canvas administration.
+
+## License
+
+See [`LICENSE`](LICENSE).
