@@ -1,6 +1,6 @@
 # Screenshot inventory
 
-Add PNG/WebP files here using these exact names, then update the matching guides to use `![caption](./screenshots/<file>)`.
+PNG screenshots used by the user guides. Guides reference them as `![caption](./screenshots/<file>)`.
 
 ## Instructor
 
@@ -11,18 +11,18 @@ Add PNG/WebP files here using these exact names, then update the matching guides
 | `instructor-courses.png` | Instructor guide | Courses list |
 | `canvas-connect.png` | Canvas connection | Connect / token screen |
 | `canvas-permissions.png` | Canvas connection | Review permissions |
-| `assistant-chat.png` | AI assistant | Chat with proposal card |
+| `assistant-chat.png` | AI assistant | Chat with starter prompts |
 | `assistant-history-collapsed.png` | AI assistant | Collapsed Conversation History |
 | `assistant-limited-mode.png` | AI assistant / Canvas | Limited-mode banner + deferred |
 | `assistant-confirm-cancel.png` | AI assistant | Confirm / Cancel controls |
-| `assistant-executing.png` | AI assistant | Running / terminal status |
-| `assignment-create-describe.png` | Assignment workflow | Describe step (incl. ungraded points) |
+| `assistant-executing.png` | AI assistant | Running / analyzing status |
+| `assignment-create-describe.png` | Assignment workflow | Describe step |
 | `assignment-create-review.png` | Assignment workflow | Review / approve step |
 | `quiz-create-review.png` | Quiz workflow | Quiz review with questions |
 | `feedback-create-review.png` | Feedback workflow | Feedback review |
-| `messages-tabs.png` | Messaging | Inbox / Announcements / Sent / Compose |
-| `messages-compose.png` | Messaging | Compose / draft |
-| `messages-templates.png` | Messaging | Templates (if shown) |
+| `messages-tabs.png` | Messaging | Inbox / Announcements / Sent |
+| `messages-compose.png` | Messaging | Confirm send |
+| `messages-templates.png` | Messaging | Draft + templates |
 | `grades-preview.png` | Grade management | Preview before submit |
 | `workflow-history.png` | Instructor guide | History / undo |
 
@@ -36,10 +36,3 @@ Add PNG/WebP files here using these exact names, then update the matching guides
 | `admin-system-health.png` | Admin guide | System health |
 | `admin-troubleshooting.png` | Admin guide | Troubleshooting |
 | `admin-failed-operations.png` | Admin guide | Failed operations |
-
-## Placeholder convention in guides
-
-Until images are added, guides keep:
-
-> **Screenshot placeholder:** `filename.png`
-> *[Add screenshot here]*

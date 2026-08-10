@@ -13,8 +13,7 @@
 3. **Preview** the mutation (old → new, student, assignment).
 4. Confirm submit. Grades are **high-risk / irreversible** in product terms (strong `CONFIRM` when required). Auto-undo is not offered.
 
-> **Screenshot placeholder:** `grades-preview.png`
-> *[Add screenshot here]*
+![Grade change preview and approval](./screenshots/grades-preview.png)
 
 ## Safety
 

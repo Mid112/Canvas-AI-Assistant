@@ -19,8 +19,7 @@
 - Resuming a draft that already has generated questions returns you to **review** with structured questions intact — you do not lose the question set and retype from a blank describe step.
 - A draft’s saved course is preferred over the current active course when resuming.
 
-> **Screenshot placeholder:** `quiz-create-review.png`
-> *[Add screenshot here]*
+![Quiz creator — review questions](./screenshots/quiz-create-review.png)
 
 ## Via assistant
 

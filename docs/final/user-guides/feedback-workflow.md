@@ -13,8 +13,7 @@
 3. Generate a draft; edit tone and accuracy.
 4. **Review / approve** before any Canvas write (comments / feedback posting per implemented action).
 
-> **Screenshot placeholder:** `feedback-create-review.png`
-> *[Add screenshot here]*
+![Feedback creator — review and approve](./screenshots/feedback-create-review.png)
 
 ## Tips
 

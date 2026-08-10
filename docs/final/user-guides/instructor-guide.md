@@ -15,11 +15,9 @@ The Canvas Helper AI Assistant helps instructors manage selected Canvas LMS work
 3. Complete Canvas onboarding (`/canvas-info` → `/connect-canvas` → `/review-permissions`).
 4. Open **Courses** and set an **active course** (or use the assistant course selector).
 
-> **Screenshot placeholder:** `instructor-dashboard.png`
-> *[Add screenshot here]*
+![Instructor dashboard](./screenshots/instructor-dashboard.png)
 
-> **Screenshot placeholder:** `instructor-sidebar-active-course.png`
-> *[Add screenshot here]*
+![Sidebar with active course](./screenshots/instructor-sidebar-active-course.png)
 
 See also: [Canvas Connection Guide](./canvas-connection.md).
 
@@ -36,8 +34,7 @@ See also: [Canvas Connection Guide](./canvas-connection.md).
 | Settings | `/instructor/settings` | Canvas connection, AI providers, security |
 | Profile | `/instructor/profile` | Account |
 
-> **Screenshot placeholder:** `instructor-courses.png`
-> *[Add screenshot here]*
+![Courses list](./screenshots/instructor-courses.png)
 
 ## 4. Active course vs draft / chat course
 
@@ -81,5 +78,4 @@ It is **not** always the write target:
 | Action stuck “running” | Wait or refresh; check History; contact admin if failed ops appear |
 | Wrong course context | Name the course in chat, use the assistant course selector, or resume the draft’s own course — not only the sidebar active course |
 
-> **Screenshot placeholder:** `workflow-history.png`
-> *[Add screenshot here]*
+![Workflow history](./screenshots/workflow-history.png)

@@ -1,6 +1,6 @@
 # User Guides
 
-Guides for instructors and administrators. Screenshot placeholders are intentional — add images under [`screenshots/`](./screenshots/) using the listed filenames.
+Guides for instructors and administrators. Screenshots live under [`screenshots/`](./screenshots/).
 
 ## Guides
 

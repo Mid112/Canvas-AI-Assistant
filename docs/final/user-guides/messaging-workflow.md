@@ -18,8 +18,7 @@ The Messages page uses four tabs:
 | **Sent** | Sent messages for the active course |
 | **Compose** | Draft and send a course message (opened from FAB, AI handoff, or `?tab=compose`) |
 
-> **Screenshot placeholder:** `messages-tabs.png`
-> *[Add screenshot here]*
+![Messages inbox with tabs](./screenshots/messages-tabs.png)
 
 ## Compose & send
 
@@ -30,11 +29,9 @@ The Messages page uses four tabs:
 5. Preview recipients and content.
 6. **Confirm send** — messaging is **irreversible** (strong confirmation / type `CONFIRM` when required).
 
-> **Screenshot placeholder:** `messages-compose.png`
-> *[Add screenshot here]*
+![Confirm send message](./screenshots/messages-compose.png)
 
-> **Screenshot placeholder:** `messages-templates.png`
-> *[Add screenshot here]*
+![Message drafting with templates](./screenshots/messages-templates.png)
 
 ## Templates
 

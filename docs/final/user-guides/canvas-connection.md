@@ -11,11 +11,9 @@ The assistant and course UIs read (and, after confirm, write) Canvas data using 
 3. Paste a Canvas access token with the permissions your institution requires for the supported workflows.
 4. **Review permissions** (`/review-permissions`) and continue.
 
-> **Screenshot placeholder:** `canvas-connect.png`
-> *[Add screenshot here]*
+![Connect Canvas token screen](./screenshots/canvas-connect.png)
 
-> **Screenshot placeholder:** `canvas-permissions.png`
-> *[Add screenshot here]*
+![Review Canvas permissions](./screenshots/canvas-permissions.png)
 
 ## Managing the connection later
 

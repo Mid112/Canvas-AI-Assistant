@@ -10,11 +10,9 @@ Go to **AI Assistant** (`/instructor/assistant`). Use the course selector when y
 
 **Conversation history** is collapsed by default so the chat stays primary — expand **Conversation History** to load a prior thread.
 
-> **Screenshot placeholder:** `assistant-chat.png`
-> *[Add screenshot here]*
+![AI Assistant chat with starter prompts](./screenshots/assistant-chat.png)
 
-> **Screenshot placeholder:** `assistant-history-collapsed.png`
-> *[Add screenshot here]*
+![Conversation history collapsed by default](./screenshots/assistant-history-collapsed.png)
 
 ## Course context (important)
 
@@ -33,8 +31,7 @@ Without usable Canvas credentials the assistant runs in **limited mode**:
 - A banner explains the restriction and links to Connect Canvas.
 - Canvas-dependent asks can be **saved as deferred requests** and **resumed** after you reconnect (queued resumes run one at a time until send succeeds).
 
-> **Screenshot placeholder:** `assistant-limited-mode.png`
-> *[Add screenshot here]*
+![Limited mode without Canvas connection](./screenshots/assistant-limited-mode.png)
 
 ## What you can ask
 
@@ -60,11 +57,9 @@ Without usable Canvas credentials the assistant runs in **limited mode**:
 | Failed | Nothing changed (or partial per message) | Error / alert treatment |
 | Cancelled / superseded | Discarded or replaced | Muted |
 
-> **Screenshot placeholder:** `assistant-confirm-cancel.png`
-> *[Add screenshot here]*
+![Proposal card with Confirm and Cancel](./screenshots/assistant-confirm-cancel.png)
 
-> **Screenshot placeholder:** `assistant-executing.png`
-> *[Add screenshot here]*
+![Assistant executing a Canvas-backed request](./screenshots/assistant-executing.png)
 
 ## Confirm, cancel, pause
 

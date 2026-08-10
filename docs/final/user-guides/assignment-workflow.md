@@ -24,11 +24,9 @@
 
 Due dates are normalized to **UTC ISO** using the instructor’s Canvas timezone before preview and Canvas write, so the confirmed value matches what Canvas receives.
 
-> **Screenshot placeholder:** `assignment-create-describe.png`
-> *[Add screenshot here]*
+![Assignment creator — describe step](./screenshots/assignment-create-describe.png)
 
-> **Screenshot placeholder:** `assignment-create-review.png`
-> *[Add screenshot here]*
+![Assignment creator — review and approve](./screenshots/assignment-create-review.png)
 
 ## Create / update via assistant
 

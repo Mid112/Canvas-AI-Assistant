@@ -29,11 +29,7 @@ Authoritative local run instructions live in the repo root:
 
 ## Screenshots
 
-User guides include screenshot placeholders. Add images under [`user-guides/screenshots/`](./user-guides/screenshots/) using the filenames in that folder’s README, then replace placeholder blocks with Markdown images:
-
-```markdown
-![Dashboard](./screenshots/instructor-dashboard.png)
-```
+User-guide screenshots are in [`user-guides/screenshots/`](./user-guides/screenshots/) (see that folder’s README for the inventory). Guides embed them inline as Markdown images.
 
 ## Related project docs
 
