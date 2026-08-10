@@ -1589,6 +1589,89 @@ async def _resolve_quiz_reference(
         return None
 
 
+async def _find_assignment_in_other_courses(
+    db: AsyncSession,
+    user: User,
+    exclude_course_id: int,
+    reference: str | None,
+) -> list[tuple[int, str, str]]:
+    """This instructor's OTHER courses that own an assignment by this name.
+
+    Exists because the failure it catches is invisible from inside one
+    course: an instructor asks about "testing event 2", the conversation is
+    sitting on a course that has no such assignment, and the only honest
+    conclusion available locally is "this course has no assignments" — which
+    is true, useless, and identical on every retry. Naming an assignment the
+    instructor plainly has is strong evidence the COURSE is wrong, not that
+    the assignment doesn't exist, and that evidence is only visible by
+    looking outside the current course.
+
+    Returns [(local_course_id, course_name, assignment_title)]. Substring
+    matching in both directions, so "testing event 2" finds "Testing Event
+    2" and a reference that trims or extends the stored title still lands.
+    """
+    if not reference:
+        return []
+    target = _normalize_course_text(reference)
+    if len(target) < _COURSE_NAME_FUZZY_MATCH_MIN_LENGTH:
+        return []
+
+    rows = await db.execute(
+        select(Course.id, Course.name, Assignment.title)
+        .join(Assignment, Assignment.course_id == Course.id)
+        .where(Course.instructor_id == user.id, Course.id != exclude_course_id)
+    )
+    matches: list[tuple[int, str, str]] = []
+    for course_id, course_name, title in rows:
+        normalized = _normalize_course_text(title or "")
+        if not normalized:
+            continue
+        if normalized == target or target in normalized or normalized in target:
+            matches.append((course_id, course_name, title))
+    return matches
+
+
+def _assignment_elsewhere_clarify(
+    course: Course,
+    reference: str | None,
+    elsewhere: list[tuple[int, str, str]],
+) -> dict:
+    """Say which course actually has it, and let one word switch to it.
+
+    The old reply stated a fact about the wrong course and offered nothing
+    to act on, so repeating the request — or naming a different course —
+    produced the identical sentence every time. Candidates are recorded so
+    the next turn reads a bare course name as an answer to this question
+    rather than as a brand-new request that resolves the same wrong way.
+    """
+    named = reference or "that assignment"
+    if len(elsewhere) == 1:
+        course_id, course_name, title = elsewhere[0]
+        question = (
+            f'I couldn\'t find "{named}" in {course.name} — this conversation '
+            f'is set to that course. "{title}" is in {course_name}. '
+            "Should I switch to it?"
+        )
+    else:
+        options = ", ".join(sorted({name for _, name, _ in elsewhere}))
+        question = (
+            f'I couldn\'t find "{named}" in {course.name} — this conversation '
+            f"is set to that course. Assignments with that name exist in: "
+            f"{options}. Which course did you mean?"
+        )
+    return {
+        "action": "clarify",
+        "clarify": True,
+        "question": question,
+        "partial_plan": {"assignment_reference": reference},
+        "clarify_field": "course_name",
+        "clarify_candidates": [
+            {"id": course_id, "label": course_name}
+            for course_id, course_name, _ in elsewhere
+        ],
+    }
+
+
 async def _resolve_course_and_assignment(
     db: AsyncSession,
     user: User,
@@ -1665,16 +1748,39 @@ async def _resolve_course_and_assignment(
         )
         assignments = assignments_result["assignments"]
         if not assignments:
+            # Before concluding anything about the assignment, check whether
+            # the COURSE is the thing that's wrong. Without this the reply is
+            # a true but dead-end statement about a course the instructor
+            # never named, and it repeats verbatim no matter what they say
+            # next.
+            elsewhere = await _find_assignment_in_other_courses(
+                db, user, course.id, assignment_reference
+            )
+            if elsewhere:
+                return _assignment_elsewhere_clarify(course, assignment_reference, elsewhere)
             return {
                 "action": "clarify",
                 "clarify": True,
-                "question": f"{course.name} has no assignments yet — is there something else I can help with?",
+                "question": (
+                    f"{course.name} — the course this conversation is set to — "
+                    "has no assignments yet. Did you mean a different course?"
+                ),
                 "partial_plan": {"local_course_id": course.id},
             }
         assignment_id = await _resolve_assignment_reference(
             assignments, assignment_reference, user_message, adapter
         )
         if assignment_id is None:
+            # Same reasoning as the empty-course branch: a named assignment
+            # that matches nothing here but exists in another course is a
+            # course-resolution failure wearing an assignment-resolution
+            # costume. Only consulted after the in-course resolver declines,
+            # so a real in-course match always wins.
+            elsewhere = await _find_assignment_in_other_courses(
+                db, user, course.id, assignment_reference
+            )
+            if elsewhere:
+                return _assignment_elsewhere_clarify(course, assignment_reference, elsewhere)
             names = ", ".join(a["name"] for a in assignments)
             return {
                 "action": "clarify",
@@ -5149,6 +5255,25 @@ async def handle_chat_message(
         )
     ):
         switched = await _resolve_course_switch(course_names, conversation.course_name, message, adapter)
+        if switched is None and history:
+            # _resolve_course_switch collapses every failure — timeout, provider
+            # error, malformed JSON — into the same None it returns for "no
+            # switch here". Safe against crashing the turn, but it makes a
+            # broken model indistinguishable from a message that named no other
+            # course, and the conversation then silently stays on the old one.
+            #
+            # The local prescan is the same check already trusted to pick the
+            # course on a conversation's first turn, so falling back to it costs
+            # nothing and makes a plainly-named course work even when the model
+            # call produced nothing at all. The != current check below still
+            # applies, so naming the current course is not a switch.
+            #
+            # Only with history. A brand-new preference-seeded conversation
+            # already has a correct path for this — the post-hoc detection
+            # below mutates it in place, which is what stops an orphaned empty
+            # Conversation row being left behind. Forking it here instead
+            # would trade one bug for that one.
+            switched = _prescan_course_reference(course_names, message)
         if (
             switched is not None
             and switched.local_course_id is not None
