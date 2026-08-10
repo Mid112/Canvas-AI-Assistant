@@ -62,7 +62,7 @@ Major completed themes this cycle:
 | Final documentation package (#1533) | Active |
 | Final Design Report / submission package finalize | Active |
 | Publish demo artifacts / release tag | Upcoming |
-| Attach Jessica Cycle 23 Clockify + team screenshots | Pending |
+| Cycle 23 Clockify screenshots (team + individual) | Attached |
 
 ---
 
@@ -75,17 +75,88 @@ Time was tracked using Clockify for **Cycle 23 (Aug 4, 2026 – Aug 9, 2026).**
 | Team Member | Clockify Username | GitHub | Logged Time |
 | --- | --- | --- | ---: |
 | Yerdana | yerdana | Yerdana2002 | **35:51:06** |
-| Rhythm | trivedirhythm | rhythmt1 | **29:06:02** |
-| Jessica | jessica goel | jessica545 | **~29:00:00**† |
-| Mridul | mridulnohria21 | Mid112 | **27:21:50** |
+| Jessica | jessica goel | jessica545 | **33:28:06** |
+| Rhythm | trivedirhythm | rhythmt1 | **29:00:36** |
+| Mridul | mridulnohria21 | Mid112 | **27:31:46** |
 | Bao | thanhvoiban | StoneCA12 | **11:44:40** |
-| **Total** | | | **~133:03:38** |
+| **Total** | | | **137:36:14** |
 
-† Replace with Jessica’s Cycle 23 Clockify export when her personal log is posted.
+The team logged a combined **137 hours, 36 minutes, and 14 seconds** during Cycle 23.
 
-### Team / Individual Clockify
+### Daily Team Hours
 
-<!-- Attach screenshots from personal Cycle 23 logs -->
+| Day | Hours |
+| --- | ---: |
+| Tue Aug 4 | **36:13:58** |
+| Wed Aug 5 | **11:00:59** |
+| Thu Aug 6 | **01:30:25** |
+| Fri Aug 7 | **31:15:47** |
+| Sat Aug 8 | **26:32:02** |
+| Sun Aug 9 | **31:03:03** |
+
+### Team Clockify
+
+![Cycle 23 Clockify team summary](assets/cycle-23-clockify-team.png)
+
+### Individual Clockify Reports
+
+#### Yerdana — **35:51:06**
+
+- team meeting — 08:25:50
+- bugfix 5 — 08:39:30
+- bugfix 4 — 11:49:46
+- bugfix 3 — 06:56:00
+
+![Cycle 23 Clockify Yerdana](assets/cycle-23-clockify-yerdana.png)
+
+#### Jessica — **33:28:06**
+
+- completing documentation — 17:39:06
+- watching presentations + team meeting — 05:40:28
+- working on bug fixes — 04:33:50
+- team meeting — 01:58:13
+- working on bug fixes and reviewing PRs — 01:53:50
+- reviewing PRs — 00:56:37
+- making the presentation slide — 00:46:02
+
+![Cycle 23 Clockify Jessica](assets/cycle-23-clockify-jessica.png)
+
+#### Rhythm — **29:00:36**
+
+- PR Reviews — 08:33:40
+- Final Documentation update — 07:22:38
+- Team Meeting — 03:22:12
+- Team Meeting / Ticket 17: Improve First-Time AI Prompt Guidance — 02:40:01
+- Final Demo video recording — 02:06:59
+- address PR requested changes / merge conflicts / merge PRs — 01:15:12
+- Testing bug fixes on open PRs — 01:05:25
+- Update Use Case Models — 00:55:10
+- Ticket 27: Harden Password Requirements and Field Feedback — 00:38:41
+- PR Requested changes and merge — 00:31:33
+- Ticket 17: Improve First-Time AI Prompt Guidance — 00:29:05
+
+![Cycle 23 Clockify Rhythm](assets/cycle-23-clockify-rhythm.png)
+
+#### Mridul — **27:31:46**
+
+- Final presentations for others and requirement review — 06:48:53
+- fixing chat context and intent determination — 06:43:13
+- final touches on app — 05:37:19
+- ER diagram correction and improve project readability — 03:42:18
+- team meeting — 02:44:02
+- final bug fixes found during presentation — 01:56:01
+
+![Cycle 23 Clockify Mridul](assets/cycle-23-clockify-mridul.png)
+
+#### Bao — **11:44:40**
+
+- PR review + personal log — 02:42:23
+- meeting with the team — 02:40:00
+- PR review — 02:35:50
+- meeting — 02:25:25
+- PR review + meeting — 01:21:02
+
+![Cycle 23 Clockify Bao](assets/cycle-23-clockify-bao.png)
 
 ---
 
@@ -106,7 +177,6 @@ Final delivery cycle complete for planning purposes. Application functionality i
 | #1557 Unique Canvas tokens | Open (approved after follow-ups) |
 | #1558 Reversibility / multi-theme branch | Open (split/rebase) |
 | #1533 Final documentation package | Draft |
-| Jessica Cycle 23 personal timesheet | Pending |
 
 ---
 
@@ -138,6 +208,5 @@ Final delivery cycle complete for planning purposes. Application functionality i
 | --- | --- | --- |
 | Overlapping assistant PRs | Regression risk on merge | Follow merge order; split #1558 |
 | Docs package incomplete | Submission gap | Finish #1533 |
-| Hours screenshot gaps | Reporting completeness | Attach Clockify exports |
 
 ---

@@ -6,9 +6,9 @@
 
 Cycle 23 was the final delivery cycle. The team focused on closing remaining TE2 / manual-QA tickets, hardening AI chat intent and course-context behaviour, unifying shared UI/safety surfaces (quick actions, due-date resolution, risk/reversibility badges), completing final documentation and design diagrams, reviewing large end-of-project pull requests, and preparing the Final Demo / submission package.
 
-Hours below are taken from each member’s Cycle 23 personal Clockify totals for **04/08/2026 – 09/08/2026** (Jessica’s personal Cycle 23 timesheet was not yet filed at draft time; her hours use the Final Week aggregate already recorded for the Final Design and Analysis Report).
+Hours below are taken from each member’s Cycle 23 Clockify totals for **04/08/2026 – 09/08/2026** (official Clockify Summary report **08/04/2026 – 08/09/2026**).
 
-Collectively the team logged approximately **133 hours and 4 minutes**. Development produced a large set of merged polish and regression PRs into `develop`, while several high-impact assistant / token / reversibility PRs remained open for final review and merge ordering at cycle end.
+Collectively the team logged **137 hours, 36 minutes, and 14 seconds**. Development produced a large set of merged polish and regression PRs into `develop`, while several high-impact assistant / token / reversibility PRs remained open for final review and merge ordering at cycle end.
 
 ---
 
@@ -98,7 +98,7 @@ Additional effort covered deep multi-pass reviews of #1555–#1558, Final Design
 | #1558 Reversibility / status badges + related assistant themes | Open / request changes — split/rebase recommended |
 | #1562 Bugfix/requirement testing | Open |
 | #1533 Final documentation package | Draft / open |
-| Cycle 23 personal log (Jessica) + team Clockify screenshots | Pending attachment |
+| Cycle 23 Clockify screenshots (team + individual) | Attached |
 
 ---
 
@@ -140,15 +140,24 @@ Time was tracked using Clockify for **Cycle 23 (Aug 4, 2026 – Aug 9, 2026).**
 | Team Member | Clockify Username | GitHub | Logged Time |
 | --- | --- | --- | ---: |
 | Yerdana | yerdana | Yerdana2002 | **35:51:06** |
-| Rhythm | trivedirhythm | rhythmt1 | **29:06:02** |
-| Jessica | jessica goel | jessica545 | **~29:00:00**† |
-| Mridul | mridulnohria21 | Mid112 | **27:21:50** |
+| Jessica | jessica goel | jessica545 | **33:28:06** |
+| Rhythm | trivedirhythm | rhythmt1 | **29:00:36** |
+| Mridul | mridulnohria21 | Mid112 | **27:31:46** |
 | Bao | thanhvoiban | StoneCA12 | **11:44:40** |
-| **Total** | | | **~133:03:38** |
+| **Total** | | | **137:36:14** |
 
-† Jessica’s Cycle 23 personal timesheet was not yet posted when this team log was drafted; hours use the Final Week aggregate already recorded for the Final Design and Analysis Report and should be replaced with her Clockify export when available.
+The team logged a combined **137 hours, 36 minutes, and 14 seconds** during Cycle 23. Effort concentrated on final ticket closure, documentation and demo preparation, and multi-branch review of the remaining assistant / Canvas-token / reversibility stack.
 
-The team logged a combined **~133 hours** during Cycle 23. Effort concentrated on final ticket closure (especially Aug 5–6), documentation and demo preparation (Aug 7–9), and multi-branch review of the remaining assistant / Canvas-token / reversibility stack.
+### Daily Team Hours
+
+| Day | Hours |
+| --- | ---: |
+| Tue Aug 4 | **36:13:58** |
+| Wed Aug 5 | **11:00:59** |
+| Thu Aug 6 | **01:30:25** |
+| Fri Aug 7 | **31:15:47** |
+| Sat Aug 8 | **26:32:02** |
+| Sun Aug 9 | **31:03:03** |
 
 ### Daily Notes (from personal logs)
 
@@ -161,16 +170,69 @@ The team logged a combined **~133 hours** during Cycle 23. Effort concentrated o
 | Saturday 8/8 | Chat intent/context fixes; due-date resolver; Final Design Report drafting |
 | Sunday 9/8 | Deep review of #1555–#1558; demo recording; unique-token / reversibility hardening |
 
-### Team / Individual Clockify
+### Team Clockify
 
-<!-- Attach Clockify team + individual screenshots from personal Cycle 23 logs here -->
+![Cycle 23 Clockify team summary](../dashboard/assets/cycle-23-clockify-team.png)
 
-Personal Clockify screenshots are available in:
+### Individual Clockify Reports
 
-- Mridul Cycle 23 personal log
-- Bao Cycle 23 personal log
-- Yerdana Cycle 23 personal log
-- Rhythm Cycle 23 personal log
+#### Yerdana — **35:51:06**
+
+- team meeting — 08:25:50
+- bugfix 5 — 08:39:30
+- bugfix 4 — 11:49:46
+- bugfix 3 — 06:56:00
+
+![Cycle 23 Clockify Yerdana](../dashboard/assets/cycle-23-clockify-yerdana.png)
+
+#### Jessica — **33:28:06**
+
+- completing documentation — 17:39:06
+- watching presentations + team meeting — 05:40:28
+- working on bug fixes — 04:33:50
+- team meeting — 01:58:13
+- working on bug fixes and reviewing PRs — 01:53:50
+- reviewing PRs — 00:56:37
+- making the presentation slide — 00:46:02
+
+![Cycle 23 Clockify Jessica](../dashboard/assets/cycle-23-clockify-jessica.png)
+
+#### Rhythm — **29:00:36**
+
+- PR Reviews — 08:33:40
+- Final Documentation update — 07:22:38
+- Team Meeting — 03:22:12
+- Team Meeting / Ticket 17: Improve First-Time AI Prompt Guidance — 02:40:01
+- Final Demo video recording — 02:06:59
+- address PR requested changes / merge conflicts / merge PRs — 01:15:12
+- Testing bug fixes on open PRs — 01:05:25
+- Update Use Case Models — 00:55:10
+- Ticket 27: Harden Password Requirements and Field Feedback — 00:38:41
+- PR Requested changes and merge — 00:31:33
+- Ticket 17: Improve First-Time AI Prompt Guidance — 00:29:05
+
+![Cycle 23 Clockify Rhythm](../dashboard/assets/cycle-23-clockify-rhythm.png)
+
+#### Mridul — **27:31:46**
+
+- Final presentations for others and requirement review — 06:48:53
+- fixing chat context and intent determination — 06:43:13
+- final touches on app — 05:37:19
+- ER diagram correction and improve project readability — 03:42:18
+- team meeting — 02:44:02
+- final bug fixes found during presentation — 01:56:01
+
+![Cycle 23 Clockify Mridul](../dashboard/assets/cycle-23-clockify-mridul.png)
+
+#### Bao — **11:44:40**
+
+- PR review + personal log — 02:42:23
+- meeting with the team — 02:40:00
+- PR review — 02:35:50
+- meeting — 02:25:25
+- PR review + meeting — 01:21:02
+
+![Cycle 23 Clockify Bao](../dashboard/assets/cycle-23-clockify-bao.png)
 
 ---
 
@@ -239,7 +301,6 @@ Backend validation focused on:
 | Large overlapping PRs (#1555/#1556/#1558) | Merge conflicts / privacy or handoff regressions if landed out of order | Follow agreed merge order; split #1558 unique themes |
 | Unique-token constraint vs shared test tokens | CI / local suite 409 failures if incomplete | Confirm #1557 test isolation remains green |
 | Final documentation package (#1533) still draft | Blocks complete hand-over checklist | Finish and merge docs package |
-| Jessica Cycle 23 Clockify not yet attached | Team hours slightly approximate | Update this log when personal timesheet is posted |
 
 ---
 
