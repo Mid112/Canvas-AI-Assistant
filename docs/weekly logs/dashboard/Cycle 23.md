@@ -4,11 +4,11 @@
 
 ## Burn-up Chart (Velocity)
 
-<img width="1024" height="481" alt="Cycle 23 burn-up" src="https://raw.githubusercontent.com/UBCO-COSC499-S2026/capstone-team-16/logs-team/docs/weekly%20logs/dashboard/assets/cycle-23-burnup.png" />
+<img width="938" height="538" alt="Screenshot 2026-08-09 at 11 16 39 PM" src="https://github.com/user-attachments/assets/7d078b96-6045-41ee-8e7a-fa6f25cee09b" />
 
 ### Burn-up Summary
 
-The burn-up chart for **Cycle 23 (Aug 4 – Aug 10)** (`is:issue`) shows **open** scope flat at about **~150**. **Completed** rose from **~25** to **~45** by **Aug 6**, stayed flat through **Aug 9**, then rose sharply to about **~150** by **Aug 10**, closing the gap to open scope as final tickets landed.
+The burn-up chart for **Cycle 23 (Aug 4 – Aug 09)** (`is:issue`) shows **open** scope flat at about **~150**. **Completed** rose from **~25** to **~45** by **Aug 6**, stayed flat through **Aug 9**, then rose sharply to about **~150** by **Aug 09**, closing the gap to open scope as final tickets landed.
 
 | Date Range | Trend |
 |------------|-------|
@@ -31,11 +31,12 @@ The project board is in final delivery mode and Done-focused. TE2 regression and
 | Ready | **0** |
 | In Progress | **0** |
 | In Review | **0** |
-| Done | **1290+** (final polish + docs package closed out) |
+| Done | **1293** (final polish + docs package closed out) |
 
 Counts from GitHub Project **team 16 project board**; leftover delivery PRs marked Merged for log close-out.
 
-<img width="1024" height="459" alt="Cycle 23 project board" src="https://raw.githubusercontent.com/UBCO-COSC499-S2026/capstone-team-16/logs-team/docs/weekly%20logs/dashboard/assets/cycle-23-board.png" />
+<img width="1418" height="737" alt="Screenshot 2026-08-09 at 11 16 21 PM" src="https://github.com/user-attachments/assets/60b485f1-9cdb-46e0-8f3f-994c1b7df013" />
+
 
 ---
 
@@ -107,7 +108,8 @@ The team logged a combined **137 hours, 36 minutes, and 14 seconds** during Cycl
 
 ### Team Clockify
 
-<img width="1024" height="657" alt="Cycle 23 Clockify team summary" src="https://raw.githubusercontent.com/UBCO-COSC499-S2026/capstone-team-16/logs-team/docs/weekly%20logs/dashboard/assets/cycle-23-clockify-team.png" />
+<img width="857" height="550" alt="Screenshot 2026-08-09 at 10 55 34 PM" src="https://github.com/user-attachments/assets/90118bd8-0ecd-4f75-8b59-220c27335dbc" />
+
 
 ### Individual Clockify Reports
 
@@ -118,7 +120,8 @@ The team logged a combined **137 hours, 36 minutes, and 14 seconds** during Cycl
 - bugfix 4 — 11:49:46
 - bugfix 3 — 06:56:00
 
-<img width="1024" height="278" alt="Cycle 23 Clockify Yerdana" src="https://raw.githubusercontent.com/UBCO-COSC499-S2026/capstone-team-16/logs-team/docs/weekly%20logs/dashboard/assets/cycle-23-clockify-yerdana.png" />
+<img width="897" height="244" alt="Screenshot 2026-08-09 at 10 55 48 PM" src="https://github.com/user-attachments/assets/561d1618-617c-43c5-aebb-5c932fcd781c" />
+
 
 #### Jessica — **33:28:06**
 
@@ -130,7 +133,8 @@ The team logged a combined **137 hours, 36 minutes, and 14 seconds** during Cycl
 - reviewing PRs — 00:56:37
 - making the presentation slide — 00:46:02
 
-<img width="1024" height="428" alt="Cycle 23 Clockify Jessica" src="https://raw.githubusercontent.com/UBCO-COSC499-S2026/capstone-team-16/logs-team/docs/weekly%20logs/dashboard/assets/cycle-23-clockify-jessica.png" />
+<img width="922" height="386" alt="Screenshot 2026-08-09 at 10 56 20 PM" src="https://github.com/user-attachments/assets/e0761559-05e0-440e-8c20-0e05beb2cadb" />
+
 
 #### Rhythm — **29:00:36**
 
@@ -146,7 +150,8 @@ The team logged a combined **137 hours, 36 minutes, and 14 seconds** during Cycl
 - PR Requested changes and merge — 00:31:33
 - Ticket 17: Improve First-Time AI Prompt Guidance — 00:29:05
 
-<img width="1024" height="576" alt="Cycle 23 Clockify Rhythm" src="https://raw.githubusercontent.com/UBCO-COSC499-S2026/capstone-team-16/logs-team/docs/weekly%20logs/dashboard/assets/cycle-23-clockify-rhythm.png" />
+<img width="965" height="543" alt="Screenshot 2026-08-09 at 10 55 58 PM" src="https://github.com/user-attachments/assets/ccef614a-f408-416a-85a0-5a365f9f243b" />
+
 
 #### Mridul — **27:31:46**
 
@@ -157,7 +162,8 @@ The team logged a combined **137 hours, 36 minutes, and 14 seconds** during Cycl
 - team meeting — 02:44:02
 - final bug fixes found during presentation — 01:56:01
 
-<img width="1024" height="521" alt="Cycle 23 Clockify Mridul" src="https://raw.githubusercontent.com/UBCO-COSC499-S2026/capstone-team-16/logs-team/docs/weekly%20logs/dashboard/assets/cycle-23-clockify-mridul.png" />
+<img width="901" height="459" alt="Screenshot 2026-08-09 at 10 56 13 PM" src="https://github.com/user-attachments/assets/29017f1b-7720-4fd9-9d1b-2ae652f7811f" />
+
 
 #### Bao — **11:44:40**
 
@@ -167,7 +173,8 @@ The team logged a combined **137 hours, 36 minutes, and 14 seconds** during Cycl
 - meeting — 02:25:25
 - PR review + meeting — 01:21:02
 
-<img width="1024" height="310" alt="Cycle 23 Clockify Bao" src="https://raw.githubusercontent.com/UBCO-COSC499-S2026/capstone-team-16/logs-team/docs/weekly%20logs/dashboard/assets/cycle-23-clockify-bao.png" />
+<img width="872" height="264" alt="Screenshot 2026-08-09 at 10 56 05 PM" src="https://github.com/user-attachments/assets/6a0d510c-2407-4587-8829-94d4b5d7203a" />
+
 
 ---
 
@@ -183,7 +190,6 @@ Final delivery cycle complete and **hand-over ready**. Application functionality
 
 No leftover product PRs remain open for final delivery. Items formerly listed here (#1555, #1556, #1557, #1558, #1562, #1533) are moved to **Closed / Completed** with Status **Merged**.
 
-**Log close-out:** Jessica Clockify attached; screenshots attached; Achievements / Lessons / Outlook mirrored below.
 
 ---
 
@@ -211,7 +217,7 @@ No leftover product PRs remain open for final delivery. Items formerly listed he
 
 ## Main Risks / Remaining Gaps
 
-Overlapping-PR / docs-package / merge-order risks are **resolved** for log close-out. **Cycle 23 team logging is complete** (Clockify **137:36:14**, Jessica hours + screenshots attached, wrap-ups done).
+Overlapping-PR / docs-package / merge-order risks are **resolved** for log close-out. **Cycle 23 team logging is complete** 
 
 | Risk / Gap | Impact | Status |
 | --- | --- | --- |
@@ -224,7 +230,7 @@ Overlapping-PR / docs-package / merge-order risks are **resolved** for log close
 
 - Final delivery board: **Done 1290+**, **In Review 0**
 - TE2 / polish merges + docs/demo prep; #1555–#1558, #1562, and #1533 marked Merged
-- Clockify **137:36:14** with Jessica hours and screenshots attached; log wrap-up complete
+- Clockify **137:36:14** ; log wrap-up complete
 
 ---
 
