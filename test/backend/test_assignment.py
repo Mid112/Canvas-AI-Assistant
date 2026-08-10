@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 import uuid
 import pytest
 from unittest.mock import AsyncMock, patch
@@ -26,7 +28,7 @@ def client():
         yield c
 
 
-def _register_with_canvas(client) -> tuple[dict, int]:
+def _register_with_canvas(client, *, token_suffix: str = "") -> tuple[dict, int]:
     """Register a fresh instructor, connect Canvas, seed one course. Returns (headers, local_course_id)."""
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
@@ -39,7 +41,7 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token() + token_suffix, "canvas_url": CANVAS_URL},
             headers=headers,
         )
 
@@ -161,7 +163,7 @@ def test_list_assignments_empty(client):
 def test_list_assignments_cross_instructor_isolation(client):
     """Instructor B cannot fetch assignments for a course owned by instructor A."""
     headers_a, local_course_id = _register_with_canvas(client)
-    headers_b, _ = _register_with_canvas(client)
+    headers_b, _ = _register_with_canvas(client, token_suffix="-second")
 
     with patch("app.services.canvas.fetch_assignments", new_callable=AsyncMock):
         response = client.get(

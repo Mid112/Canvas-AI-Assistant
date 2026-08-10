@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 import uuid
 import asyncio
 from pathlib import Path
@@ -85,7 +87,7 @@ def auth_headers(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-canvas-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
     return headers
@@ -98,7 +100,7 @@ def synced_course_id(client, auth_headers):
     return _sync_local_course(client, auth_headers)
 
 
-def _register_with_canvas(client) -> dict:
+def _register_with_canvas(client, *, token_suffix: str = "") -> dict:
     """Register a fresh user + connect a Canvas token. Returns auth headers."""
     email = f"test_{uuid.uuid4()}@example.com"
     reg = client.post(
@@ -110,7 +112,7 @@ def _register_with_canvas(client) -> dict:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token() + token_suffix, "canvas_url": CANVAS_URL},
             headers=headers,
         )
     return headers
@@ -601,8 +603,8 @@ def test_list_assignments(client):
         response = client.get(f"/api/v1/canvas/courses/{local_id}/assignments", headers=headers)
     assert response.status_code == 200
     assert response.json()[0]["name"] == "Assignment 1"
-    # token is "test-token" (set in _register_with_canvas); canvas_course_id is dynamic
-    mock.assert_awaited_once_with(canvas_course_id, "test-token", CANVAS_URL)
+    # token is unique_canvas_token() (set in _register_with_canvas); canvas_course_id is dynamic
+    mock.assert_awaited_once_with(canvas_course_id, unique_canvas_token(), CANVAS_URL)
 
 
 # Verifies: List assignments unauthenticated.
@@ -637,7 +639,7 @@ def test_list_assignments_local_url_alias(client, monkeypatch):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": local_canvas},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": local_canvas},
             headers=headers,
         )
 
@@ -661,7 +663,7 @@ def test_list_assignments_local_url_alias(client, monkeypatch):
 
     assert response.status_code == 200
     assert response.json()[0]["name"] == "Assignment 1"
-    mock.assert_awaited_once_with(canvas_course_id, "test-token", local_canvas)
+    mock.assert_awaited_once_with(canvas_course_id, unique_canvas_token(), local_canvas)
 
 
 # Verifies: Get assignment.
@@ -676,7 +678,7 @@ def test_get_assignment(client, auth_headers):
 
     assert response.status_code == 200
     assert response.json()["name"] == "Assignment 1"
-    mock.assert_awaited_once_with(12345, 10, "test-canvas-token", CANVAS_URL)
+    mock.assert_awaited_once_with(12345, 10, unique_canvas_token(), CANVAS_URL)
 
 
 # Verifies: Create assignment.
@@ -774,7 +776,7 @@ def test_update_assignment(client, auth_headers):
         12345,
         10,
         payload | {"points_possible": MOCK_ASSIGNMENT["points_possible"]},
-        "test-canvas-token",
+        unique_canvas_token(),
         CANVAS_URL,
     )
 
@@ -1193,7 +1195,7 @@ def test_set_active_course_wrong_user(client):
     local_id = fetch_resp.json()[0]["local_id"]
 
     # User B tries to set user A's course as their active course
-    headers_b = _register_with_canvas(client)
+    headers_b = _register_with_canvas(client, token_suffix="-second")
     response = client.patch(
         "/api/v1/canvas/active-course",
         json={"local_course_id": local_id},

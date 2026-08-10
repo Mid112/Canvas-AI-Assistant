@@ -1,10 +1,65 @@
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 _LOCAL_HTTP_HOSTS = frozenset({"localhost", "127.0.0.1", "canvas_lms"})
 
 
 def normalize_canvas_url(url: str) -> str:
     return url.strip().rstrip("/")
+
+
+def canonicalize_canvas_institution_url(url: str) -> str:
+    """Return the stable storage identity for a Canvas institution.
+
+    URL schemes and DNS hostnames are case-insensitive, but URL parsers may
+    preserve their original spelling in ``netloc``. Canonicalizing the
+    authority here keeps the database uniqueness key aligned with the URL
+    equivalence checks used by the application.
+    """
+    normalized = normalize_canvas_url(url)
+    parsed = urlparse(normalized)
+
+    if parsed.hostname is None:
+        return normalized
+
+    hostname = parsed.hostname.lower()
+    if hostname in _LOCAL_HTTP_HOSTS:
+        hostname = "localhost"
+
+    if ":" in hostname and not hostname.startswith("["):
+        hostname = f"[{hostname}]"
+    if parsed.port is not None:
+        hostname = f"{hostname}:{parsed.port}"
+
+    # Canvas URLs are expected to be ordinary origin URLs without userinfo;
+    # preserve it if one is supplied rather than silently changing credentials.
+    userinfo = ""
+    if parsed.username is not None:
+        userinfo = parsed.username
+        if parsed.password is not None:
+            userinfo += f":{parsed.password}"
+        userinfo += "@"
+
+    return urlunparse(
+        parsed._replace(
+            scheme=parsed.scheme.lower(),
+            netloc=f"{userinfo}{hostname}",
+        )
+    )
+
+
+def canvas_url_candidates(url: str) -> tuple[str, ...]:
+    """Return canonical and legacy URL spellings for one institution."""
+    normalized = normalize_canvas_url(url)
+    canonical = canonicalize_canvas_institution_url(normalized)
+    if canonical == normalized:
+        return (canonical,)
+
+    parsed = urlparse(canonical)
+    aliases = []
+    for host in ("localhost", "127.0.0.1", "canvas_lms"):
+        netloc = host if parsed.port is None else f"{host}:{parsed.port}"
+        aliases.append(urlunparse(parsed._replace(netloc=netloc)))
+    return tuple(dict.fromkeys(aliases))
 
 
 def canvas_urls_equivalent(a: str, b: str) -> bool:

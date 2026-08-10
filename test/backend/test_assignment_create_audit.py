@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 """Workflow + AuditLog recording for the assignment creation form.
 
 The REST create endpoint used to be a bare passthrough to Canvas, which left
@@ -43,7 +45,7 @@ def _mock_assignment(canvas_id: int | None = None) -> dict:
     }
 
 
-def _register_with_canvas(client) -> tuple[dict, int]:
+def _register_with_canvas(client, *, token_suffix: str = "") -> tuple[dict, int]:
     email = f"createaudit_{uuid.uuid4()}@example.com"
     reg = client.post(
         "/api/v1/auth/register",
@@ -54,7 +56,7 @@ def _register_with_canvas(client) -> tuple[dict, int]:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token() + token_suffix, "canvas_url": CANVAS_URL},
             headers=headers,
         )
 
@@ -269,7 +271,7 @@ def test_create_rejects_another_instructors_conversation(client):
     from app.models.workflow import Workflow
 
     headers_a, _ = _register_with_canvas(client)
-    headers_b, course_b = _register_with_canvas(client)
+    headers_b, course_b = _register_with_canvas(client, token_suffix="-second")
 
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = '{"action": "respond", "message": "hi"}'
@@ -293,7 +295,7 @@ def test_create_rejects_another_instructors_conversation(client):
 # above pass either way, so only this pins the ordering.
 def test_foreign_conversation_is_rejected_before_the_canvas_write(client):
     headers_a, _ = _register_with_canvas(client)
-    headers_b, course_b = _register_with_canvas(client)
+    headers_b, course_b = _register_with_canvas(client, token_suffix="-second")
 
     mock_adapter = AsyncMock()
     mock_adapter.generate.return_value = '{"action": "respond", "message": "hi"}'

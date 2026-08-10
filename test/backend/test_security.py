@@ -11,8 +11,13 @@ from datetime import UTC, datetime, timedelta
 from jose import jwt
 
 from app.config import settings
-from app.core.security import create_access_token, decode_access_token, hash_token
-
+from app.core.security import (
+    create_access_token,
+    decode_access_token,
+    fingerprint_canvas_token,
+    hash_token,
+    legacy_fingerprint_canvas_token,
+)
 
 # ---------------------------------------------------------------------------
 # create_access_token
@@ -107,3 +112,24 @@ def test_hash_token_produces_64_char_hex_digest():
 def test_hash_token_is_hex_string():
     digest = hash_token("test")
     int(digest, 16)  # raises ValueError if not valid hex
+
+
+# ---------------------------------------------------------------------------
+# Canvas token fingerprint
+# ---------------------------------------------------------------------------
+
+def test_canvas_token_fingerprint_is_deterministic():
+    assert fingerprint_canvas_token("canvas-token") == fingerprint_canvas_token("canvas-token")
+
+
+def test_canvas_token_fingerprint_does_not_equal_raw_token():
+    assert fingerprint_canvas_token("canvas-token") != "canvas-token"
+
+
+def test_canvas_token_fingerprint_changes_for_different_tokens():
+    assert fingerprint_canvas_token("canvas-token-a") != fingerprint_canvas_token("canvas-token-b")
+
+
+def test_canvas_token_fingerprint_is_domain_separated_and_versioned():
+    assert fingerprint_canvas_token("canvas-token").startswith("v1:")
+    assert fingerprint_canvas_token("canvas-token") != legacy_fingerprint_canvas_token("canvas-token")

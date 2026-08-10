@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 """API tests for GET /api/v1/messages/drafts (Sent tab / #1510)."""
 import asyncio
 import uuid
@@ -32,7 +34,7 @@ def _register(client) -> tuple[dict, int]:
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         me = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
     user_id = me.json()["id"]

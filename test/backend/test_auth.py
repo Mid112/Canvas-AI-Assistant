@@ -1,3 +1,5 @@
+from canvas_test_utils import unique_canvas_token
+
 import uuid
 import asyncio
 from datetime import UTC, datetime, timedelta
@@ -208,6 +210,7 @@ def test_delete_current_user(client):
 # Verifies: Set canvas token.
 def test_set_canvas_token(client):
     email = f"test_{uuid.uuid4()}@example.com"
+    canvas_token = f"fake-token-{uuid.uuid4()}"
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -217,7 +220,7 @@ def test_set_canvas_token(client):
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         resp = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "fake-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": canvas_token, "canvas_url": CANVAS_URL},
             headers=headers,
         )
     assert resp.status_code == 200
@@ -225,6 +228,138 @@ def test_set_canvas_token(client):
     assert len(resp.json()["canvas_connections"]) == 1
 
     assert client.get("/api/v1/auth/me", headers=headers).json()["has_canvas_token"] is True
+
+
+# Verifies: The same Canvas token cannot be connected to another instructor
+# within the same Canvas institution.
+def test_set_canvas_token_rejects_token_already_used_by_another_instructor(client):
+    first_email = f"test_{uuid.uuid4()}@example.com"
+    second_email = f"test_{uuid.uuid4()}@example.com"
+    first = client.post(
+        "/api/v1/auth/register",
+        json={"email": first_email, "password": "Secret123!", "name": "First User"},
+    )
+    second = client.post(
+        "/api/v1/auth/register",
+        json={"email": second_email, "password": "Secret123!", "name": "Second User"},
+    )
+    first_headers = {"Authorization": f"Bearer {first.json()['access_token']}"}
+    second_headers = {"Authorization": f"Bearer {second.json()['access_token']}"}
+    shared_token = f"shared-canvas-token-{uuid.uuid4()}"
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        first_response = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": shared_token, "canvas_url": CANVAS_URL},
+            headers=first_headers,
+        )
+        second_response = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={
+                "canvas_token": shared_token,
+                "canvas_url": CANVAS_URL,
+            },
+            headers=second_headers,
+        )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 409
+    assert second_response.json()["detail"] == "This Canvas token is already in use."
+
+
+# Verifies: Canvas token uniqueness is scoped to the Canvas institution.
+def test_set_canvas_token_allows_same_token_on_different_canvas_institutions(client):
+    first_email = f"test_{uuid.uuid4()}@example.com"
+    second_email = f"test_{uuid.uuid4()}@example.com"
+    first = client.post(
+        "/api/v1/auth/register",
+        json={"email": first_email, "password": "Secret123!", "name": "First User"},
+    )
+    second = client.post(
+        "/api/v1/auth/register",
+        json={"email": second_email, "password": "Secret123!", "name": "Second User"},
+    )
+    first_headers = {"Authorization": f"Bearer {first.json()['access_token']}"}
+    second_headers = {"Authorization": f"Bearer {second.json()['access_token']}"}
+    shared_token = f"cross-institution-token-{uuid.uuid4()}"
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        first_response = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": shared_token, "canvas_url": CANVAS_URL},
+            headers=first_headers,
+        )
+        second_response = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={
+                "canvas_token": shared_token,
+                "canvas_url": "https://canvas.other.example.edu",
+            },
+            headers=second_headers,
+        )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+
+
+# Verifies: Re-submitting the same token for the same connection is an upsert.
+def test_set_canvas_token_allows_same_token_resubmission(client):
+    email = f"test_{uuid.uuid4()}@example.com"
+    reg = client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": "Secret123!", "name": "Repeat User"},
+    )
+    headers = {"Authorization": f"Bearer {reg.json()['access_token']}"}
+    same_token = f"same-canvas-token-{uuid.uuid4()}"
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        first_response = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": same_token, "canvas_url": CANVAS_URL},
+            headers=headers,
+        )
+        second_response = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": same_token, "canvas_url": CANVAS_URL},
+            headers=headers,
+        )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert len(second_response.json()["canvas_connections"]) == 1
+
+
+# Verifies: Local Docker aliases resolve to one Canvas institution.
+def test_set_canvas_token_rejects_local_canvas_alias_collision(client):
+    first_email = f"test_{uuid.uuid4()}@example.com"
+    second_email = f"test_{uuid.uuid4()}@example.com"
+    first = client.post(
+        "/api/v1/auth/register",
+        json={"email": first_email, "password": "Secret123!", "name": "Local One"},
+    )
+    second = client.post(
+        "/api/v1/auth/register",
+        json={"email": second_email, "password": "Secret123!", "name": "Local Two"},
+    )
+    first_headers = {"Authorization": f"Bearer {first.json()['access_token']}"}
+    second_headers = {"Authorization": f"Bearer {second.json()['access_token']}"}
+    shared_token = f"local-alias-token-{uuid.uuid4()}"
+
+    with patch("app.services.auth.validate_token", new_callable=AsyncMock):
+        first_response = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": shared_token, "canvas_url": "http://localhost:3000"},
+            headers=first_headers,
+        )
+        second_response = client.patch(
+            "/api/v1/auth/me/canvas-token",
+            json={"canvas_token": shared_token, "canvas_url": "http://canvas_lms:3000"},
+            headers=second_headers,
+        )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 409
+    assert second_response.json()["detail"] == "This Canvas token is already in use."
 
 
 # Verifies: Validate canvas token.
@@ -240,7 +375,7 @@ def test_validate_canvas_token(client):
     ):
         resp = client.post(
             "/api/v1/auth/me/canvas-token/validate",
-            json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
             headers=headers,
         )
 
@@ -252,7 +387,7 @@ def test_validate_canvas_token(client):
 def test_validate_canvas_token_requires_auth(client):
     resp = client.post(
         "/api/v1/auth/me/canvas-token/validate",
-        json={"canvas_token": "test-token", "canvas_url": CANVAS_URL},
+        json={"canvas_token": unique_canvas_token(), "canvas_url": CANVAS_URL},
     )
     assert resp.status_code == 401
 
@@ -280,7 +415,7 @@ def test_validate_canvas_token_requires_canvas_url(client):
 
     resp = client.post(
         "/api/v1/auth/me/canvas-token/validate",
-        json={"canvas_token": "test-token"},
+        json={"canvas_token": unique_canvas_token()},
         headers=headers,
     )
 
@@ -293,10 +428,12 @@ def test_set_canvas_token_second_school(client):
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
+    first_canvas_token = f"token-example-{uuid.uuid4()}"
+    second_canvas_token = f"token-sfu-{uuid.uuid4()}"
 
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
-        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "token-example", "canvas_url": CANVAS_URL}, headers=headers)
-        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": "token-sfu", "canvas_url": "https://canvas.sfu.ca"}, headers=headers)
+        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": first_canvas_token, "canvas_url": CANVAS_URL}, headers=headers)
+        client.patch("/api/v1/auth/me/canvas-token", json={"canvas_token": second_canvas_token, "canvas_url": "https://canvas.sfu.ca"}, headers=headers)
 
     me = client.get("/api/v1/auth/me", headers=headers).json()
     assert me["has_canvas_token"] is True
@@ -311,16 +448,18 @@ def test_set_canvas_token_upsert_same_school(client):
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
+    old_canvas_token = f"old-token-{uuid.uuid4()}"
+    new_canvas_token = f"new-token-{uuid.uuid4()}"
 
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "old-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": old_canvas_token, "canvas_url": CANVAS_URL},
             headers=headers,
         )
         resp = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "new-token", "canvas_url": CANVAS_URL},
+            json={"canvas_token": new_canvas_token, "canvas_url": CANVAS_URL},
             headers=headers,
         )
 
@@ -386,11 +525,12 @@ def test_debug_allows_canvas_lms_http_url(client, monkeypatch):
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
+    canvas_token = f"tok-{uuid.uuid4()}"
 
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         resp = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "tok", "canvas_url": "http://canvas_lms:3000"},
+            json={"canvas_token": canvas_token, "canvas_url": "http://canvas_lms:3000"},
             headers=headers,
         )
 
@@ -417,11 +557,12 @@ def test_non_debug_allows_localhost_http_url(client, monkeypatch):
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
+    canvas_token = f"tok-{uuid.uuid4()}"
 
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         resp = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "tok", "canvas_url": "http://localhost:3000"},
+            json={"canvas_token": canvas_token, "canvas_url": "http://localhost:3000"},
             headers=headers,
         )
     assert resp.status_code == 200
@@ -433,11 +574,12 @@ def test_delete_canvas_connection(client):
     reg = client.post("/api/v1/auth/register", json={"email": email, "password": "Secret123!", "name": "Test User"})
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
+    canvas_token = f"tok-{uuid.uuid4()}"
 
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         resp = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "tok", "canvas_url": CANVAS_URL},
+            json={"canvas_token": canvas_token, "canvas_url": CANVAS_URL},
             headers=headers,
         )
     connection_id = resp.json()["canvas_connections"][0]["id"]
@@ -464,11 +606,12 @@ def test_delete_canvas_connection_wrong_user(client):
     reg_b = client.post("/api/v1/auth/register", json={"email": email_b, "password": "Secret123!", "name": "User B"})
     headers_a = {"Authorization": f"Bearer {reg_a.json()['access_token']}"}
     headers_b = {"Authorization": f"Bearer {reg_b.json()['access_token']}"}
+    canvas_token = f"tok-{uuid.uuid4()}"
 
     with patch("app.services.auth.validate_token", new_callable=AsyncMock):
         resp = client.patch(
             "/api/v1/auth/me/canvas-token",
-            json={"canvas_token": "tok", "canvas_url": CANVAS_URL},
+            json={"canvas_token": canvas_token, "canvas_url": CANVAS_URL},
             headers=headers_a,
         )
     connection_id = resp.json()["canvas_connections"][0]["id"]

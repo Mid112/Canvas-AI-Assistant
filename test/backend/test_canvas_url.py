@@ -1,4 +1,9 @@
-from app.core.canvas_url import canvas_urls_equivalent, normalize_canvas_url, resolve_server_canvas_url
+from app.core.canvas_url import (
+    canvas_urls_equivalent,
+    canonicalize_canvas_institution_url,
+    normalize_canvas_url,
+    resolve_server_canvas_url,
+)
 
 
 # Verifies: Normalize canvas url strips trailing slash.
@@ -12,9 +17,31 @@ def test_canvas_urls_equivalent_local_aliases():
     assert canvas_urls_equivalent("http://127.0.0.1:3000", "http://localhost:3000")
 
 
+# Verifies: Local aliases share one stored institution identity.
+def test_canonicalize_canvas_institution_url_local_aliases():
+    assert canonicalize_canvas_institution_url("http://canvas_lms:3000/") == "http://localhost:3000"
+    assert canonicalize_canvas_institution_url("https://canvas.example.edu/") == "https://canvas.example.edu"
+
+
+# Verifies: Scheme and hostname casing cannot split a stored institution identity.
+def test_canonicalize_canvas_institution_url_normalizes_authority_case():
+    assert (
+        canonicalize_canvas_institution_url("HTTPS://Canvas.Example.edu/")
+        == "https://canvas.example.edu"
+    )
+
+
 # Verifies: Canvas urls equivalent different hosts.
 def test_canvas_urls_equivalent_different_hosts():
     assert not canvas_urls_equivalent("https://canvas.example.edu", "https://canvas.sfu.ca")
+
+
+# Verifies: URL equivalence agrees with canonical storage for authority case.
+def test_canvas_urls_equivalent_ignores_authority_case():
+    assert canvas_urls_equivalent(
+        "HTTPS://Canvas.Example.edu/",
+        "https://canvas.example.edu",
+    )
 
 
 # Verifies: Resolve server canvas url maps local aliases.

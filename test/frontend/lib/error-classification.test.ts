@@ -19,6 +19,15 @@ describe("classifyErrorMessage", () => {
     ).toBe("canvas-auth");
   });
 
+  it("classifies an already-used Canvas token separately from auth errors", () => {
+    expect(
+      classifyErrorMessage("This Canvas token is already in use."),
+    ).toBe("canvas-token-conflict");
+    expect(classifyErrorMessage("Email already in use")).not.toBe(
+      "canvas-token-conflict",
+    );
+  });
+
   it("classifies a timeout message as canvas-outage", () => {
     expect(classifyErrorMessage("Canvas API timed out")).toBe("canvas-outage");
   });

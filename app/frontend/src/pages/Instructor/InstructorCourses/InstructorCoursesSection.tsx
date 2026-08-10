@@ -59,7 +59,7 @@ export function InstructorCoursesCard({
   return (
     <Card
       className={cn(
-        "shadow-sm ring-1 ring-border/60",
+        "flex h-full flex-col shadow-sm ring-1 ring-border/60",
         isActive && "ring-2 ring-primary",
         isUnpublished && !isActive && "opacity-95",
       )}
@@ -99,7 +99,7 @@ export function InstructorCoursesCard({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-2 pt-4 text-sm">
+      <CardContent className="flex-1 space-y-2 pt-4 text-sm">
         <div className="flex items-center justify-between">
           <span className="flex items-center gap-2 text-muted-foreground">
             <Users className="size-4" aria-hidden="true" />
@@ -134,7 +134,7 @@ export function InstructorCoursesCard({
         </p>
       </CardContent>
 
-      <CardFooter className="grid grid-cols-2 gap-2 border-t bg-transparent pt-4">
+      <CardFooter className="mt-auto grid grid-cols-2 gap-2 border-t bg-transparent pt-4">
         <Link
           to={instructorCoursePath(course.id)}
           className={cn(buttonVariants(), "col-span-2 w-full")}

@@ -2,11 +2,14 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, desc, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.canvas_url import canonicalize_canvas_institution_url, canvas_url_candidates
 from app.core.security import (
     encrypt_canvas_token,
+    fingerprint_canvas_token,
     generate_reset_token,
     hash_password,
     hash_token,
@@ -29,6 +32,7 @@ from app.schemas.auth import (
 )
 from app.services.admin import get_admin_settings
 from app.services.canvas_timezone import fetch_canvas_time_zone
+from app.services.canvas_token_registry import token_is_already_used
 from app.services.sessions import issue_token_for_user, revoke_other_sessions, revoke_session
 
 
@@ -308,30 +312,57 @@ async def remove_canvas_connection(db: AsyncSession, user: User, connection_id: 
 async def update_canvas_token(db: AsyncSession, user: User, canvas_token: str, canvas_url: str) -> User:
     await validate_token(canvas_token, canvas_url)
     encrypted = encrypt_canvas_token(canvas_token)
+    token_fingerprint = fingerprint_canvas_token(canvas_token)
     canvas_time_zone = await fetch_canvas_time_zone(canvas_token, canvas_url)
+    stored_canvas_url = canonicalize_canvas_institution_url(canvas_url)
 
     existing = await db.scalar(
         select(CanvasConnection).where(
             CanvasConnection.user_id == user.id,
-            CanvasConnection.canvas_url == canvas_url,
+            CanvasConnection.canvas_url.in_(canvas_url_candidates(canvas_url)),
         )
     )
+
+    if await token_is_already_used(
+        db,
+        canvas_token,
+        stored_canvas_url,
+        exclude_connection_id=getattr(existing, "id", None),
+    ):
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This Canvas token is already in use.",
+        )
+
     action = "canvas_connection_updated" if existing else "canvas_connection_added"
     if existing:
+        existing.canvas_url = stored_canvas_url
         existing.encrypted_token = encrypted
+        existing.token_fingerprint = token_fingerprint
         existing.time_zone = canvas_time_zone
     else:
         db.add(
             CanvasConnection(
                 user_id=user.id,
-                canvas_url=canvas_url,
+                canvas_url=stored_canvas_url,
                 encrypted_token=encrypted,
+                token_fingerprint=token_fingerprint,
                 time_zone=canvas_time_zone,
             )
         )
 
-    db.add(AuditLogSession(user_id=user.id, action=action, details={"canvas_url": canvas_url}))
-    await db.commit()
+    db.add(AuditLogSession(user_id=user.id, action=action, details={"canvas_url": stored_canvas_url}))
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        if "uq_canvas_url_token_fingerprint" in str(exc.orig):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This Canvas token is already in use.",
+            ) from exc
+        raise
 
     refreshed = await db.scalar(
         select(User)

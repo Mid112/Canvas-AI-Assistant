@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../fixtures";
 
 test.describe("Landing & auth smoke (#687)", () => {
   test("landing page links to registration", async ({ page }) => {

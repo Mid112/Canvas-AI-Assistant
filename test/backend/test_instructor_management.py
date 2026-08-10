@@ -546,6 +546,44 @@ class TestInstructorCanvasConnections:
         assert resp.status_code == 200
         assert len(resp.json()) == 1
 
+    # Verifies: admin re-submitting the same token is allowed for its own connection.
+    def test_reset_token_allows_same_token_resubmission(self, client, admin_token, instructor_id):
+        with patch("app.integrations.canvas.validate_token", new_callable=AsyncMock):
+            client.patch(
+                f"{BASE}/{instructor_id}/canvas-token",
+                json={"canvas_url": "https://canvas.example.edu", "canvas_token": "repeat-token"},
+                headers=_auth(admin_token),
+            )
+            resp = client.patch(
+                f"{BASE}/{instructor_id}/canvas-token",
+                json={"canvas_url": "https://canvas.example.edu", "canvas_token": "repeat-token"},
+                headers=_auth(admin_token),
+            )
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+
+    # Verifies: admin duplicate-token reset returns the same generic 409.
+    def test_reset_token_rejects_token_used_by_another_instructor(self, client, admin_token, instructor_id):
+        other_id = client.post(
+            BASE,
+            json={"name": "Other Instructor", "email": _new_email(), "password": "Pass123!"},
+            headers=_auth(admin_token),
+        ).json()["id"]
+        with patch("app.integrations.canvas.validate_token", new_callable=AsyncMock):
+            first = client.patch(
+                f"{BASE}/{other_id}/canvas-token",
+                json={"canvas_url": "https://canvas.example.edu", "canvas_token": "admin-shared-token"},
+                headers=_auth(admin_token),
+            )
+            resp = client.patch(
+                f"{BASE}/{instructor_id}/canvas-token",
+                json={"canvas_url": "https://canvas.example.edu", "canvas_token": "admin-shared-token"},
+                headers=_auth(admin_token),
+            )
+        assert first.status_code == 200
+        assert resp.status_code == 409
+        assert resp.json()["detail"] == "This Canvas token is already in use."
+
     # Verifies: a different canvas_url adds a second connection (multi-connection support).
     def test_reset_token_adds_second_connection_for_new_url(self, client, admin_token, instructor_id):
         with patch("app.integrations.canvas.validate_token", new_callable=AsyncMock):
