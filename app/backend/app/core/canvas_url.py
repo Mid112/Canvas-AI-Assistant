@@ -1,10 +1,38 @@
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 _LOCAL_HTTP_HOSTS = frozenset({"localhost", "127.0.0.1", "canvas_lms"})
 
 
 def normalize_canvas_url(url: str) -> str:
     return url.strip().rstrip("/")
+
+
+def canonicalize_canvas_institution_url(url: str) -> str:
+    """Use one stored identity for the local aliases used by Docker/dev."""
+    normalized = normalize_canvas_url(url)
+    parsed = urlparse(normalized)
+    if parsed.hostname not in _LOCAL_HTTP_HOSTS:
+        return normalized
+
+    netloc = "localhost"
+    if parsed.port is not None:
+        netloc = f"{netloc}:{parsed.port}"
+    return urlunparse(parsed._replace(netloc=netloc))
+
+
+def canvas_url_candidates(url: str) -> tuple[str, ...]:
+    """Return canonical and legacy URL spellings for one institution."""
+    normalized = normalize_canvas_url(url)
+    canonical = canonicalize_canvas_institution_url(normalized)
+    if canonical == normalized:
+        return (canonical,)
+
+    parsed = urlparse(canonical)
+    aliases = []
+    for host in ("localhost", "127.0.0.1", "canvas_lms"):
+        netloc = host if parsed.port is None else f"{host}:{parsed.port}"
+        aliases.append(urlunparse(parsed._replace(netloc=netloc)))
+    return tuple(dict.fromkeys(aliases))
 
 
 def canvas_urls_equivalent(a: str, b: str) -> bool:

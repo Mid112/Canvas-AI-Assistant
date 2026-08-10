@@ -6,6 +6,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.canvas_url import canonicalize_canvas_institution_url, canvas_url_candidates
 from app.core.security import (
     encrypt_canvas_token,
     fingerprint_canvas_token,
@@ -313,18 +314,19 @@ async def update_canvas_token(db: AsyncSession, user: User, canvas_token: str, c
     encrypted = encrypt_canvas_token(canvas_token)
     token_fingerprint = fingerprint_canvas_token(canvas_token)
     canvas_time_zone = await fetch_canvas_time_zone(canvas_token, canvas_url)
+    stored_canvas_url = canonicalize_canvas_institution_url(canvas_url)
 
     existing = await db.scalar(
         select(CanvasConnection).where(
             CanvasConnection.user_id == user.id,
-            CanvasConnection.canvas_url == canvas_url,
+            CanvasConnection.canvas_url.in_(canvas_url_candidates(canvas_url)),
         )
     )
 
     if await token_is_already_used(
         db,
         canvas_token,
-        canvas_url,
+        stored_canvas_url,
         exclude_connection_id=getattr(existing, "id", None),
     ):
         await db.rollback()
@@ -335,6 +337,7 @@ async def update_canvas_token(db: AsyncSession, user: User, canvas_token: str, c
 
     action = "canvas_connection_updated" if existing else "canvas_connection_added"
     if existing:
+        existing.canvas_url = stored_canvas_url
         existing.encrypted_token = encrypted
         existing.token_fingerprint = token_fingerprint
         existing.time_zone = canvas_time_zone
@@ -342,14 +345,14 @@ async def update_canvas_token(db: AsyncSession, user: User, canvas_token: str, c
         db.add(
             CanvasConnection(
                 user_id=user.id,
-                canvas_url=canvas_url,
+                canvas_url=stored_canvas_url,
                 encrypted_token=encrypted,
                 token_fingerprint=token_fingerprint,
                 time_zone=canvas_time_zone,
             )
         )
 
-    db.add(AuditLogSession(user_id=user.id, action=action, details={"canvas_url": canvas_url}))
+    db.add(AuditLogSession(user_id=user.id, action=action, details={"canvas_url": stored_canvas_url}))
     try:
         await db.commit()
     except IntegrityError as exc:

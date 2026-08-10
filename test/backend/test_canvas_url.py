@@ -1,4 +1,9 @@
-from app.core.canvas_url import canvas_urls_equivalent, normalize_canvas_url, resolve_server_canvas_url
+from app.core.canvas_url import (
+    canvas_urls_equivalent,
+    canonicalize_canvas_institution_url,
+    normalize_canvas_url,
+    resolve_server_canvas_url,
+)
 
 
 # Verifies: Normalize canvas url strips trailing slash.
@@ -10,6 +15,12 @@ def test_normalize_canvas_url_strips_trailing_slash():
 def test_canvas_urls_equivalent_local_aliases():
     assert canvas_urls_equivalent("http://localhost:3000", "http://canvas_lms:3000")
     assert canvas_urls_equivalent("http://127.0.0.1:3000", "http://localhost:3000")
+
+
+# Verifies: Local aliases share one stored institution identity.
+def test_canonicalize_canvas_institution_url_local_aliases():
+    assert canonicalize_canvas_institution_url("http://canvas_lms:3000/") == "http://localhost:3000"
+    assert canonicalize_canvas_institution_url("https://canvas.example.edu/") == "https://canvas.example.edu"
 
 
 # Verifies: Canvas urls equivalent different hosts.

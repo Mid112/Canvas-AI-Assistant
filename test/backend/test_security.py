@@ -16,6 +16,7 @@ from app.core.security import (
     decode_access_token,
     fingerprint_canvas_token,
     hash_token,
+    legacy_fingerprint_canvas_token,
 )
 
 # ---------------------------------------------------------------------------
@@ -127,3 +128,8 @@ def test_canvas_token_fingerprint_does_not_equal_raw_token():
 
 def test_canvas_token_fingerprint_changes_for_different_tokens():
     assert fingerprint_canvas_token("canvas-token-a") != fingerprint_canvas_token("canvas-token-b")
+
+
+def test_canvas_token_fingerprint_is_domain_separated_and_versioned():
+    assert fingerprint_canvas_token("canvas-token").startswith("v1:")
+    assert fingerprint_canvas_token("canvas-token") != legacy_fingerprint_canvas_token("canvas-token")

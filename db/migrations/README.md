@@ -59,3 +59,27 @@ If you have a genuinely ancient local database (created before the `ta` role was
 | `042_course_unique_per_instructor_url.sql` | Widens `courses.uq_course_per_instructor` from `(canvas_course_id, instructor_id)` to `(canvas_course_id, instructor_id, canvas_url)` so an instructor with two Canvas institutions can keep separate rows when numeric course IDs collide across hosts |
 | `043_repair_canvas_course_names.sql` | Repairs stale chat course snapshots after the alias-table migration: preserves historical `canvas_course_names` aliases, ensures a current `courses.name` alias exists, refreshes alias workflow state, and backfills `conversations.course_name` from `courses.name`. Numbered `043` because `041` and `042` are already used by the alias-table and course-unique migrations. |
 | `044_canvas_connection_time_zone.sql` | Adds `canvas_connections.time_zone` (IANA name from Canvas `/api/v1/users/self`) as the instructor source of truth when interpreting naive assignment due dates (#1435) |
+| `045_unique_canvas_token_fingerprint.sql` | Adds keyed Canvas-token fingerprints and the initial partial uniqueness index; legacy rows are upgraded by the application when they are next checked |
+| `046_scope_canvas_token_fingerprint_to_institution.sql` | Replaces the initial global index with partial uniqueness on `(canvas_url, token_fingerprint)`, with local Docker aliases canonicalized by the application |
+
+## Canvas token uniqueness rollout
+
+Deployments must apply both `045_unique_canvas_token_fingerprint.sql` and
+`046_scope_canvas_token_fingerprint_to_institution.sql`, in that order. A fresh
+database gets both entries from `db/init/01_schema.sql`; an existing database
+applies them automatically on backend startup.
+
+The fingerprint is a versioned, domain-separated HMAC. The application checks
+the indexed fingerprint first, then decrypts only legacy rows whose fingerprint
+has not yet been upgraded. Safe legacy rows are backfilled during that check.
+If pre-existing legacy rows contain the same plaintext token, the application
+does not silently overwrite either connection: the duplicate remains available
+for an administrator to identify and resolve by forcing one instructor to
+reconnect with a different token. Do not attempt to backfill plaintext tokens
+with SQL; raw tokens are never available to SQL.
+
+Rotating `CANVAS_TOKEN_ENCRYPTION_KEY` also changes fingerprints. Treat that as
+a coordinated maintenance operation: decrypt each existing token in the
+application, recompute its fingerprint under the new key, resolve duplicates,
+and only then enable the new key for normal writes. The encrypted token and
+fingerprint key must be rotated together.

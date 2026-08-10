@@ -154,9 +154,6 @@ export function InstructorAssistantPage() {
   // loading a transcript does not POST /chat/course-context and fork away
   // from the conversation the instructor just opened (#1507 re-review).
   const pendingConversationIdRef = useRef(pendingConversationId);
-  // This ref intentionally mirrors render state synchronously so the course
-  // sync effect and async callbacks always observe the latest selection.
-  // eslint-disable-next-line react-hooks/refs -- intentional synchronous ref mirror
   pendingConversationIdRef.current = pendingConversationId;
   const lastSyncedCourseIdRef = useRef<number | null>(null);
 

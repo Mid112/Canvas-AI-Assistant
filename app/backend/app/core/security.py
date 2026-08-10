@@ -63,12 +63,23 @@ def decrypt_canvas_token(encrypted_token: str) -> str:
 
 
 def fingerprint_canvas_token(plain_token: str) -> str:
-    """Return a stable, non-reversible identifier for duplicate detection.
+    """Return a versioned, domain-separated identifier for duplicate detection.
 
     Fernet ciphertext is intentionally different on every encryption, so it
     cannot be used for equality checks. A keyed HMAC lets the database enforce
-    uniqueness without storing or logging the raw Canvas token.
+    uniqueness without storing or logging the raw Canvas token. The version
+    prefix makes future fingerprint migrations explicit.
     """
+    digest = hmac.new(
+        settings.CANVAS_TOKEN_ENCRYPTION_KEY.encode(),
+        b"canvas-token-fp-v1|" + plain_token.encode(),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"v1:{digest}"
+
+
+def legacy_fingerprint_canvas_token(plain_token: str) -> str:
+    """Return the pre-v1 fingerprint while legacy rows are upgraded lazily."""
     return hmac.new(
         settings.CANVAS_TOKEN_ENCRYPTION_KEY.encode(),
         plain_token.encode(),
