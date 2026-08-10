@@ -40,13 +40,15 @@ Cycle 23 completed the board’s transition into final delivery. Most remaining 
 
 | Status | Count / Notes |
 | --- | --- |
-| Backlog / Ready | Final-delivery leftovers only (docs + open polish PRs) |
-| In Progress / In Review | Open PRs: #1555, #1556, #1557, #1558, #1562, #1533 (and related follow-ups) |
-| Done | Project burnup shows ~1205 tracked issues with completed work nearly meeting open scope by Aug 8–9 |
+| Backlog | **0** |
+| Ready | **0** |
+| In Progress | **0** |
+| In Review | **3** (#1556, #1555, #1557) |
+| Done | **1290** |
 
-Board / burnup snapshots should be attached from GitHub Projects when publishing this log.
+Board snapshot from GitHub Project **team 16 project board** at cycle end.
 
-<!-- Attach project board screenshot here -->
+![Cycle 23 project board](../dashboard/assets/cycle-23-board.png)
 
 ---
 
@@ -114,16 +116,17 @@ Additional effort covered deep multi-pass reviews of #1555–#1558, Final Design
 
 ## Burn-up Chart / Velocity
 
-<!-- Attach GitHub Projects burn-up screenshot for Aug 4–9 here -->
+![Cycle 23 burn-up](../dashboard/assets/cycle-23-burnup.png)
 
 ### Burn-up Summary
 
-The GitHub Projects burn-up for the final window (May–August, filter `is:issue`, ~1205 items) shows completed work nearly meeting total open scope by **Aug 8–9**. Mid-June scope growth and late-cycle polish are visible as open-scope steps, while the completed line converges on the open line at final delivery — consistent with Cycle 23’s focus on closing leftovers rather than expanding MVP scope.
+The GitHub Projects burn-up for **Cycle 23 (Aug 4 – Aug 10)** (filter `is:issue`) shows **open** scope holding flat near **~150** across the window. **Completed** work rose from about **~25** to **~45** by **Aug 6**, stayed flat through **Aug 9**, then climbed sharply to about **~150** by **Aug 10** — matching the final wave of issue closures as the board moved almost entirely into Done.
 
 | Date Range | Trend |
 | --- | --- |
-| Aug 4–6 | Heavy merge throughput of TE2 / polish tickets into `develop` |
-| Aug 7–9 | Documentation, demo capture, and deep review of remaining large PRs |
+| Aug 4–6 | Completed ~25 → ~45; open flat at ~150 |
+| Aug 7–9 | Completed held near ~45; open still ~150 |
+| Aug 10 | Completed surged to ~150, meeting open scope |
 | Current Focus | Ordered merge of remaining assistant/token/reversibility PRs + final docs |
 
 ---

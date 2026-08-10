@@ -4,16 +4,17 @@
 
 ## Burn-up Chart (Velocity)
 
-<!-- Attach GitHub Projects burn-up screenshot (Aug window / final delivery) here -->
+![Cycle 23 burn-up](assets/cycle-23-burnup.png)
 
 ### Burn-up Summary
 
-The burn-up chart for **Cycle 23 (Aug 4 – Aug 9)** continues the final-delivery convergence seen on the project-wide May–August burn-up (`is:issue`, ~1205 items). Completed work approaches total open scope by early August, with only a small remaining gap at freeze — matching the cycle’s emphasis on ticket closure, documentation, and review of leftover PRs rather than new MVP expansion.
+The burn-up chart for **Cycle 23 (Aug 4 – Aug 10)** (`is:issue`) shows **open** scope flat at about **~150**. **Completed** rose from **~25** to **~45** by **Aug 6**, stayed flat through **Aug 9**, then rose sharply to about **~150** by **Aug 10**, closing the gap to open scope as final tickets landed.
 
 | Date Range | Trend |
 |------------|-------|
-| Aug 4–6 | Completed work rose through TE2 / polish merges |
-| Aug 7–9 | Documentation, demo, and review-dominated completion |
+| Aug 4–6 | Completed ~25 → ~45; open flat at ~150 |
+| Aug 7–9 | Completed held near ~45; open still ~150 |
+| Aug 10 | Completed surged to ~150, meeting open scope |
 | Current Focus | Ordered merge of remaining open PRs + final submission package |
 
 ---
@@ -26,11 +27,15 @@ The project board is in final delivery mode. Most TE2 regression and polish tick
 
 | Status | Count / Notes |
 | --- | --- |
-| Done | Vast majority of tracked issues (burnup ~1205 items nearly complete) |
-| Open / In Review | #1555, #1556, #1557, #1558, #1562, #1533 |
-| Focus | Merge order, docs package, demo / submission artifacts |
+| Backlog | **0** |
+| Ready | **0** |
+| In Progress | **0** |
+| In Review | **3** (#1556, #1555, #1557) |
+| Done | **1290** |
 
-<!-- Attach board screenshot here -->
+Counts from GitHub Project **team 16 project board**.
+
+![Cycle 23 project board](assets/cycle-23-board.png)
 
 ---
 
