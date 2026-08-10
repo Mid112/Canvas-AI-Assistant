@@ -19,7 +19,10 @@ test.describe("Instructor workflows (#711)", () => {
     await registerAndSkipCanvas(page);
     // Layout header (with "AI Assistant" h1) is omitted on this route for chat height.
     await expect(page).toHaveURL(/\/instructor\/assistant/);
-    await expect(page.getByText("Limited mode")).toBeVisible();
+    // Banner title — chat chrome can also mention "Limited mode", so scope to status.
+    await expect(
+      page.getByRole("status").getByText("Limited mode", { exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByRole("textbox", { name: "Chat message" }),
     ).toBeVisible();
