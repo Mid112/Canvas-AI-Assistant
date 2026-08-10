@@ -36,41 +36,6 @@ if not os.environ.get("SECRET_KEY"):
 # ---------------------------------------------------------------------------
 
 
-def pytest_collection_modifyitems(config, items):
-    """Optionally select a deterministic CI shard without changing test behavior.
-
-    CI sets both variables when it fans the backend suite out across isolated
-    PostgreSQL containers. Local runs remain unchanged when they are absent.
-    Sorting by node id keeps the partition stable as long as the collected
-    suite is unchanged, while round-robin assignment avoids putting all of the
-    large parametrized modules in one shard.
-    """
-    del config
-    raw_index = os.environ.get("PYTEST_SHARD_INDEX")
-    raw_count = os.environ.get("PYTEST_SHARD_COUNT")
-    if raw_index is None and raw_count is None:
-        return
-    if raw_index is None or raw_count is None:
-        raise pytest.UsageError(
-            "PYTEST_SHARD_INDEX and PYTEST_SHARD_COUNT must be set together"
-        )
-
-    try:
-        shard_index = int(raw_index)
-        shard_count = int(raw_count)
-    except ValueError as exc:
-        raise pytest.UsageError("pytest shard values must be integers") from exc
-    if shard_count < 1 or shard_index < 0 or shard_index >= shard_count:
-        raise pytest.UsageError("pytest shard index must be within the shard count")
-
-    ordered = sorted(items, key=lambda item: item.nodeid)
-    items[:] = [
-        item
-        for position, item in enumerate(ordered)
-        if position % shard_count == shard_index
-    ]
-
-
 def _reset_llm_system_settings() -> None:
     """Clear persisted admin LLM defaults so tests share a clean baseline.
 
