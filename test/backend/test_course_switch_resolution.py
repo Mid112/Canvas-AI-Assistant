@@ -20,7 +20,9 @@ def client():
         yield c
 
 
-def _register_with_two_courses(client) -> tuple[dict, dict]:
+def _register_with_two_courses(
+    client, *, set_active: bool = True
+) -> tuple[dict, dict]:
     """Register a fresh instructor with two Canvas courses, set the first
     as active (seeds canvas_course_names for both, via
     sync_courses_if_stale). Returns (headers, {course_name: local_id})."""
@@ -56,12 +58,13 @@ def _register_with_two_courses(client) -> tuple[dict, dict]:
         ]
         resp = client.get(f"/api/v1/canvas/courses?canvas_url={CANVAS_URL}", headers=headers)
         local_ids = {c["name"]: c["local_id"] for c in resp.json()}
-        active_resp = client.patch(
-            "/api/v1/canvas/active-course",
-            json={"local_course_id": local_ids["CPSC 310"]},
-            headers=headers,
-        )
-        assert active_resp.status_code == 200, active_resp.text
+        if set_active:
+            active_resp = client.patch(
+                "/api/v1/canvas/active-course",
+                json={"local_course_id": local_ids["CPSC 310"]},
+                headers=headers,
+            )
+            assert active_resp.status_code == 200, active_resp.text
 
     return headers, local_ids
 
@@ -137,7 +140,16 @@ def test_first_turn_without_a_named_course_stays_on_the_active_one(client):
     assert body["is_error"] is False, body
 
 
-def test_short_course_context_statement_switches_without_llm(client):
+# Verifies a terse course-setting reply still moves the conversation — but now
+# through _resolve_course_switch rather than a regex fast path.
+#
+# _resolve_course_context_statement used to match "couse is CPSC 320" with no
+# LLM call and answer "Using CPSC 320 for this chat.", spending the whole turn
+# acknowledging the course instead of doing anything. Removing it costs the one
+# small resolver call this asserts, and buys a switch that recognizes the
+# course wherever it appears in the sentence rather than only in two fixed
+# phrasings.
+def test_short_course_context_statement_switches_the_conversation(client):
     headers, local_ids = _register_with_two_courses(client)
 
     first, _ = _chat(
@@ -150,14 +162,84 @@ def test_short_course_context_statement_switches_without_llm(client):
         client,
         headers,
         "couse is CPSC 320",
-        '{"action": "respond", "message": "This should not be used."}',
+        [
+            '{"switched_to": "CPSC 320"}',
+            '{"action": "respond", "course_name": "CPSC 320", "message": "OK."}',
+        ],
         conversation_id=first["conversation_id"],
     )
 
     assert body["is_error"] is False, body
-    assert body["reply"]["message"] == "Using CPSC 320 for this chat."
     assert body["conversation_id"] != first["conversation_id"]
-    assert mock_adapter.generate.await_count == 0
+    # The switch is settled before the main call, so the main prompt is framed
+    # with the right course from the start.
+    assert mock_adapter.generate.await_count == 2
+
+
+# Verifies the replacement for the deleted regex: a conversation with no course
+# of its own is bound to the one its first message names, and the turn then
+# CONTINUES instead of being spent on an acknowledgement.
+#
+# The active-course preference is cleared deliberately. canvas_course_names is
+# populated by sync_courses_if_stale (the sweep, the active-course button, a
+# post-write sync) and never by the chat path, so the reachable version of
+# "conversation has no course" is an instructor whose names were indexed by the
+# sweep but who has not used the course button. Skipping the button instead
+# would leave the name index empty, where no resolver — this one, the old
+# regex, or the LLM switch resolver — can match anything.
+def test_course_less_conversation_binds_to_a_course_named_in_the_message(client):
+    headers, local_ids = _register_with_two_courses(client)
+    _clear_active_course_preference(client, headers)
+
+    body, mock_adapter = _chat(
+        client,
+        headers,
+        "show me the assignments for CPSC 320",
+        '{"action": "respond", "course_name": "CPSC 320", "message": "OK."}',
+    )
+
+    assert body["is_error"] is False, body
+    # The model answered the actual question — no canned "Using X" turn.
+    assert body["reply"]["message"] == "OK."
+    # Bound without a resolver call: the course name is read straight off the
+    # message against the instructor's real course list.
+    assert mock_adapter.generate.await_count == 1
+    assert "CPSC 320" in str(mock_adapter.generate.call_args_list[-1].args)
+
+
+def _clear_active_course_preference(client, headers) -> None:
+    """Drop the persisted active course so a new conversation starts
+    course-less, the state the sweep-but-no-button instructor is in."""
+    import asyncio
+
+    from sqlalchemy import select, update
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from app.config import settings as _settings
+    from app.models.user import User
+    from app.models.user_preference import UserPreference
+
+    email = client.get("/api/v1/auth/me", headers=headers).json()["email"]
+
+    async def _clear():
+        engine = create_async_engine(_settings.DATABASE_URL)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as db:
+                user_id = await db.scalar(select(User.id).where(User.email == email))
+                await db.execute(
+                    update(UserPreference)
+                    .where(UserPreference.user_id == user_id)
+                    .values(active_course_id=None)
+                )
+                await db.commit()
+        finally:
+            await engine.dispose()
+
+    loop = asyncio.new_event_loop()
+    try:
+        loop.run_until_complete(_clear())
+    finally:
+        loop.close()
 
 
 # Verifies: a follow-up turn that switches to an explicitly-named

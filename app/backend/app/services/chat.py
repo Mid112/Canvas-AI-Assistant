@@ -122,6 +122,47 @@ def _explicit_announcement_request(message: str) -> bool:
     return bool(_ANNOUNCEMENT_REQUEST_RE.search(message))
 
 
+def _is_combined_announcement_request(action: Any) -> bool:
+    """True when the action already says "announce AND message these people".
+
+    also_announce_to_class exists for exactly one shape: a public announcement
+    plus targeted messages in the same turn. When the model has set it
+    alongside real recipients it has already understood a request like
+    "announce this and also message Alice separately", and forcing
+    announcement-only would silently drop Alice's message — the private half of
+    a request the instructor made explicitly, with nothing in the reply to say
+    it was dropped.
+
+    Deliberately narrow: it takes the flag AND recipients together. The flag
+    alone cannot re-enable private delivery, so a plain "announce this" is
+    still forced public exactly as before.
+    """
+    if action.action == "send_message":
+        return bool(
+            getattr(action, "also_announce_to_class", False)
+            and (
+                getattr(action, "recipient_directives", None)
+                or getattr(action, "recipient_canvas_user_ids", None)
+                or getattr(action, "recipient_handle", None)
+                or getattr(action, "broadcast_to_all_students", False)
+            )
+        )
+    if action.action == "intent_preview":
+        proposed = action.proposed_action
+        if not isinstance(proposed, dict) or proposed.get("action") != "send_message":
+            return False
+        return bool(
+            proposed.get("also_announce_to_class")
+            and (
+                proposed.get("recipient_directives")
+                or proposed.get("recipient_canvas_user_ids")
+                or proposed.get("recipient_handle")
+                or proposed.get("broadcast_to_all_students")
+            )
+        )
+    return False
+
+
 def _force_announcement_delivery(action: Any) -> Any:
     """Strip private recipient fields from an explicit announcement action."""
     if action.action == "send_message":
@@ -693,28 +734,6 @@ def _prescan_course_reference(
     if len(top) == 1:
         return top[0]
     return _resolve_duplicate_course_name_matches(top)
-
-
-_COURSE_CONTEXT_PATTERNS = (
-    re.compile(r"^\s*(?:course|couse|class)\s*(?:is|=|:)\s*(?P<name>.+?)\s*$", re.IGNORECASE),
-    re.compile(r"^\s*(?:use|switch(?:\s+to)?|set)\s+(?:course|class)\s+(?:to\s+)?(?P<name>.+?)\s*$", re.IGNORECASE),
-)
-
-
-def _resolve_course_context_statement(
-    course_names: list[CanvasCourseName],
-    user_message: str,
-) -> CanvasCourseName | None:
-    """Fast path for terse course-selection replies such as "course is
-    COSC 777" (and the common typo "couse is ..."). These are not really
-    Canvas tasks; they are context-setting utterances. Resolving them
-    deterministically keeps the main LLM from replaying the previous task
-    with stale context."""
-    for pattern in _COURSE_CONTEXT_PATTERNS:
-        match = pattern.match(user_message)
-        if match:
-            return _match_course_name(course_names, match.group("name"))
-    return None
 
 
 async def _find_or_fork_conversation_for_course(
@@ -4281,40 +4300,35 @@ async def handle_chat_message(
         )
         return conversation, {"error": user_facing_error}, True
 
-    if pending_message_id is None and local_course_id is None:
-        selected_course = _resolve_course_context_statement(course_names, message)
-        if selected_course is not None and selected_course.local_course_id is not None:
-            if conversation.course_id is None:
-                conversation.course_id = selected_course.local_course_id
-                conversation.course_name = await _stable_course_name(
-                    db, selected_course.local_course_id, _course_display_name(selected_course)
-                )
-            elif selected_course.local_course_id != conversation.course_id:
-                target = await _find_or_fork_conversation_for_course(
-                    db, user, selected_course.local_course_id, _course_display_name(selected_course)
-                )
-                user_msg.conversation_id = target.id
-                conversation = target
+    # Bind a course-less conversation to the course its first message names.
+    #
+    # This replaces _resolve_course_context_statement, a pair of regexes that
+    # matched only "course is X" / "switch to course X" and answered them with
+    # "Using X for this chat." — a whole turn spent acknowledging the course
+    # instead of doing the thing the message asked for. _prescan_course_reference
+    # finds the course anywhere in the sentence, so the turn now continues into
+    # the normal path and "course is CPSC 320, show me the assignments" shows
+    # the assignments.
+    #
+    # Only the course-less case is handled here. Moving an already-bound
+    # conversation to a different course stays with _resolve_course_switch
+    # below, which asks the model rather than a substring match — the switch is
+    # the destructive direction (it forks the thread), so it gets the more
+    # careful resolver.
+    if (
+        pending_message_id is None
+        and local_course_id is None
+        and conversation.course_id is None
+    ):
+        named_course = _prescan_course_reference(course_names, message)
+        if named_course is not None and named_course.local_course_id is not None:
+            conversation.course_id = named_course.local_course_id
+            conversation.course_name = await _stable_course_name(
+                db, named_course.local_course_id, _course_display_name(named_course)
+            )
             await _sync_course_context_envelope(
-                db, conversation, selected_course.local_course_id
+                db, conversation, named_course.local_course_id
             )
-            history = await _get_recent_messages(db, conversation.id)
-            await log_message(
-                db,
-                conversation,
-                role="assistant",
-                content=json.dumps(
-                    {
-                        "action": "respond",
-                        "message": f"Using {conversation.course_name} for this chat.",
-                    }
-                ),
-            )
-            await db.commit()
-            return conversation, {
-                "action": "respond",
-                "message": f"Using {conversation.course_name} for this chat.",
-            }, False
 
     # Pre-resolve a course switch from the raw message alone, before the
     # main prompt is built for this turn — see _resolve_course_switch's
@@ -4693,7 +4707,9 @@ async def handle_chat_message(
                         )
                     )
                 )
-            if _explicit_announcement_request(message):
+            if _explicit_announcement_request(message) and not _is_combined_announcement_request(
+                action
+            ):
                 action = _force_announcement_delivery(action)
             needs_unwrap = False
             if action.action == "intent_preview":

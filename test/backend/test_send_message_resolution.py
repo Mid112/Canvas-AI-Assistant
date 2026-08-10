@@ -309,6 +309,36 @@ def test_plain_send_message_without_new_fields_is_unaffected(client):
     assert _tool_call_logs(body["conversation_id"]) == []
 
 
+# Verifies the announcement guard still fires when the model tries to attach
+# private recipients to a plainly public request.
+#
+# _explicit_announcement_request/_force_announcement_delivery exist because a
+# public announcement is irreversible and goes to the whole class: if the
+# instructor asked to announce, private delivery must not survive. The guard
+# was loosened to let a combined "announce AND message X" through, so this
+# pins the half that must not have moved — the flag alone is what unlocks it,
+# and here the flag is absent.
+def test_announcement_request_still_strips_recipients_without_the_combined_flag(client):
+    headers, local_course_id = _register_with_canvas(client)
+    students = [_student("501", local_course_id, "Alice")]
+
+    llm_output = (
+        '{"action": "send_message", "course_name": "CPSC 310", "subject": "Hi class", '
+        '"body": "Welcome back.", "recipient_directives": '
+        '[{"student_reference": "Alice", "body": "Just for you."}]}'
+    )
+
+    with patch("app.mcp_tools.dispatcher.get_students", new=AsyncMock(return_value=students)):
+        body = _chat(client, headers, "post an announcement to the class", llm_output)
+
+    assert body["is_error"] is False, body
+    reply = body["reply"]
+    proposed = reply["proposed_action"]
+    assert proposed["recipient_canvas_user_ids"] is None
+    assert not proposed.get("recipient_directives")
+    assert "additional_previews" not in reply
+
+
 # Verifies: a grouped send_message batch is form-handoff only — no chat
 # confirm/cancel path, and distinct bodies still surface as additional_previews.
 def test_grouped_send_message_previews_are_not_chat_confirmable(client):

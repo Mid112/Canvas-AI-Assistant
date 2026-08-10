@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from app.mcp_tools.dispatcher import parse_action
 from app.mcp_tools.schemas import SemanticIntentAction
 from app.services.intent import normalize_semantic_intent
@@ -38,6 +40,51 @@ def test_semantic_missing_submissions_preserves_natural_reference_and_status():
     assert normalized["action"] == "resolve_missing_submissions"
     assert normalized["assignment_reference"] == "those assignments"
     assert normalized["status"] == "late"
+
+
+# Verifies the unscoped late request is not silently answered as a missing one.
+#
+# find_missing_submissions covers both categories and `status` is the only
+# thing separating them. When no assignment is named the intent is rerouted to
+# the course-wide assignment filter, and that reroute used to hardcode
+# "missing_submissions" — so "which assignments have late submissions?" came
+# back listing assignments with missing work. Wrong answer, no error, and
+# nothing in the reply to suggest the question had been changed.
+@pytest.mark.requirement("FR2.8")
+def test_unscoped_late_request_routes_to_the_late_assignment_filter():
+    intent = SemanticIntentAction(intent="find_missing_submissions", status="late")
+
+    normalized = normalize_semantic_intent(intent, local_course_id=22)
+
+    assert normalized["action"] == "find_assignments_by_submission_status"
+    assert normalized["status"] == "late_submissions"
+
+
+# Verifies the missing default still holds when no status is given, so the
+# reroute above cannot flip the ordinary case.
+@pytest.mark.requirement("FR2.8")
+def test_unscoped_request_without_a_status_still_means_missing():
+    intent = SemanticIntentAction(intent="find_missing_submissions")
+
+    normalized = normalize_semantic_intent(intent, local_course_id=22)
+
+    assert normalized["action"] == "find_assignments_by_submission_status"
+    assert normalized["status"] == "missing_submissions"
+
+
+# Verifies the course-wide analysis carries the category too. Its schema
+# defaults to "missing", so an omitted status was not a missing field — it was
+# a confidently wrong answer.
+@pytest.mark.requirement("FR2.8")
+def test_semantic_analyze_submissions_carries_the_late_category():
+    intent = SemanticIntentAction(intent="analyze_submissions", status="late")
+
+    normalized = normalize_semantic_intent(intent, local_course_id=22)
+
+    assert normalized["action"] == "analyze_course_submissions"
+    assert normalized["status"] == "late"
+    parsed = parse_action(json.dumps(normalized))
+    assert parsed.status == "late"
 
 
 def test_semantic_submission_status_maps_to_explicit_assignment_filter():
