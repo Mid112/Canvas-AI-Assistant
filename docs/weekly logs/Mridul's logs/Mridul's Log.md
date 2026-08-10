@@ -2312,3 +2312,154 @@ The main area to continue improving is final verification. Since many fixes and 
 * **Goal 5:** Prepare final demo flow and backup screenshots
 * **Goal 6:** Support any last PR reviews or urgent bug fixes before final delivery
 * **Goal 7:** Finalize project delivery and demo readiness
+
+---
+
+<br>
+
+
+# Cycle 23 Report: 04/08 – 09/08 (August 4 – August 9)
+
+## Timesheet
+
+### Clockify Report
+
+* **04/08 (Tuesday):** Using Clockify – Logged 2.73 hours
+  *(2 hours, 44 minutes, and 2 seconds for team meeting)*
+  <img width="2672" height="224" alt="image" src="https://github.com/user-attachments/assets/56476e8d-119b-4b8b-9116-bf5bfc47ad80" />
+
+
+* **05/08 (Wednesday):** Using Clockify – Logged 3.71 hours
+  *(3 hours, 42 minutes, and 18 seconds for ER diagram correction and improving project readability)*
+<img width="2682" height="224" alt="image" src="https://github.com/user-attachments/assets/c7084e97-f227-458f-9c41-80255bd1793f" />
+
+
+* **07/08 (Friday):** Using Clockify – Logged 8.75 hours
+  *(6 hours, 48 minutes, and 53 seconds for final presentations for others and requirement review)*
+  *(1 hour, 56 minutes, and 1 second for final bug fixes found during presentation)*
+<img width="2682" height="340" alt="image" src="https://github.com/user-attachments/assets/e6259313-aa6a-4750-8546-34417207357d" />
+
+* **08/08 (Saturday):** Using Clockify – Logged 6.72 hours
+  *(6 hours, 43 minutes, and 13 seconds for fixing chat context and intent determination)*
+<img width="2698" height="214" alt="image" src="https://github.com/user-attachments/assets/ad20d897-3770-4c38-8b36-045526f97f52" />
+
+
+* **09/08 (Sunday):** Using Clockify – Logged 5.46 hours
+  *(4 hours, 17 minutes, and 27 seconds visible for final touches on the app; day total shown as 5 hours, 27 minutes, and 23 seconds)*
+<img width="2674" height="216" alt="image" src="https://github.com/user-attachments/assets/35f89339-7108-4ad1-82b5-14cf49999f6e" />
+
+
+**Cycle Total:** 27 hours, 21 minutes, and 50 seconds
+
+---
+
+## Current Tasks (Provide sufficient detail)
+
+### #1: Team meeting (August 4)
+
+* Worked for 2 hours, 44 minutes, and 2 seconds on team meeting activities.
+* Discussed remaining final delivery work, open issues, demo readiness, and final project expectations.
+* Helped align team priorities for the last stage of the project.
+* This supported final coordination before presentation, documentation, and final app cleanup.
+
+### #2: ER diagram correction and project readability (August 5)
+
+* Worked for 3 hours, 42 minutes, and 18 seconds on correcting the ER diagram and improving project readability.
+* Reviewed the project documentation and made corrections to improve clarity.
+* Updated diagrams and written sections so the final project deliverables were easier to understand.
+* This helped improve the quality and professionalism of the final submission package.
+
+### #3: Final presentations and requirement review (August 7)
+
+* Worked for 6 hours, 48 minutes, and 53 seconds on final presentations for other teams and requirement review.
+* Reviewed project requirements and compared them against the implemented system.
+* Helped ensure that the final project work aligned with the expected functional and user requirements.
+* This supported final validation and helped prepare for project delivery.
+
+### #4: Final bug fixes found during presentation (August 7)
+
+* Worked for 1 hour, 56 minutes, and 1 second on final bug fixes discovered during presentation.
+* Addressed issues found while reviewing or presenting the application.
+* Focused on stabilizing final user-facing behavior before delivery.
+* This helped reduce last-minute risk before the final demo and submission.
+
+### #5: Chat context and intent determination fixes (August 8)
+
+* Worked for 6 hours, 43 minutes, and 13 seconds on fixing chat context and intent determination.
+* Worked on improving how the AI assistant understands user intent and keeps the correct course/workflow context.
+* Helped fix issues where the assistant needed clearer routing between different actions and workflows.
+* This work connected to final AI assistant improvements and workflow handoff behavior.
+
+### #6: Final touches on app (August 9)
+
+* Worked on final touches for the application.
+* Reviewed remaining app behavior, cleaned up final issues, and supported final delivery readiness.
+* Focused on improving the final state of the app before submission and demo.
+* This helped prepare the project for final project delivery.
+
+---
+
+## PRs Worked On This Cycle
+
+| PR / Issue ID | Description                                                            | Status    | Notes                                                                                           |
+| ------------- | ---------------------------------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------- |
+| 1555          | Add semantic intent routing and unified announcement/private messaging | Completed | Worked on improving assistant intent routing and unifying announcement/private message handling |
+| 1556          | Improve assistant clarification messaging and workflow handoffs        | Completed | Worked on assistant clarification behavior and workflow handoff fixes                           |
+| 1557          | Enforce unique Canvas token usage globally                             | Completed | Worked on backend enhancement to prevent Canvas token usage collisions globally                 |
+
+---
+
+## Progress Update (since 04/08/2026)
+
+| TASK/ISSUE #                              | STATUS    |
+| ----------------------------------------- | --------- |
+| Team meeting                              | Completed |
+| ER diagram correction                     | Completed |
+| Project readability improvements          | Completed |
+| Final presentations for other teams       | Completed |
+| Requirement review                        | Completed |
+| Final bug fixes found during presentation | Completed |
+| Chat context fixes                        | Completed |
+| Intent determination fixes                | Completed |
+| Semantic intent routing                   | Completed  |
+| Unified announcement/private messaging    |  Completed  |
+| Assistant clarification messaging         |  Completed  |
+| Workflow handoff improvements             |  Completed  |
+| Unique Canvas token usage enforcement     |  Completed  |
+| Final touches on app                      | Completed |
+| Final project delivery preparation        | Completed |
+| Final demo readiness                      | Completed |
+
+---
+
+## Cycle Goal Review
+
+### Reflection:
+
+This final cycle focused on final project cleanup, presentation preparation, requirement review, AI assistant improvements, and last-minute bug fixes. On August 4, I participated in a team meeting where we reviewed the remaining work and aligned on what needed to be completed before final delivery.
+
+On August 5, I worked on correcting the ER diagram and improving project readability. This was important because the final submission needed to clearly explain the system design, database structure, and overall project organization. Improving documentation quality helped make the project easier to understand and evaluate.
+
+On August 7, I worked on final presentations, requirement review, and bug fixes found during presentation. This helped confirm whether the project matched the required functionality and allowed us to catch final issues before delivery. Reviewing requirements also helped connect the final implementation back to the original project goals.
+
+On August 8 and August 9, I focused heavily on chat context, intent determination, workflow handoffs, and final app touches. This included work related to semantic intent routing, announcement/private messaging behavior, assistant clarification messaging, and Canvas token handling. These were important final fixes because the AI assistant needed to behave more reliably and guide users through workflows more clearly.
+
+### Retrospective:
+
+This was a strong final cycle because the work focused on making the project ready for final delivery rather than only adding new features. The main value of this cycle came from polishing the system, fixing issues found during presentation, improving documentation, and strengthening the AI assistant workflow.
+
+A major lesson from this cycle was that final delivery requires both technical fixes and communication work. The app needed to function correctly, but the diagrams, documentation, requirements review, and demo flow also needed to clearly explain what the team built.
+
+The most important technical improvement this cycle was around the assistant workflow. Fixing chat context, intent determination, clarification messaging, and workflow handoffs helped make the AI assistant more reliable and less confusing for users. This connected directly to the overall goal of making the Canvas Helper AI Assistant usable in realistic instructor workflows.
+
+---
+
+## Next Cycle Goals
+
+* **Goal 1:** Complete any remaining PR reviews required for final merge
+* **Goal 2:** Verify final AI assistant behavior after intent routing and workflow handoff fixes
+* **Goal 3:** Confirm Canvas token uniqueness behavior works correctly
+* **Goal 4:** Perform final demo walkthrough and backup testing
+* **Goal 5:** Finalize submission package and documentation
+* **Goal 6:** Submit final project deliverables
+
