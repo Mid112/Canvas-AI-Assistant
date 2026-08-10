@@ -45,11 +45,108 @@ const INTERNAL_FIELDS = new Set([
   "preview_id",
 ]);
 
+const CLARIFICATION_FIELD_LABELS: Record<string, string> = {
+  course_name: "course",
+  assignment_reference: "assignment",
+  student_reference: "student",
+  new_grade: "proposed grade",
+  reason: "reason",
+  title: "title",
+  description: "description",
+  due_date: "due date",
+  due_at: "due date",
+  points_possible: "possible points",
+  subject: "message subject",
+  body: "message body",
+  feedback: "feedback",
+  recipient_directives: "recipients",
+};
+
 function formatFieldLabel(field: string): string {
-  return field
+  const fallback = field
     .split("_")
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+  const label = CLARIFICATION_FIELD_LABELS[field] ?? fallback;
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function formatAcknowledgedField(field: string, value: string): string {
+  switch (field) {
+    case "course_name":
+      return `the ${value} course`;
+    case "assignment_reference":
+      return `the assignment "${value}"`;
+    case "student_reference":
+      return `the student "${value}"`;
+    case "new_grade":
+      return `a proposed grade of ${value}`;
+    case "reason":
+      return `the reason "${value}"`;
+    case "title":
+      return `the title "${value}"`;
+    case "description":
+      return "the description provided";
+    case "due_date":
+      return `the due date ${value}`;
+    case "due_at":
+      return `the due date ${value}`;
+    case "points_possible":
+      return `${value} possible points`;
+    case "subject":
+      return `the subject "${value}"`;
+    case "body":
+      return "the message body provided";
+    case "feedback":
+      return "the feedback provided";
+    default:
+      return `the ${formatFieldLabel(field).toLowerCase()} "${value}"`;
+  }
+}
+
+function joinAcknowledgements(
+  fields: Array<{ field: string; value: string }>,
+): string {
+  const phrases = fields.map(({ field, value }) =>
+    formatAcknowledgedField(field, value),
+  );
+  if (phrases.length <= 1) return phrases[0] ?? "";
+  if (phrases.length === 2) return `${phrases[0]} and ${phrases[1]}`;
+  return `${phrases.slice(0, -1).join(", ")}, and ${phrases.at(-1)}`;
+}
+
+function formatClarificationQuestion(question: string): string {
+  // Only replace schema-shaped snake_case tokens. Rewriting ordinary words
+  // such as "title", "subject", or "body" corrupts otherwise natural LLM
+  // prose (and can assign the wrong workflow-specific label).
+  const internalFieldKeys = Object.keys(CLARIFICATION_FIELD_LABELS).filter(
+    (field) => field.includes("_"),
+  );
+  const internalFieldPattern = new RegExp(
+    `\\b(?:${internalFieldKeys.join("|")})\\b`,
+    "g",
+  );
+  const normalizedQuestion = question.replace(
+    internalFieldPattern,
+    (field) => CLARIFICATION_FIELD_LABELS[field] ?? field,
+  );
+  const fields = question
+    .replace(/[.!?]+$/, "")
+    .split(",")
+    .map((field) => field.trim())
+    .filter((field) => CLARIFICATION_FIELD_LABELS[field]);
+  const rawFieldCount = question.replace(/[.!?]+$/, "").split(",").length;
+  if (fields.length >= 1 && fields.length === rawFieldCount) {
+    const labels = fields.map((field) => CLARIFICATION_FIELD_LABELS[field]);
+    const requested =
+      labels.length === 1
+        ? labels[0]
+        : labels.length === 2
+          ? `${labels[0]} and ${labels[1]}`
+          : `${labels.slice(0, -1).join(", ")}, and ${labels.at(-1)}`;
+    return `I still need the ${requested}.`;
+  }
+  return normalizedQuestion;
 }
 
 function formatSafeValue(value: unknown): string | undefined {
@@ -67,13 +164,16 @@ function formatSafeValue(value: unknown): string | undefined {
 
 function readableFields(
   value: unknown,
+  excludedFields: ReadonlySet<string> = new Set(),
 ): Array<{ label: string; value: string }> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return [];
   }
 
   return Object.entries(value as Record<string, unknown>)
-    .filter(([field]) => !INTERNAL_FIELDS.has(field))
+    .filter(
+      ([field]) => !INTERNAL_FIELDS.has(field) && !excludedFields.has(field),
+    )
     .flatMap(([field, fieldValue]) => {
       const formatted = formatSafeValue(fieldValue);
       return formatted
@@ -93,6 +193,11 @@ function readNumberArray(value: unknown): number[] | undefined {
     .map((entry) => (typeof entry === "number" ? entry : Number(entry)))
     .filter((entry) => Number.isFinite(entry));
   return numbers.length > 0 ? numbers : undefined;
+}
+
+function readStringSet(value: unknown): ReadonlySet<string> {
+  if (!Array.isArray(value)) return new Set();
+  return new Set(value.filter((entry): entry is string => typeof entry === "string"));
 }
 
 function readNumber(value: unknown): number | undefined {
@@ -279,6 +384,7 @@ function buildGradeHandoffAction(
   }
 
   const studentIds = readNumberArray(handoff.student_ids);
+  const feedback = readString(handoff.reason) ?? readString(handoff.feedback);
   return {
     action: "Update Grade",
     course: readString(handoff.course_name) ?? "Active course",
@@ -294,7 +400,7 @@ function buildGradeHandoffAction(
         assignmentId,
         studentIds,
         grade: readString(handoff.new_grade),
-        reason: readString(handoff.reason),
+        reason: feedback,
       }),
     },
   };
@@ -328,6 +434,8 @@ function buildGradeClarifyHandoffAction(
   const studentIds =
     readNumberArray(partialPlan.student_ids) ??
     (studentId !== undefined ? [studentId] : undefined);
+  const feedback =
+    readString(partialPlan.reason) ?? readString(partialPlan.feedback);
 
   return {
     action: "Update Grade",
@@ -341,7 +449,7 @@ function buildGradeClarifyHandoffAction(
         assignmentId: readNumber(partialPlan.assignment_id),
         studentIds,
         grade: readString(partialPlan.new_grade),
-        reason: readString(partialPlan.reason),
+        reason: feedback,
       }),
     },
   };
@@ -571,13 +679,11 @@ function buildQuizCreateDraftState(
 }
 
 function buildQuizCreateNavigateTo(
-  proposed: Record<string, unknown>,
-  conversationId?: number,
-  timeZone?: string,
+  draftState: Record<string, unknown>,
 ): NonNullable<AssistantResponse["navigateTo"]> {
   return {
     path: paths.instructor.quizCreate,
-    state: buildQuizCreateDraftState(proposed, conversationId, timeZone),
+    state: draftState,
   };
 }
 
@@ -694,15 +800,12 @@ function buildFeedbackDraftNavigateTo(
 function buildQuizCreateFormAction(
   proposed: Record<string, unknown>,
   previewMetadata: Record<string, unknown> | undefined,
-  conversationId?: number,
-  timeZone?: string,
+  draftState: Record<string, unknown>,
 ): NonNullable<AssistantResponse["interpretedAction"]> {
   const courseLabel =
     readString(previewMetadata?.course_name) ??
     readString(previewMetadata?.course) ??
     "Active course";
-  const draftState = buildQuizCreateDraftState(proposed, conversationId, timeZone);
-
   return {
     action: "Create Quiz",
     course: courseLabel,
@@ -814,18 +917,23 @@ function mapReplyBody(
     // keeps an "Open quiz creation form" button so reopening chat history
     // can return to the seeded form without a confirmable preview panel.
     if (proposed?.action === "create_quiz") {
+      const quizDraftState = buildQuizCreateDraftState(
+        proposed,
+        conversationId,
+        timeZone,
+      );
       return {
         content:
           readString(reply.summary) ??
-          "Opening the quiz creation form with your draft…",
+          "I prepared a quiz draft — open the form to review it.",
         explanation:
           "Quiz creation happens in the dedicated form so the write is reviewed once and recorded in workflow history.",
-        navigateTo: buildQuizCreateNavigateTo(proposed, conversationId, timeZone),
+        autoNavigate: false,
+        navigateTo: buildQuizCreateNavigateTo(quizDraftState),
         interpretedAction: buildQuizCreateFormAction(
           proposed,
           previewMetadata,
-          conversationId,
-          timeZone,
+          quizDraftState,
         ),
       };
     }
@@ -896,19 +1004,43 @@ function mapReplyBody(
   }
 
   if (reply.action === "clarify" || reply.clarify) {
-    const acknowledgedFields = readableFields(reply.partial_plan);
-    const acknowledgedText = acknowledgedFields
-      .map((field) => `${field.label.toLowerCase()}: ${field.value}`)
-      .join(", ");
+    const unresolvedFields = readStringSet(reply.unresolved_fields);
+    const partialPlan =
+      reply.partial_plan && typeof reply.partial_plan === "object"
+        ? (reply.partial_plan as Record<string, unknown>)
+        : {};
+    const displayExcludedFields = new Set(unresolvedFields);
+    if (partialPlan.reason === partialPlan.feedback) {
+      displayExcludedFields.add("reason");
+    }
+    const acknowledgedFields = readableFields(
+      partialPlan,
+      displayExcludedFields,
+    );
+    const acknowledgedEntries =
+      Object.keys(partialPlan).length > 0
+        ? Object.entries(partialPlan)
+            .filter(
+              ([field]) =>
+                !INTERNAL_FIELDS.has(field) &&
+                !displayExcludedFields.has(field),
+            )
+            .flatMap(([field, value]) => {
+              const formatted = formatSafeValue(value);
+              return formatted ? [{ field, value: formatted }] : [];
+            })
+        : [];
+    const acknowledgedText = joinAcknowledgements(acknowledgedEntries);
     const acknowledgement =
       acknowledgedFields.length > 0
-        ? `I have ${acknowledgedText}${/[.!?]$/.test(acknowledgedText) ? " " : ". "}`
+        ? `I have ${acknowledgedText}${/[.!?]["']?$/.test(acknowledgedText) ? " " : ". "}`
         : "";
-    const question =
+    const question = formatClarificationQuestion(
       readString(reply.question) ??
-      "Could you share a bit more detail so I can help?";
+        "Could you share a bit more detail so I can help?",
+    );
     const interpretedAction = buildGradeClarifyHandoffAction(
-      reply.partial_plan as Record<string, unknown> | undefined,
+      partialPlan,
     );
     if (interpretedAction) {
       return {

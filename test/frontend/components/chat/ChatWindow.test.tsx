@@ -20,6 +20,14 @@ import { renderWithInstitution } from "../../utils/renderWithInstitution";
 
 const mockUseAuth = vi.fn();
 const mockUseActiveCourse = vi.hoisted(() => vi.fn());
+const mockNavigate = vi.hoisted(() => vi.fn());
+
+vi.mock("react-router-dom", async () => {
+  const actual = await vi.importActual<typeof import("react-router-dom")>(
+    "react-router-dom",
+  );
+  return { ...actual, useNavigate: () => mockNavigate };
+});
 
 vi.mock("@/contexts/AuthContext", async () => {
   const actual = await vi.importActual<typeof import("@/contexts/AuthContext")>(
@@ -73,6 +81,7 @@ const mockedReverseWorkflow = vi.mocked(reverseWorkflow);
 describe("ChatWindow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockNavigate.mockReset();
     mockUseAuth.mockReturnValue({
       accessToken: "test-token",
       user: null,
@@ -170,6 +179,41 @@ describe("ChatWindow", () => {
     expect(screen.getByText("Interpreted Action")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirm" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+  });
+
+  it("keeps form handoffs in chat until the instructor clicks the action link", async () => {
+    const user = userEvent.setup();
+    mockedSendAssistantMessage.mockResolvedValueOnce({
+      content: "I prepared the quiz form.",
+      conversationId: 1,
+      autoNavigate: false,
+      navigateTo: {
+        path: "/instructor/quizzes/create",
+        state: { aiQuizDraft: { title: "Midterm" } },
+      },
+      interpretedAction: {
+        action: "Create Quiz",
+        course: "Capstone Project",
+        affectedStudents: "Course-wide",
+        primaryLink: {
+          label: "Open quiz creation form",
+          href: "/instructor/quizzes/create",
+        },
+      },
+    });
+
+    renderWithInstitution(<ChatWindow />);
+    await user.type(
+      screen.getByRole("textbox", { name: "Chat message" }),
+      "create a quiz",
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+
+    expect(await screen.findByText("I prepared the quiz form.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: /Open quiz creation form/i }),
+    ).toBeInTheDocument();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   // Verifies: Keeps chat usable while active course context is loading.

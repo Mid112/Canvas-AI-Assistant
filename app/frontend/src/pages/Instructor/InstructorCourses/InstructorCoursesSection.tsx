@@ -64,7 +64,7 @@ export function InstructorCoursesCard({
         isUnpublished && !isActive && "opacity-95",
       )}
     >
-      <CardHeader className="space-y-3 border-b border-border/60 pb-4">
+      <CardHeader className="space-y-3 border-b border-border/60 pb-4 md:min-h-[12.75rem]">
         <div className="flex items-start gap-3">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
             <BookOpen className="size-5" aria-hidden="true" />
@@ -166,6 +166,7 @@ export function InstructorCoursesCard({
           className={cn("w-full", !publishAction && "col-span-2")}
           onClick={onSetActive}
           disabled={isActive || isSettingActive || !course.isPublished}
+          aria-pressed={isActive}
           aria-busy={isSettingActive && !isActive}
           title={
             !course.isPublished

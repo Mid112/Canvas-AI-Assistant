@@ -23,6 +23,7 @@ pytest==8.3.5
 httpx==0.28.1
 pytest-asyncio==0.24.0
 pytest-cov==6.0.0
+pytest-timeout==2.3.1
 # Property-based / fuzz testing (#1301) — pure parser harness via `make test-fuzz`
 hypothesis==6.135.26
 

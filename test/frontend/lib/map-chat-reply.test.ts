@@ -74,9 +74,113 @@ describe("mapChatReply", () => {
       ),
     ).toEqual({
       content:
-        "I have title: Midterm. Which assignment should I update?",
+        'I have the title "Midterm". Which assignment should I update?',
       acknowledgedFields: [{ label: "Title", value: "Midterm" }],
     });
+  });
+
+  it("uses readable assignment labels in clarification acknowledgements", () => {
+    expect(
+      mapChatReply(
+        {
+          action: "clarify",
+          question: "What description should I use?",
+          partial_plan: {
+            course_name: "Capstone Project",
+            title: "Research Proposal",
+            due_date: "April 15",
+            points_possible: 50,
+          },
+        },
+        false,
+      ),
+    ).toMatchObject({
+      content:
+        'I have the Capstone Project course, the title "Research Proposal", the due date April 15, and 50 possible points. What description should I use?',
+      acknowledgedFields: [
+        { label: "Course", value: "Capstone Project" },
+        { label: "Title", value: "Research Proposal" },
+        { label: "Due date", value: "April 15" },
+        { label: "Possible points", value: "50" },
+      ],
+    });
+  });
+
+  it("formats a raw missing-assignment-field list", () => {
+    const result = mapChatReply(
+      {
+        action: "clarify",
+        question: "title, description, due_date",
+        partial_plan: {},
+      },
+      false,
+    );
+
+    expect(result.content).toBe(
+      "I still need the title, description, and due date.",
+    );
+  });
+
+  it("formats raw missing grade fields using the shared field labels", () => {
+    const result = mapChatReply(
+      {
+        action: "clarify",
+        question: "assignment_reference, student_reference, new_grade",
+        partial_plan: { course_name: "Capstone Project" },
+      },
+      false,
+    );
+
+    expect(result.content).toBe(
+      "I have the Capstone Project course. I still need the assignment, student, and proposed grade.",
+    );
+  });
+
+  it("replaces schema tokens without rewriting natural prose", () => {
+    const result = mapChatReply(
+      {
+        action: "clarify",
+        question:
+          "Which assignment would you like to update, and what changes would you like to make (title, description, due_date, points_possible)?",
+        partial_plan: { course_name: "Capstone Project" },
+      },
+      false,
+    );
+
+    expect(result.content).toBe(
+      "I have the Capstone Project course. Which assignment would you like to update, and what changes would you like to make (title, description, due date, possible points)?",
+    );
+  });
+
+  it("does not rewrite ordinary words that match field names", () => {
+    const result = mapChatReply(
+      {
+        action: "clarify",
+        question: "Please provide a title for the quiz.",
+        partial_plan: {},
+      },
+      false,
+    );
+
+    expect(result.content).toBe("Please provide a title for the quiz.");
+  });
+
+  it("does not acknowledge failed resolver references or duplicate feedback", () => {
+    const result = mapChatReply(
+      {
+        action: "clarify",
+        question: "Which student did you mean?",
+        unresolved_fields: ["student_reference"],
+        partial_plan: {
+          student_reference: "coin",
+          feedback: "Good work",
+          reason: "Good work",
+        },
+      },
+      false,
+    );
+
+    expect(result.content).toBe("I have the feedback provided. Which student did you mean?");
   });
 
   it("maps grade clarify partial plans to the Grades tab when grade scoped", () => {
@@ -99,13 +203,13 @@ describe("mapChatReply", () => {
       ),
     ).toEqual({
       acknowledgedFields: [
-        { label: "Course Name", value: "COSC 777" },
-        { label: "Assignment Reference", value: "leetcode" },
-        { label: "New Grade", value: "110" },
+        { label: "Course", value: "COSC 777" },
+        { label: "Assignment", value: "leetcode" },
+        { label: "Proposed grade", value: "110" },
         { label: "Reason", value: "Bonus adjustment" },
       ],
       content:
-        "I have course name: COSC 777, assignment reference: leetcode, new grade: 110, reason: Bonus adjustment. Which assignment should I update?",
+        'I have the COSC 777 course, the assignment "leetcode", a proposed grade of 110, and the reason "Bonus adjustment". Which assignment should I update?',
       interpretedAction: {
         action: "Update Grade",
         course: "COSC 777",
@@ -137,11 +241,11 @@ describe("mapChatReply", () => {
       ),
     ).toEqual({
       acknowledgedFields: [
-        { label: "Student Reference", value: "Coin" },
+        { label: "Student", value: "Coin" },
         { label: "Reason", value: "Please improve the explanation." },
       ],
       content:
-        "I have student reference: Coin, reason: Please improve the explanation. Do you want to add assignment feedback on a submission, or send a private message to the student?",
+        'I have the student "Coin" and the reason "Please improve the explanation." Do you want to add assignment feedback on a submission, or send a private message to the student?',
     });
   });
 
@@ -285,6 +389,29 @@ describe("mapChatReply", () => {
     });
   });
 
+  it("maps feedback text into the Grades tab feedback prefill", () => {
+    const result = mapChatReply(
+      {
+        action: "respond",
+        message: "Open the Grades tab to review and approve.",
+        grade_handoff: {
+          local_course_id: 7,
+          course_name: "COSC 777",
+          assignment_id: 10,
+          student_ids: [42],
+          student_count: 1,
+          new_grade: "85",
+          feedback: "Strong work on the explanation.",
+        },
+      },
+      false,
+    );
+
+    expect(result.interpretedAction?.primaryLink?.href).toBe(
+      "/instructor/courses/7/grades?assignmentId=10&studentIds=42&grade=85&reason=Strong+work+on+the+explanation.",
+    );
+  });
+
   // Verifies: Maps fetch_courses results.
   it("maps fetch_courses results", () => {
     expect(
@@ -376,7 +503,7 @@ describe("mapChatReply", () => {
     expect(JSON.stringify(result)).not.toContain("secret_internal_value");
   });
 
-  it("auto-redirects create_quiz and keeps a form button for chat history", () => {
+  it("keeps create_quiz in chat and provides an explicit form handoff", () => {
     const result = mapChatReply(
       {
         intent_preview: true,
@@ -402,6 +529,7 @@ describe("mapChatReply", () => {
     );
 
     expect(result.pendingMessageId).toBeUndefined();
+    expect(result.autoNavigate).toBe(false);
     expect(result.navigateTo?.path).toBe("/instructor/quizzes/create");
     expect(result.navigateTo?.state).toMatchObject({
       returnTo: "/instructor/assistant",
@@ -471,7 +599,7 @@ describe("mapChatReply", () => {
     expect(result.interpretedAction?.secondaryLink).toBeUndefined();
   });
 
-  it("auto-redirects update_grade to the feedback form", () => {
+  it("provides an explicit feedback-form link for update_grade", () => {
     const result = mapChatReply(
       {
         intent_preview: true,

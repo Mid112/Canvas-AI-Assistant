@@ -25,6 +25,7 @@ _FIELD_MEMORY_KEYS = frozenset(
         "body",
         "new_grade",
         "feedback",
+        "reason",
         "action",
     }
 )
@@ -41,18 +42,20 @@ _FIELD_MEMORY_KEYS = frozenset(
 #   - assignment_reference: the user's own words for which assignment
 #   - title, description, due_date, points_possible: assignment draft params
 #     the user explicitly provided
+#   - grade/feedback values are persisted only through the server-side grade
+#     resolver path; generic LLM clarification plans must not retain them.
 #
 # Exclude ALL student-related fields (student_id, student_reference) and
-# grade-related fields (new_grade, feedback, reason) because a clarify
-# means those values were NOT confirmed — they either failed resolution
-# or were never provided. Also exclude assignment_id (raw Canvas ID,
-# may be hallucinated).
+# assignment_id (raw Canvas IDs, which may be hallucinated), and grade fields
+# from generic LLM plans. Resolver-produced grade context is merged through a
+# separate allowlist after the server has validated the action.
 _PARTIAL_PLAN_SAFE_KEYS = _FIELD_MEMORY_KEYS - {
     "assignment_id",
     "student_id",
     "student_reference",
     "new_grade",
     "feedback",
+    "reason",
 }
 
 # Capped MRU lists persisted alongside scalar keys (#1302). Not free-form
@@ -163,6 +166,9 @@ def clear_course_scoped_field_memory(conversation: Conversation) -> None:
         "assignment_reference",
         "student_id",
         "student_reference",
+        "new_grade",
+        "feedback",
+        "reason",
         _RECENT_ASSIGNMENTS_KEY,
         _RECENT_STUDENTS_KEY,
         _GROUNDED_FACTS_KEY,

@@ -1259,9 +1259,54 @@ async def _resolve_course_and_assignment(
                 "clarify": True,
                 "question": f"Which assignment in {course.name} did you mean? Options: {names}.",
                 "partial_plan": {"local_course_id": course.id},
+                "unresolved_fields": ["assignment_reference"],
             }
 
     return course, assignment_id
+
+
+_GRADE_CLARIFICATION_FIELDS = (
+    "assignment_reference",
+    "student_reference",
+    "new_grade",
+    "feedback",
+    "reason",
+)
+
+
+def _preserve_grade_clarification_context(
+    result: dict,
+    action: Any,
+) -> dict:
+    """Carry user-provided grade context through resolver clarifications.
+
+    Assignment/student IDs are deliberately not copied here: they must be
+    resolved and verified server-side. Natural-language targets and the
+    instructor's grade/feedback values are safe to retain while a later
+    clarification resolves those targets.
+    """
+    if result.get("action") != "clarify":
+        return result
+    partial_plan = dict(result.get("partial_plan") or {})
+    for field_name in _GRADE_CLARIFICATION_FIELDS:
+        value = getattr(action, field_name, None)
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        partial_plan[field_name] = value
+    preserved = {
+        field: partial_plan[field]
+        for field in ("new_grade", "feedback", "reason")
+        if field in partial_plan
+    }
+    return {
+        **result,
+        "partial_plan": partial_plan,
+        # Consumed before the response is serialized. This keeps validated
+        # resolver context separate from arbitrary LLM clarify payloads.
+        "_server_preserved_grade_context": preserved,
+    }
 
 
 async def _run_fetch_submissions_chain(
@@ -2081,7 +2126,7 @@ async def _resolve_grade_target(
         user_message, adapter,
     )
     if isinstance(resolved, dict):
-        return resolved
+        return _preserve_grade_clarification_context(resolved, action)
     course, assignment_id = resolved
 
     print(f"Collecting {course.name} submissions for grade target resolution")
@@ -2124,7 +2169,7 @@ async def _resolve_grade_target(
             assignment_id,
             submissions,
             action.new_grade,
-            action.reason,
+            action.reason or action.feedback,
             assignment_name=assignment_name,
         )
 
@@ -2157,6 +2202,7 @@ async def _resolve_grade_target(
             "clarify": True,
             "question": f"Which student in {course.name} did you mean? Options: {names}.",
             "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
+                "unresolved_fields": ["student_reference"],
         }
 
     selected = next(s for s in submissions if _coerce_int(s.get("user_id")) == student_id)
@@ -2165,7 +2211,7 @@ async def _resolve_grade_target(
         assignment_id,
         [selected],
         action.new_grade,
-        action.reason,
+        action.reason or action.feedback,
         assignment_name=assignment_name,
     )
 
@@ -2287,6 +2333,7 @@ def _grade_partial_plan(action: Any, local_course_id: int, assignment_id: int | 
         "student_id": getattr(action, "student_id", None),
         "student_reference": getattr(action, "student_reference", None),
         "new_grade": getattr(action, "new_grade", None),
+        "feedback": getattr(action, "feedback", None),
         "reason": getattr(action, "reason", None),
     }
     return {key: value for key, value in plan.items() if value is not None}
@@ -2423,7 +2470,7 @@ async def _run_update_grade_chain(
         adapter,
     )
     if isinstance(resolved_assignment, dict):
-        return resolved_assignment
+        return _preserve_grade_clarification_context(resolved_assignment, action)
     course, assignment_id = resolved_assignment
 
     student_id = action.student_id
@@ -2433,11 +2480,8 @@ async def _run_update_grade_chain(
                 "action": "clarify",
                 "clarify": True,
                 "question": "Which student should receive this grade?",
-                "partial_plan": {
-                    "assignment_reference": action.assignment_reference,
-                    "new_grade": action.new_grade,
-                    "feedback": action.feedback,
-                },
+                "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
+                "unresolved_fields": ["student_reference"],
             }
         fetch_action = FetchStudentsAction(local_course_id=course.id)
         roster_result = await _run_tracked_read(
@@ -2464,12 +2508,8 @@ async def _run_update_grade_chain(
                     f'I could not confidently match "{action.student_reference}" '
                     "to one student in this course. What is their full name or email?"
                 ),
-                "partial_plan": {
-                    "assignment_reference": action.assignment_reference,
-                    "student_reference": action.student_reference,
-                    "new_grade": action.new_grade,
-                    "feedback": action.feedback,
-                },
+                "partial_plan": _grade_partial_plan(action, course.id, assignment_id),
+                "unresolved_fields": ["student_reference"],
             }
 
     proposed_action = {
@@ -2480,7 +2520,10 @@ async def _run_update_grade_chain(
         "student_id": student_id,
         "student_reference": action.student_reference,
         "new_grade": action.new_grade,
-        "feedback": action.feedback,
+        # Preserve both names used by the grade-history and Grades-tab paths
+        # so feedback is not lost in this resolver branch.
+        "feedback": action.feedback or action.reason,
+        "reason": action.reason or action.feedback,
     }
     proposed_action = {
         key: value for key, value in proposed_action.items() if value is not None
@@ -4696,6 +4739,15 @@ async def handle_chat_message(
             result = _step_budget_exhausted_response(loop_steps)
             break
 
+    # Grade resolver clarifications are the only path allowed to retain grade
+    # values across turns. Generic LLM clarify payloads stay memory-safe.
+    if (
+        isinstance(result, dict)
+        and result.get("clarify")
+        and getattr(action, "action", None) == "update_grade"
+    ):
+        result = _preserve_grade_clarification_context(result, action)
+
     # Feature 13 (#855 / #856) + #1303: strip Canvas ID / grade / title claims
     # that were never present in this-turn tool payloads or prior tool-derived
     # grounded_facts accumulated on the conversation.
@@ -4747,6 +4799,10 @@ async def handle_chat_message(
     # Must run before the assistant message is persisted so history reopen
     # ("Open quiz creation form") also carries the prompt.
     result = _attach_quiz_generation_prompt(result, message)
+
+    server_preserved_grade_context = result.pop(
+        "_server_preserved_grade_context", None
+    )
 
     # Log the assistant result — if this is a modify turn superseding a
     # previous intent_preview, overwrite that message in place rather than
@@ -4802,6 +4858,12 @@ async def handle_chat_message(
                 result.get("partial_plan"),
                 allowed_keys=_PARTIAL_PLAN_SAFE_KEYS,
             )
+            if isinstance(server_preserved_grade_context, dict):
+                merge_field_memory(
+                    conversation,
+                    server_preserved_grade_context,
+                    allowed_keys=frozenset({"new_grade", "feedback", "reason"}),
+                )
         await _supersede_pending_workflow(
             db,
             conversation.id,
