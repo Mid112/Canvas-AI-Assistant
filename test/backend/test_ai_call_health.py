@@ -37,6 +37,11 @@ _ACTIVE_LLM_CONFIG = ActiveLlmConfig(
     cache_ttl_seconds=300,
 )
 
+_RESOLVED_GENERATION = (
+    _ACTIVE_LLM_CONFIG.provider,
+    {"provider": _ACTIVE_LLM_CONFIG.provider, "model": _ACTIVE_LLM_CONFIG.model},
+)
+
 
 def _make_session():
     engine = create_async_engine(settings.DATABASE_URL)
@@ -109,8 +114,8 @@ async def test_create_message_draft_records_success_without_changing_output():
     with (
         patch("app.services.messages._generate_draft_content", generated),
         patch(
-            "app.services.messages.get_active_llm_config",
-            new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
+            "app.services.messages.resolve_generation_adapter_settings",
+            new=AsyncMock(return_value=_RESOLVED_GENERATION),
         ),
         patch("app.services.messages.record_ai_call_outcome", new=AsyncMock()) as mock_record,
     ):
@@ -133,8 +138,8 @@ async def test_create_message_draft_records_failure_without_changing_fallback():
     with (
         patch("app.services.messages._generate_draft_content", failing),
         patch(
-            "app.services.messages.get_active_llm_config",
-            new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
+            "app.services.messages.resolve_generation_adapter_settings",
+            new=AsyncMock(return_value=_RESOLVED_GENERATION),
         ),
         patch("app.services.messages.record_ai_call_outcome", new=AsyncMock()) as mock_record,
     ):
@@ -171,8 +176,8 @@ async def test_generate_assignment_draft_records_success_without_changing_output
     with (
         patch("app.services.assignment_draft.get_llm_adapter", return_value=adapter),
         patch(
-            "app.services.assignment_draft.get_active_llm_config",
-            new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
+            "app.services.assignment_draft.resolve_generation_adapter_settings",
+            new=AsyncMock(return_value=_RESOLVED_GENERATION),
         ),
         patch("app.services.assignment_draft.record_ai_call_outcome", new=AsyncMock()) as mock_record,
     ):
@@ -198,8 +203,8 @@ async def test_generate_assignment_draft_records_failure_when_response_is_unpars
     with (
         patch("app.services.assignment_draft.get_llm_adapter", return_value=adapter),
         patch(
-            "app.services.assignment_draft.get_active_llm_config",
-            new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
+            "app.services.assignment_draft.resolve_generation_adapter_settings",
+            new=AsyncMock(return_value=_RESOLVED_GENERATION),
         ),
         patch("app.services.assignment_draft.record_ai_call_outcome", new=AsyncMock()) as mock_record,
     ):
@@ -232,8 +237,8 @@ async def test_generate_assignment_draft_records_failure_and_still_raises_http_e
     with (
         patch("app.services.assignment_draft.get_llm_adapter", return_value=adapter),
         patch(
-            "app.services.assignment_draft.get_active_llm_config",
-            new=AsyncMock(return_value=_ACTIVE_LLM_CONFIG),
+            "app.services.assignment_draft.resolve_generation_adapter_settings",
+            new=AsyncMock(return_value=_RESOLVED_GENERATION),
         ),
         patch("app.services.assignment_draft.record_ai_call_outcome", new=AsyncMock()) as mock_record,
     ):
