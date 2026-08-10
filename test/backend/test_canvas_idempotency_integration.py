@@ -184,6 +184,10 @@ async def test_concurrent_create_course_assignment_writes_canvas_once(
             "app.services.canvas.get_owned_course",
             new=AsyncMock(return_value=course),
         ),
+        patch(
+            "app.services.assignment_validation.validate_assignment_for_create",
+            new=AsyncMock(return_value=course),
+        ),
         patch("app.services.canvas.decrypt_canvas_token", return_value="tok"),
         patch(
             "app.services.canvas._assert_no_executing_write",
