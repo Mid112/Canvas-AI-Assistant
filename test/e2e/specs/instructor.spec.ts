@@ -14,14 +14,11 @@ function mainHeading(page: import("@playwright/test").Page, name: string | RegEx
   return page.getByRole("main").getByRole("heading", { name });
 }
 
-function appHeading(page: import("@playwright/test").Page, name: string | RegExp) {
-  return page.getByRole("heading", { name });
-}
-
 test.describe("Instructor workflows (#711)", () => {
   test("register, skip Canvas, and land on assistant limited mode", async ({ page }) => {
     await registerAndSkipCanvas(page);
-    await expect(appHeading(page, "AI Assistant")).toBeVisible();
+    // Layout header (with "AI Assistant" h1) is omitted on this route for chat height.
+    await expect(page).toHaveURL(/\/instructor\/assistant/);
     await expect(page.getByText("Limited mode")).toBeVisible();
     await expect(
       page.getByRole("textbox", { name: "Chat message" }),
@@ -104,7 +101,7 @@ test.describe("Instructor workflows (#711)", () => {
     await expect(page).toHaveURL(/\/instructor\//);
     await expect(page.getByText("Limited mode")).toHaveCount(0);
     await page.goto("/instructor/assistant");
-    await expect(appHeading(page, "AI Assistant")).toBeVisible();
+    await expect(page).toHaveURL(/\/instructor\/assistant/);
     await expect(page.getByText("Limited mode")).toHaveCount(0);
     await expect(
       page.getByRole("textbox", { name: "Chat message" }),
