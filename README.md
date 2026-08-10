@@ -1,6 +1,7 @@
 # Canvas Helper AI Assistant
 
-**UBCO COSC 499 · Capstone Team 16**
+**UBCO COSC 499 · Capstone Team 16**  
+**Client:** Mohamed Mostafa
 
 An AI-assisted Canvas LMS workflow tool for instructors, with administrator oversight. Natural-language requests become structured Canvas actions only after an explicit **preview → confirm** step — the assistant never writes to Canvas on a normal chat turn.
 

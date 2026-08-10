@@ -1,7 +1,5 @@
 # LLM Provider Architecture
 
-Authoritative deep-dive: [`../../design/llm-providers.md`](../../design/llm-providers.md)
-
 ## Summary
 
 Supported providers include Hugging Face, Groq, OpenAI, Anthropic, Ollama, vLLM, and custom OpenAI-compatible endpoints.

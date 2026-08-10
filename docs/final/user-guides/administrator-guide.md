@@ -53,7 +53,7 @@ Run or view health checks for database, Canvas reachability, and AI/provider sta
 
 ## 7. Institution LLM defaults
 
-Configure default provider / failover / cache behaviour for instructors who have not attached personal keys. See also [`../../design/llm-providers.md`](../../design/llm-providers.md).
+Configure default provider / failover / cache behaviour for instructors who have not attached personal keys. See also [`../developer/llm-providers.md`](../developer/llm-providers.md).
 
 ## 8. Admin safety notes
 

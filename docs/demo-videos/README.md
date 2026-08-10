@@ -1,6 +1,7 @@
 # Demo Videos
 
-Client and planning demo videos for the **Canvas Helper AI Assistant** (UBCO COSC 499 · Team 16).
+Client and planning demo videos for the **Canvas Helper AI Assistant** (UBCO COSC 499 · Team 16).  
+**Client:** Mohamed Mostafa
 
 ## Videos
 

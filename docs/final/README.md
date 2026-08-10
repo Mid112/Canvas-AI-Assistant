@@ -1,6 +1,7 @@
 # Final Documentation Package
 
-Submission documentation for the **Canvas Helper AI Assistant** (UBCO COSC 499 · Team 16).
+Submission documentation for the **Canvas Helper AI Assistant** (UBCO COSC 499 · Team 16).  
+**Client:** Mohamed Mostafa
 
 Use this folder as the entry point for user guides, developer docs, deployment guidance, architecture/API summaries, and final verification artifacts.
 
