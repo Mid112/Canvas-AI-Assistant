@@ -339,8 +339,9 @@ def test_incomplete_create_assignment_is_clarified_not_previewed(client):
     caught before a preview is ever shown, not just documented as a
     system prompt instruction the model might not follow.
 
-    Ticket 16 / #1440: when description and points are both missing,
-    the clarify question must list both so the user can answer once."""
+    An explicit ``points_possible: null`` means the instructor chose an
+    ungraded assignment, so it must not be treated as a missing point value.
+    Only the empty description should be requested."""
     headers, local_course_id = _register_with_canvas(client)
 
     mock_adapter = AsyncMock()
@@ -362,11 +363,12 @@ def test_incomplete_create_assignment_is_clarified_not_previewed(client):
     assert reply["action"] == "clarify"
     question = reply["question"].lower()
     assert "description" in question
-    assert "point" in question
-    assert "one message" in question
+    assert "point" not in question
     assert reply["partial_plan"]["title"] == "test4"
     assert "description" not in reply["partial_plan"]
-    assert "points_possible" not in reply["partial_plan"]
+    # Preserve the explicit ungraded choice while asking only for the
+    # missing description.
+    assert reply["partial_plan"]["points_possible"] is None
     assert "intent_preview" not in reply
 
 
