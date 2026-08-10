@@ -99,7 +99,7 @@ Additional effort during the cycle covered deep multi-pass reviews of #1555–#1
 
 No leftover product PRs remain open for final delivery. Cycle 23 delivery items formerly listed here (#1555, #1556, #1557, #1558, #1562, #1533) are moved to **Completed and Merged** with Status **Merged**.
 
-**Log close-out (complete):** Jessica Clockify hours attached (**33:28:06**); team + individual Clockify screenshots attached; board / burn-up screenshots attached; Cycle Achievements / Lessons Learned / Team Outlook wrap-up sections added.
+**Log close-out (complete):** team + individual Clockify screenshots attached; board / burn-up screenshots attached; Cycle Achievements / Lessons Learned / Team Outlook wrap-up sections added.
 
 ---
 
@@ -304,7 +304,7 @@ Backend validation focused on:
 
 ## Main Risks / Remaining Gaps
 
-Product / merge risks from leftover overlapping PRs and the documentation package are **resolved** for log close-out (items marked Merged). **Team logging for Cycle 23 is closed out** (exact Clockify **137:36:14**, Jessica hours attached, screenshots attached, wrap-up sections complete).
+Product / merge risks from leftover overlapping PRs and the documentation package are **resolved** for log close-out (items marked Merged). **Team logging for Cycle 23 is closed out** (exact Clockify **137:36:14**, screenshots attached, wrap-up sections complete).
 
 | Risk / Gap | Impact | Status |
 | --- | --- | --- |

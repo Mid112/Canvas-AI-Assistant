@@ -51,7 +51,7 @@ Major completed themes this cycle:
 - Password policy + forgot-password / session revoke hardening
 - Design-doc updates (ER, DFD, use cases)
 - Deep review then merge close-out of assistant / token / reversibility PRs (#1555–#1558), #1562, and docs package #1533
-- Final Demo preparation and personal Cycle 23 logs (Mridul, Bao, Yerdana, Rhythm, Jessica Clockify attached)
+- Final Demo preparation and personal Cycle 23 logs (Mridul, Bao, Yerdana, Rhythm)
 - Team + individual Clockify screenshots and board/burn-up attachments
 
 | PR ID | Description | Status |
