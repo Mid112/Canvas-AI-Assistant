@@ -48,7 +48,7 @@ Cycle 23 completed the board’s transition into final delivery. Most remaining 
 
 Board snapshot from GitHub Project **team 16 project board** at cycle end.
 
-![Cycle 23 project board](../dashboard/assets/cycle-23-board.png)
+<img width="1024" height="459" alt="Cycle 23 project board" src="https://raw.githubusercontent.com/UBCO-COSC499-S2026/capstone-team-16/logs-team/docs/weekly%20logs/dashboard/assets/cycle-23-board.png" />
 
 ---
 
@@ -121,7 +121,7 @@ Post-log product hand-over (open on GitHub; not blockers for completing this tea
 
 ## Burn-up Chart / Velocity
 
-![Cycle 23 burn-up](../dashboard/assets/cycle-23-burnup.png)
+<img width="1024" height="481" alt="Cycle 23 burn-up" src="https://raw.githubusercontent.com/UBCO-COSC499-S2026/capstone-team-16/logs-team/docs/weekly%20logs/dashboard/assets/cycle-23-burnup.png" />
 
 ### Burn-up Summary
 
@@ -177,7 +177,7 @@ The team logged a combined **137 hours, 36 minutes, and 14 seconds** during Cycl
 
 ### Team Clockify
 
-![Cycle 23 Clockify team summary](../dashboard/assets/cycle-23-clockify-team.png)
+<img width="1024" height="657" alt="Cycle 23 Clockify team summary" src="https://raw.githubusercontent.com/UBCO-COSC499-S2026/capstone-team-16/logs-team/docs/weekly%20logs/dashboard/assets/cycle-23-clockify-team.png" />
 
 ### Individual Clockify Reports
 
@@ -188,7 +188,7 @@ The team logged a combined **137 hours, 36 minutes, and 14 seconds** during Cycl
 - bugfix 4 — 11:49:46
 - bugfix 3 — 06:56:00
 
-![Cycle 23 Clockify Yerdana](../dashboard/assets/cycle-23-clockify-yerdana.png)
+<img width="1024" height="278" alt="Cycle 23 Clockify Yerdana" src="https://raw.githubusercontent.com/UBCO-COSC499-S2026/capstone-team-16/logs-team/docs/weekly%20logs/dashboard/assets/cycle-23-clockify-yerdana.png" />
 
 #### Jessica — **33:28:06**
 
@@ -200,7 +200,7 @@ The team logged a combined **137 hours, 36 minutes, and 14 seconds** during Cycl
 - reviewing PRs — 00:56:37
 - making the presentation slide — 00:46:02
 
-![Cycle 23 Clockify Jessica](../dashboard/assets/cycle-23-clockify-jessica.png)
+<img width="1024" height="428" alt="Cycle 23 Clockify Jessica" src="https://raw.githubusercontent.com/UBCO-COSC499-S2026/capstone-team-16/logs-team/docs/weekly%20logs/dashboard/assets/cycle-23-clockify-jessica.png" />
 
 #### Rhythm — **29:00:36**
 
@@ -216,7 +216,7 @@ The team logged a combined **137 hours, 36 minutes, and 14 seconds** during Cycl
 - PR Requested changes and merge — 00:31:33
 - Ticket 17: Improve First-Time AI Prompt Guidance — 00:29:05
 
-![Cycle 23 Clockify Rhythm](../dashboard/assets/cycle-23-clockify-rhythm.png)
+<img width="1024" height="576" alt="Cycle 23 Clockify Rhythm" src="https://raw.githubusercontent.com/UBCO-COSC499-S2026/capstone-team-16/logs-team/docs/weekly%20logs/dashboard/assets/cycle-23-clockify-rhythm.png" />
 
 #### Mridul — **27:31:46**
 
@@ -227,7 +227,7 @@ The team logged a combined **137 hours, 36 minutes, and 14 seconds** during Cycl
 - team meeting — 02:44:02
 - final bug fixes found during presentation — 01:56:01
 
-![Cycle 23 Clockify Mridul](../dashboard/assets/cycle-23-clockify-mridul.png)
+<img width="1024" height="521" alt="Cycle 23 Clockify Mridul" src="https://raw.githubusercontent.com/UBCO-COSC499-S2026/capstone-team-16/logs-team/docs/weekly%20logs/dashboard/assets/cycle-23-clockify-mridul.png" />
 
 #### Bao — **11:44:40**
 
@@ -237,7 +237,7 @@ The team logged a combined **137 hours, 36 minutes, and 14 seconds** during Cycl
 - meeting — 02:25:25
 - PR review + meeting — 01:21:02
 
-![Cycle 23 Clockify Bao](../dashboard/assets/cycle-23-clockify-bao.png)
+<img width="1024" height="310" alt="Cycle 23 Clockify Bao" src="https://raw.githubusercontent.com/UBCO-COSC499-S2026/capstone-team-16/logs-team/docs/weekly%20logs/dashboard/assets/cycle-23-clockify-bao.png" />
 
 ---
 
